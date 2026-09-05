@@ -80,6 +80,10 @@ let
       "PYTHON_PREFIX_ARG=--prefix=."
     ];
 
+    # The installed Python extension is import-checked as qubesdb, but this
+    # split daemon package does not install matching Python distribution
+    # metadata for the derivation name.
+    dontCheckPythonMetadata = true;
     pythonImportsCheck = [ "qubesdb" ];
 
     inherit meta;
@@ -101,14 +105,13 @@ let
       make -C ../include install $makeFlags
     '';
 
-    nativeBuildInputs =
-      [
-        pkg-config
-      ]
-      ++ optionals withPython [
-        python
-        python.pkgs.setuptools
-      ];
+    nativeBuildInputs = [
+      pkg-config
+    ]
+    ++ optionals withPython [
+      python
+      python.pkgs.setuptools
+    ];
 
     buildInputs = [
       qubes-core-vchan-xen
@@ -137,11 +140,10 @@ let
   };
 in
 client.overrideAttrs {
-  passthru =
-    {
-      inherit daemon;
-    }
-    // optionalAttrs withPython {
-      inherit pythonModule;
-    };
+  passthru = {
+    inherit daemon;
+  }
+  // optionalAttrs withPython {
+    inherit pythonModule;
+  };
 }

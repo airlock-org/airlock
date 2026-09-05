@@ -20,6 +20,9 @@ Current local changes:
 - `qubes-linux-utils`: disable Python metadata checking for the imgconverter
   subpackage because the derivation name is `qubes-linux-utils-imgconverter`
   while the installed Python distribution is `qubesimgconverter`.
+- `qubes-core-qubesdb`: disable Python metadata checking for the split daemon
+  Python module because the importable extension is `qubesdb`, but no matching
+  distribution metadata is installed for the derivation name.
 - `qubes-vmm-xen`: make the nixpkgs Xen `xsd_glue` OCaml split-output copy
   detect the actual installed directory instead of deriving one path from
   `ls $out/lib/ocaml/`, and skip the newer plugin-interface source copy when
