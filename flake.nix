@@ -24,10 +24,23 @@
 
       forAllSystems = lib.genAttrs supportedSystems;
 
+      nixomeImageBuildToolsOverlay = _final: prev: {
+        lkl = prev.lkl.overrideAttrs (oldAttrs: {
+          postPatch = (oldAttrs.postPatch or "") + ''
+            substituteInPlace tools/lkl/cptofs.c \
+              --replace-fail 'lkl_start_kernel("mem=100M")' 'lkl_start_kernel("mem=1024M")'
+          '';
+        });
+      };
+
       pkgsFor =
         system:
         import nixpkgs {
           inherit system;
+          overlays = [
+            nixomeImageBuildToolsOverlay
+            nixos-qubes.overlays.default
+          ];
           config.allowUnfreePredicate =
             pkg:
             builtins.elem (pkg.pname or (lib.getName pkg)) [
@@ -37,6 +50,32 @@
         };
 
       boolString = value: if value then "true" else "false";
+
+      mkQubesTemplatePackage =
+        system:
+        {
+          configuration,
+          templateName,
+        }:
+        let
+          pkgs = pkgsFor system;
+          rootImage = import "${nixpkgs}/nixos/lib/make-disk-image.nix" {
+            inherit lib pkgs;
+            config = configuration.config;
+            name = "${templateName}-root-image";
+            baseName = "root";
+            format = "raw";
+            partitionTableType = "none";
+            installBootLoader = false;
+            copyChannel = false;
+            diskSize = "auto";
+            additionalSpace = "1024M";
+          };
+        in
+        pkgs.callPackage ./pkgs/nixome-qubes-template {
+          inherit templateName;
+          rootImageFile = "${rootImage}/root.img";
+        };
 
       mkModuleContractCheck =
         system:
@@ -104,14 +143,7 @@
           '';
     in
     {
-      overlays.nixomeImageBuildTools = _final: prev: {
-        lkl = prev.lkl.overrideAttrs (oldAttrs: {
-          postPatch = (oldAttrs.postPatch or "") + ''
-            substituteInPlace tools/lkl/cptofs.c \
-              --replace-fail 'lkl_start_kernel("mem=100M")' 'lkl_start_kernel("mem=1024M")'
-          '';
-        });
-      };
+      overlays.nixomeImageBuildTools = nixomeImageBuildToolsOverlay;
 
       packages = forAllSystems (
         system:
@@ -121,10 +153,20 @@
         {
           nixome-qube-bootstrap = pkgs.callPackage ./pkgs/nixome-qube-bootstrap { };
           nixome-qube-gui-smoke = pkgs.callPackage ./pkgs/nixome-qube-gui-smoke { };
+          nixome-qubes-reconcile = pkgs.callPackage ./pkgs/nixome-qubes-reconcile { };
           nixome-qubes-smoke = pkgs.callPackage ./pkgs/nixome-qubes-smoke { };
           nixome-observe-dom0 = pkgs.callPackage ./pkgs/nixome-observe { };
+          nixome-nixos-config-vault-template = mkQubesTemplatePackage system {
+            configuration = self.nixosConfigurations.qube-template-config-vault;
+            templateName = "nixome-nixos-config-vault";
+          };
+          nixome-nixos-agent-template = mkQubesTemplatePackage system {
+            configuration = self.nixosConfigurations.qube-template-agent;
+            templateName = "nixome-nixos-agent";
+          };
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
           nixome-vm-gui-image = self.nixosConfigurations.vm-gui.config.system.build.image;
+          nixome-vm-gui-config-image = self.nixosConfigurations.vm-gui-config.config.system.build.image;
           ovmf-fd = pkgs.OVMF.fd;
           qemu-kvm = pkgs.qemu_kvm;
           qemu-utils = pkgs.qemu-utils;
@@ -136,6 +178,7 @@
         module-contract = mkModuleContractCheck system;
         qube-bootstrap-package = self.packages.${system}.nixome-qube-bootstrap;
         qube-gui-smoke-package = self.packages.${system}.nixome-qube-gui-smoke;
+        qubes-reconcile-package = self.packages.${system}.nixome-qubes-reconcile;
         observe-package = self.packages.${system}.nixome-observe-dom0;
       });
 
@@ -151,6 +194,7 @@
           imports = [
             nixos-qubes.nixosModules.qubes
             ./modules/dom0.nix
+            ./modules/qubes-topology.nix
           ];
         };
 
@@ -177,6 +221,59 @@
         modules = [
           self.nixosModules.dom0
           ./machines/vm-gui.nix
+        ];
+      };
+
+      nixosConfigurations.vm-gui-config = lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = {
+          nixomeTemplatePackages = {
+            configVault = self.packages.x86_64-linux.nixome-nixos-config-vault-template;
+            agent = self.packages.x86_64-linux.nixome-nixos-agent-template;
+          };
+        };
+        modules = [
+          self.nixosModules.dom0
+          ./machines/vm-gui.nix
+          ./machines/config-system.nix
+        ];
+      };
+
+      nixosConfigurations.qube-template-config-vault = lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          nixos-qubes.nixosModules.qubes
+          (
+            { lib, ... }:
+            {
+              nixpkgs.config.allowUnfreePredicate =
+                pkg:
+                builtins.elem (pkg.pname or (lib.getName pkg)) [
+                  "qubes-artwork"
+                  "qubes-vmm-stubdom-linux"
+                ];
+            }
+          )
+          ./machines/qube-template-config-vault.nix
+        ];
+      };
+
+      nixosConfigurations.qube-template-agent = lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          nixos-qubes.nixosModules.qubes
+          (
+            { lib, ... }:
+            {
+              nixpkgs.config.allowUnfreePredicate =
+                pkg:
+                builtins.elem (pkg.pname or (lib.getName pkg)) [
+                  "qubes-artwork"
+                  "qubes-vmm-stubdom-linux"
+                ];
+            }
+          )
+          ./machines/qube-template-agent.nix
         ];
       };
     };

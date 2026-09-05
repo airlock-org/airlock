@@ -36,7 +36,10 @@ run_logged() {
 run_logged flake-check-no-build nix flake check "$ROOT" --no-build --show-trace
 run_logged module-contract nix build "$ROOT#checks.x86_64-linux.module-contract" --print-build-logs --show-trace
 run_logged observe-package nix build "$ROOT#packages.x86_64-linux.nixome-observe-dom0" --print-build-logs --show-trace
+run_logged reconcile-package nix build "$ROOT#packages.x86_64-linux.nixome-qubes-reconcile" --print-build-logs --show-trace
+run_logged config-topology-eval "$ROOT/tests/config-topology-eval.sh"
 run_logged host-capabilities "$ROOT/tests/host-capabilities.sh" --json "$LOG_DIR/host-capabilities.json"
+run_logged reconcile-static "$ROOT/tests/reconcile-topology-static.sh"
 
 if [ "${NIXOME_RUN_QUBES_SMOKE:-0}" = "1" ]; then
   run_logged qubes-smoke "$ROOT/tests/qubes-smoke.sh"

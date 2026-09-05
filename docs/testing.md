@@ -14,6 +14,9 @@ Runs:
 - `nix flake check --no-build`
 - the Nixome module contract check,
 - the lightweight `nixome-observe-dom0` package build,
+- the `nixome-qubes-reconcile` package build,
+- evaluation of the config-system topology that declares `sys-config-vault` and
+  `sys-agent`,
 - host capability detection into `.nixome-logs/host-capabilities.json`,
 - a skipped Qubes smoke-test result unless `NIXOME_RUN_QUBES_SMOKE=1`.
 
@@ -168,6 +171,44 @@ under nested virtualization.
 The GUI image closure is large enough to OOM the default NixOS image-copy
 helper in this environment. Nixome applies a narrow overlay to `pkgs.lkl` so
 `cptofs` uses `mem=1024M` while assembling disk images.
+
+## NixOS Template Topology
+
+```bash
+make nixos-templates-dry-run
+make nixos-templates
+```
+
+These targets build the NixOS Qube template source directories for
+`nixome-nixos-config-vault` and `nixome-nixos-agent`. The outputs are Nix store
+directories containing `root.img`, `template.conf`, and Qubes appmenu list
+files. They are not RPMs.
+
+To build or boot a nested GUI dom0 image that includes the declared
+`sys-config-vault` and `sys-agent` topology:
+
+```bash
+make vm-gui-config-image
+make vm-gui-config-run
+```
+
+To run just the nested control-plane check plus the topology reconciler:
+
+```bash
+make vm-config-reconcile
+```
+
+This skips the Fedora template bootstrap and old qrexec/window smoke tests,
+then runs `sudo nixome-qubes-reconcile --apply` in the nested dom0. Reconcile
+logs are written under `.nixome-logs/` on the host and `/var/log/nixome/` in
+the nested dom0.
+
+The current NixOS guest template profile uses QubesDB, qrexec-agent, Qubes
+meminfo writer, and `/dev/mapper/dmroot` as the root device to match Qubes'
+normal Linux VM boot path. Import/create reconciliation is automated; booting
+those NixOS AppVMs and proving qrexec from them is the next runtime boundary.
+The config profile sets `default_kernel = ""` so fresh config-only images can
+create TemplateVMs before any Fedora/Qubes VM kernel bootstrap has run.
 
 ## Runtime Observation
 

@@ -10,6 +10,8 @@ This repository currently vendors a local source fork of
 for:
 
 - a POC NixOS dom0 configuration,
+- NixOS Qube template artifacts for config-system experiments,
+- a first declarative Qubes topology reconciler,
 - local module/evaluation checks,
 - host capability reporting,
 - a development-only dom0 observation command,
@@ -75,6 +77,19 @@ the nested dom0 under `/var/cache/nixome/qubes-rpms/` before import. The
 template RPM is about 2 GB. Logs and JSON results are written under
 `.nixome-logs/`.
 
+For the first NixOS-template topology:
+
+```bash
+make nixos-templates-dry-run
+make vm-gui-config-image-dry-run
+make vm-config-reconcile
+```
+
+That path builds a dom0 image whose Nix config declares `sys-config-vault` and
+`sys-agent`, imports their NixOS template sources through Qubes'
+`qvm-template-postprocess`, and applies simple prefs/features/services with
+`nixome-qubes-reconcile`. See [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
+
 On a booted Xen dom0 target with a Qubes template installed:
 
 ```bash
@@ -94,13 +109,18 @@ The Qubes smoke test creates `test-nixome-smoke` if needed, starts it, runs
 - `nixome-qube-bootstrap`, `nixome-qubes-smoke`, and
   `nixome-qube-gui-smoke` are development-only commands for progressing the
   VM lifecycle, qrexec, and GUI feedback loop.
+- `modules/qube-guest.nix`, `pkgs/nixome-qubes-template`, and
+  `modules/qubes-topology.nix` are the first pieces for NixOS-backed Qubes
+  templates and declarative topology reconciliation.
 - `machines/test.nix` is the first concrete NixOS dom0 configuration.
 - `tests/` contains layered feedback scripts.
 - `docs/` records upstream findings and the next test boundary.
 
 ## Status
 
-The local development host is not Xen dom0, so `make test` can validate
-evaluation and host detection only. The qrexec milestone requires a physical or
-otherwise suitable Xen-capable test machine booted into the generated NixOS
-dom0 system with a Qubes-compatible template installed.
+The Fedora-template nested GUI/qrexec smoke path works on a host with KVM and
+nested virtualization. The NixOS-template `sys-config-vault`/`sys-agent` path
+now evaluates, builds template artifacts, and imports/creates the declared
+TemplateVMs and AppVMs in the nested dom0 reconcile check. Guest boot/qrexec
+for those NixOS templates still needs runtime testing. Production-relevant
+security validation still requires a physical Xen-capable machine.

@@ -88,10 +88,13 @@ Known gaps/TODOs found in module/package comments:
 - The module notes unresolved Xen store/dom0 memory details around Qubes memory
   manager behavior.
 - Some GUI/Xwayland/Xorg integration is still marked FIXME.
-- Template/kernel installation is imperative for now. Nixome has a
-  development-only `nixome-qube-bootstrap` command using the existing
-  `nixos-qubes-tools` RPM import helpers; a fully declarative reconciler is
-  still future work.
+- Fedora template/kernel installation is still imperative in the smoke path.
+  Nixome has a development-only `nixome-qube-bootstrap` command using the
+  existing `nixos-qubes-tools` RPM import helpers.
+- Nixome now also has an initial declarative topology reconciler for
+  Nix-built template source directories and AppVM creation. It is intentionally
+  narrow: import missing templates, create missing domains, and set simple
+  prefs/features/services.
 
 Nixome now consumes a local source fork at `vendor/nixos-qubes`. The fork is
 justified by concrete compatibility fixes needed for the POC build:

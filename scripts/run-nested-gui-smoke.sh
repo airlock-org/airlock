@@ -10,10 +10,12 @@ SSH_USER="${NIXOME_VM_SSH_USER:-nixome}"
 SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
 SSH_WAIT_SECONDS="${NIXOME_VM_SSH_WAIT_SECONDS:-240}"
 VM_TIMEOUT="${NIXOME_VM_RUN_TIMEOUT:-14400}"
+IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-image}"
 DISPLAY_MODE="${NIXOME_VM_DISPLAY:-gtk}"
 KEEP_VM="${NIXOME_KEEP_VM:-0}"
 
 BOOTSTRAP_QUBES="${NIXOME_BOOTSTRAP_QUBES:-1}"
+RUN_RECONCILE="${NIXOME_RUN_QUBES_RECONCILE:-0}"
 RUN_QREXEC_SMOKE="${NIXOME_RUN_QUBES_SMOKE:-1}"
 RUN_GUI_SMOKE="${NIXOME_RUN_GUI_SMOKE:-1}"
 CACHE_QUBES_ASSETS="${NIXOME_CACHE_QUBES_ASSETS:-1}"
@@ -36,6 +38,9 @@ JOURNAL_LOG="$LOG_DIR/vm-gui-journal.log"
 BOOTSTRAP_JSON="$LOG_DIR/vm-gui-bootstrap.json"
 BOOTSTRAP_STDOUT="$LOG_DIR/vm-gui-bootstrap.stdout.log"
 BOOTSTRAP_STDERR="$LOG_DIR/vm-gui-bootstrap.stderr.log"
+RECONCILE_JSON="$LOG_DIR/vm-gui-reconcile.json"
+RECONCILE_STDOUT="$LOG_DIR/vm-gui-reconcile.stdout.log"
+RECONCILE_STDERR="$LOG_DIR/vm-gui-reconcile.stderr.log"
 QREXEC_JSON="$LOG_DIR/vm-gui-qrexec-smoke.json"
 QREXEC_STDERR="$LOG_DIR/vm-gui-qrexec-smoke.stderr.log"
 GUI_JSON="$LOG_DIR/vm-gui-window-smoke.json"
@@ -60,6 +65,9 @@ rm -f \
   "$BOOTSTRAP_JSON" \
   "$BOOTSTRAP_STDOUT" \
   "$BOOTSTRAP_STDERR" \
+  "$RECONCILE_JSON" \
+  "$RECONCILE_STDOUT" \
+  "$RECONCILE_STDERR" \
   "$QREXEC_JSON" \
   "$QREXEC_STDERR" \
   "$GUI_JSON" \
@@ -268,6 +276,7 @@ collect_diagnostics() {
   remote 'journalctl -b --no-pager -n 260 -u qubesd -u libvirtd -u qubes-db-dom0 -u qubes-qrexec-policy-daemon -u nixome-qubes-store-init || true' > "$JOURNAL_LOG" 2>/dev/null || true
   remote 'qvm-ls || true' > "$QVM_LS_LOG" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/qubes-bootstrap.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-bootstrap.commands.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/qubes-reconcile.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-reconcile.commands.log" 2>/dev/null || true
 }
 
 extract_json_result() {
@@ -293,7 +302,7 @@ printf 'starting nested GUI VM smoke run\n'
 printf 'logs: %s\n' "$LOG_DIR"
 
 timeout -k 20s "$VM_TIMEOUT" env \
-  NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-image \
+  NIXOME_VM_IMAGE_ATTR="$IMAGE_ATTR" \
   NIXOME_VM_DISPLAY="$DISPLAY_MODE" \
   NIXOME_VM_SSH_PORT="$SSH_PORT" \
   "$ROOT/scripts/run-nested-vm.sh" > "$QEMU_LOG" 2>&1 &
@@ -348,6 +357,26 @@ else
   printf '{"schema":"nixome.qubes-bootstrap.v1","status":"skipped","reason":"NIXOME_BOOTSTRAP_QUBES=0"}\n' > "$BOOTSTRAP_JSON"
 fi
 
+if [ "$RUN_RECONCILE" = "1" ]; then
+  printf 'reconcile: applying declared Qubes topology\n'
+  if ! remote "sudo -n env NIXOME_LOG_DIR=/var/log/nixome nixome-qubes-reconcile --apply" > "$RECONCILE_STDOUT" 2> "$RECONCILE_STDERR"; then
+    remote 'sudo -n cat /var/log/nixome/qubes-reconcile.json 2>/dev/null || true' > "$RECONCILE_JSON" 2>/dev/null || true
+    collect_diagnostics
+    cat "$RECONCILE_STDERR" >&2 || true
+    exit 1
+  fi
+  if ! extract_json_result "nixome.qubes-reconcile.v1" "$RECONCILE_STDOUT" "$RECONCILE_JSON"; then
+    remote 'sudo -n cat /var/log/nixome/qubes-reconcile.json 2>/dev/null || true' > "$RECONCILE_JSON" 2>/dev/null || true
+    if ! grep -q '"schema":"nixome.qubes-reconcile.v1"' "$RECONCILE_JSON"; then
+      collect_diagnostics
+      printf 'reconcile did not emit result JSON; see %s\n' "$RECONCILE_STDOUT" >&2
+      exit 1
+    fi
+  fi
+else
+  printf '{"schema":"nixome.qubes-reconcile.v1","status":"skipped","reason":"NIXOME_RUN_QUBES_RECONCILE=0"}\n' > "$RECONCILE_JSON"
+fi
+
 if [ "$RUN_QREXEC_SMOKE" = "1" ]; then
   printf 'qrexec: running uname smoke test\n'
   if ! remote "env NIXOME_LOG_DIR=/tmp/nixome-logs NIXOME_TEST_TEMPLATE=$(shell_quote "$TEMPLATE") NIXOME_TEST_QUBE=$(shell_quote "$QUBE") NIXOME_TEST_CLEANUP=0 nixome-qubes-smoke" > "$QREXEC_JSON" 2> "$QREXEC_STDERR"; then
@@ -375,5 +404,6 @@ remote 'qvm-ls || true' > "$QVM_LS_LOG" 2>/dev/null || true
 printf 'nested GUI smoke completed\n'
 printf 'observe: %s\n' "$OBSERVE_JSON"
 printf 'bootstrap: %s\n' "$BOOTSTRAP_JSON"
+printf 'reconcile: %s\n' "$RECONCILE_JSON"
 printf 'qrexec: %s\n' "$QREXEC_JSON"
 printf 'gui: %s\n' "$GUI_JSON"
