@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_SOURCE="${BASH_SOURCE[0]:-$0}"
+ROOT="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 if [ -n "${NIXOME_LOG_DIR:-}" ]; then
   LOG_DIR="$NIXOME_LOG_DIR"
 elif [ -w "$ROOT" ]; then
@@ -11,6 +12,7 @@ else
 fi
 
 RESULT_JSON="$LOG_DIR/qubes-gui-smoke.json"
+LAUNCH_LOG="$LOG_DIR/qubes-gui-launch.log"
 QUBE="${NIXOME_TEST_QUBE:-test-nixome-smoke}"
 TITLE="${NIXOME_GUI_SMOKE_TITLE:-nixome-gui-smoke-$(date -u +%Y%m%dT%H%M%SZ)}"
 DISPLAY_VALUE="${NIXOME_GUI_DISPLAY:-${DISPLAY:-:0}}"
@@ -51,6 +53,8 @@ write_result() {
     json_string "$DISPLAY_VALUE"
     printf ',"reason":'
     json_string "$reason"
+    printf ',"launch_log":'
+    json_string "$LAUNCH_LOG"
     printf ',"window_ids":'
     if [ -n "$window_ids" ]; then
       json_string "$window_ids"
@@ -74,6 +78,20 @@ require_command() {
   fi
 }
 
+single_quote() {
+  printf "'"
+  printf '%s' "$1" | sed "s/'/'\\\\''/g"
+  printf "'"
+}
+
+case "$TIMEOUT_SECONDS" in
+  "" | *[!0-9]*) fail "NIXOME_GUI_SMOKE_TIMEOUT must be an integer" ;;
+esac
+
+case "$REMOTE_SLEEP" in
+  "" | *[!0-9]*) fail "NIXOME_GUI_SMOKE_REMOTE_SLEEP must be an integer" ;;
+esac
+
 for cmd in qvm-check qvm-run qvm-start qvm-start-gui systemctl xdotool; do
   require_command "$cmd"
 done
@@ -87,8 +105,9 @@ fi
 
 qvm-start-gui "$QUBE" >/dev/null 2>&1 || true
 
-remote_cmd="xterm -title $TITLE -e sh -c 'sleep $REMOTE_SLEEP'"
-if ! qvm-run "$QUBE" "$remote_cmd" >/dev/null 2>&1; then
+remote_inner="command -v xterm >/dev/null || exit 127; nohup xterm -title $(single_quote "$TITLE") -e sh -c $(single_quote "sleep $REMOTE_SLEEP") >/tmp/nixome-gui-smoke.log 2>&1 &"
+remote_cmd="sh -lc $(single_quote "$remote_inner")"
+if ! qvm-run "$QUBE" "$remote_cmd" > "$LAUNCH_LOG" 2>&1; then
   fail "failed to launch xterm through qvm-run"
 fi
 
