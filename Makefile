@@ -54,4 +54,5 @@ vm-config-smoke:
 	NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_QUBES_RECONCILE=1 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
 
 clean-vm-disks:
+	rm -rf .nixome-vm/*-result
 	rm -f .nixome-vm/*.qcow2 .nixome-vm/*.qcow2.*.bak .nixome-vm/*.monitor .nixome-vm/serial.log

@@ -204,9 +204,10 @@ then runs `sudo nixome-qubes-reconcile --apply` in the nested dom0. Reconcile
 logs are written under `.nixome-logs/` on the host and `/var/log/nixome/` in
 the nested dom0.
 
-The config topology image is built as a sparse raw base image and the VM runner
-creates a writable qcow2 overlay from it. This avoids the extra raw-to-qcow2
-conversion copy for the largest local smoke-test image.
+The config topology image keeps local build size down by sharing one NixOS
+guest root image between the two TemplateVM source directories. The VM runner
+can use either qcow2 or raw Nix-built base images and creates a writable qcow2
+overlay for runtime state.
 
 The current NixOS guest template profile uses QubesDB, qrexec-agent, Qubes
 meminfo writer, and `/dev/mapper/dmroot` as the root device to match Qubes'
@@ -215,9 +216,9 @@ those NixOS AppVMs and proving qrexec from them is the next runtime boundary.
 The config profile sets `default_kernel = ""` so fresh config-only images can
 create TemplateVMs before any Fedora/Qubes VM kernel bootstrap has run.
 
-The VM runner keeps generated writable qcow2 overlays under `.nixome-vm/`.
-They are safe to regenerate. If a local image build fails with `No space left on
-device` during raw-to-qcow2 conversion, run:
+The VM runner keeps generated writable qcow2 overlays and Nix build out-links
+under `.nixome-vm/`. They are safe to regenerate. If a local image build fails
+with `No space left on device`, run:
 
 ```bash
 make clean-vm-disks

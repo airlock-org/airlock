@@ -89,12 +89,12 @@ That path builds a dom0 image whose Nix config declares `sys-config-vault` and
 `sys-agent`, imports their NixOS template sources through Qubes'
 `qvm-template-postprocess`, and applies simple prefs/features/services with
 `nixome-qubes-reconcile`. See [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
-The config topology image is built as a sparse raw base image and run through a
-qcow2 overlay to reduce peak local build-space use.
+The config topology image keeps local build size down by sharing one NixOS
+guest root image between the two TemplateVM source directories.
 
-Generated writable VM overlays live under `.nixome-vm/`. If local image builds
-fail because the image converter runs out of temporary disk space, remove only
-those generated overlays with:
+Generated writable VM overlays and VM build out-links live under `.nixome-vm/`.
+If local image builds fail because the builder runs out of temporary disk
+space, remove only those generated VM artifacts with:
 
 ```bash
 make clean-vm-disks
