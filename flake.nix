@@ -62,7 +62,7 @@
         lib.concatStringsSep " " (
           kernelParams
           ++ [
-            "init=${cfg.system.build.toplevel}/init"
+            "init=/sbin/init"
           ]
         );
 
@@ -76,7 +76,30 @@
           pkgs = pkgsFor system;
           bootAnchors = pkgs.runCommand "${imageName}-qubes-boot-anchors" { } ''
             mkdir -p "$out/sbin" "$out/lib/modules"
-            ln -s "${configuration.config.system.build.toplevel}/init" "$out/sbin/init"
+            cat > "$out/sbin/init" <<'EOF'
+            #!${pkgs.runtimeShell}
+            set -eu
+
+            export PATH=${
+              lib.makeBinPath [
+                pkgs.coreutils
+                pkgs.findutils
+              ]
+            }
+
+            mkdir -p /etc /run
+
+            for entry in ${configuration.config.system.build.etc}/etc/*; do
+              name="$(basename "$entry")"
+              if [ ! -e "/etc/$name" ] && [ ! -L "/etc/$name" ]; then
+                ln -s "$entry" "/etc/$name"
+              fi
+            done
+
+            ln -sfn ${configuration.config.system.build.toplevel} /run/current-system
+            exec ${configuration.config.system.build.toplevel}/init "$@"
+            EOF
+            chmod 0555 "$out/sbin/init"
           '';
         in
         import "${nixpkgs}/nixos/lib/make-disk-image.nix" {

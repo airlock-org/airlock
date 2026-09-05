@@ -103,7 +103,11 @@ templates and created the two AppVMs in the nested dom0 test environment.
 
 Booting those NixOS guests is still experimental. Normal Qubes Linux VMs use a
 dom0-provided VM kernel/initramfs and kernel options such as
-`root=/dev/mapper/dmroot`. The guest profile now declares that root path, but
-we still need to prove that the Qubes VM kernel/initramfs can start this NixOS
-root and reach qrexec. If it cannot, the next design point is a declarative
-NixOS-compatible Qubes VM kernel/initrd import or an internal-kernel boot path.
+`root=/dev/mapper/dmroot`. The guest profile now declares that root path and
+the template image includes a small Nix-owned `/sbin/init` wrapper. The wrapper
+links the generated NixOS `/etc` entries into the writable Qubes root, sets
+`/run/current-system`, then execs the normal NixOS systemd init.
+
+We still need to prove that this reaches qrexec in nested Xen. If it cannot,
+the next design point is a declarative NixOS-compatible Qubes VM kernel/initrd
+import or an internal-kernel boot path.
