@@ -10,6 +10,10 @@ let
   qubeGuiSmoke = pkgs.callPackage ../pkgs/nixome-qube-gui-smoke { };
   observeDom0 = pkgs.callPackage ../pkgs/nixome-observe { };
   qubesSmoke = pkgs.callPackage ../pkgs/nixome-qubes-smoke { };
+  xorgQubesShmoverride = pkgs.writeShellScript "X-qubes-shmoverride" ''
+    export LD_PRELOAD=${pkgs.qubes-gui-daemon}/lib/qubes-gui-daemon/shmoverride.so''${LD_PRELOAD:+:$LD_PRELOAD}
+    exec ${pkgs.xorg-server}/bin/X "$@"
+  '';
 
   baselineOptOuts = [
     # Upstream requires these because dedicated sys-net/sys-usb are not ready.
@@ -113,6 +117,11 @@ in
 
     boot.initrd.systemd.enable = lib.mkDefault true;
     time.timeZone = lib.mkDefault "UTC";
+    # Qubes GUI needs shmoverride preloaded in the Xorg server. The NixOS
+    # display-manager module sets xserverBin at normal priority, so this must
+    # be stronger than a default while GUI support is enabled.
+    services.xserver.displayManager.xserverBin =
+      lib.mkIf cfg.gui.enable (lib.mkOverride 50 xorgQubesShmoverride);
 
     virtualisation.qubes = {
       dom0.enable = true;
