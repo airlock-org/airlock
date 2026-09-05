@@ -6,6 +6,8 @@
 }:
 let
   cfg = config.nixome.dom0;
+  qubeBootstrap = pkgs.callPackage ../pkgs/nixome-qube-bootstrap { };
+  qubeGuiSmoke = pkgs.callPackage ../pkgs/nixome-qube-gui-smoke { };
   observeDom0 = pkgs.callPackage ../pkgs/nixome-observe { };
   qubesSmoke = pkgs.callPackage ../pkgs/nixome-qubes-smoke { };
 
@@ -37,6 +39,15 @@ in
       description = ''
         Install the development-only nixome-observe-dom0 command.
         It reports Xen, systemd, and Qubes control-stack state as JSON.
+      '';
+    };
+
+    testingTools.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Install development-only bootstrap and smoke-test commands.
+        These commands may create or modify Qubes runtime state.
       '';
     };
 
@@ -147,9 +158,14 @@ in
       requires = [ "nixome-qubes-store-init.service" ];
     };
 
-    environment.systemPackages = lib.optionals cfg.observability.enable [
-      observeDom0
-      qubesSmoke
-    ];
+    environment.systemPackages =
+      lib.optionals cfg.observability.enable [
+        observeDom0
+      ]
+      ++ lib.optionals cfg.testingTools.enable [
+        qubeBootstrap
+        qubeGuiSmoke
+        qubesSmoke
+      ];
   };
 }

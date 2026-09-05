@@ -88,8 +88,10 @@ Known gaps/TODOs found in module/package comments:
 - The module notes unresolved Xen store/dom0 memory details around Qubes memory
   manager behavior.
 - Some GUI/Xwayland/Xorg integration is still marked FIXME.
-- Template/kernel installation is imperative for now, although helper tools
-  exist and an OOBE module is present but incomplete.
+- Template/kernel installation is imperative for now. Nixome has a
+  development-only `nixome-qube-bootstrap` command using the existing
+  `nixos-qubes-tools` RPM import helpers; a fully declarative reconciler is
+  still future work.
 
 Nixome now consumes a local source fork at `vendor/nixos-qubes`. The fork is
 justified by concrete compatibility fixes needed for the POC build:
@@ -171,6 +173,7 @@ What requires a booted Xen dom0 target:
 - `qubesd`, QubesDB, qrexec daemon/policy daemon runtime checks.
 - Creating and starting a qube.
 - `qvm-run --pass-io` and qrexec stdout capture.
+- Narrow AppVM GUI smoke testing with dom0 X window detection.
 - Full Qubes integration tests.
 
 What likely requires physical hardware:

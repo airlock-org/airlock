@@ -28,6 +28,7 @@
 
   environment.systemPackages = with pkgs; [
     xterm
+    xdotool
   ];
 
   image.baseName = "nixome-dom0-vm-gui";

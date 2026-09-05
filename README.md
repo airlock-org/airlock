@@ -55,6 +55,23 @@ This builds the GUI VM profile with X11, LightDM, XFCE, and Qubes GUI-related
 dom0 packages enabled. It is still a development VM, not a production Qubes
 desktop.
 
+For an automated nested GUI boot/control-plane check:
+
+```bash
+make vm-gui-check
+```
+
+For the current full nested smoke path:
+
+```bash
+make vm-gui-smoke
+```
+
+This starts the GUI image, checks core services over SSH, downloads/imports the
+default Qubes R4.3 Fedora VM kernel and Fedora 43 XFCE template, runs qrexec
+`uname -a`, then tries to detect a Qube GUI window in dom0. The template RPM is
+about 2 GB. Logs and JSON results are written under `.nixome-logs/`.
+
 On a booted Xen dom0 target with a Qubes template installed:
 
 ```bash
@@ -71,6 +88,9 @@ The Qubes smoke test creates `test-nixome-smoke` if needed, starts it, runs
   The `nixos-qubes` `nixpkgs` input follows this repository's `nixpkgs` pin.
 - `modules/dom0.nix` enables upstream Qubes-on-NixOS dom0 support and keeps the
   upstream security gap explicit with `virtualisation.qubes.secure = false`.
+- `nixome-qube-bootstrap`, `nixome-qubes-smoke`, and
+  `nixome-qube-gui-smoke` are development-only commands for progressing the
+  VM lifecycle, qrexec, and GUI feedback loop.
 - `machines/test.nix` is the first concrete NixOS dom0 configuration.
 - `tests/` contains layered feedback scripts.
 - `docs/` records upstream findings and the next test boundary.

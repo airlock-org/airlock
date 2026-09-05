@@ -1,6 +1,6 @@
 SHELL := bash
 
-.PHONY: build test vm-image vm-image-dry-run vm-run vm-gui-image vm-gui-image-dry-run vm-gui-run
+.PHONY: build test vm-image vm-image-dry-run vm-run vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-check vm-gui-smoke
 
 build:
 	nix build .#nixosConfigurations.test.config.system.build.toplevel --print-build-logs --show-trace
@@ -25,3 +25,9 @@ vm-gui-image-dry-run:
 
 vm-gui-run:
 	NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-image NIXOME_VM_DISPLAY=gtk ./scripts/run-nested-vm.sh
+
+vm-gui-check:
+	NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
+
+vm-gui-smoke:
+	./scripts/run-nested-gui-smoke.sh

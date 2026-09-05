@@ -119,6 +119,8 @@
           pkgs = pkgsFor system;
         in
         {
+          nixome-qube-bootstrap = pkgs.callPackage ./pkgs/nixome-qube-bootstrap { };
+          nixome-qube-gui-smoke = pkgs.callPackage ./pkgs/nixome-qube-gui-smoke { };
           nixome-qubes-smoke = pkgs.callPackage ./pkgs/nixome-qubes-smoke { };
           nixome-observe-dom0 = pkgs.callPackage ./pkgs/nixome-observe { };
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
@@ -132,6 +134,8 @@
 
       checks = forAllSystems (system: {
         module-contract = mkModuleContractCheck system;
+        qube-bootstrap-package = self.packages.${system}.nixome-qube-bootstrap;
+        qube-gui-smoke-package = self.packages.${system}.nixome-qube-gui-smoke;
         observe-package = self.packages.${system}.nixome-observe-dom0;
       });
 

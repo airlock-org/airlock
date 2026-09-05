@@ -30,6 +30,10 @@
     ];
   };
 
+  # Development-only: host-side smoke scripts need unattended sudo inside the
+  # throwaway nested VM. Do not copy this into a real dom0 machine profile.
+  security.sudo.wheelNeedsPassword = false;
+
   services.openssh = {
     enable = true;
     settings = {

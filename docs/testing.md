@@ -96,6 +96,56 @@ After a Qubes VM kernel and template are installed, run `nixome-qubes-smoke`
 inside the VM to create/start the test qube and execute `uname -a` through
 qrexec.
 
+For an automated version of the boot/control-plane check:
+
+```bash
+make vm-gui-check
+```
+
+This starts the GUI image, waits for SSH, verifies `libvirtd`, `qubesd`,
+QubesDB, and the qrexec policy daemon, saves `nixome-observe-dom0` JSON, and
+then stops the VM. It does not download templates or create Qubes.
+
+For the current full nested smoke path:
+
+```bash
+make vm-gui-smoke
+```
+
+This does the control-plane check and then, by default:
+
+- runs `nixome-qube-bootstrap` in dom0 as root,
+- downloads the Qubes R4.3 RPM signing key from `keys.qubes-os.org`,
+- downloads/imports the Fedora 41 Qubes VM kernel RPMs,
+- downloads/imports the Fedora 43 XFCE template RPM,
+- sets `default_kernel`, `default_template`, `default_dispvm`, and `updatevm`,
+- runs `nixome-qubes-smoke`,
+- runs `nixome-qube-gui-smoke`.
+
+The Fedora 43 XFCE template RPM is about 2 GB. To run only selected layers:
+
+```bash
+NIXOME_BOOTSTRAP_QUBES=0 make vm-gui-smoke
+NIXOME_RUN_QUBES_SMOKE=0 make vm-gui-smoke
+NIXOME_RUN_GUI_SMOKE=0 make vm-gui-smoke
+NIXOME_KEEP_VM=1 make vm-gui-smoke
+```
+
+Default bootstrap inputs come from the current `nixos-qubes` README examples:
+
+```text
+template: fedora-43-xfce
+kernel:   6.12.64-1.fc41
+key:      https://keys.qubes-os.org/keys/qubes-release-4.3-signing-key.asc
+```
+
+Override them with `NIXOME_QUBES_TEMPLATE`,
+`NIXOME_QUBES_TEMPLATE_URL`, `NIXOME_QUBES_KERNEL_NAME`,
+`NIXOME_QUBES_KERNEL_VERSION`, `NIXOME_QUBES_KERNEL_FEDORA`,
+`NIXOME_QUBES_KERNEL_URL`, and `NIXOME_QUBES_KERNEL_MODULES_URL`.
+RPM signature verification is enabled by default. Set
+`NIXOME_QUBES_VERIFY_RPMS=0` only for throwaway development debugging.
+
 This VM path is not a production-supported Qubes deployment. It is a development
 probe for whether the NixOS guest can boot Xen and reach Qubes control services
 under nested virtualization.
