@@ -125,6 +125,28 @@ in
 
     virtualisation.libvirtd.firewallBackend = lib.mkForce cfg.libvirtFirewallBackend;
 
+    systemd.services.nixome-qubes-store-init = {
+      description = "Initialize the Qubes XML store for Nixome dom0";
+      after = [ "systemd-tmpfiles-setup.service" ];
+      before = [ "qubesd.service" ];
+      requiredBy = [ "qubesd.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        if [ ! -f /var/lib/qubes/qubes.xml ]; then
+          echo "setting up Qubes XML store..."
+          ${pkgs.python3.pkgs.qubes-core-admin}/bin/qubes-create --offline-mode
+        fi
+      '';
+    };
+
+    systemd.services.qubesd = {
+      after = [ "nixome-qubes-store-init.service" ];
+      requires = [ "nixome-qubes-store-init.service" ];
+    };
+
     environment.systemPackages = lib.optionals cfg.observability.enable [
       observeDom0
       qubesSmoke
