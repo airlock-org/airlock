@@ -34,6 +34,9 @@ Current local changes:
   create and register asyncio event loops explicitly. Python 3.14 no longer
   gives the main thread an implicit current event loop for
   `asyncio.get_event_loop()`.
+- `qubes-core-admin`: patch `runuser` invocations in VM daemon startup and dom0
+  service dispatch to use the Nix store path from `util-linux`. `qubesd` starts
+  with a narrow service `PATH`, so bare `runuser` fails at VM start time.
 - `qubes-vmm-xen`: make the nixpkgs Xen `xsd_glue` OCaml split-output copy
   detect the actual installed directory instead of deriving one path from
   `ls $out/lib/ocaml/`, and skip the newer plugin-interface source copy when
