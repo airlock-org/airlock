@@ -13,36 +13,56 @@ plane in dom0, but moves the desired VM topology into Nix.
 - `sys-config-mod`, an offline AppVM based on the config-mod template.
 - `default_kernel = ""`, so fresh config-only images can create TemplateVMs
   before a Fedora/Qubes VM kernel has been bootstrapped.
-- qrexec policy allowing only `sys-config-mod` to call
-  `nixome.Config.Export` on `sys-config-vault`.
+- qrexec policy allowing only dom0 to call `nixome.Config.CandidateExport` on
+  `sys-config-mod` and `nixome.Config.ArchiveCandidate` on
+  `sys-config-vault`.
 
 The initial VM resource settings are sized for the nested 8 GiB developer VM:
 `sys-config-vault` starts at 1024 MiB and `sys-config-mod` starts at 2048 MiB. A
 physical Nixome host can raise these declaratively later.
 
 For this POC both TemplateVM source directories reference the same NixOS guest
-root image. That shared image carries both the vault export service and the
-config-mod fetch tooling; the AppVM names, Qubes features, offline networking, and
-qrexec policy carry the role distinction. Splitting the guest root into
-role-specific templates remains compatible with the topology model once the
-boot path is stable.
+root image. That shared image carries both the vault archive tooling and the
+config-mod validation/export tooling; the AppVM names, Qubes features, offline
+networking, and qrexec policy carry the runtime role distinction. Dedicated
+role-specific guest closures already evaluate/build and remain the hardening
+target once the authority flow is stable.
 
-`sys-config-vault` owns the authoritative Git repository at:
+`sys-config-mod` owns the editable candidate repository at:
 
 ```text
 /home/user/nixome-config
 ```
 
-`sys-config-mod` gets a read-only snapshot by running:
+It can initialize and validate that candidate with:
 
 ```bash
-nixome-agent-fetch-config
+nixome-config-mod-init
+nixome-config-mod-validate
 ```
 
-That command calls `nixome.Config.Export` over qrexec, receives a Git bundle,
-clones it to `/home/user/nixome-config-readonly`, and removes write bits from
-the snapshot. It does not grant `sys-config-mod` a qrexec service that writes back
-to the vault.
+Validation runs in `sys-config-mod`, writes JSON under:
+
+```text
+/home/user/nixome-config-validation
+```
+
+`sys-config-vault` owns the archive repository at:
+
+```text
+/home/user/nixome-config-vault
+```
+
+dom0 archives a candidate by running:
+
+```bash
+sudo nixome-config-archive-candidate
+```
+
+That command refuses to proceed unless `sys-config-mod` is offline, fetches a
+validated Git bundle from `sys-config-mod`, checks the validation artifact and
+bundle commit in dom0, then sends the bundle to `sys-config-vault` for archival.
+This records what dom0 is about to attempt before deployment logic exists.
 
 ## Reconcile Path
 
@@ -107,8 +127,9 @@ make vm-config-smoke
 
 That target builds and boots the nested config dom0 image, applies the declared
 Qubes topology, starts `sys-config-vault` and `sys-config-mod`, runs `uname -a`
-through qrexec in both VMs, initializes the vault Git repository, and verifies
-that `sys-config-mod` can fetch a read-only snapshot through `nixome.Config.Export`.
+through qrexec in both VMs, initializes the config modifier repository,
+validates the committed candidate inside `sys-config-mod`, and verifies that
+dom0 archives the validated candidate into `sys-config-vault`.
 The machine-readable result is copied to:
 
 ```text
@@ -135,6 +156,7 @@ It also loads the Xen vchan support modules used by Qubes guests
 QubesDB starts.
 
 The verified smoke path reaches qrexec in both declared NixOS AppVMs. The next
-boundary is hardening the model: split role-specific guest roots when useful,
-classify reconcile changes that require VM restart or dom0 reboot, and validate
-the same path on physical Xen-capable hardware.
+boundary is deployment from the archived commit plus hardening the model: split
+role-specific guest roots when useful, classify reconcile changes that require
+VM restart or dom0 reboot, and validate the same path on physical Xen-capable
+hardware.

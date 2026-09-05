@@ -212,8 +212,9 @@ make vm-config-smoke
 
 This runs the same reconcile path, then starts `sys-config-vault` and
 `sys-config-mod`, runs `uname -a` through qrexec in both VMs, initializes the
-vault's Git repository, and has `sys-config-mod` fetch a read-only snapshot through
-the `nixome.Config.Export` qrexec service. The result JSON is written to:
+config modifier repository, validates the committed candidate in
+`sys-config-mod`, and has dom0 archive that validated candidate into
+`sys-config-vault`. The result JSON is written to:
 
 ```text
 .nixome-logs/vm-gui-config-vms-smoke.json

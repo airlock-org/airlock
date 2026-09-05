@@ -91,8 +91,9 @@ That path builds a dom0 image whose Nix config declares `sys-config-vault` and
 `qvm-template-postprocess`, applies simple prefs/features/services with
 `nixome-qubes-reconcile`, boots both NixOS AppVMs with the normal
 dom0-provided Qubes VM kernel, runs `uname -a` through qrexec in each VM, and
-checks that `sys-config-mod` can fetch a read-only Git snapshot from
-`sys-config-vault`. See [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
+checks that `sys-config-mod` can validate and export a committed config
+candidate which dom0 then archives into `sys-config-vault`. See
+[docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
 The config topology image keeps local build size down by sharing one NixOS
 guest root image between the two TemplateVM source directories.
 
@@ -139,5 +140,5 @@ The Fedora-template nested GUI/qrexec smoke path works on a host with KVM and
 nested virtualization. The NixOS-template `sys-config-vault`/`sys-config-mod` path
 now evaluates, builds template artifacts, imports/creates the declared
 TemplateVMs and AppVMs, boots both NixOS AppVMs under nested Xen, proves qrexec
-with `uname -a`, and verifies the read-only config snapshot flow. Production
-security validation still requires a physical Xen-capable machine.
+with `uname -a`, and verifies the config candidate validation/archive flow.
+Production security validation still requires a physical Xen-capable machine.

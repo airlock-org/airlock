@@ -148,8 +148,9 @@ in
     configAccessPolicy = {
       enable = true;
       vault = "sys-config-vault";
-      reader = "sys-config-mod";
-      service = "nixome.Config.Export";
+      modifier = "sys-config-mod";
+      candidateExportService = "nixome.Config.CandidateExport";
+      archiveService = "nixome.Config.ArchiveCandidate";
     };
   };
 

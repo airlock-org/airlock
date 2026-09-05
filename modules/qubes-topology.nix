@@ -108,6 +108,7 @@ let
   };
 
   reconciler = pkgs.callPackage ../pkgs/nixome-qubes-reconcile { };
+  configArchive = pkgs.callPackage ../pkgs/nixome-config-archive { };
   configVmsSmoke = pkgs.callPackage ../pkgs/nixome-config-vms-smoke { };
 
   configAccessPolicyPackage = pkgs.runCommand "nixome-config-access-policy" { } ''
@@ -115,10 +116,12 @@ let
 
         install -d "$out/etc/qubes/policy.d"
         cat > "$out/etc/qubes/policy.d/30-nixome-config.policy" <<'EOF'
-    # Managed by Nixome. This grants sys-config-mod read-only access to the
-    # config-vault export service and denies the service everywhere else.
-    ${cfg.configAccessPolicy.service} * ${cfg.configAccessPolicy.reader} ${cfg.configAccessPolicy.vault} allow
-    ${cfg.configAccessPolicy.service} * @anyvm @anyvm deny
+    # Managed by Nixome. Only dom0 may fetch a validated candidate from
+    # sys-config-mod or archive a candidate into sys-config-vault.
+    ${cfg.configAccessPolicy.candidateExportService} * dom0 ${cfg.configAccessPolicy.modifier} allow
+    ${cfg.configAccessPolicy.candidateExportService} * @anyvm @anyvm deny
+    ${cfg.configAccessPolicy.archiveService} * dom0 ${cfg.configAccessPolicy.vault} allow
+    ${cfg.configAccessPolicy.archiveService} * @anyvm @anyvm deny
     EOF
   '';
 in
@@ -154,25 +157,31 @@ in
       enable = lib.mkOption {
         type = lib.types.bool;
         default = false;
-        description = "Install qrexec policy for sys-config-mod read access to sys-config-vault.";
+        description = "Install qrexec policy for dom0-mediated config candidate archival.";
       };
 
-      service = lib.mkOption {
+      candidateExportService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.Export";
-        description = "qrexec service used for read-only config export.";
+        default = "nixome.Config.CandidateExport";
+        description = "qrexec service used by dom0 to fetch a validated candidate from sys-config-mod.";
+      };
+
+      archiveService = lib.mkOption {
+        type = lib.types.str;
+        default = "nixome.Config.ArchiveCandidate";
+        description = "qrexec service used by dom0 to archive a candidate into sys-config-vault.";
       };
 
       vault = lib.mkOption {
         type = lib.types.str;
         default = "sys-config-vault";
-        description = "Qube that owns the authoritative configuration repository.";
+        description = "Qube that owns the archived configuration history.";
       };
 
-      reader = lib.mkOption {
+      modifier = lib.mkOption {
         type = lib.types.str;
         default = "sys-config-mod";
-        description = "Qube allowed to read exported configuration snapshots.";
+        description = "Qube that owns the editable configuration candidate.";
       };
     };
   };
@@ -194,6 +203,7 @@ in
 
     environment.etc."nixome/qubes-topology.json".text = builtins.toJSON topology + "\n";
     environment.systemPackages = [
+      configArchive
       configVmsSmoke
       reconciler
     ];

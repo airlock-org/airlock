@@ -7,15 +7,16 @@ COMMAND_LOG="$LOG_DIR/config-vms-smoke.commands.log"
 QVM_LS_LOG="$LOG_DIR/config-vms-qvm-ls.log"
 MOD_UNAME_LOG="$LOG_DIR/config-vms-sys-config-mod-uname.log"
 VAULT_UNAME_LOG="$LOG_DIR/config-vms-sys-config-vault-uname.log"
-VAULT_INIT_LOG="$LOG_DIR/config-vms-vault-init.log"
-MOD_FETCH_LOG="$LOG_DIR/config-vms-mod-fetch.log"
+MOD_INIT_LOG="$LOG_DIR/config-vms-mod-init.log"
+MOD_VALIDATION_LOG="$LOG_DIR/config-vms-mod-validation.log"
+ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
+ARCHIVE_JSON="$LOG_DIR/config-archive.json"
 JOURNAL_LOG="$LOG_DIR/config-vms-journal.log"
 LIBXL_LOG="$LOG_DIR/config-vms-libxl.log"
 QVM_PREFS_LOG="$LOG_DIR/config-vms-qvm-prefs.log"
 
 MOD="${NIXOME_CONFIG_MOD_VM:-sys-config-mod}"
 VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
-SNAPSHOT_PATH="${NIXOME_CONFIG_MOD_SNAPSHOT:-/home/user/nixome-config-readonly}"
 MOD_CONSOLE_LOG="$LOG_DIR/config-vms-$MOD-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 result_written=0
@@ -40,6 +41,16 @@ json_file_string_or_null() {
   fi
 }
 
+json_file_value_or_null() {
+  file="$1"
+
+  if [ -r "$file" ] && jq -e . "$file" >/dev/null 2>&1; then
+    jq -c . "$file" | tr -d '\n'
+  else
+    printf 'null'
+  fi
+}
+
 write_result() {
   status="$1"
   reason="$2"
@@ -55,16 +66,18 @@ write_result() {
     json_string "$MOD"
     printf ',"vault":'
     json_string "$VAULT"
-    printf ',"snapshot_path":'
-    json_string "$SNAPSHOT_PATH"
     printf ',"modifier_uname":'
     json_file_string_or_null "$MOD_UNAME_LOG"
     printf ',"vault_uname":'
     json_file_string_or_null "$VAULT_UNAME_LOG"
-    printf ',"vault_init_log":'
-    json_file_string_or_null "$VAULT_INIT_LOG"
-    printf ',"modifier_fetch_log":'
-    json_file_string_or_null "$MOD_FETCH_LOG"
+    printf ',"modifier_init_log":'
+    json_file_string_or_null "$MOD_INIT_LOG"
+    printf ',"modifier_validation":'
+    json_file_value_or_null "$MOD_VALIDATION_LOG"
+    printf ',"archive":'
+    json_file_value_or_null "$ARCHIVE_JSON"
+    printf ',"archive_log":'
+    json_file_string_or_null "$ARCHIVE_LOG"
     printf ',"command_log":'
     json_string "$COMMAND_LOG"
     printf ',"qvm_ls_log":'
@@ -105,12 +118,6 @@ require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     fail "missing command: $1"
   fi
-}
-
-single_quote() {
-  printf "'"
-  printf '%s' "$1" | sed "s/'/'\\\\''/g"
-  printf "'"
 }
 
 collect_diagnostics() {
@@ -179,6 +186,7 @@ for cmd in \
   grep \
   jq \
   journalctl \
+  nixome-config-archive-candidate \
   qvm-check \
   qvm-ls \
   qvm-run \
@@ -209,24 +217,26 @@ run_qrexec_or_fail "$MOD" "qrexec uname in $MOD" "$MOD_UNAME_LOG" "uname -a"
 grep -q 'Linux' "$VAULT_UNAME_LOG" || fail "vault uname output did not contain Linux"
 grep -q 'Linux' "$MOD_UNAME_LOG" || fail "modifier uname output did not contain Linux"
 
-run_qrexec_or_fail "$VAULT" "config vault init" "$VAULT_INIT_LOG" "nixome-config-vault-init"
+run_qrexec_or_fail "$MOD" "config mod init" "$MOD_INIT_LOG" "nixome-config-mod-init"
+run_qrexec_or_fail "$MOD" "config mod validation in $MOD" "$MOD_VALIDATION_LOG" "nixome-config-mod-validate"
 
-mod_fetch_command="
-set -eu
-dest=$(single_quote "$SNAPSHOT_PATH")
-vault=$(single_quote "$VAULT")
-rm -rf \"\$dest\"
-nixome-agent-fetch-config \"\$vault\" \"\$dest\"
-test -d \"\$dest/.git\"
-if touch \"\$dest/.nixome-write-test\" 2>/dev/null; then
-  echo \"snapshot is writable: \$dest\" >&2
-  exit 1
-fi
-git -C \"\$dest\" log --oneline -1
-"
+jq -e '
+  .schema == "nixome.config-validation.v1" and
+  .status == "passed" and
+  (.commit | type == "string" and length == 40)
+' "$MOD_VALIDATION_LOG" >/dev/null || fail "config mod validation JSON did not pass"
 
-run_qrexec_or_fail "$MOD" "config snapshot fetch in $MOD" "$MOD_FETCH_LOG" "$mod_fetch_command"
+run_or_fail "archive config candidate from $MOD into $VAULT" "$ARCHIVE_LOG" \
+  env NIXOME_LOG_DIR="$LOG_DIR" NIXOME_CONFIG_MOD_VM="$MOD" NIXOME_CONFIG_VAULT_VM="$VAULT" \
+  nixome-config-archive-candidate --mod "$MOD" --vault "$VAULT"
+
+jq -e '
+  .schema == "nixome.config-archive.v1" and
+  .status == "passed" and
+  .candidate_commit == .validation_commit and
+  .candidate_commit == .vault_archive.candidate_commit
+' "$ARCHIVE_JSON" >/dev/null || fail "config archive JSON did not pass"
 
 collect_diagnostics
-write_result passed "NixOS config VMs booted, qrexec worked, and sys-config-mod fetched a read-only config snapshot"
+write_result passed "NixOS config VMs booted, sys-config-mod validated a candidate, and dom0 archived it in sys-config-vault"
 cat "$RESULT_JSON"

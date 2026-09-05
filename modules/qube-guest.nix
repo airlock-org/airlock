@@ -36,11 +36,19 @@ let
     base = [ ];
     config-vault = [
       configVaultInit
+      configVaultArchiveCandidate
+      pkgs.gawk
       pkgs.git
+      pkgs.gnutar
+      pkgs.jq
     ];
     config-mod = [
-      agentFetchConfig
+      configModExportCandidate
+      configModInit
+      configModValidate
+      pkgs.gawk
       pkgs.git
+      pkgs.gnutar
       pkgs.jq
       pkgs.nix
     ];
@@ -50,39 +58,298 @@ let
   configVaultInit = pkgs.writeShellScriptBin "nixome-config-vault-init" ''
         set -eu
 
-        repo="${cfg.configRepoPath}"
+        repo="${cfg.configArchivePath}"
         if [ -d "$repo/.git" ]; then
-          printf 'config repo already exists: %s\n' "$repo"
+          printf 'config archive already exists: %s\n' "$repo"
           exit 0
         fi
 
         mkdir -p "$repo"
         cd "$repo"
-        ${pkgs.git}/bin/git init
+        ${pkgs.git}/bin/git init -b main
+        mkdir -p candidates deployments
+        : > candidates/.gitkeep
+        : > deployments/.gitkeep
         cat > README.md <<'EOF'
-    # Nixome Machine Configuration
+    # Nixome Configuration Vault
 
-    This repository is intended to be the authoritative Git state for this
-    machine's Nixome configuration.
+    This repository archives Nixome configuration candidates and deployment
+    records written by dom0.
     EOF
-        ${pkgs.git}/bin/git add README.md
+        ${pkgs.git}/bin/git add README.md candidates/.gitkeep deployments/.gitkeep
         ${pkgs.git}/bin/git \
           -c user.name='Nixome Config Vault' \
           -c user.email='nixome-config-vault@localhost' \
-          commit -m 'init nixome config repository'
+          commit -m 'init nixome config archive'
   '';
 
-  configExportService = pkgs.writeShellScript "nixome-config-export-qrexec" ''
+  configModInit = pkgs.writeShellScriptBin "nixome-config-mod-init" ''
+        set -eu
+
+        repo="${cfg.configRepoPath}"
+        if [ -d "$repo/.git" ]; then
+          printf 'config mod repo already exists: %s\n' "$repo"
+          exit 0
+        fi
+
+        mkdir -p "$repo"
+        cd "$repo"
+        ${pkgs.git}/bin/git init -b main
+        cat > README.md <<'EOF'
+    # Nixome Machine Configuration
+
+    This is the editable Nixome configuration candidate. dom0 archives a
+    validated commit into sys-config-vault before attempting deployment.
+    EOF
+        cat > flake.nix <<'EOF'
+    {
+      description = "Nixome machine configuration candidate";
+
+      outputs = { self }: {
+        nixome.metadata = {
+          schema = "nixome.config-repo.v1";
+          purpose = "candidate";
+        };
+      };
+    }
+    EOF
+        ${pkgs.git}/bin/git add README.md flake.nix
+        ${pkgs.git}/bin/git \
+          -c user.name='Nixome Config Mod' \
+          -c user.email='nixome-config-mod@localhost' \
+          commit -m 'init nixome config candidate'
+  '';
+
+  configModValidate = pkgs.writeShellScriptBin "nixome-config-mod-validate" ''
     set -eu
 
     repo="${cfg.configRepoPath}"
+    validation_dir="${cfg.configValidationPath}"
+
     if [ ! -d "$repo/.git" ]; then
-      printf 'missing Git repo at %s; run nixome-config-vault-init first\n' "$repo" >&2
+      printf 'missing Git repo at %s; run nixome-config-mod-init first\n' "$repo" >&2
+      exit 1
+    fi
+
+    mkdir -p "$validation_dir/logs"
+    cd "$repo"
+
+    commit="$(${pkgs.git}/bin/git rev-parse HEAD)"
+    result_file="$validation_dir/$commit.json"
+    result_tmp="$result_file.tmp"
+    flake_log="$validation_dir/logs/flake-check-$commit.log"
+    dirty="$(${pkgs.git}/bin/git status --porcelain)"
+
+    write_validation() {
+      status="$1"
+      reason="$2"
+      flake_status="$3"
+
+      ${pkgs.jq}/bin/jq -c -n \
+        --arg schema "nixome.config-validation.v1" \
+        --arg status "$status" \
+        --arg reason "$reason" \
+        --arg repo "$repo" \
+        --arg commit "$commit" \
+        --arg dirty "$dirty" \
+        --arg flake_status "$flake_status" \
+        --arg flake_log "$flake_log" \
+        '{
+          schema: $schema,
+          status: $status,
+          reason: $reason,
+          repo: $repo,
+          commit: $commit,
+          checks: [
+            {
+              name: "git-clean",
+              status: (if $dirty == "" then "passed" else "failed" end),
+              details: $dirty
+            },
+            {
+              name: "nix-flake-check-no-build",
+              status: $flake_status,
+              log: $flake_log
+            }
+          ]
+        }' > "$result_tmp"
+      mv "$result_tmp" "$result_file"
+      cat "$result_file"
+    }
+
+    if [ -n "$dirty" ]; then
+      write_validation failed "config mod worktree is dirty; commit changes before export" skipped
+      exit 1
+    fi
+
+    flake_status=skipped
+    reason="validation passed"
+    status=passed
+    if [ -f flake.nix ]; then
+      if ${pkgs.nix}/bin/nix \
+        --extra-experimental-features nix-command \
+        --extra-experimental-features flakes \
+        flake check --no-build . > "$flake_log" 2>&1; then
+        flake_status=passed
+      else
+        flake_status=failed
+        reason="nix flake check --no-build failed"
+        status=failed
+      fi
+    else
+      printf 'no flake.nix present; skipping nix flake check\n' > "$flake_log"
+    fi
+
+    write_validation "$status" "$reason" "$flake_status"
+    [ "$status" = passed ]
+  '';
+
+  configModExportCandidate = pkgs.writeShellScriptBin "nixome-config-mod-export-candidate" ''
+    set -eu
+
+    repo="${cfg.configRepoPath}"
+    tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
+    trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
+
+    ${configModValidate}/bin/nixome-config-mod-validate > "$tmpdir/validation.json"
+    status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
+    commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
+
+    if [ "$status" != passed ]; then
+      cat "$tmpdir/validation.json" >&2
       exit 1
     fi
 
     cd "$repo"
-    exec ${pkgs.git}/bin/git bundle create - --branches --tags
+    head_commit="$(${pkgs.git}/bin/git rev-parse HEAD)"
+    if [ "$head_commit" != "$commit" ]; then
+      printf 'validation commit %s does not match HEAD %s\n' "$commit" "$head_commit" >&2
+      exit 1
+    fi
+
+    ${pkgs.git}/bin/git bundle create "$tmpdir/config.bundle" HEAD >/dev/null
+    ${pkgs.jq}/bin/jq -c -n \
+      --arg schema "nixome.config-candidate.v1" \
+      --arg commit "$commit" \
+      --arg validation_schema "$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validation.json")" \
+      '{schema: $schema, commit: $commit, validation_schema: $validation_schema}' \
+      > "$tmpdir/manifest.json"
+
+    exec ${pkgs.gnutar}/bin/tar -C "$tmpdir" -cf - config.bundle validation.json manifest.json
+  '';
+
+  configCandidateExportService = pkgs.writeShellScript "nixome-config-candidate-export-qrexec" ''
+    exec ${configModExportCandidate}/bin/nixome-config-mod-export-candidate
+  '';
+
+  configVaultArchiveCandidate = pkgs.writeShellScriptBin "nixome-config-vault-archive-candidate" ''
+    set -eu
+
+    repo="${cfg.configArchivePath}"
+    tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
+    trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
+
+    candidate_tar="$tmpdir/candidate.tar"
+    ${pkgs.coreutils}/bin/cat > "$candidate_tar"
+    ${pkgs.gnutar}/bin/tar -tf "$candidate_tar" |
+      ${pkgs.gawk}/bin/awk '
+        $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" {
+          printf "unexpected candidate tar member: %s\n", $0 > "/dev/stderr"
+          exit 1
+        }
+      '
+    ${pkgs.gnutar}/bin/tar -C "$tmpdir" -xf "$candidate_tar"
+
+    [ -f "$tmpdir/config.bundle" ] || {
+      printf 'candidate tar is missing config.bundle\n' >&2
+      exit 1
+    }
+    [ -f "$tmpdir/validation.json" ] || {
+      printf 'candidate tar is missing validation.json\n' >&2
+      exit 1
+    }
+
+    validation_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validation.json")"
+    validation_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
+    validation_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
+    [ "$validation_schema" = "nixome.config-validation.v1" ] || {
+      printf 'unsupported validation schema: %s\n' "$validation_schema" >&2
+      exit 1
+    }
+    [ "$validation_status" = passed ] || {
+      printf 'validation status is not passed: %s\n' "$validation_status" >&2
+      exit 1
+    }
+
+    verify_repo="$tmpdir/verify.git"
+    ${pkgs.git}/bin/git init --bare "$verify_repo" >/dev/null
+    ${pkgs.git}/bin/git -C "$verify_repo" bundle verify "$tmpdir/config.bundle" > "$tmpdir/bundle-verify.log" 2>&1
+    candidate_commit="$(
+      ${pkgs.git}/bin/git -C "$verify_repo" bundle list-heads "$tmpdir/config.bundle" |
+        ${pkgs.gawk}/bin/awk 'NR == 1 { print $1 }'
+    )"
+    [ -n "$candidate_commit" ] || {
+      printf 'candidate bundle did not expose a commit\n' >&2
+      exit 1
+    }
+    [ "$candidate_commit" = "$validation_commit" ] || {
+      printf 'candidate commit %s does not match validation commit %s\n' "$candidate_commit" "$validation_commit" >&2
+      exit 1
+    }
+
+    if [ ! -d "$repo/.git" ]; then
+      ${configVaultInit}/bin/nixome-config-vault-init >/dev/null
+    fi
+
+    archive_dir="$repo/candidates/$candidate_commit"
+    ${pkgs.coreutils}/bin/mkdir -p "$archive_dir"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/config.bundle" "$archive_dir/config.bundle"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/validation.json" "$archive_dir/validation.json"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/bundle-verify.log" "$archive_dir/bundle-verify.log"
+    ${pkgs.jq}/bin/jq -c -n \
+      --arg schema "nixome.config-candidate-archive-record.v1" \
+      --arg candidate_commit "$candidate_commit" \
+      --arg validation_schema "$validation_schema" \
+      --arg source "dom0" \
+      '{
+        schema: $schema,
+        candidate_commit: $candidate_commit,
+        validation_schema: $validation_schema,
+        archived_by: $source
+      }' > "$archive_dir/metadata.json"
+    printf '%s\n' "$candidate_commit" > "$repo/latest-candidate"
+
+    cd "$repo"
+    ${pkgs.git}/bin/git add "candidates/$candidate_commit" latest-candidate
+    archive_status=current
+    if ! ${pkgs.git}/bin/git diff --cached --quiet; then
+      ${pkgs.git}/bin/git \
+        -c user.name='Nixome dom0 archive' \
+        -c user.email='nixome-dom0@localhost' \
+        commit -m "archive candidate ''${candidate_commit:0:12}" >/dev/null
+      archive_status=archived
+    fi
+
+    vault_commit="$(${pkgs.git}/bin/git rev-parse HEAD)"
+    ${pkgs.jq}/bin/jq -c -n \
+      --arg schema "nixome.config-vault-archive.v1" \
+      --arg status "passed" \
+      --arg archive_status "$archive_status" \
+      --arg candidate_commit "$candidate_commit" \
+      --arg vault_commit "$vault_commit" \
+      --arg archive_repo "$repo" \
+      '{
+        schema: $schema,
+        status: $status,
+        archive_status: $archive_status,
+        candidate_commit: $candidate_commit,
+        vault_commit: $vault_commit,
+        archive_repo: $archive_repo
+      }'
+  '';
+
+  configArchiveService = pkgs.writeShellScript "nixome-config-archive-candidate-qrexec" ''
+    exec ${configVaultArchiveCandidate}/bin/nixome-config-vault-archive-candidate
   '';
 
   vmShellService = pkgs.writeShellScript "nixome-qubes-vmshell" ''
@@ -90,26 +357,6 @@ let
     exec ${pkgs.runtimeShell}
   '';
 
-  agentFetchConfig = pkgs.writeShellScriptBin "nixome-agent-fetch-config" ''
-    set -eu
-
-    target="''${1:-sys-config-vault}"
-    dest="''${2:-$HOME/nixome-config-readonly}"
-    tmpdir="$(mktemp -d)"
-    bundle="$tmpdir/nixome-config.bundle"
-
-    ${pkgs.python3.pkgs.qubes-core-qrexec.domU}/bin/qrexec-client-vm \
-      "$target" nixome.Config.Export > "$bundle"
-
-    if [ -e "$dest" ]; then
-      printf 'destination already exists: %s\n' "$dest" >&2
-      exit 1
-    fi
-
-    ${pkgs.git}/bin/git clone "$bundle" "$dest"
-    chmod -R a-w "$dest"
-    printf 'read-only config snapshot written to %s\n' "$dest"
-  '';
 in
 {
   options.nixome.qubeGuest = {
@@ -135,7 +382,19 @@ in
     configRepoPath = lib.mkOption {
       type = lib.types.str;
       default = "/home/${cfg.user}/nixome-config";
-      description = "Authoritative config repository path in the config-vault role.";
+      description = "Editable config repository path in the config-mod role.";
+    };
+
+    configValidationPath = lib.mkOption {
+      type = lib.types.str;
+      default = "/home/${cfg.user}/nixome-config-validation";
+      description = "Directory for config-mod validation results.";
+    };
+
+    configArchivePath = lib.mkOption {
+      type = lib.types.str;
+      default = "/home/${cfg.user}/nixome-config-vault";
+      description = "Archived candidate repository path in the config-vault role.";
     };
   };
 
@@ -148,6 +407,14 @@ in
       {
         assertion = lib.hasPrefix "/home/" cfg.configRepoPath;
         message = "nixome.qubeGuest.configRepoPath should live under /home for Qubes private storage.";
+      }
+      {
+        assertion = lib.hasPrefix "/home/" cfg.configValidationPath;
+        message = "nixome.qubeGuest.configValidationPath should live under /home for Qubes private storage.";
+      }
+      {
+        assertion = lib.hasPrefix "/home/" cfg.configArchivePath;
+        message = "nixome.qubeGuest.configArchivePath should live under /home for Qubes private storage.";
       }
     ];
 
@@ -393,8 +660,13 @@ in
       before = [ "systemd-user-sessions.service" ];
     };
 
-    environment.etc."qubes-rpc/nixome.Config.Export" = lib.mkIf hasConfigVaultRole {
-      source = configExportService;
+    environment.etc."qubes-rpc/nixome.Config.CandidateExport" = lib.mkIf hasConfigModRole {
+      source = configCandidateExportService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes-rpc/nixome.Config.ArchiveCandidate" = lib.mkIf hasConfigVaultRole {
+      source = configArchiveService;
       mode = "0555";
     };
 
@@ -412,10 +684,13 @@ in
     ]
     ++ (rolePackages.${cfg.role} or [ ]);
 
-    nix.settings.experimental-features = lib.mkIf hasConfigModRole [
-      "nix-command"
-      "flakes"
-    ];
+    nix.settings = lib.mkIf hasConfigModRole {
+      allowed-users = [ cfg.user ];
+      experimental-features = [
+        "nix-command"
+        "flakes"
+      ];
+    };
 
     services.timesyncd.enable = false;
     system.stateVersion = "26.05";

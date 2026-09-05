@@ -286,6 +286,8 @@ collect_diagnostics() {
   remote 'sudo -n cat /var/log/nixome/qubes-bootstrap.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-bootstrap.commands.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/qubes-reconcile.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-reconcile.commands.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-smoke.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-smoke.commands.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-archive.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-archive.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.commands.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-journal.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-journal.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-libxl.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-libxl.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-qvm-prefs.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-qvm-prefs.log" 2>/dev/null || true
@@ -412,7 +414,7 @@ else
 fi
 
 if [ "$RUN_CONFIG_VMS_SMOKE" = "1" ]; then
-  printf 'config-vms: booting declared NixOS config VMs and fetching config snapshot\n'
+  printf 'config-vms: booting declared NixOS config VMs and archiving a validated config candidate\n'
   if ! remote "sudo -n env NIXOME_LOG_DIR=/var/log/nixome nixome-config-vms-smoke" > "$CONFIG_VMS_STDOUT" 2> "$CONFIG_VMS_STDERR"; then
     remote 'sudo -n cat /var/log/nixome/config-vms-smoke.json 2>/dev/null || true' > "$CONFIG_VMS_JSON" 2>/dev/null || true
     collect_diagnostics
