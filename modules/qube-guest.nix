@@ -6,6 +6,8 @@
 }:
 let
   cfg = config.nixome.qubeGuest;
+  hasConfigVaultRole = cfg.role == "config-vault" || cfg.role == "config-system";
+  hasAgentRole = cfg.role == "agent" || cfg.role == "config-system";
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
 
   qubesGuestPath = [
@@ -22,7 +24,7 @@ let
     pkgs.util-linux
   ];
 
-  rolePackages = {
+  rolePackages = rec {
     base = [ ];
     config-vault = [
       configVaultInit
@@ -34,7 +36,7 @@ let
       pkgs.jq
       pkgs.nix
     ];
-    config-system = rolePackages.config-vault ++ rolePackages.agent;
+    config-system = config-vault ++ agent;
   };
 
   configVaultInit = pkgs.writeShellScriptBin "nixome-config-vault-init" ''
@@ -275,7 +277,7 @@ in
       before = [ "systemd-user-sessions.service" ];
     };
 
-    environment.etc."qubes-rpc/nixome.Config.Export" = lib.mkIf (cfg.role == "config-vault") {
+    environment.etc."qubes-rpc/nixome.Config.Export" = lib.mkIf hasConfigVaultRole {
       source = configExportService;
       mode = "0555";
     };
@@ -289,7 +291,7 @@ in
     ]
     ++ (rolePackages.${cfg.role} or [ ]);
 
-    nix.settings.experimental-features = lib.mkIf (cfg.role == "agent") [
+    nix.settings.experimental-features = lib.mkIf hasAgentRole [
       "nix-command"
       "flakes"
     ];
