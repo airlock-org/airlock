@@ -63,6 +63,7 @@ Useful overrides:
 ```bash
 NIXOME_VM_MEMORY=12288 NIXOME_VM_SMP=6 make vm-run
 NIXOME_VM_DISPLAY=gtk make vm-run
+NIXOME_VM_VGA=virtio make vm-gui-run
 NIXOME_VM_SSH_PORT=2223 make vm-run
 ```
 
@@ -76,6 +77,8 @@ make vm-gui-run
 This builds `.#nixome-vm-gui-image` from `machines/vm-gui.nix` and starts it
 with `NIXOME_VM_DISPLAY=gtk`. The VM profile enables X11, LightDM, XFCE,
 autologin for the throwaway `nixome` user, and Qubes GUI-related dom0 packages.
+The launcher defaults to standard VGA for nested Xen because virtio VGA can
+boot and run X while leaving the GTK display black on this host.
 
 The graphical image keeps its writable qcow2 overlay separate from the headless
 image under `.nixome-vm/`.

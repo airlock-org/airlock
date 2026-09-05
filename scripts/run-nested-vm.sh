@@ -8,7 +8,10 @@ MEMORY="${NIXOME_VM_MEMORY:-8192}"
 SMP="${NIXOME_VM_SMP:-4}"
 SSH_PORT="${NIXOME_VM_SSH_PORT:-2222}"
 DISPLAY_MODE="${NIXOME_VM_DISPLAY:-none}"
+VGA="${NIXOME_VM_VGA:-std}"
 OUT_LINK="$VM_DIR/${IMAGE_ATTR}-result"
+SERIAL_LOG="$VM_DIR/serial.log"
+MONITOR_SOCKET="$VM_DIR/${IMAGE_ATTR}.monitor"
 
 mkdir -p "$VM_DIR"
 
@@ -33,10 +36,25 @@ fi
 
 BASE_IMAGE="$(readlink -f "${base_images[0]}")"
 RUN_DISK="$VM_DIR/${IMAGE_ATTR}.qcow2"
+RUN_DISK_BACKUP_TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 
 qemu_out="$(nix build --no-link --print-out-paths "$ROOT#qemu-kvm")"
 qemu_utils_out="$(nix build --no-link --print-out-paths "$ROOT#qemu-utils")"
 ovmf_out="$(nix build --no-link --print-out-paths "$ROOT#ovmf-fd")"
+
+if [ -e "$RUN_DISK" ]; then
+  current_backing="$(
+    "$qemu_utils_out/bin/qemu-img" info --output=json "$RUN_DISK" |
+      sed -n 's/^[[:space:]]*"backing-filename": "\(.*\)",[[:space:]]*$/\1/p' |
+      head -n 1
+  )"
+
+  if [ "$current_backing" != "$BASE_IMAGE" ]; then
+    backup_disk="$RUN_DISK.$RUN_DISK_BACKUP_TIMESTAMP.bak"
+    printf 'base image changed; moving stale writable overlay to: %s\n' "$backup_disk"
+    mv "$RUN_DISK" "$backup_disk"
+  fi
+fi
 
 if [ ! -e "$RUN_DISK" ]; then
   printf 'creating writable overlay: %s\n' "$RUN_DISK"
@@ -59,10 +77,12 @@ case "$DISPLAY_MODE" in
     display_args=(-display none -serial mon:stdio)
     ;;
   gtk)
-    display_args=(-display gtk,gl=off -serial "file:$VM_DIR/serial.log")
+    : > "$SERIAL_LOG"
+    display_args=(-display gtk,gl=off -serial "file:$SERIAL_LOG")
     ;;
   sdl)
-    display_args=(-display sdl -serial "file:$VM_DIR/serial.log")
+    : > "$SERIAL_LOG"
+    display_args=(-display sdl -serial "file:$SERIAL_LOG")
     ;;
   *)
     printf 'error: unsupported NIXOME_VM_DISPLAY=%s; use none, gtk, or sdl\n' "$DISPLAY_MODE" >&2
@@ -75,15 +95,19 @@ starting VM
   image attr: .#$IMAGE_ATTR
   disk: $RUN_DISK
   display: $DISPLAY_MODE
+  vga: $VGA
   memory: ${MEMORY} MiB
   ssh: ssh -p $SSH_PORT nixome@127.0.0.1
   password: nixome
+  monitor: $MONITOR_SOCKET
 
 Inside the VM, first check:
   nixome-observe-dom0 | jq
   cat /proc/xen/capabilities
   systemctl status qubes-db-dom0 qubesd qubes-qrexec-policy-daemon
 EOF
+
+rm -f "$MONITOR_SOCKET"
 
 exec "$qemu_out/bin/qemu-system-x86_64" \
   -machine q35,accel=kvm \
@@ -93,9 +117,10 @@ exec "$qemu_out/bin/qemu-system-x86_64" \
   -drive if=pflash,format=raw,readonly=on,file="$ovmf_out/FV/OVMF_CODE.fd" \
   -drive if=pflash,format=raw,file="$OVMF_VARS" \
   -drive if=virtio,format=qcow2,file="$RUN_DISK",discard=unmap \
-  -vga virtio \
+  -vga "$VGA" \
   -device virtio-net-pci,netdev=net0 \
   -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22" \
   -device virtio-rng-pci \
+  -monitor "unix:$MONITOR_SOCKET,server=on,wait=off" \
   -no-reboot \
   "${display_args[@]}"
