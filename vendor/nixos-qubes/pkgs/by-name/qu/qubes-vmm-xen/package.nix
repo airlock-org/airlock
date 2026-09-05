@@ -151,6 +151,20 @@ let
       done
     fi
   '';
+
+  fragilePluginInterfaceInstall = ''
+    mkdir -p $ocaml/share/xen/ocaml/xsd_glue
+    cp -v tools/ocaml/libs/xsd_glue/plugin_interface_v1.ml $ocaml/share/xen/ocaml/xsd_glue/
+    cp -v tools/ocaml/libs/xsd_glue/plugin_interface_v1.mli $ocaml/share/xen/ocaml/xsd_glue/
+  '';
+
+  robustPluginInterfaceInstall = ''
+    if [ -e tools/ocaml/libs/xsd_glue/plugin_interface_v1.ml ]; then
+      mkdir -p $ocaml/share/xen/ocaml/xsd_glue
+      cp -v tools/ocaml/libs/xsd_glue/plugin_interface_v1.ml $ocaml/share/xen/ocaml/xsd_glue/
+      cp -v tools/ocaml/libs/xsd_glue/plugin_interface_v1.mli $ocaml/share/xen/ocaml/xsd_glue/
+    fi
+  '';
 in
 (xen.override {
   inherit python3Packages;
@@ -175,7 +189,18 @@ in
     installPhase =
       assert lib.assertMsg (lib.hasInfix fragileXsdGlueInstall oldAttrs.installPhase)
         "qubes-vmm-xen: expected nixpkgs xsd_glue install phase was not found";
-      builtins.replaceStrings [ fragileXsdGlueInstall ] [ robustXsdGlueInstall ] oldAttrs.installPhase;
+      assert lib.assertMsg (lib.hasInfix fragilePluginInterfaceInstall oldAttrs.installPhase)
+        "qubes-vmm-xen: expected nixpkgs plugin_interface install phase was not found";
+      builtins.replaceStrings
+        [
+          fragileXsdGlueInstall
+          fragilePluginInterfaceInstall
+        ]
+        [
+          robustXsdGlueInstall
+          robustPluginInterfaceInstall
+        ]
+        oldAttrs.installPhase;
 
     src = fetchgit {
       url = "https://xenbits.xenproject.org/git-http/xen.git";

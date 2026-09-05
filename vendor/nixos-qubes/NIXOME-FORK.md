@@ -22,4 +22,5 @@ Current local changes:
   while the installed Python distribution is `qubesimgconverter`.
 - `qubes-vmm-xen`: make the nixpkgs Xen `xsd_glue` OCaml split-output copy
   detect the actual installed directory instead of deriving one path from
-  `ls $out/lib/ocaml/`.
+  `ls $out/lib/ocaml/`, and skip the newer plugin-interface source copy when
+  the older Qubes Xen source layout does not include those files.
