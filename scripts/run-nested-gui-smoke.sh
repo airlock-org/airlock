@@ -10,6 +10,7 @@ SSH_USER="${NIXOME_VM_SSH_USER:-nixome}"
 SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
 SSH_WAIT_SECONDS="${NIXOME_VM_SSH_WAIT_SECONDS:-240}"
 VM_TIMEOUT="${NIXOME_VM_RUN_TIMEOUT:-14400}"
+VM_START_WAIT_SECONDS="${NIXOME_VM_START_WAIT_SECONDS:-$VM_TIMEOUT}"
 IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-image}"
 DISPLAY_MODE="${NIXOME_VM_DISPLAY:-gtk}"
 KEEP_VM="${NIXOME_KEEP_VM:-0}"
@@ -320,6 +321,26 @@ timeout -k 20s "$VM_TIMEOUT" env \
   NIXOME_VM_SSH_PORT="$SSH_PORT" \
   "$ROOT/scripts/run-nested-vm.sh" > "$QEMU_LOG" 2>&1 &
 vm_pid="$!"
+
+vm_start_deadline=$((SECONDS + VM_START_WAIT_SECONDS))
+while [ "$SECONDS" -lt "$vm_start_deadline" ]; do
+  if grep -q '^starting VM$' "$QEMU_LOG" 2>/dev/null; then
+    break
+  fi
+
+  if ! kill -0 "$vm_pid" >/dev/null 2>&1; then
+    tail -n 120 "$QEMU_LOG" >&2 || true
+    exit 1
+  fi
+
+  sleep 3
+done
+
+if ! grep -q '^starting VM$' "$QEMU_LOG" 2>/dev/null; then
+  printf 'VM did not start within %s seconds; see %s\n' "$VM_START_WAIT_SECONDS" "$QEMU_LOG" >&2
+  tail -n 120 "$QEMU_LOG" >&2 || true
+  exit 1
+fi
 
 deadline=$((SECONDS + SSH_WAIT_SECONDS))
 while [ "$SECONDS" -lt "$deadline" ]; do
