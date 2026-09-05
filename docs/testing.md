@@ -204,6 +204,21 @@ then runs `sudo nixome-qubes-reconcile --apply` in the nested dom0. Reconcile
 logs are written under `.nixome-logs/` on the host and `/var/log/nixome/` in
 the nested dom0.
 
+To run the current NixOS config-VM boot/qrexec proof:
+
+```bash
+make vm-config-smoke
+```
+
+This runs the same reconcile path, then starts `sys-config-vault` and
+`sys-agent`, runs `uname -a` through qrexec in both VMs, initializes the
+vault's Git repository, and has `sys-agent` fetch a read-only snapshot through
+the `nixome.Config.Export` qrexec service. The result JSON is written to:
+
+```text
+.nixome-logs/vm-gui-config-vms-smoke.json
+```
+
 The config topology image keeps local build size down by sharing one NixOS
 guest root image between the two TemplateVM source directories. The VM runner
 can use either qcow2 or raw Nix-built base images and creates a writable qcow2
@@ -212,8 +227,9 @@ The nested config image currently has 24 GiB of virtual disk capacity.
 
 The current NixOS guest template profile uses QubesDB, qrexec-agent, Qubes
 meminfo writer, and `/dev/mapper/dmroot` as the root device to match Qubes'
-normal Linux VM boot path. Import/create reconciliation is automated; booting
-those NixOS AppVMs and proving qrexec from them is the next runtime boundary.
+normal Linux VM boot path. Import/create reconciliation is automated, and
+`make vm-config-smoke` currently proves that the declared NixOS AppVMs boot and
+serve qrexec under nested Xen.
 The config profile sets `default_kernel = ""` so fresh config-only images can
 create TemplateVMs before any Fedora/Qubes VM kernel bootstrap has run.
 

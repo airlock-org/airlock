@@ -99,18 +99,33 @@ That target uses the config image, skips Fedora template bootstrap, skips the
 old qrexec/window smoke tests, and saves reconcile output under
 `.nixome-logs/`.
 
-## Current Boundary
+Run the current NixOS config-VM runtime proof:
+
+```bash
+make vm-config-smoke
+```
+
+That target builds and boots the nested config dom0 image, applies the declared
+Qubes topology, starts `sys-config-vault` and `sys-agent`, runs `uname -a`
+through qrexec in both VMs, initializes the vault Git repository, and verifies
+that `sys-agent` can fetch a read-only snapshot through `nixome.Config.Export`.
+The machine-readable result is copied to:
+
+```text
+.nixome-logs/vm-gui-config-vms-smoke.json
+```
+
+## Verified Boundary
 
 The template artifacts are NixOS root images packaged in the shape expected by
 `qvm-template-postprocess`. `make vm-config-reconcile` has imported those
 templates and created the two AppVMs in the nested dom0 test environment.
 
-Booting those NixOS guests is still experimental. Normal Qubes Linux VMs use a
-dom0-provided VM kernel/initramfs and kernel options such as
-`root=/dev/mapper/dmroot`. The guest profile now declares that root path and
-the template image includes a small Nix-owned `/sbin/init` wrapper. The wrapper
-sets up the normal NixOS activation state in the writable Qubes root, then
-execs the normal NixOS systemd init.
+The NixOS guests now boot in nested Xen with the normal Qubes dom0-provided VM
+kernel/initramfs and kernel options such as `root=/dev/mapper/dmroot`. The
+guest profile declares that root path and the template image includes a small
+Nix-owned `/sbin/init` wrapper. The wrapper sets up the normal NixOS activation
+state in the writable Qubes root, then execs the normal NixOS systemd init.
 Guest users and groups are declarative (`users.mutableUsers = false`) so early
 systemd services such as QubesDB can resolve their configured service groups
 before qrexec is available. The template explicitly opts out of NixOS'
@@ -119,6 +134,7 @@ It also loads the Xen vchan support modules used by Qubes guests
 (`xen-evtchn`, `xen-gntalloc`, `xen-gntdev`, and `xen-privcmd`) before
 QubesDB starts.
 
-We still need to prove that this reaches qrexec in nested Xen. If it cannot,
-the next design point is a declarative NixOS-compatible Qubes VM kernel/initrd
-import or an internal-kernel boot path.
+The verified smoke path reaches qrexec in both declared NixOS AppVMs. The next
+boundary is hardening the model: split role-specific guest roots when useful,
+classify reconcile changes that require VM restart or dom0 reboot, and validate
+the same path on physical Xen-capable hardware.
