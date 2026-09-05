@@ -27,14 +27,14 @@ exec > >(tee -a "$COMMAND_LOG") 2>&1
 trap write_unexpected_failure EXIT
 
 json_string() {
-  printf '%s' "$1" | jq -Rs .
+  printf '%s' "$1" | jq -Rs . | tr -d '\n'
 }
 
 json_file_string_or_null() {
   file="$1"
 
   if [ -r "$file" ]; then
-    jq -Rs . < "$file"
+    jq -Rs . < "$file" | tr -d '\n'
   else
     printf 'null'
   fi
@@ -184,7 +184,8 @@ for cmd in \
   qvm-run \
   qvm-start \
   systemctl \
-  tail; do
+  tail \
+  tr; do
   require_command "$cmd"
 done
 
