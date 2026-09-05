@@ -56,6 +56,7 @@ buildPythonPackage {
       qubes_guid = qubes-gui-daemon;
     })
     ./0002-refactor-fixup-paths.patch
+    ./0003-fix-qvm-run-python-3.14-multiprocessing.patch
   ];
 
   postPatch = ''
