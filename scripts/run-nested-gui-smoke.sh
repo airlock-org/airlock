@@ -34,6 +34,7 @@ SERVICES_LOG="$LOG_DIR/vm-gui-services.log"
 FAILED_UNITS_LOG="$LOG_DIR/vm-gui-failed-units.log"
 JOURNAL_LOG="$LOG_DIR/vm-gui-journal.log"
 BOOTSTRAP_JSON="$LOG_DIR/vm-gui-bootstrap.json"
+BOOTSTRAP_STDOUT="$LOG_DIR/vm-gui-bootstrap.stdout.log"
 BOOTSTRAP_STDERR="$LOG_DIR/vm-gui-bootstrap.stderr.log"
 QREXEC_JSON="$LOG_DIR/vm-gui-qrexec-smoke.json"
 QREXEC_STDERR="$LOG_DIR/vm-gui-qrexec-smoke.stderr.log"
@@ -50,6 +51,20 @@ cached_kernel_modules_host=""
 cached_kernel_modules_guest=""
 cached_template_host=""
 cached_template_guest=""
+
+rm -f \
+  "$OBSERVE_JSON" \
+  "$SERVICES_LOG" \
+  "$FAILED_UNITS_LOG" \
+  "$JOURNAL_LOG" \
+  "$BOOTSTRAP_JSON" \
+  "$BOOTSTRAP_STDOUT" \
+  "$BOOTSTRAP_STDERR" \
+  "$QREXEC_JSON" \
+  "$QREXEC_STDERR" \
+  "$GUI_JSON" \
+  "$GUI_STDERR" \
+  "$QVM_LS_LOG"
 
 cleanup() {
   if [ "$KEEP_VM" = "1" ]; then
@@ -113,14 +128,15 @@ download_cached() {
   curl \
     --fail \
     --location \
+    --silent \
     --show-error \
-    --progress-bar \
     "${curl_resume[@]}" \
     --output "$partial" \
     "$url"
 
   chmod 0644 "$partial"
   mv "$partial" "$dest"
+  printf 'cache: stored %s\n' "$dest" >&2
   printf '%s' "$dest"
 }
 
@@ -253,6 +269,23 @@ collect_diagnostics() {
   remote 'sudo -n cat /var/log/nixome/qubes-bootstrap.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-bootstrap.commands.log" 2>/dev/null || true
 }
 
+extract_json_result() {
+  local schema="$1"
+  local input="$2"
+  local output="$3"
+
+  awk -v schema="$schema" '
+    index($0, "\"schema\":\"" schema "\"") { line = $0 }
+    END {
+      if (line != "") {
+        print line
+        exit 0
+      }
+      exit 1
+    }
+  ' "$input" > "$output"
+}
+
 prepare_cached_bootstrap_assets
 
 printf 'starting nested GUI VM smoke run\n'
@@ -300,9 +333,14 @@ if [ "$BOOTSTRAP_QUBES" = "1" ]; then
   printf 'bootstrap: installing/checking Qubes VM kernel and template\n'
   copy_cached_bootstrap_assets_to_guest
   bootstrap_env="$(remote_env_prefix)"
-  if ! remote "sudo -n $bootstrap_env NIXOME_LOG_DIR=/var/log/nixome nixome-qube-bootstrap" > "$BOOTSTRAP_JSON" 2> "$BOOTSTRAP_STDERR"; then
+  if ! remote "sudo -n $bootstrap_env NIXOME_LOG_DIR=/var/log/nixome nixome-qube-bootstrap" > "$BOOTSTRAP_STDOUT" 2> "$BOOTSTRAP_STDERR"; then
     collect_diagnostics
     cat "$BOOTSTRAP_STDERR" >&2 || true
+    exit 1
+  fi
+  if ! extract_json_result "nixome.qubes-bootstrap.v1" "$BOOTSTRAP_STDOUT" "$BOOTSTRAP_JSON"; then
+    collect_diagnostics
+    printf 'bootstrap did not emit result JSON; see %s\n' "$BOOTSTRAP_STDOUT" >&2
     exit 1
   fi
 else
