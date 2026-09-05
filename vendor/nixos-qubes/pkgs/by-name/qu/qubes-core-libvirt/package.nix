@@ -29,6 +29,7 @@ assert assertMsg (libvirt.version == "10.5.0")
   (oldAttrs: {
     pname = "qubes-core-libvirt";
     version = "${versionPatches}-${versionSuffix}";
+    __intentionallyOverridingVersion = true;
 
     # Several upstream libvirt tests compare driver/capability fixtures that
     # are invalidated by the Qubes patchset in this build environment.

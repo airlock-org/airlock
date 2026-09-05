@@ -37,7 +37,20 @@
             (composeExtensions (import ./pkgs/top-level/overlay.nix) (
               import "${inputs.nixpkgs}/pkgs/top-level/by-name-overlay.nix" ./pkgs/by-name
             ))
-            (self: _: { libvirt_10_5 = inputs.nixpkgs-libvirt_10_5.legacyPackages.${self.stdenv.hostPlatform.system}.libvirt; })
+            (
+              self: _: {
+                libvirt_10_5 =
+                  self.callPackage "${inputs.nixpkgs-libvirt_10_5}/pkgs/development/libraries/libvirt"
+                    {
+                      # The 10.5-era package expression predates replaceVars and still
+                      # names Darwin frameworks as top-level function arguments.
+                      substituteAll = args: self.replaceVars args.src (builtins.removeAttrs args [ "src" ]);
+                      xhtml1 = null;
+                      AppKit = null;
+                      Carbon = null;
+                    };
+              }
+            )
           ) (import ./nix/overlay.nix);
         flake.overlays.default = self.overlays.qubesPackages;
 

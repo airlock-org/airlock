@@ -26,6 +26,10 @@ Current local changes:
 - `qubes-core-libvirt`: disable inherited libvirt package checks because the
   Qubes patchset invalidates driver/capability fixture tests in the generic Nix
   build environment.
+- `qubes-core-libvirt`: build libvirt 10.5 from the old nixpkgs package
+  expression using Nixome's current nixpkgs dependency set. Importing the old
+  package output directly mixed old glibc 2.39 libvirt objects with current
+  Qubes Xen/glibc 2.42 dependencies at runtime.
 - `qubes-vmm-xen`: make the nixpkgs Xen `xsd_glue` OCaml split-output copy
   detect the actual installed directory instead of deriving one path from
   `ls $out/lib/ocaml/`, and skip the newer plugin-interface source copy when
