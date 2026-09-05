@@ -312,6 +312,7 @@ in
       enable = true;
       wantedBy = [ "sysinit.target" ];
       after = [ "systemd-modules-load.service" ];
+      overrideStrategy = "asDropin";
       unitConfig.OnFailure = [ "nixome-qubes-db-diagnostics.service" ];
     };
 
@@ -324,6 +325,7 @@ in
         "systemd-user-sessions.service"
       ];
       aliases = [ "qubes-core-agent.service" ];
+      overrideStrategy = "asDropin";
       unitConfig.OnFailure = [ "nixome-qubes-qrexec-diagnostics.service" ];
     };
 
