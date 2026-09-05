@@ -456,6 +456,7 @@ else
 fi
 
 remote 'qvm-ls || true' > "$QVM_LS_LOG" 2>/dev/null || true
+collect_diagnostics
 
 printf 'nested GUI smoke completed\n'
 printf 'observe: %s\n' "$OBSERVE_JSON"
