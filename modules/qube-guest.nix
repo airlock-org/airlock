@@ -85,6 +85,11 @@ let
     exec ${pkgs.git}/bin/git bundle create - --branches --tags
   '';
 
+  vmShellService = pkgs.writeShellScript "nixome-qubes-vmshell" ''
+    export PATH=/run/current-system/sw/bin:/run/wrappers/bin:/bin:/usr/bin
+    exec ${pkgs.runtimeShell}
+  '';
+
   agentFetchConfig = pkgs.writeShellScriptBin "nixome-agent-fetch-config" ''
     set -eu
 
@@ -390,6 +395,11 @@ in
 
     environment.etc."qubes-rpc/nixome.Config.Export" = lib.mkIf hasConfigVaultRole {
       source = configExportService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes-rpc/qubes.VMShell" = {
+      source = vmShellService;
       mode = "0555";
     };
 
