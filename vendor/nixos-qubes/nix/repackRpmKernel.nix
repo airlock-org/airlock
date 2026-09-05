@@ -6,6 +6,7 @@
   util-linux,
   zstd,
   attr,
+  kmod,
 }:
 {
   kernelSrc,

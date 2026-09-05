@@ -36,12 +36,23 @@ let
     };
   };
 
+  kernelType = lib.types.submodule {
+    options = {
+      source = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Source directory containing a Qubes VM kernel vmlinuz and optional initramfs/modules.img.";
+      };
+    };
+  };
+
   domainType = lib.types.submodule {
     options = {
       class = lib.mkOption {
         type = lib.types.enum [
           "AppVM"
           "StandaloneVM"
+          "TemplateVM"
         ];
         default = "AppVM";
         description = "Qubes domain class to create when the domain is missing.";
@@ -91,6 +102,7 @@ let
       inherit (template) import source;
       skip_start = template.skipStart;
     }) cfg.templates;
+    kernels = cfg.kernels;
     domains = cfg.domains;
     prefs = cfg.prefs;
   };
@@ -117,6 +129,12 @@ in
       type = lib.types.attrsOf templateType;
       default = { };
       description = "TemplateVMs that Nixome can import before reconciling domains.";
+    };
+
+    kernels = lib.mkOption {
+      type = lib.types.attrsOf kernelType;
+      default = { };
+      description = "Qubes VM kernels Nixome should install into dom0's VM kernel pool.";
     };
 
     domains = lib.mkOption {
@@ -167,7 +185,11 @@ in
       ++ lib.mapAttrsToList (name: template: {
         assertion = !template.import || template.source != null;
         message = "nixome.qubes.templates.${name}.source must be set when import is enabled.";
-      }) cfg.templates;
+      }) cfg.templates
+      ++ lib.mapAttrsToList (name: kernel: {
+        assertion = kernel.source != null;
+        message = "nixome.qubes.kernels.${name}.source must be set.";
+      }) cfg.kernels;
 
     environment.etc."nixome/qubes-topology.json".text = builtins.toJSON topology + "\n";
     environment.systemPackages = [ reconciler ];

@@ -9,6 +9,7 @@ LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
 RESULT_JSON="$LOG_DIR/qubes-reconcile.json"
 COMMAND_LOG="$LOG_DIR/qubes-reconcile.commands.log"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
+KERNEL_BASE="${NIXOME_QUBES_KERNEL_BASE:-/var/lib/qubes/vm-kernels}"
 result_written=0
 
 usage() {
@@ -58,6 +59,7 @@ exec > >(tee -a "$COMMAND_LOG") 2>&1
 trap write_unexpected_failure EXIT
 
 templates_changed=0
+kernels_changed=0
 domains_changed=0
 prefs_changed=0
 features_changed=0
@@ -96,6 +98,7 @@ write_result() {
     printf ',"topology":'
     json_string "$TOPOLOGY"
     printf ',"templates_changed":%s' "$templates_changed"
+    printf ',"kernels_changed":%s' "$kernels_changed"
     printf ',"domains_changed":%s' "$domains_changed"
     printf ',"prefs_changed":%s' "$prefs_changed"
     printf ',"features_changed":%s' "$features_changed"
@@ -194,9 +197,64 @@ set_service() {
   services_changed=$((services_changed + 1))
 }
 
+kernel_source_matches_target() {
+  source="$1"
+  target="$2"
+
+  [ -d "$target" ] || return 1
+  [ -f "$target/vmlinuz" ] || return 1
+
+  while IFS= read -r source_file; do
+    relative_file="${source_file#"$source"/}"
+    target_file="$target/$relative_file"
+    [ -f "$target_file" ] || return 1
+    cmp -s "$source_file" "$target_file" || return 1
+  done < <(find "$source" -maxdepth 1 -type f | sort)
+}
+
+kernel_is_current() {
+  name="$1"
+  source="$2"
+  target="$KERNEL_BASE/$name"
+  marker="$target/MANAGED_BY_NIXOME"
+
+  [ -f "$marker" ] || return 1
+  grep -Fx "source=$source" "$marker" >/dev/null 2>&1 || return 1
+  kernel_source_matches_target "$source" "$target"
+}
+
+mark_kernel_managed() {
+  name="$1"
+  source="$2"
+  target="$KERNEL_BASE/$name"
+
+  {
+    printf 'source=%s\n' "$source"
+    printf 'schema=nixome.qubes-kernel.v1\n'
+  } > "$target/MANAGED_BY_NIXOME"
+}
+
+install_kernel() {
+  name="$1"
+  source="$2"
+  target="$KERNEL_BASE/$name"
+  tmp="$KERNEL_BASE/.nixome-$name.tmp"
+
+  rm -rf "$tmp"
+  mkdir -p "$tmp"
+  cp -a "$source/." "$tmp/"
+  {
+    printf 'source=%s\n' "$source"
+    printf 'schema=nixome.qubes-kernel.v1\n'
+  } > "$tmp/MANAGED_BY_NIXOME"
+  rm -rf "$target"
+  mv "$tmp" "$target"
+}
+
 [ -r "$TOPOLOGY" ] || fail "topology file is not readable: $TOPOLOGY"
 
 for cmd in \
+  cmp \
   grep \
   jq \
   qubes-prefs \
@@ -226,6 +284,47 @@ mapfile -t global_pref_names < <(jq_get '.prefs | keys[]?')
 for pref in "${global_pref_names[@]}"; do
   value="$(json_value '.prefs[$pref]' --arg pref "$pref")"
   set_global_pref "$pref" "$value"
+done
+
+printf 'reconciling kernels\n'
+mapfile -t kernel_names < <(jq_get '.kernels | keys[]?')
+for kernel in "${kernel_names[@]}"; do
+  case "$kernel" in
+    ""|*/*)
+      fail "invalid kernel name: $kernel"
+      ;;
+  esac
+
+  source="$(jq_get '.kernels[$name].source // ""' --arg name "$kernel")"
+  target="$KERNEL_BASE/$kernel"
+
+  [ -n "$source" ] || fail "kernel source is empty: $kernel"
+  [ -d "$source" ] || fail "kernel source directory is missing: $source"
+  [ -f "$source/vmlinuz" ] || fail "kernel source vmlinuz is missing: $source/vmlinuz"
+
+  if kernel_is_current "$kernel" "$source"; then
+    printf 'kernel current: %s\n' "$kernel"
+    continue
+  fi
+
+  if [ -d "$target" ] && [ ! -f "$target/MANAGED_BY_NIXOME" ]; then
+    if kernel_source_matches_target "$source" "$target"; then
+      printf '+ adopt-kernel %q %q\n' "$kernel" "$source"
+      if [ "$APPLY" = "1" ]; then
+        mark_kernel_managed "$kernel" "$source"
+      fi
+      kernels_changed=$((kernels_changed + 1))
+      continue
+    fi
+
+    fail "kernel exists but is not managed by Nixome: $target"
+  fi
+
+  printf '+ install-kernel %q %q\n' "$kernel" "$source"
+  if [ "$APPLY" = "1" ]; then
+    install_kernel "$kernel" "$source"
+  fi
+  kernels_changed=$((kernels_changed + 1))
 done
 
 printf 'reconciling templates\n'

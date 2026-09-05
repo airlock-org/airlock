@@ -51,6 +51,21 @@
 
       boolString = value: if value then "true" else "false";
 
+      nixomeQubesVmKernelName = "6.12.64-1.fc41";
+
+      mkQubeKernelOpts =
+        configuration:
+        let
+          cfg = configuration.config;
+          kernelParams = builtins.filter (param: !(lib.hasPrefix "root=" param)) cfg.boot.kernelParams;
+        in
+        lib.concatStringsSep " " (
+          kernelParams
+          ++ [
+            "init=${cfg.system.build.toplevel}/init"
+          ]
+        );
+
       mkQubesTemplatePackage =
         system:
         {
@@ -156,6 +171,18 @@
           nixome-qubes-reconcile = pkgs.callPackage ./pkgs/nixome-qubes-reconcile { };
           nixome-qubes-smoke = pkgs.callPackage ./pkgs/nixome-qubes-smoke { };
           nixome-observe-dom0 = pkgs.callPackage ./pkgs/nixome-observe { };
+          nixome-qubes-vm-kernel = pkgs.repackRpmKernel {
+            kernelSrc = pkgs.fetchurl {
+              url = "https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm";
+              hash = "sha256-nK0KbnT8hUwIZPhUgW8nSRNAbZDgjexHWfeeYDiFxsU=";
+            };
+            modulesSrc = pkgs.fetchurl {
+              url = "https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-modules-6.12.64-1.qubes.fc41.x86_64.rpm";
+              hash = "sha256-JBPQM27u/nQwKnfGGDLpQ35BhRwSpy+vcZLUlI06ELo=";
+            };
+            kernelVersion = "6.12.64-1";
+            fedoraVersion = "fc41";
+          };
           nixome-nixos-config-vault-template = mkQubesTemplatePackage system {
             configuration = self.nixosConfigurations.qube-template-config-vault;
             templateName = "nixome-nixos-config-vault";
@@ -227,6 +254,14 @@
       nixosConfigurations.vm-gui-config = lib.nixosSystem {
         system = "x86_64-linux";
         specialArgs = {
+          nixomeQubeKernel = {
+            name = nixomeQubesVmKernelName;
+            package = self.packages.x86_64-linux.nixome-qubes-vm-kernel;
+          };
+          nixomeQubeKernelOpts = {
+            agent = mkQubeKernelOpts self.nixosConfigurations.qube-template-agent;
+            configVault = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-vault;
+          };
           nixomeTemplatePackages = {
             configVault = self.packages.x86_64-linux.nixome-nixos-config-vault-template;
             agent = self.packages.x86_64-linux.nixome-nixos-agent-template;

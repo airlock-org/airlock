@@ -4,14 +4,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="${NIXOME_RECONCILE_STATIC_DIR:-$ROOT/.nixome-logs/reconcile-static}"
 BIN_DIR="$WORK_DIR/bin"
+KERNEL_DIR="$WORK_DIR/kernel/6.12.64-1.fc41"
 TEMPLATE_DIR="$WORK_DIR/template/nixome-nixos-test"
 TOPOLOGY="$WORK_DIR/topology.json"
 CAPABILITIES="$WORK_DIR/xen-capabilities"
 LOG_DIR="$WORK_DIR/logs"
+KERNEL_BASE="$WORK_DIR/vm-kernels"
 
-mkdir -p "$BIN_DIR" "$TEMPLATE_DIR" "$LOG_DIR"
+mkdir -p "$BIN_DIR" "$KERNEL_DIR" "$TEMPLATE_DIR" "$LOG_DIR"
 
 printf 'control_d\n' > "$CAPABILITIES"
+: > "$KERNEL_DIR/vmlinuz"
+: > "$KERNEL_DIR/initramfs"
+: > "$KERNEL_DIR/modules.img"
 : > "$TEMPLATE_DIR/root.img"
 printf 'qrexec=1\nvirt-mode=pvh\n' > "$TEMPLATE_DIR/template.conf"
 
@@ -23,6 +28,11 @@ cat > "$TOPOLOGY" <<EOF
       "import": true,
       "skip_start": true,
       "source": "$TEMPLATE_DIR"
+    }
+  },
+  "kernels": {
+    "6.12.64-1.fc41": {
+      "source": "$KERNEL_DIR"
     }
   },
   "domains": {
@@ -74,6 +84,7 @@ EOF
 chmod 0755 "$BIN_DIR/systemctl"
 
 PATH="$BIN_DIR:$PATH" \
+  NIXOME_QUBES_KERNEL_BASE="$KERNEL_BASE" \
   NIXOME_XEN_CAPABILITIES="$CAPABILITIES" \
   NIXOME_LOG_DIR="$LOG_DIR" \
   bash "$ROOT/scripts/reconcile-qubes-topology.sh" --plan --topology "$TOPOLOGY" \
@@ -84,6 +95,7 @@ jq -e '
   .status == "passed" and
   .mode == "plan" and
   .templates_changed == 1 and
+  .kernels_changed == 1 and
   .domains_changed == 1 and
   .prefs_changed == 1
 ' "$LOG_DIR/qubes-reconcile.json" >/dev/null
