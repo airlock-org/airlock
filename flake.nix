@@ -104,6 +104,15 @@
           '';
     in
     {
+      overlays.nixomeImageBuildTools = _final: prev: {
+        lkl = prev.lkl.overrideAttrs (oldAttrs: {
+          postPatch = (oldAttrs.postPatch or "") + ''
+            substituteInPlace tools/lkl/cptofs.c \
+              --replace-fail 'lkl_start_kernel("mem=100M")' 'lkl_start_kernel("mem=1024M")'
+          '';
+        });
+      };
+
       packages = forAllSystems (
         system:
         let
@@ -131,6 +140,10 @@
       nixosModules.dom0 =
         { ... }:
         {
+          nixpkgs.overlays = [
+            self.overlays.nixomeImageBuildTools
+          ];
+
           imports = [
             nixos-qubes.nixosModules.qubes
             ./modules/dom0.nix

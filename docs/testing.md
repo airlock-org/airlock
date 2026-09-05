@@ -97,6 +97,10 @@ This VM path is not a production-supported Qubes deployment. It is a development
 probe for whether the NixOS guest can boot Xen and reach Qubes control services
 under nested virtualization.
 
+The GUI image closure is large enough to OOM the default NixOS image-copy
+helper in this environment. Nixome applies a narrow overlay to `pkgs.lkl` so
+`cptofs` uses `mem=1024M` while assembling disk images.
+
 ## Runtime Observation
 
 The POC module installs:
