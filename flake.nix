@@ -74,6 +74,10 @@
         }:
         let
           pkgs = pkgsFor system;
+          bootAnchors = pkgs.runCommand "${imageName}-qubes-boot-anchors" { } ''
+            mkdir -p "$out/sbin" "$out/lib/modules"
+            ln -s "${configuration.config.system.build.toplevel}/init" "$out/sbin/init"
+          '';
         in
         import "${nixpkgs}/nixos/lib/make-disk-image.nix" {
           inherit lib pkgs;
@@ -86,6 +90,16 @@
           copyChannel = false;
           diskSize = "auto";
           additionalSpace = "1024M";
+          contents = [
+            {
+              source = "${bootAnchors}/sbin/init";
+              target = "/sbin/init";
+            }
+            {
+              source = "${bootAnchors}/lib";
+              target = "/lib";
+            }
+          ];
         };
 
       mkQubesTemplatePackage =
