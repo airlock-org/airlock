@@ -19,10 +19,10 @@ jq -e '
   ."sys-config-vault".template == "nixome-nixos-config-vault" and
   ."sys-config-vault".netvm == null and
   ."sys-config-vault".features."nixome-role" == "config-vault" and
-  ."sys-agent".class == "AppVM" and
-  ."sys-agent".template == "nixome-nixos-agent" and
-  ."sys-agent".netvm == null and
-  ."sys-agent".features."nixome-role" == "agent"
+  ."sys-config-mod".class == "AppVM" and
+  ."sys-config-mod".template == "nixome-nixos-config-mod" and
+  ."sys-config-mod".netvm == null and
+  ."sys-config-mod".features."nixome-role" == "config-mod"
 ' "$DOMAINS_JSON" >/dev/null
 
 jq -e '
@@ -33,9 +33,9 @@ jq -e '
   ."nixome-nixos-config-vault".import == true and
   ."nixome-nixos-config-vault".skipStart == true and
   (."nixome-nixos-config-vault".source | test("nixome-nixos-config-vault")) and
-  ."nixome-nixos-agent".import == true and
-  ."nixome-nixos-agent".skipStart == true and
-  (."nixome-nixos-agent".source | test("nixome-nixos-agent"))
+  ."nixome-nixos-config-mod".import == true and
+  ."nixome-nixos-config-mod".skipStart == true and
+  (."nixome-nixos-config-mod".source | test("nixome-nixos-config-mod"))
 ' "$TEMPLATES_JSON" >/dev/null
 
 printf 'config topology eval ok\n'

@@ -236,8 +236,8 @@
             templateName = "nixome-nixos-config-vault";
             rootImageFile = "${configSystemRootImage}/root.img";
           };
-          nixome-nixos-agent-template = mkQubesTemplatePackage system {
-            templateName = "nixome-nixos-agent";
+          nixome-nixos-config-mod-template = mkQubesTemplatePackage system {
+            templateName = "nixome-nixos-config-mod";
             rootImageFile = "${configSystemRootImage}/root.img";
           };
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
@@ -309,12 +309,12 @@
             package = self.packages.x86_64-linux.nixome-qubes-vm-kernel;
           };
           nixomeQubeKernelOpts = {
-            agent = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
+            configMod = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
             configVault = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
           };
           nixomeTemplatePackages = {
             configVault = self.packages.x86_64-linux.nixome-nixos-config-vault-template;
-            agent = self.packages.x86_64-linux.nixome-nixos-agent-template;
+            configMod = self.packages.x86_64-linux.nixome-nixos-config-mod-template;
           };
         };
         modules = [
@@ -362,7 +362,7 @@
         ];
       };
 
-      nixosConfigurations.qube-template-agent = lib.nixosSystem {
+      nixosConfigurations.qube-template-config-mod = lib.nixosSystem {
         system = "x86_64-linux";
         modules = [
           nixos-qubes.nixosModules.qubes
@@ -377,7 +377,7 @@
                 ];
             }
           )
-          ./machines/qube-template-agent.nix
+          ./machines/qube-template-config-mod.nix
         ];
       };
     };

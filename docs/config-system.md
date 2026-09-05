@@ -8,21 +8,21 @@ plane in dom0, but moves the desired VM topology into Nix.
 `machines/config-system.nix` declares:
 
 - `nixome-nixos-config-vault`, a NixOS TemplateVM source.
-- `nixome-nixos-agent`, a NixOS TemplateVM source.
+- `nixome-nixos-config-mod`, a NixOS TemplateVM source.
 - `sys-config-vault`, an offline AppVM based on the config-vault template.
-- `sys-agent`, an offline AppVM based on the agent template.
+- `sys-config-mod`, an offline AppVM based on the config-mod template.
 - `default_kernel = ""`, so fresh config-only images can create TemplateVMs
   before a Fedora/Qubes VM kernel has been bootstrapped.
-- qrexec policy allowing only `sys-agent` to call
+- qrexec policy allowing only `sys-config-mod` to call
   `nixome.Config.Export` on `sys-config-vault`.
 
 The initial VM resource settings are sized for the nested 8 GiB developer VM:
-`sys-config-vault` starts at 1024 MiB and `sys-agent` starts at 2048 MiB. A
+`sys-config-vault` starts at 1024 MiB and `sys-config-mod` starts at 2048 MiB. A
 physical Nixome host can raise these declaratively later.
 
 For this POC both TemplateVM source directories reference the same NixOS guest
 root image. That shared image carries both the vault export service and the
-agent fetch tooling; the AppVM names, Qubes features, offline networking, and
+config-mod fetch tooling; the AppVM names, Qubes features, offline networking, and
 qrexec policy carry the role distinction. Splitting the guest root into
 role-specific templates remains compatible with the topology model once the
 boot path is stable.
@@ -33,7 +33,7 @@ boot path is stable.
 /home/user/nixome-config
 ```
 
-`sys-agent` gets a read-only snapshot by running:
+`sys-config-mod` gets a read-only snapshot by running:
 
 ```bash
 nixome-agent-fetch-config
@@ -41,7 +41,7 @@ nixome-agent-fetch-config
 
 That command calls `nixome.Config.Export` over qrexec, receives a Git bundle,
 clones it to `/home/user/nixome-config-readonly`, and removes write bits from
-the snapshot. It does not grant `sys-agent` a qrexec service that writes back
+the snapshot. It does not grant `sys-config-mod` a qrexec service that writes back
 to the vault.
 
 ## Reconcile Path
@@ -106,9 +106,9 @@ make vm-config-smoke
 ```
 
 That target builds and boots the nested config dom0 image, applies the declared
-Qubes topology, starts `sys-config-vault` and `sys-agent`, runs `uname -a`
+Qubes topology, starts `sys-config-vault` and `sys-config-mod`, runs `uname -a`
 through qrexec in both VMs, initializes the vault Git repository, and verifies
-that `sys-agent` can fetch a read-only snapshot through `nixome.Config.Export`.
+that `sys-config-mod` can fetch a read-only snapshot through `nixome.Config.Export`.
 The machine-readable result is copied to:
 
 ```text

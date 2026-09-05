@@ -16,7 +16,7 @@ Runs:
 - the lightweight `nixome-observe-dom0` package build,
 - the `nixome-qubes-reconcile` package build,
 - evaluation of the config-system topology that declares `sys-config-vault` and
-  `sys-agent`,
+  `sys-config-mod`,
 - host capability detection into `.nixome-logs/host-capabilities.json`,
 - a skipped Qubes smoke-test result unless `NIXOME_RUN_QUBES_SMOKE=1`.
 
@@ -180,13 +180,13 @@ make nixos-templates
 ```
 
 These targets build the NixOS Qube template source directories for
-`nixome-nixos-config-vault` and `nixome-nixos-agent`. The outputs are Nix store
+`nixome-nixos-config-vault` and `nixome-nixos-config-mod`. The outputs are Nix store
 directories containing `root.img`, `template.conf`, and Qubes appmenu list
 files. They are not RPMs. For now, both template directories symlink `root.img`
 to one shared NixOS guest root image to reduce local build size.
 
 To build or boot a nested GUI dom0 image that includes the declared
-`sys-config-vault` and `sys-agent` topology:
+`sys-config-vault` and `sys-config-mod` topology:
 
 ```bash
 make vm-gui-config-image
@@ -211,8 +211,8 @@ make vm-config-smoke
 ```
 
 This runs the same reconcile path, then starts `sys-config-vault` and
-`sys-agent`, runs `uname -a` through qrexec in both VMs, initializes the
-vault's Git repository, and has `sys-agent` fetch a read-only snapshot through
+`sys-config-mod`, runs `uname -a` through qrexec in both VMs, initializes the
+vault's Git repository, and has `sys-config-mod` fetch a read-only snapshot through
 the `nixome.Config.Export` qrexec service. The result JSON is written to:
 
 ```text

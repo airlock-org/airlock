@@ -5,18 +5,18 @@ LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
 RESULT_JSON="$LOG_DIR/config-vms-smoke.json"
 COMMAND_LOG="$LOG_DIR/config-vms-smoke.commands.log"
 QVM_LS_LOG="$LOG_DIR/config-vms-qvm-ls.log"
-AGENT_UNAME_LOG="$LOG_DIR/config-vms-sys-agent-uname.log"
+MOD_UNAME_LOG="$LOG_DIR/config-vms-sys-config-mod-uname.log"
 VAULT_UNAME_LOG="$LOG_DIR/config-vms-sys-config-vault-uname.log"
 VAULT_INIT_LOG="$LOG_DIR/config-vms-vault-init.log"
-AGENT_FETCH_LOG="$LOG_DIR/config-vms-agent-fetch.log"
+MOD_FETCH_LOG="$LOG_DIR/config-vms-mod-fetch.log"
 JOURNAL_LOG="$LOG_DIR/config-vms-journal.log"
 LIBXL_LOG="$LOG_DIR/config-vms-libxl.log"
 QVM_PREFS_LOG="$LOG_DIR/config-vms-qvm-prefs.log"
 
-AGENT="${NIXOME_CONFIG_AGENT_VM:-sys-agent}"
+MOD="${NIXOME_CONFIG_MOD_VM:-sys-config-mod}"
 VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
-SNAPSHOT_PATH="${NIXOME_CONFIG_AGENT_SNAPSHOT:-/home/user/nixome-config-readonly}"
-AGENT_CONSOLE_LOG="$LOG_DIR/config-vms-$AGENT-console.log"
+SNAPSHOT_PATH="${NIXOME_CONFIG_MOD_SNAPSHOT:-/home/user/nixome-config-readonly}"
+MOD_CONSOLE_LOG="$LOG_DIR/config-vms-$MOD-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 result_written=0
 
@@ -51,20 +51,20 @@ write_result() {
     json_string "$status"
     printf ',"reason":'
     json_string "$reason"
-    printf ',"agent":'
-    json_string "$AGENT"
+    printf ',"modifier":'
+    json_string "$MOD"
     printf ',"vault":'
     json_string "$VAULT"
     printf ',"snapshot_path":'
     json_string "$SNAPSHOT_PATH"
-    printf ',"agent_uname":'
-    json_file_string_or_null "$AGENT_UNAME_LOG"
+    printf ',"modifier_uname":'
+    json_file_string_or_null "$MOD_UNAME_LOG"
     printf ',"vault_uname":'
     json_file_string_or_null "$VAULT_UNAME_LOG"
     printf ',"vault_init_log":'
     json_file_string_or_null "$VAULT_INIT_LOG"
-    printf ',"agent_fetch_log":'
-    json_file_string_or_null "$AGENT_FETCH_LOG"
+    printf ',"modifier_fetch_log":'
+    json_file_string_or_null "$MOD_FETCH_LOG"
     printf ',"command_log":'
     json_string "$COMMAND_LOG"
     printf ',"qvm_ls_log":'
@@ -75,8 +75,8 @@ write_result() {
     json_string "$LIBXL_LOG"
     printf ',"qvm_prefs_log":'
     json_string "$QVM_PREFS_LOG"
-    printf ',"agent_console_log":'
-    json_string "$AGENT_CONSOLE_LOG"
+    printf ',"modifier_console_log":'
+    json_string "$MOD_CONSOLE_LOG"
     printf ',"vault_console_log":'
     json_string "$VAULT_CONSOLE_LOG"
     printf '}\n'
@@ -116,7 +116,7 @@ single_quote() {
 collect_diagnostics() {
   qvm-ls > "$QVM_LS_LOG" 2>&1 || true
   {
-    for vm in "$VAULT" "$AGENT"; do
+    for vm in "$VAULT" "$MOD"; do
       printf '== %s qvm-prefs ==\n' "$vm"
       qvm-prefs "$vm" || true
       printf '\n== %s qvm-features ==\n' "$vm"
@@ -132,7 +132,7 @@ collect_diagnostics() {
     > "$JOURNAL_LOG" 2>&1 || true
   tail -n 260 /var/log/libvirt/libxl/libxl-driver.log > "$LIBXL_LOG" 2>&1 || true
   tail -n 500 "/var/log/xen/console/guest-$VAULT.log" > "$VAULT_CONSOLE_LOG" 2>&1 || true
-  tail -n 500 "/var/log/xen/console/guest-$AGENT.log" > "$AGENT_CONSOLE_LOG" 2>&1 || true
+  tail -n 500 "/var/log/xen/console/guest-$MOD.log" > "$MOD_CONSOLE_LOG" 2>&1 || true
 }
 
 run_or_fail() {
@@ -198,20 +198,20 @@ systemctl is-active --quiet qubesd.service || fail "qubesd.service is not active
 systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qrexec-policy-daemon.service is not active"
 
 qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
-qvm-check "$AGENT" >/dev/null 2>&1 || fail "missing config agent VM: $AGENT"
+qvm-check "$MOD" >/dev/null 2>&1 || fail "missing config modifier VM: $MOD"
 
 start_vm "$VAULT"
-start_vm "$AGENT"
+start_vm "$MOD"
 
 run_qrexec_or_fail "$VAULT" "qrexec uname in $VAULT" "$VAULT_UNAME_LOG" "uname -a"
-run_qrexec_or_fail "$AGENT" "qrexec uname in $AGENT" "$AGENT_UNAME_LOG" "uname -a"
+run_qrexec_or_fail "$MOD" "qrexec uname in $MOD" "$MOD_UNAME_LOG" "uname -a"
 
 grep -q 'Linux' "$VAULT_UNAME_LOG" || fail "vault uname output did not contain Linux"
-grep -q 'Linux' "$AGENT_UNAME_LOG" || fail "agent uname output did not contain Linux"
+grep -q 'Linux' "$MOD_UNAME_LOG" || fail "modifier uname output did not contain Linux"
 
 run_qrexec_or_fail "$VAULT" "config vault init" "$VAULT_INIT_LOG" "nixome-config-vault-init"
 
-agent_fetch_command="
+mod_fetch_command="
 set -eu
 dest=$(single_quote "$SNAPSHOT_PATH")
 vault=$(single_quote "$VAULT")
@@ -225,8 +225,8 @@ fi
 git -C \"\$dest\" log --oneline -1
 "
 
-run_qrexec_or_fail "$AGENT" "config snapshot fetch in $AGENT" "$AGENT_FETCH_LOG" "$agent_fetch_command"
+run_qrexec_or_fail "$MOD" "config snapshot fetch in $MOD" "$MOD_FETCH_LOG" "$mod_fetch_command"
 
 collect_diagnostics
-write_result passed "NixOS config VMs booted, qrexec worked, and sys-agent fetched a read-only config snapshot"
+write_result passed "NixOS config VMs booted, qrexec worked, and sys-config-mod fetched a read-only config snapshot"
 cat "$RESULT_JSON"

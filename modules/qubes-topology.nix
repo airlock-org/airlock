@@ -115,7 +115,7 @@ let
 
         install -d "$out/etc/qubes/policy.d"
         cat > "$out/etc/qubes/policy.d/30-nixome-config.policy" <<'EOF'
-    # Managed by Nixome. This grants sys-agent read-only access to the
+    # Managed by Nixome. This grants sys-config-mod read-only access to the
     # config-vault export service and denies the service everywhere else.
     ${cfg.configAccessPolicy.service} * ${cfg.configAccessPolicy.reader} ${cfg.configAccessPolicy.vault} allow
     ${cfg.configAccessPolicy.service} * @anyvm @anyvm deny
@@ -154,7 +154,7 @@ in
       enable = lib.mkOption {
         type = lib.types.bool;
         default = false;
-        description = "Install qrexec policy for sys-agent read access to sys-config-vault.";
+        description = "Install qrexec policy for sys-config-mod read access to sys-config-vault.";
       };
 
       service = lib.mkOption {
@@ -171,7 +171,7 @@ in
 
       reader = lib.mkOption {
         type = lib.types.str;
-        default = "sys-agent";
+        default = "sys-config-mod";
         description = "Qube allowed to read exported configuration snapshots.";
       };
     };

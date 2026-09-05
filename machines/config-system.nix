@@ -40,9 +40,10 @@ in
         skipStart = true;
       };
 
-      nixome-nixos-agent = {
+      nixome-nixos-config-mod = {
         import = true;
-        source = if haveTemplates then "${nixomeTemplatePackages.agent}/nixome-nixos-agent" else null;
+        source =
+          if haveTemplates then "${nixomeTemplatePackages.configMod}/nixome-nixos-config-mod" else null;
         skipStart = true;
       };
     };
@@ -76,20 +77,20 @@ in
         };
       };
 
-      nixome-nixos-agent = {
+      nixome-nixos-config-mod = {
         class = "TemplateVM";
         label = "black";
         netvm = null;
         prefs = {
           default_user = "user";
           kernel = if haveQubeKernel then nixomeQubeKernel.name else "";
-          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.agent else "";
+          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.configMod else "";
           qrexec_timeout = 120;
           virt_mode = "pvh";
         };
         features = {
           "nixome-managed" = "1";
-          "nixome-role" = "agent-template";
+          "nixome-role" = "config-mod-template";
           os = "Linux";
           qrexec = "1";
         };
@@ -121,9 +122,9 @@ in
         };
       };
 
-      sys-agent = {
+      sys-config-mod = {
         class = "AppVM";
-        template = "nixome-nixos-agent";
+        template = "nixome-nixos-config-mod";
         label = "gray";
         netvm = null;
         prefs = {
@@ -135,8 +136,8 @@ in
         };
         features = {
           "nixome-managed" = "1";
-          "nixome-role" = "agent";
-          "nixome-config-reader" = "1";
+          "nixome-role" = "config-mod";
+          "nixome-config-modifier" = "1";
         };
         services = {
           "meminfo-writer" = true;
@@ -147,7 +148,7 @@ in
     configAccessPolicy = {
       enable = true;
       vault = "sys-config-vault";
-      reader = "sys-agent";
+      reader = "sys-config-mod";
       service = "nixome.Config.Export";
     };
   };

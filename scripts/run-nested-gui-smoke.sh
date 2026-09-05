@@ -290,7 +290,7 @@ collect_diagnostics() {
   remote 'sudo -n cat /var/log/nixome/config-vms-libxl.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-libxl.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-qvm-prefs.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-qvm-prefs.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-sys-config-vault-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-sys-config-vault-console.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-sys-agent-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-sys-agent-console.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-vms-sys-config-mod-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-sys-config-mod-console.log" 2>/dev/null || true
 }
 
 extract_json_result() {

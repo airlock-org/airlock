@@ -7,7 +7,7 @@
 let
   cfg = config.nixome.qubeGuest;
   hasConfigVaultRole = cfg.role == "config-vault" || cfg.role == "config-system";
-  hasAgentRole = cfg.role == "agent" || cfg.role == "config-system";
+  hasConfigModRole = cfg.role == "config-mod" || cfg.role == "config-system";
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
 
   qubesGuestPath = [
@@ -38,13 +38,13 @@ let
       configVaultInit
       pkgs.git
     ];
-    agent = [
+    config-mod = [
       agentFetchConfig
       pkgs.git
       pkgs.jq
       pkgs.nix
     ];
-    config-system = config-vault ++ agent;
+    config-system = config-vault ++ config-mod;
   };
 
   configVaultInit = pkgs.writeShellScriptBin "nixome-config-vault-init" ''
@@ -119,7 +119,7 @@ in
       type = lib.types.enum [
         "base"
         "config-vault"
-        "agent"
+        "config-mod"
         "config-system"
       ];
       default = "base";
@@ -412,7 +412,7 @@ in
     ]
     ++ (rolePackages.${cfg.role} or [ ]);
 
-    nix.settings.experimental-features = lib.mkIf hasAgentRole [
+    nix.settings.experimental-features = lib.mkIf hasConfigModRole [
       "nix-command"
       "flakes"
     ];
