@@ -155,5 +155,5 @@ in
   # This profile carries Nix-built template artifacts in the dom0 store, then
   # imports them into the Qubes pool. It needs room, but not the full large
   # Fedora-template smoke-test disk.
-  virtualisation.diskSize = lib.mkForce 32768;
+  virtualisation.diskSize = lib.mkForce 24576;
 }

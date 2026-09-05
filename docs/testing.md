@@ -208,6 +208,7 @@ The config topology image keeps local build size down by sharing one NixOS
 guest root image between the two TemplateVM source directories. The VM runner
 can use either qcow2 or raw Nix-built base images and creates a writable qcow2
 overlay for runtime state.
+The nested config image currently has 24 GiB of virtual disk capacity.
 
 The current NixOS guest template profile uses QubesDB, qrexec-agent, Qubes
 meminfo writer, and `/dev/mapper/dmroot` as the root device to match Qubes'
