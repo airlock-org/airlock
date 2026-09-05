@@ -190,6 +190,12 @@ in
       extraGroups = [ "qubes" ];
     };
 
+    security.pam.services.qrexec = {
+      rootOK = true;
+      startSession = true;
+      setLoginUid = false;
+    };
+
     systemd.tmpfiles.packages = [
       qubesAgentLinux
       pkgs.qubes-linux-utils
