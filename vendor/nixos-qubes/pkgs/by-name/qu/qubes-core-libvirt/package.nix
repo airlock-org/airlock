@@ -30,15 +30,18 @@ assert assertMsg (libvirt.version == "10.5.0")
     pname = "qubes-core-libvirt";
     version = "${versionPatches}-${versionSuffix}";
 
+    # Several upstream libvirt tests compare driver/capability fixtures that
+    # are invalidated by the Qubes patchset in this build environment.
+    doCheck = false;
+
     # series-qubes.conf in patches repo is outdated, this list is generated from file listing
     # in the original repo.
     # TODO: updateScript is required.
-    postPatch =
-      ''
-        cp ${./series.conf} series-qubes.conf
-        ${patches}/apply-patches series-qubes.conf ${patches}
-      ''
-      + optionalString (oldAttrs ? postPatch) oldAttrs.postPatch;
+    postPatch = ''
+      cp ${./series.conf} series-qubes.conf
+      ${patches}/apply-patches series-qubes.conf ${patches}
+    ''
+    + optionalString (oldAttrs ? postPatch) oldAttrs.postPatch;
 
     meta = {
       description = "libvirt with qubes patches applied";

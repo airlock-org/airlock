@@ -23,6 +23,9 @@ Current local changes:
 - `qubes-core-qubesdb`: disable Python metadata checking for the split daemon
   Python module because the importable extension is `qubesdb`, but no matching
   distribution metadata is installed for the derivation name.
+- `qubes-core-libvirt`: disable inherited libvirt package checks because the
+  Qubes patchset invalidates driver/capability fixture tests in the generic Nix
+  build environment.
 - `qubes-vmm-xen`: make the nixpkgs Xen `xsd_glue` OCaml split-output copy
   detect the actual installed directory instead of deriving one path from
   `ls $out/lib/ocaml/`, and skip the newer plugin-interface source copy when
