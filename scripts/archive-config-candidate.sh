@@ -237,7 +237,7 @@ verify_candidate() {
     fail "candidate validation did not pass: $validation_status"
 
   verify_repo="$tmpdir/verify.git"
-  git init --bare "$verify_repo" >/dev/null
+  git init --bare -b main "$verify_repo" >/dev/null
   git -C "$verify_repo" bundle verify "$tmpdir/config.bundle" > "$BUNDLE_VERIFY_LOG" 2>&1
   candidate_commit="$(
     git -C "$verify_repo" bundle list-heads "$tmpdir/config.bundle" |

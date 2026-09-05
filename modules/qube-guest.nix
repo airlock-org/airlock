@@ -282,7 +282,7 @@ let
     }
 
     verify_repo="$tmpdir/verify.git"
-    ${pkgs.git}/bin/git init --bare "$verify_repo" >/dev/null
+    ${pkgs.git}/bin/git init --bare -b main "$verify_repo" >/dev/null
     ${pkgs.git}/bin/git -C "$verify_repo" bundle verify "$tmpdir/config.bundle" > "$tmpdir/bundle-verify.log" 2>&1
     candidate_commit="$(
       ${pkgs.git}/bin/git -C "$verify_repo" bundle list-heads "$tmpdir/config.bundle" |
