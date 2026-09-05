@@ -167,6 +167,8 @@ in
     networking.hostName = lib.mkDefault "nixome-qube";
     networking.useDHCP = lib.mkDefault true;
 
+    users.mutableUsers = lib.mkDefault false;
+    users.allowNoPasswordLogin = lib.mkDefault true;
     users.groups.qubes = { };
     users.users.${cfg.user} = {
       isNormalUser = true;

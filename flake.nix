@@ -96,7 +96,7 @@
               fi
             done
 
-            ln -sfn ${configuration.config.system.build.toplevel} /run/current-system
+            ${configuration.config.system.build.toplevel}/activate
             exec ${configuration.config.system.build.toplevel}/init "$@"
             EOF
             chmod 0555 "$out/sbin/init"
