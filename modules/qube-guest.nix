@@ -206,6 +206,11 @@ in
         group = "qubes";
         mode = "0770";
       };
+      "/var/lib/qubes".d = {
+        user = "root";
+        group = "root";
+        mode = "0755";
+      };
     };
 
     systemd.packages = [
@@ -270,6 +275,28 @@ in
       };
     };
 
+    systemd.services.nixome-qubes-rw-init-diagnostics = {
+      description = "Print Qubes private storage diagnostics to the console";
+      path = guestDiagnosticsPath;
+      script = ''
+        set +e
+        echo "nixome guest diagnostics: nixome-qubes-rw-init.service failed"
+        systemctl --no-pager status nixome-qubes-rw-init.service
+        journalctl -b --no-pager -u nixome-qubes-rw-init.service -n 120
+        echo "nixome guest diagnostics: filesystem state"
+        ls -ld /rw /home /usr/local /var /var/run /run/qubes /var/lib /var/lib/qubes
+        findmnt / /rw /home /usr/local
+        echo "nixome guest diagnostics: block devices"
+        lsblk -o NAME,MAJ:MIN,SIZE,FSTYPE,MOUNTPOINTS
+        blkid /dev/xvdb
+      '';
+      serviceConfig = {
+        Type = "oneshot";
+        StandardOutput = "journal+console";
+        StandardError = "journal+console";
+      };
+    };
+
     systemd.services.nixome-qubes-rw-init = {
       description = "Initialize Qubes private storage mounts for NixOS guests";
       wantedBy = [ "multi-user.target" ];
@@ -288,6 +315,7 @@ in
         set -eu
 
         mkdir -p /rw /home /usr/local
+        mkdir -p /var/lib/qubes
 
         if [ ! -e /dev/xvdb ]; then
           echo "Qubes private device /dev/xvdb is not present" >&2
@@ -319,6 +347,7 @@ in
         Type = "oneshot";
         RemainAfterExit = true;
       };
+      unitConfig.OnFailure = [ "nixome-qubes-rw-init-diagnostics.service" ];
     };
 
     systemd.services.qubes-db = {
@@ -337,6 +366,7 @@ in
       enable = true;
       wantedBy = [ "multi-user.target" ];
       wants = [ "nixome-qubes-rw-init.service" ];
+      requires = [ "nixome-qubes-rw-init.service" ];
       after = [
         "nixome-qubes-rw-init.service"
         "systemd-user-sessions.service"
