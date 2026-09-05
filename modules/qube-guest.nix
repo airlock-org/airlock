@@ -195,6 +195,19 @@ in
       pkgs.qubes-linux-utils
     ];
 
+    systemd.tmpfiles.settings."10-nixome-qubes-guest" = {
+      "/run/qubes".d = {
+        user = "root";
+        group = "qubes";
+        mode = "0770";
+      };
+      "/var/log/qubes".d = {
+        user = "root";
+        group = "qubes";
+        mode = "0770";
+      };
+    };
+
     systemd.packages = [
       pkgs.qubes-core-qubesdb.daemon
       pkgs.python3.pkgs.qubes-core-qrexec.domU
@@ -311,7 +324,11 @@ in
     systemd.services.qubes-db = {
       enable = true;
       wantedBy = [ "sysinit.target" ];
-      after = [ "systemd-modules-load.service" ];
+      after = [
+        "systemd-modules-load.service"
+        "systemd-tmpfiles-setup.service"
+      ];
+      requires = [ "systemd-tmpfiles-setup.service" ];
       overrideStrategy = "asDropin";
       unitConfig.OnFailure = [ "nixome-qubes-db-diagnostics.service" ];
     };

@@ -82,7 +82,16 @@
 
             export PATH=${lib.makeBinPath [ pkgs.coreutils ]}
 
-            mkdir -p /etc /run
+            mkdir -p /etc /run/qubes /var/log/qubes
+            if [ -L /var/run ] || [ ! -e /var/run ]; then
+              mkdir -p /var
+              ln -sfn /run /var/run
+            elif [ -d /var/run ]; then
+              mkdir -p /var/run/qubes
+            else
+              echo "cannot initialize /var/run for Qubes guest runtime" >&2
+              exit 1
+            fi
 
             ${configuration.config.system.build.toplevel}/activate
             exec ${configuration.config.system.build.toplevel}/init "$@"
