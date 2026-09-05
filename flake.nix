@@ -80,21 +80,9 @@
             #!${pkgs.runtimeShell}
             set -eu
 
-            export PATH=${
-              lib.makeBinPath [
-                pkgs.coreutils
-                pkgs.findutils
-              ]
-            }
+            export PATH=${lib.makeBinPath [ pkgs.coreutils ]}
 
             mkdir -p /etc /run
-
-            for entry in ${configuration.config.system.build.etc}/etc/*; do
-              name="$(basename "$entry")"
-              if [ ! -e "/etc/$name" ] && [ ! -L "/etc/$name" ]; then
-                ln -s "$entry" "/etc/$name"
-              fi
-            done
 
             ${configuration.config.system.build.toplevel}/activate
             exec ${configuration.config.system.build.toplevel}/init "$@"

@@ -105,8 +105,8 @@ Booting those NixOS guests is still experimental. Normal Qubes Linux VMs use a
 dom0-provided VM kernel/initramfs and kernel options such as
 `root=/dev/mapper/dmroot`. The guest profile now declares that root path and
 the template image includes a small Nix-owned `/sbin/init` wrapper. The wrapper
-links the generated NixOS `/etc` entries into the writable Qubes root, sets
-up the normal NixOS activation state, then execs the normal NixOS systemd init.
+sets up the normal NixOS activation state in the writable Qubes root, then
+execs the normal NixOS systemd init.
 Guest users and groups are declarative (`users.mutableUsers = false`) so early
 systemd services such as QubesDB can resolve their configured service groups
 before qrexec is available. The template explicitly opts out of NixOS'
