@@ -2,6 +2,7 @@
   coreutils,
   gnugrep,
   gnused,
+  jq,
   lib,
   systemd,
   writeShellApplication,
@@ -14,6 +15,7 @@ writeShellApplication {
     coreutils
     gnugrep
     gnused
+    jq
     systemd
   ];
 

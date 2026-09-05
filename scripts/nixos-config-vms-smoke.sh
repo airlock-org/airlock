@@ -26,24 +26,15 @@ mkdir -p "$LOG_DIR"
 exec > >(tee -a "$COMMAND_LOG") 2>&1
 trap write_unexpected_failure EXIT
 
-json_escape() {
-  printf '%s' "$1" | sed \
-    -e 's/\\/\\\\/g' \
-    -e 's/"/\\"/g' \
-    -e ':a;N;$!ba;s/\n/\\n/g'
-}
-
 json_string() {
-  printf '"'
-  json_escape "$1"
-  printf '"'
+  printf '%s' "$1" | jq -Rs .
 }
 
 json_file_string_or_null() {
   file="$1"
 
   if [ -r "$file" ]; then
-    json_string "$(cat "$file")"
+    jq -Rs . < "$file"
   else
     printf 'null'
   fi
@@ -186,6 +177,7 @@ start_vm() {
 
 for cmd in \
   grep \
+  jq \
   journalctl \
   qvm-check \
   qvm-ls \
