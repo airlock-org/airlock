@@ -24,6 +24,14 @@ let
     pkgs.util-linux
   ];
 
+  guestDiagnosticsPath = [
+    pkgs.coreutils
+    pkgs.gnugrep
+    pkgs.kmod
+    pkgs.systemd
+    pkgs.util-linux
+  ];
+
   rolePackages = rec {
     base = [ ];
     config-vault = [
@@ -211,6 +219,44 @@ in
       unitConfig.DefaultDependencies = false;
     };
 
+    systemd.services.nixome-qubes-db-diagnostics = {
+      description = "Print QubesDB guest diagnostics to the console";
+      path = guestDiagnosticsPath;
+      script = ''
+        set +e
+        echo "nixome guest diagnostics: qubes-db.service failed"
+        systemctl --no-pager status qubes-db.service
+        journalctl -b --no-pager -u qubes-db.service -n 120
+        echo "nixome guest diagnostics: Xen device nodes"
+        ls -l /dev/xen /proc/xen
+        echo "nixome guest diagnostics: loaded Xen modules"
+        lsmod | grep -E '(^xen|evtchn|gnt|privcmd)'
+      '';
+      serviceConfig = {
+        Type = "oneshot";
+        StandardOutput = "journal+console";
+        StandardError = "journal+console";
+      };
+    };
+
+    systemd.services.nixome-qubes-qrexec-diagnostics = {
+      description = "Print qrexec guest diagnostics to the console";
+      path = guestDiagnosticsPath;
+      script = ''
+        set +e
+        echo "nixome guest diagnostics: qubes-qrexec-agent.service failed"
+        systemctl --no-pager status qubes-qrexec-agent.service
+        journalctl -b --no-pager -u qubes-qrexec-agent.service -n 120
+        echo "nixome guest diagnostics: QubesDB service state"
+        systemctl --no-pager status qubes-db.service
+      '';
+      serviceConfig = {
+        Type = "oneshot";
+        StandardOutput = "journal+console";
+        StandardError = "journal+console";
+      };
+    };
+
     systemd.services.nixome-qubes-rw-init = {
       description = "Initialize Qubes private storage mounts for NixOS guests";
       wantedBy = [ "multi-user.target" ];
@@ -266,6 +312,7 @@ in
       enable = true;
       wantedBy = [ "sysinit.target" ];
       after = [ "systemd-modules-load.service" ];
+      unitConfig.OnFailure = [ "nixome-qubes-db-diagnostics.service" ];
     };
 
     systemd.services.qubes-qrexec-agent = {
@@ -277,6 +324,7 @@ in
         "systemd-user-sessions.service"
       ];
       aliases = [ "qubes-core-agent.service" ];
+      unitConfig.OnFailure = [ "nixome-qubes-qrexec-diagnostics.service" ];
     };
 
     systemd.services.qubes-meminfo-writer = {
