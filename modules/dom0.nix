@@ -112,6 +112,7 @@ in
     );
 
     boot.initrd.systemd.enable = lib.mkDefault true;
+    time.timeZone = lib.mkDefault "UTC";
 
     virtualisation.qubes = {
       dom0.enable = true;
