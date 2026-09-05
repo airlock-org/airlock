@@ -90,6 +90,14 @@ That path builds a dom0 image whose Nix config declares `sys-config-vault` and
 `qvm-template-postprocess`, and applies simple prefs/features/services with
 `nixome-qubes-reconcile`. See [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
 
+Generated writable VM overlays live under `.nixome-vm/`. If local image builds
+fail because the image converter runs out of temporary disk space, remove only
+those generated overlays with:
+
+```bash
+make clean-vm-disks
+```
+
 On a booted Xen dom0 target with a Qubes template installed:
 
 ```bash

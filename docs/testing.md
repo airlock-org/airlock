@@ -210,6 +210,14 @@ those NixOS AppVMs and proving qrexec from them is the next runtime boundary.
 The config profile sets `default_kernel = ""` so fresh config-only images can
 create TemplateVMs before any Fedora/Qubes VM kernel bootstrap has run.
 
+The VM runner keeps generated writable qcow2 overlays under `.nixome-vm/`.
+They are safe to regenerate. If a local image build fails with `No space left on
+device` during raw-to-qcow2 conversion, run:
+
+```bash
+make clean-vm-disks
+```
+
 ## Runtime Observation
 
 The POC module installs:
