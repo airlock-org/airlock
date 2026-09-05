@@ -16,9 +16,17 @@ KEEP_VM="${NIXOME_KEEP_VM:-0}"
 BOOTSTRAP_QUBES="${NIXOME_BOOTSTRAP_QUBES:-1}"
 RUN_QREXEC_SMOKE="${NIXOME_RUN_QUBES_SMOKE:-1}"
 RUN_GUI_SMOKE="${NIXOME_RUN_GUI_SMOKE:-1}"
+CACHE_QUBES_ASSETS="${NIXOME_CACHE_QUBES_ASSETS:-1}"
+CACHE_DIR="${NIXOME_QUBES_CACHE_DIR:-$ROOT/.nixome-cache/rpms}"
+GUEST_CACHE_DIR="/var/cache/nixome/qubes-rpms"
 
 TEMPLATE="${NIXOME_QUBES_TEMPLATE:-fedora-43-xfce}"
+TEMPLATE_URL="${NIXOME_QUBES_TEMPLATE_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/templates-itl/rpm/qubes-template-fedora-43-xfce-4.3.0-202601041226.noarch.rpm}"
 QUBE="${NIXOME_TEST_QUBE:-test-nixome-smoke}"
+
+KERNEL_URL="${NIXOME_QUBES_KERNEL_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm}"
+KERNEL_MODULES_URL="${NIXOME_QUBES_KERNEL_MODULES_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-modules-6.12.64-1.qubes.fc41.x86_64.rpm}"
+GPG_KEY_URL="${NIXOME_QUBES_GPG_KEY_URL:-https://keys.qubes-os.org/keys/qubes-release-4.3-signing-key.asc}"
 
 QEMU_LOG="$LOG_DIR/vm-gui-smoke-qemu.log"
 OBSERVE_JSON="$LOG_DIR/vm-gui-observe.json"
@@ -34,6 +42,14 @@ GUI_STDERR="$LOG_DIR/vm-gui-window-smoke.stderr.log"
 QVM_LS_LOG="$LOG_DIR/vm-gui-qvm-ls.log"
 
 vm_pid=""
+cached_gpg_key_host=""
+cached_gpg_key_guest=""
+cached_kernel_host=""
+cached_kernel_guest=""
+cached_kernel_modules_host=""
+cached_kernel_modules_guest=""
+cached_template_host=""
+cached_template_guest=""
 
 cleanup() {
   if [ "$KEEP_VM" = "1" ]; then
@@ -52,6 +68,141 @@ shell_quote() {
   printf '%q' "$1"
 }
 
+filename_from_url() {
+  local url="${1%%\?*}"
+  url="${url%/}"
+  local filename="${url##*/}"
+
+  if [ -z "$filename" ]; then
+    printf 'could not determine filename from URL: %s\n' "$1" >&2
+    exit 1
+  fi
+
+  printf '%s' "$filename"
+}
+
+require_host_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    printf 'missing host command: %s\n' "$1" >&2
+    exit 1
+  fi
+}
+
+download_cached() {
+  local url="$1"
+  local filename="$2"
+  local dest="$CACHE_DIR/$filename"
+  local partial="$dest.part"
+  local curl_resume=()
+
+  mkdir -p "$CACHE_DIR"
+
+  if [ -s "$dest" ]; then
+    printf 'cache: using %s\n' "$dest" >&2
+    printf '%s' "$dest"
+    return 0
+  fi
+
+  if [ -s "$partial" ]; then
+    curl_resume=(--continue-at -)
+    printf 'cache: resuming %s\n' "$url" >&2
+  else
+    printf 'cache: downloading %s\n' "$url" >&2
+  fi
+
+  curl \
+    --fail \
+    --location \
+    --show-error \
+    --progress-bar \
+    "${curl_resume[@]}" \
+    --output "$partial" \
+    "$url"
+
+  chmod 0644 "$partial"
+  mv "$partial" "$dest"
+  printf '%s' "$dest"
+}
+
+prepare_cached_bootstrap_assets() {
+  if [ "$BOOTSTRAP_QUBES" != "1" ] || [ "$CACHE_QUBES_ASSETS" != "1" ]; then
+    return 0
+  fi
+
+  require_host_command curl
+  require_host_command stat
+
+  printf 'cache: host Qubes asset cache: %s\n' "$CACHE_DIR"
+
+  if [ -z "${NIXOME_QUBES_GPG_KEY:-}" ] && [ "${NIXOME_QUBES_VERIFY_RPMS:-1}" = "1" ]; then
+    local gpg_key_filename
+    gpg_key_filename="$(filename_from_url "$GPG_KEY_URL")"
+    cached_gpg_key_host="$(download_cached "$GPG_KEY_URL" "$gpg_key_filename")"
+    cached_gpg_key_guest="$GUEST_CACHE_DIR/$gpg_key_filename"
+    NIXOME_QUBES_GPG_KEY="$cached_gpg_key_guest"
+  fi
+
+  if [ -n "${NIXOME_QUBES_KERNEL_RPM:-}" ] || [ -n "${NIXOME_QUBES_KERNEL_MODULES_RPM:-}" ]; then
+    if [ -z "${NIXOME_QUBES_KERNEL_RPM:-}" ] || [ -z "${NIXOME_QUBES_KERNEL_MODULES_RPM:-}" ]; then
+      printf 'NIXOME_QUBES_KERNEL_RPM and NIXOME_QUBES_KERNEL_MODULES_RPM must be set together\n' >&2
+      exit 1
+    fi
+  else
+    local kernel_filename
+    local kernel_modules_filename
+    kernel_filename="$(filename_from_url "$KERNEL_URL")"
+    kernel_modules_filename="$(filename_from_url "$KERNEL_MODULES_URL")"
+    cached_kernel_host="$(download_cached "$KERNEL_URL" "$kernel_filename")"
+    cached_kernel_guest="$GUEST_CACHE_DIR/$kernel_filename"
+    cached_kernel_modules_host="$(download_cached "$KERNEL_MODULES_URL" "$kernel_modules_filename")"
+    cached_kernel_modules_guest="$GUEST_CACHE_DIR/$kernel_modules_filename"
+    NIXOME_QUBES_KERNEL_RPM="$cached_kernel_guest"
+    NIXOME_QUBES_KERNEL_MODULES_RPM="$cached_kernel_modules_guest"
+  fi
+
+  if [ -z "${NIXOME_QUBES_TEMPLATE_RPM:-}" ]; then
+    local template_filename
+    template_filename="$(filename_from_url "$TEMPLATE_URL")"
+    cached_template_host="$(download_cached "$TEMPLATE_URL" "$template_filename")"
+    cached_template_guest="$GUEST_CACHE_DIR/$template_filename"
+    NIXOME_QUBES_TEMPLATE_RPM="$cached_template_guest"
+  fi
+}
+
+copy_to_guest_cache() {
+  local host_path="$1"
+  local guest_path="$2"
+  local guest_partial="$guest_path.part"
+  local host_size
+
+  if [ -z "$host_path" ]; then
+    return 0
+  fi
+
+  host_size="$(stat -c %s "$host_path")"
+
+  if remote "test -f $(shell_quote "$guest_path") && [ \"\$(stat -c %s $(shell_quote "$guest_path"))\" = $(shell_quote "$host_size") ]" >/dev/null 2>&1; then
+    printf 'cache: guest already has %s\n' "$guest_path"
+    return 0
+  fi
+
+  printf 'cache: copying %s to guest:%s\n' "$host_path" "$guest_path"
+  remote "sudo -n install -d -m 0755 $(shell_quote "$GUEST_CACHE_DIR")"
+  ssh_command "sudo -n tee $(shell_quote "$guest_partial") >/dev/null" < "$host_path"
+  remote "sudo -n chmod 0644 $(shell_quote "$guest_partial") && sudo -n mv $(shell_quote "$guest_partial") $(shell_quote "$guest_path")"
+}
+
+copy_cached_bootstrap_assets_to_guest() {
+  if [ "$BOOTSTRAP_QUBES" != "1" ] || [ "$CACHE_QUBES_ASSETS" != "1" ]; then
+    return 0
+  fi
+
+  copy_to_guest_cache "$cached_gpg_key_host" "$cached_gpg_key_guest"
+  copy_to_guest_cache "$cached_kernel_host" "$cached_kernel_guest"
+  copy_to_guest_cache "$cached_kernel_modules_host" "$cached_kernel_modules_guest"
+  copy_to_guest_cache "$cached_template_host" "$cached_template_guest"
+}
+
 remote_env_prefix() {
   local prefix="env"
   local name
@@ -59,11 +210,14 @@ remote_env_prefix() {
   for name in \
     NIXOME_QUBES_TEMPLATE \
     NIXOME_QUBES_TEMPLATE_URL \
+    NIXOME_QUBES_TEMPLATE_RPM \
     NIXOME_QUBES_KERNEL_NAME \
     NIXOME_QUBES_KERNEL_VERSION \
     NIXOME_QUBES_KERNEL_FEDORA \
     NIXOME_QUBES_KERNEL_URL \
     NIXOME_QUBES_KERNEL_MODULES_URL \
+    NIXOME_QUBES_KERNEL_RPM \
+    NIXOME_QUBES_KERNEL_MODULES_RPM \
     NIXOME_QUBES_GPG_KEY_URL \
     NIXOME_QUBES_GPG_KEY \
     NIXOME_QUBES_VERIFY_RPMS \
@@ -98,6 +252,8 @@ collect_diagnostics() {
   remote 'qvm-ls || true' > "$QVM_LS_LOG" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/qubes-bootstrap.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-bootstrap.commands.log" 2>/dev/null || true
 }
+
+prepare_cached_bootstrap_assets
 
 printf 'starting nested GUI VM smoke run\n'
 printf 'logs: %s\n' "$LOG_DIR"
@@ -142,6 +298,7 @@ fi
 
 if [ "$BOOTSTRAP_QUBES" = "1" ]; then
   printf 'bootstrap: installing/checking Qubes VM kernel and template\n'
+  copy_cached_bootstrap_assets_to_guest
   bootstrap_env="$(remote_env_prefix)"
   if ! remote "sudo -n $bootstrap_env NIXOME_LOG_DIR=/var/log/nixome nixome-qube-bootstrap" > "$BOOTSTRAP_JSON" 2> "$BOOTSTRAP_STDERR"; then
     collect_diagnostics

@@ -7,12 +7,15 @@ COMMAND_LOG="$LOG_DIR/qubes-bootstrap.commands.log"
 
 TEMPLATE_NAME="${NIXOME_QUBES_TEMPLATE:-fedora-43-xfce}"
 TEMPLATE_URL="${NIXOME_QUBES_TEMPLATE_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/templates-itl/rpm/qubes-template-fedora-43-xfce-4.3.0-202601041226.noarch.rpm}"
+TEMPLATE_RPM="${NIXOME_QUBES_TEMPLATE_RPM:-}"
 
 KERNEL_NAME="${NIXOME_QUBES_KERNEL_NAME:-6.12.64-1.fc41}"
 KERNEL_VERSION="${NIXOME_QUBES_KERNEL_VERSION:-6.12.64-1}"
 KERNEL_FEDORA="${NIXOME_QUBES_KERNEL_FEDORA:-fc41}"
 KERNEL_URL="${NIXOME_QUBES_KERNEL_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm}"
 KERNEL_MODULES_URL="${NIXOME_QUBES_KERNEL_MODULES_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-modules-6.12.64-1.qubes.fc41.x86_64.rpm}"
+KERNEL_RPM="${NIXOME_QUBES_KERNEL_RPM:-}"
+KERNEL_MODULES_RPM="${NIXOME_QUBES_KERNEL_MODULES_RPM:-}"
 
 GPG_KEY_URL="${NIXOME_QUBES_GPG_KEY_URL:-https://keys.qubes-os.org/keys/qubes-release-4.3-signing-key.asc}"
 GPG_KEY="${NIXOME_QUBES_GPG_KEY:-/var/lib/nixome/qubes-release-4.3-signing-key.asc}"
@@ -56,9 +59,15 @@ write_result() {
     json_string "$TEMPLATE_NAME"
     printf ',"template_url":'
     json_string "$TEMPLATE_URL"
+    printf ',"template_rpm":'
+    json_string "$TEMPLATE_RPM"
     printf ',"template_installed":%s' "$template_installed"
     printf ',"kernel":'
     json_string "$KERNEL_NAME"
+    printf ',"kernel_rpm":'
+    json_string "$KERNEL_RPM"
+    printf ',"kernel_modules_rpm":'
+    json_string "$KERNEL_MODULES_RPM"
     printf ',"kernel_installed":%s' "$kernel_installed"
     printf ',"rpm_signature_verification":'
     if [ "$VERIFY_RPMS" = "1" ]; then
@@ -95,6 +104,21 @@ require_command() {
   fi
 }
 
+verify_rpm() {
+  rpm_file="$1"
+
+  if [ "$VERIFY_RPMS" != "1" ]; then
+    return 0
+  fi
+
+  rpmdb_dir="$(mktemp -d)"
+  rpmkeys --dbpath="$rpmdb_dir" --import "$GPG_KEY"
+  rpmkeys --dbpath="$rpmdb_dir" \
+    --define='_pkgverify_level all' \
+    --define='_pkgverify_flags 0x0' \
+    --checksig "$rpm_file"
+}
+
 service_active() {
   systemctl is-active --quiet "$1"
 }
@@ -112,7 +136,9 @@ require_root
 for cmd in \
   curl \
   grep \
+  nixos-qubes-install-kernel-rpm \
   nixos-qubes-install-kernel-url \
+  nixos-qubes-install-template-rpm \
   nixos-qubes-install-template-url \
   qubes-prefs \
   qvm-create \
@@ -121,6 +147,12 @@ for cmd in \
   systemctl; do
   require_command "$cmd"
 done
+
+if [ "$VERIFY_RPMS" = "1" ] && {
+  [ -n "$KERNEL_RPM" ] || [ -n "$KERNEL_MODULES_RPM" ] || [ -n "$TEMPLATE_RPM" ];
+}; then
+  require_command rpmkeys
+fi
 
 service_active qubes-db-dom0.service || fail "qubes-db-dom0.service is not active"
 service_active qubesd.service || fail "qubesd.service is not active"
@@ -141,18 +173,40 @@ else
   printf 'WARNING: RPM signature verification disabled by NIXOME_QUBES_VERIFY_RPMS=%s\n' "$VERIFY_RPMS" >&2
 fi
 
+if [ -n "$KERNEL_RPM" ] || [ -n "$KERNEL_MODULES_RPM" ]; then
+  [ -n "$KERNEL_RPM" ] || fail "NIXOME_QUBES_KERNEL_MODULES_RPM is set but NIXOME_QUBES_KERNEL_RPM is empty"
+  [ -n "$KERNEL_MODULES_RPM" ] || fail "NIXOME_QUBES_KERNEL_RPM is set but NIXOME_QUBES_KERNEL_MODULES_RPM is empty"
+  [ -f "$KERNEL_RPM" ] || fail "kernel RPM is missing: $KERNEL_RPM"
+  [ -f "$KERNEL_MODULES_RPM" ] || fail "kernel modules RPM is missing: $KERNEL_MODULES_RPM"
+fi
+
+if [ -n "$TEMPLATE_RPM" ]; then
+  [ -f "$TEMPLATE_RPM" ] || fail "template RPM is missing: $TEMPLATE_RPM"
+fi
+
 kernel_installed=false
 if [ -d "/var/lib/qubes/vm-kernels/$KERNEL_NAME" ]; then
   printf 'kernel already installed: %s\n' "$KERNEL_NAME"
 else
   printf 'installing Qubes VM kernel: %s\n' "$KERNEL_NAME"
-  nixos-qubes-install-kernel-url \
-    "$KERNEL_NAME" \
-    "$KERNEL_VERSION" \
-    "$KERNEL_FEDORA" \
-    "$KERNEL_URL" \
-    "$KERNEL_MODULES_URL" \
-    "${key_arg[@]}"
+  if [ -n "$KERNEL_RPM" ]; then
+    verify_rpm "$KERNEL_RPM"
+    verify_rpm "$KERNEL_MODULES_RPM"
+    nixos-qubes-install-kernel-rpm \
+      "$KERNEL_NAME" \
+      "$KERNEL_VERSION" \
+      "$KERNEL_FEDORA" \
+      "$KERNEL_RPM" \
+      "$KERNEL_MODULES_RPM"
+  else
+    nixos-qubes-install-kernel-url \
+      "$KERNEL_NAME" \
+      "$KERNEL_VERSION" \
+      "$KERNEL_FEDORA" \
+      "$KERNEL_URL" \
+      "$KERNEL_MODULES_URL" \
+      "${key_arg[@]}"
+  fi
   kernel_installed=true
 fi
 
@@ -164,10 +218,15 @@ if template_exists || [ -d "/var/lib/qubes/vm-templates/$TEMPLATE_NAME" ]; then
   printf 'template already installed: %s\n' "$TEMPLATE_NAME"
 else
   printf 'installing Qubes template: %s\n' "$TEMPLATE_NAME"
-  nixos-qubes-install-template-url \
-    "$TEMPLATE_NAME" \
-    "$TEMPLATE_URL" \
-    "${key_arg[@]}"
+  if [ -n "$TEMPLATE_RPM" ]; then
+    verify_rpm "$TEMPLATE_RPM"
+    nixos-qubes-install-template-rpm "$TEMPLATE_NAME" "$TEMPLATE_RPM"
+  else
+    nixos-qubes-install-template-url \
+      "$TEMPLATE_NAME" \
+      "$TEMPLATE_URL" \
+      "${key_arg[@]}"
+  fi
   template_installed=true
 fi
 

@@ -69,8 +69,11 @@ make vm-gui-smoke
 
 This starts the GUI image, checks core services over SSH, downloads/imports the
 default Qubes R4.3 Fedora VM kernel and Fedora 43 XFCE template, runs qrexec
-`uname -a`, then tries to detect a Qube GUI window in dom0. The template RPM is
-about 2 GB. Logs and JSON results are written under `.nixome-logs/`.
+`uname -a`, then tries to detect a Qube GUI window in dom0. By default, Qubes
+RPM inputs are cached on the host under `.nixome-cache/rpms/` and copied into
+the nested dom0 under `/var/cache/nixome/qubes-rpms/` before import. The
+template RPM is about 2 GB. Logs and JSON results are written under
+`.nixome-logs/`.
 
 On a booted Xen dom0 target with a Qubes template installed:
 

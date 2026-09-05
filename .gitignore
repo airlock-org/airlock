@@ -1,5 +1,6 @@
 /result
 /result-*
 /.nixome-logs/
+/.nixome-cache/
 /.nixome-vm/
 /.direnv/

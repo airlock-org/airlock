@@ -115,20 +115,34 @@ make vm-gui-smoke
 This does the control-plane check and then, by default:
 
 - runs `nixome-qube-bootstrap` in dom0 as root,
-- downloads the Qubes R4.3 RPM signing key from `keys.qubes-os.org`,
-- downloads/imports the Fedora 41 Qubes VM kernel RPMs,
-- downloads/imports the Fedora 43 XFCE template RPM,
+- caches the Qubes R4.3 RPM signing key on the host,
+- caches the Fedora 41 Qubes VM kernel RPMs on the host,
+- caches the Fedora 43 XFCE template RPM on the host,
+- copies cached assets into the nested dom0 and imports them there,
 - sets `default_kernel`, `default_template`, `default_dispvm`, and `updatevm`,
 - runs `nixome-qubes-smoke`,
 - runs `nixome-qube-gui-smoke`.
 
-The Fedora 43 XFCE template RPM is about 2 GB. To run only selected layers:
+The Fedora 43 XFCE template RPM is about 2 GB. The host cache lives at:
+
+```text
+.nixome-cache/rpms/
+```
+
+Inside the nested dom0, cached inputs are copied to:
+
+```text
+/var/cache/nixome/qubes-rpms/
+```
+
+To run only selected layers:
 
 ```bash
 NIXOME_BOOTSTRAP_QUBES=0 make vm-gui-smoke
 NIXOME_RUN_QUBES_SMOKE=0 make vm-gui-smoke
 NIXOME_RUN_GUI_SMOKE=0 make vm-gui-smoke
 NIXOME_KEEP_VM=1 make vm-gui-smoke
+NIXOME_CACHE_QUBES_ASSETS=0 make vm-gui-smoke
 ```
 
 Default bootstrap inputs come from the current `nixos-qubes` README examples:
@@ -143,6 +157,7 @@ Override them with `NIXOME_QUBES_TEMPLATE`,
 `NIXOME_QUBES_TEMPLATE_URL`, `NIXOME_QUBES_KERNEL_NAME`,
 `NIXOME_QUBES_KERNEL_VERSION`, `NIXOME_QUBES_KERNEL_FEDORA`,
 `NIXOME_QUBES_KERNEL_URL`, and `NIXOME_QUBES_KERNEL_MODULES_URL`.
+Override the host cache location with `NIXOME_QUBES_CACHE_DIR`.
 RPM signature verification is enabled by default. Set
 `NIXOME_QUBES_VERIFY_RPMS=0` only for throwaway development debugging.
 

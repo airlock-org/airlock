@@ -4,6 +4,7 @@
   gnugrep,
   gnused,
   lib,
+  rpm,
   systemd,
   writeShellApplication,
 }:
@@ -16,6 +17,7 @@ writeShellApplication {
     curl
     gnugrep
     gnused
+    rpm
     systemd
   ];
 
