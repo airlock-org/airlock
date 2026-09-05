@@ -122,6 +122,9 @@ The Qubes smoke test creates `test-nixome-smoke` if needed, starts it, runs
 - `modules/qube-guest.nix`, `pkgs/nixome-qubes-template`, and
   `modules/qubes-topology.nix` are the first pieces for NixOS-backed Qubes
   templates and declarative topology reconciliation.
+- The two config-system TemplateVM source directories currently share one
+  NixOS guest root image to keep nested smoke builds practical; AppVM roles and
+  qrexec policy provide the current separation.
 - `machines/test.nix` is the first concrete NixOS dom0 configuration.
 - `tests/` contains layered feedback scripts.
 - `docs/` records upstream findings and the next test boundary.

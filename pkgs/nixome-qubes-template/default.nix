@@ -38,8 +38,7 @@ runCommand "qubes-template-${templateName}"
         template="$out/${templateName}"
         install -d "$template/apps" "$template/apps.tempicons" "$template/apps.templates"
 
-        cp "${rootImageFile}" "$template/root.img"
-        chmod 0444 "$template/root.img"
+        ln -s "${rootImageFile}" "$template/root.img"
 
         cat > "$template/template.conf" <<'EOF'
     ${templateConfText}

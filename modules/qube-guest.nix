@@ -34,6 +34,7 @@ let
       pkgs.jq
       pkgs.nix
     ];
+    config-system = rolePackages.config-vault ++ rolePackages.agent;
   };
 
   configVaultInit = pkgs.writeShellScriptBin "nixome-config-vault-init" ''
@@ -104,6 +105,7 @@ in
         "base"
         "config-vault"
         "agent"
+        "config-system"
       ];
       default = "base";
       description = "Nixome role-specific userspace to place in the guest template.";

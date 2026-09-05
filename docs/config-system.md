@@ -16,6 +16,12 @@ plane in dom0, but moves the desired VM topology into Nix.
 - qrexec policy allowing only `sys-agent` to call
   `nixome.Config.Export` on `sys-config-vault`.
 
+For this POC both TemplateVM source directories reference the same NixOS guest
+root image. The AppVM names, Qubes features, offline networking, and qrexec
+policy carry the role distinction. Splitting the guest root into role-specific
+templates remains compatible with the topology model once the boot path is
+stable.
+
 `sys-config-vault` owns the authoritative Git repository at:
 
 ```text

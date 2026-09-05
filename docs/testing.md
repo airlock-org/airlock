@@ -182,7 +182,8 @@ make nixos-templates
 These targets build the NixOS Qube template source directories for
 `nixome-nixos-config-vault` and `nixome-nixos-agent`. The outputs are Nix store
 directories containing `root.img`, `template.conf`, and Qubes appmenu list
-files. They are not RPMs.
+files. They are not RPMs. For now, both template directories symlink `root.img`
+to one shared NixOS guest root image to reduce local build size.
 
 To build or boot a nested GUI dom0 image that includes the declared
 `sys-config-vault` and `sys-agent` topology:

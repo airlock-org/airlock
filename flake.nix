@@ -66,30 +66,39 @@
           ]
         );
 
-      mkQubesTemplatePackage =
+      mkQubeRootImage =
         system:
         {
           configuration,
-          templateName,
+          imageName,
         }:
         let
           pkgs = pkgsFor system;
-          rootImage = import "${nixpkgs}/nixos/lib/make-disk-image.nix" {
-            inherit lib pkgs;
-            config = configuration.config;
-            name = "${templateName}-root-image";
-            baseName = "root";
-            format = "raw";
-            partitionTableType = "none";
-            installBootLoader = false;
-            copyChannel = false;
-            diskSize = "auto";
-            additionalSpace = "1024M";
-          };
+        in
+        import "${nixpkgs}/nixos/lib/make-disk-image.nix" {
+          inherit lib pkgs;
+          config = configuration.config;
+          name = "${imageName}-root-image";
+          baseName = "root";
+          format = "raw";
+          partitionTableType = "none";
+          installBootLoader = false;
+          copyChannel = false;
+          diskSize = "auto";
+          additionalSpace = "1024M";
+        };
+
+      mkQubesTemplatePackage =
+        system:
+        {
+          templateName,
+          rootImageFile,
+        }:
+        let
+          pkgs = pkgsFor system;
         in
         pkgs.callPackage ./pkgs/nixome-qubes-template {
-          inherit templateName;
-          rootImageFile = "${rootImage}/root.img";
+          inherit templateName rootImageFile;
         };
 
       mkModuleContractCheck =
@@ -164,6 +173,10 @@
         system:
         let
           pkgs = pkgsFor system;
+          configSystemRootImage = mkQubeRootImage system {
+            configuration = self.nixosConfigurations.qube-template-config-system;
+            imageName = "nixome-nixos-config-system";
+          };
         in
         {
           nixome-config-vms-smoke = pkgs.callPackage ./pkgs/nixome-config-vms-smoke { };
@@ -184,13 +197,14 @@
             kernelVersion = "6.12.64-1";
             fedoraVersion = "fc41";
           };
+          nixome-nixos-config-system-root-image = configSystemRootImage;
           nixome-nixos-config-vault-template = mkQubesTemplatePackage system {
-            configuration = self.nixosConfigurations.qube-template-config-vault;
             templateName = "nixome-nixos-config-vault";
+            rootImageFile = "${configSystemRootImage}/root.img";
           };
           nixome-nixos-agent-template = mkQubesTemplatePackage system {
-            configuration = self.nixosConfigurations.qube-template-agent;
             templateName = "nixome-nixos-agent";
+            rootImageFile = "${configSystemRootImage}/root.img";
           };
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
           nixome-vm-gui-image = self.nixosConfigurations.vm-gui.config.system.build.image;
@@ -261,8 +275,8 @@
             package = self.packages.x86_64-linux.nixome-qubes-vm-kernel;
           };
           nixomeQubeKernelOpts = {
-            agent = mkQubeKernelOpts self.nixosConfigurations.qube-template-agent;
-            configVault = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-vault;
+            agent = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
+            configVault = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
           };
           nixomeTemplatePackages = {
             configVault = self.packages.x86_64-linux.nixome-nixos-config-vault-template;
@@ -273,6 +287,25 @@
           self.nixosModules.dom0
           ./machines/vm-gui.nix
           ./machines/config-system.nix
+        ];
+      };
+
+      nixosConfigurations.qube-template-config-system = lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          nixos-qubes.nixosModules.qubes
+          (
+            { lib, ... }:
+            {
+              nixpkgs.config.allowUnfreePredicate =
+                pkg:
+                builtins.elem (pkg.pname or (lib.getName pkg)) [
+                  "qubes-artwork"
+                  "qubes-vmm-stubdom-linux"
+                ];
+            }
+          )
+          ./machines/qube-template-config-system.nix
         ];
       };
 
