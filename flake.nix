@@ -166,6 +166,7 @@
           pkgs = pkgsFor system;
         in
         {
+          nixome-config-vms-smoke = pkgs.callPackage ./pkgs/nixome-config-vms-smoke { };
           nixome-qube-bootstrap = pkgs.callPackage ./pkgs/nixome-qube-bootstrap { };
           nixome-qube-gui-smoke = pkgs.callPackage ./pkgs/nixome-qube-gui-smoke { };
           nixome-qubes-reconcile = pkgs.callPackage ./pkgs/nixome-qubes-reconcile { };
@@ -203,6 +204,7 @@
 
       checks = forAllSystems (system: {
         module-contract = mkModuleContractCheck system;
+        config-vms-smoke-package = self.packages.${system}.nixome-config-vms-smoke;
         qube-bootstrap-package = self.packages.${system}.nixome-qube-bootstrap;
         qube-gui-smoke-package = self.packages.${system}.nixome-qube-gui-smoke;
         qubes-reconcile-package = self.packages.${system}.nixome-qubes-reconcile;

@@ -35,6 +35,7 @@ run_logged() {
 
 run_logged flake-check-no-build nix flake check "$ROOT" --no-build --show-trace
 run_logged module-contract nix build "$ROOT#checks.x86_64-linux.module-contract" --print-build-logs --show-trace
+run_logged config-vms-smoke-package nix build "$ROOT#packages.x86_64-linux.nixome-config-vms-smoke" --print-build-logs --show-trace
 run_logged observe-package nix build "$ROOT#packages.x86_64-linux.nixome-observe-dom0" --print-build-logs --show-trace
 run_logged reconcile-package nix build "$ROOT#packages.x86_64-linux.nixome-qubes-reconcile" --print-build-logs --show-trace
 run_logged config-topology-eval "$ROOT/tests/config-topology-eval.sh"

@@ -16,6 +16,7 @@ KEEP_VM="${NIXOME_KEEP_VM:-0}"
 
 BOOTSTRAP_QUBES="${NIXOME_BOOTSTRAP_QUBES:-1}"
 RUN_RECONCILE="${NIXOME_RUN_QUBES_RECONCILE:-0}"
+RUN_CONFIG_VMS_SMOKE="${NIXOME_RUN_CONFIG_VMS_SMOKE:-0}"
 RUN_QREXEC_SMOKE="${NIXOME_RUN_QUBES_SMOKE:-1}"
 RUN_GUI_SMOKE="${NIXOME_RUN_GUI_SMOKE:-1}"
 CACHE_QUBES_ASSETS="${NIXOME_CACHE_QUBES_ASSETS:-1}"
@@ -41,6 +42,9 @@ BOOTSTRAP_STDERR="$LOG_DIR/vm-gui-bootstrap.stderr.log"
 RECONCILE_JSON="$LOG_DIR/vm-gui-reconcile.json"
 RECONCILE_STDOUT="$LOG_DIR/vm-gui-reconcile.stdout.log"
 RECONCILE_STDERR="$LOG_DIR/vm-gui-reconcile.stderr.log"
+CONFIG_VMS_JSON="$LOG_DIR/vm-gui-config-vms-smoke.json"
+CONFIG_VMS_STDOUT="$LOG_DIR/vm-gui-config-vms-smoke.stdout.log"
+CONFIG_VMS_STDERR="$LOG_DIR/vm-gui-config-vms-smoke.stderr.log"
 QREXEC_JSON="$LOG_DIR/vm-gui-qrexec-smoke.json"
 QREXEC_STDERR="$LOG_DIR/vm-gui-qrexec-smoke.stderr.log"
 GUI_JSON="$LOG_DIR/vm-gui-window-smoke.json"
@@ -68,6 +72,9 @@ rm -f \
   "$RECONCILE_JSON" \
   "$RECONCILE_STDOUT" \
   "$RECONCILE_STDERR" \
+  "$CONFIG_VMS_JSON" \
+  "$CONFIG_VMS_STDOUT" \
+  "$CONFIG_VMS_STDERR" \
   "$QREXEC_JSON" \
   "$QREXEC_STDERR" \
   "$GUI_JSON" \
@@ -277,6 +284,9 @@ collect_diagnostics() {
   remote 'qvm-ls || true' > "$QVM_LS_LOG" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/qubes-bootstrap.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-bootstrap.commands.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/qubes-reconcile.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-reconcile.commands.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-vms-smoke.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-smoke.commands.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-vms-journal.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-journal.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-vms-libxl.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-libxl.log" 2>/dev/null || true
 }
 
 extract_json_result() {
@@ -377,6 +387,26 @@ else
   printf '{"schema":"nixome.qubes-reconcile.v1","status":"skipped","reason":"NIXOME_RUN_QUBES_RECONCILE=0"}\n' > "$RECONCILE_JSON"
 fi
 
+if [ "$RUN_CONFIG_VMS_SMOKE" = "1" ]; then
+  printf 'config-vms: booting declared NixOS config VMs and fetching config snapshot\n'
+  if ! remote "sudo -n env NIXOME_LOG_DIR=/var/log/nixome nixome-config-vms-smoke" > "$CONFIG_VMS_STDOUT" 2> "$CONFIG_VMS_STDERR"; then
+    remote 'sudo -n cat /var/log/nixome/config-vms-smoke.json 2>/dev/null || true' > "$CONFIG_VMS_JSON" 2>/dev/null || true
+    collect_diagnostics
+    cat "$CONFIG_VMS_STDERR" >&2 || true
+    exit 1
+  fi
+  if ! extract_json_result "nixome.config-vms-smoke.v1" "$CONFIG_VMS_STDOUT" "$CONFIG_VMS_JSON"; then
+    remote 'sudo -n cat /var/log/nixome/config-vms-smoke.json 2>/dev/null || true' > "$CONFIG_VMS_JSON" 2>/dev/null || true
+    if ! grep -q '"schema":"nixome.config-vms-smoke.v1"' "$CONFIG_VMS_JSON"; then
+      collect_diagnostics
+      printf 'config VMs smoke did not emit result JSON; see %s\n' "$CONFIG_VMS_STDOUT" >&2
+      exit 1
+    fi
+  fi
+else
+  printf '{"schema":"nixome.config-vms-smoke.v1","status":"skipped","reason":"NIXOME_RUN_CONFIG_VMS_SMOKE=0"}\n' > "$CONFIG_VMS_JSON"
+fi
+
 if [ "$RUN_QREXEC_SMOKE" = "1" ]; then
   printf 'qrexec: running uname smoke test\n'
   if ! remote "env NIXOME_LOG_DIR=/tmp/nixome-logs NIXOME_TEST_TEMPLATE=$(shell_quote "$TEMPLATE") NIXOME_TEST_QUBE=$(shell_quote "$QUBE") NIXOME_TEST_CLEANUP=0 nixome-qubes-smoke" > "$QREXEC_JSON" 2> "$QREXEC_STDERR"; then
@@ -405,5 +435,6 @@ printf 'nested GUI smoke completed\n'
 printf 'observe: %s\n' "$OBSERVE_JSON"
 printf 'bootstrap: %s\n' "$BOOTSTRAP_JSON"
 printf 'reconcile: %s\n' "$RECONCILE_JSON"
+printf 'config-vms: %s\n' "$CONFIG_VMS_JSON"
 printf 'qrexec: %s\n' "$QREXEC_JSON"
 printf 'gui: %s\n' "$GUI_JSON"

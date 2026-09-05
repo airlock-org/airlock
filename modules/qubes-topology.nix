@@ -108,6 +108,7 @@ let
   };
 
   reconciler = pkgs.callPackage ../pkgs/nixome-qubes-reconcile { };
+  configVmsSmoke = pkgs.callPackage ../pkgs/nixome-config-vms-smoke { };
 
   configAccessPolicyPackage = pkgs.runCommand "nixome-config-access-policy" { } ''
         set -eu
@@ -192,7 +193,10 @@ in
       }) cfg.kernels;
 
     environment.etc."nixome/qubes-topology.json".text = builtins.toJSON topology + "\n";
-    environment.systemPackages = [ reconciler ];
+    environment.systemPackages = [
+      configVmsSmoke
+      reconciler
+    ];
 
     virtualisation.qubes.packages = lib.optionals cfg.configAccessPolicy.enable [
       configAccessPolicyPackage
