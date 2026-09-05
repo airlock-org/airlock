@@ -9,16 +9,15 @@ plane in dom0, but moves the desired VM topology into Nix.
 
 - `nixome-nixos-config-vault`, a NixOS TemplateVM source.
 - `nixome-nixos-config-mod`, a NixOS TemplateVM source.
-- `sys-config-vault`, an offline AppVM based on the config-vault template.
-- `sys-config-mod`, an offline AppVM based on the config-mod template.
+- `config-vault`, an offline AppVM based on the config-vault template.
+- `config-mod`, an offline AppVM based on the config-mod template.
 - `default_kernel = ""`, so fresh config-only images can create TemplateVMs
   before a Fedora/Qubes VM kernel has been bootstrapped.
 - qrexec policy allowing only dom0 to call `nixome.Config.CandidateExport` on
-  `sys-config-mod` and `nixome.Config.ArchiveCandidate` on
-  `sys-config-vault`.
+  `config-mod` and `nixome.Config.ArchiveCandidate` on `config-vault`.
 
 The initial VM resource settings are sized for the nested 8 GiB developer VM:
-`sys-config-vault` starts at 1024 MiB and `sys-config-mod` starts at 2048 MiB. A
+`config-vault` starts at 1024 MiB and `config-mod` starts at 2048 MiB. A
 physical Nixome host can raise these declaratively later.
 
 For this POC both TemplateVM source directories reference the same NixOS guest
@@ -28,7 +27,7 @@ networking, and qrexec policy carry the runtime role distinction. Dedicated
 role-specific guest closures already evaluate/build and remain the hardening
 target once the authority flow is stable.
 
-`sys-config-mod` owns the editable candidate repository at:
+`config-mod` owns the editable candidate repository at:
 
 ```text
 /home/user/nixome-config
@@ -41,13 +40,13 @@ nixome-config-mod-init
 nixome-config-mod-validate
 ```
 
-Validation runs in `sys-config-mod`, writes JSON under:
+Validation runs in `config-mod`, writes JSON under:
 
 ```text
 /home/user/nixome-config-validation
 ```
 
-`sys-config-vault` owns the archive repository at:
+`config-vault` owns the archive repository at:
 
 ```text
 /home/user/nixome-config-vault
@@ -59,9 +58,9 @@ dom0 archives a candidate by running:
 sudo nixome-config-archive-candidate
 ```
 
-That command refuses to proceed unless `sys-config-mod` is offline, fetches a
-validated Git bundle from `sys-config-mod`, checks the validation artifact and
-bundle commit in dom0, then sends the bundle to `sys-config-vault` for archival.
+That command refuses to proceed unless `config-mod` is offline, fetches a
+validated Git bundle from `config-mod`, checks the validation artifact and
+bundle commit in dom0, then sends the bundle to `config-vault` for archival.
 This records what dom0 is about to attempt before deployment logic exists.
 
 ## Reconcile Path
@@ -126,10 +125,10 @@ make vm-config-smoke
 ```
 
 That target builds and boots the nested config dom0 image, applies the declared
-Qubes topology, starts `sys-config-vault` and `sys-config-mod`, runs `uname -a`
+Qubes topology, starts `config-vault` and `config-mod`, runs `uname -a`
 through qrexec in both VMs, initializes the config modifier repository,
-validates the committed candidate inside `sys-config-mod`, and verifies that
-dom0 archives the validated candidate into `sys-config-vault`.
+validates the committed candidate inside `config-mod`, and verifies that dom0
+archives the validated candidate into `config-vault`.
 The machine-readable result is copied to:
 
 ```text

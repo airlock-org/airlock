@@ -99,7 +99,7 @@ let
     # Nixome Machine Configuration
 
     This is the editable Nixome configuration candidate. dom0 archives a
-    validated commit into sys-config-vault before attempting deployment.
+    validated commit into config-vault before attempting deployment.
     EOF
         cat > flake.nix <<'EOF'
     {

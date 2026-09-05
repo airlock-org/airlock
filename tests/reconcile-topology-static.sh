@@ -36,7 +36,7 @@ cat > "$TOPOLOGY" <<EOF
     }
   },
   "domains": {
-    "sys-config-vault": {
+    "config-vault": {
       "class": "AppVM",
       "template": "nixome-nixos-test",
       "label": "black",

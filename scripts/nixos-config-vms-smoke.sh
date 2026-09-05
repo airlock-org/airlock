@@ -5,8 +5,8 @@ LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
 RESULT_JSON="$LOG_DIR/config-vms-smoke.json"
 COMMAND_LOG="$LOG_DIR/config-vms-smoke.commands.log"
 QVM_LS_LOG="$LOG_DIR/config-vms-qvm-ls.log"
-MOD_UNAME_LOG="$LOG_DIR/config-vms-sys-config-mod-uname.log"
-VAULT_UNAME_LOG="$LOG_DIR/config-vms-sys-config-vault-uname.log"
+MOD_UNAME_LOG="$LOG_DIR/config-vms-config-mod-uname.log"
+VAULT_UNAME_LOG="$LOG_DIR/config-vms-config-vault-uname.log"
 MOD_INIT_LOG="$LOG_DIR/config-vms-mod-init.log"
 MOD_VALIDATION_LOG="$LOG_DIR/config-vms-mod-validation.log"
 ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
@@ -15,8 +15,8 @@ JOURNAL_LOG="$LOG_DIR/config-vms-journal.log"
 LIBXL_LOG="$LOG_DIR/config-vms-libxl.log"
 QVM_PREFS_LOG="$LOG_DIR/config-vms-qvm-prefs.log"
 
-MOD="${NIXOME_CONFIG_MOD_VM:-sys-config-mod}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
+MOD="${NIXOME_CONFIG_MOD_VM:-config-mod}"
+VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
 MOD_CONSOLE_LOG="$LOG_DIR/config-vms-$MOD-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 result_written=0
@@ -238,5 +238,5 @@ jq -e '
 ' "$ARCHIVE_JSON" >/dev/null || fail "config archive JSON did not pass"
 
 collect_diagnostics
-write_result passed "NixOS config VMs booted, sys-config-mod validated a candidate, and dom0 archived it in sys-config-vault"
+write_result passed "NixOS config VMs booted, config-mod validated a candidate, and dom0 archived it in config-vault"
 cat "$RESULT_JSON"

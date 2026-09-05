@@ -12,8 +12,8 @@ VAULT_ARCHIVE_LOG="$LOG_DIR/config-vault-archive.log"
 VAULT_ARCHIVE_JSON="$LOG_DIR/config-vault-archive.json"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 
-MOD="${NIXOME_CONFIG_MOD_VM:-sys-config-mod}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
+MOD="${NIXOME_CONFIG_MOD_VM:-config-mod}"
+VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
 CANDIDATE_EXPORT_SERVICE="${NIXOME_CONFIG_CANDIDATE_EXPORT_SERVICE:-nixome.Config.CandidateExport}"
 ARCHIVE_SERVICE="${NIXOME_CONFIG_ARCHIVE_SERVICE:-nixome.Config.ArchiveCandidate}"
 result_written=0
@@ -25,8 +25,8 @@ usage() {
   cat >&2 <<'EOF'
 Usage: nixome-config-archive-candidate [--mod VM] [--vault VM]
 
-Fetch a validated config candidate from sys-config-mod and archive it into
-sys-config-vault before any deployment attempt.
+Fetch a validated config candidate from config-mod and archive it into
+config-vault before any deployment attempt.
 EOF
   exit 1
 }
@@ -308,5 +308,5 @@ vault_commit="$(jq -r '.vault_commit' "$VAULT_ARCHIVE_JSON")"
 [ "$vault_archive_commit" = "$candidate_commit" ] ||
   fail "vault archived commit $vault_archive_commit does not match candidate commit $candidate_commit"
 
-write_result passed "validated candidate archived in sys-config-vault before deployment"
+write_result passed "validated candidate archived in config-vault before deployment"
 cat "$RESULT_JSON"

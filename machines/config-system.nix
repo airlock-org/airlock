@@ -99,7 +99,7 @@ in
         };
       };
 
-      sys-config-vault = {
+      config-vault = {
         class = "AppVM";
         template = "nixome-nixos-config-vault";
         label = "black";
@@ -122,7 +122,7 @@ in
         };
       };
 
-      sys-config-mod = {
+      config-mod = {
         class = "AppVM";
         template = "nixome-nixos-config-mod";
         label = "gray";
@@ -147,8 +147,8 @@ in
 
     configAccessPolicy = {
       enable = true;
-      vault = "sys-config-vault";
-      modifier = "sys-config-mod";
+      vault = "config-vault";
+      modifier = "config-mod";
       candidateExportService = "nixome.Config.CandidateExport";
       archiveService = "nixome.Config.ArchiveCandidate";
     };

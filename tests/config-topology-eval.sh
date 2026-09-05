@@ -15,14 +15,14 @@ nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.nixome.qubes.ker
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.nixome.qubes.templates" > "$TEMPLATES_JSON"
 
 jq -e '
-  ."sys-config-vault".class == "AppVM" and
-  ."sys-config-vault".template == "nixome-nixos-config-vault" and
-  ."sys-config-vault".netvm == null and
-  ."sys-config-vault".features."nixome-role" == "config-vault" and
-  ."sys-config-mod".class == "AppVM" and
-  ."sys-config-mod".template == "nixome-nixos-config-mod" and
-  ."sys-config-mod".netvm == null and
-  ."sys-config-mod".features."nixome-role" == "config-mod"
+  ."config-vault".class == "AppVM" and
+  ."config-vault".template == "nixome-nixos-config-vault" and
+  ."config-vault".netvm == null and
+  ."config-vault".features."nixome-role" == "config-vault" and
+  ."config-mod".class == "AppVM" and
+  ."config-mod".template == "nixome-nixos-config-mod" and
+  ."config-mod".netvm == null and
+  ."config-mod".features."nixome-role" == "config-mod"
 ' "$DOMAINS_JSON" >/dev/null
 
 jq -e '

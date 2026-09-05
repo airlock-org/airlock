@@ -22,7 +22,7 @@ writeShellApplication {
   text = builtins.readFile ../../scripts/nixos-config-vms-smoke.sh;
 
   meta = {
-    description = "Run a Nixome smoke test for sys-config-vault and sys-config-mod";
+    description = "Run a Nixome smoke test for config-vault and config-mod";
     license = lib.licenses.mit;
     platforms = [ "x86_64-linux" ];
   };

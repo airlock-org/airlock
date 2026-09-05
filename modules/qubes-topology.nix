@@ -117,7 +117,7 @@ let
         install -d "$out/etc/qubes/policy.d"
         cat > "$out/etc/qubes/policy.d/30-nixome-config.policy" <<'EOF'
     # Managed by Nixome. Only dom0 may fetch a validated candidate from
-    # sys-config-mod or archive a candidate into sys-config-vault.
+    # config-mod or archive a candidate into config-vault.
     ${cfg.configAccessPolicy.candidateExportService} * dom0 ${cfg.configAccessPolicy.modifier} allow
     ${cfg.configAccessPolicy.candidateExportService} * @anyvm @anyvm deny
     ${cfg.configAccessPolicy.archiveService} * dom0 ${cfg.configAccessPolicy.vault} allow
@@ -163,24 +163,24 @@ in
       candidateExportService = lib.mkOption {
         type = lib.types.str;
         default = "nixome.Config.CandidateExport";
-        description = "qrexec service used by dom0 to fetch a validated candidate from sys-config-mod.";
+        description = "qrexec service used by dom0 to fetch a validated candidate from config-mod.";
       };
 
       archiveService = lib.mkOption {
         type = lib.types.str;
         default = "nixome.Config.ArchiveCandidate";
-        description = "qrexec service used by dom0 to archive a candidate into sys-config-vault.";
+        description = "qrexec service used by dom0 to archive a candidate into config-vault.";
       };
 
       vault = lib.mkOption {
         type = lib.types.str;
-        default = "sys-config-vault";
+        default = "config-vault";
         description = "Qube that owns the archived configuration history.";
       };
 
       modifier = lib.mkOption {
         type = lib.types.str;
-        default = "sys-config-mod";
+        default = "config-mod";
         description = "Qube that owns the editable configuration candidate.";
       };
     };

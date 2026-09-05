@@ -15,8 +15,8 @@ Runs:
 - the Nixome module contract check,
 - the lightweight `nixome-observe-dom0` package build,
 - the `nixome-qubes-reconcile` package build,
-- evaluation of the config-system topology that declares `sys-config-vault` and
-  `sys-config-mod`,
+- evaluation of the config-system topology that declares `config-vault` and
+  `config-mod`,
 - host capability detection into `.nixome-logs/host-capabilities.json`,
 - a skipped Qubes smoke-test result unless `NIXOME_RUN_QUBES_SMOKE=1`.
 
@@ -186,7 +186,7 @@ files. They are not RPMs. For now, both template directories symlink `root.img`
 to one shared NixOS guest root image to reduce local build size.
 
 To build or boot a nested GUI dom0 image that includes the declared
-`sys-config-vault` and `sys-config-mod` topology:
+`config-vault` and `config-mod` topology:
 
 ```bash
 make vm-gui-config-image
@@ -210,11 +210,11 @@ To run the current NixOS config-VM boot/qrexec proof:
 make vm-config-smoke
 ```
 
-This runs the same reconcile path, then starts `sys-config-vault` and
-`sys-config-mod`, runs `uname -a` through qrexec in both VMs, initializes the
+This runs the same reconcile path, then starts `config-vault` and
+`config-mod`, runs `uname -a` through qrexec in both VMs, initializes the
 config modifier repository, validates the committed candidate in
-`sys-config-mod`, and has dom0 archive that validated candidate into
-`sys-config-vault`. The result JSON is written to:
+`config-mod`, and has dom0 archive that validated candidate into
+`config-vault`. The result JSON is written to:
 
 ```text
 .nixome-logs/vm-gui-config-vms-smoke.json
