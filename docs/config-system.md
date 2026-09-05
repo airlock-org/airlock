@@ -16,6 +16,10 @@ plane in dom0, but moves the desired VM topology into Nix.
 - qrexec policy allowing only `sys-agent` to call
   `nixome.Config.Export` on `sys-config-vault`.
 
+The initial VM resource settings are sized for the nested 8 GiB developer VM:
+`sys-config-vault` starts at 1024 MiB and `sys-agent` starts at 2048 MiB. A
+physical Nixome host can raise these declaratively later.
+
 For this POC both TemplateVM source directories reference the same NixOS guest
 root image. That shared image carries both the vault export service and the
 agent fetch tooling; the AppVM names, Qubes features, offline networking, and

@@ -129,9 +129,9 @@ in
         prefs = {
           autostart = false;
           include_in_backups = true;
-          memory = 4096;
-          maxmem = 8192;
-          vcpus = 4;
+          memory = 2048;
+          maxmem = 4096;
+          vcpus = 2;
         };
         features = {
           "nixome-managed" = "1";
