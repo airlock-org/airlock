@@ -28,9 +28,9 @@ fi
 printf 'building/resolving Nixome VM base image: .#%s\n' "$IMAGE_ATTR"
 nix build "$ROOT#$IMAGE_ATTR" --out-link "$OUT_LINK" --print-build-logs --show-trace
 
-mapfile -t base_images < <(find -L "$OUT_LINK" -maxdepth 1 -type f -name '*.qcow2' | sort)
+mapfile -t base_images < <(find -L "$OUT_LINK" -maxdepth 1 -type f \( -name '*.qcow2' -o -name '*.img' \) | sort)
 if [ "${#base_images[@]}" -ne 1 ]; then
-  printf 'error: expected one qcow2 under %s, found %s\n' "$OUT_LINK" "${#base_images[@]}" >&2
+  printf 'error: expected one qcow2 or raw img under %s, found %s\n' "$OUT_LINK" "${#base_images[@]}" >&2
   exit 1
 fi
 
@@ -41,6 +41,21 @@ RUN_DISK_BACKUP_TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 qemu_out="$(nix build --no-link --print-out-paths "$ROOT#qemu-kvm")"
 qemu_utils_out="$(nix build --no-link --print-out-paths "$ROOT#qemu-utils")"
 ovmf_out="$(nix build --no-link --print-out-paths "$ROOT#ovmf-fd")"
+
+BASE_FORMAT="$(
+  "$qemu_utils_out/bin/qemu-img" info --output=json "$BASE_IMAGE" |
+    sed -n 's/^[[:space:]]*"format": "\(.*\)",[[:space:]]*$/\1/p' |
+    head -n 1
+)"
+
+case "$BASE_FORMAT" in
+  raw | qcow2)
+    ;;
+  *)
+    printf 'error: unsupported base image format for %s: %s\n' "$BASE_IMAGE" "${BASE_FORMAT:-unknown}" >&2
+    exit 1
+    ;;
+esac
 
 if [ -e "$RUN_DISK" ]; then
   current_backing="$(
@@ -60,7 +75,7 @@ if [ ! -e "$RUN_DISK" ]; then
   printf 'creating writable overlay: %s\n' "$RUN_DISK"
   "$qemu_utils_out/bin/qemu-img" create \
     -f qcow2 \
-    -F qcow2 \
+    -F "$BASE_FORMAT" \
     -b "$BASE_IMAGE" \
     "$RUN_DISK"
 fi
@@ -93,6 +108,7 @@ esac
 cat <<EOF
 starting VM
   image attr: .#$IMAGE_ATTR
+  base: $BASE_IMAGE ($BASE_FORMAT)
   disk: $RUN_DISK
   display: $DISPLAY_MODE
   vga: $VGA

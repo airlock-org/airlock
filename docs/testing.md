@@ -203,6 +203,10 @@ then runs `sudo nixome-qubes-reconcile --apply` in the nested dom0. Reconcile
 logs are written under `.nixome-logs/` on the host and `/var/log/nixome/` in
 the nested dom0.
 
+The config topology image is built as a sparse raw base image and the VM runner
+creates a writable qcow2 overlay from it. This avoids the extra raw-to-qcow2
+conversion copy for the largest local smoke-test image.
+
 The current NixOS guest template profile uses QubesDB, qrexec-agent, Qubes
 meminfo writer, and `/dev/mapper/dmroot` as the root device to match Qubes'
 normal Linux VM boot path. Import/create reconciliation is automated; booting
