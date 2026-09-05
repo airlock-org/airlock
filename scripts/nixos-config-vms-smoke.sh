@@ -11,10 +11,13 @@ VAULT_INIT_LOG="$LOG_DIR/config-vms-vault-init.log"
 AGENT_FETCH_LOG="$LOG_DIR/config-vms-agent-fetch.log"
 JOURNAL_LOG="$LOG_DIR/config-vms-journal.log"
 LIBXL_LOG="$LOG_DIR/config-vms-libxl.log"
+QVM_PREFS_LOG="$LOG_DIR/config-vms-qvm-prefs.log"
 
 AGENT="${NIXOME_CONFIG_AGENT_VM:-sys-agent}"
 VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
 SNAPSHOT_PATH="${NIXOME_CONFIG_AGENT_SNAPSHOT:-/home/user/nixome-config-readonly}"
+AGENT_CONSOLE_LOG="$LOG_DIR/config-vms-$AGENT-console.log"
+VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 result_written=0
 
 mkdir -p "$LOG_DIR"
@@ -79,6 +82,12 @@ write_result() {
     json_string "$JOURNAL_LOG"
     printf ',"libxl_log":'
     json_string "$LIBXL_LOG"
+    printf ',"qvm_prefs_log":'
+    json_string "$QVM_PREFS_LOG"
+    printf ',"agent_console_log":'
+    json_string "$AGENT_CONSOLE_LOG"
+    printf ',"vault_console_log":'
+    json_string "$VAULT_CONSOLE_LOG"
     printf '}\n'
   } > "$RESULT_JSON"
   result_written=1
@@ -115,6 +124,15 @@ single_quote() {
 
 collect_diagnostics() {
   qvm-ls > "$QVM_LS_LOG" 2>&1 || true
+  {
+    for vm in "$VAULT" "$AGENT"; do
+      printf '== %s qvm-prefs ==\n' "$vm"
+      qvm-prefs "$vm" || true
+      printf '\n== %s qvm-features ==\n' "$vm"
+      qvm-features "$vm" || true
+      printf '\n'
+    done
+  } > "$QVM_PREFS_LOG" 2>&1 || true
   journalctl -b --no-pager -n 260 \
     -u qubesd \
     -u libvirtd \
@@ -122,6 +140,8 @@ collect_diagnostics() {
     -u qubes-qrexec-policy-daemon \
     > "$JOURNAL_LOG" 2>&1 || true
   tail -n 260 /var/log/libvirt/libxl/libxl-driver.log > "$LIBXL_LOG" 2>&1 || true
+  tail -n 500 "/var/log/xen/console/guest-$VAULT.log" > "$VAULT_CONSOLE_LOG" 2>&1 || true
+  tail -n 500 "/var/log/xen/console/guest-$AGENT.log" > "$AGENT_CONSOLE_LOG" 2>&1 || true
 }
 
 run_or_fail() {
