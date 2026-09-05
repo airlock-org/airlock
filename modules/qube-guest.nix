@@ -155,6 +155,12 @@ in
       "dm_mod"
       "dm_snapshot"
     ];
+    boot.kernelModules = [
+      "xen-evtchn"
+      "xen-gntalloc"
+      "xen-gntdev"
+      "xen-privcmd"
+    ];
     boot.kernelParams = [
       "console=hvc0"
     ];

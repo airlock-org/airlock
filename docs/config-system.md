@@ -111,6 +111,9 @@ Guest users and groups are declarative (`users.mutableUsers = false`) so early
 systemd services such as QubesDB can resolve their configured service groups
 before qrexec is available. The template explicitly opts out of NixOS'
 passworded-wheel-user assertion instead of carrying a shared guest password.
+It also loads the Xen vchan support modules used by Qubes guests
+(`xen-evtchn`, `xen-gntalloc`, `xen-gntdev`, and `xen-privcmd`) before
+QubesDB starts.
 
 We still need to prove that this reaches qrexec in nested Xen. If it cannot,
 the next design point is a declarative NixOS-compatible Qubes VM kernel/initrd
