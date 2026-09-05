@@ -6,6 +6,21 @@
 }:
 let
   cfg = config.nixome.qubeGuest;
+  qubesAgentLinux = pkgs.qubes-core-agent-linux;
+
+  qubesGuestPath = [
+    pkgs.coreutils
+    pkgs.diffutils
+    pkgs.e2fsprogs
+    pkgs.findutils
+    pkgs.gawk
+    pkgs.gnugrep
+    pkgs.kmod
+    pkgs.qubes-core-qubesdb
+    pkgs.qubes-linux-utils
+    pkgs.systemd
+    pkgs.util-linux
+  ];
 
   rolePackages = {
     base = [ ];
@@ -133,6 +148,8 @@ in
     boot.initrd.kernelModules = [
       "xen-blkfront"
       "xen-netfront"
+      "dm_mod"
+      "dm_snapshot"
     ];
     boot.kernelParams = [
       "console=hvc0"
@@ -154,6 +171,7 @@ in
     };
 
     systemd.tmpfiles.packages = [
+      qubesAgentLinux
       pkgs.qubes-linux-utils
     ];
 
@@ -162,6 +180,75 @@ in
       pkgs.python3.pkgs.qubes-core-qrexec.domU
       pkgs.qubes-linux-utils
     ];
+
+    systemd.services.qubes-sysinit = {
+      enable = true;
+      wantedBy = [ "sysinit.target" ];
+      after = [
+        "systemd-modules-load.service"
+        "qubes-db.service"
+      ];
+      requires = [ "qubes-db.service" ];
+      before = [ "sysinit.target" ];
+      path = qubesGuestPath;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${qubesAgentLinux}/lib/qubes/init/qubes-sysinit.sh";
+      };
+      unitConfig.DefaultDependencies = false;
+    };
+
+    systemd.services.nixome-qubes-rw-init = {
+      description = "Initialize Qubes private storage mounts for NixOS guests";
+      wantedBy = [ "multi-user.target" ];
+      wants = [ "dev-xvdb.device" ];
+      after = [
+        "dev-xvdb.device"
+        "qubes-sysinit.service"
+      ];
+      requires = [ "qubes-sysinit.service" ];
+      before = [
+        "systemd-user-sessions.service"
+        "qubes-qrexec-agent.service"
+      ];
+      path = qubesGuestPath;
+      script = ''
+        set -eu
+
+        mkdir -p /rw /home /usr/local
+
+        if [ ! -e /dev/xvdb ]; then
+          echo "Qubes private device /dev/xvdb is not present" >&2
+          exit 1
+        fi
+
+        ${qubesAgentLinux}/lib/qubes/init/setup-rwdev.sh
+
+        if ! mountpoint -q /rw; then
+          mount -t auto -o defaults,discard,nosuid,nodev /dev/xvdb /rw
+        fi
+
+        ${qubesAgentLinux}/lib/qubes/init/setup-rw.sh
+
+        . ${qubesAgentLinux}/lib/qubes/init/functions
+        initialize_home /rw/home ifneeded
+
+        if ! mountpoint -q /home; then
+          mount --bind /rw/home /home
+          mount -o remount,bind,nosuid,nodev /home
+        fi
+
+        mkdir -p /rw/usrlocal
+        if ! mountpoint -q /usr/local; then
+          mount --bind /rw/usrlocal /usr/local
+        fi
+      '';
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+    };
 
     systemd.services.qubes-db = {
       enable = true;
@@ -172,7 +259,11 @@ in
     systemd.services.qubes-qrexec-agent = {
       enable = true;
       wantedBy = [ "multi-user.target" ];
-      after = [ "systemd-user-sessions.service" ];
+      wants = [ "nixome-qubes-rw-init.service" ];
+      after = [
+        "nixome-qubes-rw-init.service"
+        "systemd-user-sessions.service"
+      ];
       aliases = [ "qubes-core-agent.service" ];
     };
 
@@ -189,6 +280,7 @@ in
 
     environment.systemPackages = [
       pkgs.qubes-core-qubesdb
+      qubesAgentLinux
       pkgs.qubes-linux-utils
       pkgs.python3.pkgs.qubes-core-qrexec
       pkgs.python3.pkgs.qubes-core-qrexec.domU
