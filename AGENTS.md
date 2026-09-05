@@ -11,3 +11,5 @@
 - `make test` is the primary feedback loop. Preserve clear logs and
   machine-readable output under `.nixome-logs/`.
 - Do not make full GUI support block the first qrexec/VM lifecycle milestone.
+- Commit changes after each coherent conceptual change when practical. Use
+  judgment about granularity, but avoid bundling unrelated work into one commit.
