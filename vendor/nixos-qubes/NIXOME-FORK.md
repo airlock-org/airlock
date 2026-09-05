@@ -30,6 +30,9 @@ Current local changes:
   expression using Nixome's current nixpkgs dependency set. Importing the old
   package output directly mixed old glibc 2.39 libvirt objects with current
   Qubes Xen/glibc 2.42 dependencies at runtime.
+- `qubes-core-admin`: patch `qubesd` to create and register an asyncio event
+  loop explicitly. Python 3.14 no longer gives the main thread an implicit
+  current event loop for `asyncio.get_event_loop()`.
 - `qubes-vmm-xen`: make the nixpkgs Xen `xsd_glue` OCaml split-output copy
   detect the actual installed directory instead of deriving one path from
   `ls $out/lib/ocaml/`, and skip the newer plugin-interface source copy when

@@ -86,6 +86,7 @@ buildPythonPackage {
     })
     ./0003-fix-fixup-paths.patch
     ./0004-fix-python-prefix-arg.patch
+    ./0005-python314-qubesd-event-loop.patch
   ];
 
   postPatch = ''
