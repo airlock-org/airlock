@@ -44,7 +44,7 @@ ovmf_out="$(nix build --no-link --print-out-paths "$ROOT#ovmf-fd")"
 
 BASE_FORMAT="$(
   "$qemu_utils_out/bin/qemu-img" info --output=json "$BASE_IMAGE" |
-    sed -n 's/^[[:space:]]*"format": "\(.*\)",[[:space:]]*$/\1/p' |
+    sed -n 's/^[[:space:]]*"format": "\(raw\|qcow2\)",[[:space:]]*$/\1/p' |
     head -n 1
 )"
 
