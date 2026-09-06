@@ -201,6 +201,10 @@
           '';
     in
     {
+      lib = {
+        nixomeTopology = import ./lib/nixome/topology.nix;
+      };
+
       overlays.nixomeImageBuildTools = nixomeImageBuildToolsOverlay;
 
       packages = forAllSystems (

@@ -79,6 +79,7 @@ let
   };
 
   configStagingSeedFlake = builtins.readFile ../seeds/config-staging/flake.nix;
+  configStagingTopologySchema = builtins.readFile ../lib/nixome/topology.nix;
 
   configVaultInit = pkgs.writeShellScriptBin "nixome-config-vault-init" ''
         set -eu
@@ -120,6 +121,7 @@ let
         mkdir -p "$repo"
         cd "$repo"
         ${pkgs.git}/bin/git init -b main
+        mkdir -p nixome
         cat > README.md <<'EOF'
     # Nixome Machine Configuration
 
@@ -129,7 +131,10 @@ let
         cat > flake.nix <<'EOF'
     ${configStagingSeedFlake}
     EOF
-        ${pkgs.git}/bin/git add README.md flake.nix
+        cat > nixome/topology.nix <<'EOF'
+    ${configStagingTopologySchema}
+    EOF
+        ${pkgs.git}/bin/git add README.md flake.nix nixome/topology.nix
         ${pkgs.git}/bin/git \
           -c user.name='Nixome Config Staging' \
           -c user.email='nixome-config-staging@localhost' \

@@ -11,7 +11,9 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
+mkdir -p "$WORK_DIR/nixome"
 cp "$ROOT/seeds/config-staging/flake.nix" "$WORK_DIR/flake.nix"
+cp "$ROOT/lib/nixome/topology.nix" "$WORK_DIR/nixome/topology.nix"
 
 nix flake check "$WORK_DIR" --no-build --show-trace
 nix eval --json "$WORK_DIR#nixome.topology" > "$TOPOLOGY_JSON"
@@ -22,6 +24,11 @@ jq -e '
   (.kernels | type == "object") and
   (.prefs | type == "object") and
   (.domains | type == "object") and
+  .domains."config-staging".class == "AppVM" and
+  .domains."config-staging".netvm == null and
+  .domains."config-staging".prefs.autostart == false and
+  .domains."config-staging".prefs.include_in_backups == true and
+  .domains."config-staging".services == {} and
   .domains."config-staging".features."nixome-config-applied-message" == "initial"
 ' "$TOPOLOGY_JSON" >/dev/null
 

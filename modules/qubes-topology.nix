@@ -6,6 +6,12 @@
 }:
 let
   cfg = config.nixome.qubes;
+  access = cfg.configAccessPolicy;
+  topologyLib = import ../lib/nixome/topology.nix;
+  sourcePath = lib.types.oneOf [
+    lib.types.path
+    lib.types.str
+  ];
   jsonScalar = lib.types.nullOr (
     lib.types.oneOf [
       lib.types.bool
@@ -23,7 +29,7 @@ let
       };
 
       source = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
+        type = lib.types.nullOr sourcePath;
         default = null;
         description = "Qubes template source directory containing root.img and template.conf.";
       };
@@ -39,9 +45,9 @@ let
   kernelType = lib.types.submodule {
     options = {
       source = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
+        type = lib.types.nullOr sourcePath;
         default = null;
-        description = "Source directory containing a Qubes VM kernel vmlinuz and optional initramfs/modules.img.";
+        description = "Source directory containing Qubes VM kernel files.";
       };
     };
   };
@@ -49,11 +55,7 @@ let
   domainType = lib.types.submodule {
     options = {
       class = lib.mkOption {
-        type = lib.types.enum [
-          "AppVM"
-          "StandaloneVM"
-          "TemplateVM"
-        ];
+        type = lib.types.enum topologyLib.domainClasses;
         default = "AppVM";
         description = "Qubes domain class to create when the domain is missing.";
       };
@@ -65,7 +67,7 @@ let
       };
 
       label = lib.mkOption {
-        type = lib.types.str;
+        type = lib.types.enum topologyLib.labels;
         default = "red";
         description = "Qubes label.";
       };
@@ -97,14 +99,12 @@ let
   };
 
   topology = {
-    schema = "nixome.qubes-topology.v1";
-    templates = lib.mapAttrs (_: template: {
-      inherit (template) import source;
-      skip_start = template.skipStart;
-    }) cfg.templates;
-    kernels = cfg.kernels;
-    domains = cfg.domains;
-    prefs = cfg.prefs;
+    inherit (cfg)
+      templates
+      kernels
+      domains
+      prefs
+      ;
   };
 
   setupConfig = pkgs.callPackage ../pkgs/nixome-setup-config { };
@@ -119,12 +119,12 @@ let
         cat > "$out/etc/qubes/policy.d/30-nixome-config.policy" <<'EOF'
     # Managed by Nixome. Only dom0 may fetch a candidate from config-staging,
     # ask config-validator to validate it, or archive it into config-vault.
-    ${cfg.configAccessPolicy.candidateExportService} * dom0 ${cfg.configAccessPolicy.staging} allow
-    ${cfg.configAccessPolicy.candidateExportService} * @anyvm @anyvm deny
-    ${cfg.configAccessPolicy.candidateValidateService} * dom0 ${cfg.configAccessPolicy.validator} allow
-    ${cfg.configAccessPolicy.candidateValidateService} * @anyvm @anyvm deny
-    ${cfg.configAccessPolicy.archiveService} * dom0 ${cfg.configAccessPolicy.vault} allow
-    ${cfg.configAccessPolicy.archiveService} * @anyvm @anyvm deny
+    ${access.candidateExportService} * dom0 ${access.staging} allow
+    ${access.candidateExportService} * @anyvm @anyvm deny
+    ${access.candidateValidateService} * dom0 ${access.validator} allow
+    ${access.candidateValidateService} * @anyvm @anyvm deny
+    ${access.archiveService} * dom0 ${access.vault} allow
+    ${access.archiveService} * @anyvm @anyvm deny
     EOF
   '';
 in
@@ -154,6 +154,12 @@ in
       type = lib.types.attrsOf jsonScalar;
       default = { };
       description = "Global qubes-prefs values for the setup-config layer.";
+    };
+
+    topology = lib.mkOption {
+      type = lib.types.attrs;
+      readOnly = true;
+      description = "Normalized Nixome Qubes topology JSON payload.";
     };
 
     configAccessPolicy = {
@@ -216,7 +222,10 @@ in
         message = "nixome.qubes.kernels.${name}.source must be set.";
       }) cfg.kernels;
 
-    environment.etc."nixome/qubes-topology.json".text = builtins.toJSON topology + "\n";
+    nixome.qubes.topology = topologyLib.mkTopology topology;
+
+    environment.etc."nixome/qubes-topology.json".text =
+      builtins.toJSON config.nixome.qubes.topology + "\n";
     environment.systemPackages = [
       configApply
       configArchive

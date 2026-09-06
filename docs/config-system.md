@@ -42,9 +42,36 @@ It can initialize that candidate with:
 nixome-config-staging-init
 ```
 
-The seeded candidate exposes `nixome.topology` from `flake.nix`. For this first
-apply proof, that Nix value declares a small observable Qubes feature on
-`config-staging`:
+The seeded candidate defines `nixome.config` in `flake.nix`, imports the local
+`./nixome/topology.nix` schema helper, and exposes normalized
+`nixome.topology`:
+
+```nix
+let
+  topologySchema = import ./nixome/topology.nix;
+  config = {
+    domains.config-staging = {
+      template = "nixome-nixos-config-staging";
+      label = "gray";
+      prefs.include_in_backups = true;
+      features."nixome-config-applied-message" = "initial";
+    };
+  };
+in
+{
+  nixome.config = config;
+  nixome.topology = topologySchema.mkTopology config;
+}
+```
+
+The schema currently checks domain classes, labels, Qube/template names,
+template and kernel source fields, JSON-safe prefs/features, and boolean
+services. It also defaults AppVMs to `class = "AppVM"`, `netvm = null`,
+`prefs.autostart = false`, `prefs.include_in_backups = false`, and empty
+`features`/`services`.
+
+For this first apply proof, the Nix value declares a small observable Qubes
+feature on `config-staging`:
 
 ```text
 nixome-config-applied-message
@@ -55,8 +82,8 @@ AppVM based on `nixome-nixos-config-staging`, and proves that dom0 creates it
 from the validator-produced topology.
 
 `config-validator` validates candidates exported from `config-staging`,
-evaluates `.#nixome.topology` to the `topology.json` apply artifact, and writes
-validation JSON under:
+evaluates the schema-normalized `.#nixome.topology` to the `topology.json` apply
+artifact, and writes validation JSON under:
 
 ```text
 /home/user/nixome-config-validation
@@ -95,7 +122,8 @@ and Nix evaluation happen in `config-validator`.
 
 ## Setup Path
 
-The dom0 module writes the desired topology to:
+The dom0 module also normalizes `nixome.qubes.*` through the same schema helper
+and writes the desired topology to:
 
 ```text
 /etc/nixome/qubes-topology.json

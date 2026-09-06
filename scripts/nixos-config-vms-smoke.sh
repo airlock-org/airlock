@@ -413,39 +413,31 @@ cat > flake.nix <<'NIXEOF'
 {
   description = "Nixome machine configuration candidate";
 
-  outputs = { self }: {
-    nixome = {
-      metadata = {
-        schema = "nixome.config-repo.v1";
-        purpose = "candidate";
-      };
+  outputs =
+    { self }:
+    let
+      topologySchema = import ./nixome/topology.nix;
 
-      topology = {
-        schema = "nixome.qubes-topology.v1";
+      config = {
         templates = { };
         kernels = { };
         prefs = { };
         domains = {
           config-staging = {
-            class = "AppVM";
             template = "nixome-nixos-config-staging";
             label = "gray";
-            netvm = null;
-            prefs = { };
+            prefs = {
+              include_in_backups = true;
+            };
             features = {
               "nixome-config-applied-message" = "$APPLY_MESSAGE";
             };
-            services = { };
           };
 
           "$CREATED_QUBE" = {
-            class = "AppVM";
             template = "nixome-nixos-config-staging";
             label = "green";
-            netvm = null;
             prefs = {
-              autostart = false;
-              include_in_backups = false;
               memory = 1024;
               maxmem = 2048;
               vcpus = 1;
@@ -463,8 +455,19 @@ cat > flake.nix <<'NIXEOF'
           };
         };
       };
+    in
+    {
+      nixome = {
+        metadata = {
+          schema = "nixome.config-repo.v1";
+          purpose = "candidate";
+          topology_schema = topologySchema.schema;
+        };
+
+        inherit config;
+        topology = topologySchema.mkTopology config;
+      };
     };
-  };
 }
 NIXEOF
 grep -F '"nixome-config-applied-message" = "$APPLY_MESSAGE";' flake.nix

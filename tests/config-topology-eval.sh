@@ -7,6 +7,7 @@ WORK_DIR="$LOG_DIR/config-topology"
 DOMAINS_JSON="$WORK_DIR/domains.json"
 KERNELS_JSON="$WORK_DIR/kernels.json"
 TEMPLATES_JSON="$WORK_DIR/templates.json"
+TOPOLOGY_JSON="$WORK_DIR/topology.json"
 GUEST_INIT_WANTED_BY_JSON="$WORK_DIR/guest-init-wanted-by.json"
 GUEST_INIT_AFTER_JSON="$WORK_DIR/guest-init-after.json"
 GUEST_INIT_BEFORE_JSON="$WORK_DIR/guest-init-before.json"
@@ -20,6 +21,7 @@ mkdir -p "$WORK_DIR"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.nixome.qubes.domains" > "$DOMAINS_JSON"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.nixome.qubes.kernels" > "$KERNELS_JSON"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.nixome.qubes.templates" > "$TEMPLATES_JSON"
+nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.nixome.qubes.topology" > "$TOPOLOGY_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.systemd.services.nixome-config-guest-init.wantedBy" > "$GUEST_INIT_WANTED_BY_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.systemd.services.nixome-config-guest-init.after" > "$GUEST_INIT_AFTER_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.systemd.services.nixome-config-guest-init.before" > "$GUEST_INIT_BEFORE_JSON"
@@ -58,6 +60,15 @@ jq -e '
   ."nixome-nixos-config-validator".skipStart == true and
   (."nixome-nixos-config-validator".source | test("nixome-nixos-config-validator"))
 ' "$TEMPLATES_JSON" >/dev/null
+
+jq -e '
+  .schema == "nixome.qubes-topology.v1" and
+  .templates."nixome-nixos-config-staging".skip_start == true and
+  .domains."config-staging".prefs.autostart == false and
+  .domains."config-staging".prefs.include_in_backups == true and
+  .domains."config-validator".prefs.autostart == false and
+  .domains."config-validator".prefs.include_in_backups == true
+' "$TOPOLOGY_JSON" >/dev/null
 
 jq -e '
   index("multi-user.target") != null

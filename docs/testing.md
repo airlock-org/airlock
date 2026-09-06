@@ -17,6 +17,7 @@ Runs:
 - the `nixome-setup-config` package build,
 - evaluation of the config-system topology that declares `config-vault` and
   `config-staging` and `config-validator`,
+- typed topology schema/defaulting checks for staged config candidates,
 - host capability detection into `.nixome-logs/host-capabilities.json`,
 - a skipped Qubes smoke-test result unless `NIXOME_RUN_QUBES_SMOKE=1`.
 
@@ -216,18 +217,19 @@ This explicitly runs the dom0 topology setup, then starts `config-vault`,
 three VMs, checks that `/home/user/nixome-config-vault` and
 `/home/user/nixome-config` already exist as clean Git repositories, modifies
 and commits `flake.nix` in `config-staging`, has `config-validator` run
-`nix flake check --no-build` and evaluate `.#nixome.topology`, has dom0 archive
-that validated source plus evaluated topology into `config-vault`, and applies
-the validated topology with `nixome-config-apply --apply`. It then checks that
-the Nix-declared `nixome-test-from-config` AppVM exists and that `uname -a`
-runs inside it through qrexec. The result JSON is written to:
+`nix flake check --no-build` and evaluate the schema-normalized
+`.#nixome.topology`, has dom0 archive that validated source plus evaluated
+topology into `config-vault`, and applies the validated topology with
+`nixome-config-apply --apply`. It then checks that the Nix-declared
+`nixome-test-from-config` AppVM exists and that `uname -a` runs inside it
+through qrexec. The result JSON is written to:
 
 ```text
 .nixome-logs/vm-gui-config-vms-smoke.json
 ```
 
 The config topology image keeps local build size down by sharing one NixOS
-guest root image between the two TemplateVM source directories. The VM runner
+guest root image between the three TemplateVM source directories. The VM runner
 can use either qcow2 or raw Nix-built base images and creates a writable qcow2
 overlay for runtime state.
 The nested config image currently has 32 GiB of virtual disk capacity.
