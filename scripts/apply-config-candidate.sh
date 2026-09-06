@@ -10,6 +10,14 @@ ARCHIVE_JSON="$LOG_DIR/config-archive.json"
 VALIDATED_CANDIDATE_TAR="$LOG_DIR/config-candidate-validated.tar"
 VALIDATED_TOPOLOGY_JSON="$LOG_DIR/config-apply-topology-validated.json"
 APPLY_TOPOLOGY_JSON="$LOG_DIR/config-apply-topology.json"
+VALIDATED_SYSTEM_JSON="$LOG_DIR/config-apply-system-validated.json"
+APPLY_SYSTEM_JSON="$LOG_DIR/config-apply-system.json"
+SYSTEM_PLAN_JSON="$LOG_DIR/config-apply-system-plan.json"
+SYSTEM_BUILDS_JSON="$LOG_DIR/config-apply-system-builds.json"
+SYSTEM_BUILD_LOG="$LOG_DIR/config-apply-system-builds.log"
+SYSTEM_APPLY_JSON="$LOG_DIR/config-system-apply.json"
+SYSTEM_APPLY_LOG="$LOG_DIR/config-system-apply.log"
+PROFILE_ACTIVATION_LOG="$LOG_DIR/config-system-profile-activation.log"
 TEMPLATE_BUILDS_JSON="$LOG_DIR/config-apply-template-builds.json"
 TEMPLATE_BUILD_LOG="$LOG_DIR/config-apply-template-builds.log"
 DEPLOYMENT_JSON="$LOG_DIR/config-deployment.json"
@@ -23,6 +31,9 @@ SETUP_STDOUT="$LOG_DIR/config-apply-setup.stdout.log"
 SETUP_STDERR="$LOG_DIR/config-apply-setup.stderr.log"
 SETUP_JSON="$LOG_DIR/setup-config.json"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
+SYSTEM_STATE_DIR="${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
+SYSTEM_ETC_DIR="${NIXOME_SYSTEM_ETC_DIR:-/etc/nixome}"
+SYSTEM_PROFILE="${NIXOME_SYSTEM_PROFILE:-/nix/var/nix/profiles/nixome-system}"
 
 STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
 VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
@@ -113,6 +124,7 @@ write_result() {
   reason="$2"
   archive_json="$(json_file_or_null "$ARCHIVE_JSON")"
   setup_json="$(json_file_or_null "$SETUP_JSON")"
+  system_apply_json="$(json_file_or_null "$SYSTEM_APPLY_JSON")"
   deployment_json="$(json_file_or_null "$DEPLOYMENT_JSON")"
   deployment_archive_json="$(json_file_or_null "$DEPLOYMENT_ARCHIVE_JSON")"
 
@@ -128,6 +140,14 @@ write_result() {
     --arg deployment_archive_service "$DEPLOYMENT_ARCHIVE_SERVICE" \
     --arg topology "$APPLY_TOPOLOGY_JSON" \
     --arg validated_topology "$VALIDATED_TOPOLOGY_JSON" \
+    --arg system "$APPLY_SYSTEM_JSON" \
+    --arg validated_system "$VALIDATED_SYSTEM_JSON" \
+    --arg system_plan "$SYSTEM_PLAN_JSON" \
+    --arg system_builds "$SYSTEM_BUILDS_JSON" \
+    --arg system_build_log "$SYSTEM_BUILD_LOG" \
+    --arg system_apply_path "$SYSTEM_APPLY_JSON" \
+    --arg system_apply_log "$SYSTEM_APPLY_LOG" \
+    --arg profile_activation_log "$PROFILE_ACTIVATION_LOG" \
     --arg template_builds "$TEMPLATE_BUILDS_JSON" \
     --arg template_build_log "$TEMPLATE_BUILD_LOG" \
     --arg deployment_record "$DEPLOYMENT_JSON" \
@@ -144,6 +164,7 @@ write_result() {
     --arg setup_stderr "$SETUP_STDERR" \
     --argjson archive "$archive_json" \
     --argjson setup "$setup_json" \
+    --argjson system_apply "$system_apply_json" \
     --argjson deployment "$deployment_json" \
     --argjson deployment_archive "$deployment_archive_json" \
     '{
@@ -158,6 +179,14 @@ write_result() {
       deployment_archive_service: $deployment_archive_service,
       topology: $topology,
       validated_topology: $validated_topology,
+      system: $system,
+      validated_system: $validated_system,
+      system_plan: $system_plan,
+      system_builds: $system_builds,
+      system_build_log: $system_build_log,
+      system_apply: $system_apply_path,
+      system_apply_log: $system_apply_log,
+      profile_activation_log: $profile_activation_log,
       template_builds: $template_builds,
       template_build_log: $template_build_log,
       deployment_record: $deployment_record,
@@ -174,6 +203,7 @@ write_result() {
       setup_stderr: $setup_stderr,
       archive: $archive,
       setup: $setup,
+      system_apply_result: $system_apply,
       deployment: $deployment,
       deployment_archive: $deployment_archive
     }' > "$RESULT_JSON"
@@ -260,6 +290,7 @@ build_deployment_tar() {
 
   archive_json="$(json_file_or_null "$ARCHIVE_JSON")"
   setup_json="$(json_file_or_null "$SETUP_JSON")"
+  system_apply_json="$(json_file_or_null "$SYSTEM_APPLY_JSON")"
 
   jq -c -n \
     --arg schema "nixome.config-deployment.v1" \
@@ -273,6 +304,11 @@ build_deployment_tar() {
     --arg vault "$VAULT" \
     --arg candidate_commit "$candidate_commit" \
     --arg topology "topology.json" \
+    --arg system "system.json" \
+    --arg resolved_system "resolved-system.json" \
+    --arg system_plan "system-plan.json" \
+    --arg system_apply "system-apply.json" \
+    --arg system_builds "system-builds.json" \
     --arg apply "apply.json" \
     --arg archive "archive.json" \
     --arg setup "setup.json" \
@@ -282,6 +318,7 @@ build_deployment_tar() {
     --arg manifest "manifest.json" \
     --argjson archive_result "$archive_json" \
     --argjson setup_result "$setup_json" \
+    --argjson system_apply_result "$system_apply_json" \
     '{
       schema: $schema,
       status: $status,
@@ -295,6 +332,11 @@ build_deployment_tar() {
       candidate_commit: $candidate_commit,
       artifacts: {
         topology: $topology,
+        system: $system,
+        resolved_system: $resolved_system,
+        system_plan: $system_plan,
+        system_apply: $system_apply,
+        system_builds: $system_builds,
         apply: $apply,
         archive: $archive,
         setup: $setup,
@@ -304,7 +346,8 @@ build_deployment_tar() {
         manifest: $manifest
       },
       archive: $archive_result,
-      setup: $setup_result
+      setup: $setup_result,
+      system_apply: $system_apply_result
     }' > "$DEPLOYMENT_JSON"
 
   write_result "$status" "$reason"
@@ -316,6 +359,11 @@ build_deployment_tar() {
   copy_or_empty "$APPLY_TOPOLOGY_JSON" "$record_dir/topology.json"
   copy_or_empty "$VALIDATED_TOPOLOGY_JSON" "$record_dir/validated-topology.json"
   copy_or_empty "$TEMPLATE_BUILDS_JSON" "$record_dir/template-builds.json"
+  copy_or_empty "$VALIDATED_SYSTEM_JSON" "$record_dir/system.json"
+  copy_or_empty "$APPLY_SYSTEM_JSON" "$record_dir/resolved-system.json"
+  copy_or_empty "$SYSTEM_PLAN_JSON" "$record_dir/system-plan.json"
+  copy_or_empty "$SYSTEM_APPLY_JSON" "$record_dir/system-apply.json"
+  copy_or_empty "$SYSTEM_BUILDS_JSON" "$record_dir/system-builds.json"
   copy_or_empty "$tmpdir/validation.json" "$record_dir/validation.json"
   copy_or_empty "$tmpdir/manifest.json" "$record_dir/manifest.json"
   copy_or_empty "$COMMAND_LOG" "$record_dir/logs/apply.commands.log"
@@ -324,6 +372,9 @@ build_deployment_tar() {
   copy_or_empty "$SETUP_STDOUT" "$record_dir/logs/setup.stdout.log"
   copy_or_empty "$SETUP_STDERR" "$record_dir/logs/setup.stderr.log"
   copy_or_empty "$TEMPLATE_BUILD_LOG" "$record_dir/logs/template-builds.log"
+  copy_or_empty "$SYSTEM_BUILD_LOG" "$record_dir/logs/system-builds.log"
+  copy_or_empty "$SYSTEM_APPLY_LOG" "$record_dir/logs/system-apply.log"
+  copy_or_empty "$PROFILE_ACTIVATION_LOG" "$record_dir/logs/profile-activation.log"
   copy_or_empty "$CLONE_LOG" "$record_dir/logs/clone.log"
   copy_or_empty "$CHECKOUT_LOG" "$record_dir/logs/checkout.log"
 
@@ -335,6 +386,11 @@ build_deployment_tar() {
     topology.json \
     validated-topology.json \
     template-builds.json \
+    system.json \
+    resolved-system.json \
+    system-plan.json \
+    system-apply.json \
+    system-builds.json \
     validation.json \
     manifest.json \
     logs/apply.commands.log \
@@ -343,6 +399,9 @@ build_deployment_tar() {
     logs/setup.stdout.log \
     logs/setup.stderr.log \
     logs/template-builds.log \
+    logs/system-builds.log \
+    logs/system-apply.log \
+    logs/profile-activation.log \
     logs/clone.log \
     logs/checkout.log
 }
@@ -534,6 +593,253 @@ resolve_template_sources() {
     fail "unresolved template source references remain: $unresolved"
 }
 
+init_system_builds_json() {
+  : > "$SYSTEM_BUILD_LOG"
+  jq -c -n \
+    --arg schema "nixome.system-builds.v1" \
+    '{schema: $schema, builds: []}' \
+    > "$SYSTEM_BUILDS_JSON"
+}
+
+record_system_build() {
+  component="$1"
+  attr="$2"
+  subpath="$3"
+  status="$4"
+  output_path="$5"
+  source_path="$6"
+  log="$7"
+  tmp="$SYSTEM_BUILDS_JSON.tmp"
+
+  jq -c \
+    --arg component "$component" \
+    --arg attr "$attr" \
+    --arg subpath "$subpath" \
+    --arg status "$status" \
+    --arg output_path "$output_path" \
+    --arg source_path "$source_path" \
+    --arg log "$log" \
+    '.builds += [{
+      component: $component,
+      attr: $attr,
+      subpath: $subpath,
+      status: $status,
+      output_path: $output_path,
+      source_path: $source_path,
+      log: $log
+    }]' \
+    "$SYSTEM_BUILDS_JSON" > "$tmp"
+  mv "$tmp" "$SYSTEM_BUILDS_JSON"
+}
+
+resolve_system_sources() {
+  system_json="$1"
+  worktree="$2"
+  resolved="$3"
+
+  cp "$system_json" "$VALIDATED_SYSTEM_JSON"
+  cp "$system_json" "$resolved"
+  init_system_builds_json
+
+  mapfile -t system_refs < <(
+    jq -r '
+      [
+        { component: "dom0.profile", path: ["dom0", "profile"], ref: .dom0.profile.source_ref },
+        { component: "dom0.nixos.system", path: ["dom0", "nixos", "system"], ref: .dom0.nixos.system.source_ref },
+        { component: "dom0.nixos.kernel", path: ["dom0", "nixos", "kernel"], ref: .dom0.nixos.kernel.source_ref },
+        { component: "dom0.nixos.xen", path: ["dom0", "nixos", "xen"], ref: .dom0.nixos.xen.source_ref },
+        { component: "dom0.nixos.bootloader", path: ["dom0", "nixos", "bootloader"], ref: .dom0.nixos.bootloader.source_ref },
+        { component: "dom0.nixos.qubes", path: ["dom0", "nixos", "qubes"], ref: .dom0.nixos.qubes.source_ref }
+      ]
+      | .[]
+      | select(.ref != null)
+      | @base64
+    ' "$system_json"
+  )
+
+  if [ "${#system_refs[@]}" -eq 0 ]; then
+    printf 'no staged system build references to resolve\n' >> "$SYSTEM_BUILD_LOG"
+    return
+  fi
+
+  for encoded in "${system_refs[@]}"; do
+    ref_json="$(printf '%s' "$encoded" | base64 -d)"
+    component="$(printf '%s' "$ref_json" | jq -r '.component')"
+    attr="$(printf '%s' "$ref_json" | jq -r '.ref.attr')"
+    subpath="$(printf '%s' "$ref_json" | jq -r '.ref.subpath // ""')"
+    ref_path="$(printf '%s' "$ref_json" | jq -c '.path')"
+    safe_component="$(safe_log_name "$component")"
+    build_log="$LOG_DIR/config-apply-system-build-$safe_component.log"
+    build_stdout="$tmpdir/config-apply-system-build-$safe_component.stdout"
+
+    {
+      printf 'component=%s\n' "$component"
+      printf 'attr=%s\n' "$attr"
+      printf 'subpath=%s\n' "$subpath"
+      printf '+ nix build --impure --offline --no-link --print-out-paths %s#%s\n' "$worktree" "$attr"
+    } > "$build_log"
+
+    if
+      nix \
+        --extra-experimental-features nix-command \
+        --extra-experimental-features flakes \
+        build \
+        --impure \
+        --offline \
+        --no-write-lock-file \
+        --no-link \
+        --print-out-paths \
+        --show-trace \
+        "$worktree#$attr" > "$build_stdout" 2>> "$build_log"
+    then
+      cat "$build_stdout" >> "$build_log"
+      output_path="$(awk 'NF { last = $0 } END { print last }' "$build_stdout")"
+    else
+      record_system_build "$component" "$attr" "$subpath" failed "" "" "$build_log"
+      cat "$build_log" >> "$SYSTEM_BUILD_LOG" || true
+      fail "system build failed for $component from $attr"
+    fi
+
+    [ -n "$output_path" ] ||
+      fail "system build did not print an output path for $component from $attr"
+
+    source_path="$output_path"
+    if [ -n "$subpath" ]; then
+      source_path="$source_path/$subpath"
+    fi
+    source_path_physical="$(nixome_physical_store_path "$source_path")"
+
+    [ -e "$source_path_physical" ] ||
+      fail "built system source is missing for $component: $source_path"
+
+    tmp_resolved="$resolved.tmp"
+    jq \
+      --argjson path "$ref_path" \
+      --arg source "$source_path" \
+      'setpath($path + ["source"]; $source) | setpath($path + ["source_ref"]; null)' \
+      "$resolved" > "$tmp_resolved"
+    mv "$tmp_resolved" "$resolved"
+
+    record_system_build "$component" "$attr" "$subpath" passed "$output_path" "$source_path" "$build_log"
+    cat "$build_log" >> "$SYSTEM_BUILD_LOG" || true
+  done
+}
+
+install_profile_link() {
+  profile_source="$1"
+  profile_source_physical="$2"
+  profile_parent="$(dirname "$SYSTEM_PROFILE")"
+
+  mkdir -p "$profile_parent"
+
+  if nixome_store_uses_chroot; then
+    ln -sfn "$profile_source_physical" "$SYSTEM_PROFILE"
+  else
+    nix-env -p "$SYSTEM_PROFILE" --set "$profile_source"
+  fi
+}
+
+apply_system() {
+  system_json="$1"
+  status=passed
+  reason="system plan applied"
+  profile_status=skipped
+  profile_source=""
+  profile_source_physical=""
+  profile_activation_command=""
+  reboot_required="$(jq -r '.plan.reboot_required' "$system_json")"
+  reboot_reasons="$(jq -c '.plan.reboot_reasons' "$system_json")"
+
+  : > "$SYSTEM_APPLY_LOG"
+  jq -c '.plan' "$system_json" > "$SYSTEM_PLAN_JSON"
+
+  mkdir -p "$SYSTEM_STATE_DIR" "$SYSTEM_ETC_DIR"
+  cp "$system_json" "$SYSTEM_STATE_DIR/last-system.json"
+  cp "$SYSTEM_PLAN_JSON" "$SYSTEM_STATE_DIR/last-plan.json"
+
+  profile_source="$(jq -r '.dom0.profile.source // ""' "$system_json")"
+  profile_activation_command="$(jq -r '.dom0.profile.activation_command // "bin/nixome-dom0-profile-activate"' "$system_json")"
+  profile_activation_action="$(jq -r '.dom0.profile.activation_action // "run"' "$system_json")"
+
+  if [ -n "$profile_source" ]; then
+    profile_source_physical="$(nixome_physical_store_path "$profile_source")"
+    activation_path="$profile_source_physical/$profile_activation_command"
+    [ -d "$profile_source_physical" ] ||
+      fail "dom0 profile source is missing: $profile_source"
+    [ -x "$activation_path" ] ||
+      fail "dom0 profile activation command is missing or not executable: $profile_source/$profile_activation_command"
+
+    {
+      printf 'profile_source=%s\n' "$profile_source"
+      printf 'profile_source_physical=%s\n' "$profile_source_physical"
+      printf 'profile=%s\n' "$SYSTEM_PROFILE"
+      printf 'activation_command=%s\n' "$profile_activation_command"
+      printf 'activation_action=%s\n' "$profile_activation_action"
+    } >> "$SYSTEM_APPLY_LOG"
+
+    install_profile_link "$profile_source" "$profile_source_physical" >> "$SYSTEM_APPLY_LOG" 2>&1 ||
+      fail "installing dom0 profile failed"
+
+    if [ "$profile_activation_action" = run ]; then
+      if ! env \
+        NIXOME_SYSTEM_JSON="$system_json" \
+        NIXOME_SYSTEM_PLAN_JSON="$SYSTEM_PLAN_JSON" \
+        NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
+        NIXOME_SYSTEM_ETC_DIR="$SYSTEM_ETC_DIR" \
+        NIXOME_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
+        "$activation_path" > "$PROFILE_ACTIVATION_LOG" 2>&1; then
+        cat "$PROFILE_ACTIVATION_LOG" >&2 || true
+        fail "dom0 profile activation failed"
+      fi
+    else
+      printf 'activation action is %s; not running profile activation\n' "$profile_activation_action" > "$PROFILE_ACTIVATION_LOG"
+    fi
+
+    profile_status=passed
+  else
+    printf 'no dom0 profile source declared\n' > "$PROFILE_ACTIVATION_LOG"
+  fi
+
+  cp "$system_json" "$SYSTEM_ETC_DIR/system.json"
+  cp "$SYSTEM_PLAN_JSON" "$SYSTEM_ETC_DIR/system-plan.json"
+  cp "$SYSTEM_BUILDS_JSON" "$SYSTEM_STATE_DIR/last-system-builds.json"
+
+  jq -c -n \
+    --arg schema "nixome.system-apply.v1" \
+    --arg status "$status" \
+    --arg reason "$reason" \
+    --arg profile_status "$profile_status" \
+    --arg profile_source "$profile_source" \
+    --arg profile_source_physical "$profile_source_physical" \
+    --arg profile "$SYSTEM_PROFILE" \
+    --arg state_dir "$SYSTEM_STATE_DIR" \
+    --arg etc_dir "$SYSTEM_ETC_DIR" \
+    --arg plan "$SYSTEM_PLAN_JSON" \
+    --arg system "$system_json" \
+    --arg build_log "$SYSTEM_BUILD_LOG" \
+    --arg activation_log "$PROFILE_ACTIVATION_LOG" \
+    --argjson reboot_required "$reboot_required" \
+    --argjson reboot_reasons "$reboot_reasons" \
+    '{
+      schema: $schema,
+      status: $status,
+      reason: $reason,
+      profile_status: $profile_status,
+      profile_source: $profile_source,
+      profile_source_physical: $profile_source_physical,
+      profile: $profile,
+      state_dir: $state_dir,
+      etc_dir: $etc_dir,
+      system: $system,
+      plan: $plan,
+      build_log: $build_log,
+      activation_log: $activation_log,
+      reboot_required: $reboot_required,
+      reboot_reasons: $reboot_reasons
+    }' > "$SYSTEM_APPLY_JSON"
+  cp "$SYSTEM_APPLY_JSON" "$SYSTEM_STATE_DIR/last-apply.json"
+}
+
 for cmd in \
   awk \
   base64 \
@@ -541,13 +847,16 @@ for cmd in \
   cp \
   cut \
   date \
+  dirname \
   git \
   grep \
   jq \
+  ln \
   mkdir \
   mktemp \
   mv \
   nix \
+  nix-env \
   nixome-config-archive-candidate \
   nixome-setup-config \
   qrexec-client \
@@ -593,7 +902,7 @@ validation_status="$(jq -r '.validation.status' "$ARCHIVE_JSON")"
 tmpdir="$(mktemp -d)"
 tar -tf "$VALIDATED_CANDIDATE_TAR" |
   awk '
-    $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" && $0 != "topology.json" {
+    $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" && $0 != "topology.json" && $0 != "system.json" {
       printf "unexpected validated candidate tar member: %s\n", $0 > "/dev/stderr"
       exit 1
     }
@@ -607,7 +916,9 @@ git -C "$worktree" checkout --detach "$candidate_commit" > "$CHECKOUT_LOG" 2>&1 
   fail "checkout validated candidate commit failed"
 
 topology="$tmpdir/topology.json"
+system_json="$tmpdir/system.json"
 [ -r "$topology" ] || fail "validated candidate is missing evaluated topology.json"
+[ -r "$system_json" ] || fail "validated candidate is missing evaluated system.json"
 jq -e '
   .schema == "nixome.qubes-topology.v1" and
   (.templates | type == "object") and
@@ -615,7 +926,16 @@ jq -e '
   (.prefs | type == "object") and
   (.domains | type == "object")
 ' "$topology" >/dev/null || fail "validated candidate topology JSON is invalid"
+jq -e '
+  .schema == "nixome.system.v1" and
+  (.dom0 | type == "object") and
+  (.plan | type == "object") and
+  (.plan.live_actions | type == "array") and
+  (.plan.reboot_required | type == "boolean") and
+  (.plan.reboot_reasons | type == "array")
+' "$system_json" >/dev/null || fail "validated candidate system JSON is invalid"
 resolve_template_sources "$topology" "$worktree" "$APPLY_TOPOLOGY_JSON"
+resolve_system_sources "$system_json" "$worktree" "$APPLY_SYSTEM_JSON"
 
 printf '+ env NIXOME_LOG_DIR=%q nixome-setup-config --apply --topology %q\n' \
   "$LOG_DIR" \
@@ -632,6 +952,20 @@ setup_status="$(jq -r '.status' "$SETUP_JSON")"
 if [ "$setup_rc" != 0 ] || [ "$setup_status" != passed ]; then
   archive_deployment_or_fail failed "setup-config failed"
   printf 'config apply failed: setup-config failed\n' >&2
+  exit 1
+fi
+
+if apply_system "$APPLY_SYSTEM_JSON"; then
+  system_apply_rc=0
+else
+  system_apply_rc="$?"
+fi
+
+[ -r "$SYSTEM_APPLY_JSON" ] || fail "system apply result JSON is missing: $SYSTEM_APPLY_JSON"
+system_apply_status="$(jq -r '.status' "$SYSTEM_APPLY_JSON")"
+if [ "$system_apply_rc" != 0 ] || [ "$system_apply_status" != passed ]; then
+  archive_deployment_or_fail failed "system apply failed"
+  printf 'config apply failed: system apply failed\n' >&2
   exit 1
 fi
 

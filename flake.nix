@@ -221,6 +221,7 @@
     in
     {
       lib = {
+        nixomeSystem = import ./lib/nixome/system.nix;
         nixomeTopology = import ./lib/nixome/topology.nix;
         nixomeQubeTemplate = import ./lib/nixome/qube-template.nix;
       };
@@ -359,8 +360,7 @@
           };
           nixomePrebuiltTemplateSources = {
             work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
-            nixome-nixos-work =
-              "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
+            nixome-nixos-work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
           };
           inherit nixomeConfigSeedInputs;
         };
@@ -379,8 +379,7 @@
           };
           nixomePrebuiltTemplateSources = {
             work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
-            nixome-nixos-work =
-              "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
+            nixome-nixos-work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
           };
           inherit nixomeConfigSeedInputs;
         };

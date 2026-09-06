@@ -83,7 +83,9 @@ let
 
   configStagingSeedFlake = builtins.readFile ../seeds/config-staging/flake.nix;
   configStagingConfigVms = builtins.readFile ../seeds/config-staging/nixome/config-vms.nix;
+  configStagingSystem = builtins.readFile ../seeds/config-staging/nixome/system.nix;
   configStagingTemplates = builtins.readFile ../seeds/config-staging/nixome/templates.nix;
+  configStagingSystemSchema = builtins.readFile ../lib/nixome/system.nix;
   configStagingTopologySchema = builtins.readFile ../lib/nixome/topology.nix;
   configStagingPrebuiltTemplateSources = lib.generators.toPretty { } nixomePrebuiltTemplateSources;
   haveConfigSeedInputs = nixomeConfigSeedInputs != null;
@@ -141,8 +143,14 @@ let
         cat > nixome/topology.nix <<'EOF'
     ${configStagingTopologySchema}
     EOF
+        cat > nixome/system-schema.nix <<'EOF'
+    ${configStagingSystemSchema}
+    EOF
         cat > nixome/config-vms.nix <<'EOF'
     ${configStagingConfigVms}
+    EOF
+        cat > nixome/system.nix <<'EOF'
+    ${configStagingSystem}
     EOF
         cat > nixome/templates.nix <<'EOF'
     ${configStagingTemplates}
@@ -164,6 +172,8 @@ let
           flake.nix \
           nixome/config-vms.nix \
           nixome/prebuilt-template-sources.nix \
+          nixome/system.nix \
+          nixome/system-schema.nix \
           nixome/templates.nix \
           nixome/topology.nix
         ${pkgs.nix}/bin/nix \
@@ -513,11 +523,18 @@ let
     topology_eval_log="$validation_dir/logs/nix-eval-topology-$candidate_commit.log"
     topology_log="$validation_dir/logs/topology-json-$candidate_commit.log"
     template_refs_log="$validation_dir/logs/template-source-refs-$candidate_commit.log"
+    system_eval_log="$validation_dir/logs/nix-eval-system-$candidate_commit.log"
+    system_log="$validation_dir/logs/system-json-$candidate_commit.log"
+    system_refs_log="$validation_dir/logs/system-source-refs-$candidate_commit.log"
     local_flake_log="$tmpdir/flake-check.log"
     local_topology_eval_log="$tmpdir/nix-eval-topology.log"
     local_topology_log="$tmpdir/topology-json.log"
     local_template_refs_log="$tmpdir/template-source-refs.log"
+    local_system_eval_log="$tmpdir/nix-eval-system.log"
+    local_system_log="$tmpdir/system-json.log"
+    local_system_refs_log="$tmpdir/system-source-refs.log"
     generated_topology="$tmpdir/topology.json"
+    generated_system="$tmpdir/system.json"
 
     write_validation() {
       status="$1"
@@ -529,7 +546,14 @@ let
       topology_log_path="$7"
       template_refs_status="$8"
       template_refs_log_path="$9"
-      flake_status="''${10}"
+      system_eval_status="''${10}"
+      system_status="''${11}"
+      system_path="''${12}"
+      system_eval_log_path="''${13}"
+      system_log_path="''${14}"
+      system_refs_status="''${15}"
+      system_refs_log_path="''${16}"
+      flake_status="''${17}"
 
       ${pkgs.jq}/bin/jq -c -n \
         --arg schema "nixome.config-validation.v1" \
@@ -548,6 +572,13 @@ let
         --arg topology_log "$topology_log_path" \
         --arg template_refs_status "$template_refs_status" \
         --arg template_refs_log "$template_refs_log_path" \
+        --arg system_eval_status "$system_eval_status" \
+        --arg system_status "$system_status" \
+        --arg system_path "$system_path" \
+        --arg system_eval_log "$system_eval_log_path" \
+        --arg system_log "$system_log_path" \
+        --arg system_refs_status "$system_refs_status" \
+        --arg system_refs_log "$system_refs_log_path" \
         --arg flake_status "$flake_status" \
         --arg flake_log "$flake_log" \
         '{
@@ -596,6 +627,24 @@ let
               log: $template_refs_log
             },
             {
+              name: "nix-eval-nixome-system",
+              status: $system_eval_status,
+              attr: "nixome.system",
+              output: $system_path,
+              log: $system_eval_log
+            },
+            {
+              name: "nixome-system-json",
+              status: $system_status,
+              path: $system_path,
+              log: $system_log
+            },
+            {
+              name: "nix-system-source-refs-dry-run",
+              status: $system_refs_status,
+              log: $system_refs_log
+            },
+            {
               name: "nix-flake-check-no-build",
               status: $flake_status,
               log: $flake_log
@@ -607,7 +656,7 @@ let
     }
 
     if [ -n "$dirty" ]; then
-      write_validation failed "validated candidate worktree is dirty" skipped skipped "topology.json" "$topology_eval_log" "$topology_log" skipped "$template_refs_log" skipped
+      write_validation failed "validated candidate worktree is dirty" skipped skipped "topology.json" "$topology_eval_log" "$topology_log" skipped "$template_refs_log" skipped skipped "system.json" "$system_eval_log" "$system_log" skipped "$system_refs_log" skipped
       cat "$tmpdir/validation.json" >&2
       exit 1
     fi
@@ -622,6 +671,9 @@ let
     topology_eval_status=skipped
     topology_status=skipped
     template_refs_status=skipped
+    system_eval_status=skipped
+    system_status=skipped
+    system_refs_status=skipped
     flake_status=skipped
     reason="validation passed"
     status=passed
@@ -652,6 +704,53 @@ let
           template="$(printf '%s' "$template_json" | ${pkgs.jq}/bin/jq -r '.key')"
           attr="$(printf '%s' "$template_json" | ${pkgs.jq}/bin/jq -r '.value.source_ref.attr')"
           printf 'checking template=%s attr=%s\n' "$template" "$attr" >> "$log"
+          ${pkgs.nix}/bin/nix \
+            --extra-experimental-features nix-command \
+            --extra-experimental-features flakes \
+            build \
+            --impure \
+            --offline \
+            --no-write-lock-file \
+            --dry-run \
+            --no-link \
+            --show-trace \
+            ".#$attr" >> "$log" 2>&1
+        done
+    }
+
+    check_system_source_refs() {
+      system_file="$1"
+      log="$2"
+
+      : > "$log"
+      refs="$(
+        ${pkgs.jq}/bin/jq -r '
+          [
+            { name: "dom0.profile", ref: .dom0.profile.source_ref },
+            { name: "dom0.nixos.system", ref: .dom0.nixos.system.source_ref },
+            { name: "dom0.nixos.kernel", ref: .dom0.nixos.kernel.source_ref },
+            { name: "dom0.nixos.xen", ref: .dom0.nixos.xen.source_ref },
+            { name: "dom0.nixos.bootloader", ref: .dom0.nixos.bootloader.source_ref },
+            { name: "dom0.nixos.qubes", ref: .dom0.nixos.qubes.source_ref }
+          ]
+          | .[]
+          | select(.ref != null)
+          | @base64
+        ' "$system_file"
+      )"
+
+      if [ -z "$refs" ]; then
+        printf 'no system source refs declared\n' >> "$log"
+        return 0
+      fi
+
+      printf '%s\n' "$refs" |
+        while IFS= read -r encoded; do
+          [ -n "$encoded" ] || continue
+          ref_json="$(printf '%s' "$encoded" | ${pkgs.coreutils}/bin/base64 -d)"
+          name="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.name')"
+          attr="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.ref.attr')"
+          printf 'checking system=%s attr=%s\n' "$name" "$attr" >> "$log"
           ${pkgs.nix}/bin/nix \
             --extra-experimental-features nix-command \
             --extra-experimental-features flakes \
@@ -736,13 +835,59 @@ let
         printf 'skipped because nix eval .#nixome.topology did not pass\n' > "$template_refs_log"
       fi
 
-    write_validation "$status" "$reason" "$topology_eval_status" "$topology_status" "topology.json" "$topology_eval_log" "$topology_log" "$template_refs_status" "$template_refs_log" "$flake_status"
+      if ${pkgs.nix}/bin/nix \
+        --extra-experimental-features nix-command \
+        --extra-experimental-features flakes \
+        eval \
+        --impure \
+        --offline \
+        --no-write-lock-file \
+        .#nixome.system --json > "$generated_system" 2> "$local_system_eval_log"; then
+        system_eval_status=passed
+      else
+        system_eval_status=failed
+        : > "$generated_system"
+        mark_failed "nix eval .#nixome.system failed"
+      fi
+      ${pkgs.coreutils}/bin/cp "$local_system_eval_log" "$system_eval_log"
+
+      if [ "$system_eval_status" = passed ]; then
+        if ${pkgs.jq}/bin/jq -e '
+          .schema == "nixome.system.v1" and
+          (.dom0 | type == "object") and
+          (.plan | type == "object") and
+          (.plan.live_actions | type == "array") and
+          (.plan.reboot_required | type == "boolean") and
+          (.plan.reboot_reasons | type == "array")
+        ' "$generated_system" > "$local_system_log" 2>&1; then
+          system_status=passed
+        else
+          system_status=failed
+          mark_failed "evaluated nixome.system JSON validation failed"
+        fi
+        ${pkgs.coreutils}/bin/cp "$local_system_log" "$system_log"
+
+        if check_system_source_refs "$generated_system" "$local_system_refs_log"; then
+          system_refs_status=passed
+        else
+          system_refs_status=failed
+          mark_failed "system source reference dry-run failed"
+        fi
+        ${pkgs.coreutils}/bin/cp "$local_system_refs_log" "$system_refs_log"
+      else
+        printf 'skipped because nix eval .#nixome.system did not pass\n' > "$system_log"
+        printf 'skipped because nix eval .#nixome.system did not pass\n' > "$system_refs_log"
+      fi
+
+    write_validation "$status" "$reason" "$topology_eval_status" "$topology_status" "topology.json" "$topology_eval_log" "$topology_log" "$template_refs_status" "$template_refs_log" "$system_eval_status" "$system_status" "system.json" "$system_eval_log" "$system_log" "$system_refs_status" "$system_refs_log" "$flake_status"
     if [ "$status" != passed ]; then
       cat "$tmpdir/validation.json" >&2
       exit 1
     fi
 
-    exec ${pkgs.gnutar}/bin/tar -C "$tmpdir" -cf - config.bundle validation.json manifest.json topology.json
+    ${pkgs.coreutils}/bin/cp "$generated_topology" "$tmpdir/topology.json"
+    ${pkgs.coreutils}/bin/cp "$generated_system" "$tmpdir/system.json"
+    exec ${pkgs.gnutar}/bin/tar -C "$tmpdir" -cf - config.bundle validation.json manifest.json topology.json system.json
   '';
 
   configCandidateValidateService = pkgs.writeShellScript "nixome-config-candidate-validate-qrexec" ''
@@ -760,7 +905,7 @@ let
     ${pkgs.coreutils}/bin/cat > "$candidate_tar"
     ${pkgs.gnutar}/bin/tar -tf "$candidate_tar" |
       ${pkgs.gawk}/bin/awk '
-        $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" && $0 != "topology.json" {
+        $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" && $0 != "topology.json" && $0 != "system.json" {
           printf "unexpected candidate tar member: %s\n", $0 > "/dev/stderr"
           exit 1
         }
@@ -783,18 +928,27 @@ let
       printf 'candidate tar is missing topology.json\n' >&2
       exit 1
     }
+    [ -f "$tmpdir/system.json" ] || {
+      printf 'candidate tar is missing system.json\n' >&2
+      exit 1
+    }
 
     manifest_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/manifest.json")"
     manifest_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/manifest.json")"
     validation_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validation.json")"
     validation_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
     validation_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
+    system_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/system.json")"
     [ "$manifest_schema" = "nixome.config-candidate.v1" ] || {
       printf 'unsupported candidate manifest schema: %s\n' "$manifest_schema" >&2
       exit 1
     }
     [ "$validation_schema" = "nixome.config-validation.v1" ] || {
       printf 'unsupported validation schema: %s\n' "$validation_schema" >&2
+      exit 1
+    }
+    [ "$system_schema" = "nixome.system.v1" ] || {
+      printf 'unsupported system schema: %s\n' "$system_schema" >&2
       exit 1
     }
     [ "$validation_status" = passed ] || {
@@ -838,6 +992,7 @@ let
     ${pkgs.coreutils}/bin/cp "$tmpdir/manifest.json" "$archive_dir/manifest.json"
     ${pkgs.coreutils}/bin/cp "$tmpdir/validation.json" "$archive_dir/validation.json"
     ${pkgs.coreutils}/bin/cp "$tmpdir/topology.json" "$archive_dir/topology.json"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/system.json" "$archive_dir/system.json"
     ${pkgs.coreutils}/bin/cp "$tmpdir/bundle-verify.log" "$archive_dir/bundle-verify.log"
     ${pkgs.coreutils}/bin/cp "$tmpdir/snapshot-git-clone.log" "$archive_dir/snapshot-git-clone.log"
     ${pkgs.coreutils}/bin/cp "$tmpdir/snapshot-git-checkout.log" "$archive_dir/snapshot-git-checkout.log"
@@ -848,16 +1003,20 @@ let
       --arg candidate_commit "$candidate_commit" \
       --arg manifest_schema "$manifest_schema" \
       --arg validation_schema "$validation_schema" \
+      --arg system_schema "$system_schema" \
       --arg snapshot "$archive_dir/snapshot" \
       --arg topology "$archive_dir/topology.json" \
+      --arg system "$archive_dir/system.json" \
       --arg source "dom0" \
       '{
         schema: $schema,
         candidate_commit: $candidate_commit,
         manifest_schema: $manifest_schema,
         validation_schema: $validation_schema,
+        system_schema: $system_schema,
         snapshot: $snapshot,
         topology: $topology,
+        system: $system,
         archived_by: $source
       }' > "$archive_dir/metadata.json"
     printf '%s\n' "$candidate_commit" > "$repo/latest-candidate"
@@ -909,6 +1068,11 @@ let
         $0 != "topology.json" &&
         $0 != "validated-topology.json" &&
         $0 != "template-builds.json" &&
+        $0 != "system.json" &&
+        $0 != "resolved-system.json" &&
+        $0 != "system-plan.json" &&
+        $0 != "system-apply.json" &&
+        $0 != "system-builds.json" &&
         $0 != "validation.json" &&
         $0 != "manifest.json" &&
         $0 != "logs/apply.commands.log" &&
@@ -917,6 +1081,9 @@ let
         $0 != "logs/setup.stdout.log" &&
         $0 != "logs/setup.stderr.log" &&
         $0 != "logs/template-builds.log" &&
+        $0 != "logs/system-builds.log" &&
+        $0 != "logs/system-apply.log" &&
+        $0 != "logs/profile-activation.log" &&
         $0 != "logs/clone.log" &&
         $0 != "logs/checkout.log" {
           printf "unexpected deployment tar member: %s\n", $0 > "/dev/stderr"
@@ -933,6 +1100,11 @@ let
       topology.json \
       validated-topology.json \
       template-builds.json \
+      system.json \
+      resolved-system.json \
+      system-plan.json \
+      system-apply.json \
+      system-builds.json \
       validation.json \
       manifest.json; do
       [ -f "$tmpdir/$required" ] || {
@@ -954,6 +1126,11 @@ let
     topology_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/topology.json")"
     validated_topology_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validated-topology.json")"
     template_builds_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/template-builds.json")"
+    system_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/system.json")"
+    resolved_system_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/resolved-system.json")"
+    system_apply_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/system-apply.json")"
+    system_apply_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/system-apply.json")"
+    system_builds_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/system-builds.json")"
     validation_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validation.json")"
     validation_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
     validation_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
@@ -1007,6 +1184,26 @@ let
       printf 'unsupported template builds schema: %s\n' "$template_builds_schema" >&2
       exit 1
     }
+    [ "$system_schema" = "nixome.system.v1" ] || {
+      printf 'unsupported system schema: %s\n' "$system_schema" >&2
+      exit 1
+    }
+    [ "$resolved_system_schema" = "nixome.system.v1" ] || {
+      printf 'unsupported resolved system schema: %s\n' "$resolved_system_schema" >&2
+      exit 1
+    }
+    [ "$system_apply_schema" = "nixome.system-apply.v1" ] || {
+      printf 'unsupported system apply schema: %s\n' "$system_apply_schema" >&2
+      exit 1
+    }
+    [ "$system_apply_status" = passed ] || {
+      printf 'system apply did not pass: %s\n' "$system_apply_status" >&2
+      exit 1
+    }
+    [ "$system_builds_schema" = "nixome.system-builds.v1" ] || {
+      printf 'unsupported system builds schema: %s\n' "$system_builds_schema" >&2
+      exit 1
+    }
     [ "$validation_schema" = "nixome.config-validation.v1" ] || {
       printf 'unsupported validation schema: %s\n' "$validation_schema" >&2
       exit 1
@@ -1056,6 +1253,13 @@ let
       archive.json \
       setup.json \
       topology.json \
+      validated-topology.json \
+      template-builds.json \
+      system.json \
+      resolved-system.json \
+      system-plan.json \
+      system-apply.json \
+      system-builds.json \
       validation.json \
       manifest.json; do
       ${pkgs.coreutils}/bin/cp "$tmpdir/$file" "$deployment_dir/$file"
@@ -1067,6 +1271,9 @@ let
       setup.stdout.log \
       setup.stderr.log \
       template-builds.log \
+      system-builds.log \
+      system-apply.log \
+      profile-activation.log \
       clone.log \
       checkout.log; do
       ${pkgs.coreutils}/bin/cp "$tmpdir/logs/$log" "$deployment_dir/logs/$log"

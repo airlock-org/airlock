@@ -10,6 +10,9 @@ LOG_DIR="$WORK_DIR/logs"
 CAPABILITIES="$WORK_DIR/xen-capabilities"
 VALIDATED_TAR="$WORK_DIR/config-candidate-validated.tar"
 SETUP_CAPTURE="$WORK_DIR/setup-topology.json"
+SYSTEM_STATE_DIR="$WORK_DIR/state"
+SYSTEM_ETC_DIR="$WORK_DIR/etc"
+SYSTEM_PROFILE="$WORK_DIR/nixome-system-profile"
 
 rm -rf "$WORK_DIR"
 mkdir -p "$BIN_DIR" "$CANDIDATE_DIR" "$LOG_DIR"
@@ -59,6 +62,58 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
         prefs = { };
         qrexec_policy.rules = [ ];
       };
+
+      nixome.system = {
+        schema = "nixome.system.v1";
+        dom0 = {
+          profile = {
+            source = null;
+            source_ref = null;
+            activation_command = "bin/nixome-dom0-profile-activate";
+            activation_action = "none";
+            message = "";
+          };
+          packages = [ ];
+          systemd.services = { };
+          nixos = {
+            system = {
+              enable = false;
+              reason = "dom0 system change requires reboot";
+              source = null;
+              source_ref = null;
+            };
+            kernel = {
+              enable = false;
+              reason = "dom0 kernel change requires reboot";
+              source = null;
+              source_ref = null;
+            };
+            xen = {
+              enable = false;
+              reason = "dom0 xen change requires reboot";
+              source = null;
+              source_ref = null;
+            };
+            bootloader = {
+              enable = false;
+              reason = "dom0 bootloader change requires reboot";
+              source = null;
+              source_ref = null;
+            };
+            qubes = {
+              enable = false;
+              reason = "dom0 qubes change requires reboot";
+              source = null;
+              source_ref = null;
+            };
+          };
+        };
+        plan = {
+          live_actions = [ ];
+          reboot_required = false;
+          reboot_reasons = [ ];
+        };
+      };
     };
 }
 EOF
@@ -104,7 +159,15 @@ nix \
   --offline \
   --no-write-lock-file \
   --json "$CANDIDATE_DIR#nixome.topology" > "$WORK_DIR/topology.json"
-tar -C "$WORK_DIR" -cf "$VALIDATED_TAR" config.bundle validation.json manifest.json topology.json
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json "$CANDIDATE_DIR#nixome.system" > "$WORK_DIR/system.json"
+tar -C "$WORK_DIR" -cf "$VALIDATED_TAR" config.bundle validation.json manifest.json topology.json system.json
 
 cat > "$BIN_DIR/nixome-config-archive-candidate" <<'EOF'
 #!/usr/bin/env bash
@@ -201,6 +264,9 @@ PATH="$BIN_DIR:$PATH" \
   VALIDATED_TAR_FIXTURE="$VALIDATED_TAR" \
   NIXOME_XEN_CAPABILITIES="$CAPABILITIES" \
   NIXOME_LOG_DIR="$LOG_DIR" \
+  NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
+  NIXOME_SYSTEM_ETC_DIR="$SYSTEM_ETC_DIR" \
+  NIXOME_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
   bash "$ROOT/scripts/apply-config-candidate.sh" --apply \
   > "$WORK_DIR/stdout.log" 2> "$WORK_DIR/stderr.log"
 
@@ -222,6 +288,18 @@ jq -e '
   .builds[0].status == "passed" and
   (.builds[0].source_path | test("^/nix/store/.*/test-template$"))
 ' "$LOG_DIR/config-apply-template-builds.json" >/dev/null
+
+jq -e '
+  .schema == "nixome.system-builds.v1" and
+  (.builds | length) == 0
+' "$LOG_DIR/config-apply-system-builds.json" >/dev/null
+
+jq -e '
+  .schema == "nixome.system-apply.v1" and
+  .status == "passed" and
+  .profile_status == "skipped" and
+  .reboot_required == false
+' "$LOG_DIR/config-system-apply.json" >/dev/null
 
 jq -e '
   .templates."test-template".source != null and

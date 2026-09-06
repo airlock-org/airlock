@@ -7,6 +7,7 @@ LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 RESULT_DIR="$LOG_DIR/config-candidate-flake"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nixome-config-candidate-flake.XXXXXX")"
 TOPOLOGY_JSON="$RESULT_DIR/topology.json"
+SYSTEM_JSON="$RESULT_DIR/system.json"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -16,7 +17,9 @@ mkdir -p "$WORK_DIR/nixome"
 cp "$ROOT/seeds/config-staging/flake.nix" "$WORK_DIR/flake.nix"
 cp "$ROOT/seeds/config-staging/nixome/config-vms.nix" "$WORK_DIR/nixome/config-vms.nix"
 cp "$ROOT/seeds/config-staging/nixome/prebuilt-template-sources.nix" "$WORK_DIR/nixome/prebuilt-template-sources.nix"
+cp "$ROOT/seeds/config-staging/nixome/system.nix" "$WORK_DIR/nixome/system.nix"
 cp "$ROOT/seeds/config-staging/nixome/templates.nix" "$WORK_DIR/nixome/templates.nix"
+cp "$ROOT/lib/nixome/system.nix" "$WORK_DIR/nixome/system-schema.nix"
 cp "$ROOT/lib/nixome/topology.nix" "$WORK_DIR/nixome/topology.nix"
 
 nixpkgs_path="$(nix eval --raw "$ROOT#nixome.seedInputs.nixpkgs")"
@@ -69,6 +72,14 @@ nix \
   --offline \
   --no-write-lock-file \
   --json "$WORK_DIR#nixome.topology" > "$TOPOLOGY_JSON"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json "$WORK_DIR#nixome.system" > "$SYSTEM_JSON"
 
 jq -e '
   .schema == "nixome.qubes-topology.v1" and
@@ -158,5 +169,45 @@ jq -e '
     }
   ]
 ' "$TOPOLOGY_JSON" >/dev/null
+
+jq -e '
+  .schema == "nixome.system.v1" and
+  .dom0.profile.source == null and
+  .dom0.profile.source_ref == {
+    "type": "flake-output",
+    "attr": "packages.x86_64-linux.nixome-dom0-profile",
+    "subpath": ""
+  } and
+  .dom0.profile.activation_command == "bin/nixome-dom0-profile-activate" and
+  .dom0.profile.activation_action == "run" and
+  .dom0.profile.message == "initial" and
+  .dom0.packages == [
+    {
+      "name": "nixome-dom0-profile"
+    }
+  ] and
+  .dom0.systemd.services == {} and
+  .dom0.nixos.system.enable == false and
+  .dom0.nixos.kernel.enable == false and
+  .dom0.nixos.xen.enable == false and
+  .dom0.nixos.bootloader.enable == false and
+  .dom0.nixos.qubes.enable == false and
+  .plan.live_actions == [
+    {
+      "type": "dom0-profile",
+      "action": "run",
+      "source": null,
+      "source_ref": {
+        "type": "flake-output",
+        "attr": "packages.x86_64-linux.nixome-dom0-profile",
+        "subpath": ""
+      },
+      "activation_command": "bin/nixome-dom0-profile-activate",
+      "message": "initial"
+    }
+  ] and
+  .plan.reboot_required == false and
+  .plan.reboot_reasons == []
+' "$SYSTEM_JSON" >/dev/null
 
 printf 'config candidate flake eval ok\n'
