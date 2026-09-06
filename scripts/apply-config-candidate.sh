@@ -37,6 +37,7 @@ SYSTEM_PROFILE="${NIXOME_SYSTEM_PROFILE:-/nix/var/nix/profiles/nixome-system}"
 HOST_SYSTEM_PROFILE="${NIXOME_HOST_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}"
 HOST_CURRENT_SYSTEM_LINK="${NIXOME_HOST_CURRENT_SYSTEM_LINK:-/run/current-system}"
 HOST_SYSTEM_ACTIVATION_LOG="$LOG_DIR/config-system-host-activation.log"
+CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-1}"
 
 STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
 VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
@@ -238,6 +239,45 @@ require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     fail "missing command: $1"
   fi
+}
+
+nix_build_print_path() {
+  local worktree="$1"
+  local attr="$2"
+  local stdout="$3"
+  local log="$4"
+  local command=(
+    nix
+    --extra-experimental-features nix-command
+    --extra-experimental-features flakes
+    build
+    --impure
+    --no-write-lock-file
+    --no-link
+    --print-out-paths
+    --show-trace
+  )
+
+  case "$CONFIG_APPLY_NIX_OFFLINE" in
+    1|true|yes)
+      command+=(--offline)
+      ;;
+    0|false|no)
+      ;;
+    *)
+      fail "unsupported NIXOME_CONFIG_APPLY_NIX_OFFLINE value: $CONFIG_APPLY_NIX_OFFLINE"
+      ;;
+  esac
+
+  command+=("$worktree#$attr")
+
+  {
+    printf '+'
+    printf ' %q' "${command[@]}"
+    printf '\n'
+  } >> "$log"
+
+  "${command[@]}" > "$stdout" 2>> "$log"
 }
 
 run_to_files_or_fail() {
@@ -536,22 +576,9 @@ resolve_template_sources() {
       printf 'template=%s\n' "$template"
       printf 'attr=%s\n' "$attr"
       printf 'subpath=%s\n' "$subpath"
-      printf '+ nix build --impure --offline --no-link --print-out-paths %s#%s\n' "$worktree" "$attr"
     } > "$build_log"
 
-    if
-      nix \
-        --extra-experimental-features nix-command \
-        --extra-experimental-features flakes \
-        build \
-        --impure \
-        --offline \
-        --no-write-lock-file \
-        --no-link \
-        --print-out-paths \
-        --show-trace \
-        "$worktree#$attr" > "$build_stdout" 2>> "$build_log"
-    then
+    if nix_build_print_path "$worktree" "$attr" "$build_stdout" "$build_log"; then
       cat "$build_stdout" >> "$build_log"
       output_path="$(awk 'NF { last = $0 } END { print last }' "$build_stdout")"
     else
@@ -795,22 +822,9 @@ resolve_system_sources() {
       printf 'component=%s\n' "$component"
       printf 'attr=%s\n' "$attr"
       printf 'subpath=%s\n' "$subpath"
-      printf '+ nix build --impure --offline --no-link --print-out-paths %s#%s\n' "$worktree" "$attr"
     } > "$build_log"
 
-    if
-      nix \
-        --extra-experimental-features nix-command \
-        --extra-experimental-features flakes \
-        build \
-        --impure \
-        --offline \
-        --no-write-lock-file \
-        --no-link \
-        --print-out-paths \
-        --show-trace \
-        "$worktree#$attr" > "$build_stdout" 2>> "$build_log"
-    then
+    if nix_build_print_path "$worktree" "$attr" "$build_stdout" "$build_log"; then
       cat "$build_stdout" >> "$build_log"
       output_path="$(awk 'NF { last = $0 } END { print last }' "$build_stdout")"
     else

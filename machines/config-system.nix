@@ -164,8 +164,8 @@ in
     };
   };
 
-  # This profile carries Nix-built template artifacts in the dom0 store, then
-  # imports them into the Qubes pool. It needs room, but not the full large
-  # Fedora-template smoke-test disk.
-  virtualisation.diskSize = lib.mkForce 32768;
+  # This profile carries Nix-built template artifacts and may switch a staged
+  # dom0 system generation at runtime. Keep the qcow2 capacity large; it is
+  # sparse on the host but gives the nested dom0 store enough room to grow.
+  virtualisation.diskSize = lib.mkDefault 131072;
 }

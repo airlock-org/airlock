@@ -632,6 +632,7 @@ run_or_fail "apply config candidate from $STAGING through $VALIDATOR" "$APPLY_LO
     NIXOME_CONFIG_STAGING_VM="$STAGING" \
     NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
     NIXOME_CONFIG_VAULT_VM="$VAULT" \
+    NIXOME_CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-0}" \
   nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
 
 run_or_fail \
