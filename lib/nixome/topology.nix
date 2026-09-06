@@ -18,15 +18,30 @@ let
     "black"
   ];
 
+  qrexecActions = [
+    "allow"
+    "deny"
+  ];
+
+  reservedQrexecServices = [
+    "nixome.Config.CandidateExport"
+    "nixome.Config.ValidateCandidate"
+    "nixome.Config.ArchiveCandidate"
+    "nixome.Config.ArchiveDeployment"
+  ];
+
   attrNames = builtins.attrNames;
   concatStringsSep = builtins.concatStringsSep;
   elem = builtins.elem;
   filter = builtins.filter;
+  foldl' = builtins.foldl';
   getAttr = builtins.getAttr;
   hasAttr = builtins.hasAttr;
+  head = builtins.head;
   listToAttrs = builtins.listToAttrs;
   map = builtins.map;
   match = builtins.match;
+  tail = builtins.tail;
   toJSON = builtins.toJSON;
   typeOf = builtins.typeOf;
 
@@ -52,6 +67,10 @@ let
   expectBool =
     path: value:
     if typeOf value == "bool" then value else fail path "expected a boolean, got ${typeOf value}";
+
+  expectList =
+    path: value:
+    if typeOf value == "list" then value else fail path "expected a list, got ${typeOf value}";
 
   expectStringOrPath =
     path: value:
@@ -103,6 +122,40 @@ let
     else
       fail path "invalid ${kind} name ${toJSON name}; expected [A-Za-z0-9_.:+-]+";
 
+  expectQrexecService =
+    path: value:
+    let
+      service = expectStringOrPath path value;
+    in
+    if match "nixome\\.[A-Za-z0-9_.-]+" service == null then
+      fail path "invalid qrexec service ${toJSON service}; expected nixome.[A-Za-z0-9_.-]+"
+    else if elem service reservedQrexecServices then
+      fail path "reserved bootstrap qrexec service ${toJSON service} cannot be managed by topology"
+    else
+      service;
+
+  expectQrexecArgument =
+    path: value:
+    let
+      argument = expectStringOrPath path value;
+    in
+    if argument == "*" || match "[A-Za-z0-9_.:+-]+" argument != null then
+      argument
+    else
+      fail path "invalid qrexec argument ${toJSON argument}; expected * or [A-Za-z0-9_.:+-]+";
+
+  expectQrexecEndpoint =
+    path: value:
+    let
+      endpoint = expectStringOrPath path value;
+    in
+    if
+      endpoint == "dom0" || endpoint == "@anyvm" || match "[A-Za-z][A-Za-z0-9_.-]*" endpoint != null
+    then
+      endpoint
+    else
+      fail path "invalid qrexec endpoint ${toJSON endpoint}; expected dom0, @anyvm, or a Qubes domain name";
+
   expectKernelName =
     path: name:
     if typeOf name != "string" then
@@ -138,6 +191,90 @@ let
       in
       expectBool "${path}.${checkedName}" service
     ) (expectAttrs path value);
+
+  imap =
+    f: list:
+    let
+      go =
+        index: values:
+        if values == [ ] then [ ] else [ (f index (head values)) ] ++ go (index + 1) (tail values);
+    in
+    go 0 list;
+
+  any = pred: list: foldl' (acc: value: acc || pred value) false list;
+
+  normalizeQrexecRule =
+    index: value:
+    let
+      path = "qrexecPolicy.rules.${toString index}";
+      rule = expectOptions path [
+        "service"
+        "argument"
+        "source"
+        "target"
+        "action"
+      ] value;
+      service = expectQrexecService "${path}.service" (get rule "service" null);
+      argument = expectQrexecArgument "${path}.argument" (get rule "argument" "*");
+      source = expectQrexecEndpoint "${path}.source" (get rule "source" null);
+      target = expectQrexecEndpoint "${path}.target" (get rule "target" null);
+      action = expectEnum "${path}.action" qrexecActions (get rule "action" null);
+    in
+    if target == "dom0" then
+      fail "${path}.target" "topology-managed qrexec policy cannot target dom0"
+    else if action == "allow" && source == "@anyvm" then
+      fail "${path}.source" "allow rules must use dom0 or a concrete source domain"
+    else if action == "allow" && target == "@anyvm" then
+      fail "${path}.target" "allow rules must use a concrete target domain"
+    else
+      {
+        inherit
+          service
+          argument
+          source
+          target
+          action
+          ;
+      };
+
+  ruleIsCatchAllDeny =
+    service: rule:
+    rule.service == service
+    && rule.argument == "*"
+    && rule.source == "@anyvm"
+    && rule.target == "@anyvm"
+    && rule.action == "deny";
+
+  servicesForRules =
+    rules:
+    attrNames (
+      listToAttrs (
+        map (rule: {
+          name = rule.service;
+          value = true;
+        }) rules
+      )
+    );
+
+  normalizeQrexecPolicy =
+    path: value:
+    let
+      policy = expectOptions path [ "rules" ] value;
+      explicitRules = imap normalizeQrexecRule (expectList "${path}.rules" (get policy "rules" [ ]));
+      servicesMissingCatchAllDeny = filter (service: !(any (ruleIsCatchAllDeny service) explicitRules)) (
+        servicesForRules explicitRules
+      );
+      denyRules = map (service: {
+        inherit service;
+        argument = "*";
+        source = "@anyvm";
+        target = "@anyvm";
+        action = "deny";
+      }) servicesMissingCatchAllDeny;
+    in
+    {
+      rules = explicitRules ++ denyRules;
+    };
 
   normalizeTemplate =
     name: value:
@@ -267,8 +404,21 @@ let
         "kernels"
         "domains"
         "prefs"
+        "qrexecPolicy"
+        "qrexec_policy"
       ] value;
       requestedSchema = get cfg "schema" schema;
+      hasCamelQrexecPolicy = hasAttr "qrexecPolicy" cfg;
+      hasSnakeQrexecPolicy = hasAttr "qrexec_policy" cfg;
+      qrexecPolicy =
+        if hasCamelQrexecPolicy && hasSnakeQrexecPolicy then
+          fail "" "qrexecPolicy and qrexec_policy cannot both be set"
+        else if hasCamelQrexecPolicy then
+          cfg.qrexecPolicy
+        else if hasSnakeQrexecPolicy then
+          cfg.qrexec_policy
+        else
+          { };
     in
     if requestedSchema != schema then
       fail "schema" "expected ${schema}, got ${toJSON requestedSchema}"
@@ -279,6 +429,7 @@ let
         kernels = normalizeNamedAttrs "kernels" (get cfg "kernels" { }) normalizeKernel;
         domains = normalizeNamedAttrs "domains" (get cfg "domains" { }) normalizeDomain;
         prefs = normalizeJsonAttrs "pref" "prefs" (get cfg "prefs" { });
+        qrexec_policy = normalizeQrexecPolicy "qrexecPolicy" qrexecPolicy;
       };
 in
 {
@@ -286,6 +437,8 @@ in
     domainClasses
     labels
     mkTopology
+    qrexecActions
+    reservedQrexecServices
     schema
     ;
 }

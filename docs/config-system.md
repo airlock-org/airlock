@@ -20,6 +20,15 @@ plane in dom0, but moves the desired VM topology into Nix.
   `nixome.Config.ArchiveCandidate` on `config-vault`, and
   `nixome.Config.ArchiveDeployment` on `config-vault`.
 
+That config-access policy is bootstrap policy and remains dom0/NixOS-owned in
+`30-nixome-config.policy`, so staged config changes cannot lock dom0 out of the
+fetch/validate/archive/apply path. Additional Nixome-owned qrexec policy is
+declared in staged topology and rendered by `nixome-setup-config` to:
+
+```text
+/etc/qubes/policy.d/90-nixome.policy
+```
+
 The initial VM resource settings are sized for the nested 8 GiB developer VM:
 `config-vault` starts at 1024 MiB, while `config-staging` and `config-validator`
 start at 2048 MiB. A physical Nixome host can raise these declaratively later.
@@ -57,6 +66,14 @@ let
       prefs.include_in_backups = true;
       features."nixome-config-applied-message" = "initial";
     };
+    qrexecPolicy.rules = [
+      {
+        service = "nixome.PolicyProbe";
+        source = "dom0";
+        target = "config-vault";
+        action = "allow";
+      }
+    ];
   };
 in
 {
@@ -66,10 +83,16 @@ in
 ```
 
 The schema currently checks domain classes, labels, Qube/template names,
-template and kernel source fields, JSON-safe prefs/features, and boolean
-services. It also defaults AppVMs to `class = "AppVM"`, `netvm = null`,
-`prefs.autostart = false`, `prefs.include_in_backups = false`, and empty
-`features`/`services`.
+template and kernel source fields, JSON-safe prefs/features, boolean services,
+and constrained Nixome-owned qrexec policy rules. Managed qrexec service names
+must start with `nixome.`, bootstrap config services are reserved, actions are
+limited to `allow` and `deny`, allow rules cannot use `@anyvm`, and generated
+policy cannot target dom0. The schema also appends a catch-all deny rule for
+each managed service.
+
+The schema defaults AppVMs to `class = "AppVM"`, `netvm = null`,
+`prefs.autostart = false`, `prefs.include_in_backups = false`, empty
+`features`/`services`, and an empty generated qrexec policy.
 
 For this first apply proof, the Nix value declares a small observable Qubes
 feature on `config-staging`:
@@ -80,7 +103,9 @@ nixome-config-applied-message
 
 The runtime smoke then edits `flake.nix` to add `nixome-test-from-config`, an
 AppVM based on `nixome-nixos-config-staging`, and proves that dom0 creates it
-from the validator-produced topology.
+from the validator-produced topology. It also declares a generated
+`nixome.PolicyProbe` qrexec policy rule and proves dom0 can call that service in
+`config-vault` after apply.
 
 `config-validator` validates candidates exported from `config-staging`,
 evaluates the schema-normalized `.#nixome.topology` to the `topology.json` apply
@@ -212,7 +237,8 @@ in `config-staging`, evaluates `.#nixome.topology` in `config-validator`,
 archives the source and evaluated topology into `config-vault`, applies it from
 dom0, checks that `nixome-test-from-config` was created, and runs `uname -a`
 inside it through qrexec. It also checks that `config-vault` wrote a deployment
-record for the successful apply.
+record for the successful apply and that generated qrexec policy is installed
+and active.
 The machine-readable result is copied to:
 
 ```text
@@ -242,7 +268,8 @@ The validated smoke path reaches qrexec in the declared NixOS AppVMs, proves
 that `config-vault` has `/home/user/nixome-config-vault` initialized before
 qrexec accepts the repository status check, and proves that a staged Nix config
 can create a new AppVM that boots and serves qrexec. It also records the
-successful apply as a deployment in `config-vault`. The next boundary is
-hardening the model: split role-specific guest roots when useful, classify setup
-changes that require VM restart or dom0 reboot, and validate the same path on
-physical Xen-capable hardware.
+successful apply as a deployment in `config-vault` and proves a staged
+Nixome-owned qrexec policy rule by calling `nixome.PolicyProbe` through
+`qrexec-client`. The next boundary is hardening the model: split role-specific
+guest roots when useful, classify setup changes that require VM restart or dom0
+reboot, and validate the same path on physical Xen-capable hardware.

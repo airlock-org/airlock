@@ -3,6 +3,7 @@
   gnugrep,
   jq,
   lib,
+  python3,
   systemd,
   writeShellApplication,
 }:
@@ -14,6 +15,7 @@ writeShellApplication {
     coreutils
     gnugrep
     jq
+    python3.pkgs.qubes-core-qrexec.dom0
     systemd
   ];
 

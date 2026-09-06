@@ -46,6 +46,7 @@ run_logged topology-schema "$ROOT/tests/topology-schema.sh"
 run_logged config-candidate-flake "$ROOT/tests/config-candidate-flake.sh"
 run_logged host-capabilities "$ROOT/tests/host-capabilities.sh" --json "$LOG_DIR/host-capabilities.json"
 run_logged setup-config-static "$ROOT/tests/setup-config-static.sh"
+run_logged setup-config-qrexec-policy "$ROOT/tests/setup-config-qrexec-policy.sh"
 run_logged setup-config-idempotent "$ROOT/tests/setup-config-idempotent.sh"
 run_logged setup-config-empty-global-pref "$ROOT/tests/setup-config-empty-global-pref.sh"
 

@@ -10,8 +10,9 @@ TOPOLOGY="$WORK_DIR/topology.json"
 CAPABILITIES="$WORK_DIR/xen-capabilities"
 LOG_DIR="$WORK_DIR/logs"
 KERNEL_BASE="$WORK_DIR/vm-kernels"
+POLICY_DIR="$WORK_DIR/policy.d"
 
-mkdir -p "$BIN_DIR" "$KERNEL_DIR" "$TEMPLATE_DIR" "$LOG_DIR"
+mkdir -p "$BIN_DIR" "$KERNEL_DIR" "$TEMPLATE_DIR" "$LOG_DIR" "$POLICY_DIR"
 
 printf 'control_d\n' > "$CAPABILITIES"
 : > "$KERNEL_DIR/vmlinuz"
@@ -85,6 +86,7 @@ chmod 0755 "$BIN_DIR/systemctl"
 
 PATH="$BIN_DIR:$PATH" \
   NIXOME_QUBES_KERNEL_BASE="$KERNEL_BASE" \
+  NIXOME_QUBES_POLICY_DIR="$POLICY_DIR" \
   NIXOME_XEN_CAPABILITIES="$CAPABILITIES" \
   NIXOME_LOG_DIR="$LOG_DIR" \
   bash "$ROOT/scripts/setup-config.sh" --plan --topology "$TOPOLOGY" \
@@ -97,7 +99,8 @@ jq -e '
   .templates_changed == 1 and
   .kernels_changed == 1 and
   .domains_changed == 1 and
-  .prefs_changed == 1
+  .prefs_changed == 1 and
+  .qrexec_policy_changed == 1
 ' "$LOG_DIR/setup-config.json" >/dev/null
 
 printf 'setup-config static test ok\n'

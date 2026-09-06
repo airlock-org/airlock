@@ -98,12 +98,51 @@ let
     };
   };
 
+  qrexecPolicyRuleType = lib.types.submodule {
+    options = {
+      service = lib.mkOption {
+        type = lib.types.str;
+        description = "Nixome-owned qrexec service name.";
+      };
+
+      argument = lib.mkOption {
+        type = lib.types.str;
+        default = "*";
+        description = "qrexec service argument.";
+      };
+
+      source = lib.mkOption {
+        type = lib.types.str;
+        description = "qrexec source endpoint.";
+      };
+
+      target = lib.mkOption {
+        type = lib.types.str;
+        description = "qrexec target endpoint.";
+      };
+
+      action = lib.mkOption {
+        type = lib.types.enum topologyLib.qrexecActions;
+        description = "qrexec policy action.";
+      };
+    };
+  };
+
+  qrexecPolicyType = lib.types.submodule {
+    options.rules = lib.mkOption {
+      type = lib.types.listOf qrexecPolicyRuleType;
+      default = [ ];
+      description = "Nixome-owned qrexec policy rules.";
+    };
+  };
+
   topology = {
     inherit (cfg)
       templates
       kernels
       domains
       prefs
+      qrexecPolicy
       ;
   };
 
@@ -156,6 +195,12 @@ in
       type = lib.types.attrsOf jsonScalar;
       default = { };
       description = "Global qubes-prefs values for the setup-config layer.";
+    };
+
+    qrexecPolicy = lib.mkOption {
+      type = qrexecPolicyType;
+      default = { };
+      description = "Nixome-owned qrexec policy rendered by setup-config.";
     };
 
     topology = lib.mkOption {

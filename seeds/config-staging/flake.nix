@@ -22,6 +22,14 @@
             };
           };
         };
+        qrexecPolicy.rules = [
+          {
+            service = "nixome.PolicyProbe";
+            source = "dom0";
+            target = "config-vault";
+            action = "allow";
+          }
+        ];
       };
     in
     {

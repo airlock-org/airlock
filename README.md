@@ -148,7 +148,8 @@ The Qubes smoke test creates `test-nixome-smoke` if needed, starts it, runs
   `modules/qubes-topology.nix` are the first pieces for NixOS-backed Qubes
   templates and declarative topology setup.
 - `lib/nixome/topology.nix` is the shared topology schema/defaulting helper used
-  by both dom0 topology generation and staged config candidates.
+  by both dom0 topology generation and staged config candidates, including the
+  constrained Nixome-owned qrexec policy schema.
 - The config-system TemplateVM source directories currently share one NixOS
   guest root image to keep nested smoke builds practical; AppVM roles and
   qrexec policy provide the current separation.
@@ -163,5 +164,6 @@ nested virtualization. The NixOS-template
 `config-vault`/`config-staging`/`config-validator` path now evaluates, builds
 template artifacts, imports/creates the declared TemplateVMs and AppVMs, boots
 the NixOS AppVMs under nested Xen, proves qrexec with `uname -a`, and verifies
-the typed config candidate validation/archive/apply flow. Production security
-validation still requires a physical Xen-capable machine.
+the typed config candidate validation/archive/apply flow. The staged config now
+also generates Nixome-owned qrexec policy into `/etc/qubes/policy.d/90-nixome.policy`.
+Production security validation still requires a physical Xen-capable machine.

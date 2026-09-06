@@ -14,6 +14,10 @@ COMMAND_LOG="$LOG_DIR/setup-config.commands.log"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 KERNEL_BASE="${NIXOME_QUBES_KERNEL_BASE:-/var/lib/qubes/vm-kernels}"
 QUBES_XML="${NIXOME_QUBES_XML:-/var/lib/qubes/qubes.xml}"
+POLICY_DIR="${NIXOME_QUBES_POLICY_DIR:-/etc/qubes/policy.d}"
+MANAGED_POLICY_FILE="${NIXOME_QUBES_MANAGED_POLICY_FILE:-90-nixome.policy}"
+MANAGED_POLICY_PATH="$POLICY_DIR/$MANAGED_POLICY_FILE"
+RENDERED_POLICY="$LOG_DIR/$MANAGED_POLICY_FILE.rendered"
 result_written=0
 
 usage() {
@@ -68,6 +72,7 @@ domains_changed=0
 prefs_changed=0
 features_changed=0
 services_changed=0
+qrexec_policy_changed=0
 
 json_escape() {
   printf '%s' "$1" | sed \
@@ -107,6 +112,11 @@ write_result() {
     printf ',"prefs_changed":%s' "$prefs_changed"
     printf ',"features_changed":%s' "$features_changed"
     printf ',"services_changed":%s' "$services_changed"
+    printf ',"qrexec_policy_changed":%s' "$qrexec_policy_changed"
+    printf ',"qrexec_policy_file":'
+    json_string "$MANAGED_POLICY_PATH"
+    printf ',"qrexec_policy_rendered":'
+    json_string "$RENDERED_POLICY"
     printf ',"command_log":'
     json_string "$COMMAND_LOG"
     printf '}\n'
@@ -279,6 +289,124 @@ set_service() {
   services_changed=$((services_changed + 1))
 }
 
+is_qubes_name() {
+  [[ "$1" =~ ^[A-Za-z][A-Za-z0-9_.-]*$ ]]
+}
+
+is_qrexec_service() {
+  [[ "$1" =~ ^nixome\.[A-Za-z0-9_.-]+$ ]]
+}
+
+is_qrexec_argument() {
+  [ "$1" = "*" ] || [[ "$1" =~ ^[A-Za-z0-9_.:+-]+$ ]]
+}
+
+is_qrexec_endpoint() {
+  [ "$1" = "dom0" ] || [ "$1" = "@anyvm" ] || is_qubes_name "$1"
+}
+
+validate_qrexec_rule() {
+  index="$1"
+  service="$2"
+  argument="$3"
+  source="$4"
+  target="$5"
+  action="$6"
+
+  is_qrexec_service "$service" ||
+    fail "qrexec policy rule $index has invalid service: $service"
+  case "$service" in
+    nixome.Config.CandidateExport|nixome.Config.ValidateCandidate|nixome.Config.ArchiveCandidate|nixome.Config.ArchiveDeployment)
+      fail "qrexec policy rule $index uses reserved bootstrap service: $service"
+      ;;
+  esac
+  is_qrexec_argument "$argument" ||
+    fail "qrexec policy rule $index has invalid argument: $argument"
+  is_qrexec_endpoint "$source" ||
+    fail "qrexec policy rule $index has invalid source: $source"
+  is_qrexec_endpoint "$target" ||
+    fail "qrexec policy rule $index has invalid target: $target"
+  [ "$target" != "dom0" ] ||
+    fail "qrexec policy rule $index targets dom0; topology-managed policy may not target dom0"
+
+  case "$action" in
+    allow)
+      [ "$source" != "@anyvm" ] ||
+        fail "qrexec policy rule $index allow uses @anyvm source"
+      [ "$target" != "@anyvm" ] ||
+        fail "qrexec policy rule $index allow uses @anyvm target"
+      ;;
+    deny)
+      ;;
+    *)
+      fail "qrexec policy rule $index has invalid action: $action"
+      ;;
+  esac
+}
+
+policy_file_is_managed() {
+  file="$1"
+
+  grep -Fx "# Managed by Nixome setup-config." "$file" >/dev/null 2>&1
+}
+
+render_qrexec_policy() {
+  output="$1"
+
+  {
+    printf '# Managed by Nixome setup-config.\n'
+    printf '# Source: nixome.qubes.topology.qrexec_policy.\n'
+    printf '# Bootstrap config transport policy remains in 30-nixome-config.policy.\n'
+
+    rule_count="$(jq_get '(.qrexec_policy.rules // []) | length')"
+    index=0
+    while [ "$index" -lt "$rule_count" ]; do
+      service="$(jq_get '.qrexec_policy.rules[$index].service' --argjson index "$index")"
+      argument="$(jq_get '.qrexec_policy.rules[$index].argument' --argjson index "$index")"
+      source="$(jq_get '.qrexec_policy.rules[$index].source' --argjson index "$index")"
+      target="$(jq_get '.qrexec_policy.rules[$index].target' --argjson index "$index")"
+      action="$(jq_get '.qrexec_policy.rules[$index].action' --argjson index "$index")"
+
+      validate_qrexec_rule "$index" "$service" "$argument" "$source" "$target" "$action"
+      printf '%s %s %s %s %s\n' "$service" "$argument" "$source" "$target" "$action"
+      index=$((index + 1))
+    done
+  } > "$output"
+}
+
+reload_qrexec_policy_daemon() {
+  printf '+ systemctl reload qubes-qrexec-policy-daemon.service\n'
+  if systemctl reload qubes-qrexec-policy-daemon.service; then
+    return
+  fi
+
+  printf '+ systemctl try-restart qubes-qrexec-policy-daemon.service\n'
+  systemctl try-restart qubes-qrexec-policy-daemon.service
+}
+
+setup_qrexec_policy() {
+  printf 'setting up Nixome-owned qrexec policy\n'
+  render_qrexec_policy "$RENDERED_POLICY"
+
+  if [ -e "$MANAGED_POLICY_PATH" ] && ! policy_file_is_managed "$MANAGED_POLICY_PATH"; then
+    fail "qrexec policy file exists but is not Nixome-managed: $MANAGED_POLICY_PATH"
+  fi
+
+  if [ -e "$MANAGED_POLICY_PATH" ] && cmp -s "$RENDERED_POLICY" "$MANAGED_POLICY_PATH"; then
+    printf 'qrexec policy current: %s\n' "$MANAGED_POLICY_PATH"
+    return
+  fi
+
+  printf '+ install-qrexec-policy %q %q\n' "$RENDERED_POLICY" "$MANAGED_POLICY_PATH"
+  if [ "$APPLY" = "1" ]; then
+    mkdir -p "$POLICY_DIR"
+    cp "$RENDERED_POLICY" "$MANAGED_POLICY_PATH"
+    chmod 0644 "$MANAGED_POLICY_PATH"
+    reload_qrexec_policy_daemon
+  fi
+  qrexec_policy_changed=$((qrexec_policy_changed + 1))
+}
+
 kernel_source_matches_target() {
   source="$1"
   target="$2"
@@ -336,9 +464,12 @@ install_kernel() {
 [ -r "$TOPOLOGY" ] || fail "topology file is not readable: $TOPOLOGY"
 
 for cmd in \
+  chmod \
   cmp \
+  cp \
   grep \
   jq \
+  mkdir \
   qubes-prefs \
   qvm-create \
   qvm-features \
@@ -348,6 +479,7 @@ for cmd in \
   qvm-template-postprocess \
   qubesd-query \
   python3 \
+  rm \
   systemctl; do
   require_command "$cmd"
 done
@@ -362,6 +494,8 @@ systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qr
 
 schema="$(jq_get '.schema')"
 [ "$schema" = "nixome.qubes-topology.v1" ] || fail "unsupported topology schema: $schema"
+
+setup_qrexec_policy
 
 printf 'setting up global prefs\n'
 mapfile -t global_pref_names < <(jq_get '.prefs | keys[]?')

@@ -39,6 +39,14 @@ cat > "$WORK_DIR/valid/flake.nix" <<'EOF'
           features."nixome-role" = "test";
           services."network-manager" = false;
         };
+        qrexecPolicy.rules = [
+          {
+            service = "nixome.PolicyProbe";
+            source = "dom0";
+            target = "test-qube";
+            action = "allow";
+          }
+        ];
       };
     };
 }
@@ -58,7 +66,23 @@ jq -e '
   .domains."test-qube".prefs.autostart == false and
   .domains."test-qube".prefs.include_in_backups == false and
   .domains."test-qube".prefs.memory == 1024 and
-  .domains."test-qube".services."network-manager" == false
+  .domains."test-qube".services."network-manager" == false and
+  .qrexec_policy.rules == [
+    {
+      "service": "nixome.PolicyProbe",
+      "argument": "*",
+      "source": "dom0",
+      "target": "test-qube",
+      "action": "allow"
+    },
+    {
+      "service": "nixome.PolicyProbe",
+      "argument": "*",
+      "source": "@anyvm",
+      "target": "@anyvm",
+      "action": "deny"
+    }
+  ]
 ' "$TOPOLOGY_JSON" >/dev/null
 
 expect_failure() {
@@ -117,5 +141,25 @@ expect_failure \
   "template-import-without-source" \
   "nixome.topology.templates.nixome-template.source: must be set when import is true" \
   '{ templates."nixome-template".import = true; }'
+
+expect_failure \
+  "non-nixome-qrexec-service" \
+  "invalid qrexec service" \
+  '{ qrexecPolicy.rules = [ { service = "qubes.Filecopy"; source = "dom0"; target = "vault"; action = "allow"; } ]; }'
+
+expect_failure \
+  "reserved-qrexec-service" \
+  "reserved bootstrap qrexec service" \
+  '{ qrexecPolicy.rules = [ { service = "nixome.Config.ArchiveCandidate"; source = "dom0"; target = "config-vault"; action = "allow"; } ]; }'
+
+expect_failure \
+  "qrexec-allow-any-source" \
+  "allow rules must use dom0 or a concrete source domain" \
+  '{ qrexecPolicy.rules = [ { service = "nixome.PolicyProbe"; source = "@anyvm"; target = "config-vault"; action = "allow"; } ]; }'
+
+expect_failure \
+  "qrexec-target-dom0" \
+  "topology-managed qrexec policy cannot target dom0" \
+  '{ qrexecPolicy.rules = [ { service = "nixome.PolicyProbe"; source = "config-vault"; target = "dom0"; action = "allow"; } ]; }'
 
 printf 'topology schema test ok\n'

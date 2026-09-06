@@ -29,7 +29,23 @@ jq -e '
   .domains."config-staging".prefs.autostart == false and
   .domains."config-staging".prefs.include_in_backups == true and
   .domains."config-staging".services == {} and
-  .domains."config-staging".features."nixome-config-applied-message" == "initial"
+  .domains."config-staging".features."nixome-config-applied-message" == "initial" and
+  .qrexec_policy.rules == [
+    {
+      "service": "nixome.PolicyProbe",
+      "argument": "*",
+      "source": "dom0",
+      "target": "config-vault",
+      "action": "allow"
+    },
+    {
+      "service": "nixome.PolicyProbe",
+      "argument": "*",
+      "source": "@anyvm",
+      "target": "@anyvm",
+      "action": "deny"
+    }
+  ]
 ' "$TOPOLOGY_JSON" >/dev/null
 
 printf 'config candidate flake eval ok\n'

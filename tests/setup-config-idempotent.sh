@@ -13,9 +13,11 @@ CAPABILITIES="$WORK_DIR/xen-capabilities"
 LOG_DIR="$WORK_DIR/logs"
 MUTATION_LOG="$WORK_DIR/mutations.log"
 QUBES_XML="$WORK_DIR/qubes.xml"
+POLICY_DIR="$WORK_DIR/policy.d"
+POLICY_FILE="$POLICY_DIR/90-nixome.policy"
 
 rm -rf "$WORK_DIR"
-mkdir -p "$BIN_DIR" "$KERNEL_DIR" "$KERNEL_TARGET" "$TEMPLATE_DIR" "$LOG_DIR"
+mkdir -p "$BIN_DIR" "$KERNEL_DIR" "$KERNEL_TARGET" "$TEMPLATE_DIR" "$LOG_DIR" "$POLICY_DIR"
 
 printf 'control_d\n' > "$CAPABILITIES"
 for file in vmlinuz initramfs modules.img; do
@@ -36,6 +38,12 @@ cat > "$QUBES_XML" <<'EOF'
     <property name="default_kernel"></property>
   </properties>
 </qubes>
+EOF
+
+cat > "$POLICY_FILE" <<'EOF'
+# Managed by Nixome setup-config.
+# Source: nixome.qubes.topology.qrexec_policy.
+# Bootstrap config transport policy remains in 30-nixome-config.policy.
 EOF
 
 cat > "$TOPOLOGY" <<EOF
@@ -85,6 +93,10 @@ EOF
 cat > "$BIN_DIR/systemctl" <<'EOF'
 #!/usr/bin/env bash
 if [ "$1" = "is-active" ]; then
+  exit 0
+fi
+if [ "$1" = "reload" ] || [ "$1" = "try-restart" ]; then
+  printf 'systemctl %s\n' "$*" >> "$MUTATION_LOG"
   exit 0
 fi
 exit 1
@@ -161,6 +173,7 @@ PATH="$BIN_DIR:$PATH" \
   MUTATION_LOG="$MUTATION_LOG" \
   NIXOME_QUBES_KERNEL_BASE="$KERNEL_BASE" \
   NIXOME_QUBES_XML="$QUBES_XML" \
+  NIXOME_QUBES_POLICY_DIR="$POLICY_DIR" \
   NIXOME_XEN_CAPABILITIES="$CAPABILITIES" \
   NIXOME_LOG_DIR="$LOG_DIR" \
   "$BASH" "$ROOT/scripts/setup-config.sh" --apply --topology "$TOPOLOGY" \
@@ -175,7 +188,8 @@ jq -e '
   .domains_changed == 0 and
   .prefs_changed == 0 and
   .features_changed == 0 and
-  .services_changed == 0
+  .services_changed == 0 and
+  .qrexec_policy_changed == 0
 ' "$LOG_DIR/setup-config.json" >/dev/null
 
 if [ -s "$MUTATION_LOG" ]; then

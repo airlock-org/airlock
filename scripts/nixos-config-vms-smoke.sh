@@ -30,6 +30,8 @@ ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
 ARCHIVE_JSON="$LOG_DIR/config-archive.json"
 APPLY_LOG="$LOG_DIR/config-vms-apply.log"
 APPLY_JSON="$LOG_DIR/config-apply.json"
+QREXEC_POLICY_FILE_LOG="$LOG_DIR/config-vms-qrexec-policy.log"
+QREXEC_POLICY_PROBE_LOG="$LOG_DIR/config-vms-qrexec-policy-probe.log"
 APPLIED_FEATURE_LOG="$LOG_DIR/config-vms-applied-feature.log"
 CREATED_QUBE_FEATURE_LOG="$LOG_DIR/config-vms-created-qube-feature.log"
 VAULT_ARCHIVE_TREE_LOG="$LOG_DIR/config-vms-config-vault-archive-tree.log"
@@ -150,6 +152,10 @@ write_result() {
     json_file_value_or_null "$APPLY_JSON"
     printf ',"apply_log":'
     json_file_string_or_null "$APPLY_LOG"
+    printf ',"qrexec_policy_file":'
+    json_file_string_or_null "$QREXEC_POLICY_FILE_LOG"
+    printf ',"qrexec_policy_probe":'
+    json_file_string_or_null "$QREXEC_POLICY_PROBE_LOG"
     printf ',"applied_feature":'
     json_file_string_or_null "$APPLIED_FEATURE_LOG"
     printf ',"created_qube_feature":'
@@ -319,6 +325,7 @@ for cmd in \
   cat \
   date \
   nixome-config-apply \
+  qrexec-client \
   qvm-check \
   qvm-features \
   qvm-ls \
@@ -457,6 +464,14 @@ cat > flake.nix <<'NIXEOF'
             };
           };
         };
+        qrexecPolicy.rules = [
+          {
+            service = "nixome.PolicyProbe";
+            source = "dom0";
+            target = "config-vault";
+            action = "allow";
+          }
+        ];
       };
     in
     {
@@ -495,6 +510,22 @@ run_or_fail "apply config candidate from $STAGING through $VALIDATOR" "$APPLY_LO
     NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
     NIXOME_CONFIG_VAULT_VM="$VAULT" \
   nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+
+run_or_fail \
+  "read generated Nixome qrexec policy" \
+  "$QREXEC_POLICY_FILE_LOG" \
+  cat /etc/qubes/policy.d/90-nixome.policy
+grep -Fx "nixome.PolicyProbe * dom0 config-vault allow" "$QREXEC_POLICY_FILE_LOG" >/dev/null ||
+  fail "generated qrexec policy is missing PolicyProbe allow rule"
+grep -Fx "nixome.PolicyProbe * @anyvm @anyvm deny" "$QREXEC_POLICY_FILE_LOG" >/dev/null ||
+  fail "generated qrexec policy is missing PolicyProbe deny rule"
+
+run_or_fail \
+  "run qrexec probe allowed by generated policy" \
+  "$QREXEC_POLICY_PROBE_LOG" \
+  qrexec-client -d "$VAULT" -T -w 120 "DEFAULT:QUBESRPC nixome.PolicyProbe+ dom0"
+grep -Fx "nixome-policy-probe role=config-vault user=$QUBE_USER" "$QREXEC_POLICY_PROBE_LOG" >/dev/null ||
+  fail "generated qrexec policy probe output did not match expected value"
 
 qvm-features "$STAGING" nixome-config-applied-message > "$APPLIED_FEATURE_LOG" 2>&1 ||
   fail "applied config feature is missing"

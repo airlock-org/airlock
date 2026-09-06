@@ -268,7 +268,9 @@ let
           (.templates | type == "object") and
           (.kernels | type == "object") and
           (.prefs | type == "object") and
-          (.domains | type == "object")
+          (.domains | type == "object") and
+          (.qrexec_policy | type == "object") and
+          (.qrexec_policy.rules | type == "array")
         ' "$topology_json" > "$topology_log" 2>&1; then
           topology_status=passed
         else
@@ -547,7 +549,9 @@ let
         (.templates | type == "object") and
         (.kernels | type == "object") and
         (.prefs | type == "object") and
-        (.domains | type == "object")
+        (.domains | type == "object") and
+        (.qrexec_policy | type == "object") and
+        (.qrexec_policy.rules | type == "array")
       ' "$generated_topology" > "$local_topology_log" 2>&1; then
         topology_status=passed
       else
@@ -573,145 +577,145 @@ let
   '';
 
   configVaultArchiveCandidate = pkgs.writeShellScriptBin "nixome-config-vault-archive-candidate" ''
-        set -eu
+    set -eu
 
-        repo="${cfg.configArchivePath}"
-        tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
-        trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
+    repo="${cfg.configArchivePath}"
+    tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
+    trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
-        candidate_tar="$tmpdir/candidate.tar"
-        ${pkgs.coreutils}/bin/cat > "$candidate_tar"
-        ${pkgs.gnutar}/bin/tar -tf "$candidate_tar" |
-          ${pkgs.gawk}/bin/awk '
-            $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" && $0 != "topology.json" {
-              printf "unexpected candidate tar member: %s\n", $0 > "/dev/stderr"
-              exit 1
-            }
-          '
-        ${pkgs.gnutar}/bin/tar -C "$tmpdir" -xf "$candidate_tar"
-
-        [ -f "$tmpdir/config.bundle" ] || {
-          printf 'candidate tar is missing config.bundle\n' >&2
+    candidate_tar="$tmpdir/candidate.tar"
+    ${pkgs.coreutils}/bin/cat > "$candidate_tar"
+    ${pkgs.gnutar}/bin/tar -tf "$candidate_tar" |
+      ${pkgs.gawk}/bin/awk '
+        $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" && $0 != "topology.json" {
+          printf "unexpected candidate tar member: %s\n", $0 > "/dev/stderr"
           exit 1
         }
-        [ -f "$tmpdir/validation.json" ] || {
-          printf 'candidate tar is missing validation.json\n' >&2
-          exit 1
-        }
-        [ -f "$tmpdir/manifest.json" ] || {
-          printf 'candidate tar is missing manifest.json\n' >&2
-          exit 1
-        }
-        [ -f "$tmpdir/topology.json" ] || {
-          printf 'candidate tar is missing topology.json\n' >&2
-          exit 1
-        }
+      '
+    ${pkgs.gnutar}/bin/tar -C "$tmpdir" -xf "$candidate_tar"
 
-        manifest_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/manifest.json")"
-        manifest_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/manifest.json")"
-        validation_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validation.json")"
-        validation_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
-        validation_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
-        [ "$manifest_schema" = "nixome.config-candidate.v1" ] || {
-          printf 'unsupported candidate manifest schema: %s\n' "$manifest_schema" >&2
-          exit 1
-        }
-        [ "$validation_schema" = "nixome.config-validation.v1" ] || {
-          printf 'unsupported validation schema: %s\n' "$validation_schema" >&2
-          exit 1
-        }
-        [ "$validation_status" = passed ] || {
-          printf 'validation status is not passed: %s\n' "$validation_status" >&2
-          exit 1
-        }
-        [ "$manifest_commit" = "$validation_commit" ] || {
-          printf 'manifest commit %s does not match validation commit %s\n' "$manifest_commit" "$validation_commit" >&2
-          exit 1
-        }
+    [ -f "$tmpdir/config.bundle" ] || {
+      printf 'candidate tar is missing config.bundle\n' >&2
+      exit 1
+    }
+    [ -f "$tmpdir/validation.json" ] || {
+      printf 'candidate tar is missing validation.json\n' >&2
+      exit 1
+    }
+    [ -f "$tmpdir/manifest.json" ] || {
+      printf 'candidate tar is missing manifest.json\n' >&2
+      exit 1
+    }
+    [ -f "$tmpdir/topology.json" ] || {
+      printf 'candidate tar is missing topology.json\n' >&2
+      exit 1
+    }
 
-        verify_repo="$tmpdir/verify.git"
-        ${pkgs.git}/bin/git init --bare -b main "$verify_repo" >/dev/null
-        ${pkgs.git}/bin/git -C "$verify_repo" bundle verify "$tmpdir/config.bundle" > "$tmpdir/bundle-verify.log" 2>&1
-        candidate_commit="$(
-          ${pkgs.git}/bin/git -C "$verify_repo" bundle list-heads "$tmpdir/config.bundle" |
-            ${pkgs.gawk}/bin/awk 'NR == 1 { print $1 }'
-        )"
-        [ -n "$candidate_commit" ] || {
-          printf 'candidate bundle did not expose a commit\n' >&2
-          exit 1
-        }
-        [ "$candidate_commit" = "$validation_commit" ] || {
-          printf 'candidate commit %s does not match validation commit %s\n' "$candidate_commit" "$validation_commit" >&2
-          exit 1
-        }
+    manifest_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/manifest.json")"
+    manifest_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/manifest.json")"
+    validation_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validation.json")"
+    validation_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
+    validation_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
+    [ "$manifest_schema" = "nixome.config-candidate.v1" ] || {
+      printf 'unsupported candidate manifest schema: %s\n' "$manifest_schema" >&2
+      exit 1
+    }
+    [ "$validation_schema" = "nixome.config-validation.v1" ] || {
+      printf 'unsupported validation schema: %s\n' "$validation_schema" >&2
+      exit 1
+    }
+    [ "$validation_status" = passed ] || {
+      printf 'validation status is not passed: %s\n' "$validation_status" >&2
+      exit 1
+    }
+    [ "$manifest_commit" = "$validation_commit" ] || {
+      printf 'manifest commit %s does not match validation commit %s\n' "$manifest_commit" "$validation_commit" >&2
+      exit 1
+    }
 
-        snapshot_tmp="$tmpdir/snapshot"
-        ${pkgs.git}/bin/git clone "$tmpdir/config.bundle" "$snapshot_tmp" > "$tmpdir/snapshot-git-clone.log" 2>&1
-        ${pkgs.git}/bin/git -C "$snapshot_tmp" checkout --detach "$candidate_commit" > "$tmpdir/snapshot-git-checkout.log" 2>&1
-        ${pkgs.coreutils}/bin/rm -rf "$snapshot_tmp/.git"
+    verify_repo="$tmpdir/verify.git"
+    ${pkgs.git}/bin/git init --bare -b main "$verify_repo" >/dev/null
+    ${pkgs.git}/bin/git -C "$verify_repo" bundle verify "$tmpdir/config.bundle" > "$tmpdir/bundle-verify.log" 2>&1
+    candidate_commit="$(
+      ${pkgs.git}/bin/git -C "$verify_repo" bundle list-heads "$tmpdir/config.bundle" |
+        ${pkgs.gawk}/bin/awk 'NR == 1 { print $1 }'
+    )"
+    [ -n "$candidate_commit" ] || {
+      printf 'candidate bundle did not expose a commit\n' >&2
+      exit 1
+    }
+    [ "$candidate_commit" = "$validation_commit" ] || {
+      printf 'candidate commit %s does not match validation commit %s\n' "$candidate_commit" "$validation_commit" >&2
+      exit 1
+    }
 
-        if [ ! -d "$repo/.git" ]; then
-          ${configVaultInit}/bin/nixome-config-vault-init >/dev/null
-        fi
+    snapshot_tmp="$tmpdir/snapshot"
+    ${pkgs.git}/bin/git clone "$tmpdir/config.bundle" "$snapshot_tmp" > "$tmpdir/snapshot-git-clone.log" 2>&1
+    ${pkgs.git}/bin/git -C "$snapshot_tmp" checkout --detach "$candidate_commit" > "$tmpdir/snapshot-git-checkout.log" 2>&1
+    ${pkgs.coreutils}/bin/rm -rf "$snapshot_tmp/.git"
 
-        archive_dir="$repo/candidates/$candidate_commit"
-        snapshot_dir="$archive_dir/snapshot"
-        ${pkgs.coreutils}/bin/mkdir -p "$archive_dir"
-        ${pkgs.coreutils}/bin/cp "$tmpdir/config.bundle" "$archive_dir/config.bundle"
-        ${pkgs.coreutils}/bin/cp "$tmpdir/manifest.json" "$archive_dir/manifest.json"
-        ${pkgs.coreutils}/bin/cp "$tmpdir/validation.json" "$archive_dir/validation.json"
-        ${pkgs.coreutils}/bin/cp "$tmpdir/topology.json" "$archive_dir/topology.json"
-        ${pkgs.coreutils}/bin/cp "$tmpdir/bundle-verify.log" "$archive_dir/bundle-verify.log"
-        ${pkgs.coreutils}/bin/cp "$tmpdir/snapshot-git-clone.log" "$archive_dir/snapshot-git-clone.log"
-        ${pkgs.coreutils}/bin/cp "$tmpdir/snapshot-git-checkout.log" "$archive_dir/snapshot-git-checkout.log"
-        ${pkgs.coreutils}/bin/rm -rf "$snapshot_dir"
-        ${pkgs.coreutils}/bin/cp -a "$snapshot_tmp" "$snapshot_dir"
-        ${pkgs.jq}/bin/jq -c -n \
-          --arg schema "nixome.config-candidate-archive-record.v1" \
-          --arg candidate_commit "$candidate_commit" \
-          --arg manifest_schema "$manifest_schema" \
-          --arg validation_schema "$validation_schema" \
-          --arg snapshot "$archive_dir/snapshot" \
-          --arg topology "$archive_dir/topology.json" \
-          --arg source "dom0" \
-          '{
-            schema: $schema,
-            candidate_commit: $candidate_commit,
-            manifest_schema: $manifest_schema,
-            validation_schema: $validation_schema,
-            snapshot: $snapshot,
-            topology: $topology,
-            archived_by: $source
-          }' > "$archive_dir/metadata.json"
-        printf '%s\n' "$candidate_commit" > "$repo/latest-candidate"
+    if [ ! -d "$repo/.git" ]; then
+      ${configVaultInit}/bin/nixome-config-vault-init >/dev/null
+    fi
 
-        cd "$repo"
-        ${pkgs.git}/bin/git add "candidates/$candidate_commit" latest-candidate
-        archive_status=current
-        if ! ${pkgs.git}/bin/git diff --cached --quiet; then
-          ${pkgs.git}/bin/git \
-            -c user.name='Nixome dom0 archive' \
-            -c user.email='nixome-dom0@localhost' \
-            commit -m "archive candidate ''${candidate_commit:0:12}" >/dev/null
-          archive_status=archived
-        fi
+    archive_dir="$repo/candidates/$candidate_commit"
+    snapshot_dir="$archive_dir/snapshot"
+    ${pkgs.coreutils}/bin/mkdir -p "$archive_dir"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/config.bundle" "$archive_dir/config.bundle"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/manifest.json" "$archive_dir/manifest.json"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/validation.json" "$archive_dir/validation.json"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/topology.json" "$archive_dir/topology.json"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/bundle-verify.log" "$archive_dir/bundle-verify.log"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/snapshot-git-clone.log" "$archive_dir/snapshot-git-clone.log"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/snapshot-git-checkout.log" "$archive_dir/snapshot-git-checkout.log"
+    ${pkgs.coreutils}/bin/rm -rf "$snapshot_dir"
+    ${pkgs.coreutils}/bin/cp -a "$snapshot_tmp" "$snapshot_dir"
+    ${pkgs.jq}/bin/jq -c -n \
+      --arg schema "nixome.config-candidate-archive-record.v1" \
+      --arg candidate_commit "$candidate_commit" \
+      --arg manifest_schema "$manifest_schema" \
+      --arg validation_schema "$validation_schema" \
+      --arg snapshot "$archive_dir/snapshot" \
+      --arg topology "$archive_dir/topology.json" \
+      --arg source "dom0" \
+      '{
+        schema: $schema,
+        candidate_commit: $candidate_commit,
+        manifest_schema: $manifest_schema,
+        validation_schema: $validation_schema,
+        snapshot: $snapshot,
+        topology: $topology,
+        archived_by: $source
+      }' > "$archive_dir/metadata.json"
+    printf '%s\n' "$candidate_commit" > "$repo/latest-candidate"
 
-        vault_commit="$(${pkgs.git}/bin/git rev-parse HEAD)"
-        ${pkgs.jq}/bin/jq -c -n \
-          --arg schema "nixome.config-vault-archive.v1" \
-          --arg status "passed" \
-          --arg archive_status "$archive_status" \
-          --arg candidate_commit "$candidate_commit" \
-          --arg vault_commit "$vault_commit" \
-          --arg archive_repo "$repo" \
-          '{
-            schema: $schema,
-            status: $status,
-            archive_status: $archive_status,
-            candidate_commit: $candidate_commit,
-            vault_commit: $vault_commit,
-            archive_repo: $archive_repo
-          }'
+    cd "$repo"
+    ${pkgs.git}/bin/git add "candidates/$candidate_commit" latest-candidate
+    archive_status=current
+    if ! ${pkgs.git}/bin/git diff --cached --quiet; then
+      ${pkgs.git}/bin/git \
+        -c user.name='Nixome dom0 archive' \
+        -c user.email='nixome-dom0@localhost' \
+        commit -m "archive candidate ''${candidate_commit:0:12}" >/dev/null
+      archive_status=archived
+    fi
+
+    vault_commit="$(${pkgs.git}/bin/git rev-parse HEAD)"
+    ${pkgs.jq}/bin/jq -c -n \
+      --arg schema "nixome.config-vault-archive.v1" \
+      --arg status "passed" \
+      --arg archive_status "$archive_status" \
+      --arg candidate_commit "$candidate_commit" \
+      --arg vault_commit "$vault_commit" \
+      --arg archive_repo "$repo" \
+      '{
+        schema: $schema,
+        status: $status,
+        archive_status: $archive_status,
+        candidate_commit: $candidate_commit,
+        vault_commit: $vault_commit,
+        archive_repo: $archive_repo
+      }'
   '';
 
   configVaultArchiveDeployment = pkgs.writeShellScriptBin "nixome-config-vault-archive-deployment" ''
@@ -920,6 +924,18 @@ let
 
   configDeploymentArchiveService = pkgs.writeShellScript "nixome-config-archive-deployment-qrexec" ''
     exec ${configVaultArchiveDeployment}/bin/nixome-config-vault-archive-deployment
+  '';
+
+  policyProbeService = pkgs.writeShellScript "nixome-policy-probe-qrexec" ''
+    set -eu
+
+    role=${lib.escapeShellArg cfg.role}
+    qdb_role="$(${pkgs.qubes-core-qubesdb}/bin/qubesdb-read /features/nixome-role 2>/dev/null || true)"
+    if [ -n "$qdb_role" ]; then
+      role="$qdb_role"
+    fi
+
+    printf 'nixome-policy-probe role=%s user=%s\n' "$role" "$(${pkgs.coreutils}/bin/whoami)"
   '';
 
   vmShellService = pkgs.writeShellScript "nixome-qubes-vmshell" ''
@@ -1427,6 +1443,16 @@ in
     };
 
     environment.etc."qubes/rpc-config/nixome.Config.ArchiveDeployment" = lib.mkIf hasConfigVaultRole {
+      text = "force-user='${cfg.user}'\n";
+      mode = "0444";
+    };
+
+    environment.etc."qubes-rpc/nixome.PolicyProbe" = lib.mkIf hasConfigRole {
+      source = policyProbeService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes/rpc-config/nixome.PolicyProbe" = lib.mkIf hasConfigRole {
       text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };

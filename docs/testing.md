@@ -223,7 +223,9 @@ topology into `config-vault`, and applies the validated topology with
 `nixome-config-apply --apply`. It then checks that the Nix-declared
 `nixome-test-from-config` AppVM exists and that `uname -a` runs inside it
 through qrexec. It also checks that `config-vault` contains a successful
-deployment record for that apply. The result JSON is written to:
+deployment record for that apply, and that the staged config generated
+`/etc/qubes/policy.d/90-nixome.policy` with an active `nixome.PolicyProbe`
+rule. The result JSON is written to:
 
 ```text
 .nixome-logs/vm-gui-config-vms-smoke.json
@@ -240,7 +242,8 @@ meminfo writer, and `/dev/mapper/dmroot` as the root device to match Qubes'
 normal Linux VM boot path. Import/create setup is automated, and
 `make vm-config-smoke` currently proves that the declared NixOS AppVMs boot and
 serve qrexec under nested Xen, and that a staged Nix topology can add one more
-AppVM and record the deployment in `config-vault`.
+AppVM, generate Nixome-owned qrexec policy, and record the deployment in
+`config-vault`.
 The config profile sets `default_kernel = ""` so fresh config-only images can
 create TemplateVMs before any Fedora/Qubes VM kernel bootstrap has run.
 
