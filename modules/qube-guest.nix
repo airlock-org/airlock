@@ -193,7 +193,7 @@ let
     set -eu
 
     repo="${cfg.configRepoPath}"
-    validation_dir="${cfg.configValidationPath}"
+    validation_dir="''${NIXOME_CONFIG_VALIDATION_DIR:-${cfg.configValidationPath}}"
 
     if [ ! -d "$repo/.git" ]; then
       printf 'missing Git repo at %s; run nixome-config-staging-init first\n' "$repo" >&2
@@ -447,7 +447,7 @@ let
   configValidatorInit = pkgs.writeShellScriptBin "nixome-config-validator-init" ''
     set -eu
 
-    validation_dir="${cfg.configValidationPath}"
+    validation_dir="''${NIXOME_CONFIG_VALIDATION_DIR:-${cfg.configValidationPath}}"
     mkdir -p "$validation_dir/logs"
     printf 'config validator workspace ready: %s\n' "$validation_dir"
   '';
@@ -455,7 +455,7 @@ let
   configValidatorValidateCandidate = pkgs.writeShellScriptBin "nixome-config-validator-validate-candidate" ''
     set -eu
 
-    validation_dir="${cfg.configValidationPath}"
+    validation_dir="''${NIXOME_CONFIG_VALIDATION_DIR:-${cfg.configValidationPath}}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
@@ -533,8 +533,8 @@ let
     local_system_eval_log="$tmpdir/nix-eval-system.log"
     local_system_log="$tmpdir/system-json.log"
     local_system_refs_log="$tmpdir/system-source-refs.log"
-    generated_topology="$tmpdir/topology.json"
-    generated_system="$tmpdir/system.json"
+    generated_topology="$tmpdir/generated-topology.json"
+    generated_system="$tmpdir/generated-system.json"
 
     write_validation() {
       status="$1"
