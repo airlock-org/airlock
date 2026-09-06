@@ -54,16 +54,16 @@ cp "$(nixome_physical_store_path "$(cat "$CONFIG_ACCESS_POLICY_PKG")")/etc/qubes
 
 jq -e '
   ."config-vault".class == "AppVM" and
-  ."config-vault".template == "nixome-nixos-config-vault" and
+  ."config-vault".template == "nixome-nixos-config-system" and
   ."config-vault".netvm == null and
   ."config-vault".features."nixome-role" == "config-vault" and
   ."config-staging".class == "AppVM" and
-  ."config-staging".template == "nixome-nixos-config-staging" and
+  ."config-staging".template == "nixome-nixos-config-system" and
   ."config-staging".netvm == null and
   ."config-staging".features."nixome-role" == "config-staging" and
   ."config-staging".features."nixome-config-applied-message" == "initial" and
   ."config-validator".class == "AppVM" and
-  ."config-validator".template == "nixome-nixos-config-validator" and
+  ."config-validator".template == "nixome-nixos-config-system" and
   ."config-validator".netvm == null and
   ."config-validator".features."nixome-role" == "config-validator"
 ' "$DOMAINS_JSON" >/dev/null
@@ -73,20 +73,15 @@ jq -e '
 ' "$KERNELS_JSON" >/dev/null
 
 jq -e '
-  ."nixome-nixos-config-vault".import == true and
-  ."nixome-nixos-config-vault".skipStart == true and
-  (."nixome-nixos-config-vault".source | test("nixome-nixos-config-vault")) and
-  ."nixome-nixos-config-staging".import == true and
-  ."nixome-nixos-config-staging".skipStart == true and
-  (."nixome-nixos-config-staging".source | test("nixome-nixos-config-staging")) and
-  ."nixome-nixos-config-validator".import == true and
-  ."nixome-nixos-config-validator".skipStart == true and
-  (."nixome-nixos-config-validator".source | test("nixome-nixos-config-validator"))
+  ."nixome-nixos-config-system".import == true and
+  ."nixome-nixos-config-system".skipStart == true and
+  (."nixome-nixos-config-system".source | test("nixome-nixos-config-system")) and
+  (keys | length) == 1
 ' "$TEMPLATES_JSON" >/dev/null
 
 jq -e '
   .schema == "nixome.qubes-topology.v1" and
-  .templates."nixome-nixos-config-staging".skip_start == true and
+  .templates."nixome-nixos-config-system".skip_start == true and
   .domains."config-staging".prefs.autostart == false and
   .domains."config-staging".prefs.include_in_backups == true and
   .domains."config-validator".prefs.autostart == false and

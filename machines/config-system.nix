@@ -8,8 +8,8 @@
   ...
 }:
 let
-  haveTemplates = nixomeTemplatePackages != null;
-  haveQubeKernel = nixomeQubeKernel != null && nixomeQubeKernelOpts != null;
+  haveTemplates = nixomeTemplatePackages != null && nixomeTemplatePackages ? configSystem;
+  haveQubeKernel = nixomeQubeKernel != null && nixomeQubeKernelOpts != null && nixomeQubeKernelOpts ? configSystem;
   haveConfigSeedInputs = nixomeConfigSeedInputs != null;
 in
 {
@@ -51,30 +51,10 @@ in
     };
 
     templates = {
-      nixome-nixos-config-vault = {
+      nixome-nixos-config-system = {
         import = true;
         source =
-          if haveTemplates then "${nixomeTemplatePackages.configVault}/nixome-nixos-config-vault" else null;
-        skipStart = true;
-      };
-
-      nixome-nixos-config-staging = {
-        import = true;
-        source =
-          if haveTemplates then
-            "${nixomeTemplatePackages.configStaging}/nixome-nixos-config-staging"
-          else
-            null;
-        skipStart = true;
-      };
-
-      nixome-nixos-config-validator = {
-        import = true;
-        source =
-          if haveTemplates then
-            "${nixomeTemplatePackages.configValidator}/nixome-nixos-config-validator"
-          else
-            null;
+          if haveTemplates then "${nixomeTemplatePackages.configSystem}/nixome-nixos-config-system" else null;
         skipStart = true;
       };
     };
@@ -86,58 +66,20 @@ in
     };
 
     domains = {
-      nixome-nixos-config-vault = {
+      nixome-nixos-config-system = {
         class = "TemplateVM";
         label = "black";
         netvm = null;
         prefs = {
           default_user = "user";
           kernel = if haveQubeKernel then nixomeQubeKernel.name else "";
-          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.configVault else "";
+          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.configSystem else "";
           qrexec_timeout = 120;
           virt_mode = "pvh";
         };
         features = {
           "nixome-managed" = "1";
-          "nixome-role" = "config-vault-template";
-          os = "Linux";
-          qrexec = "1";
-        };
-      };
-
-      nixome-nixos-config-staging = {
-        class = "TemplateVM";
-        label = "black";
-        netvm = null;
-        prefs = {
-          default_user = "user";
-          kernel = if haveQubeKernel then nixomeQubeKernel.name else "";
-          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.configStaging else "";
-          qrexec_timeout = 120;
-          virt_mode = "pvh";
-        };
-        features = {
-          "nixome-managed" = "1";
-          "nixome-role" = "config-staging-template";
-          os = "Linux";
-          qrexec = "1";
-        };
-      };
-
-      nixome-nixos-config-validator = {
-        class = "TemplateVM";
-        label = "black";
-        netvm = null;
-        prefs = {
-          default_user = "user";
-          kernel = if haveQubeKernel then nixomeQubeKernel.name else "";
-          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.configValidator else "";
-          qrexec_timeout = 120;
-          virt_mode = "pvh";
-        };
-        features = {
-          "nixome-managed" = "1";
-          "nixome-role" = "config-validator-template";
+          "nixome-role" = "config-system-template";
           os = "Linux";
           qrexec = "1";
         };
@@ -145,7 +87,7 @@ in
 
       config-vault = {
         class = "AppVM";
-        template = "nixome-nixos-config-vault";
+        template = "nixome-nixos-config-system";
         label = "black";
         netvm = null;
         prefs = {
@@ -167,7 +109,7 @@ in
 
       config-staging = {
         class = "AppVM";
-        template = "nixome-nixos-config-staging";
+        template = "nixome-nixos-config-system";
         label = "gray";
         netvm = null;
         prefs = {
@@ -187,7 +129,7 @@ in
 
       config-validator = {
         class = "AppVM";
-        template = "nixome-nixos-config-validator";
+        template = "nixome-nixos-config-system";
         label = "blue";
         netvm = null;
         prefs = {

@@ -40,10 +40,10 @@ test: ensure-generated-dirs
 	./tests/run-local.sh
 
 nixos-templates: ensure-generated-dirs
-	$(NIXOME_NIX) build .#nixome-nixos-config-vault-template .#nixome-nixos-config-staging-template .#nixome-nixos-config-validator-template --print-build-logs --show-trace
+	$(NIXOME_NIX) build .#nixome-nixos-config-system-template .#nixome-nixos-work-template --print-build-logs --show-trace
 
 nixos-templates-dry-run: ensure-generated-dirs
-	$(NIXOME_NIX) build .#nixome-nixos-config-vault-template .#nixome-nixos-config-staging-template .#nixome-nixos-config-validator-template --dry-run --show-trace
+	$(NIXOME_NIX) build .#nixome-nixos-config-system-template .#nixome-nixos-work-template --dry-run --show-trace
 
 vm-image: ensure-generated-dirs
 	$(NIXOME_NIX) build .#nixome-vm-image --print-build-logs --show-trace

@@ -86,7 +86,7 @@ jq -e '
   .prefs.default_kernel == "" and
   (.domains | type == "object") and
   .domains."config-vault".class == "AppVM" and
-  .domains."config-vault".template == "nixome-nixos-config-vault" and
+  .domains."config-vault".template == "nixome-nixos-config-system" and
   .domains."config-vault".label == "black" and
   .domains."config-vault".netvm == null and
   .domains."config-vault".prefs.autostart == false and
@@ -99,7 +99,7 @@ jq -e '
   .domains."config-vault".features."nixome-config-authority" == "1" and
   .domains."config-vault".services."network-manager" == false and
   .domains."config-staging".class == "AppVM" and
-  .domains."config-staging".template == "nixome-nixos-config-staging" and
+  .domains."config-staging".template == "nixome-nixos-config-system" and
   .domains."config-staging".label == "gray" and
   .domains."config-staging".netvm == null and
   .domains."config-staging".prefs.autostart == false and
@@ -113,7 +113,7 @@ jq -e '
   .domains."config-staging".services == {} and
   .domains."config-staging".features."nixome-config-applied-message" == "initial" and
   .domains."config-validator".class == "AppVM" and
-  .domains."config-validator".template == "nixome-nixos-config-validator" and
+  .domains."config-validator".template == "nixome-nixos-config-system" and
   .domains."config-validator".label == "blue" and
   .domains."config-validator".netvm == null and
   .domains."config-validator".prefs.autostart == false and

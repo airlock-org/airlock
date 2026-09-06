@@ -7,9 +7,11 @@
   extraQrexecRules ? [ ],
 }:
 let
+  configSystemTemplate = "nixome-nixos-config-system";
+
   configDomains = {
     config-vault = {
-      template = "nixome-nixos-config-vault";
+      template = configSystemTemplate;
       label = "black";
       netvm = null;
       prefs = {
@@ -30,7 +32,7 @@ let
     };
 
     config-staging = {
-      template = "nixome-nixos-config-staging";
+      template = configSystemTemplate;
       label = "gray";
       netvm = null;
       prefs = {
@@ -49,7 +51,7 @@ let
     };
 
     config-validator = {
-      template = "nixome-nixos-config-validator";
+      template = configSystemTemplate;
       label = "blue";
       netvm = null;
       prefs = {

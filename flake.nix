@@ -261,6 +261,10 @@
             fedoraVersion = "fc41";
           };
           nixome-nixos-config-system-root-image = configSystemRootImage;
+          nixome-nixos-config-system-template = mkQubesTemplatePackage system {
+            templateName = "nixome-nixos-config-system";
+            rootImageFile = "${configSystemRootImage}/root.img";
+          };
           nixome-nixos-config-vault-template = mkQubesTemplatePackage system {
             templateName = "nixome-nixos-config-vault";
             rootImageFile = "${configSystemRootImage}/root.img";
@@ -345,14 +349,10 @@
             package = self.packages.x86_64-linux.nixome-qubes-vm-kernel;
           };
           nixomeQubeKernelOpts = {
-            configStaging = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
-            configValidator = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
-            configVault = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
+            configSystem = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
           };
           nixomeTemplatePackages = {
-            configVault = self.packages.x86_64-linux.nixome-nixos-config-vault-template;
-            configStaging = self.packages.x86_64-linux.nixome-nixos-config-staging-template;
-            configValidator = self.packages.x86_64-linux.nixome-nixos-config-validator-template;
+            configSystem = self.packages.x86_64-linux.nixome-nixos-config-system-template;
           };
           nixomePrebuiltTemplatePackages = {
             work = self.packages.x86_64-linux.nixome-nixos-work-template;

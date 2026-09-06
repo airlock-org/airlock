@@ -577,7 +577,7 @@ jq -e \
     .templates."nixome-nixos-work".source_ref == null and
     .kernels == {} and
     .domains[$vault].class == "AppVM" and
-    .domains[$vault].template == "nixome-nixos-config-vault" and
+    .domains[$vault].template == "nixome-nixos-config-system" and
     .domains[$vault].label == "black" and
     .domains[$vault].netvm == null and
     .domains[$vault].prefs.include_in_backups == true and
@@ -585,14 +585,14 @@ jq -e \
     .domains[$vault].features."nixome-role" == "config-vault" and
     .domains[$vault].services."network-manager" == false and
     .domains[$staging].class == "AppVM" and
-    .domains[$staging].template == "nixome-nixos-config-staging" and
+    .domains[$staging].template == "nixome-nixos-config-system" and
     .domains[$staging].label == "gray" and
     .domains[$staging].netvm == null and
     .domains[$staging].prefs.include_in_backups == true and
     .domains[$staging].features."nixome-config-staging" == "1" and
     .domains[$staging].features."nixome-config-applied-message" == $apply_message and
     .domains[$validator].class == "AppVM" and
-    .domains[$validator].template == "nixome-nixos-config-validator" and
+    .domains[$validator].template == "nixome-nixos-config-system" and
     .domains[$validator].label == "blue" and
     .domains[$validator].netvm == null and
     .domains[$validator].prefs.include_in_backups == true and
