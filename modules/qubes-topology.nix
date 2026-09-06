@@ -117,11 +117,11 @@ let
         install -d "$out/etc/qubes/policy.d"
         cat > "$out/etc/qubes/policy.d/30-nixome-config.policy" <<'EOF'
     # Managed by Nixome. Only dom0 may fetch a candidate from config-staging,
-    # ask config-verify to validate it, or archive it into config-vault.
+    # ask config-validator to validate it, or archive it into config-vault.
     ${cfg.configAccessPolicy.candidateExportService} * dom0 ${cfg.configAccessPolicy.staging} allow
     ${cfg.configAccessPolicy.candidateExportService} * @anyvm @anyvm deny
-    ${cfg.configAccessPolicy.candidateVerifyService} * dom0 ${cfg.configAccessPolicy.verifier} allow
-    ${cfg.configAccessPolicy.candidateVerifyService} * @anyvm @anyvm deny
+    ${cfg.configAccessPolicy.candidateValidateService} * dom0 ${cfg.configAccessPolicy.validator} allow
+    ${cfg.configAccessPolicy.candidateValidateService} * @anyvm @anyvm deny
     ${cfg.configAccessPolicy.archiveService} * dom0 ${cfg.configAccessPolicy.vault} allow
     ${cfg.configAccessPolicy.archiveService} * @anyvm @anyvm deny
     EOF
@@ -168,10 +168,10 @@ in
         description = "qrexec service used by dom0 to fetch a candidate from config-staging.";
       };
 
-      candidateVerifyService = lib.mkOption {
+      candidateValidateService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.VerifyCandidate";
-        description = "qrexec service used by dom0 to validate a candidate in config-verify.";
+        default = "nixome.Config.ValidateCandidate";
+        description = "qrexec service used by dom0 to validate a candidate in config-validator.";
       };
 
       archiveService = lib.mkOption {
@@ -192,9 +192,9 @@ in
         description = "Qube that owns the editable configuration candidate.";
       };
 
-      verifier = lib.mkOption {
+      validator = lib.mkOption {
         type = lib.types.str;
-        default = "config-verify";
+        default = "config-validator";
         description = "Qube that validates staged configuration candidates.";
       };
     };

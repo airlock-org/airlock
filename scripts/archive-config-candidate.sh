@@ -5,9 +5,9 @@ LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
 RESULT_JSON="$LOG_DIR/config-archive.json"
 COMMAND_LOG="$LOG_DIR/config-archive.commands.log"
 STAGED_CANDIDATE_TAR="$LOG_DIR/config-candidate-staged.tar"
-VERIFIED_CANDIDATE_TAR="$LOG_DIR/config-candidate-verified.tar"
+VALIDATED_CANDIDATE_TAR="$LOG_DIR/config-candidate-validated.tar"
 EXPORT_STDERR="$LOG_DIR/config-candidate-export.stderr.log"
-VERIFY_STDERR="$LOG_DIR/config-candidate-verify.stderr.log"
+VALIDATE_STDERR="$LOG_DIR/config-candidate-validate.stderr.log"
 VALIDATION_JSON="$LOG_DIR/config-candidate-validation.json"
 MANIFEST_JSON="$LOG_DIR/config-candidate-manifest.json"
 BUNDLE_VERIFY_LOG="$LOG_DIR/config-candidate-bundle-verify.log"
@@ -17,10 +17,10 @@ VAULT_ARCHIVE_JSON="$LOG_DIR/config-vault-archive.json"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 
 STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
-VERIFY="${NIXOME_CONFIG_VERIFY_VM:-config-verify}"
+VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
 VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
 CANDIDATE_EXPORT_SERVICE="${NIXOME_CONFIG_CANDIDATE_EXPORT_SERVICE:-nixome.Config.CandidateExport}"
-CANDIDATE_VERIFY_SERVICE="${NIXOME_CONFIG_CANDIDATE_VERIFY_SERVICE:-nixome.Config.VerifyCandidate}"
+CANDIDATE_VALIDATE_SERVICE="${NIXOME_CONFIG_CANDIDATE_VALIDATE_SERVICE:-nixome.Config.ValidateCandidate}"
 ARCHIVE_SERVICE="${NIXOME_CONFIG_ARCHIVE_SERVICE:-nixome.Config.ArchiveCandidate}"
 result_written=0
 candidate_commit=""
@@ -29,10 +29,10 @@ vault_commit=""
 
 usage() {
   cat >&2 <<'EOF'
-Usage: nixome-config-archive-candidate [--staging VM] [--verify VM] [--vault VM]
+Usage: nixome-config-archive-candidate [--staging VM] [--validator VM] [--vault VM]
 
-Fetch a config candidate from config-staging, validate it in config-verify, and
-archive the verified candidate into config-vault before any deployment attempt.
+Fetch a config candidate from config-staging, validate it in config-validator, and
+archive the validated candidate into config-vault before any deployment attempt.
 EOF
   exit 1
 }
@@ -44,10 +44,10 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -gt 0 ] || usage
       STAGING="$1"
       ;;
-    --verify)
+    --validator)
       shift
       [ "$#" -gt 0 ] || usage
-      VERIFY="$1"
+      VALIDATOR="$1"
       ;;
     --vault)
       shift
@@ -91,19 +91,19 @@ write_result() {
     --arg status "$status" \
     --arg reason "$reason" \
     --arg staging "$STAGING" \
-    --arg verifier "$VERIFY" \
+    --arg validator "$VALIDATOR" \
     --arg vault "$VAULT" \
     --arg candidate_export_service "$CANDIDATE_EXPORT_SERVICE" \
-    --arg candidate_verify_service "$CANDIDATE_VERIFY_SERVICE" \
+    --arg candidate_validate_service "$CANDIDATE_VALIDATE_SERVICE" \
     --arg archive_service "$ARCHIVE_SERVICE" \
     --arg candidate_commit "$candidate_commit" \
     --arg validation_commit "$validation_commit" \
     --arg vault_commit "$vault_commit" \
     --arg staged_candidate_tar "$STAGED_CANDIDATE_TAR" \
-    --arg verified_candidate_tar "$VERIFIED_CANDIDATE_TAR" \
+    --arg validated_candidate_tar "$VALIDATED_CANDIDATE_TAR" \
     --arg command_log "$COMMAND_LOG" \
     --arg export_stderr "$EXPORT_STDERR" \
-    --arg verify_stderr "$VERIFY_STDERR" \
+    --arg validate_stderr "$VALIDATE_STDERR" \
     --arg bundle_verify_log "$BUNDLE_VERIFY_LOG" \
     --arg vault_archive_log "$VAULT_ARCHIVE_LOG" \
     --arg vault_archive_stderr "$VAULT_ARCHIVE_STDERR" \
@@ -114,19 +114,19 @@ write_result() {
       status: $status,
       reason: $reason,
       staging: $staging,
-      verifier: $verifier,
+      validator: $validator,
       vault: $vault,
       candidate_export_service: $candidate_export_service,
-      candidate_verify_service: $candidate_verify_service,
+      candidate_validate_service: $candidate_validate_service,
       archive_service: $archive_service,
       candidate_commit: $candidate_commit,
       validation_commit: $validation_commit,
       vault_commit: $vault_commit,
       staged_candidate_tar: $staged_candidate_tar,
-      verified_candidate_tar: $verified_candidate_tar,
+      validated_candidate_tar: $validated_candidate_tar,
       command_log: $command_log,
       export_stderr: $export_stderr,
-      verify_stderr: $verify_stderr,
+      validate_stderr: $validate_stderr,
       bundle_verify_log: $bundle_verify_log,
       vault_archive_stderr: $vault_archive_stderr,
       vault_archive_log: $vault_archive_log,
@@ -322,21 +322,21 @@ systemctl is-active --quiet qubesd.service || fail "qubesd.service is not active
 systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qrexec-policy-daemon.service is not active"
 
 qvm-check "$STAGING" >/dev/null 2>&1 || fail "missing config staging VM: $STAGING"
-qvm-check "$VERIFY" >/dev/null 2>&1 || fail "missing config verify VM: $VERIFY"
+qvm-check "$VALIDATOR" >/dev/null 2>&1 || fail "missing config validator VM: $VALIDATOR"
 qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
 
 verify_offline_vm "$STAGING" "config staging"
-verify_offline_vm "$VERIFY" "config verify"
+verify_offline_vm "$VALIDATOR" "config validator"
 verify_offline_vm "$VAULT" "config vault"
 start_vm "$STAGING"
-start_vm "$VERIFY"
+start_vm "$VALIDATOR"
 start_vm "$VAULT"
 
 run_qrexec_service_to_file "$STAGING" "config candidate export from $STAGING" "$STAGED_CANDIDATE_TAR" "$EXPORT_STDERR" "$CANDIDATE_EXPORT_SERVICE"
-run_qrexec_service_with_stdin "$VERIFY" "config candidate verification in $VERIFY" "$STAGED_CANDIDATE_TAR" "$VERIFIED_CANDIDATE_TAR" "$VERIFY_STDERR" "$CANDIDATE_VERIFY_SERVICE"
-verify_candidate "$VERIFIED_CANDIDATE_TAR"
+run_qrexec_service_with_stdin "$VALIDATOR" "config candidate validation in $VALIDATOR" "$STAGED_CANDIDATE_TAR" "$VALIDATED_CANDIDATE_TAR" "$VALIDATE_STDERR" "$CANDIDATE_VALIDATE_SERVICE"
+verify_candidate "$VALIDATED_CANDIDATE_TAR"
 
-run_qrexec_service_with_stdin "$VAULT" "archive candidate into $VAULT" "$VERIFIED_CANDIDATE_TAR" "$VAULT_ARCHIVE_LOG" "$VAULT_ARCHIVE_STDERR" "$ARCHIVE_SERVICE"
+run_qrexec_service_with_stdin "$VAULT" "archive candidate into $VAULT" "$VALIDATED_CANDIDATE_TAR" "$VAULT_ARCHIVE_LOG" "$VAULT_ARCHIVE_STDERR" "$ARCHIVE_SERVICE"
 extract_vault_archive_json || fail "vault archive command did not emit result JSON"
 
 vault_archive_status="$(jq -r '.status' "$VAULT_ARCHIVE_JSON")"
@@ -347,5 +347,5 @@ vault_commit="$(jq -r '.vault_commit' "$VAULT_ARCHIVE_JSON")"
 [ "$vault_archive_commit" = "$candidate_commit" ] ||
   fail "vault archived commit $vault_archive_commit does not match candidate commit $candidate_commit"
 
-write_result passed "config-staging candidate verified in config-verify and archived in config-vault before deployment"
+write_result passed "config-staging candidate validated in config-validator and archived in config-vault before deployment"
 cat "$RESULT_JSON"

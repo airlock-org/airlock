@@ -293,7 +293,7 @@ collect_diagnostics() {
   remote 'sudo -n cat /var/log/nixome/config-vms-qvm-prefs.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-qvm-prefs.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-config-vault-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-vault-console.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-config-staging-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-staging-console.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-config-verify-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-verify-console.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-vms-config-validator-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-validator-console.log" 2>/dev/null || true
 }
 
 extract_json_result() {

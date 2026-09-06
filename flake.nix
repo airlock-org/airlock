@@ -241,8 +241,8 @@
             templateName = "nixome-nixos-config-staging";
             rootImageFile = "${configSystemRootImage}/root.img";
           };
-          nixome-nixos-config-verify-template = mkQubesTemplatePackage system {
-            templateName = "nixome-nixos-config-verify";
+          nixome-nixos-config-validator-template = mkQubesTemplatePackage system {
+            templateName = "nixome-nixos-config-validator";
             rootImageFile = "${configSystemRootImage}/root.img";
           };
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
@@ -316,13 +316,13 @@
           };
           nixomeQubeKernelOpts = {
             configStaging = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
-            configVerify = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
+            configValidator = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
             configVault = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
           };
           nixomeTemplatePackages = {
             configVault = self.packages.x86_64-linux.nixome-nixos-config-vault-template;
             configStaging = self.packages.x86_64-linux.nixome-nixos-config-staging-template;
-            configVerify = self.packages.x86_64-linux.nixome-nixos-config-verify-template;
+            configValidator = self.packages.x86_64-linux.nixome-nixos-config-validator-template;
           };
         };
         modules = [
@@ -389,7 +389,7 @@
         ];
       };
 
-      nixosConfigurations.qube-template-config-verify = lib.nixosSystem {
+      nixosConfigurations.qube-template-config-validator = lib.nixosSystem {
         system = "x86_64-linux";
         modules = [
           nixos-qubes.nixosModules.qubes
@@ -404,7 +404,7 @@
                 ];
             }
           )
-          ./machines/qube-template-config-verify.nix
+          ./machines/qube-template-config-validator.nix
         ];
       };
     };

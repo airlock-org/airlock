@@ -87,12 +87,12 @@ make vm-config-smoke
 ```
 
 That path builds a dom0 image whose Nix config declares `config-vault`,
-`config-staging`, and `config-verify`, imports their NixOS template sources through Qubes'
+`config-staging`, and `config-validator`, imports their NixOS template sources through Qubes'
 `qvm-template-postprocess` during an explicit dom0 topology setup, applies
 simple prefs/features/services with `nixome-setup-config`, boots the NixOS
 AppVMs with the normal dom0-provided Qubes VM kernel, runs `uname -a` through
 qrexec in each VM, and checks that the role repositories exist before
-`config-staging` exports a committed config candidate, `config-verify`
+`config-staging` exports a committed config candidate, `config-validator`
 validates it, and dom0 archives it into `config-vault`. See
 [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
 The config topology image keeps local build size down by sharing one NixOS
@@ -139,7 +139,7 @@ The Qubes smoke test creates `test-nixome-smoke` if needed, starts it, runs
 
 The Fedora-template nested GUI/qrexec smoke path works on a host with KVM and
 nested virtualization. The NixOS-template
-`config-vault`/`config-staging`/`config-verify` path now evaluates, builds
+`config-vault`/`config-staging`/`config-validator` path now evaluates, builds
 template artifacts, imports/creates the declared TemplateVMs and AppVMs, boots
 the NixOS AppVMs under nested Xen, proves qrexec with `uname -a`, and verifies
 the config candidate validation/archive flow. Production security validation

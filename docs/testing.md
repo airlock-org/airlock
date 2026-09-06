@@ -16,7 +16,7 @@ Runs:
 - the lightweight `nixome-observe-dom0` package build,
 - the `nixome-setup-config` package build,
 - evaluation of the config-system topology that declares `config-vault` and
-  `config-staging` and `config-verify`,
+  `config-staging` and `config-validator`,
 - host capability detection into `.nixome-logs/host-capabilities.json`,
 - a skipped Qubes smoke-test result unless `NIXOME_RUN_QUBES_SMOKE=1`.
 
@@ -181,13 +181,13 @@ make nixos-templates
 
 These targets build the NixOS Qube template source directories for
 `nixome-nixos-config-vault`, `nixome-nixos-config-staging`, and
-`nixome-nixos-config-verify`. The outputs are Nix store directories containing
+`nixome-nixos-config-validator`. The outputs are Nix store directories containing
 `root.img`, `template.conf`, and Qubes appmenu list files. They are not RPMs.
 For now, all three template directories symlink `root.img` to one shared NixOS
 guest root image to reduce local build size.
 
 To build or boot a nested GUI dom0 image that includes the declared
-`config-vault`, `config-staging`, and `config-verify` topology:
+`config-vault`, `config-staging`, and `config-validator` topology:
 
 ```bash
 make vm-gui-config-image
@@ -212,11 +212,11 @@ make vm-config-smoke
 ```
 
 This explicitly runs the dom0 topology setup, then starts `config-vault`,
-`config-staging`, and `config-verify`, runs `uname -a` through qrexec in all
+`config-staging`, and `config-validator`, runs `uname -a` through qrexec in all
 three VMs, checks that `/home/user/nixome-config-vault` and
 `/home/user/nixome-config` already exist as clean Git repositories, has
-`config-verify` validate the committed candidate from `config-staging`, and
-has dom0 archive that verified candidate into `config-vault`. The result JSON
+`config-validator` validate the committed candidate from `config-staging`, and
+has dom0 archive that validated candidate into `config-vault`. The result JSON
 is written to:
 
 ```text

@@ -8,8 +8,8 @@ let
   cfg = config.nixome.qubeGuest;
   hasConfigVaultRole = cfg.role == "config-vault" || cfg.role == "config-system";
   hasConfigStagingRole = cfg.role == "config-staging" || cfg.role == "config-system";
-  hasConfigVerifyRole = cfg.role == "config-verify" || cfg.role == "config-system";
-  hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigVerifyRole;
+  hasConfigValidatorRole = cfg.role == "config-validator" || cfg.role == "config-system";
+  hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole;
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
 
   qubesGuestPath = [
@@ -66,16 +66,16 @@ let
       pkgs.jq
       pkgs.nix
     ];
-    config-verify = [
-      configVerifyCandidate
-      configVerifyInit
+    config-validator = [
+      configValidatorValidateCandidate
+      configValidatorInit
       pkgs.gawk
       pkgs.git
       pkgs.gnutar
       pkgs.jq
       pkgs.nix
     ];
-    config-system = config-vault ++ config-staging ++ config-verify;
+    config-system = config-vault ++ config-staging ++ config-validator;
   };
 
   configVaultInit = pkgs.writeShellScriptBin "nixome-config-vault-init" ''
@@ -265,15 +265,15 @@ let
     exec ${configStagingExportCandidate}/bin/nixome-config-staging-export-candidate
   '';
 
-  configVerifyInit = pkgs.writeShellScriptBin "nixome-config-verify-init" ''
+  configValidatorInit = pkgs.writeShellScriptBin "nixome-config-validator-init" ''
     set -eu
 
     validation_dir="${cfg.configValidationPath}"
     mkdir -p "$validation_dir/logs"
-    printf 'config verify workspace ready: %s\n' "$validation_dir"
+    printf 'config validator workspace ready: %s\n' "$validation_dir"
   '';
 
-  configVerifyCandidate = pkgs.writeShellScriptBin "nixome-config-verify-candidate" ''
+  configValidatorValidateCandidate = pkgs.writeShellScriptBin "nixome-config-validator-validate-candidate" ''
     set -eu
 
     validation_dir="${cfg.configValidationPath}"
@@ -352,7 +352,7 @@ let
         --arg schema "nixome.config-validation.v1" \
         --arg status "$status" \
         --arg reason "$reason" \
-        --arg verifier_role "config-verify" \
+        --arg validator_role "config-validator" \
         --arg commit "$candidate_commit" \
         --arg dirty "$dirty" \
         --arg manifest "$tmpdir/manifest.json" \
@@ -364,7 +364,7 @@ let
           schema: $schema,
           status: $status,
           reason: $reason,
-          verifier_role: $verifier_role,
+          validator_role: $validator_role,
           commit: $commit,
           checks: [
             {
@@ -399,7 +399,7 @@ let
     }
 
     if [ -n "$dirty" ]; then
-      write_validation failed "verified candidate worktree is dirty" skipped
+      write_validation failed "validated candidate worktree is dirty" skipped
       cat "$tmpdir/validation.json" >&2
       exit 1
     fi
@@ -432,8 +432,8 @@ let
     exec ${pkgs.gnutar}/bin/tar -C "$tmpdir" -cf - config.bundle validation.json manifest.json
   '';
 
-  configCandidateVerifyService = pkgs.writeShellScript "nixome-config-candidate-verify-qrexec" ''
-    exec ${configVerifyCandidate}/bin/nixome-config-verify-candidate
+  configCandidateValidateService = pkgs.writeShellScript "nixome-config-candidate-validate-qrexec" ''
+    exec ${configValidatorValidateCandidate}/bin/nixome-config-validator-validate-candidate
   '';
 
   configVaultArchiveCandidate = pkgs.writeShellScriptBin "nixome-config-vault-archive-candidate" ''
@@ -665,7 +665,7 @@ in
         "base"
         "config-vault"
         "config-staging"
-        "config-verify"
+        "config-validator"
         "config-system"
       ];
       default = "base";
@@ -687,7 +687,7 @@ in
     configValidationPath = lib.mkOption {
       type = lib.types.str;
       default = "/home/${cfg.user}/nixome-config-validation";
-      description = "Directory for config-staging and config-verify validation results.";
+      description = "Directory for config-staging and config-validator validation results.";
     };
 
     configArchivePath = lib.mkOption {
@@ -952,13 +952,13 @@ in
         qdb_role="$(qubesdb-read /features/nixome-role 2>/dev/null || true)"
 
         case "$qdb_role" in
-          config-vault|config-staging|config-verify|config-system) role="$qdb_role" ;;
+          config-vault|config-staging|config-validator|config-system) role="$qdb_role" ;;
         esac
 
         case "$vm_name" in
           config-vault) role=config-vault ;;
           config-staging) role=config-staging ;;
-          config-verify) role=config-verify ;;
+          config-validator) role=config-validator ;;
         esac
 
         run_as_user() {
@@ -973,13 +973,13 @@ in
           config-staging)
             run_as_user ${configStagingInit}/bin/nixome-config-staging-init
             ;;
-          config-verify)
-            run_as_user ${configVerifyInit}/bin/nixome-config-verify-init
+          config-validator)
+            run_as_user ${configValidatorInit}/bin/nixome-config-validator-init
             ;;
           config-system)
             run_as_user ${configVaultInit}/bin/nixome-config-vault-init
             run_as_user ${configStagingInit}/bin/nixome-config-staging-init
-            run_as_user ${configVerifyInit}/bin/nixome-config-verify-init
+            run_as_user ${configValidatorInit}/bin/nixome-config-validator-init
             ;;
           *)
             echo "nixome config guest init: no config repo initialization for role=$role vm=$vm_name qdb_role=$qdb_role"
@@ -1038,15 +1038,17 @@ in
       mode = "0444";
     };
 
-    environment.etc."qubes-rpc/nixome.Config.VerifyCandidate" = lib.mkIf hasConfigVerifyRole {
-      source = configCandidateVerifyService;
+    environment.etc."qubes-rpc/nixome.Config.ValidateCandidate" = lib.mkIf hasConfigValidatorRole {
+      source = configCandidateValidateService;
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/nixome.Config.VerifyCandidate" = lib.mkIf hasConfigVerifyRole {
-      text = "force-user='${cfg.user}'\n";
-      mode = "0444";
-    };
+    environment.etc."qubes/rpc-config/nixome.Config.ValidateCandidate" =
+      lib.mkIf hasConfigValidatorRole
+        {
+          text = "force-user='${cfg.user}'\n";
+          mode = "0444";
+        };
 
     environment.etc."qubes-rpc/nixome.Config.ArchiveCandidate" = lib.mkIf hasConfigVaultRole {
       source = configArchiveService;
@@ -1087,7 +1089,7 @@ in
     ]
     ++ (rolePackages.${cfg.role} or [ ]);
 
-    nix.settings = lib.mkIf (hasConfigStagingRole || hasConfigVerifyRole) {
+    nix.settings = lib.mkIf (hasConfigStagingRole || hasConfigValidatorRole) {
       allowed-users = [ cfg.user ];
       experimental-features = [
         "nix-command"

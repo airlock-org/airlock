@@ -9,23 +9,23 @@ plane in dom0, but moves the desired VM topology into Nix.
 
 - `nixome-nixos-config-vault`, a NixOS TemplateVM source.
 - `nixome-nixos-config-staging`, a NixOS TemplateVM source.
-- `nixome-nixos-config-verify`, a NixOS TemplateVM source.
+- `nixome-nixos-config-validator`, a NixOS TemplateVM source.
 - `config-vault`, an offline AppVM based on the config-vault template.
 - `config-staging`, an offline AppVM based on the config-staging template.
-- `config-verify`, an offline AppVM based on the config-verify template.
+- `config-validator`, an offline AppVM based on the config-validator template.
 - `default_kernel = ""`, so fresh config-only images can create TemplateVMs
   before a Fedora/Qubes VM kernel has been bootstrapped.
 - qrexec policy allowing only dom0 to call `nixome.Config.CandidateExport` on
-  `config-staging`, `nixome.Config.VerifyCandidate` on `config-verify`, and
+  `config-staging`, `nixome.Config.ValidateCandidate` on `config-validator`, and
   `nixome.Config.ArchiveCandidate` on `config-vault`.
 
 The initial VM resource settings are sized for the nested 8 GiB developer VM:
-`config-vault` starts at 1024 MiB, while `config-staging` and `config-verify`
+`config-vault` starts at 1024 MiB, while `config-staging` and `config-validator`
 start at 2048 MiB. A physical Nixome host can raise these declaratively later.
 
 For this POC the TemplateVM source directories reference the same NixOS guest
 root image. That shared image carries the vault archive tooling, staging export
-tooling, and verifier tooling; the AppVM names, Qubes features, offline
+tooling, and validator tooling; the AppVM names, Qubes features, offline
 networking, and qrexec policy carry the runtime role distinction. Dedicated
 role-specific guest closures already evaluate/build and remain the hardening
 target once the authority flow is stable.
@@ -42,7 +42,7 @@ It can initialize that candidate with:
 nixome-config-staging-init
 ```
 
-`config-verify` validates candidates exported from `config-staging` and writes
+`config-validator` validates candidates exported from `config-staging` and writes
 JSON under:
 
 ```text
@@ -61,11 +61,11 @@ dom0 archives a candidate by running:
 sudo nixome-config-archive-candidate
 ```
 
-That command refuses to proceed unless `config-staging`, `config-verify`, and
+That command refuses to proceed unless `config-staging`, `config-validator`, and
 `config-vault` are offline. It fetches a clean Git bundle from
-`config-staging`, sends it to `config-verify` for `nix flake check --no-build`,
+`config-staging`, sends it to `config-validator` for `nix flake check --no-build`,
 checks the validation artifact and bundle commit in dom0, then sends the
-verified bundle to `config-vault` for archival. This records what dom0 is about
+validated bundle to `config-vault` for archival. This records what dom0 is about
 to attempt before deployment logic exists.
 
 ## Setup Path
@@ -133,20 +133,20 @@ make vm-config-smoke
 
 That target builds and boots the nested config dom0 image, explicitly runs the
 dom0 topology setup, starts `config-vault`, `config-staging`, and
-`config-verify`, runs `uname -a` through qrexec in all three VMs, initializes
-the staging repository and verifier workspace, and verifies that dom0 archives
-the candidate into `config-vault` only after `config-verify` validates it.
+`config-validator`, runs `uname -a` through qrexec in all three VMs, initializes
+the staging repository and validator workspace, and verifies that dom0 archives
+the candidate into `config-vault` only after `config-validator` validates it.
 The machine-readable result is copied to:
 
 ```text
 .nixome-logs/vm-gui-config-vms-smoke.json
 ```
 
-## Verified Boundary
+## Validated Boundary
 
 The template artifacts are NixOS root images packaged in the shape expected by
 `qvm-template-postprocess`. The explicit dom0 setup command has imported those
-templates and created the two AppVMs in the nested dom0 test environment.
+templates and created the three AppVMs in the nested dom0 test environment.
 
 The NixOS guests now boot in nested Xen with the normal Qubes dom0-provided VM
 kernel/initramfs and kernel options such as `root=/dev/mapper/dmroot`. The
@@ -161,9 +161,9 @@ It also loads the Xen vchan support modules used by Qubes guests
 (`xen-evtchn`, `xen-gntalloc`, `xen-gntdev`, and `xen-privcmd`) before
 QubesDB starts.
 
-The verified smoke path reaches qrexec in both declared NixOS AppVMs and proves
+The validated smoke path reaches qrexec in the declared NixOS AppVMs and proves
 that `config-vault` has `/home/user/nixome-config-vault` initialized before
-qrexec accepts the repository status check. The next boundary is deployment
-from the archived commit plus hardening the model: split role-specific guest
-roots when useful, classify setup changes that require VM restart or dom0
-reboot, and validate the same path on physical Xen-capable hardware.
+qrexec accepts the repository status check. The next boundary is deployment from
+the archived commit plus hardening the model: split role-specific guest roots
+when useful, classify setup changes that require VM restart or dom0 reboot, and
+validate the same path on physical Xen-capable hardware.

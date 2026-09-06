@@ -7,18 +7,18 @@ COMMAND_LOG="$LOG_DIR/config-vms-smoke.commands.log"
 QVM_LS_LOG="$LOG_DIR/config-vms-qvm-ls.log"
 STAGING_UNAME_LOG="$LOG_DIR/config-vms-config-staging-uname.log"
 VAULT_UNAME_LOG="$LOG_DIR/config-vms-config-vault-uname.log"
-VERIFY_UNAME_LOG="$LOG_DIR/config-vms-config-verify-uname.log"
+VALIDATOR_UNAME_LOG="$LOG_DIR/config-vms-config-validator-uname.log"
 STAGING_USER_LOG="$LOG_DIR/config-vms-config-staging-user.log"
 VAULT_USER_LOG="$LOG_DIR/config-vms-config-vault-user.log"
-VERIFY_USER_LOG="$LOG_DIR/config-vms-config-verify-user.log"
+VALIDATOR_USER_LOG="$LOG_DIR/config-vms-config-validator-user.log"
 STAGING_TEMPLATE_LOG="$LOG_DIR/config-vms-config-staging-template.log"
 VAULT_TEMPLATE_LOG="$LOG_DIR/config-vms-config-vault-template.log"
-VERIFY_TEMPLATE_LOG="$LOG_DIR/config-vms-config-verify-template.log"
+VALIDATOR_TEMPLATE_LOG="$LOG_DIR/config-vms-config-validator-template.log"
 STAGING_APPMENUS_LOG="$LOG_DIR/config-vms-config-staging-appmenus.log"
 VAULT_APPMENUS_LOG="$LOG_DIR/config-vms-config-vault-appmenus.log"
-VERIFY_APPMENUS_LOG="$LOG_DIR/config-vms-config-verify-appmenus.log"
+VALIDATOR_APPMENUS_LOG="$LOG_DIR/config-vms-config-validator-appmenus.log"
 STAGING_INIT_LOG="$LOG_DIR/config-vms-config-staging-init.log"
-VERIFY_INIT_LOG="$LOG_DIR/config-vms-config-verify-init.log"
+VALIDATOR_INIT_LOG="$LOG_DIR/config-vms-config-validator-init.log"
 STAGING_REPO_STATUS_LOG="$LOG_DIR/config-vms-config-staging-repo-status.log"
 VAULT_REPO_STATUS_LOG="$LOG_DIR/config-vms-config-vault-repo-status.log"
 ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
@@ -29,12 +29,12 @@ QVM_PREFS_LOG="$LOG_DIR/config-vms-qvm-prefs.log"
 
 STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
 VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
-VERIFY="${NIXOME_CONFIG_VERIFY_VM:-config-verify}"
+VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
 QUBE_USER="${NIXOME_QUBE_USER:-user}"
 DOM0_USER="${NIXOME_DOM0_USER:-${SUDO_USER:-nixome}}"
 STAGING_CONSOLE_LOG="$LOG_DIR/config-vms-$STAGING-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
-VERIFY_CONSOLE_LOG="$LOG_DIR/config-vms-$VERIFY-console.log"
+VALIDATOR_CONSOLE_LOG="$LOG_DIR/config-vms-$VALIDATOR-console.log"
 result_written=0
 
 mkdir -p "$LOG_DIR"
@@ -82,36 +82,36 @@ write_result() {
     json_string "$STAGING"
     printf ',"vault":'
     json_string "$VAULT"
-    printf ',"verifier":'
-    json_string "$VERIFY"
+    printf ',"validator":'
+    json_string "$VALIDATOR"
     printf ',"staging_uname":'
     json_file_string_or_null "$STAGING_UNAME_LOG"
     printf ',"vault_uname":'
     json_file_string_or_null "$VAULT_UNAME_LOG"
-    printf ',"verifier_uname":'
-    json_file_string_or_null "$VERIFY_UNAME_LOG"
+    printf ',"validator_uname":'
+    json_file_string_or_null "$VALIDATOR_UNAME_LOG"
     printf ',"staging_user":'
     json_file_string_or_null "$STAGING_USER_LOG"
     printf ',"vault_user":'
     json_file_string_or_null "$VAULT_USER_LOG"
-    printf ',"verifier_user":'
-    json_file_string_or_null "$VERIFY_USER_LOG"
+    printf ',"validator_user":'
+    json_file_string_or_null "$VALIDATOR_USER_LOG"
     printf ',"staging_template":'
     json_file_string_or_null "$STAGING_TEMPLATE_LOG"
     printf ',"vault_template":'
     json_file_string_or_null "$VAULT_TEMPLATE_LOG"
-    printf ',"verifier_template":'
-    json_file_string_or_null "$VERIFY_TEMPLATE_LOG"
+    printf ',"validator_template":'
+    json_file_string_or_null "$VALIDATOR_TEMPLATE_LOG"
     printf ',"staging_appmenus_log":'
     json_file_string_or_null "$STAGING_APPMENUS_LOG"
     printf ',"vault_appmenus_log":'
     json_file_string_or_null "$VAULT_APPMENUS_LOG"
-    printf ',"verifier_appmenus_log":'
-    json_file_string_or_null "$VERIFY_APPMENUS_LOG"
+    printf ',"validator_appmenus_log":'
+    json_file_string_or_null "$VALIDATOR_APPMENUS_LOG"
     printf ',"staging_init_log":'
     json_file_string_or_null "$STAGING_INIT_LOG"
-    printf ',"verifier_init_log":'
-    json_file_string_or_null "$VERIFY_INIT_LOG"
+    printf ',"validator_init_log":'
+    json_file_string_or_null "$VALIDATOR_INIT_LOG"
     printf ',"staging_repo_status":'
     json_file_string_or_null "$STAGING_REPO_STATUS_LOG"
     printf ',"vault_repo_status":'
@@ -134,8 +134,8 @@ write_result() {
     json_string "$STAGING_CONSOLE_LOG"
     printf ',"vault_console_log":'
     json_string "$VAULT_CONSOLE_LOG"
-    printf ',"verifier_console_log":'
-    json_string "$VERIFY_CONSOLE_LOG"
+    printf ',"validator_console_log":'
+    json_string "$VALIDATOR_CONSOLE_LOG"
     printf '}\n'
   } > "$RESULT_JSON"
   result_written=1
@@ -167,7 +167,7 @@ require_command() {
 collect_diagnostics() {
   qvm-ls > "$QVM_LS_LOG" 2>&1 || true
   {
-    for vm in "$VAULT" "$STAGING" "$VERIFY"; do
+    for vm in "$VAULT" "$STAGING" "$VALIDATOR"; do
       printf '== %s qvm-prefs ==\n' "$vm"
       qvm-prefs "$vm" || true
       printf '\n== %s qvm-features ==\n' "$vm"
@@ -184,7 +184,7 @@ collect_diagnostics() {
   tail -n 260 /var/log/libvirt/libxl/libxl-driver.log > "$LIBXL_LOG" 2>&1 || true
   tail -n 500 "/var/log/xen/console/guest-$VAULT.log" > "$VAULT_CONSOLE_LOG" 2>&1 || true
   tail -n 500 "/var/log/xen/console/guest-$STAGING.log" > "$STAGING_CONSOLE_LOG" 2>&1 || true
-  tail -n 500 "/var/log/xen/console/guest-$VERIFY.log" > "$VERIFY_CONSOLE_LOG" 2>&1 || true
+  tail -n 500 "/var/log/xen/console/guest-$VALIDATOR.log" > "$VALIDATOR_CONSOLE_LOG" 2>&1 || true
 }
 
 run_or_fail() {
@@ -267,42 +267,42 @@ systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qr
 
 qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
 qvm-check "$STAGING" >/dev/null 2>&1 || fail "missing config staging VM: $STAGING"
-qvm-check "$VERIFY" >/dev/null 2>&1 || fail "missing config verify VM: $VERIFY"
+qvm-check "$VALIDATOR" >/dev/null 2>&1 || fail "missing config validator VM: $VALIDATOR"
 
 run_or_fail "read template for $VAULT" "$VAULT_TEMPLATE_LOG" qvm-prefs "$VAULT" template
 run_or_fail "read template for $STAGING" "$STAGING_TEMPLATE_LOG" qvm-prefs "$STAGING" template
-run_or_fail "read template for $VERIFY" "$VERIFY_TEMPLATE_LOG" qvm-prefs "$VERIFY" template
+run_or_fail "read template for $VALIDATOR" "$VALIDATOR_TEMPLATE_LOG" qvm-prefs "$VALIDATOR" template
 VAULT_TEMPLATE="$(tr -d '\n' < "$VAULT_TEMPLATE_LOG")"
 STAGING_TEMPLATE="$(tr -d '\n' < "$STAGING_TEMPLATE_LOG")"
-VERIFY_TEMPLATE="$(tr -d '\n' < "$VERIFY_TEMPLATE_LOG")"
+VALIDATOR_TEMPLATE="$(tr -d '\n' < "$VALIDATOR_TEMPLATE_LOG")"
 [ -n "$VAULT_TEMPLATE" ] || fail "missing template preference for $VAULT"
 [ -n "$STAGING_TEMPLATE" ] || fail "missing template preference for $STAGING"
-[ -n "$VERIFY_TEMPLATE" ] || fail "missing template preference for $VERIFY"
+[ -n "$VALIDATOR_TEMPLATE" ] || fail "missing template preference for $VALIDATOR"
 
 start_vm "$VAULT"
 start_vm "$STAGING"
-start_vm "$VERIFY"
+start_vm "$VALIDATOR"
 start_vm "$VAULT_TEMPLATE"
 start_vm "$STAGING_TEMPLATE"
-start_vm "$VERIFY_TEMPLATE"
+start_vm "$VALIDATOR_TEMPLATE"
 
 run_qrexec_or_fail "$VAULT" "qrexec uname in $VAULT" "$VAULT_UNAME_LOG" "uname -a"
 run_qrexec_or_fail "$STAGING" "qrexec uname in $STAGING" "$STAGING_UNAME_LOG" "uname -a"
-run_qrexec_or_fail "$VERIFY" "qrexec uname in $VERIFY" "$VERIFY_UNAME_LOG" "uname -a"
+run_qrexec_or_fail "$VALIDATOR" "qrexec uname in $VALIDATOR" "$VALIDATOR_UNAME_LOG" "uname -a"
 run_qrexec_or_fail "$VAULT" "qrexec user in $VAULT" "$VAULT_USER_LOG" "id -un"
 run_qrexec_or_fail "$STAGING" "qrexec user in $STAGING" "$STAGING_USER_LOG" "id -un"
-run_qrexec_or_fail "$VERIFY" "qrexec user in $VERIFY" "$VERIFY_USER_LOG" "id -un"
+run_qrexec_or_fail "$VALIDATOR" "qrexec user in $VALIDATOR" "$VALIDATOR_USER_LOG" "id -un"
 
 grep -q 'Linux' "$VAULT_UNAME_LOG" || fail "vault uname output did not contain Linux"
 grep -q 'Linux' "$STAGING_UNAME_LOG" || fail "staging uname output did not contain Linux"
-grep -q 'Linux' "$VERIFY_UNAME_LOG" || fail "verifier uname output did not contain Linux"
+grep -q 'Linux' "$VALIDATOR_UNAME_LOG" || fail "validator uname output did not contain Linux"
 grep -qx "$QUBE_USER" "$VAULT_USER_LOG" || fail "vault qrexec user was not $QUBE_USER"
 grep -qx "$QUBE_USER" "$STAGING_USER_LOG" || fail "staging qrexec user was not $QUBE_USER"
-grep -qx "$QUBE_USER" "$VERIFY_USER_LOG" || fail "verifier qrexec user was not $QUBE_USER"
+grep -qx "$QUBE_USER" "$VALIDATOR_USER_LOG" || fail "validator qrexec user was not $QUBE_USER"
 
 run_appmenus_sync_or_fail "$VAULT_TEMPLATE" "$VAULT_APPMENUS_LOG"
 run_appmenus_sync_or_fail "$STAGING_TEMPLATE" "$STAGING_APPMENUS_LOG"
-run_appmenus_sync_or_fail "$VERIFY_TEMPLATE" "$VERIFY_APPMENUS_LOG"
+run_appmenus_sync_or_fail "$VALIDATOR_TEMPLATE" "$VALIDATOR_APPMENUS_LOG"
 
 run_qrexec_or_fail "$VAULT" "config vault repo status" "$VAULT_REPO_STATUS_LOG" \
   "cd /home/$QUBE_USER/nixome-config-vault && git status --short --branch"
@@ -313,17 +313,17 @@ grep -q '^## main$' "$VAULT_REPO_STATUS_LOG" || fail "config vault repository is
 grep -q '^## main$' "$STAGING_REPO_STATUS_LOG" || fail "config staging repository is not initialized cleanly"
 
 run_qrexec_or_fail "$STAGING" "config staging init" "$STAGING_INIT_LOG" "nixome-config-staging-init"
-run_qrexec_or_fail "$VERIFY" "config verify init" "$VERIFY_INIT_LOG" "nixome-config-verify-init"
+run_qrexec_or_fail "$VALIDATOR" "config validator init" "$VALIDATOR_INIT_LOG" "nixome-config-validator-init"
 
 run_or_fail "archive config candidate from $STAGING into $VAULT" "$ARCHIVE_LOG" \
-  env NIXOME_LOG_DIR="$LOG_DIR" NIXOME_CONFIG_STAGING_VM="$STAGING" NIXOME_CONFIG_VERIFY_VM="$VERIFY" NIXOME_CONFIG_VAULT_VM="$VAULT" \
-  nixome-config-archive-candidate --staging "$STAGING" --verify "$VERIFY" --vault "$VAULT"
+  env NIXOME_LOG_DIR="$LOG_DIR" NIXOME_CONFIG_STAGING_VM="$STAGING" NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" NIXOME_CONFIG_VAULT_VM="$VAULT" \
+  nixome-config-archive-candidate --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
 
-jq -e --arg staging "$STAGING" --arg verifier "$VERIFY" --arg vault "$VAULT" '
+jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT" '
   .schema == "nixome.config-archive.v1" and
   .status == "passed" and
   .staging == $staging and
-  .verifier == $verifier and
+  .validator == $validator and
   .vault == $vault and
   .candidate_commit == .validation_commit and
   .candidate_commit == .vault_archive.candidate_commit and
@@ -332,5 +332,5 @@ jq -e --arg staging "$STAGING" --arg verifier "$VERIFY" --arg vault "$VAULT" '
 ' "$ARCHIVE_JSON" >/dev/null || fail "config archive JSON did not pass"
 
 collect_diagnostics
-write_result passed "NixOS config VMs booted, config-staging exported a candidate, config-verify validated it, and dom0 archived it in config-vault"
+write_result passed "NixOS config VMs booted, config-staging exported a candidate, config-validator validated it, and dom0 archived it in config-vault"
 cat "$RESULT_JSON"

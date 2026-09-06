@@ -50,10 +50,13 @@ in
         skipStart = true;
       };
 
-      nixome-nixos-config-verify = {
+      nixome-nixos-config-validator = {
         import = true;
         source =
-          if haveTemplates then "${nixomeTemplatePackages.configVerify}/nixome-nixos-config-verify" else null;
+          if haveTemplates then
+            "${nixomeTemplatePackages.configValidator}/nixome-nixos-config-validator"
+          else
+            null;
         skipStart = true;
       };
     };
@@ -103,20 +106,20 @@ in
         };
       };
 
-      nixome-nixos-config-verify = {
+      nixome-nixos-config-validator = {
         class = "TemplateVM";
         label = "black";
         netvm = null;
         prefs = {
           default_user = "user";
           kernel = if haveQubeKernel then nixomeQubeKernel.name else "";
-          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.configVerify else "";
+          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.configValidator else "";
           qrexec_timeout = 120;
           virt_mode = "pvh";
         };
         features = {
           "nixome-managed" = "1";
-          "nixome-role" = "config-verify-template";
+          "nixome-role" = "config-validator-template";
           os = "Linux";
           qrexec = "1";
         };
@@ -163,9 +166,9 @@ in
         };
       };
 
-      config-verify = {
+      config-validator = {
         class = "AppVM";
-        template = "nixome-nixos-config-verify";
+        template = "nixome-nixos-config-validator";
         label = "blue";
         netvm = null;
         prefs = {
@@ -177,8 +180,8 @@ in
         };
         features = {
           "nixome-managed" = "1";
-          "nixome-role" = "config-verify";
-          "nixome-config-verify" = "1";
+          "nixome-role" = "config-validator";
+          "nixome-config-validator" = "1";
         };
       };
     };
@@ -187,9 +190,9 @@ in
       enable = true;
       vault = "config-vault";
       staging = "config-staging";
-      verifier = "config-verify";
+      validator = "config-validator";
       candidateExportService = "nixome.Config.CandidateExport";
-      candidateVerifyService = "nixome.Config.VerifyCandidate";
+      candidateValidateService = "nixome.Config.ValidateCandidate";
       archiveService = "nixome.Config.ArchiveCandidate";
     };
   };

@@ -28,7 +28,7 @@ writeShellApplication {
   text = builtins.readFile ../../scripts/archive-config-candidate.sh;
 
   meta = {
-    description = "Verify a staged Nixome config candidate and archive it into config-vault";
+    description = "Validate a staged Nixome config candidate and archive it into config-vault";
     license = lib.licenses.mit;
     platforms = [ "x86_64-linux" ];
   };

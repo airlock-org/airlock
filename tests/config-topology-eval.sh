@@ -12,8 +12,8 @@ GUEST_INIT_AFTER_JSON="$WORK_DIR/guest-init-after.json"
 GUEST_INIT_BEFORE_JSON="$WORK_DIR/guest-init-before.json"
 GUEST_QREXEC_REQUIRES_JSON="$WORK_DIR/guest-qrexec-requires.json"
 GUEST_QREXEC_AFTER_JSON="$WORK_DIR/guest-qrexec-after.json"
-GUEST_VERIFY_ROLE_JSON="$WORK_DIR/guest-verify-role.json"
-GUEST_VERIFY_RPC_MODE_JSON="$WORK_DIR/guest-verify-rpc-mode.json"
+GUEST_VALIDATOR_ROLE_JSON="$WORK_DIR/guest-validator-role.json"
+GUEST_VALIDATOR_RPC_MODE_JSON="$WORK_DIR/guest-validator-rpc-mode.json"
 
 mkdir -p "$WORK_DIR"
 
@@ -25,8 +25,8 @@ nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.sy
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.systemd.services.nixome-config-guest-init.before" > "$GUEST_INIT_BEFORE_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.systemd.services.qubes-qrexec-agent.requires" > "$GUEST_QREXEC_REQUIRES_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.systemd.services.qubes-qrexec-agent.after" > "$GUEST_QREXEC_AFTER_JSON"
-nix eval --json "$ROOT#nixosConfigurations.qube-template-config-verify.config.nixome.qubeGuest.role" > "$GUEST_VERIFY_ROLE_JSON"
-nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.Config.VerifyCandidate\".mode" > "$GUEST_VERIFY_RPC_MODE_JSON"
+nix eval --json "$ROOT#nixosConfigurations.qube-template-config-validator.config.nixome.qubeGuest.role" > "$GUEST_VALIDATOR_ROLE_JSON"
+nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.Config.ValidateCandidate\".mode" > "$GUEST_VALIDATOR_RPC_MODE_JSON"
 
 jq -e '
   ."config-vault".class == "AppVM" and
@@ -37,10 +37,10 @@ jq -e '
   ."config-staging".template == "nixome-nixos-config-staging" and
   ."config-staging".netvm == null and
   ."config-staging".features."nixome-role" == "config-staging" and
-  ."config-verify".class == "AppVM" and
-  ."config-verify".template == "nixome-nixos-config-verify" and
-  ."config-verify".netvm == null and
-  ."config-verify".features."nixome-role" == "config-verify"
+  ."config-validator".class == "AppVM" and
+  ."config-validator".template == "nixome-nixos-config-validator" and
+  ."config-validator".netvm == null and
+  ."config-validator".features."nixome-role" == "config-validator"
 ' "$DOMAINS_JSON" >/dev/null
 
 jq -e '
@@ -54,9 +54,9 @@ jq -e '
   ."nixome-nixos-config-staging".import == true and
   ."nixome-nixos-config-staging".skipStart == true and
   (."nixome-nixos-config-staging".source | test("nixome-nixos-config-staging")) and
-  ."nixome-nixos-config-verify".import == true and
-  ."nixome-nixos-config-verify".skipStart == true and
-  (."nixome-nixos-config-verify".source | test("nixome-nixos-config-verify"))
+  ."nixome-nixos-config-validator".import == true and
+  ."nixome-nixos-config-validator".skipStart == true and
+  (."nixome-nixos-config-validator".source | test("nixome-nixos-config-validator"))
 ' "$TEMPLATES_JSON" >/dev/null
 
 jq -e '
@@ -81,11 +81,11 @@ jq -e '
 ' "$GUEST_QREXEC_AFTER_JSON" >/dev/null
 
 jq -e '
-  . == "config-verify"
-' "$GUEST_VERIFY_ROLE_JSON" >/dev/null
+  . == "config-validator"
+' "$GUEST_VALIDATOR_ROLE_JSON" >/dev/null
 
 jq -e '
   . == "0555"
-' "$GUEST_VERIFY_RPC_MODE_JSON" >/dev/null
+' "$GUEST_VALIDATOR_RPC_MODE_JSON" >/dev/null
 
 printf 'config topology eval ok\n'

@@ -9,10 +9,10 @@ test:
 	./tests/run-local.sh
 
 nixos-templates:
-	nix build .#nixome-nixos-config-vault-template .#nixome-nixos-config-staging-template .#nixome-nixos-config-verify-template --print-build-logs --show-trace
+	nix build .#nixome-nixos-config-vault-template .#nixome-nixos-config-staging-template .#nixome-nixos-config-validator-template --print-build-logs --show-trace
 
 nixos-templates-dry-run:
-	nix build .#nixome-nixos-config-vault-template .#nixome-nixos-config-staging-template .#nixome-nixos-config-verify-template --dry-run --show-trace
+	nix build .#nixome-nixos-config-vault-template .#nixome-nixos-config-staging-template .#nixome-nixos-config-validator-template --dry-run --show-trace
 
 vm-image:
 	nix build .#nixome-vm-image --print-build-logs --show-trace
