@@ -9,6 +9,10 @@ MOD_UNAME_LOG="$LOG_DIR/config-vms-config-mod-uname.log"
 VAULT_UNAME_LOG="$LOG_DIR/config-vms-config-vault-uname.log"
 MOD_USER_LOG="$LOG_DIR/config-vms-config-mod-user.log"
 VAULT_USER_LOG="$LOG_DIR/config-vms-config-vault-user.log"
+MOD_TEMPLATE_LOG="$LOG_DIR/config-vms-config-mod-template.log"
+VAULT_TEMPLATE_LOG="$LOG_DIR/config-vms-config-vault-template.log"
+MOD_APPMENUS_LOG="$LOG_DIR/config-vms-config-mod-appmenus.log"
+VAULT_APPMENUS_LOG="$LOG_DIR/config-vms-config-vault-appmenus.log"
 MOD_INIT_LOG="$LOG_DIR/config-vms-mod-init.log"
 MOD_VALIDATION_LOG="$LOG_DIR/config-vms-mod-validation.log"
 ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
@@ -20,6 +24,7 @@ QVM_PREFS_LOG="$LOG_DIR/config-vms-qvm-prefs.log"
 MOD="${NIXOME_CONFIG_MOD_VM:-config-mod}"
 VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
 QUBE_USER="${NIXOME_QUBE_USER:-user}"
+DOM0_USER="${NIXOME_DOM0_USER:-${SUDO_USER:-nixome}}"
 MOD_CONSOLE_LOG="$LOG_DIR/config-vms-$MOD-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 result_written=0
@@ -77,6 +82,14 @@ write_result() {
     json_file_string_or_null "$MOD_USER_LOG"
     printf ',"vault_user":'
     json_file_string_or_null "$VAULT_USER_LOG"
+    printf ',"modifier_template":'
+    json_file_string_or_null "$MOD_TEMPLATE_LOG"
+    printf ',"vault_template":'
+    json_file_string_or_null "$VAULT_TEMPLATE_LOG"
+    printf ',"modifier_appmenus_log":'
+    json_file_string_or_null "$MOD_APPMENUS_LOG"
+    printf ',"vault_appmenus_log":'
+    json_file_string_or_null "$VAULT_APPMENUS_LOG"
     printf ',"modifier_init_log":'
     json_file_string_or_null "$MOD_INIT_LOG"
     printf ',"modifier_validation":'
@@ -178,6 +191,19 @@ run_qrexec_or_fail() {
   run_or_fail "$description" "$output" "${qvm_run_args[@]}" "$vm" "$command"
 }
 
+run_appmenus_sync_or_fail() {
+  template="$1"
+  output="$2"
+
+  if [ "$(id -u)" = 0 ]; then
+    run_or_fail "sync appmenus for $template" "$output" \
+      runuser -u "$DOM0_USER" -- qvm-sync-appmenus "$template"
+  else
+    run_or_fail "sync appmenus for $template" "$output" \
+      qvm-sync-appmenus "$template"
+  fi
+}
+
 start_vm() {
   vm="$1"
 
@@ -198,6 +224,8 @@ for cmd in \
   qvm-ls \
   qvm-run \
   qvm-start \
+  qvm-sync-appmenus \
+  runuser \
   systemctl \
   tail \
   tr; do
@@ -215,8 +243,17 @@ systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qr
 qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
 qvm-check "$MOD" >/dev/null 2>&1 || fail "missing config modifier VM: $MOD"
 
+run_or_fail "read template for $VAULT" "$VAULT_TEMPLATE_LOG" qvm-prefs "$VAULT" template
+run_or_fail "read template for $MOD" "$MOD_TEMPLATE_LOG" qvm-prefs "$MOD" template
+VAULT_TEMPLATE="$(tr -d '\n' < "$VAULT_TEMPLATE_LOG")"
+MOD_TEMPLATE="$(tr -d '\n' < "$MOD_TEMPLATE_LOG")"
+[ -n "$VAULT_TEMPLATE" ] || fail "missing template preference for $VAULT"
+[ -n "$MOD_TEMPLATE" ] || fail "missing template preference for $MOD"
+
 start_vm "$VAULT"
 start_vm "$MOD"
+start_vm "$VAULT_TEMPLATE"
+start_vm "$MOD_TEMPLATE"
 
 run_qrexec_or_fail "$VAULT" "qrexec uname in $VAULT" "$VAULT_UNAME_LOG" "uname -a"
 run_qrexec_or_fail "$MOD" "qrexec uname in $MOD" "$MOD_UNAME_LOG" "uname -a"
@@ -227,6 +264,9 @@ grep -q 'Linux' "$VAULT_UNAME_LOG" || fail "vault uname output did not contain L
 grep -q 'Linux' "$MOD_UNAME_LOG" || fail "modifier uname output did not contain Linux"
 grep -qx "$QUBE_USER" "$VAULT_USER_LOG" || fail "vault qrexec user was not $QUBE_USER"
 grep -qx "$QUBE_USER" "$MOD_USER_LOG" || fail "modifier qrexec user was not $QUBE_USER"
+
+run_appmenus_sync_or_fail "$VAULT_TEMPLATE" "$VAULT_APPMENUS_LOG"
+run_appmenus_sync_or_fail "$MOD_TEMPLATE" "$MOD_APPMENUS_LOG"
 
 run_qrexec_or_fail "$MOD" "config mod init" "$MOD_INIT_LOG" "nixome-config-mod-init"
 run_qrexec_or_fail "$MOD" "config mod validation in $MOD" "$MOD_VALIDATION_LOG" "nixome-config-mod-validate"
