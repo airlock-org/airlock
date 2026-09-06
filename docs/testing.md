@@ -91,7 +91,7 @@ image under the generated VM directory.
 After it boots:
 
 ```bash
-ssh -p 2222 nixome@127.0.0.1
+make vm-ssh
 nixome-observe-dom0 | jq
 cat /proc/xen/capabilities
 systemctl status qubes-db-dom0 qubesd qubes-qrexec-policy-daemon

@@ -265,13 +265,15 @@ remote_env_prefix() {
 }
 
 ssh_command() {
-  nix shell nixpkgs#sshpass -c sshpass -p "$SSH_PASSWORD" \
+  SSHPASS="$SSH_PASSWORD" nix shell nixpkgs#sshpass -c sshpass -e \
     ssh \
       -F /dev/null \
       -o LogLevel=ERROR \
       -o StrictHostKeyChecking=no \
       -o UserKnownHostsFile=/dev/null \
       -o ConnectTimeout=5 \
+      -o NumberOfPasswordPrompts=1 \
+      -o PubkeyAuthentication=no \
       -p "$SSH_PORT" \
       "$SSH_USER@127.0.0.1" \
       "$@"

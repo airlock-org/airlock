@@ -24,7 +24,7 @@ endif
 
 NIXOME_NIX ?= ./scripts/nixome-nix.sh
 
-.PHONY: ensure-generated-dirs build test nixos-templates nixos-templates-dry-run vm-image vm-image-dry-run vm-run vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-config-setup vm-config-smoke disk-usage clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test nixos-templates nixos-templates-dry-run vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-config-setup vm-config-smoke disk-usage clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -53,6 +53,9 @@ vm-image-dry-run: ensure-generated-dirs
 
 vm-run: ensure-generated-dirs
 	./scripts/run-nested-vm.sh
+
+vm-ssh: ensure-generated-dirs
+	./scripts/ssh-nested-vm.sh
 
 vm-gui-image: ensure-generated-dirs
 	$(NIXOME_NIX) build .#nixome-vm-gui-image --print-build-logs --show-trace

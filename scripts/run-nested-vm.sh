@@ -178,8 +178,8 @@ starting VM
   display: $DISPLAY_MODE
   vga: $VGA
   memory: ${MEMORY} MiB
-  ssh: ssh -p $SSH_PORT nixome@127.0.0.1
-  password: nixome
+  ssh: NIXOME_VM_SSH_PORT=$SSH_PORT $ROOT/scripts/ssh-nested-vm.sh
+  login: $SSH_USER / ${NIXOME_VM_SSH_PASSWORD:-nixome}
   monitor: $MONITOR_SOCKET
 
 Inside the VM, first check:
