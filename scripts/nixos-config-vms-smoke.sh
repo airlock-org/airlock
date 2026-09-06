@@ -517,7 +517,7 @@ sed -i \
   flake.nix
 grep -F 'appliedMessage = "$APPLY_MESSAGE";' flake.nix
 grep -F 'configVms = import ./nixome/config-vms.nix;' flake.nix
-grep -F 'templateSet = import ./nixome/templates.nix;' flake.nix
+grep -F 'templateSet = import ./nixome/templates.nix' flake.nix
 grep -F '"$CREATED_QUBE" = {' flake.nix
 git add flake.nix nixome/config-vms.nix
 git \
