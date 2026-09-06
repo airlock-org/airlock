@@ -129,15 +129,21 @@ This does the control-plane check and then, by default:
 - runs `nixome-qube-gui-smoke`.
 
 The Fedora 43 XFCE template RPM is about 2 GB. When `/run/media/user/data` is
-mounted, generated VM disks, logs, caches, and temp files default to:
+mounted, generated VM disks, logs, caches, temp files, and Nixome Nix build
+outputs default to:
 
 ```text
 /run/media/user/data/nixome/
 ```
 
 The source tree, Nix code, scripts, docs, and Git history stay in
-`/home/user/dev/nixome`. Without the data mount, generated files fall back to
-repo-local `.nixome-vm/`, `.nixome-logs/`, and `.nixome-cache/rpms/`.
+`/home/user/dev/nixome`. The Nixome Nix store is a chroot local store at
+`/run/media/user/data/nixome/nix-root`; logical store paths remain
+`/nix/store/...`, but the physical files live under that data-disk root.
+
+If `/run/media/user/data` is not available, Nixome refuses to use the host
+`/nix/store` by default. Set `NIXOME_DATA_ROOT` to another data-backed path, or
+set `NIXOME_USE_HOST_NIX_STORE=1` for an explicit one-off host-store command.
 
 Inside the nested dom0, cached inputs are copied to:
 
@@ -257,8 +263,9 @@ AppVM, generate Nixome-owned qrexec policy, and record the deployment in
 The config profile sets `default_kernel = ""` so fresh config-only images can
 create TemplateVMs before any Fedora/Qubes VM kernel bootstrap has run.
 
-The VM runner keeps generated writable qcow2 overlays and Nix build out-links
-under the generated VM directory. They are safe to regenerate. Old repo-local
+The VM runner keeps generated writable qcow2 overlays and physical Nix build
+out-links under the generated VM directory. Nixome build outputs themselves
+live in the generated Nix root. They are safe to regenerate. Old repo-local
 experimental VM work directories match `.nixome-vm-*`. The host-side Qubes
 RPM/template download cache lives under the generated cache directory and
 should normally be kept.
@@ -274,10 +281,11 @@ make clean-logs
 ```
 
 `make clean` removes VM work directories and logs while preserving the download
-cache. `make clean-cache` removes the generated cache too, which means the next
-full GUI smoke may need to download the Qubes kernel RPMs and template RPM
-again. The runner keeps only one stale writable-overlay backup per image by
-default; adjust that with `NIXOME_VM_BACKUP_RETENTION`.
+cache and Nixome Nix store. `make clean-cache` removes the generated Qubes
+asset cache too, which means the next full GUI smoke may need to download the
+Qubes kernel RPMs and template RPM again. The runner keeps only one stale
+writable-overlay backup per image by default; adjust that with
+`NIXOME_VM_BACKUP_RETENTION`.
 
 ## Runtime Observation
 

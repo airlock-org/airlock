@@ -2,15 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if [ -n "${NIXOME_DATA_ROOT:-}" ]; then
-  DEFAULT_NIXOME_DATA_ROOT="$NIXOME_DATA_ROOT"
-elif [ -d /run/media/user/data ] && [ -w /run/media/user/data ]; then
-  DEFAULT_NIXOME_DATA_ROOT="/run/media/user/data/nixome"
-else
-  DEFAULT_NIXOME_DATA_ROOT=""
-fi
-LOG_DIR="${NIXOME_LOG_DIR:-${DEFAULT_NIXOME_DATA_ROOT:+$DEFAULT_NIXOME_DATA_ROOT/logs}}"
-LOG_DIR="${LOG_DIR:-$ROOT/.nixome-logs}"
+source "$ROOT/scripts/lib/nixome-env.sh"
+LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 mkdir -p "$LOG_DIR"
 
 SSH_PORT="${NIXOME_VM_SSH_PORT:-2222}"
@@ -29,8 +22,7 @@ RUN_CONFIG_VMS_SMOKE="${NIXOME_RUN_CONFIG_VMS_SMOKE:-0}"
 RUN_QREXEC_SMOKE="${NIXOME_RUN_QUBES_SMOKE:-1}"
 RUN_GUI_SMOKE="${NIXOME_RUN_GUI_SMOKE:-1}"
 CACHE_QUBES_ASSETS="${NIXOME_CACHE_QUBES_ASSETS:-1}"
-CACHE_DIR="${NIXOME_QUBES_CACHE_DIR:-${DEFAULT_NIXOME_DATA_ROOT:+$DEFAULT_NIXOME_DATA_ROOT/cache/rpms}}"
-CACHE_DIR="${CACHE_DIR:-$ROOT/.nixome-cache/rpms}"
+CACHE_DIR="${NIXOME_QUBES_CACHE_DIR:-$ROOT/.nixome-cache/rpms}"
 GUEST_CACHE_DIR="/var/cache/nixome/qubes-rpms"
 
 TEMPLATE="${NIXOME_QUBES_TEMPLATE:-fedora-43-xfce}"

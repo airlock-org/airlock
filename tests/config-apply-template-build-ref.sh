@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORK_DIR="${NIXOME_CONFIG_APPLY_TEMPLATE_BUILD_REF_DIR:-$ROOT/.nixome-logs/config-apply-template-build-ref}"
+source "$ROOT/scripts/lib/nixome-env.sh"
+WORK_DIR="${NIXOME_CONFIG_APPLY_TEMPLATE_BUILD_REF_DIR:-${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}/config-apply-template-build-ref}"
 BIN_DIR="$WORK_DIR/bin"
 CANDIDATE_DIR="$WORK_DIR/candidate"
 LOG_DIR="$WORK_DIR/logs"

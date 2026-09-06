@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORK_DIR="${NIXOME_SETUP_CONFIG_QREXEC_POLICY_DIR:-$ROOT/.nixome-logs/setup-config-qrexec-policy}"
+source "$ROOT/scripts/lib/nixome-env.sh"
+HOST_LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
+WORK_DIR="${NIXOME_SETUP_CONFIG_QREXEC_POLICY_DIR:-$HOST_LOG_DIR/setup-config-qrexec-policy}"
 BIN_DIR="$WORK_DIR/bin"
 TOPOLOGY="$WORK_DIR/topology.json"
 CAPABILITIES="$WORK_DIR/xen-capabilities"

@@ -34,6 +34,22 @@ candidate_commit=""
 deployment_id=""
 tmpdir=""
 
+nixome_store_uses_chroot() {
+  [ "${NIXOME_USE_HOST_NIX_STORE:-0}" != "1" ] &&
+    [ -n "${NIXOME_NIX_ROOT:-}" ] &&
+    [ "$NIXOME_NIX_ROOT" != "/" ]
+}
+
+nixome_physical_store_path() {
+  local path="$1"
+
+  if nixome_store_uses_chroot && [ "${path#/nix/store/}" != "$path" ]; then
+    printf '%s%s\n' "$NIXOME_NIX_ROOT" "$path"
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
 usage() {
   cat >&2 <<'EOF'
 Usage: nixome-config-apply --apply [--staging VM] [--validator VM] [--vault VM]
@@ -485,12 +501,13 @@ resolve_template_sources() {
     if [ -n "$subpath" ]; then
       source_path="$source_path/$subpath"
     fi
+    source_path_physical="$(nixome_physical_store_path "$source_path")"
 
-    [ -d "$source_path" ] ||
+    [ -d "$source_path_physical" ] ||
       fail "built template source directory is missing for $template: $source_path"
-    [ -f "$source_path/root.img" ] ||
+    [ -f "$source_path_physical/root.img" ] ||
       fail "built template source root.img is missing for $template: $source_path/root.img"
-    [ -f "$source_path/template.conf" ] ||
+    [ -f "$source_path_physical/template.conf" ] ||
       fail "built template source template.conf is missing for $template: $source_path/template.conf"
 
     tmp_resolved="$resolved.tmp"

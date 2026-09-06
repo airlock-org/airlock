@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/scripts/lib/nixome-env.sh"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 WORK_DIR="$LOG_DIR/config-topology"
 DOMAINS_JSON="$WORK_DIR/domains.json"
@@ -49,7 +50,7 @@ let
 in
   builtins.head matches
 ' --no-link --print-out-paths > "$CONFIG_ACCESS_POLICY_PKG"
-cp "$(cat "$CONFIG_ACCESS_POLICY_PKG")/etc/qubes/policy.d/30-nixome-config.policy" "$CONFIG_ACCESS_POLICY_FILE"
+cp "$(nixome_physical_store_path "$(cat "$CONFIG_ACCESS_POLICY_PKG")")/etc/qubes/policy.d/30-nixome-config.policy" "$CONFIG_ACCESS_POLICY_FILE"
 
 jq -e '
   ."config-vault".class == "AppVM" and

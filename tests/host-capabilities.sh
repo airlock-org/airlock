@@ -2,6 +2,8 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/scripts/lib/nixome-env.sh"
+LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 OUTPUT=""
 
 if [ "${1:-}" = "--json" ]; then
@@ -9,7 +11,7 @@ if [ "${1:-}" = "--json" ]; then
 fi
 
 if [ -z "$OUTPUT" ]; then
-  OUTPUT="$ROOT/.nixome-logs/host-capabilities.json"
+  OUTPUT="$LOG_DIR/host-capabilities.json"
 fi
 
 mkdir -p "$(dirname "$OUTPUT")"

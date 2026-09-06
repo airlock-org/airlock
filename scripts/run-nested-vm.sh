@@ -2,15 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if [ -n "${NIXOME_DATA_ROOT:-}" ]; then
-  DEFAULT_NIXOME_DATA_ROOT="$NIXOME_DATA_ROOT"
-elif [ -d /run/media/user/data ] && [ -w /run/media/user/data ]; then
-  DEFAULT_NIXOME_DATA_ROOT="/run/media/user/data/nixome"
-else
-  DEFAULT_NIXOME_DATA_ROOT=""
-fi
-VM_DIR="${NIXOME_VM_DIR:-${DEFAULT_NIXOME_DATA_ROOT:+$DEFAULT_NIXOME_DATA_ROOT/vm}}"
-VM_DIR="${VM_DIR:-$ROOT/.nixome-vm}"
+source "$ROOT/scripts/lib/nixome-env.sh"
+VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
 IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-image}"
 MEMORY="${NIXOME_VM_MEMORY:-8192}"
 SMP="${NIXOME_VM_SMP:-4}"
@@ -52,15 +45,19 @@ if ! awk -F: '/flags|Features/ { print $2; exit }' /proc/cpuinfo | grep -Eqw 'vm
 fi
 
 printf 'building/resolving Nixome VM base image: .#%s\n' "$IMAGE_ATTR"
-nix build "$ROOT#$IMAGE_ATTR" --out-link "$OUT_LINK" --print-build-logs --show-trace
+base_image_out="$(nix build "$ROOT#$IMAGE_ATTR" --no-link --print-out-paths --print-build-logs --show-trace)"
+base_image_out="$(awk 'NF { last = $0 } END { print last }' <<< "$base_image_out")"
+base_image_out_physical="$(nixome_physical_store_path "$base_image_out")"
+ln -sfn "$base_image_out_physical" "$OUT_LINK"
 
-mapfile -t base_images < <(find -L "$OUT_LINK" -maxdepth 1 -type f \( -name '*.qcow2' -o -name '*.img' \) | sort)
+mapfile -t base_images < <(find -L "$base_image_out_physical" -maxdepth 1 -type f \( -name '*.qcow2' -o -name '*.img' \) | sort)
 if [ "${#base_images[@]}" -ne 1 ]; then
-  printf 'error: expected one qcow2 or raw img under %s, found %s\n' "$OUT_LINK" "${#base_images[@]}" >&2
+  printf 'error: expected one qcow2 or raw img under %s, found %s\n' "$base_image_out" "${#base_images[@]}" >&2
   exit 1
 fi
 
-BASE_IMAGE="$(readlink -f "${base_images[0]}")"
+base_image_relative="${base_images[0]#"$base_image_out_physical"/}"
+BASE_IMAGE="$base_image_out/$base_image_relative"
 RUN_DISK="$VM_DIR/${IMAGE_ATTR}.qcow2"
 OVMF_VARS="$VM_DIR/${IMAGE_ATTR}-OVMF_VARS.fd"
 RUN_DISK_BACKUP_TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -99,7 +96,7 @@ qemu_utils_out="$(nix build --no-link --print-out-paths "$ROOT#qemu-utils")"
 ovmf_out="$(nix build --no-link --print-out-paths "$ROOT#ovmf-fd")"
 
 BASE_FORMAT="$(
-  "$qemu_utils_out/bin/qemu-img" info --output=json "$BASE_IMAGE" |
+  nixome_run_store_path "$qemu_utils_out/bin/qemu-img" info --output=json "$BASE_IMAGE" |
     sed -n 's/^[[:space:]]*"format": "\(raw\|qcow2\)",[[:space:]]*$/\1/p' |
     head -n 1
 )"
@@ -127,7 +124,7 @@ fi
 
 if [ -e "$RUN_DISK" ]; then
   current_backing="$(
-    "$qemu_utils_out/bin/qemu-img" info --output=json "$RUN_DISK" |
+    nixome_run_store_path "$qemu_utils_out/bin/qemu-img" info --output=json "$RUN_DISK" |
       sed -n 's/^[[:space:]]*"backing-filename": "\(.*\)",[[:space:]]*$/\1/p' |
       head -n 1
   )"
@@ -142,7 +139,7 @@ fi
 
 if [ ! -e "$RUN_DISK" ]; then
   printf 'creating writable overlay: %s\n' "$RUN_DISK"
-  "$qemu_utils_out/bin/qemu-img" create \
+  nixome_run_store_path "$qemu_utils_out/bin/qemu-img" create \
     -f qcow2 \
     -F "$BASE_FORMAT" \
     -b "$BASE_IMAGE" \
@@ -150,7 +147,7 @@ if [ ! -e "$RUN_DISK" ]; then
 fi
 
 if [ ! -e "$OVMF_VARS" ]; then
-  cp "$ovmf_out/FV/OVMF_VARS.fd" "$OVMF_VARS"
+  cp "$(nixome_physical_store_path "$ovmf_out")/FV/OVMF_VARS.fd" "$OVMF_VARS"
   chmod u+w "$OVMF_VARS"
 fi
 
@@ -193,7 +190,7 @@ EOF
 
 rm -f "$MONITOR_SOCKET"
 
-exec "$qemu_out/bin/qemu-system-x86_64" \
+nixome_exec_store_path "$qemu_out/bin/qemu-system-x86_64" \
   -machine q35,accel=kvm \
   -cpu host,migratable=off \
   -smp "$SMP" \

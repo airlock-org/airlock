@@ -110,10 +110,18 @@ The config topology image keeps local build size down by sharing one NixOS
 guest root image between the TemplateVM source directories.
 
 When `/run/media/user/data` is mounted, generated writable VM overlays, logs,
-temporary files, and Qubes RPM/template downloads default to
-`/run/media/user/data/nixome/`. Without that mount, the fallback locations are
-repo-local `.nixome-vm/`, `.nixome-logs/`, and `.nixome-cache/rpms/`. Keep the
-cache unless you intentionally want to re-download the large template RPM.
+temporary files, Qubes RPM/template downloads, and Nixome Nix build outputs
+default to `/run/media/user/data/nixome/`. Source code, Nix files, scripts,
+docs, and Git history remain in this repository. The Nix store is a chroot
+local store rooted at `/run/media/user/data/nixome/nix-root`, so store paths
+still have logical names like `/nix/store/...` while the bytes live on the data
+disk.
+
+If that data path is not available, Nixome refuses to use the host `/nix/store`
+by default. Set `NIXOME_DATA_ROOT` to another data-backed path, or set
+`NIXOME_USE_HOST_NIX_STORE=1` for an explicit one-off host-store command. Keep
+the Qubes asset cache unless you intentionally want to re-download the large
+template RPM.
 
 Useful cleanup commands:
 
@@ -126,9 +134,9 @@ make clean-cache
 ```
 
 `make clean` removes VM work directories and logs, but preserves the download
-cache. The VM runner keeps only one stale overlay backup per image by default;
-set `NIXOME_VM_BACKUP_RETENTION=0` to keep none, or a larger number if you want
-rollback overlays while iterating.
+cache and the Nixome Nix store. The VM runner keeps only one stale overlay
+backup per image by default; set `NIXOME_VM_BACKUP_RETENTION=0` to keep none,
+or a larger number if you want rollback overlays while iterating.
 
 On a booted Xen dom0 target with a Qubes template installed:
 

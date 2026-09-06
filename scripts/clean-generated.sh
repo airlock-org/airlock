@@ -3,19 +3,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="${1:-usage}"
-if [ -n "${NIXOME_DATA_ROOT:-}" ]; then
-  DEFAULT_NIXOME_DATA_ROOT="$NIXOME_DATA_ROOT"
-elif [ -d /run/media/user/data ] && [ -w /run/media/user/data ]; then
-  DEFAULT_NIXOME_DATA_ROOT="/run/media/user/data/nixome"
-else
-  DEFAULT_NIXOME_DATA_ROOT=""
-fi
-VM_DIR="${NIXOME_VM_DIR:-${DEFAULT_NIXOME_DATA_ROOT:+$DEFAULT_NIXOME_DATA_ROOT/vm}}"
-VM_DIR="${VM_DIR:-$ROOT/.nixome-vm}"
-LOG_DIR="${NIXOME_LOG_DIR:-${DEFAULT_NIXOME_DATA_ROOT:+$DEFAULT_NIXOME_DATA_ROOT/logs}}"
-LOG_DIR="${LOG_DIR:-$ROOT/.nixome-logs}"
-CACHE_DIR="${NIXOME_QUBES_CACHE_DIR:-${DEFAULT_NIXOME_DATA_ROOT:+$DEFAULT_NIXOME_DATA_ROOT/cache/rpms}}"
-CACHE_DIR="${CACHE_DIR:-$ROOT/.nixome-cache/rpms}"
+source "$ROOT/scripts/lib/nixome-env.sh"
+VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
+LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
+CACHE_DIR="${NIXOME_QUBES_CACHE_DIR:-$ROOT/.nixome-cache/rpms}"
 CACHE_ROOT="${CACHE_DIR%/rpms}"
 
 usage() {
@@ -73,14 +64,23 @@ clean_vm_workdirs() {
 }
 
 show_disk_usage() {
-  du -sh \
+  local paths=(
     "$VM_DIR" \
     "$LOG_DIR" \
     "$CACHE_ROOT" \
+  )
+
+  if [ -n "${NIXOME_NIX_ROOT:-}" ]; then
+    paths+=("$NIXOME_NIX_ROOT")
+  fi
+
+  paths+=(
     "$ROOT"/.nixome-* \
     "$ROOT"/result \
     "$ROOT"/result-* \
-    2>/dev/null || true
+  )
+
+  du -sh "${paths[@]}" 2>/dev/null || true
 }
 
 case "$MODE" in

@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORK_DIR="${NIXOME_SETUP_CONFIG_IDEMPOTENT_DIR:-$ROOT/.nixome-logs/setup-config-idempotent}"
+source "$ROOT/scripts/lib/nixome-env.sh"
+HOST_LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
+WORK_DIR="${NIXOME_SETUP_CONFIG_IDEMPOTENT_DIR:-$HOST_LOG_DIR/setup-config-idempotent}"
 BIN_DIR="$WORK_DIR/bin"
 KERNEL_DIR="$WORK_DIR/kernel/6.12.64-1.fc41"
 KERNEL_BASE="$WORK_DIR/vm-kernels"
