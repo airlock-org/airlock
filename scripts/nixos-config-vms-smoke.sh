@@ -466,6 +466,7 @@ nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = "\\(.*\\)";$/\\1/p' fla
 [ -n "\$nixome_support_path" ]
 [ -n "\$nixos_qubes_path" ]
 mkdir -p dom0-profile/bin dom0-profile/share/nixome nixome
+rm -f dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json
 cat > nixome/config-vms.nix <<'CONFIGVMSNIXEOF'
 $CONFIG_VMS_SEED_TEXT
 CONFIGVMSNIXEOF
@@ -506,7 +507,7 @@ if [ -n "\${NIXOME_SYSTEM_PROFILE:-}" ]; then
   printf '%s\n' "\$NIXOME_SYSTEM_PROFILE" > "\$state_dir/current-profile-link"
 fi
 PROFILEACTIVATEEOF
-chmod 0555 dom0-profile/bin/nixome-dom0-profile-activate
+chmod 0755 dom0-profile/bin/nixome-dom0-profile-activate
 cat > flake.nix <<'NIXEOF'
 {
   description = "Nixome machine configuration candidate";

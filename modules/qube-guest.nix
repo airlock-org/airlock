@@ -166,7 +166,7 @@ let
         cat > dom0-profile/share/nixome/profile.json <<'EOF'
     ${configStagingDom0ProfileJson}
     EOF
-        chmod 0555 dom0-profile/bin/nixome-dom0-profile-activate
+        chmod 0755 dom0-profile/bin/nixome-dom0-profile-activate
         if [ "${if haveConfigSeedInputs then "1" else "0"}" != "1" ]; then
           printf 'missing Nixome config seed input paths in guest build\n' >&2
           exit 1
