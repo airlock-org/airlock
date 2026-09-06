@@ -422,7 +422,15 @@ run_qrexec_or_fail \
 if [ -z "${NIXOME_CONFIG_VMS_SEED:-}" ] || [ ! -r "$NIXOME_CONFIG_VMS_SEED" ]; then
   fail "missing config VM seed helper for smoke update"
 fi
+if [ -z "${NIXOME_TEMPLATES_SEED:-}" ] || [ ! -r "$NIXOME_TEMPLATES_SEED" ]; then
+  fail "missing template seed helper for smoke update"
+fi
+if [ -z "${NIXOME_TOPOLOGY_SCHEMA_SEED:-}" ] || [ ! -r "$NIXOME_TOPOLOGY_SCHEMA_SEED" ]; then
+  fail "missing topology schema seed helper for smoke update"
+fi
 CONFIG_VMS_SEED_TEXT="$(cat "$NIXOME_CONFIG_VMS_SEED")"
+TEMPLATES_SEED_TEXT="$(cat "$NIXOME_TEMPLATES_SEED")"
+TOPOLOGY_SCHEMA_SEED_TEXT="$(cat "$NIXOME_TOPOLOGY_SCHEMA_SEED")"
 
 cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
@@ -437,6 +445,12 @@ mkdir -p nixome
 cat > nixome/config-vms.nix <<'CONFIGVMSNIXEOF'
 $CONFIG_VMS_SEED_TEXT
 CONFIGVMSNIXEOF
+cat > nixome/templates.nix <<'TEMPLATESNIXEOF'
+$TEMPLATES_SEED_TEXT
+TEMPLATESNIXEOF
+cat > nixome/topology.nix <<'TOPOLOGYNIXEOF'
+$TOPOLOGY_SCHEMA_SEED_TEXT
+TOPOLOGYNIXEOF
 cat > flake.nix <<'NIXEOF'
 {
   description = "Nixome machine configuration candidate";
@@ -519,7 +533,7 @@ grep -F 'appliedMessage = "$APPLY_MESSAGE";' flake.nix
 grep -F 'configVms = import ./nixome/config-vms.nix;' flake.nix
 grep -F 'templateSet = import ./nixome/templates.nix' flake.nix
 grep -F '"$CREATED_QUBE" = {' flake.nix
-git add flake.nix nixome/config-vms.nix
+git add flake.nix nixome/config-vms.nix nixome/templates.nix nixome/topology.nix
 git \
   -c user.name='Nixome Config Smoke' \
   -c user.email='nixome-config-smoke@localhost' \

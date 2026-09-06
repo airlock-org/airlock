@@ -12,6 +12,12 @@ let
   configVmsSeed = builtins.toFile "nixome-config-vms.nix" (
     builtins.readFile ../../seeds/config-staging/nixome/config-vms.nix
   );
+  templatesSeed = builtins.toFile "nixome-templates.nix" (
+    builtins.readFile ../../seeds/config-staging/nixome/templates.nix
+  );
+  topologySchemaSeed = builtins.toFile "nixome-topology.nix" (
+    builtins.readFile ../../lib/nixome/topology.nix
+  );
 in
 writeShellApplication {
   name = "nixome-config-vms-smoke";
@@ -26,6 +32,8 @@ writeShellApplication {
 
   text = ''
     export NIXOME_CONFIG_VMS_SEED=${lib.escapeShellArg configVmsSeed}
+    export NIXOME_TEMPLATES_SEED=${lib.escapeShellArg templatesSeed}
+    export NIXOME_TOPOLOGY_SCHEMA_SEED=${lib.escapeShellArg topologySchemaSeed}
   ''
   + builtins.readFile ../../scripts/nixos-config-vms-smoke.sh;
 
