@@ -8,6 +8,8 @@ IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-image}"
 MEMORY="${NIXOME_VM_MEMORY:-8192}"
 SMP="${NIXOME_VM_SMP:-4}"
 SSH_PORT="${NIXOME_VM_SSH_PORT:-2222}"
+SSH_USER="${NIXOME_VM_SSH_USER:-nixome}"
+SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
 DISPLAY_MODE="${NIXOME_VM_DISPLAY:-none}"
 VGA="${NIXOME_VM_VGA:-std}"
 BACKUP_RETENTION="${NIXOME_VM_BACKUP_RETENTION:-1}"
@@ -179,7 +181,7 @@ starting VM
   vga: $VGA
   memory: ${MEMORY} MiB
   ssh: NIXOME_VM_SSH_PORT=$SSH_PORT $ROOT/scripts/ssh-nested-vm.sh
-  login: $SSH_USER / ${NIXOME_VM_SSH_PASSWORD:-nixome}
+  login: $SSH_USER / $SSH_PASSWORD
   monitor: $MONITOR_SOCKET
 
 Inside the VM, first check:
