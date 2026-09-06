@@ -135,6 +135,19 @@
           inherit templateName rootImageFile;
         };
 
+      mkStagedTemplateSet =
+        system:
+        let
+          templateBuilders = import ./lib/nixome/qube-template.nix {
+            inherit nixpkgs system;
+            nixomeSupport = "${self}";
+            nixosQubesSource = "${nixos-qubes}";
+          };
+        in
+        import ./seeds/config-staging/nixome/templates.nix {
+          inherit system templateBuilders;
+        };
+
       nixomeConfigSeedInputs = {
         nixpkgs = "${nixpkgs}";
         nixosQubes = "${nixos-qubes}";
@@ -220,6 +233,7 @@
         system:
         let
           pkgs = pkgsFor system;
+          stagedTemplateSet = mkStagedTemplateSet system;
           configSystemRootImage = mkQubeRootImage system {
             configuration = self.nixosConfigurations.qube-template-config-system;
             imageName = "nixome-nixos-config-system";
@@ -259,6 +273,7 @@
             templateName = "nixome-nixos-config-validator";
             rootImageFile = "${configSystemRootImage}/root.img";
           };
+          nixome-nixos-work-template = stagedTemplateSet.packages.nixome-nixos-work-template;
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
           nixome-vm-gui-image = self.nixosConfigurations.vm-gui.config.system.build.image;
           nixome-vm-gui-config-image = self.nixosConfigurations.vm-gui-config.config.system.build.image;
@@ -339,6 +354,9 @@
             configStaging = self.packages.x86_64-linux.nixome-nixos-config-staging-template;
             configValidator = self.packages.x86_64-linux.nixome-nixos-config-validator-template;
           };
+          nixomePrebuiltTemplatePackages = {
+            work = self.packages.x86_64-linux.nixome-nixos-work-template;
+          };
           inherit nixomeConfigSeedInputs;
         };
         modules = [
@@ -351,6 +369,9 @@
       nixosConfigurations.qube-template-config-system = lib.nixosSystem {
         system = "x86_64-linux";
         specialArgs = {
+          nixomePrebuiltTemplatePackages = {
+            work = self.packages.x86_64-linux.nixome-nixos-work-template;
+          };
           inherit nixomeConfigSeedInputs;
         };
         modules = [

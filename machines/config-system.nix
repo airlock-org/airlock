@@ -1,6 +1,7 @@
 {
   lib,
   nixomeConfigSeedInputs ? null,
+  nixomePrebuiltTemplatePackages ? { },
   nixomeQubeKernel ? null,
   nixomeQubeKernelOpts ? null,
   nixomeTemplatePackages ? null,
@@ -35,6 +36,8 @@ in
     "nixome/config-seed-inputs/nixome-support".source =
       if haveConfigSeedInputs then nixomeConfigSeedInputs.nixomeSupport else null;
   };
+
+  environment.systemPackages = lib.attrValues nixomePrebuiltTemplatePackages;
 
   nixome.qubes = {
     enable = true;
