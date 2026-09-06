@@ -214,10 +214,11 @@ make vm-config-smoke
 This explicitly runs the dom0 topology setup, then starts `config-vault`,
 `config-staging`, and `config-validator`, runs `uname -a` through qrexec in all
 three VMs, checks that `/home/user/nixome-config-vault` and
-`/home/user/nixome-config` already exist as clean Git repositories, has
-`config-validator` validate the committed candidate from `config-staging`, and
-has dom0 archive that validated candidate into `config-vault`. The result JSON
-is written to:
+`/home/user/nixome-config` already exist as clean Git repositories, modifies
+and commits `topology.json` in `config-staging`, has `config-validator`
+validate the committed candidate, has dom0 archive that validated candidate
+into `config-vault`, and applies the validated topology with
+`nixome-config-apply --apply`. The result JSON is written to:
 
 ```text
 .nixome-logs/vm-gui-config-vms-smoke.json

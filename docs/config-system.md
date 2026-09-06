@@ -42,6 +42,13 @@ It can initialize that candidate with:
 nixome-config-staging-init
 ```
 
+The seeded candidate contains `topology.json`. For this first apply proof, that
+file declares a small observable Qubes feature on `config-staging`:
+
+```text
+nixome-config-applied-message
+```
+
 `config-validator` validates candidates exported from `config-staging` and writes
 JSON under:
 
@@ -67,6 +74,17 @@ That command refuses to proceed unless `config-staging`, `config-validator`, and
 checks the validation artifact and bundle commit in dom0, then sends the
 validated bundle to `config-vault` for archival. This records what dom0 is about
 to attempt before deployment logic exists.
+
+dom0 applies a validated candidate by running:
+
+```bash
+sudo nixome-config-apply --apply
+```
+
+That command performs the same staging-to-validator-to-vault flow, then extracts
+the validator-approved Git bundle and applies its `topology.json` with
+`nixome-setup-config --apply`. Dom0 transports and applies the artifact, but the
+candidate validity decision comes from `config-validator`.
 
 ## Setup Path
 
@@ -96,7 +114,7 @@ delete undeclared domains or perform full restart/reboot classification yet.
 
 ## Developer Commands
 
-Build the two NixOS Qube template directory artifacts:
+Build the NixOS Qube template directory artifacts:
 
 ```bash
 make nixos-templates
@@ -134,8 +152,10 @@ make vm-config-smoke
 That target builds and boots the nested config dom0 image, explicitly runs the
 dom0 topology setup, starts `config-vault`, `config-staging`, and
 `config-validator`, runs `uname -a` through qrexec in all three VMs, initializes
-the staging repository and validator workspace, and verifies that dom0 archives
-the candidate into `config-vault` only after `config-validator` validates it.
+the staging repository and validator workspace, edits and commits
+`topology.json` in `config-staging`, validates that committed candidate in
+`config-validator`, archives it into `config-vault`, applies it from dom0, and
+checks that the declared Qubes feature changed.
 The machine-readable result is copied to:
 
 ```text

@@ -19,10 +19,15 @@ VAULT_APPMENUS_LOG="$LOG_DIR/config-vms-config-vault-appmenus.log"
 VALIDATOR_APPMENUS_LOG="$LOG_DIR/config-vms-config-validator-appmenus.log"
 STAGING_INIT_LOG="$LOG_DIR/config-vms-config-staging-init.log"
 VALIDATOR_INIT_LOG="$LOG_DIR/config-vms-config-validator-init.log"
+STAGING_UPDATE_LOG="$LOG_DIR/config-vms-config-staging-update.log"
 STAGING_REPO_STATUS_LOG="$LOG_DIR/config-vms-config-staging-repo-status.log"
 VAULT_REPO_STATUS_LOG="$LOG_DIR/config-vms-config-vault-repo-status.log"
 ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
 ARCHIVE_JSON="$LOG_DIR/config-archive.json"
+APPLY_LOG="$LOG_DIR/config-vms-apply.log"
+APPLY_JSON="$LOG_DIR/config-apply.json"
+APPLIED_FEATURE_LOG="$LOG_DIR/config-vms-applied-feature.log"
+VAULT_ARCHIVE_TREE_LOG="$LOG_DIR/config-vms-config-vault-archive-tree.log"
 JOURNAL_LOG="$LOG_DIR/config-vms-journal.log"
 LIBXL_LOG="$LOG_DIR/config-vms-libxl.log"
 QVM_PREFS_LOG="$LOG_DIR/config-vms-qvm-prefs.log"
@@ -32,6 +37,7 @@ VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
 VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
 QUBE_USER="${NIXOME_QUBE_USER:-user}"
 DOM0_USER="${NIXOME_DOM0_USER:-${SUDO_USER:-nixome}}"
+APPLY_MESSAGE="${NIXOME_CONFIG_APPLY_MESSAGE:-smoke-applied}"
 STAGING_CONSOLE_LOG="$LOG_DIR/config-vms-$STAGING-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 VALIDATOR_CONSOLE_LOG="$LOG_DIR/config-vms-$VALIDATOR-console.log"
@@ -112,6 +118,8 @@ write_result() {
     json_file_string_or_null "$STAGING_INIT_LOG"
     printf ',"validator_init_log":'
     json_file_string_or_null "$VALIDATOR_INIT_LOG"
+    printf ',"staging_update_log":'
+    json_file_string_or_null "$STAGING_UPDATE_LOG"
     printf ',"staging_repo_status":'
     json_file_string_or_null "$STAGING_REPO_STATUS_LOG"
     printf ',"vault_repo_status":'
@@ -120,6 +128,14 @@ write_result() {
     json_file_value_or_null "$ARCHIVE_JSON"
     printf ',"archive_log":'
     json_file_string_or_null "$ARCHIVE_LOG"
+    printf ',"apply":'
+    json_file_value_or_null "$APPLY_JSON"
+    printf ',"apply_log":'
+    json_file_string_or_null "$APPLY_LOG"
+    printf ',"applied_feature":'
+    json_file_string_or_null "$APPLIED_FEATURE_LOG"
+    printf ',"vault_archive_tree":'
+    json_file_string_or_null "$VAULT_ARCHIVE_TREE_LOG"
     printf ',"command_log":'
     json_string "$COMMAND_LOG"
     printf ',"qvm_ls_log":'
@@ -244,8 +260,9 @@ for cmd in \
   grep \
   jq \
   journalctl \
-  nixome-config-archive-candidate \
+  nixome-config-apply \
   qvm-check \
+  qvm-features \
   qvm-ls \
   qvm-run \
   qvm-start \
@@ -315,9 +332,28 @@ grep -q '^## main$' "$STAGING_REPO_STATUS_LOG" || fail "config staging repositor
 run_qrexec_or_fail "$STAGING" "config staging init" "$STAGING_INIT_LOG" "nixome-config-staging-init"
 run_qrexec_or_fail "$VALIDATOR" "config validator init" "$VALIDATOR_INIT_LOG" "nixome-config-validator-init"
 
-run_or_fail "archive config candidate from $STAGING into $VAULT" "$ARCHIVE_LOG" \
+run_qrexec_or_fail "$STAGING" "modify config candidate in $STAGING" "$STAGING_UPDATE_LOG" "
+set -eu
+cd /home/$QUBE_USER/nixome-config
+tmp=\"\$(mktemp)\"
+jq --arg value '$APPLY_MESSAGE' '.domains.\"config-staging\".features.\"nixome-config-applied-message\" = \$value' topology.json > \"\$tmp\"
+mv \"\$tmp\" topology.json
+git add topology.json
+git -c user.name='Nixome Config Smoke' -c user.email='nixome-config-smoke@localhost' commit -m 'test config apply'
+git status --short --branch
+"
+
+run_or_fail "apply config candidate from $STAGING through $VALIDATOR" "$APPLY_LOG" \
   env NIXOME_LOG_DIR="$LOG_DIR" NIXOME_CONFIG_STAGING_VM="$STAGING" NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" NIXOME_CONFIG_VAULT_VM="$VAULT" \
-  nixome-config-archive-candidate --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+  nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+
+qvm-features "$STAGING" nixome-config-applied-message > "$APPLIED_FEATURE_LOG" 2>&1 ||
+  fail "applied config feature is missing"
+grep -qx "$APPLY_MESSAGE" "$APPLIED_FEATURE_LOG" ||
+  fail "applied config feature did not match expected value"
+
+run_qrexec_or_fail "$VAULT" "config vault archive tree" "$VAULT_ARCHIVE_TREE_LOG" \
+  "cd /home/$QUBE_USER/nixome-config-vault && cat latest-candidate && find candidates -maxdepth 3 -type f | sort"
 
 jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT" '
   .schema == "nixome.config-archive.v1" and
@@ -331,6 +367,16 @@ jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT"
   .validation.status == "passed"
 ' "$ARCHIVE_JSON" >/dev/null || fail "config archive JSON did not pass"
 
+jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT" '
+  .schema == "nixome.config-apply.v1" and
+  .status == "passed" and
+  .staging == $staging and
+  .validator == $validator and
+  .vault == $vault and
+  .archive.status == "passed" and
+  .setup.status == "passed"
+' "$APPLY_JSON" >/dev/null || fail "config apply JSON did not pass"
+
 collect_diagnostics
-write_result passed "NixOS config VMs booted, config-staging exported a candidate, config-validator validated it, and dom0 archived it in config-vault"
+write_result passed "NixOS config VMs booted, config-staging was edited, config-validator validated it, dom0 archived it, and setup-config applied the topology"
 cat "$RESULT_JSON"

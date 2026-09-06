@@ -108,6 +108,7 @@ let
   };
 
   setupConfig = pkgs.callPackage ../pkgs/nixome-setup-config { };
+  configApply = pkgs.callPackage ../pkgs/nixome-config-apply { };
   configArchive = pkgs.callPackage ../pkgs/nixome-config-archive { };
   configVmsSmoke = pkgs.callPackage ../pkgs/nixome-config-vms-smoke { };
 
@@ -217,6 +218,7 @@ in
 
     environment.etc."nixome/qubes-topology.json".text = builtins.toJSON topology + "\n";
     environment.systemPackages = [
+      configApply
       configArchive
       configVmsSmoke
       setupConfig

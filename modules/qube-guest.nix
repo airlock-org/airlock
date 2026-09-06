@@ -136,7 +136,28 @@ let
       };
     }
     EOF
-        ${pkgs.git}/bin/git add README.md flake.nix
+        cat > topology.json <<'EOF'
+    {
+      "schema": "nixome.qubes-topology.v1",
+      "templates": {},
+      "kernels": {},
+      "prefs": {},
+      "domains": {
+        "config-staging": {
+          "class": "AppVM",
+          "template": "nixome-nixos-config-staging",
+          "label": "gray",
+          "netvm": null,
+          "prefs": {},
+          "features": {
+            "nixome-config-applied-message": "initial"
+          },
+          "services": {}
+        }
+      }
+    }
+    EOF
+        ${pkgs.git}/bin/git add README.md flake.nix topology.json
         ${pkgs.git}/bin/git \
           -c user.name='Nixome Config Staging' \
           -c user.email='nixome-config-staging@localhost' \
@@ -341,12 +362,17 @@ let
     result_file="$validation_dir/$candidate_commit.json"
     result_tmp="$result_file.tmp"
     flake_log="$validation_dir/logs/flake-check-$candidate_commit.log"
+    topology_log="$validation_dir/logs/topology-json-$candidate_commit.log"
     local_flake_log="$tmpdir/flake-check.log"
+    local_topology_log="$tmpdir/topology-json.log"
 
     write_validation() {
       status="$1"
       reason="$2"
-      flake_status="$3"
+      topology_status="$3"
+      topology_path="$4"
+      topology_log_path="$5"
+      flake_status="$6"
 
       ${pkgs.jq}/bin/jq -c -n \
         --arg schema "nixome.config-validation.v1" \
@@ -358,6 +384,9 @@ let
         --arg manifest "$tmpdir/manifest.json" \
         --arg bundle_verify_log "$tmpdir/bundle-verify.log" \
         --arg git_clone_log "$tmpdir/git-clone.log" \
+        --arg topology_status "$topology_status" \
+        --arg topology_path "$topology_path" \
+        --arg topology_log "$topology_log_path" \
         --arg flake_status "$flake_status" \
         --arg flake_log "$flake_log" \
         '{
@@ -388,6 +417,12 @@ let
               details: $dirty
             },
             {
+              name: "nixome-topology-json",
+              status: $topology_status,
+              path: $topology_path,
+              log: $topology_log
+            },
+            {
               name: "nix-flake-check-no-build",
               status: $flake_status,
               log: $flake_log
@@ -399,14 +434,38 @@ let
     }
 
     if [ -n "$dirty" ]; then
-      write_validation failed "validated candidate worktree is dirty" skipped
+      write_validation failed "validated candidate worktree is dirty" skipped "topology.json" "$topology_log" skipped
       cat "$tmpdir/validation.json" >&2
       exit 1
     fi
 
+    topology_status=skipped
     flake_status=skipped
     reason="validation passed"
     status=passed
+
+    if [ -f topology.json ]; then
+      if ${pkgs.jq}/bin/jq -e '
+        .schema == "nixome.qubes-topology.v1" and
+        (.templates | type == "object") and
+        (.kernels | type == "object") and
+        (.prefs | type == "object") and
+        (.domains | type == "object")
+      ' topology.json > "$local_topology_log" 2>&1; then
+        topology_status=passed
+      else
+        topology_status=failed
+        reason="topology.json validation failed"
+        status=failed
+      fi
+      ${pkgs.coreutils}/bin/cp "$local_topology_log" "$topology_log"
+    else
+      printf 'no topology.json present; no dom0 topology can be applied\n' > "$topology_log"
+      topology_status=failed
+      reason="topology.json is missing"
+      status=failed
+    fi
+
     if [ -f flake.nix ]; then
       if ${pkgs.nix}/bin/nix \
         --extra-experimental-features nix-command \
@@ -423,7 +482,7 @@ let
       printf 'no flake.nix present; skipping nix flake check\n' > "$flake_log"
     fi
 
-    write_validation "$status" "$reason" "$flake_status"
+    write_validation "$status" "$reason" "$topology_status" "topology.json" "$topology_log" "$flake_status"
     if [ "$status" != passed ]; then
       cat "$tmpdir/validation.json" >&2
       exit 1
@@ -505,27 +564,39 @@ let
       exit 1
     }
 
+    snapshot_tmp="$tmpdir/snapshot"
+    ${pkgs.git}/bin/git clone "$tmpdir/config.bundle" "$snapshot_tmp" > "$tmpdir/snapshot-git-clone.log" 2>&1
+    ${pkgs.git}/bin/git -C "$snapshot_tmp" checkout --detach "$candidate_commit" > "$tmpdir/snapshot-git-checkout.log" 2>&1
+    ${pkgs.coreutils}/bin/rm -rf "$snapshot_tmp/.git"
+
     if [ ! -d "$repo/.git" ]; then
       ${configVaultInit}/bin/nixome-config-vault-init >/dev/null
     fi
 
     archive_dir="$repo/candidates/$candidate_commit"
+    snapshot_dir="$archive_dir/snapshot"
     ${pkgs.coreutils}/bin/mkdir -p "$archive_dir"
     ${pkgs.coreutils}/bin/cp "$tmpdir/config.bundle" "$archive_dir/config.bundle"
     ${pkgs.coreutils}/bin/cp "$tmpdir/manifest.json" "$archive_dir/manifest.json"
     ${pkgs.coreutils}/bin/cp "$tmpdir/validation.json" "$archive_dir/validation.json"
     ${pkgs.coreutils}/bin/cp "$tmpdir/bundle-verify.log" "$archive_dir/bundle-verify.log"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/snapshot-git-clone.log" "$archive_dir/snapshot-git-clone.log"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/snapshot-git-checkout.log" "$archive_dir/snapshot-git-checkout.log"
+    ${pkgs.coreutils}/bin/rm -rf "$snapshot_dir"
+    ${pkgs.coreutils}/bin/cp -a "$snapshot_tmp" "$snapshot_dir"
     ${pkgs.jq}/bin/jq -c -n \
       --arg schema "nixome.config-candidate-archive-record.v1" \
       --arg candidate_commit "$candidate_commit" \
       --arg manifest_schema "$manifest_schema" \
       --arg validation_schema "$validation_schema" \
+      --arg snapshot "$archive_dir/snapshot" \
       --arg source "dom0" \
       '{
         schema: $schema,
         candidate_commit: $candidate_commit,
         manifest_schema: $manifest_schema,
         validation_schema: $validation_schema,
+        snapshot: $snapshot,
         archived_by: $source
       }' > "$archive_dir/metadata.json"
     printf '%s\n' "$candidate_commit" > "$repo/latest-candidate"

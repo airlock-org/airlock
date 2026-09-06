@@ -93,7 +93,8 @@ simple prefs/features/services with `nixome-setup-config`, boots the NixOS
 AppVMs with the normal dom0-provided Qubes VM kernel, runs `uname -a` through
 qrexec in each VM, and checks that the role repositories exist before
 `config-staging` exports a committed config candidate, `config-validator`
-validates it, and dom0 archives it into `config-vault`. See
+validates it, dom0 archives it into `config-vault`, and
+`nixome-config-apply --apply` applies the validated topology. See
 [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
 The config topology image keeps local build size down by sharing one NixOS
 guest root image between the TemplateVM source directories.
@@ -125,6 +126,8 @@ The Qubes smoke test creates `test-nixome-smoke` if needed, starts it, runs
 - `nixome-qube-bootstrap`, `nixome-qubes-smoke`, and
   `nixome-qube-gui-smoke` are development-only commands for progressing the
   VM lifecycle, qrexec, and GUI feedback loop.
+- `nixome-config-apply` is the first explicit dom0 command for applying a
+  validator-approved config candidate.
 - `modules/qube-guest.nix`, `pkgs/nixome-qubes-template`, and
   `modules/qubes-topology.nix` are the first pieces for NixOS-backed Qubes
   templates and declarative topology setup.

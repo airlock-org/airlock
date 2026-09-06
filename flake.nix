@@ -213,6 +213,7 @@
           };
         in
         {
+          nixome-config-apply = pkgs.callPackage ./pkgs/nixome-config-apply { };
           nixome-config-archive-candidate = pkgs.callPackage ./pkgs/nixome-config-archive { };
           nixome-config-vms-smoke = pkgs.callPackage ./pkgs/nixome-config-vms-smoke { };
           nixome-qube-bootstrap = pkgs.callPackage ./pkgs/nixome-qube-bootstrap { };
@@ -256,6 +257,7 @@
       );
 
       checks = forAllSystems (system: {
+        config-apply-package = self.packages.${system}.nixome-config-apply;
         config-archive-package = self.packages.${system}.nixome-config-archive-candidate;
         module-contract = mkModuleContractCheck system;
         config-vms-smoke-package = self.packages.${system}.nixome-config-vms-smoke;
