@@ -26,7 +26,9 @@
         "nixpkgs": [
           "nixpkgs"
         ],
-        "nixpkgs-libvirt_10_5": "nixpkgs-libvirt_10_5",
+        "nixpkgs-libvirt_10_5": [
+          "nixpkgs-libvirt_10_5"
+        ],
         "shelly": "shelly",
         "treefmt-nix": "treefmt-nix"
       },
@@ -59,6 +61,7 @@
     "nixpkgs-libvirt_10_5": {
       "locked": {
         "lastModified": 1727211877,
+        "narHash": "sha256-zy/ar3GpnzuGRCwrr6zV/QicoZcqd2kNNhkRDECfStU=",
         "owner": "NixOS",
         "repo": "nixpkgs",
         "rev": "e0464e47880a69896f0fb1810f00e0de469f770a",
@@ -74,7 +77,8 @@
     "root": {
       "inputs": {
         "nixos-qubes": "nixos-qubes",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "nixpkgs-libvirt_10_5": "nixpkgs-libvirt_10_5"
       }
     },
     "shelly": {

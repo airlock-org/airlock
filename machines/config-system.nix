@@ -31,6 +31,11 @@ in
   environment.etc = {
     "nixome/config-seed-inputs/nixpkgs".source =
       if haveConfigSeedInputs then nixomeConfigSeedInputs.nixpkgs else null;
+    "nixome/config-seed-inputs/nixpkgs-libvirt_10_5".source =
+      if haveConfigSeedInputs && nixomeConfigSeedInputs ? nixpkgsLibvirt105 then
+        nixomeConfigSeedInputs.nixpkgsLibvirt105
+      else
+        null;
     "nixome/config-seed-inputs/nixos-qubes".source =
       if haveConfigSeedInputs then nixomeConfigSeedInputs.nixosQubes else null;
     "nixome/config-seed-inputs/nixome-support".source =

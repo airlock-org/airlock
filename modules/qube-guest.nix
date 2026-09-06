@@ -181,6 +181,7 @@ let
         fi
         ${pkgs.gnused}/bin/sed -i \
           -e ${lib.escapeShellArg "s|__NIXOME_NIXPKGS_URL__|path:${if haveConfigSeedInputs then nixomeConfigSeedInputs.nixpkgs else ""}|g"} \
+          -e ${lib.escapeShellArg "s|__NIXPKGS_LIBVIRT_10_5_PATH__|${if haveConfigSeedInputs then nixomeConfigSeedInputs.nixpkgsLibvirt105 or "" else ""}|g"} \
           -e ${lib.escapeShellArg "s|__NIXOME_NIXOS_QUBES_PATH__|${if haveConfigSeedInputs then nixomeConfigSeedInputs.nixosQubes else ""}|g"} \
           -e ${lib.escapeShellArg "s|__NIXOME_SUPPORT_PATH__|${if haveConfigSeedInputs then nixomeConfigSeedInputs.nixomeSupport else ""}|g"} \
           flake.nix
@@ -1653,6 +1654,10 @@ in
     environment.etc."nixome/config-seed-inputs/nixpkgs" = lib.mkIf haveConfigSeedInputs {
       source = nixomeConfigSeedInputs.nixpkgs;
     };
+    environment.etc."nixome/config-seed-inputs/nixpkgs-libvirt_10_5" =
+      lib.mkIf (haveConfigSeedInputs && nixomeConfigSeedInputs ? nixpkgsLibvirt105) {
+        source = nixomeConfigSeedInputs.nixpkgsLibvirt105;
+      };
     environment.etc."nixome/config-seed-inputs/nixos-qubes" = lib.mkIf haveConfigSeedInputs {
       source = nixomeConfigSeedInputs.nixosQubes;
     };

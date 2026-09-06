@@ -1,5 +1,6 @@
 {
   nixpkgs,
+  nixpkgsLibvirt105Source,
   nixosQubesSource,
   nixomeSupport,
   system ? "x86_64-linux",
@@ -23,10 +24,20 @@ let
     });
   };
 
+  libvirt105Overlay = self: _: {
+    libvirt_10_5 = self.callPackage "${nixpkgsLibvirt105Source}/pkgs/development/libraries/libvirt" {
+      substituteAll = args: self.replaceVars args.src (builtins.removeAttrs args [ "src" ]);
+      xhtml1 = null;
+      AppKit = null;
+      Carbon = null;
+    };
+  };
+
   qubesOverlays = [
     imageBuildToolsOverlay
     (import "${nixosQubesSource}/pkgs/top-level/overlay.nix")
     (import "${nixpkgs}/pkgs/top-level/by-name-overlay.nix" "${nixosQubesSource}/pkgs/by-name")
+    libvirt105Overlay
     (import "${nixosQubesSource}/nix/overlay.nix")
   ];
 

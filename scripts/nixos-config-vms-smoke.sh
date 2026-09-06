@@ -497,9 +497,22 @@ extract_input_url() {
 nixpkgs_url="\$(sed -n 's/^[[:space:]]*\\(inputs\\.\\)\\{0,1\\}nixpkgs\\.url = "\\(.*\\)";$/\\2/p' flake.nix | head -n 1)"
 nixome_support_url="\$(extract_input_url nixome-support)"
 nixos_qubes_url="\$(extract_input_url nixos-qubes)"
-nixome_support_path="\${nixome_support_url#path:}"
-nixos_qubes_path="\${nixos_qubes_url#path:}"
+if [ -n "\$nixome_support_url" ]; then
+  nixome_support_path="\${nixome_support_url#path:}"
+else
+  nixome_support_path="\$(sed -n 's/^      nixomeSupport = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
+fi
+if [ -n "\$nixos_qubes_url" ]; then
+  nixos_qubes_path="\${nixos_qubes_url#path:}"
+else
+  nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
+fi
+nixpkgs_libvirt_10_5_path="\$(sed -n 's/^      nixpkgsLibvirt105Source = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
+if [ -z "\$nixpkgs_libvirt_10_5_path" ] && [ -e /etc/nixome/config-seed-inputs/nixpkgs-libvirt_10_5 ]; then
+  nixpkgs_libvirt_10_5_path="\$(readlink -f /etc/nixome/config-seed-inputs/nixpkgs-libvirt_10_5)"
+fi
 [ -n "\$nixpkgs_url" ]
+[ -n "\$nixpkgs_libvirt_10_5_path" ]
 [ -n "\$nixome_support_path" ]
 [ -n "\$nixos_qubes_path" ]
 mkdir -p dom0-profile/bin dom0-profile/share/nixome nixome
@@ -586,6 +599,7 @@ PROFILEACTIVATEEOF
 chmod 0755 dom0-profile/bin/nixome-dom0-profile-activate
 sed -i \
   -e "s|__NIXOME_NIXPKGS_URL__|\$nixpkgs_url|g" \
+  -e "s|__NIXPKGS_LIBVIRT_10_5_PATH__|\$nixpkgs_libvirt_10_5_path|g" \
   -e "s|__NIXOME_NIXOS_QUBES_PATH__|\$nixos_qubes_path|g" \
   -e "s|__NIXOME_SUPPORT_PATH__|\$nixome_support_path|g" \
   flake.nix

@@ -3,10 +3,12 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs-libvirt_10_5.url = "github:NixOS/nixpkgs/e0464e47880a69896f0fb1810f00e0de469f770a";
 
     nixos-qubes = {
       url = "path:./vendor/nixos-qubes";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixpkgs-libvirt_10_5.follows = "nixpkgs-libvirt_10_5";
     };
   };
 
@@ -14,6 +16,7 @@
     inputs@{
       self,
       nixpkgs,
+      nixpkgs-libvirt_10_5,
       nixos-qubes,
       ...
     }:
@@ -140,6 +143,7 @@
         let
           templateBuilders = import ./lib/nixome/qube-template.nix {
             inherit nixpkgs system;
+            nixpkgsLibvirt105Source = "${nixpkgs-libvirt_10_5}";
             nixomeSupport = "${self}";
             nixosQubesSource = "${nixos-qubes}";
           };
@@ -150,6 +154,7 @@
 
       nixomeConfigSeedInputs = {
         nixpkgs = "${nixpkgs}";
+        nixpkgsLibvirt105 = "${nixpkgs-libvirt_10_5}";
         nixosQubes = "${nixos-qubes}";
         nixomeSupport = "${self}";
       };

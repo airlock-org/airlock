@@ -29,10 +29,14 @@ cp "$ROOT/lib/nixome/system.nix" "$WORK_DIR/nixome/system-schema.nix"
 cp "$ROOT/lib/nixome/topology.nix" "$WORK_DIR/nixome/topology.nix"
 
 nixpkgs_path="$(nixome_physical_store_path "$(nix eval --raw "$ROOT#nixome.seedInputs.nixpkgs")")"
+nixpkgs_libvirt_10_5_path="$(
+  nixome_physical_store_path "$(nix eval --raw "$ROOT#nixome.seedInputs.nixpkgsLibvirt105")"
+)"
 nixos_qubes_path="$(nixome_physical_store_path "$(nix eval --raw "$ROOT#nixome.seedInputs.nixosQubes")")"
 nixome_support_path="$(nixome_physical_store_path "$(nix eval --raw "$ROOT#nixome.seedInputs.nixomeSupport")")"
 sed -i \
   -e "s|__NIXOME_NIXPKGS_URL__|path:$nixpkgs_path|g" \
+  -e "s|__NIXPKGS_LIBVIRT_10_5_PATH__|$nixpkgs_libvirt_10_5_path|g" \
   -e "s|__NIXOME_NIXOS_QUBES_PATH__|$nixos_qubes_path|g" \
   -e "s|__NIXOME_SUPPORT_PATH__|$nixome_support_path|g" \
   "$WORK_DIR/flake.nix"
@@ -41,9 +45,22 @@ extracted_nixpkgs_url="$(
   sed -n 's/^[[:space:]]*\(inputs\.\)\{0,1\}nixpkgs\.url = "\(.*\)";$/\2/p' "$WORK_DIR/flake.nix" |
     head -n 1
 )"
+extracted_nixome_support_path="$(
+  sed -n 's/^      nixomeSupport = "\(.*\)";$/\1/p' "$WORK_DIR/flake.nix" |
+    head -n 1
+)"
+extracted_nixpkgs_libvirt_10_5_path="$(
+  sed -n 's/^      nixpkgsLibvirt105Source = "\(.*\)";$/\1/p' "$WORK_DIR/flake.nix" |
+    head -n 1
+)"
+extracted_nixos_qubes_path="$(
+  sed -n 's/^      nixosQubesSource = "\(.*\)";$/\1/p' "$WORK_DIR/flake.nix" |
+    head -n 1
+)"
 [ "$extracted_nixpkgs_url" = "path:$nixpkgs_path" ]
-grep -F "url = \"path:$nixome_support_path\";" "$WORK_DIR/flake.nix" >/dev/null
-grep -F "url = \"path:$nixos_qubes_path\";" "$WORK_DIR/flake.nix" >/dev/null
+[ "$extracted_nixome_support_path" = "$nixome_support_path" ]
+[ "$extracted_nixpkgs_libvirt_10_5_path" = "$nixpkgs_libvirt_10_5_path" ]
+[ "$extracted_nixos_qubes_path" = "$nixos_qubes_path" ]
 
 (
   cd "$WORK_DIR"

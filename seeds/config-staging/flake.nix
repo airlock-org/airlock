@@ -1,28 +1,10 @@
 {
   description = "Nixome machine configuration candidate";
 
-  inputs = {
-    nixpkgs.url = "__NIXOME_NIXPKGS_URL__";
-
-    nixos-qubes = {
-      url = "path:__NIXOME_NIXOS_QUBES_PATH__";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    nixome-support = {
-      url = "path:__NIXOME_SUPPORT_PATH__";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.nixos-qubes.follows = "nixos-qubes";
-    };
-  };
+  inputs.nixpkgs.url = "__NIXOME_NIXPKGS_URL__";
 
   outputs =
-    {
-      self,
-      nixpkgs,
-      nixos-qubes,
-      nixome-support,
-    }:
+    { self, nixpkgs }:
     let
       system = "x86_64-linux";
       topologySchema = import ./nixome/topology.nix;
@@ -38,11 +20,16 @@
       };
       localTopology = localConfig.topology or { };
       prebuiltTemplateSources = import ./nixome/prebuilt-template-sources.nix;
-      nixomeSupport = "${nixome-support}";
-      nixosQubesSource = "${nixos-qubes}";
+      nixomeSupport = "__NIXOME_SUPPORT_PATH__";
+      nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
+      nixpkgsLibvirt105Source = "__NIXPKGS_LIBVIRT_10_5_PATH__";
       templateBuilders = import "${nixomeSupport}/lib/nixome/qube-template.nix" {
         inherit nixpkgs system;
-        inherit nixomeSupport nixosQubesSource;
+        inherit
+          nixomeSupport
+          nixosQubesSource
+          nixpkgsLibvirt105Source
+          ;
       };
       templateSet = import ./nixome/templates.nix {
         inherit
@@ -69,11 +56,66 @@
         // (localConfig.system.args or { })
       );
       machineSystem = systemSchema.mkSystem machineSystemConfig;
+      pkgs = templateBuilders.pkgs;
+      allowUnfreePredicate =
+        pkg:
+        builtins.elem (pkg.pname or (nixpkgs.lib.getName pkg)) [
+          "qubes-artwork"
+          "qubes-vmm-stubdom-linux"
+        ];
       nixomeQubeKernelName = "6.12.64-1.fc41";
+      nixomeQubeKernel = pkgs.repackRpmKernel {
+        kernelSrc = pkgs.fetchurl {
+          url = "https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm";
+          hash = "sha256-nK0KbnT8hUwIZPhUgW8nSRNAbZDgjexHWfeeYDiFxsU=";
+        };
+        modulesSrc = pkgs.fetchurl {
+          url = "https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-modules-6.12.64-1.qubes.fc41.x86_64.rpm";
+          hash = "sha256-JBPQM27u/nQwKnfGGDLpQ35BhRwSpy+vcZLUlI06ELo=";
+        };
+        kernelVersion = "6.12.64-1";
+        fedoraVersion = "fc41";
+      };
       nixomeConfigSeedInputs = {
         nixpkgs = "${nixpkgs}";
-        nixosQubes = "${nixos-qubes}";
-        nixomeSupport = "${nixome-support}";
+        nixpkgsLibvirt105 = nixpkgsLibvirt105Source;
+        nixosQubes = nixosQubesSource;
+        inherit nixomeSupport;
+      };
+      configSystemGuest = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit
+            nixomeConfigSeedInputs
+            ;
+          nixomePrebuiltTemplateSources = prebuiltTemplateSources;
+          nixomePrebuiltTemplatePackages = {
+            work = templateSet.packages.nixome-nixos-work-template;
+          };
+        };
+        modules = [
+          "${nixpkgs}/nixos/modules/profiles/minimal.nix"
+          "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
+          "${nixomeSupport}/modules/qube-guest.nix"
+          {
+            nixpkgs.overlays = templateBuilders.qubesOverlays;
+            nixpkgs.config.allowUnfreePredicate = allowUnfreePredicate;
+            nixome.qubeGuest.enable = true;
+            nixome.qubeGuest.role = "config-system";
+            networking.hostName = "nixome-config-system-template";
+            documentation.enable = nixpkgs.lib.mkDefault false;
+            programs.command-not-found.enable = nixpkgs.lib.mkDefault false;
+            system.nixos.versionSuffix = nixpkgs.lib.mkForce "";
+          }
+        ];
+      };
+      configSystemRootImage = templateBuilders.mkQubeRootImage {
+        configuration = configSystemGuest;
+        imageName = "nixome-nixos-config-system";
+      };
+      configSystemTemplate = templateBuilders.mkQubesTemplatePackage {
+        templateName = "nixome-nixos-config-system";
+        rootImageFile = "${configSystemRootImage}/root.img";
       };
       nixomeDom0System = nixpkgs.lib.nixosSystem {
         inherit system;
@@ -84,27 +126,32 @@
             ;
           nixomeQubeKernel = {
             name = nixomeQubeKernelName;
-            package = nixome-support.packages.${system}.nixome-qubes-vm-kernel;
+            package = nixomeQubeKernel;
           };
           nixomeQubeKernelOpts = {
-            configSystem = templateBuilders.mkQubeKernelOpts nixome-support.nixosConfigurations.qube-template-config-system;
+            configSystem = templateBuilders.mkQubeKernelOpts configSystemGuest;
           };
           nixomeTemplatePackages = {
-            configSystem = nixome-support.packages.${system}.nixome-nixos-config-system-template;
+            configSystem = configSystemTemplate;
           };
           nixomePrebuiltTemplatePackages = {
-            work = nixome-support.packages.${system}.nixome-nixos-work-template;
+            work = templateSet.packages.nixome-nixos-work-template;
           };
           nixomePrebuiltTemplateSources = {
-            work = "${nixome-support.packages.${system}.nixome-nixos-work-template}/nixome-nixos-work";
+            work = "${templateSet.packages.nixome-nixos-work-template}/nixome-nixos-work";
             nixome-nixos-work =
-              "${nixome-support.packages.${system}.nixome-nixos-work-template}/nixome-nixos-work";
+              "${templateSet.packages.nixome-nixos-work-template}/nixome-nixos-work";
           };
         };
         modules = [
-          nixome-support.nixosModules.dom0
+          "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
+          "${nixomeSupport}/modules/dom0.nix"
+          "${nixomeSupport}/modules/qubes-topology.nix"
           "${nixomeSupport}/machines/vm-gui.nix"
           "${nixomeSupport}/machines/config-system.nix"
+          {
+            nixpkgs.overlays = templateBuilders.qubesOverlays;
+          }
           ./nixome/dom0-host.nix
         ];
       };
