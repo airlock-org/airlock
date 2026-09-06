@@ -436,8 +436,8 @@ cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
 cd /home/$QUBE_USER/nixome-config
 nixpkgs_url="\$(sed -n 's/^  inputs\\.nixpkgs\\.url = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
-nixome_support_path="\$(sed -n 's/^      nixomeSupport = \\(.*\\);$/\\1/p' flake.nix | head -n 1)"
-nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = \\(.*\\);$/\\1/p' flake.nix | head -n 1)"
+nixome_support_path="\$(sed -n 's/^      nixomeSupport = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
+nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
 [ -n "\$nixpkgs_url" ]
 [ -n "\$nixome_support_path" ]
 [ -n "\$nixos_qubes_path" ]

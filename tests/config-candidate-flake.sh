@@ -26,6 +26,22 @@ sed -i \
   -e "s|__NIXOME_SUPPORT_PATH__|$nixome_support_path|g" \
   "$WORK_DIR/flake.nix"
 
+extracted_nixpkgs_url="$(
+  sed -n 's/^  inputs\.nixpkgs\.url = "\(.*\)";$/\1/p' "$WORK_DIR/flake.nix" |
+    head -n 1
+)"
+extracted_nixome_support_path="$(
+  sed -n 's/^      nixomeSupport = "\(.*\)";$/\1/p' "$WORK_DIR/flake.nix" |
+    head -n 1
+)"
+extracted_nixos_qubes_path="$(
+  sed -n 's/^      nixosQubesSource = "\(.*\)";$/\1/p' "$WORK_DIR/flake.nix" |
+    head -n 1
+)"
+[ "$extracted_nixpkgs_url" = "path:$nixpkgs_path" ]
+[ "$extracted_nixome_support_path" = "$nixome_support_path" ]
+[ "$extracted_nixos_qubes_path" = "$nixos_qubes_path" ]
+
 (
   cd "$WORK_DIR"
   nix \
