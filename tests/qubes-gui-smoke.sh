@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]:-$0}"
 ROOT="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
-source "$ROOT/scripts/lib/nixome-env.sh"
 if [ -n "${NIXOME_LOG_DIR:-}" ]; then
   LOG_DIR="$NIXOME_LOG_DIR"
 elif [ -w "$ROOT" ]; then
