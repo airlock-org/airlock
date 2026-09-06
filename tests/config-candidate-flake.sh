@@ -8,6 +8,8 @@ RESULT_DIR="$LOG_DIR/config-candidate-flake"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nixome-config-candidate-flake.XXXXXX")"
 TOPOLOGY_JSON="$RESULT_DIR/topology.json"
 SYSTEM_JSON="$RESULT_DIR/system.json"
+PROFILE_LINK="$RESULT_DIR/dom0-profile"
+PROFILE_JSON="$RESULT_DIR/dom0-profile.json"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -80,6 +82,19 @@ nix \
   --offline \
   --no-write-lock-file \
   --json "$WORK_DIR#nixome.system" > "$SYSTEM_JSON"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  build \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --out-link "$PROFILE_LINK" \
+  "$WORK_DIR#packages.x86_64-linux.nixome-dom0-profile"
+profile_out="$(readlink "$PROFILE_LINK")"
+profile_physical="$(nixome_physical_store_path "$profile_out")"
+[ -x "$profile_physical/bin/nixome-dom0-profile-activate" ]
+cp "$profile_physical/share/nixome/profile.json" "$PROFILE_JSON"
 
 jq -e '
   .schema == "nixome.qubes-topology.v1" and
@@ -209,5 +224,11 @@ jq -e '
   .plan.reboot_required == false and
   .plan.reboot_reasons == []
 ' "$SYSTEM_JSON" >/dev/null
+
+jq -e '
+  .schema == "nixome.dom0-profile.v1" and
+  .message == "initial" and
+  .built_by == "config-staging"
+' "$PROFILE_JSON" >/dev/null
 
 printf 'config candidate flake eval ok\n'

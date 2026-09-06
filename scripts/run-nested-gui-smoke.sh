@@ -297,6 +297,12 @@ collect_diagnostics() {
   remote 'sudo -n cat /var/log/nixome/config-apply-template-builds.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-builds.json" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-apply-template-builds.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-builds.log" 2>/dev/null || true
   remote 'sudo -n sh -c '"'"'for f in /var/log/nixome/config-apply-template-build-*.log; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-build-details.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-apply-system-builds.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-system-builds.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-apply-system-builds.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-system-builds.log" 2>/dev/null || true
+  remote 'sudo -n sh -c '"'"'for f in /var/log/nixome/config-apply-system-build-*.log; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-system-build-details.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-system-apply.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-system-apply.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-system-apply.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-system-apply.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-system-profile-activation.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-system-profile-activation.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-journal.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-journal.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-libxl.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-libxl.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-qvm-prefs.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-qvm-prefs.log" 2>/dev/null || true

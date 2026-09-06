@@ -697,6 +697,7 @@ resolve_system_sources() {
     else
       record_system_build "$component" "$attr" "$subpath" failed "" "" "$build_log"
       cat "$build_log" >> "$SYSTEM_BUILD_LOG" || true
+      cat "$build_log" >&2 || true
       fail "system build failed for $component from $attr"
     fi
 
