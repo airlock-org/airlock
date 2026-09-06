@@ -97,6 +97,11 @@ cat /proc/xen/capabilities
 systemctl status qubes-db-dom0 qubesd qubes-qrexec-policy-daemon
 ```
 
+`make vm-ssh` supplies the default `nixome` password itself and ignores stale
+loopback host keys from previous nested VM images. Override with
+`NIXOME_VM_SSH_USER`, `NIXOME_VM_SSH_PASSWORD`, or `NIXOME_VM_SSH_PORT` when
+needed.
+
 After a Qubes VM kernel and template are installed, run `nixome-qubes-smoke`
 inside the VM to create/start the test qube and execute `uname -a` through
 qrexec.
@@ -192,12 +197,10 @@ make nixos-templates-dry-run
 make nixos-templates
 ```
 
-These targets build the NixOS Qube template source directories for
-`nixome-nixos-config-vault`, `nixome-nixos-config-staging`, and
-`nixome-nixos-config-validator`. The outputs are Nix store directories containing
-`root.img`, `template.conf`, and Qubes appmenu list files. They are not RPMs.
-For now, all three template directories symlink `root.img` to one shared NixOS
-guest root image to reduce local build size.
+These targets build the shared config-system NixOS Qube template source
+directory and the staged work-template source directory. The outputs are Nix
+store directories containing `root.img`, `template.conf`, and Qubes appmenu
+list files. They are not RPMs.
 
 To build or boot a nested GUI dom0 image that includes the declared
 `config-vault`, `config-staging`, and `config-validator` topology:
@@ -244,12 +247,12 @@ config generated
 rule. The result JSON is written to:
 
 ```text
-.nixome-logs/vm-gui-config-vms-smoke.json
+/run/media/user/data/nixome/logs/vm-gui-config-vms-smoke.json
 ```
 
-The config topology image keeps local build size down by sharing one NixOS
-guest root image between the three TemplateVM source directories. The VM runner
-can use either qcow2 or raw Nix-built base images and creates a writable qcow2
+The config topology image keeps local build size down by importing one shared
+NixOS config-system TemplateVM for the three config AppVMs. The VM runner can
+use either qcow2 or raw Nix-built base images and creates a writable qcow2
 overlay for runtime state.
 The nested config image currently has 32 GiB of virtual disk capacity.
 
