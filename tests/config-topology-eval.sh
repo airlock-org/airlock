@@ -60,6 +60,7 @@ jq -e '
   ."config-staging".template == "nixome-nixos-config-staging" and
   ."config-staging".netvm == null and
   ."config-staging".features."nixome-role" == "config-staging" and
+  ."config-staging".features."nixome-config-applied-message" == "initial" and
   ."config-validator".class == "AppVM" and
   ."config-validator".template == "nixome-nixos-config-validator" and
   ."config-validator".netvm == null and

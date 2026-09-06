@@ -216,14 +216,16 @@ This explicitly runs the dom0 topology setup, then starts `config-vault`,
 `config-staging`, and `config-validator`, runs `uname -a` through qrexec in all
 three VMs, checks that `/home/user/nixome-config-vault` and
 `/home/user/nixome-config` already exist as clean Git repositories, modifies
-and commits `flake.nix` in `config-staging`, has `config-validator` run
-`nix flake check --no-build` and evaluate the schema-normalized
-`.#nixome.topology`, has dom0 archive that validated source plus evaluated
-topology into `config-vault`, and applies the validated topology with
-`nixome-config-apply --apply`. It then checks that the Nix-declared
-`nixome-test-from-config` AppVM exists and that `uname -a` runs inside it
-through qrexec. It also checks that `config-vault` contains a successful
-deployment record for that apply, and that the staged config generated
+and commits `flake.nix` plus `nixome/config-vms.nix` in `config-staging`, has
+`config-validator` run `nix flake check --no-build` and evaluate the
+schema-normalized `.#nixome.topology`, has dom0 archive that validated source
+plus evaluated topology into `config-vault`, and applies the validated topology
+with `nixome-config-apply --apply`. It then checks that the applied topology
+re-declared `config-vault`, `config-staging`, and `config-validator`, checks
+that the Nix-declared `nixome-test-from-config` AppVM exists, and verifies that
+`uname -a` runs inside it through qrexec. It also checks that `config-vault`
+contains a successful deployment record for that apply, and that the staged
+config generated
 `/var/lib/nixome/qubes-policy.d/90-nixome.policy` with an active `nixome.PolicyProbe`
 rule. The result JSON is written to:
 

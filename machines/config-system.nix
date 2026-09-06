@@ -163,6 +163,7 @@ in
           "nixome-managed" = "1";
           "nixome-role" = "config-staging";
           "nixome-config-staging" = "1";
+          "nixome-config-applied-message" = "initial";
         };
       };
 

@@ -30,6 +30,7 @@ ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
 ARCHIVE_JSON="$LOG_DIR/config-archive.json"
 APPLY_LOG="$LOG_DIR/config-vms-apply.log"
 APPLY_JSON="$LOG_DIR/config-apply.json"
+APPLIED_TOPOLOGY_LOG="$LOG_DIR/config-vms-applied-topology.json"
 QREXEC_POLICY_FILE_LOG="$LOG_DIR/config-vms-qrexec-policy.log"
 QREXEC_POLICY_PROBE_LOG="$LOG_DIR/config-vms-qrexec-policy-probe.log"
 APPLIED_FEATURE_LOG="$LOG_DIR/config-vms-applied-feature.log"
@@ -152,6 +153,8 @@ write_result() {
     json_file_value_or_null "$APPLY_JSON"
     printf ',"apply_log":'
     json_file_string_or_null "$APPLY_LOG"
+    printf ',"applied_topology":'
+    json_file_value_or_null "$APPLIED_TOPOLOGY_LOG"
     printf ',"qrexec_policy_file":'
     json_file_string_or_null "$QREXEC_POLICY_FILE_LOG"
     printf ',"qrexec_policy_probe":'
@@ -416,9 +419,18 @@ run_qrexec_or_fail \
   "$VALIDATOR_INIT_LOG" \
   "nixome-config-validator-init"
 
+if [ -z "${NIXOME_CONFIG_VMS_SEED:-}" ] || [ ! -r "$NIXOME_CONFIG_VMS_SEED" ]; then
+  fail "missing config VM seed helper for smoke update"
+fi
+CONFIG_VMS_SEED_TEXT="$(cat "$NIXOME_CONFIG_VMS_SEED")"
+
 cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
 cd /home/$QUBE_USER/nixome-config
+mkdir -p nixome
+cat > nixome/config-vms.nix <<'CONFIGVMSNIXEOF'
+$CONFIG_VMS_SEED_TEXT
+CONFIGVMSNIXEOF
 cat > flake.nix <<'NIXEOF'
 {
   description = "Nixome machine configuration candidate";
@@ -427,23 +439,11 @@ cat > flake.nix <<'NIXEOF'
     { self }:
     let
       topologySchema = import ./nixome/topology.nix;
+      configVms = import ./nixome/config-vms.nix;
 
-      config = {
-        templates = { };
-        kernels = { };
-        prefs = { };
-        domains = {
-          config-staging = {
-            template = "nixome-nixos-config-staging";
-            label = "gray";
-            prefs = {
-              include_in_backups = true;
-            };
-            features = {
-              "nixome-config-applied-message" = "$APPLY_MESSAGE";
-            };
-          };
-
+      config = configVms {
+        appliedMessage = "$APPLY_MESSAGE";
+        extraDomains = {
           "$CREATED_QUBE" = {
             template = "nixome-nixos-config-staging";
             label = "green";
@@ -464,14 +464,6 @@ cat > flake.nix <<'NIXEOF'
             };
           };
         };
-        qrexecPolicy.rules = [
-          {
-            service = "nixome.PolicyProbe";
-            source = "dom0";
-            target = "config-vault";
-            action = "allow";
-          }
-        ];
       };
     in
     {
@@ -488,9 +480,10 @@ cat > flake.nix <<'NIXEOF'
     };
 }
 NIXEOF
-grep -F '"nixome-config-applied-message" = "$APPLY_MESSAGE";' flake.nix
+grep -F 'appliedMessage = "$APPLY_MESSAGE";' flake.nix
+grep -F 'configVms = import ./nixome/config-vms.nix;' flake.nix
 grep -F '"$CREATED_QUBE" = {' flake.nix
-git add flake.nix
+git add flake.nix nixome/config-vms.nix
 git \
   -c user.name='Nixome Config Smoke' \
   -c user.email='nixome-config-smoke@localhost' \
@@ -510,6 +503,47 @@ run_or_fail "apply config candidate from $STAGING through $VALIDATOR" "$APPLY_LO
     NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
     NIXOME_CONFIG_VAULT_VM="$VAULT" \
   nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+
+run_or_fail \
+  "read applied topology" \
+  "$APPLIED_TOPOLOGY_LOG" \
+  cat /var/log/nixome/config-apply-topology.json
+jq -e \
+  --arg staging "$STAGING" \
+  --arg validator "$VALIDATOR" \
+  --arg vault "$VAULT" \
+  --arg apply_message "$APPLY_MESSAGE" \
+  --arg created "$CREATED_QUBE" \
+  '
+    .schema == "nixome.qubes-topology.v1" and
+    .prefs.default_kernel == "" and
+    .templates == {} and
+    .kernels == {} and
+    .domains[$vault].class == "AppVM" and
+    .domains[$vault].template == "nixome-nixos-config-vault" and
+    .domains[$vault].label == "black" and
+    .domains[$vault].netvm == null and
+    .domains[$vault].prefs.include_in_backups == true and
+    .domains[$vault].features."nixome-config-authority" == "1" and
+    .domains[$vault].features."nixome-role" == "config-vault" and
+    .domains[$vault].services."network-manager" == false and
+    .domains[$staging].class == "AppVM" and
+    .domains[$staging].template == "nixome-nixos-config-staging" and
+    .domains[$staging].label == "gray" and
+    .domains[$staging].netvm == null and
+    .domains[$staging].prefs.include_in_backups == true and
+    .domains[$staging].features."nixome-config-staging" == "1" and
+    .domains[$staging].features."nixome-config-applied-message" == $apply_message and
+    .domains[$validator].class == "AppVM" and
+    .domains[$validator].template == "nixome-nixos-config-validator" and
+    .domains[$validator].label == "blue" and
+    .domains[$validator].netvm == null and
+    .domains[$validator].prefs.include_in_backups == true and
+    .domains[$validator].features."nixome-config-validator" == "1" and
+    .domains[$validator].features."nixome-role" == "config-validator" and
+    .domains[$created].template == "nixome-nixos-config-staging"
+  ' "$APPLIED_TOPOLOGY_LOG" >/dev/null ||
+  fail "applied topology does not define self-hosted config VMs"
 
 run_or_fail \
   "read generated Nixome qrexec policy" \

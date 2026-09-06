@@ -97,8 +97,9 @@ through qrexec in each VM, and checks that the role repositories exist before
 evaluates normalized `.#nixome.topology`, dom0 archives it into `config-vault`,
 and `nixome-config-apply --apply` applies the validated topology JSON. The
 successful apply is then recorded under `deployments/` in `config-vault`. The
-smoke proves the staged Nix config can create `nixome-test-from-config`, run
-`uname -a` inside it through qrexec, and preserve the deployment record. See
+smoke proves the staged Nix config re-declares the three config AppVMs, can
+create `nixome-test-from-config`, run `uname -a` inside it through qrexec, and
+preserve the deployment record. See
 [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
 The config topology image keeps local build size down by sharing one NixOS
 guest root image between the TemplateVM source directories.

@@ -5,32 +5,9 @@
     { self }:
     let
       topologySchema = import ./nixome/topology.nix;
+      configVms = import ./nixome/config-vms.nix;
 
-      config = {
-        templates = { };
-        kernels = { };
-        prefs = { };
-        domains = {
-          config-staging = {
-            template = "nixome-nixos-config-staging";
-            label = "gray";
-            prefs = {
-              include_in_backups = true;
-            };
-            features = {
-              "nixome-config-applied-message" = "initial";
-            };
-          };
-        };
-        qrexecPolicy.rules = [
-          {
-            service = "nixome.PolicyProbe";
-            source = "dom0";
-            target = "config-vault";
-            action = "allow";
-          }
-        ];
-      };
+      config = configVms { };
     in
     {
       nixome = {

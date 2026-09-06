@@ -58,34 +58,27 @@ nixome-config-staging-init
 ```
 
 The seeded candidate defines `nixome.config` in `flake.nix`, imports the local
-`./nixome/topology.nix` schema helper, and exposes normalized
-`nixome.topology`:
+`./nixome/topology.nix` schema helper plus `./nixome/config-vms.nix`, and exposes
+normalized `nixome.topology`:
 
 ```nix
 let
   topologySchema = import ./nixome/topology.nix;
-  config = {
-    domains.config-staging = {
-      template = "nixome-nixos-config-staging";
-      label = "gray";
-      prefs.include_in_backups = true;
-      features."nixome-config-applied-message" = "initial";
-    };
-    qrexecPolicy.rules = [
-      {
-        service = "nixome.PolicyProbe";
-        source = "dom0";
-        target = "config-vault";
-        action = "allow";
-      }
-    ];
-  };
+  configVms = import ./nixome/config-vms.nix;
+  config = configVms { };
 in
 {
   nixome.config = config;
   nixome.topology = topologySchema.mkTopology config;
 }
 ```
+
+That seed now re-declares `config-vault`, `config-staging`, and
+`config-validator` as offline AppVMs, so after first boot their Qubes-level
+runtime topology is owned by the normal config-staging -> config-validator ->
+dom0 apply path. Template import and VM kernel installation remain in the outer
+bootstrap dom0 image because those still refer to Nix-built artifacts in dom0's
+store.
 
 The schema currently checks domain classes, labels, Qube/template names,
 template and kernel source fields, JSON-safe prefs/features, boolean services,
@@ -99,8 +92,8 @@ The schema defaults AppVMs to `class = "AppVM"`, `netvm = null`,
 `prefs.autostart = false`, `prefs.include_in_backups = false`, empty
 `features`/`services`, and an empty generated qrexec policy.
 
-For this first apply proof, the Nix value declares a small observable Qubes
-feature on `config-staging`:
+For this first apply proof, the Nix value declares the config AppVMs plus a
+small observable Qubes feature on `config-staging`:
 
 ```text
 nixome-config-applied-message
