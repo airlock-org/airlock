@@ -210,9 +210,10 @@ To run the current NixOS config-VM boot/qrexec proof:
 make vm-config-smoke
 ```
 
-This runs the same reconcile path, then starts `config-vault` and
-`config-mod`, runs `uname -a` through qrexec in both VMs, initializes the
-config modifier repository, validates the committed candidate in
+This waits for the config image's boot-time topology reconcile, then starts
+`config-vault` and `config-mod`, runs `uname -a` through qrexec in both VMs,
+checks that `/home/user/nixome-config-vault` and `/home/user/nixome-config`
+already exist as clean Git repositories, validates the committed candidate in
 `config-mod`, and has dom0 archive that validated candidate into
 `config-vault`. The result JSON is written to:
 
@@ -224,7 +225,7 @@ The config topology image keeps local build size down by sharing one NixOS
 guest root image between the two TemplateVM source directories. The VM runner
 can use either qcow2 or raw Nix-built base images and creates a writable qcow2
 overlay for runtime state.
-The nested config image currently has 24 GiB of virtual disk capacity.
+The nested config image currently has 32 GiB of virtual disk capacity.
 
 The current NixOS guest template profile uses QubesDB, qrexec-agent, Qubes
 meminfo writer, and `/dev/mapper/dmroot` as the root device to match Qubes'

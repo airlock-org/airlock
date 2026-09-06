@@ -281,7 +281,7 @@ remote() {
 
 collect_diagnostics() {
   remote 'systemctl --failed --no-legend || true' > "$FAILED_UNITS_LOG" 2>/dev/null || true
-  remote 'journalctl -b --no-pager -n 260 -u qubesd -u libvirtd -u qubes-db-dom0 -u qubes-qrexec-policy-daemon -u nixome-qubes-store-init || true' > "$JOURNAL_LOG" 2>/dev/null || true
+  remote 'journalctl -b --no-pager -n 320 -u qubesd -u qubes-core -u libvirtd -u qubes-db-dom0 -u qubes-qrexec-policy-daemon -u nixome-qubes-store-init -u nixome-qubes-reconcile -u nixome-qubes-reconcile.timer || true' > "$JOURNAL_LOG" 2>/dev/null || true
   remote 'qvm-ls || true' > "$QVM_LS_LOG" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/qubes-bootstrap.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-bootstrap.commands.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/qubes-reconcile.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-reconcile.commands.log" 2>/dev/null || true
@@ -310,6 +310,62 @@ extract_json_result() {
       exit 1
     }
   ' "$input" > "$output"
+}
+
+wait_for_boot_reconcile() {
+  if ! remote 'systemctl cat nixome-qubes-reconcile.service >/dev/null 2>&1'; then
+    printf '{"schema":"nixome.qubes-reconcile.v1","status":"skipped","reason":"nixome-qubes-reconcile.service is not installed"}\n' > "$RECONCILE_JSON"
+    return 0
+  fi
+
+  printf 'reconcile: waiting for boot-time topology reconcile\n'
+  if ! remote '
+    deadline=$((SECONDS + 600))
+    while [ "$SECONDS" -lt "$deadline" ]; do
+      if test -s /var/log/nixome/qubes-reconcile.json 2>/dev/null &&
+          grep -q "\"schema\":\"nixome.qubes-reconcile.v1\"" /var/log/nixome/qubes-reconcile.json &&
+          grep -q "\"status\":\"passed\"" /var/log/nixome/qubes-reconcile.json; then
+        exit 0
+      fi
+
+      state="$(systemctl show -p ActiveState --value nixome-qubes-reconcile.service 2>/dev/null || true)"
+      substate="$(systemctl show -p SubState --value nixome-qubes-reconcile.service 2>/dev/null || true)"
+      result="$(systemctl show -p Result --value nixome-qubes-reconcile.service 2>/dev/null || true)"
+      timer_state="$(systemctl show -p ActiveState --value nixome-qubes-reconcile.timer 2>/dev/null || true)"
+      timer_next="$(systemctl show -p NextElapseUSecRealtime --value nixome-qubes-reconcile.timer 2>/dev/null || true)"
+
+      if [ "$state" = active ]; then
+        exit 0
+      fi
+
+      case "$state:$result" in
+        failed:*|*:exit-code|*:signal|*:core-dump|*:timeout)
+          systemctl status --no-pager nixome-qubes-reconcile.service
+          systemctl status --no-pager nixome-qubes-reconcile.timer
+          exit 1
+          ;;
+      esac
+
+      printf "waiting for nixome-qubes-reconcile.service: state=%s substate=%s result=%s timer_state=%s timer_next=%s\n" "$state" "$substate" "$result" "$timer_state" "$timer_next" >&2
+      sleep 2
+    done
+
+    systemctl status --no-pager nixome-qubes-reconcile.service
+    systemctl status --no-pager nixome-qubes-reconcile.timer
+    exit 1
+  ' > "$RECONCILE_STDOUT" 2> "$RECONCILE_STDERR"; then
+    remote 'sudo -n cat /var/log/nixome/qubes-reconcile.json 2>/dev/null || true' > "$RECONCILE_JSON" 2>/dev/null || true
+    collect_diagnostics
+    cat "$RECONCILE_STDERR" >&2 || true
+    exit 1
+  fi
+
+  remote 'sudo -n cat /var/log/nixome/qubes-reconcile.json 2>/dev/null || true' > "$RECONCILE_JSON" 2>/dev/null || true
+  if ! grep -q '"schema":"nixome.qubes-reconcile.v1"' "$RECONCILE_JSON"; then
+    collect_diagnostics
+    printf 'boot-time reconcile did not emit result JSON; see %s\n' "$RECONCILE_STDOUT" >&2
+    exit 1
+  fi
 }
 
 prepare_cached_bootstrap_assets
@@ -410,7 +466,11 @@ if [ "$RUN_RECONCILE" = "1" ]; then
     fi
   fi
 else
-  printf '{"schema":"nixome.qubes-reconcile.v1","status":"skipped","reason":"NIXOME_RUN_QUBES_RECONCILE=0"}\n' > "$RECONCILE_JSON"
+  if [ "$RUN_CONFIG_VMS_SMOKE" = "1" ]; then
+    wait_for_boot_reconcile
+  else
+    printf '{"schema":"nixome.qubes-reconcile.v1","status":"skipped","reason":"NIXOME_RUN_QUBES_RECONCILE=0"}\n' > "$RECONCILE_JSON"
+  fi
 fi
 
 if [ "$RUN_CONFIG_VMS_SMOKE" = "1" ]; then

@@ -15,6 +15,8 @@ MOD_APPMENUS_LOG="$LOG_DIR/config-vms-config-mod-appmenus.log"
 VAULT_APPMENUS_LOG="$LOG_DIR/config-vms-config-vault-appmenus.log"
 MOD_INIT_LOG="$LOG_DIR/config-vms-mod-init.log"
 MOD_VALIDATION_LOG="$LOG_DIR/config-vms-mod-validation.log"
+MOD_REPO_STATUS_LOG="$LOG_DIR/config-vms-config-mod-repo-status.log"
+VAULT_REPO_STATUS_LOG="$LOG_DIR/config-vms-config-vault-repo-status.log"
 ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
 ARCHIVE_JSON="$LOG_DIR/config-archive.json"
 JOURNAL_LOG="$LOG_DIR/config-vms-journal.log"
@@ -94,6 +96,10 @@ write_result() {
     json_file_string_or_null "$MOD_INIT_LOG"
     printf ',"modifier_validation":'
     json_file_value_or_null "$MOD_VALIDATION_LOG"
+    printf ',"modifier_repo_status":'
+    json_file_string_or_null "$MOD_REPO_STATUS_LOG"
+    printf ',"vault_repo_status":'
+    json_file_string_or_null "$VAULT_REPO_STATUS_LOG"
     printf ',"archive":'
     json_file_value_or_null "$ARCHIVE_JSON"
     printf ',"archive_log":'
@@ -267,6 +273,14 @@ grep -qx "$QUBE_USER" "$MOD_USER_LOG" || fail "modifier qrexec user was not $QUB
 
 run_appmenus_sync_or_fail "$VAULT_TEMPLATE" "$VAULT_APPMENUS_LOG"
 run_appmenus_sync_or_fail "$MOD_TEMPLATE" "$MOD_APPMENUS_LOG"
+
+run_qrexec_or_fail "$VAULT" "config vault repo status" "$VAULT_REPO_STATUS_LOG" \
+  "cd /home/$QUBE_USER/nixome-config-vault && git status --short --branch"
+run_qrexec_or_fail "$MOD" "config mod repo status" "$MOD_REPO_STATUS_LOG" \
+  "cd /home/$QUBE_USER/nixome-config && git status --short --branch"
+
+grep -q '^## main$' "$VAULT_REPO_STATUS_LOG" || fail "config vault repository is not initialized cleanly"
+grep -q '^## main$' "$MOD_REPO_STATUS_LOG" || fail "config mod repository is not initialized cleanly"
 
 run_qrexec_or_fail "$MOD" "config mod init" "$MOD_INIT_LOG" "nixome-config-mod-init"
 run_qrexec_or_fail "$MOD" "config mod validation in $MOD" "$MOD_VALIDATION_LOG" "nixome-config-mod-validate"

@@ -6,6 +6,7 @@
 }:
 let
   cfg = config.nixome.qubes;
+  dom0User = config.nixome.dom0.user;
   jsonScalar = lib.types.nullOr (
     lib.types.oneOf [
       lib.types.bool
@@ -153,6 +154,16 @@ in
       description = "Global qubes-prefs values. Reserved for the next reconciler layer.";
     };
 
+    reconcileOnBoot = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Run nixome-qubes-reconcile --apply during boot after Qubes dom0 services
+        are active. This materializes the Nix-declared topology into Qubes'
+        runtime state.
+      '';
+    };
+
     configAccessPolicy = {
       enable = lib.mkOption {
         type = lib.types.bool;
@@ -207,6 +218,57 @@ in
       configVmsSmoke
       reconciler
     ];
+
+    systemd.services.nixome-qubes-reconcile = lib.mkIf cfg.reconcileOnBoot {
+      description = "Reconcile Nixome Qubes topology";
+      wants = [ "qubes-core.service" ];
+      requires = [
+        "qubes-db-dom0.service"
+        "qubesd.service"
+        "qubes-qrexec-policy-daemon.service"
+      ];
+      after = [
+        "qubes-core.service"
+        "qubes-db-dom0.service"
+        "qubesd.service"
+        "qubes-qrexec-policy-daemon.service"
+      ];
+      unitConfig.ConditionPathExists = "/etc/nixome/qubes-topology.json";
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        attempt=1
+        while true; do
+          echo "nixome-qubes-reconcile: attempt $attempt"
+          if ${pkgs.util-linux}/bin/runuser -u ${lib.escapeShellArg dom0User} -- \
+            /run/wrappers/bin/sudo -n \
+            ${pkgs.coreutils}/bin/env NIXOME_LOG_DIR=/var/log/nixome \
+            ${reconciler}/bin/nixome-qubes-reconcile --apply; then
+            exit 0
+          fi
+
+          if [ "$attempt" -ge 18 ]; then
+            echo "nixome-qubes-reconcile: giving up after $attempt attempts" >&2
+            exit 1
+          fi
+
+          attempt=$((attempt + 1))
+          ${pkgs.coreutils}/bin/sleep 10
+        done
+      '';
+    };
+
+    systemd.timers.nixome-qubes-reconcile = lib.mkIf cfg.reconcileOnBoot {
+      description = "Delay Nixome Qubes topology reconcile until dom0 settles";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "90s";
+        AccuracySec = "1s";
+        Unit = "nixome-qubes-reconcile.service";
+      };
+    };
 
     virtualisation.qubes.packages = lib.optionals cfg.configAccessPolicy.enable [
       configAccessPolicyPackage

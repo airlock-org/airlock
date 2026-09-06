@@ -77,6 +77,11 @@ Apply it from dom0 with:
 sudo nixome-qubes-reconcile --apply
 ```
 
+The config dom0 image enables `nixome.qubes.reconcileOnBoot`, so a fresh boot
+also starts a delayed `nixome-qubes-reconcile.timer`. That path materializes
+the declared config topology without a manual SSH command and writes the same
+JSON result under `/var/log/nixome/`.
+
 For a non-mutating preview:
 
 ```bash
@@ -124,8 +129,9 @@ Run the current NixOS config-VM runtime proof:
 make vm-config-smoke
 ```
 
-That target builds and boots the nested config dom0 image, applies the declared
-Qubes topology, starts `config-vault` and `config-mod`, runs `uname -a`
+That target builds and boots the nested config dom0 image, waits for the
+boot-time declared topology reconcile, starts `config-vault` and `config-mod`,
+runs `uname -a`
 through qrexec in both VMs, initializes the config modifier repository,
 validates the committed candidate inside `config-mod`, and verifies that dom0
 archives the validated candidate into `config-vault`.
@@ -138,7 +144,7 @@ The machine-readable result is copied to:
 ## Verified Boundary
 
 The template artifacts are NixOS root images packaged in the shape expected by
-`qvm-template-postprocess`. `make vm-config-reconcile` has imported those
+`qvm-template-postprocess`. The boot-time reconciler has imported those
 templates and created the two AppVMs in the nested dom0 test environment.
 
 The NixOS guests now boot in nested Xen with the normal Qubes dom0-provided VM
@@ -154,8 +160,9 @@ It also loads the Xen vchan support modules used by Qubes guests
 (`xen-evtchn`, `xen-gntalloc`, `xen-gntdev`, and `xen-privcmd`) before
 QubesDB starts.
 
-The verified smoke path reaches qrexec in both declared NixOS AppVMs. The next
-boundary is deployment from the archived commit plus hardening the model: split
-role-specific guest roots when useful, classify reconcile changes that require
-VM restart or dom0 reboot, and validate the same path on physical Xen-capable
-hardware.
+The verified smoke path reaches qrexec in both declared NixOS AppVMs and proves
+that `config-vault` has `/home/user/nixome-config-vault` initialized before
+qrexec accepts the repository status check. The next boundary is deployment
+from the archived commit plus hardening the model: split role-specific guest
+roots when useful, classify reconcile changes that require VM restart or dom0
+reboot, and validate the same path on physical Xen-capable hardware.

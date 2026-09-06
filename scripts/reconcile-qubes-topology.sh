@@ -2,6 +2,9 @@
 # shellcheck disable=SC2016
 set -euo pipefail
 
+PATH="/run/wrappers/bin:$PATH"
+export PATH
+
 TOPOLOGY="/etc/nixome/qubes-topology.json"
 APPLY=0
 PLAN=0
@@ -264,6 +267,7 @@ for cmd in \
   qvm-prefs \
   qvm-service \
   qvm-template-postprocess \
+  qubesd-query \
   systemctl; do
   require_command "$cmd"
 done

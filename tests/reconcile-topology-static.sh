@@ -59,7 +59,7 @@ cat > "$TOPOLOGY" <<EOF
 }
 EOF
 
-for command in qubes-prefs qvm-create qvm-features qvm-prefs qvm-service qvm-template-postprocess; do
+for command in qubes-prefs qvm-appmenus qvm-create qvm-features qvm-prefs qvm-service qvm-template-postprocess qubesd-query runuser; do
   cat > "$BIN_DIR/$command" <<'EOF'
 #!/usr/bin/env bash
 printf 'unexpected command execution: %s\n' "$0" >&2

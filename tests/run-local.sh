@@ -39,6 +39,7 @@ run_logged config-archive-package nix build "$ROOT#packages.x86_64-linux.nixome-
 run_logged config-vms-smoke-package nix build "$ROOT#packages.x86_64-linux.nixome-config-vms-smoke" --print-build-logs --show-trace
 run_logged observe-package nix build "$ROOT#packages.x86_64-linux.nixome-observe-dom0" --print-build-logs --show-trace
 run_logged reconcile-package nix build "$ROOT#packages.x86_64-linux.nixome-qubes-reconcile" --print-build-logs --show-trace
+run_logged reconcile-runtime-path "$ROOT/tests/reconcile-runtime-path.sh"
 run_logged config-topology-eval "$ROOT/tests/config-topology-eval.sh"
 run_logged host-capabilities "$ROOT/tests/host-capabilities.sh" --json "$LOG_DIR/host-capabilities.json"
 run_logged reconcile-static "$ROOT/tests/reconcile-topology-static.sh"

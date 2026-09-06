@@ -6,7 +6,11 @@
   jq,
   lib,
   python3,
+  qubes-desktop-linux-common ? python3.pkgs.qubes-desktop-linux-common,
+  qubes-core-admin ? python3.pkgs.qubes-core-admin,
+  sudo,
   systemd,
+  util-linux,
   writeShellApplication,
 }:
 
@@ -20,8 +24,12 @@ writeShellApplication {
     gnugrep
     gnused
     jq
+    qubes-core-admin
+    qubes-desktop-linux-common
+    sudo
     python3.pkgs.qubes-core-admin-client
     systemd
+    util-linux
   ];
 
   text = builtins.readFile ../../scripts/reconcile-qubes-topology.sh;

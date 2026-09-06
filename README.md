@@ -88,11 +88,13 @@ make vm-config-smoke
 
 That path builds a dom0 image whose Nix config declares `config-vault` and
 `config-mod`, imports their NixOS template sources through Qubes'
-`qvm-template-postprocess`, applies simple prefs/features/services with
-`nixome-qubes-reconcile`, boots both NixOS AppVMs with the normal
+`qvm-template-postprocess` during boot-time topology reconcile, applies simple
+prefs/features/services with `nixome-qubes-reconcile`, boots both NixOS AppVMs
+with the normal
 dom0-provided Qubes VM kernel, runs `uname -a` through qrexec in each VM, and
-checks that `config-mod` can validate and export a committed config candidate
-which dom0 then archives into `config-vault`. See
+checks that both role repositories exist before `config-mod` validates and
+exports a committed config candidate which dom0 then archives into
+`config-vault`. See
 [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
 The config topology image keeps local build size down by sharing one NixOS
 guest root image between the two TemplateVM source directories.

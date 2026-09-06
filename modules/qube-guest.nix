@@ -33,6 +33,17 @@ let
     pkgs.util-linux
   ];
 
+  roleInitPath = lib.makeBinPath [
+    pkgs.coreutils
+    pkgs.gawk
+    pkgs.git
+    pkgs.gnutar
+    pkgs.jq
+    pkgs.nix
+    pkgs.qubes-core-qubesdb
+    pkgs.util-linux
+  ];
+
   rolePackages = rec {
     base = [ ];
     config-vault = [
@@ -365,13 +376,15 @@ let
       . /etc/profile
     fi
 
-    export PATH=${lib.makeBinPath [
-      pkgs.coreutils
-      pkgs.findutils
-      pkgs.gawk
-      pkgs.glibc.bin
-      pkgs.qubes-core-qubesdb
-    ]}:$PATH
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.findutils
+        pkgs.gawk
+        pkgs.glibc.bin
+        pkgs.qubes-core-qubesdb
+      ]
+    }:$PATH
 
     if [ -z "''${XDG_DATA_HOME:-}" ]; then
       qrexec_user="$(whoami)"
@@ -716,6 +729,64 @@ in
       unitConfig.OnFailure = [ "nixome-qubes-rw-init-diagnostics.service" ];
     };
 
+    systemd.services.nixome-config-guest-init = lib.mkIf (hasConfigVaultRole || hasConfigModRole) {
+      description = "Initialize Nixome config repositories in Qubes private storage";
+      wantedBy = [ "multi-user.target" ];
+      wants = [ "nixome-qubes-rw-init.service" ];
+      requires = [ "nixome-qubes-rw-init.service" ];
+      after = [
+        "nixome-qubes-rw-init.service"
+        "qubes-db.service"
+      ];
+      before = [ "qubes-qrexec-agent.service" ];
+      path = [
+        pkgs.coreutils
+        pkgs.qubes-core-qubesdb
+        pkgs.util-linux
+      ];
+      script = ''
+        set -eu
+
+        role=${lib.escapeShellArg cfg.role}
+        vm_name="$(qubesdb-read /name 2>/dev/null || true)"
+        qdb_role="$(qubesdb-read /features/nixome-role 2>/dev/null || true)"
+
+        case "$qdb_role" in
+          config-vault|config-mod|config-system) role="$qdb_role" ;;
+        esac
+
+        case "$vm_name" in
+          config-vault) role=config-vault ;;
+          config-mod) role=config-mod ;;
+        esac
+
+        run_as_user() {
+          ${pkgs.util-linux}/bin/runuser -u ${lib.escapeShellArg cfg.user} -- \
+            ${pkgs.coreutils}/bin/env PATH=${lib.escapeShellArg roleInitPath} "$@"
+        }
+
+        case "$role" in
+          config-vault)
+            run_as_user ${configVaultInit}/bin/nixome-config-vault-init
+            ;;
+          config-mod)
+            run_as_user ${configModInit}/bin/nixome-config-mod-init
+            ;;
+          config-system)
+            run_as_user ${configVaultInit}/bin/nixome-config-vault-init
+            run_as_user ${configModInit}/bin/nixome-config-mod-init
+            ;;
+          *)
+            echo "nixome config guest init: no config repo initialization for role=$role vm=$vm_name qdb_role=$qdb_role"
+            ;;
+        esac
+      '';
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+    };
+
     systemd.services.qubes-db = {
       enable = true;
       wantedBy = [ "sysinit.target" ];
@@ -732,11 +803,15 @@ in
       enable = true;
       wantedBy = [ "multi-user.target" ];
       wants = [ "nixome-qubes-rw-init.service" ];
-      requires = [ "nixome-qubes-rw-init.service" ];
+      requires = [
+        "nixome-qubes-rw-init.service"
+      ]
+      ++ lib.optional (hasConfigVaultRole || hasConfigModRole) "nixome-config-guest-init.service";
       after = [
         "nixome-qubes-rw-init.service"
         "systemd-user-sessions.service"
-      ];
+      ]
+      ++ lib.optional (hasConfigVaultRole || hasConfigModRole) "nixome-config-guest-init.service";
       aliases = [ "qubes-core-agent.service" ];
       overrideStrategy = "asDropin";
       unitConfig.OnFailure = [ "nixome-qubes-qrexec-diagnostics.service" ];
