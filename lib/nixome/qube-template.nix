@@ -149,6 +149,7 @@ let
         inherit system;
         specialArgs = {
           nixomeConfigSeedInputs = null;
+          nixomePrebuiltTemplateSources = { };
         };
         modules = [
           "${nixpkgs}/nixos/modules/profiles/minimal.nix"

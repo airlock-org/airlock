@@ -1,4 +1,5 @@
 {
+  prebuiltTemplateSources ? { },
   system ? "x86_64-linux",
   templateBuilders,
 }:
@@ -7,6 +8,8 @@ let
   workTemplateName = "nixome-nixos-work";
   workTemplatePackageName = "nixome-nixos-work-template";
   workTemplatePackageAttr = "packages.${system}.${workTemplatePackageName}";
+  workTemplatePrebuiltSource =
+    prebuiltTemplateSources.${workTemplateName} or prebuiltTemplateSources.work or null;
 
   workTemplate = templateBuilders.mkNixosQubeTemplate {
     templateName = workTemplateName;
@@ -34,10 +37,14 @@ in
   topology = {
     templates.${workTemplateName} = {
       import = true;
-      source = {
-        build = workTemplatePackageAttr;
-        subpath = workTemplateName;
-      };
+      source =
+        if workTemplatePrebuiltSource != null then
+          workTemplatePrebuiltSource
+        else
+          {
+            build = workTemplatePackageAttr;
+            subpath = workTemplateName;
+          };
       skipStart = true;
     };
 

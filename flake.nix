@@ -357,6 +357,11 @@
           nixomePrebuiltTemplatePackages = {
             work = self.packages.x86_64-linux.nixome-nixos-work-template;
           };
+          nixomePrebuiltTemplateSources = {
+            work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
+            nixome-nixos-work =
+              "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
+          };
           inherit nixomeConfigSeedInputs;
         };
         modules = [
@@ -371,6 +376,11 @@
         specialArgs = {
           nixomePrebuiltTemplatePackages = {
             work = self.packages.x86_64-linux.nixome-nixos-work-template;
+          };
+          nixomePrebuiltTemplateSources = {
+            work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
+            nixome-nixos-work =
+              "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
           };
           inherit nixomeConfigSeedInputs;
         };
@@ -395,6 +405,7 @@
         system = "x86_64-linux";
         specialArgs = {
           inherit nixomeConfigSeedInputs;
+          nixomePrebuiltTemplateSources = { };
         };
         modules = [
           nixos-qubes.nixosModules.qubes
@@ -417,6 +428,7 @@
         system = "x86_64-linux";
         specialArgs = {
           inherit nixomeConfigSeedInputs;
+          nixomePrebuiltTemplateSources = { };
         };
         modules = [
           nixos-qubes.nixosModules.qubes
@@ -439,6 +451,7 @@
         system = "x86_64-linux";
         specialArgs = {
           inherit nixomeConfigSeedInputs;
+          nixomePrebuiltTemplateSources = { };
         };
         modules = [
           nixos-qubes.nixosModules.qubes

@@ -463,6 +463,7 @@ cat > flake.nix <<'NIXEOF'
       system = "x86_64-linux";
       topologySchema = import ./nixome/topology.nix;
       configVms = import ./nixome/config-vms.nix;
+      prebuiltTemplateSources = import ./nixome/prebuilt-template-sources.nix;
       nixomeSupport = "__NIXOME_SUPPORT_PATH__";
       nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
       templateBuilders = import "\${nixomeSupport}/lib/nixome/qube-template.nix" {
@@ -470,7 +471,11 @@ cat > flake.nix <<'NIXEOF'
         inherit nixomeSupport nixosQubesSource;
       };
       templateSet = import ./nixome/templates.nix {
-        inherit system templateBuilders;
+        inherit
+          prebuiltTemplateSources
+          system
+          templateBuilders
+          ;
       };
 
       config = configVms {
@@ -533,7 +538,7 @@ grep -F 'appliedMessage = "$APPLY_MESSAGE";' flake.nix
 grep -F 'configVms = import ./nixome/config-vms.nix;' flake.nix
 grep -F 'templateSet = import ./nixome/templates.nix' flake.nix
 grep -F '"$CREATED_QUBE" = {' flake.nix
-git add flake.nix nixome/config-vms.nix nixome/templates.nix nixome/topology.nix
+git add flake.nix nixome/config-vms.nix nixome/prebuilt-template-sources.nix nixome/templates.nix nixome/topology.nix
 git \
   -c user.name='Nixome Config Smoke' \
   -c user.email='nixome-config-smoke@localhost' \

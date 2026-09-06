@@ -2,6 +2,7 @@
   config,
   lib,
   nixomeConfigSeedInputs ? null,
+  nixomePrebuiltTemplateSources ? { },
   pkgs,
   ...
 }:
@@ -84,6 +85,7 @@ let
   configStagingConfigVms = builtins.readFile ../seeds/config-staging/nixome/config-vms.nix;
   configStagingTemplates = builtins.readFile ../seeds/config-staging/nixome/templates.nix;
   configStagingTopologySchema = builtins.readFile ../lib/nixome/topology.nix;
+  configStagingPrebuiltTemplateSources = lib.generators.toPretty { } nixomePrebuiltTemplateSources;
   haveConfigSeedInputs = nixomeConfigSeedInputs != null;
 
   configVaultInit = pkgs.writeShellScriptBin "nixome-config-vault-init" ''
@@ -145,6 +147,9 @@ let
         cat > nixome/templates.nix <<'EOF'
     ${configStagingTemplates}
     EOF
+        cat > nixome/prebuilt-template-sources.nix <<'EOF'
+    ${configStagingPrebuiltTemplateSources}
+    EOF
         if [ "${if haveConfigSeedInputs then "1" else "0"}" != "1" ]; then
           printf 'missing Nixome config seed input paths in guest build\n' >&2
           exit 1
@@ -158,6 +163,7 @@ let
           README.md \
           flake.nix \
           nixome/config-vms.nix \
+          nixome/prebuilt-template-sources.nix \
           nixome/templates.nix \
           nixome/topology.nix
         ${pkgs.nix}/bin/nix \

@@ -15,6 +15,7 @@ mkdir -p "$RESULT_DIR"
 mkdir -p "$WORK_DIR/nixome"
 cp "$ROOT/seeds/config-staging/flake.nix" "$WORK_DIR/flake.nix"
 cp "$ROOT/seeds/config-staging/nixome/config-vms.nix" "$WORK_DIR/nixome/config-vms.nix"
+cp "$ROOT/seeds/config-staging/nixome/prebuilt-template-sources.nix" "$WORK_DIR/nixome/prebuilt-template-sources.nix"
 cp "$ROOT/seeds/config-staging/nixome/templates.nix" "$WORK_DIR/nixome/templates.nix"
 cp "$ROOT/lib/nixome/topology.nix" "$WORK_DIR/nixome/topology.nix"
 

@@ -9,6 +9,7 @@
       system = "x86_64-linux";
       topologySchema = import ./nixome/topology.nix;
       configVms = import ./nixome/config-vms.nix;
+      prebuiltTemplateSources = import ./nixome/prebuilt-template-sources.nix;
       nixomeSupport = "__NIXOME_SUPPORT_PATH__";
       nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
       templateBuilders = import "${nixomeSupport}/lib/nixome/qube-template.nix" {
@@ -16,7 +17,11 @@
         inherit nixomeSupport nixosQubesSource;
       };
       templateSet = import ./nixome/templates.nix {
-        inherit system templateBuilders;
+        inherit
+          prebuiltTemplateSources
+          system
+          templateBuilders
+          ;
       };
 
       config = configVms {
