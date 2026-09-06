@@ -288,6 +288,11 @@ collect_diagnostics() {
   remote 'sudo -n cat /var/log/nixome/config-vms-smoke.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-smoke.commands.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-archive.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.json" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-archive.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.commands.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-apply.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-apply.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply.commands.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-apply-template-builds.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-builds.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-apply-template-builds.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-builds.log" 2>/dev/null || true
+  remote 'sudo -n sh -c '"'"'for f in /var/log/nixome/config-apply-template-build-*.log; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-build-details.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-journal.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-journal.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-libxl.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-libxl.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-qvm-prefs.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-qvm-prefs.log" 2>/dev/null || true
