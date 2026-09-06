@@ -210,10 +210,10 @@ To run the current NixOS config-VM boot/qrexec proof:
 make vm-config-smoke
 ```
 
-This waits for the config image's boot-time topology reconcile, then starts
-`config-vault` and `config-mod`, runs `uname -a` through qrexec in both VMs,
-checks that `/home/user/nixome-config-vault` and `/home/user/nixome-config`
-already exist as clean Git repositories, validates the committed candidate in
+This explicitly runs the dom0 topology reconcile, then starts `config-vault`
+and `config-mod`, runs `uname -a` through qrexec in both VMs, checks that
+`/home/user/nixome-config-vault` and `/home/user/nixome-config` already exist
+as clean Git repositories, validates the committed candidate in
 `config-mod`, and has dom0 archive that validated candidate into
 `config-vault`. The result JSON is written to:
 

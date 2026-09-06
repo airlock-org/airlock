@@ -23,7 +23,6 @@ in
 
   nixome.qubes = {
     enable = true;
-    reconcileOnBoot = true;
 
     prefs = {
       # Fresh Nixome dom0 images do not have a Fedora/Qubes VM kernel
