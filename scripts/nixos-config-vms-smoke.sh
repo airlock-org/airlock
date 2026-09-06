@@ -269,6 +269,7 @@ for cmd in \
   qvm-start \
   qvm-sync-appmenus \
   runuser \
+  sed \
   systemctl \
   tail \
   tr; do
@@ -336,10 +337,9 @@ run_qrexec_or_fail "$VALIDATOR" "config validator init" "$VALIDATOR_INIT_LOG" "n
 run_qrexec_or_fail "$STAGING" "modify config candidate in $STAGING" "$STAGING_UPDATE_LOG" "
 set -eu
 cd /home/$QUBE_USER/nixome-config
-tmp=\"\$(mktemp)\"
-jq --arg value '$APPLY_MESSAGE' '.domains.\"config-staging\".features.\"nixome-config-applied-message\" = \$value' topology.json > \"\$tmp\"
-mv \"\$tmp\" topology.json
-git add topology.json
+sed -i 's/\"nixome-config-applied-message\" = \"[^\"]*\";/\"nixome-config-applied-message\" = \"$APPLY_MESSAGE\";/' flake.nix
+grep -F '\"nixome-config-applied-message\" = \"$APPLY_MESSAGE\";' flake.nix
+git add flake.nix
 git -c user.name='Nixome Config Smoke' -c user.email='nixome-config-smoke@localhost' commit -m 'test config apply'
 git status --short --branch
 "
@@ -365,7 +365,9 @@ jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT"
   .candidate_commit == .validation_commit and
   .candidate_commit == .vault_archive.candidate_commit and
   .validation.schema == "nixome.config-validation.v1" and
-  .validation.status == "passed"
+  .validation.status == "passed" and
+  any(.validation.checks[]; .name == "nix-eval-nixome-topology" and .status == "passed") and
+  any(.validation.checks[]; .name == "nixome-topology-json" and .status == "passed")
 ' "$ARCHIVE_JSON" >/dev/null || fail "config archive JSON did not pass"
 
 jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT" '

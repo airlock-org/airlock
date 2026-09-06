@@ -42,15 +42,17 @@ It can initialize that candidate with:
 nixome-config-staging-init
 ```
 
-The seeded candidate contains `topology.json`. For this first apply proof, that
-file declares a small observable Qubes feature on `config-staging`:
+The seeded candidate exposes `nixome.topology` from `flake.nix`. For this first
+apply proof, that Nix value declares a small observable Qubes feature on
+`config-staging`:
 
 ```text
 nixome-config-applied-message
 ```
 
-`config-validator` validates candidates exported from `config-staging` and writes
-JSON under:
+`config-validator` validates candidates exported from `config-staging`,
+evaluates `.#nixome.topology` to the `topology.json` apply artifact, and writes
+validation JSON under:
 
 ```text
 /home/user/nixome-config-validation
@@ -70,10 +72,11 @@ sudo nixome-config-archive-candidate
 
 That command refuses to proceed unless `config-staging`, `config-validator`, and
 `config-vault` are offline. It fetches a clean Git bundle from
-`config-staging`, sends it to `config-validator` for `nix flake check --no-build`,
-checks the validation artifact and bundle commit in dom0, then sends the
-validated bundle to `config-vault` for archival. This records what dom0 is about
-to attempt before deployment logic exists.
+`config-staging`, sends it to `config-validator` for `nix flake check
+--no-build` and `nix eval .#nixome.topology --json`, checks the validation
+artifact, evaluated topology, and bundle commit in dom0, then sends the
+validated bundle plus evaluated topology to `config-vault` for archival.
+This records what dom0 is about to attempt before deployment logic exists.
 
 dom0 applies a validated candidate by running:
 
@@ -81,10 +84,10 @@ dom0 applies a validated candidate by running:
 sudo nixome-config-apply --apply
 ```
 
-That command performs the same staging-to-validator-to-vault flow, then extracts
-the validator-approved Git bundle and applies its `topology.json` with
-`nixome-setup-config --apply`. Dom0 transports and applies the artifact, but the
-candidate validity decision comes from `config-validator`.
+That command performs the same staging-to-validator-to-vault flow, then applies
+the validator-produced `topology.json` with `nixome-setup-config --apply`.
+Dom0 transports and applies the artifact, but the candidate validity decision
+and Nix evaluation happen in `config-validator`.
 
 ## Setup Path
 
@@ -152,10 +155,10 @@ make vm-config-smoke
 That target builds and boots the nested config dom0 image, explicitly runs the
 dom0 topology setup, starts `config-vault`, `config-staging`, and
 `config-validator`, runs `uname -a` through qrexec in all three VMs, initializes
-the staging repository and validator workspace, edits and commits
-`topology.json` in `config-staging`, validates that committed candidate in
-`config-validator`, archives it into `config-vault`, applies it from dom0, and
-checks that the declared Qubes feature changed.
+the staging repository and validator workspace, edits and commits `flake.nix`
+in `config-staging`, evaluates `.#nixome.topology` in `config-validator`,
+archives the source and evaluated topology into `config-vault`, applies it from
+dom0, and checks that the declared Qubes feature changed.
 The machine-readable result is copied to:
 
 ```text

@@ -10,6 +10,7 @@ EXPORT_STDERR="$LOG_DIR/config-candidate-export.stderr.log"
 VALIDATE_STDERR="$LOG_DIR/config-candidate-validate.stderr.log"
 VALIDATION_JSON="$LOG_DIR/config-candidate-validation.json"
 MANIFEST_JSON="$LOG_DIR/config-candidate-manifest.json"
+TOPOLOGY_JSON="$LOG_DIR/config-candidate-topology.json"
 BUNDLE_VERIFY_LOG="$LOG_DIR/config-candidate-bundle-verify.log"
 VAULT_ARCHIVE_LOG="$LOG_DIR/config-vault-archive.log"
 VAULT_ARCHIVE_STDERR="$LOG_DIR/config-vault-archive.stderr.log"
@@ -101,6 +102,7 @@ write_result() {
     --arg vault_commit "$vault_commit" \
     --arg staged_candidate_tar "$STAGED_CANDIDATE_TAR" \
     --arg validated_candidate_tar "$VALIDATED_CANDIDATE_TAR" \
+    --arg topology "$TOPOLOGY_JSON" \
     --arg command_log "$COMMAND_LOG" \
     --arg export_stderr "$EXPORT_STDERR" \
     --arg validate_stderr "$VALIDATE_STDERR" \
@@ -124,6 +126,7 @@ write_result() {
       vault_commit: $vault_commit,
       staged_candidate_tar: $staged_candidate_tar,
       validated_candidate_tar: $validated_candidate_tar,
+      topology: $topology,
       command_log: $command_log,
       export_stderr: $export_stderr,
       validate_stderr: $validate_stderr,
@@ -241,7 +244,7 @@ verify_candidate() {
 
   tar -tf "$candidate_tar" |
     awk '
-      $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" {
+      $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" && $0 != "topology.json" {
         printf "unexpected candidate tar member: %s\n", $0 > "/dev/stderr"
         exit 1
       }
@@ -250,9 +253,19 @@ verify_candidate() {
   [ -f "$tmpdir/config.bundle" ] || fail "candidate tar is missing config.bundle"
   [ -f "$tmpdir/validation.json" ] || fail "candidate tar is missing validation.json"
   [ -f "$tmpdir/manifest.json" ] || fail "candidate tar is missing manifest.json"
+  [ -f "$tmpdir/topology.json" ] || fail "candidate tar is missing topology.json"
 
   cp "$tmpdir/validation.json" "$VALIDATION_JSON"
   cp "$tmpdir/manifest.json" "$MANIFEST_JSON"
+  cp "$tmpdir/topology.json" "$TOPOLOGY_JSON"
+
+  jq -e '
+    .schema == "nixome.qubes-topology.v1" and
+    (.templates | type == "object") and
+    (.kernels | type == "object") and
+    (.prefs | type == "object") and
+    (.domains | type == "object")
+  ' "$TOPOLOGY_JSON" >/dev/null || fail "evaluated candidate topology JSON is invalid"
 
   manifest_schema="$(jq -r '.schema' "$MANIFEST_JSON")"
   manifest_commit="$(jq -r '.commit' "$MANIFEST_JSON")"

@@ -92,9 +92,9 @@ That path builds a dom0 image whose Nix config declares `config-vault`,
 simple prefs/features/services with `nixome-setup-config`, boots the NixOS
 AppVMs with the normal dom0-provided Qubes VM kernel, runs `uname -a` through
 qrexec in each VM, and checks that the role repositories exist before
-`config-staging` exports a committed config candidate, `config-validator`
-validates it, dom0 archives it into `config-vault`, and
-`nixome-config-apply --apply` applies the validated topology. See
+`config-staging` exports a committed Nix config candidate, `config-validator`
+evaluates `.#nixome.topology`, dom0 archives it into `config-vault`, and
+`nixome-config-apply --apply` applies the validated topology JSON. See
 [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
 The config topology image keeps local build size down by sharing one NixOS
 guest root image between the TemplateVM source directories.

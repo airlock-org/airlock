@@ -42,6 +42,7 @@ run_logged observe-package nix build "$ROOT#packages.x86_64-linux.nixome-observe
 run_logged setup-config-package nix build "$ROOT#packages.x86_64-linux.nixome-setup-config" --print-build-logs --show-trace
 run_logged setup-config-runtime-path "$ROOT/tests/setup-config-runtime-path.sh"
 run_logged config-topology-eval "$ROOT/tests/config-topology-eval.sh"
+run_logged config-candidate-flake "$ROOT/tests/config-candidate-flake.sh"
 run_logged host-capabilities "$ROOT/tests/host-capabilities.sh" --json "$LOG_DIR/host-capabilities.json"
 run_logged setup-config-static "$ROOT/tests/setup-config-static.sh"
 run_logged setup-config-idempotent "$ROOT/tests/setup-config-idempotent.sh"

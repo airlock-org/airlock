@@ -19,7 +19,6 @@ XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
 VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
 VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
-TOPOLOGY_REL="${NIXOME_CONFIG_TOPOLOGY_PATH:-topology.json}"
 APPLY=0
 result_written=0
 candidate_commit=""
@@ -172,12 +171,6 @@ run_to_files_or_fail() {
   fi
 }
 
-case "$TOPOLOGY_REL" in
-  ""|/*|../*|*/../*|*/..|..)
-    fail "invalid relative topology path: $TOPOLOGY_REL"
-    ;;
-esac
-
 for cmd in \
   awk \
   cp \
@@ -228,7 +221,7 @@ validation_status="$(jq -r '.validation.status' "$ARCHIVE_JSON")"
 tmpdir="$(mktemp -d)"
 tar -tf "$VALIDATED_CANDIDATE_TAR" |
   awk '
-    $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" {
+    $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" && $0 != "topology.json" {
       printf "unexpected validated candidate tar member: %s\n", $0 > "/dev/stderr"
       exit 1
     }
@@ -241,8 +234,8 @@ git clone "$tmpdir/config.bundle" "$worktree" > "$CLONE_LOG" 2>&1 ||
 git -C "$worktree" checkout --detach "$candidate_commit" > "$CHECKOUT_LOG" 2>&1 ||
   fail "checkout validated candidate commit failed"
 
-topology="$worktree/$TOPOLOGY_REL"
-[ -r "$topology" ] || fail "validated candidate is missing topology: $TOPOLOGY_REL"
+topology="$tmpdir/topology.json"
+[ -r "$topology" ] || fail "validated candidate is missing evaluated topology.json"
 jq -e '
   .schema == "nixome.qubes-topology.v1" and
   (.templates | type == "object") and
