@@ -930,10 +930,21 @@ let
     set -eu
 
     role=${lib.escapeShellArg cfg.role}
-    qdb_role="$(${pkgs.qubes-core-qubesdb}/bin/qubesdb-read /features/nixome-role 2>/dev/null || true)"
-    if [ -n "$qdb_role" ]; then
-      role="$qdb_role"
-    fi
+    qubesdb_read="''${NIXOME_QUBESDB_READ:-${pkgs.qubes-core-qubesdb}/bin/qubesdb-read}"
+    qdb_role="$("$qubesdb_read" /features/nixome-role 2>/dev/null || true)"
+    vm_name="$("$qubesdb_read" /name 2>/dev/null || true)"
+
+    case "$qdb_role" in
+      config-vault|config-staging|config-validator|config-system) role="$qdb_role" ;;
+      "") ;;
+      *) role=base ;;
+    esac
+
+    case "$vm_name" in
+      config-vault) role=config-vault ;;
+      config-staging) role=config-staging ;;
+      config-validator) role=config-validator ;;
+    esac
 
     printf 'nixome-policy-probe role=%s user=%s\n' "$role" "$(${pkgs.coreutils}/bin/whoami)"
   '';
