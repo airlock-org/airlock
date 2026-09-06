@@ -10,6 +10,7 @@ SSH_PORT="${NIXOME_VM_SSH_PORT:-2222}"
 DISPLAY_MODE="${NIXOME_VM_DISPLAY:-none}"
 VGA="${NIXOME_VM_VGA:-std}"
 BACKUP_RETENTION="${NIXOME_VM_BACKUP_RETENTION:-1}"
+FRESH="${NIXOME_VM_FRESH:-0}"
 OUT_LINK="$VM_DIR/${IMAGE_ATTR}-result"
 SERIAL_LOG="$VM_DIR/serial.log"
 MONITOR_SOCKET="$VM_DIR/${IMAGE_ATTR}.monitor"
@@ -19,6 +20,15 @@ mkdir -p "$VM_DIR"
 case "$BACKUP_RETENTION" in
   '' | *[!0-9]*)
     printf 'error: NIXOME_VM_BACKUP_RETENTION must be a non-negative integer\n' >&2
+    exit 1
+    ;;
+esac
+
+case "$FRESH" in
+  0 | 1)
+    ;;
+  *)
+    printf 'error: NIXOME_VM_FRESH must be 0 or 1\n' >&2
     exit 1
     ;;
 esac
@@ -44,7 +54,21 @@ fi
 
 BASE_IMAGE="$(readlink -f "${base_images[0]}")"
 RUN_DISK="$VM_DIR/${IMAGE_ATTR}.qcow2"
+OVMF_VARS="$VM_DIR/${IMAGE_ATTR}-OVMF_VARS.fd"
 RUN_DISK_BACKUP_TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+
+delete_file_if_present() {
+  local path="$1"
+
+  [ -e "$path" ] || return 0
+  if [ -f "$path" ] || [ -L "$path" ]; then
+    printf 'fresh run: removing generated VM state: %s\n' "$path"
+    unlink "$path"
+  else
+    printf 'error: refusing to remove non-file generated VM state: %s\n' "$path" >&2
+    exit 1
+  fi
+}
 
 prune_run_disk_backups() {
   local disk_name
@@ -82,6 +106,18 @@ case "$BASE_FORMAT" in
 esac
 
 if [ -e "$RUN_DISK" ]; then
+  if [ "$FRESH" = "1" ]; then
+    delete_file_if_present "$RUN_DISK"
+  fi
+fi
+
+if [ -e "$OVMF_VARS" ]; then
+  if [ "$FRESH" = "1" ]; then
+    delete_file_if_present "$OVMF_VARS"
+  fi
+fi
+
+if [ -e "$RUN_DISK" ]; then
   current_backing="$(
     "$qemu_utils_out/bin/qemu-img" info --output=json "$RUN_DISK" |
       sed -n 's/^[[:space:]]*"backing-filename": "\(.*\)",[[:space:]]*$/\1/p' |
@@ -105,7 +141,6 @@ if [ ! -e "$RUN_DISK" ]; then
     "$RUN_DISK"
 fi
 
-OVMF_VARS="$VM_DIR/${IMAGE_ATTR}-OVMF_VARS.fd"
 if [ ! -e "$OVMF_VARS" ]; then
   cp "$ovmf_out/FV/OVMF_VARS.fd" "$OVMF_VARS"
   chmod u+w "$OVMF_VARS"
