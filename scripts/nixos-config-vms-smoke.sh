@@ -476,9 +476,29 @@ TOPOLOGY_SCHEMA_SEED_TEXT="$(cat "$NIXOME_TOPOLOGY_SCHEMA_SEED")"
 cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
 cd /home/$QUBE_USER/nixome-config
+extract_input_url() {
+  name="\$1"
+  awk -v input="\$name" '
+    \$0 ~ "^[[:space:]]*" input "[[:space:]]*=" {
+      in_input = 1
+      next
+    }
+    in_input && /^[[:space:]]*url[[:space:]]*=/ {
+      sub(/^[[:space:]]*url[[:space:]]*=[[:space:]]*"/, "")
+      sub(/";[[:space:]]*$/, "")
+      print
+      exit
+    }
+    in_input && /^[[:space:]]*};[[:space:]]*$/ {
+      in_input = 0
+    }
+  ' flake.nix
+}
 nixpkgs_url="\$(sed -n 's/^[[:space:]]*\\(inputs\\.\\)\\{0,1\\}nixpkgs\\.url = "\\(.*\\)";$/\\2/p' flake.nix | head -n 1)"
-nixome_support_path="\$(sed -n 's/^      nixomeSupport = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
-nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
+nixome_support_url="\$(extract_input_url nixome-support)"
+nixos_qubes_url="\$(extract_input_url nixos-qubes)"
+nixome_support_path="\${nixome_support_url#path:}"
+nixos_qubes_path="\${nixos_qubes_url#path:}"
 [ -n "\$nixpkgs_url" ]
 [ -n "\$nixome_support_path" ]
 [ -n "\$nixos_qubes_path" ]
