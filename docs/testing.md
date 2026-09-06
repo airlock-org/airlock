@@ -51,7 +51,8 @@ make vm-run
 ```
 
 This builds `.#nixome-vm-image` from `machines/vm.nix` and starts it with
-QEMU/KVM, OVMF, `-cpu host`, and a writable qcow2 overlay under `.nixome-vm/`.
+QEMU/KVM, OVMF, `-cpu host`, and a writable qcow2 overlay under the generated
+VM directory.
 
 Defaults:
 
@@ -85,7 +86,7 @@ The launcher defaults to standard VGA for nested Xen because virtio VGA can
 boot and run X while leaving the GTK display black on this host.
 
 The graphical image keeps its writable qcow2 overlay separate from the headless
-image under `.nixome-vm/`.
+image under the generated VM directory.
 
 After it boots:
 
@@ -127,11 +128,16 @@ This does the control-plane check and then, by default:
 - runs `nixome-qubes-smoke`,
 - runs `nixome-qube-gui-smoke`.
 
-The Fedora 43 XFCE template RPM is about 2 GB. The host cache lives at:
+The Fedora 43 XFCE template RPM is about 2 GB. When `/run/media/user/data` is
+mounted, generated VM disks, logs, caches, and temp files default to:
 
 ```text
-.nixome-cache/rpms/
+/run/media/user/data/nixome/
 ```
+
+The source tree, Nix code, scripts, docs, and Git history stay in
+`/home/user/dev/nixome`. Without the data mount, generated files fall back to
+repo-local `.nixome-vm/`, `.nixome-logs/`, and `.nixome-cache/rpms/`.
 
 Inside the nested dom0, cached inputs are copied to:
 
@@ -252,9 +258,10 @@ The config profile sets `default_kernel = ""` so fresh config-only images can
 create TemplateVMs before any Fedora/Qubes VM kernel bootstrap has run.
 
 The VM runner keeps generated writable qcow2 overlays and Nix build out-links
-under `.nixome-vm/`. They are safe to regenerate. Old experimental VM work
-directories match `.nixome-vm-*`. The host-side Qubes RPM/template download
-cache lives under `.nixome-cache/rpms/` and should normally be kept.
+under the generated VM directory. They are safe to regenerate. Old repo-local
+experimental VM work directories match `.nixome-vm-*`. The host-side Qubes
+RPM/template download cache lives under the generated cache directory and
+should normally be kept.
 
 If a local image build fails with `No space left on device`, inspect and clean
 generated state with:
@@ -267,7 +274,7 @@ make clean-logs
 ```
 
 `make clean` removes VM work directories and logs while preserving the download
-cache. `make clean-cache` removes `.nixome-cache/` too, which means the next
+cache. `make clean-cache` removes the generated cache too, which means the next
 full GUI smoke may need to download the Qubes kernel RPMs and template RPM
 again. The runner keeps only one stale writable-overlay backup per image by
 default; adjust that with `NIXOME_VM_BACKUP_RETENTION`.

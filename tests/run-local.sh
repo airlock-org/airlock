@@ -2,7 +2,15 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
+if [ -n "${NIXOME_DATA_ROOT:-}" ]; then
+  DEFAULT_NIXOME_DATA_ROOT="$NIXOME_DATA_ROOT"
+elif [ -d /run/media/user/data ] && [ -w /run/media/user/data ]; then
+  DEFAULT_NIXOME_DATA_ROOT="/run/media/user/data/nixome"
+else
+  DEFAULT_NIXOME_DATA_ROOT=""
+fi
+LOG_DIR="${NIXOME_LOG_DIR:-${DEFAULT_NIXOME_DATA_ROOT:+$DEFAULT_NIXOME_DATA_ROOT/logs}}"
+LOG_DIR="${LOG_DIR:-$ROOT/.nixome-logs}"
 STATUS=0
 
 mkdir -p "$LOG_DIR"

@@ -74,10 +74,10 @@ make vm-gui-smoke
 This starts the GUI image, checks core services over SSH, downloads/imports the
 default Qubes R4.3 Fedora VM kernel and Fedora 43 XFCE template, runs qrexec
 `uname -a`, then tries to detect a Qube GUI window in dom0. By default, Qubes
-RPM inputs are cached on the host under `.nixome-cache/rpms/` and copied into
+RPM inputs are cached on the host under the generated data root and copied into
 the nested dom0 under `/var/cache/nixome/qubes-rpms/` before import. The
-template RPM is about 2 GB. Logs and JSON results are written under
-`.nixome-logs/`.
+template RPM is about 2 GB. Logs and JSON results are written under the same
+generated data root.
 
 For the first NixOS-template topology:
 
@@ -109,10 +109,11 @@ preserves the deployment record. See
 The config topology image keeps local build size down by sharing one NixOS
 guest root image between the TemplateVM source directories.
 
-Generated writable VM overlays and VM build out-links live under `.nixome-vm/`.
-Old one-off VM work directories also match `.nixome-vm-*`. The Qubes RPM and
-template downloads live under `.nixome-cache/rpms/`; keep that cache unless you
-intentionally want to re-download the large template RPM.
+When `/run/media/user/data` is mounted, generated writable VM overlays, logs,
+temporary files, and Qubes RPM/template downloads default to
+`/run/media/user/data/nixome/`. Without that mount, the fallback locations are
+repo-local `.nixome-vm/`, `.nixome-logs/`, and `.nixome-cache/rpms/`. Keep the
+cache unless you intentionally want to re-download the large template RPM.
 
 Useful cleanup commands:
 
@@ -124,10 +125,10 @@ make clean-logs
 make clean-cache
 ```
 
-`make clean` removes VM work directories and logs, but preserves
-`.nixome-cache/`. The VM runner keeps only one stale overlay backup per image by
-default; set `NIXOME_VM_BACKUP_RETENTION=0` to keep none, or a larger number if
-you want rollback overlays while iterating.
+`make clean` removes VM work directories and logs, but preserves the download
+cache. The VM runner keeps only one stale overlay backup per image by default;
+set `NIXOME_VM_BACKUP_RETENTION=0` to keep none, or a larger number if you want
+rollback overlays while iterating.
 
 On a booted Xen dom0 target with a Qubes template installed:
 
@@ -136,8 +137,8 @@ NIXOME_RUN_QUBES_SMOKE=1 make test
 ```
 
 The Qubes smoke test creates `test-nixome-smoke` if needed, starts it, runs
-`uname -a` through `qvm-run --pass-io`, validates stdout, writes logs under
-`.nixome-logs/`, and removes the test qube on success if it created it.
+`uname -a` through `qvm-run --pass-io`, validates stdout, writes logs under the
+generated log directory, and removes the test qube on success if it created it.
 
 ## Current Shape
 

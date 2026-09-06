@@ -2,7 +2,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
+if [ -n "${NIXOME_DATA_ROOT:-}" ]; then
+  DEFAULT_NIXOME_DATA_ROOT="$NIXOME_DATA_ROOT"
+elif [ -d /run/media/user/data ] && [ -w /run/media/user/data ]; then
+  DEFAULT_NIXOME_DATA_ROOT="/run/media/user/data/nixome"
+else
+  DEFAULT_NIXOME_DATA_ROOT=""
+fi
+VM_DIR="${NIXOME_VM_DIR:-${DEFAULT_NIXOME_DATA_ROOT:+$DEFAULT_NIXOME_DATA_ROOT/vm}}"
+VM_DIR="${VM_DIR:-$ROOT/.nixome-vm}"
 IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-image}"
 MEMORY="${NIXOME_VM_MEMORY:-8192}"
 SMP="${NIXOME_VM_SMP:-4}"
