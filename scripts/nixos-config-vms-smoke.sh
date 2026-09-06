@@ -465,7 +465,7 @@ nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = "\\(.*\\)";$/\\1/p' fla
 [ -n "\$nixpkgs_url" ]
 [ -n "\$nixome_support_path" ]
 [ -n "\$nixos_qubes_path" ]
-mkdir -p nixome
+mkdir -p dom0-profile/bin dom0-profile/share/nixome nixome
 cat > nixome/config-vms.nix <<'CONFIGVMSNIXEOF'
 $CONFIG_VMS_SEED_TEXT
 CONFIGVMSNIXEOF
@@ -481,6 +481,32 @@ SYSTEMSCHEMANIXEOF
 cat > nixome/system.nix <<'SYSTEMNIXEOF'
 $SYSTEM_SEED_TEXT
 SYSTEMNIXEOF
+cat > dom0-profile/share/nixome/profile.json <<PROFILEJSONEOF
+{"schema":"nixome.dom0-profile.v1","message":"$APPLY_MESSAGE","built_by":"config-staging"}
+PROFILEJSONEOF
+cat > dom0-profile/bin/nixome-dom0-profile-activate <<'PROFILEACTIVATEEOF'
+#!/bin/sh
+set -eu
+
+profile_root="\$(CDPATH= cd -- "\$(dirname -- "\$0")/.." && pwd)"
+state_dir="\${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
+etc_dir="\${NIXOME_SYSTEM_ETC_DIR:-/etc/nixome}"
+
+install -d -m 0755 "\$state_dir" "\$etc_dir"
+cp "\$profile_root/share/nixome/profile.json" "\$state_dir/current-profile.json"
+cp "\$profile_root/share/nixome/profile.json" "\$etc_dir/system-profile.json"
+
+if [ -n "\${NIXOME_SYSTEM_JSON:-}" ]; then
+  cp "\$NIXOME_SYSTEM_JSON" "\$state_dir/current-system.json"
+fi
+if [ -n "\${NIXOME_SYSTEM_PLAN_JSON:-}" ]; then
+  cp "\$NIXOME_SYSTEM_PLAN_JSON" "\$state_dir/current-plan.json"
+fi
+if [ -n "\${NIXOME_SYSTEM_PROFILE:-}" ]; then
+  printf '%s\n' "\$NIXOME_SYSTEM_PROFILE" > "\$state_dir/current-profile-link"
+fi
+PROFILEACTIVATEEOF
+chmod 0555 dom0-profile/bin/nixome-dom0-profile-activate
 cat > flake.nix <<'NIXEOF'
 {
   description = "Nixome machine configuration candidate";
@@ -633,7 +659,7 @@ grep -F 'systemConfig = import ./nixome/system.nix;' flake.nix
 grep -F 'templateSet = import ./nixome/templates.nix' flake.nix
 grep -F 'nixome-dom0-profile = dom0Profile;' flake.nix
 grep -F '"$CREATED_QUBE" = {' flake.nix
-git add flake.nix nixome/config-vms.nix nixome/prebuilt-template-sources.nix nixome/system.nix nixome/system-schema.nix nixome/templates.nix nixome/topology.nix
+git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.nix nixome/config-vms.nix nixome/prebuilt-template-sources.nix nixome/system.nix nixome/system-schema.nix nixome/templates.nix nixome/topology.nix
 git \
   -c user.name='Nixome Config Smoke' \
   -c user.email='nixome-config-smoke@localhost' \

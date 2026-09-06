@@ -83,6 +83,8 @@ let
 
   configStagingSeedFlake = builtins.readFile ../seeds/config-staging/flake.nix;
   configStagingConfigVms = builtins.readFile ../seeds/config-staging/nixome/config-vms.nix;
+  configStagingDom0ProfileActivate = builtins.readFile ../seeds/config-staging/dom0-profile/bin/nixome-dom0-profile-activate;
+  configStagingDom0ProfileJson = builtins.readFile ../seeds/config-staging/dom0-profile/share/nixome/profile.json;
   configStagingSystem = builtins.readFile ../seeds/config-staging/nixome/system.nix;
   configStagingTemplates = builtins.readFile ../seeds/config-staging/nixome/templates.nix;
   configStagingSystemSchema = builtins.readFile ../lib/nixome/system.nix;
@@ -130,7 +132,7 @@ let
         mkdir -p "$repo"
         cd "$repo"
         ${pkgs.git}/bin/git init -b main
-        mkdir -p nixome
+        mkdir -p dom0-profile/bin dom0-profile/share/nixome nixome
         cat > README.md <<'EOF'
     # Nixome Machine Configuration
 
@@ -158,6 +160,13 @@ let
         cat > nixome/prebuilt-template-sources.nix <<'EOF'
     ${configStagingPrebuiltTemplateSources}
     EOF
+        cat > dom0-profile/bin/nixome-dom0-profile-activate <<'EOF'
+    ${configStagingDom0ProfileActivate}
+    EOF
+        cat > dom0-profile/share/nixome/profile.json <<'EOF'
+    ${configStagingDom0ProfileJson}
+    EOF
+        chmod 0555 dom0-profile/bin/nixome-dom0-profile-activate
         if [ "${if haveConfigSeedInputs then "1" else "0"}" != "1" ]; then
           printf 'missing Nixome config seed input paths in guest build\n' >&2
           exit 1
@@ -169,6 +178,8 @@ let
           flake.nix
         ${pkgs.git}/bin/git add \
           README.md \
+          dom0-profile/bin/nixome-dom0-profile-activate \
+          dom0-profile/share/nixome/profile.json \
           flake.nix \
           nixome/config-vms.nix \
           nixome/prebuilt-template-sources.nix \
@@ -738,31 +749,119 @@ let
           | @base64
         ' "$system_file"
       )"
+      direct_sources="$(
+        ${pkgs.jq}/bin/jq -r '
+          [
+            {
+              component: "dom0.profile",
+              source: .dom0.profile.source,
+              activation_command: .dom0.profile.activation_command
+            },
+            {
+              component: "dom0.nixos.system",
+              source: .dom0.nixos.system.source,
+              activation_command: null
+            },
+            {
+              component: "dom0.nixos.kernel",
+              source: .dom0.nixos.kernel.source,
+              activation_command: null
+            },
+            {
+              component: "dom0.nixos.xen",
+              source: .dom0.nixos.xen.source,
+              activation_command: null
+            },
+            {
+              component: "dom0.nixos.bootloader",
+              source: .dom0.nixos.bootloader.source,
+              activation_command: null
+            },
+            {
+              component: "dom0.nixos.qubes",
+              source: .dom0.nixos.qubes.source,
+              activation_command: null
+            }
+          ]
+          | .[]
+          | select(.source != null)
+          | @base64
+        ' "$system_file"
+      )"
 
-      if [ -z "$refs" ]; then
-        printf 'no system source refs declared\n' >> "$log"
+      if [ -z "$refs" ] && [ -z "$direct_sources" ]; then
+        printf 'no system sources declared\n' >> "$log"
         return 0
       fi
 
-      printf '%s\n' "$refs" |
-        while IFS= read -r encoded; do
+      if [ -n "$refs" ]; then
+        printf '%s\n' "$refs" |
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            ref_json="$(printf '%s' "$encoded" | ${pkgs.coreutils}/bin/base64 -d)"
+            name="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.name')"
+            attr="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.ref.attr')"
+            printf 'checking system=%s attr=%s\n' "$name" "$attr" >> "$log"
+            ${pkgs.nix}/bin/nix \
+              --extra-experimental-features nix-command \
+              --extra-experimental-features flakes \
+              build \
+              --impure \
+              --offline \
+              --no-write-lock-file \
+              --dry-run \
+              --no-link \
+              --show-trace \
+              ".#$attr" >> "$log" 2>&1
+          done
+      fi
+
+      if [ -n "$direct_sources" ]; then
+        printf '%s\n' "$direct_sources" |
+          while IFS= read -r encoded; do
           [ -n "$encoded" ] || continue
-          ref_json="$(printf '%s' "$encoded" | ${pkgs.coreutils}/bin/base64 -d)"
-          name="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.name')"
-          attr="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.ref.attr')"
-          printf 'checking system=%s attr=%s\n' "$name" "$attr" >> "$log"
-          ${pkgs.nix}/bin/nix \
-            --extra-experimental-features nix-command \
-            --extra-experimental-features flakes \
-            build \
-            --impure \
-            --offline \
-            --no-write-lock-file \
-            --dry-run \
-            --no-link \
-            --show-trace \
-            ".#$attr" >> "$log" 2>&1
-        done
+          source_json="$(printf '%s' "$encoded" | ${pkgs.coreutils}/bin/base64 -d)"
+          component="$(printf '%s' "$source_json" | ${pkgs.jq}/bin/jq -r '.component')"
+          source="$(printf '%s' "$source_json" | ${pkgs.jq}/bin/jq -r '.source')"
+          activation_command="$(printf '%s' "$source_json" | ${pkgs.jq}/bin/jq -r '.activation_command // ""')"
+          case "$source" in
+            "")
+              printf 'empty direct system source for %s\n' "$component" >> "$log"
+              exit 1
+              ;;
+            /*)
+              resolved="$source"
+              ;;
+            .|./|..|../*|*/..|*/../*|*//*)
+              printf 'unsafe relative system source for %s: %s\n' "$component" "$source" >> "$log"
+              exit 1
+              ;;
+            ./*)
+              stripped="$(printf '%s' "$source" | ${pkgs.gnused}/bin/sed 's|^\./||')"
+              resolved="$PWD/$stripped"
+              ;;
+            *)
+              resolved="$PWD/$source"
+              ;;
+          esac
+          printf 'checking system=%s source=%s resolved=%s\n' "$component" "$source" "$resolved" >> "$log"
+          [ -e "$resolved" ] || {
+            printf 'direct system source is missing for %s: %s\n' "$component" "$source" >> "$log"
+            exit 1
+          }
+          if [ "$component" = "dom0.profile" ]; then
+            [ -d "$resolved" ] || {
+              printf 'direct dom0 profile source is not a directory: %s\n' "$source" >> "$log"
+              exit 1
+            }
+            [ -n "$activation_command" ] || activation_command="bin/nixome-dom0-profile-activate"
+            [ -x "$resolved/$activation_command" ] || {
+              printf 'direct dom0 profile activation command is missing or not executable: %s/%s\n' "$source" "$activation_command" >> "$log"
+              exit 1
+            }
+          fi
+          done
+      fi
     }
 
     if [ -f flake.nix ]; then

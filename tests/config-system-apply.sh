@@ -8,7 +8,7 @@ BIN_DIR="$WORK_DIR/bin"
 CANDIDATE_DIR="$WORK_DIR/candidate"
 LOG_DIR="$WORK_DIR/logs"
 CAPABILITIES="$WORK_DIR/xen-capabilities"
-PROFILE_SOURCE="$WORK_DIR/profile-source"
+PROFILE_SOURCE="$CANDIDATE_DIR/dom0-profile"
 SYSTEM_STATE_DIR="$WORK_DIR/state"
 SYSTEM_ETC_DIR="$WORK_DIR/etc"
 SYSTEM_PROFILE="$WORK_DIR/nixome-system-profile"
@@ -115,12 +115,12 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
     };
 }
 EOF
-sed -i "s|__PROFILE_SOURCE__|$PROFILE_SOURCE|g" "$CANDIDATE_DIR/flake.nix"
+sed -i "s|__PROFILE_SOURCE__|dom0-profile|g" "$CANDIDATE_DIR/flake.nix"
 
 (
   cd "$CANDIDATE_DIR"
   git init -b main >/dev/null
-  git add flake.nix
+  git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.nix
   git \
     -c user.name='Nixome Test' \
     -c user.email='nixome-test@localhost' \
@@ -128,6 +128,7 @@ sed -i "s|__PROFILE_SOURCE__|$PROFILE_SOURCE|g" "$CANDIDATE_DIR/flake.nix"
 )
 
 CANDIDATE_COMMIT="$(git -C "$CANDIDATE_DIR" rev-parse HEAD)"
+EXPECTED_PROFILE_SOURCE="$SYSTEM_STATE_DIR/sources/$CANDIDATE_COMMIT/dom0.profile"
 git -C "$CANDIDATE_DIR" bundle create "$WORK_DIR/config.bundle" HEAD refs/heads/main >/dev/null
 nix eval --json "$CANDIDATE_DIR#nixome.topology" > "$WORK_DIR/topology.json"
 nix eval --json "$CANDIDATE_DIR#nixome.system" > "$WORK_DIR/system.json"
@@ -252,7 +253,8 @@ jq -e '
 ' "$SYSTEM_STATE_DIR/current-system.json" >/dev/null
 
 grep -qx activated "$SYSTEM_STATE_DIR/profile-activated"
-[ "$(readlink "$SYSTEM_PROFILE")" = "$PROFILE_SOURCE" ]
+[ "$(readlink "$SYSTEM_PROFILE")" = "$EXPECTED_PROFILE_SOURCE" ]
+[ -x "$EXPECTED_PROFILE_SOURCE/bin/nixome-dom0-profile-activate" ]
 
 tar -tf "$DEPLOYMENT_TAR_CAPTURE" | sort > "$WORK_DIR/deployment-members.txt"
 grep -Fx system.json "$WORK_DIR/deployment-members.txt" >/dev/null

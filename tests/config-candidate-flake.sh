@@ -16,6 +16,7 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 mkdir -p "$WORK_DIR/nixome"
+cp -R "$ROOT/seeds/config-staging/dom0-profile" "$WORK_DIR/dom0-profile"
 cp "$ROOT/seeds/config-staging/flake.nix" "$WORK_DIR/flake.nix"
 cp "$ROOT/seeds/config-staging/nixome/config-vms.nix" "$WORK_DIR/nixome/config-vms.nix"
 cp "$ROOT/seeds/config-staging/nixome/prebuilt-template-sources.nix" "$WORK_DIR/nixome/prebuilt-template-sources.nix"
@@ -187,12 +188,8 @@ jq -e '
 
 jq -e '
   .schema == "nixome.system.v1" and
-  .dom0.profile.source == null and
-  .dom0.profile.source_ref == {
-    "type": "flake-output",
-    "attr": "packages.x86_64-linux.nixome-dom0-profile",
-    "subpath": ""
-  } and
+  .dom0.profile.source == "dom0-profile" and
+  .dom0.profile.source_ref == null and
   .dom0.profile.activation_command == "bin/nixome-dom0-profile-activate" and
   .dom0.profile.activation_action == "run" and
   .dom0.profile.message == "initial" and
@@ -211,12 +208,8 @@ jq -e '
     {
       "type": "dom0-profile",
       "action": "run",
-      "source": null,
-      "source_ref": {
-        "type": "flake-output",
-        "attr": "packages.x86_64-linux.nixome-dom0-profile",
-        "subpath": ""
-      },
+      "source": "dom0-profile",
+      "source_ref": null,
       "activation_command": "bin/nixome-dom0-profile-activate",
       "message": "initial"
     }

@@ -12,7 +12,18 @@ VALIDATOR_STDERR="$WORK_DIR/validator.stderr.log"
 MEMBERS="$WORK_DIR/validated-members.txt"
 
 rm -rf "$WORK_DIR"
-mkdir -p "$CANDIDATE_DIR" "$VALIDATION_DIR"
+mkdir -p "$CANDIDATE_DIR/dom0-profile/bin" "$CANDIDATE_DIR/dom0-profile/share/nixome" "$VALIDATION_DIR"
+
+cat > "$CANDIDATE_DIR/dom0-profile/share/nixome/profile.json" <<'EOF'
+{"schema":"nixome.dom0-profile.v1","message":"validator-test","built_by":"config-validator-candidate-test"}
+EOF
+
+cat > "$CANDIDATE_DIR/dom0-profile/bin/nixome-dom0-profile-activate" <<'EOF'
+#!/bin/sh
+set -eu
+exit 0
+EOF
+chmod 0755 "$CANDIDATE_DIR/dom0-profile/bin/nixome-dom0-profile-activate"
 
 cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
 {
@@ -32,11 +43,11 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
       schema = "nixome.system.v1";
       dom0 = {
         profile = {
-          source = null;
+          source = "dom0-profile";
           source_ref = null;
           activation_command = "bin/nixome-dom0-profile-activate";
           activation_action = "none";
-          message = "";
+          message = "validator-test";
         };
         packages = [ ];
         systemd.services = { };
@@ -86,7 +97,7 @@ EOF
 (
   cd "$CANDIDATE_DIR"
   git init -b main >/dev/null
-  git add flake.nix
+  git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.nix
   git \
     -c user.name='Nixome Validator Test' \
     -c user.email='nixome-validator-test@localhost' \

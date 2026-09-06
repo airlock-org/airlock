@@ -8,9 +8,7 @@
 {
   dom0 = {
     profile = {
-      source = {
-        build = "packages.${system}.nixome-dom0-profile";
-      };
+      source = "dom0-profile";
       activationCommand = "bin/nixome-dom0-profile-activate";
       activationAction = "run";
       message = appliedMessage;

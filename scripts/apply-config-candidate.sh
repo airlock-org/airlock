@@ -632,6 +632,104 @@ record_system_build() {
   mv "$tmp" "$SYSTEM_BUILDS_JSON"
 }
 
+resolve_candidate_source_path() {
+  component="$1"
+  worktree="$2"
+  source="$3"
+
+  case "$source" in
+    "")
+      fail "empty direct system source for $component"
+      ;;
+    /*)
+      printf '%s\n' "$source"
+      ;;
+    .|./|..|../*|*/..|*/../*|*//*)
+      fail "unsafe relative system source for $component: $source"
+      ;;
+    ./*)
+      printf '%s/%s\n' "$worktree" "${source#./}"
+      ;;
+    *)
+      printf '%s/%s\n' "$worktree" "$source"
+      ;;
+  esac
+}
+
+resolve_direct_system_sources() {
+  resolved="$1"
+  worktree="$2"
+
+  mapfile -t direct_sources < <(
+    jq -r '
+      [
+        { component: "dom0.profile", path: ["dom0", "profile"], source: .dom0.profile.source },
+        { component: "dom0.nixos.system", path: ["dom0", "nixos", "system"], source: .dom0.nixos.system.source },
+        { component: "dom0.nixos.kernel", path: ["dom0", "nixos", "kernel"], source: .dom0.nixos.kernel.source },
+        { component: "dom0.nixos.xen", path: ["dom0", "nixos", "xen"], source: .dom0.nixos.xen.source },
+        { component: "dom0.nixos.bootloader", path: ["dom0", "nixos", "bootloader"], source: .dom0.nixos.bootloader.source },
+        { component: "dom0.nixos.qubes", path: ["dom0", "nixos", "qubes"], source: .dom0.nixos.qubes.source }
+      ]
+      | .[]
+      | select(.source != null)
+      | @base64
+    ' "$resolved"
+  )
+
+  if [ "${#direct_sources[@]}" -eq 0 ]; then
+    printf 'no direct system sources to resolve\n' >> "$SYSTEM_BUILD_LOG"
+    return
+  fi
+
+  for encoded in "${direct_sources[@]}"; do
+    source_json="$(printf '%s' "$encoded" | base64 -d)"
+    component="$(printf '%s' "$source_json" | jq -r '.component')"
+    source="$(printf '%s' "$source_json" | jq -r '.source')"
+    source_path="$(printf '%s' "$source_json" | jq -c '.path')"
+    resolved_source="$(resolve_candidate_source_path "$component" "$worktree" "$source")"
+    resolved_source_physical="$(nixome_physical_store_path "$resolved_source")"
+    source_was_relative=0
+
+    case "$source" in
+      /*) ;;
+      *) source_was_relative=1 ;;
+    esac
+
+    [ -e "$resolved_source_physical" ] ||
+      fail "direct system source is missing for $component: $source"
+
+    if [ "$source_was_relative" = "1" ]; then
+      persistent_source="$SYSTEM_STATE_DIR/sources/$candidate_commit/$(safe_log_name "$component")"
+      rm -rf "$persistent_source"
+      mkdir -p "$(dirname "$persistent_source")"
+      cp -a "$resolved_source_physical" "$persistent_source"
+      resolved_source="$persistent_source"
+      resolved_source_physical="$persistent_source"
+    fi
+
+    if [ "$component" = "dom0.profile" ]; then
+      activation_command="$(jq -r '.dom0.profile.activation_command // "bin/nixome-dom0-profile-activate"' "$resolved")"
+      [ -d "$resolved_source_physical" ] ||
+        fail "direct dom0 profile source is not a directory: $source"
+      [ -x "$resolved_source_physical/$activation_command" ] ||
+        fail "direct dom0 profile activation command is missing or not executable: $source/$activation_command"
+    fi
+
+    printf 'direct system source component=%s source=%s resolved=%s\n' \
+      "$component" \
+      "$source" \
+      "$resolved_source" >> "$SYSTEM_BUILD_LOG"
+
+    tmp_resolved="$resolved.tmp"
+    jq \
+      --argjson path "$source_path" \
+      --arg source "$resolved_source" \
+      'setpath($path + ["source"]; $source)' \
+      "$resolved" > "$tmp_resolved"
+    mv "$tmp_resolved" "$resolved"
+  done
+}
+
 resolve_system_sources() {
   system_json="$1"
   worktree="$2"
@@ -659,10 +757,8 @@ resolve_system_sources() {
 
   if [ "${#system_refs[@]}" -eq 0 ]; then
     printf 'no staged system build references to resolve\n' >> "$SYSTEM_BUILD_LOG"
-    return
-  fi
-
-  for encoded in "${system_refs[@]}"; do
+  else
+    for encoded in "${system_refs[@]}"; do
     ref_json="$(printf '%s' "$encoded" | base64 -d)"
     component="$(printf '%s' "$ref_json" | jq -r '.component')"
     attr="$(printf '%s' "$ref_json" | jq -r '.ref.attr')"
@@ -723,7 +819,10 @@ resolve_system_sources() {
 
     record_system_build "$component" "$attr" "$subpath" passed "$output_path" "$source_path" "$build_log"
     cat "$build_log" >> "$SYSTEM_BUILD_LOG" || true
-  done
+    done
+  fi
+
+  resolve_direct_system_sources "$resolved" "$worktree"
 }
 
 install_profile_link() {
