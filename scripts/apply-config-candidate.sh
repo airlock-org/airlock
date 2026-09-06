@@ -832,7 +832,9 @@ install_profile_link() {
 
   mkdir -p "$profile_parent"
 
-  if nixome_store_uses_chroot; then
+  if [ "${profile_source#/nix/store/}" = "$profile_source" ]; then
+    ln -sfn "$profile_source_physical" "$SYSTEM_PROFILE"
+  elif nixome_store_uses_chroot; then
     ln -sfn "$profile_source_physical" "$SYSTEM_PROFILE"
   else
     nix-env -p "$SYSTEM_PROFILE" --set "$profile_source"
