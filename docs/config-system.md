@@ -8,39 +8,42 @@ plane in dom0, but moves the desired VM topology into Nix.
 `machines/config-system.nix` declares:
 
 - `nixome-nixos-config-vault`, a NixOS TemplateVM source.
-- `nixome-nixos-config-mod`, a NixOS TemplateVM source.
+- `nixome-nixos-config-staging`, a NixOS TemplateVM source.
+- `nixome-nixos-config-verify`, a NixOS TemplateVM source.
 - `config-vault`, an offline AppVM based on the config-vault template.
-- `config-mod`, an offline AppVM based on the config-mod template.
+- `config-staging`, an offline AppVM based on the config-staging template.
+- `config-verify`, an offline AppVM based on the config-verify template.
 - `default_kernel = ""`, so fresh config-only images can create TemplateVMs
   before a Fedora/Qubes VM kernel has been bootstrapped.
 - qrexec policy allowing only dom0 to call `nixome.Config.CandidateExport` on
-  `config-mod` and `nixome.Config.ArchiveCandidate` on `config-vault`.
+  `config-staging`, `nixome.Config.VerifyCandidate` on `config-verify`, and
+  `nixome.Config.ArchiveCandidate` on `config-vault`.
 
 The initial VM resource settings are sized for the nested 8 GiB developer VM:
-`config-vault` starts at 1024 MiB and `config-mod` starts at 2048 MiB. A
-physical Nixome host can raise these declaratively later.
+`config-vault` starts at 1024 MiB, while `config-staging` and `config-verify`
+start at 2048 MiB. A physical Nixome host can raise these declaratively later.
 
-For this POC both TemplateVM source directories reference the same NixOS guest
-root image. That shared image carries both the vault archive tooling and the
-config-mod validation/export tooling; the AppVM names, Qubes features, offline
+For this POC the TemplateVM source directories reference the same NixOS guest
+root image. That shared image carries the vault archive tooling, staging export
+tooling, and verifier tooling; the AppVM names, Qubes features, offline
 networking, and qrexec policy carry the runtime role distinction. Dedicated
 role-specific guest closures already evaluate/build and remain the hardening
 target once the authority flow is stable.
 
-`config-mod` owns the editable candidate repository at:
+`config-staging` owns the editable candidate repository at:
 
 ```text
 /home/user/nixome-config
 ```
 
-It can initialize and validate that candidate with:
+It can initialize that candidate with:
 
 ```bash
-nixome-config-mod-init
-nixome-config-mod-validate
+nixome-config-staging-init
 ```
 
-Validation runs in `config-mod`, writes JSON under:
+`config-verify` validates candidates exported from `config-staging` and writes
+JSON under:
 
 ```text
 /home/user/nixome-config-validation
@@ -58,10 +61,12 @@ dom0 archives a candidate by running:
 sudo nixome-config-archive-candidate
 ```
 
-That command refuses to proceed unless `config-mod` is offline, fetches a
-validated Git bundle from `config-mod`, checks the validation artifact and
-bundle commit in dom0, then sends the bundle to `config-vault` for archival.
-This records what dom0 is about to attempt before deployment logic exists.
+That command refuses to proceed unless `config-staging`, `config-verify`, and
+`config-vault` are offline. It fetches a clean Git bundle from
+`config-staging`, sends it to `config-verify` for `nix flake check --no-build`,
+checks the validation artifact and bundle commit in dom0, then sends the
+verified bundle to `config-vault` for archival. This records what dom0 is about
+to attempt before deployment logic exists.
 
 ## Setup Path
 
@@ -127,10 +132,10 @@ make vm-config-smoke
 ```
 
 That target builds and boots the nested config dom0 image, explicitly runs the
-dom0 topology setup, starts `config-vault` and `config-mod`, runs `uname -a`
-through qrexec in both VMs, initializes the config modifier repository,
-validates the committed candidate inside `config-mod`, and verifies that dom0
-archives the validated candidate into `config-vault`.
+dom0 topology setup, starts `config-vault`, `config-staging`, and
+`config-verify`, runs `uname -a` through qrexec in all three VMs, initializes
+the staging repository and verifier workspace, and verifies that dom0 archives
+the candidate into `config-vault` only after `config-verify` validates it.
 The machine-readable result is copied to:
 
 ```text

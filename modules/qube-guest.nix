@@ -7,7 +7,9 @@
 let
   cfg = config.nixome.qubeGuest;
   hasConfigVaultRole = cfg.role == "config-vault" || cfg.role == "config-system";
-  hasConfigModRole = cfg.role == "config-mod" || cfg.role == "config-system";
+  hasConfigStagingRole = cfg.role == "config-staging" || cfg.role == "config-system";
+  hasConfigVerifyRole = cfg.role == "config-verify" || cfg.role == "config-system";
+  hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigVerifyRole;
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
 
   qubesGuestPath = [
@@ -54,17 +56,26 @@ let
       pkgs.gnutar
       pkgs.jq
     ];
-    config-mod = [
-      configModExportCandidate
-      configModInit
-      configModValidate
+    config-staging = [
+      configStagingExportCandidate
+      configStagingInit
+      configStagingValidate
       pkgs.gawk
       pkgs.git
       pkgs.gnutar
       pkgs.jq
       pkgs.nix
     ];
-    config-system = config-vault ++ config-mod;
+    config-verify = [
+      configVerifyCandidate
+      configVerifyInit
+      pkgs.gawk
+      pkgs.git
+      pkgs.gnutar
+      pkgs.jq
+      pkgs.nix
+    ];
+    config-system = config-vault ++ config-staging ++ config-verify;
   };
 
   configVaultInit = pkgs.writeShellScriptBin "nixome-config-vault-init" ''
@@ -95,12 +106,12 @@ let
           commit -m 'init nixome config archive'
   '';
 
-  configModInit = pkgs.writeShellScriptBin "nixome-config-mod-init" ''
+  configStagingInit = pkgs.writeShellScriptBin "nixome-config-staging-init" ''
         set -eu
 
         repo="${cfg.configRepoPath}"
         if [ -d "$repo/.git" ]; then
-          printf 'config mod repo already exists: %s\n' "$repo"
+          printf 'config staging repo already exists: %s\n' "$repo"
           exit 0
         fi
 
@@ -127,19 +138,19 @@ let
     EOF
         ${pkgs.git}/bin/git add README.md flake.nix
         ${pkgs.git}/bin/git \
-          -c user.name='Nixome Config Mod' \
-          -c user.email='nixome-config-mod@localhost' \
+          -c user.name='Nixome Config Staging' \
+          -c user.email='nixome-config-staging@localhost' \
           commit -m 'init nixome config candidate'
   '';
 
-  configModValidate = pkgs.writeShellScriptBin "nixome-config-mod-validate" ''
+  configStagingValidate = pkgs.writeShellScriptBin "nixome-config-staging-validate" ''
     set -eu
 
     repo="${cfg.configRepoPath}"
     validation_dir="${cfg.configValidationPath}"
 
     if [ ! -d "$repo/.git" ]; then
-      printf 'missing Git repo at %s; run nixome-config-mod-init first\n' "$repo" >&2
+      printf 'missing Git repo at %s; run nixome-config-staging-init first\n' "$repo" >&2
       exit 1
     fi
 
@@ -190,7 +201,7 @@ let
     }
 
     if [ -n "$dirty" ]; then
-      write_validation failed "config mod worktree is dirty; commit changes before export" skipped
+      write_validation failed "config staging worktree is dirty; commit changes before export" skipped
       exit 1
     fi
 
@@ -216,42 +227,213 @@ let
     [ "$status" = passed ]
   '';
 
-  configModExportCandidate = pkgs.writeShellScriptBin "nixome-config-mod-export-candidate" ''
+  configStagingExportCandidate = pkgs.writeShellScriptBin "nixome-config-staging-export-candidate" ''
     set -eu
 
     repo="${cfg.configRepoPath}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
-    ${configModValidate}/bin/nixome-config-mod-validate > "$tmpdir/validation.json"
-    status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
-    commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
+    if [ ! -d "$repo/.git" ]; then
+      printf 'missing Git repo at %s; run nixome-config-staging-init first\n' "$repo" >&2
+      exit 1
+    fi
 
+    cd "$repo"
+    dirty="$(${pkgs.git}/bin/git status --porcelain)"
+    if [ -n "$dirty" ]; then
+      printf 'config staging worktree is dirty; commit changes before export\n' >&2
+      printf '%s\n' "$dirty" >&2
+      exit 1
+    fi
+
+    commit="$(${pkgs.git}/bin/git rev-parse HEAD)"
+    branch="$(${pkgs.git}/bin/git symbolic-ref --short HEAD)"
+    ${pkgs.git}/bin/git bundle create "$tmpdir/config.bundle" HEAD "refs/heads/$branch" >/dev/null
+    ${pkgs.jq}/bin/jq -c -n \
+      --arg schema "nixome.config-candidate.v1" \
+      --arg commit "$commit" \
+      --arg branch "$branch" \
+      --arg source_role "config-staging" \
+      '{schema: $schema, commit: $commit, branch: $branch, source_role: $source_role}' \
+      > "$tmpdir/manifest.json"
+
+    exec ${pkgs.gnutar}/bin/tar -C "$tmpdir" -cf - config.bundle manifest.json
+  '';
+
+  configCandidateExportService = pkgs.writeShellScript "nixome-config-candidate-export-qrexec" ''
+    exec ${configStagingExportCandidate}/bin/nixome-config-staging-export-candidate
+  '';
+
+  configVerifyInit = pkgs.writeShellScriptBin "nixome-config-verify-init" ''
+    set -eu
+
+    validation_dir="${cfg.configValidationPath}"
+    mkdir -p "$validation_dir/logs"
+    printf 'config verify workspace ready: %s\n' "$validation_dir"
+  '';
+
+  configVerifyCandidate = pkgs.writeShellScriptBin "nixome-config-verify-candidate" ''
+    set -eu
+
+    validation_dir="${cfg.configValidationPath}"
+    tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
+    trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
+
+    candidate_tar="$tmpdir/candidate.tar"
+    ${pkgs.coreutils}/bin/cat > "$candidate_tar"
+    ${pkgs.gnutar}/bin/tar -tf "$candidate_tar" |
+      ${pkgs.gawk}/bin/awk '
+        $0 != "config.bundle" && $0 != "manifest.json" {
+          printf "unexpected staged candidate tar member: %s\n", $0 > "/dev/stderr"
+          exit 1
+        }
+      '
+    ${pkgs.gnutar}/bin/tar -C "$tmpdir" -xf "$candidate_tar"
+
+    [ -f "$tmpdir/config.bundle" ] || {
+      printf 'staged candidate tar is missing config.bundle\n' >&2
+      exit 1
+    }
+    [ -f "$tmpdir/manifest.json" ] || {
+      printf 'staged candidate tar is missing manifest.json\n' >&2
+      exit 1
+    }
+
+    manifest_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/manifest.json")"
+    manifest_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/manifest.json")"
+    [ "$manifest_schema" = "nixome.config-candidate.v1" ] || {
+      printf 'unsupported candidate manifest schema: %s\n' "$manifest_schema" >&2
+      exit 1
+    }
+    [ -n "$manifest_commit" ] && [ "$manifest_commit" != null ] || {
+      printf 'candidate manifest is missing commit\n' >&2
+      exit 1
+    }
+
+    verify_repo="$tmpdir/verify.git"
+    ${pkgs.git}/bin/git init --bare -b main "$verify_repo" >/dev/null
+    ${pkgs.git}/bin/git -C "$verify_repo" bundle verify "$tmpdir/config.bundle" > "$tmpdir/bundle-verify.log" 2>&1
+    candidate_commit="$(
+      ${pkgs.git}/bin/git -C "$verify_repo" bundle list-heads "$tmpdir/config.bundle" |
+        ${pkgs.gawk}/bin/awk 'NR == 1 { print $1 }'
+    )"
+    [ -n "$candidate_commit" ] || {
+      printf 'candidate bundle did not expose a commit\n' >&2
+      exit 1
+    }
+    [ "$candidate_commit" = "$manifest_commit" ] || {
+      printf 'candidate commit %s does not match manifest commit %s\n' "$candidate_commit" "$manifest_commit" >&2
+      exit 1
+    }
+
+    worktree="$tmpdir/worktree"
+    ${pkgs.git}/bin/git clone "$tmpdir/config.bundle" "$worktree" > "$tmpdir/git-clone.log" 2>&1
+    cd "$worktree"
+    checked_commit="$(${pkgs.git}/bin/git rev-parse HEAD)"
+    dirty="$(${pkgs.git}/bin/git status --porcelain)"
+    [ "$checked_commit" = "$candidate_commit" ] || {
+      printf 'cloned commit %s does not match candidate commit %s\n' "$checked_commit" "$candidate_commit" >&2
+      exit 1
+    }
+
+    mkdir -p "$validation_dir/logs"
+    result_file="$validation_dir/$candidate_commit.json"
+    result_tmp="$result_file.tmp"
+    flake_log="$validation_dir/logs/flake-check-$candidate_commit.log"
+    local_flake_log="$tmpdir/flake-check.log"
+
+    write_validation() {
+      status="$1"
+      reason="$2"
+      flake_status="$3"
+
+      ${pkgs.jq}/bin/jq -c -n \
+        --arg schema "nixome.config-validation.v1" \
+        --arg status "$status" \
+        --arg reason "$reason" \
+        --arg verifier_role "config-verify" \
+        --arg commit "$candidate_commit" \
+        --arg dirty "$dirty" \
+        --arg manifest "$tmpdir/manifest.json" \
+        --arg bundle_verify_log "$tmpdir/bundle-verify.log" \
+        --arg git_clone_log "$tmpdir/git-clone.log" \
+        --arg flake_status "$flake_status" \
+        --arg flake_log "$flake_log" \
+        '{
+          schema: $schema,
+          status: $status,
+          reason: $reason,
+          verifier_role: $verifier_role,
+          commit: $commit,
+          checks: [
+            {
+              name: "candidate-manifest",
+              status: "passed",
+              manifest: $manifest
+            },
+            {
+              name: "git-bundle-verify",
+              status: "passed",
+              log: $bundle_verify_log
+            },
+            {
+              name: "git-clone",
+              status: "passed",
+              log: $git_clone_log
+            },
+            {
+              name: "git-clean",
+              status: (if $dirty == "" then "passed" else "failed" end),
+              details: $dirty
+            },
+            {
+              name: "nix-flake-check-no-build",
+              status: $flake_status,
+              log: $flake_log
+            }
+          ]
+        }' > "$result_tmp"
+      mv "$result_tmp" "$result_file"
+      ${pkgs.coreutils}/bin/cp "$result_file" "$tmpdir/validation.json"
+    }
+
+    if [ -n "$dirty" ]; then
+      write_validation failed "verified candidate worktree is dirty" skipped
+      cat "$tmpdir/validation.json" >&2
+      exit 1
+    fi
+
+    flake_status=skipped
+    reason="validation passed"
+    status=passed
+    if [ -f flake.nix ]; then
+      if ${pkgs.nix}/bin/nix \
+        --extra-experimental-features nix-command \
+        --extra-experimental-features flakes \
+        flake check --no-build . > "$local_flake_log" 2>&1; then
+        flake_status=passed
+      else
+        flake_status=failed
+        reason="nix flake check --no-build failed"
+        status=failed
+      fi
+      ${pkgs.coreutils}/bin/cp "$local_flake_log" "$flake_log"
+    else
+      printf 'no flake.nix present; skipping nix flake check\n' > "$flake_log"
+    fi
+
+    write_validation "$status" "$reason" "$flake_status"
     if [ "$status" != passed ]; then
       cat "$tmpdir/validation.json" >&2
       exit 1
     fi
 
-    cd "$repo"
-    head_commit="$(${pkgs.git}/bin/git rev-parse HEAD)"
-    if [ "$head_commit" != "$commit" ]; then
-      printf 'validation commit %s does not match HEAD %s\n' "$commit" "$head_commit" >&2
-      exit 1
-    fi
-
-    ${pkgs.git}/bin/git bundle create "$tmpdir/config.bundle" HEAD >/dev/null
-    ${pkgs.jq}/bin/jq -c -n \
-      --arg schema "nixome.config-candidate.v1" \
-      --arg commit "$commit" \
-      --arg validation_schema "$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validation.json")" \
-      '{schema: $schema, commit: $commit, validation_schema: $validation_schema}' \
-      > "$tmpdir/manifest.json"
-
     exec ${pkgs.gnutar}/bin/tar -C "$tmpdir" -cf - config.bundle validation.json manifest.json
   '';
 
-  configCandidateExportService = pkgs.writeShellScript "nixome-config-candidate-export-qrexec" ''
-    exec ${configModExportCandidate}/bin/nixome-config-mod-export-candidate
+  configCandidateVerifyService = pkgs.writeShellScript "nixome-config-candidate-verify-qrexec" ''
+    exec ${configVerifyCandidate}/bin/nixome-config-verify-candidate
   '';
 
   configVaultArchiveCandidate = pkgs.writeShellScriptBin "nixome-config-vault-archive-candidate" ''
@@ -280,16 +462,30 @@ let
       printf 'candidate tar is missing validation.json\n' >&2
       exit 1
     }
+    [ -f "$tmpdir/manifest.json" ] || {
+      printf 'candidate tar is missing manifest.json\n' >&2
+      exit 1
+    }
 
+    manifest_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/manifest.json")"
+    manifest_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/manifest.json")"
     validation_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validation.json")"
     validation_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
     validation_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
+    [ "$manifest_schema" = "nixome.config-candidate.v1" ] || {
+      printf 'unsupported candidate manifest schema: %s\n' "$manifest_schema" >&2
+      exit 1
+    }
     [ "$validation_schema" = "nixome.config-validation.v1" ] || {
       printf 'unsupported validation schema: %s\n' "$validation_schema" >&2
       exit 1
     }
     [ "$validation_status" = passed ] || {
       printf 'validation status is not passed: %s\n' "$validation_status" >&2
+      exit 1
+    }
+    [ "$manifest_commit" = "$validation_commit" ] || {
+      printf 'manifest commit %s does not match validation commit %s\n' "$manifest_commit" "$validation_commit" >&2
       exit 1
     }
 
@@ -316,16 +512,19 @@ let
     archive_dir="$repo/candidates/$candidate_commit"
     ${pkgs.coreutils}/bin/mkdir -p "$archive_dir"
     ${pkgs.coreutils}/bin/cp "$tmpdir/config.bundle" "$archive_dir/config.bundle"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/manifest.json" "$archive_dir/manifest.json"
     ${pkgs.coreutils}/bin/cp "$tmpdir/validation.json" "$archive_dir/validation.json"
     ${pkgs.coreutils}/bin/cp "$tmpdir/bundle-verify.log" "$archive_dir/bundle-verify.log"
     ${pkgs.jq}/bin/jq -c -n \
       --arg schema "nixome.config-candidate-archive-record.v1" \
       --arg candidate_commit "$candidate_commit" \
+      --arg manifest_schema "$manifest_schema" \
       --arg validation_schema "$validation_schema" \
       --arg source "dom0" \
       '{
         schema: $schema,
         candidate_commit: $candidate_commit,
+        manifest_schema: $manifest_schema,
         validation_schema: $validation_schema,
         archived_by: $source
       }' > "$archive_dir/metadata.json"
@@ -465,7 +664,8 @@ in
       type = lib.types.enum [
         "base"
         "config-vault"
-        "config-mod"
+        "config-staging"
+        "config-verify"
         "config-system"
       ];
       default = "base";
@@ -481,13 +681,13 @@ in
     configRepoPath = lib.mkOption {
       type = lib.types.str;
       default = "/home/${cfg.user}/nixome-config";
-      description = "Editable config repository path in the config-mod role.";
+      description = "Editable config repository path in the config-staging role.";
     };
 
     configValidationPath = lib.mkOption {
       type = lib.types.str;
       default = "/home/${cfg.user}/nixome-config-validation";
-      description = "Directory for config-mod validation results.";
+      description = "Directory for config-staging and config-verify validation results.";
     };
 
     configArchivePath = lib.mkOption {
@@ -729,7 +929,7 @@ in
       unitConfig.OnFailure = [ "nixome-qubes-rw-init-diagnostics.service" ];
     };
 
-    systemd.services.nixome-config-guest-init = lib.mkIf (hasConfigVaultRole || hasConfigModRole) {
+    systemd.services.nixome-config-guest-init = lib.mkIf hasConfigRole {
       description = "Initialize Nixome config repositories in Qubes private storage";
       wantedBy = [ "multi-user.target" ];
       wants = [ "nixome-qubes-rw-init.service" ];
@@ -752,12 +952,13 @@ in
         qdb_role="$(qubesdb-read /features/nixome-role 2>/dev/null || true)"
 
         case "$qdb_role" in
-          config-vault|config-mod|config-system) role="$qdb_role" ;;
+          config-vault|config-staging|config-verify|config-system) role="$qdb_role" ;;
         esac
 
         case "$vm_name" in
           config-vault) role=config-vault ;;
-          config-mod) role=config-mod ;;
+          config-staging) role=config-staging ;;
+          config-verify) role=config-verify ;;
         esac
 
         run_as_user() {
@@ -769,12 +970,16 @@ in
           config-vault)
             run_as_user ${configVaultInit}/bin/nixome-config-vault-init
             ;;
-          config-mod)
-            run_as_user ${configModInit}/bin/nixome-config-mod-init
+          config-staging)
+            run_as_user ${configStagingInit}/bin/nixome-config-staging-init
+            ;;
+          config-verify)
+            run_as_user ${configVerifyInit}/bin/nixome-config-verify-init
             ;;
           config-system)
             run_as_user ${configVaultInit}/bin/nixome-config-vault-init
-            run_as_user ${configModInit}/bin/nixome-config-mod-init
+            run_as_user ${configStagingInit}/bin/nixome-config-staging-init
+            run_as_user ${configVerifyInit}/bin/nixome-config-verify-init
             ;;
           *)
             echo "nixome config guest init: no config repo initialization for role=$role vm=$vm_name qdb_role=$qdb_role"
@@ -806,12 +1011,12 @@ in
       requires = [
         "nixome-qubes-rw-init.service"
       ]
-      ++ lib.optional (hasConfigVaultRole || hasConfigModRole) "nixome-config-guest-init.service";
+      ++ lib.optional hasConfigRole "nixome-config-guest-init.service";
       after = [
         "nixome-qubes-rw-init.service"
         "systemd-user-sessions.service"
       ]
-      ++ lib.optional (hasConfigVaultRole || hasConfigModRole) "nixome-config-guest-init.service";
+      ++ lib.optional hasConfigRole "nixome-config-guest-init.service";
       aliases = [ "qubes-core-agent.service" ];
       overrideStrategy = "asDropin";
       unitConfig.OnFailure = [ "nixome-qubes-qrexec-diagnostics.service" ];
@@ -823,12 +1028,22 @@ in
       before = [ "systemd-user-sessions.service" ];
     };
 
-    environment.etc."qubes-rpc/nixome.Config.CandidateExport" = lib.mkIf hasConfigModRole {
+    environment.etc."qubes-rpc/nixome.Config.CandidateExport" = lib.mkIf hasConfigStagingRole {
       source = configCandidateExportService;
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/nixome.Config.CandidateExport" = lib.mkIf hasConfigModRole {
+    environment.etc."qubes/rpc-config/nixome.Config.CandidateExport" = lib.mkIf hasConfigStagingRole {
+      text = "force-user='${cfg.user}'\n";
+      mode = "0444";
+    };
+
+    environment.etc."qubes-rpc/nixome.Config.VerifyCandidate" = lib.mkIf hasConfigVerifyRole {
+      source = configCandidateVerifyService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes/rpc-config/nixome.Config.VerifyCandidate" = lib.mkIf hasConfigVerifyRole {
       text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };
@@ -872,7 +1087,7 @@ in
     ]
     ++ (rolePackages.${cfg.role} or [ ]);
 
-    nix.settings = lib.mkIf hasConfigModRole {
+    nix.settings = lib.mkIf (hasConfigStagingRole || hasConfigVerifyRole) {
       allowed-users = [ cfg.user ];
       experimental-features = [
         "nix-command"

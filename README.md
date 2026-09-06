@@ -86,18 +86,17 @@ make vm-config-setup
 make vm-config-smoke
 ```
 
-That path builds a dom0 image whose Nix config declares `config-vault` and
-`config-mod`, imports their NixOS template sources through Qubes'
+That path builds a dom0 image whose Nix config declares `config-vault`,
+`config-staging`, and `config-verify`, imports their NixOS template sources through Qubes'
 `qvm-template-postprocess` during an explicit dom0 topology setup, applies
-simple prefs/features/services with `nixome-setup-config`, boots both NixOS
-AppVMs with the normal
-dom0-provided Qubes VM kernel, runs `uname -a` through qrexec in each VM, and
-checks that both role repositories exist before `config-mod` validates and
-exports a committed config candidate which dom0 then archives into
-`config-vault`. See
+simple prefs/features/services with `nixome-setup-config`, boots the NixOS
+AppVMs with the normal dom0-provided Qubes VM kernel, runs `uname -a` through
+qrexec in each VM, and checks that the role repositories exist before
+`config-staging` exports a committed config candidate, `config-verify`
+validates it, and dom0 archives it into `config-vault`. See
 [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
 The config topology image keeps local build size down by sharing one NixOS
-guest root image between the two TemplateVM source directories.
+guest root image between the TemplateVM source directories.
 
 Generated writable VM overlays and VM build out-links live under `.nixome-vm/`.
 If local image builds fail because the builder runs out of temporary disk
@@ -128,9 +127,9 @@ The Qubes smoke test creates `test-nixome-smoke` if needed, starts it, runs
   VM lifecycle, qrexec, and GUI feedback loop.
 - `modules/qube-guest.nix`, `pkgs/nixome-qubes-template`, and
   `modules/qubes-topology.nix` are the first pieces for NixOS-backed Qubes
-  templates and declarative topology reconciliation.
-- The two config-system TemplateVM source directories currently share one
-  NixOS guest root image to keep nested smoke builds practical; AppVM roles and
+  templates and declarative topology setup.
+- The config-system TemplateVM source directories currently share one NixOS
+  guest root image to keep nested smoke builds practical; AppVM roles and
   qrexec policy provide the current separation.
 - `machines/test.nix` is the first concrete NixOS dom0 configuration.
 - `tests/` contains layered feedback scripts.
@@ -139,8 +138,9 @@ The Qubes smoke test creates `test-nixome-smoke` if needed, starts it, runs
 ## Status
 
 The Fedora-template nested GUI/qrexec smoke path works on a host with KVM and
-nested virtualization. The NixOS-template `config-vault`/`config-mod` path
-now evaluates, builds template artifacts, imports/creates the declared
-TemplateVMs and AppVMs, boots both NixOS AppVMs under nested Xen, proves qrexec
-with `uname -a`, and verifies the config candidate validation/archive flow.
-Production security validation still requires a physical Xen-capable machine.
+nested virtualization. The NixOS-template
+`config-vault`/`config-staging`/`config-verify` path now evaluates, builds
+template artifacts, imports/creates the declared TemplateVMs and AppVMs, boots
+the NixOS AppVMs under nested Xen, proves qrexec with `uname -a`, and verifies
+the config candidate validation/archive flow. Production security validation
+still requires a physical Xen-capable machine.

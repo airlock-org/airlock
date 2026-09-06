@@ -40,10 +40,20 @@ in
         skipStart = true;
       };
 
-      nixome-nixos-config-mod = {
+      nixome-nixos-config-staging = {
         import = true;
         source =
-          if haveTemplates then "${nixomeTemplatePackages.configMod}/nixome-nixos-config-mod" else null;
+          if haveTemplates then
+            "${nixomeTemplatePackages.configStaging}/nixome-nixos-config-staging"
+          else
+            null;
+        skipStart = true;
+      };
+
+      nixome-nixos-config-verify = {
+        import = true;
+        source =
+          if haveTemplates then "${nixomeTemplatePackages.configVerify}/nixome-nixos-config-verify" else null;
         skipStart = true;
       };
     };
@@ -74,20 +84,39 @@ in
         };
       };
 
-      nixome-nixos-config-mod = {
+      nixome-nixos-config-staging = {
         class = "TemplateVM";
         label = "black";
         netvm = null;
         prefs = {
           default_user = "user";
           kernel = if haveQubeKernel then nixomeQubeKernel.name else "";
-          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.configMod else "";
+          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.configStaging else "";
           qrexec_timeout = 120;
           virt_mode = "pvh";
         };
         features = {
           "nixome-managed" = "1";
-          "nixome-role" = "config-mod-template";
+          "nixome-role" = "config-staging-template";
+          os = "Linux";
+          qrexec = "1";
+        };
+      };
+
+      nixome-nixos-config-verify = {
+        class = "TemplateVM";
+        label = "black";
+        netvm = null;
+        prefs = {
+          default_user = "user";
+          kernel = if haveQubeKernel then nixomeQubeKernel.name else "";
+          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.configVerify else "";
+          qrexec_timeout = 120;
+          virt_mode = "pvh";
+        };
+        features = {
+          "nixome-managed" = "1";
+          "nixome-role" = "config-verify-template";
           os = "Linux";
           qrexec = "1";
         };
@@ -115,9 +144,9 @@ in
         };
       };
 
-      config-mod = {
+      config-staging = {
         class = "AppVM";
-        template = "nixome-nixos-config-mod";
+        template = "nixome-nixos-config-staging";
         label = "gray";
         netvm = null;
         prefs = {
@@ -129,8 +158,27 @@ in
         };
         features = {
           "nixome-managed" = "1";
-          "nixome-role" = "config-mod";
-          "nixome-config-modifier" = "1";
+          "nixome-role" = "config-staging";
+          "nixome-config-staging" = "1";
+        };
+      };
+
+      config-verify = {
+        class = "AppVM";
+        template = "nixome-nixos-config-verify";
+        label = "blue";
+        netvm = null;
+        prefs = {
+          autostart = false;
+          include_in_backups = true;
+          memory = 2048;
+          maxmem = 4096;
+          vcpus = 2;
+        };
+        features = {
+          "nixome-managed" = "1";
+          "nixome-role" = "config-verify";
+          "nixome-config-verify" = "1";
         };
       };
     };
@@ -138,8 +186,10 @@ in
     configAccessPolicy = {
       enable = true;
       vault = "config-vault";
-      modifier = "config-mod";
+      staging = "config-staging";
+      verifier = "config-verify";
       candidateExportService = "nixome.Config.CandidateExport";
+      candidateVerifyService = "nixome.Config.VerifyCandidate";
       archiveService = "nixome.Config.ArchiveCandidate";
     };
   };

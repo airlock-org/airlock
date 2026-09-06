@@ -116,10 +116,12 @@ let
 
         install -d "$out/etc/qubes/policy.d"
         cat > "$out/etc/qubes/policy.d/30-nixome-config.policy" <<'EOF'
-    # Managed by Nixome. Only dom0 may fetch a validated candidate from
-    # config-mod or archive a candidate into config-vault.
-    ${cfg.configAccessPolicy.candidateExportService} * dom0 ${cfg.configAccessPolicy.modifier} allow
+    # Managed by Nixome. Only dom0 may fetch a candidate from config-staging,
+    # ask config-verify to validate it, or archive it into config-vault.
+    ${cfg.configAccessPolicy.candidateExportService} * dom0 ${cfg.configAccessPolicy.staging} allow
     ${cfg.configAccessPolicy.candidateExportService} * @anyvm @anyvm deny
+    ${cfg.configAccessPolicy.candidateVerifyService} * dom0 ${cfg.configAccessPolicy.verifier} allow
+    ${cfg.configAccessPolicy.candidateVerifyService} * @anyvm @anyvm deny
     ${cfg.configAccessPolicy.archiveService} * dom0 ${cfg.configAccessPolicy.vault} allow
     ${cfg.configAccessPolicy.archiveService} * @anyvm @anyvm deny
     EOF
@@ -163,7 +165,13 @@ in
       candidateExportService = lib.mkOption {
         type = lib.types.str;
         default = "nixome.Config.CandidateExport";
-        description = "qrexec service used by dom0 to fetch a validated candidate from config-mod.";
+        description = "qrexec service used by dom0 to fetch a candidate from config-staging.";
+      };
+
+      candidateVerifyService = lib.mkOption {
+        type = lib.types.str;
+        default = "nixome.Config.VerifyCandidate";
+        description = "qrexec service used by dom0 to validate a candidate in config-verify.";
       };
 
       archiveService = lib.mkOption {
@@ -178,10 +186,16 @@ in
         description = "Qube that owns the archived configuration history.";
       };
 
-      modifier = lib.mkOption {
+      staging = lib.mkOption {
         type = lib.types.str;
-        default = "config-mod";
+        default = "config-staging";
         description = "Qube that owns the editable configuration candidate.";
+      };
+
+      verifier = lib.mkOption {
+        type = lib.types.str;
+        default = "config-verify";
+        description = "Qube that validates staged configuration candidates.";
       };
     };
   };

@@ -237,8 +237,12 @@
             templateName = "nixome-nixos-config-vault";
             rootImageFile = "${configSystemRootImage}/root.img";
           };
-          nixome-nixos-config-mod-template = mkQubesTemplatePackage system {
-            templateName = "nixome-nixos-config-mod";
+          nixome-nixos-config-staging-template = mkQubesTemplatePackage system {
+            templateName = "nixome-nixos-config-staging";
+            rootImageFile = "${configSystemRootImage}/root.img";
+          };
+          nixome-nixos-config-verify-template = mkQubesTemplatePackage system {
+            templateName = "nixome-nixos-config-verify";
             rootImageFile = "${configSystemRootImage}/root.img";
           };
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
@@ -311,12 +315,14 @@
             package = self.packages.x86_64-linux.nixome-qubes-vm-kernel;
           };
           nixomeQubeKernelOpts = {
-            configMod = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
+            configStaging = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
+            configVerify = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
             configVault = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
           };
           nixomeTemplatePackages = {
             configVault = self.packages.x86_64-linux.nixome-nixos-config-vault-template;
-            configMod = self.packages.x86_64-linux.nixome-nixos-config-mod-template;
+            configStaging = self.packages.x86_64-linux.nixome-nixos-config-staging-template;
+            configVerify = self.packages.x86_64-linux.nixome-nixos-config-verify-template;
           };
         };
         modules = [
@@ -364,7 +370,7 @@
         ];
       };
 
-      nixosConfigurations.qube-template-config-mod = lib.nixosSystem {
+      nixosConfigurations.qube-template-config-staging = lib.nixosSystem {
         system = "x86_64-linux";
         modules = [
           nixos-qubes.nixosModules.qubes
@@ -379,7 +385,26 @@
                 ];
             }
           )
-          ./machines/qube-template-config-mod.nix
+          ./machines/qube-template-config-staging.nix
+        ];
+      };
+
+      nixosConfigurations.qube-template-config-verify = lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          nixos-qubes.nixosModules.qubes
+          (
+            { lib, ... }:
+            {
+              nixpkgs.config.allowUnfreePredicate =
+                pkg:
+                builtins.elem (pkg.pname or (lib.getName pkg)) [
+                  "qubes-artwork"
+                  "qubes-vmm-stubdom-linux"
+                ];
+            }
+          )
+          ./machines/qube-template-config-verify.nix
         ];
       };
     };
