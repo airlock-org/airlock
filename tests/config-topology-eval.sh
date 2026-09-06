@@ -15,6 +15,7 @@ GUEST_QREXEC_REQUIRES_JSON="$WORK_DIR/guest-qrexec-requires.json"
 GUEST_QREXEC_AFTER_JSON="$WORK_DIR/guest-qrexec-after.json"
 GUEST_VALIDATOR_ROLE_JSON="$WORK_DIR/guest-validator-role.json"
 GUEST_VALIDATOR_RPC_MODE_JSON="$WORK_DIR/guest-validator-rpc-mode.json"
+GUEST_DEPLOYMENT_RPC_MODE_JSON="$WORK_DIR/guest-deployment-rpc-mode.json"
 
 mkdir -p "$WORK_DIR"
 
@@ -29,6 +30,7 @@ nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.sy
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.systemd.services.qubes-qrexec-agent.after" > "$GUEST_QREXEC_AFTER_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-validator.config.nixome.qubeGuest.role" > "$GUEST_VALIDATOR_ROLE_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.Config.ValidateCandidate\".mode" > "$GUEST_VALIDATOR_RPC_MODE_JSON"
+nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.Config.ArchiveDeployment\".mode" > "$GUEST_DEPLOYMENT_RPC_MODE_JSON"
 
 jq -e '
   ."config-vault".class == "AppVM" and
@@ -98,5 +100,9 @@ jq -e '
 jq -e '
   . == "0555"
 ' "$GUEST_VALIDATOR_RPC_MODE_JSON" >/dev/null
+
+jq -e '
+  . == "0555"
+' "$GUEST_DEPLOYMENT_RPC_MODE_JSON" >/dev/null
 
 printf 'config topology eval ok\n'

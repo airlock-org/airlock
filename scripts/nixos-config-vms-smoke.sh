@@ -33,6 +33,7 @@ APPLY_JSON="$LOG_DIR/config-apply.json"
 APPLIED_FEATURE_LOG="$LOG_DIR/config-vms-applied-feature.log"
 CREATED_QUBE_FEATURE_LOG="$LOG_DIR/config-vms-created-qube-feature.log"
 VAULT_ARCHIVE_TREE_LOG="$LOG_DIR/config-vms-config-vault-archive-tree.log"
+VAULT_DEPLOYMENT_TREE_LOG="$LOG_DIR/config-vms-config-vault-deployment-tree.log"
 JOURNAL_LOG="$LOG_DIR/config-vms-journal.log"
 LIBXL_LOG="$LOG_DIR/config-vms-libxl.log"
 QVM_PREFS_LOG="$LOG_DIR/config-vms-qvm-prefs.log"
@@ -155,6 +156,8 @@ write_result() {
     json_file_string_or_null "$CREATED_QUBE_FEATURE_LOG"
     printf ',"vault_archive_tree":'
     json_file_string_or_null "$VAULT_ARCHIVE_TREE_LOG"
+    printf ',"vault_deployment_tree":'
+    json_file_string_or_null "$VAULT_DEPLOYMENT_TREE_LOG"
     printf ',"command_log":'
     json_string "$COMMAND_LOG"
     printf ',"qvm_ls_log":'
@@ -531,6 +534,24 @@ run_qrexec_or_fail \
     cat latest-candidate &&
     find candidates -maxdepth 3 -type f | sort"
 
+run_qrexec_or_fail \
+  "$VAULT" \
+  "config vault deployment tree" \
+  "$VAULT_DEPLOYMENT_TREE_LOG" \
+  "cd /home/$QUBE_USER/nixome-config-vault &&
+    latest=\$(cat latest-deployment) &&
+    attempt=\$(cat latest-deployment-attempt) &&
+    test \"\$latest\" = \"\$attempt\" &&
+    test -d \"deployments/\$latest\" &&
+    jq -e '.schema == \"nixome.config-deployment.v1\" and
+      .status == \"passed\"' \"deployments/\$latest/deployment.json\" &&
+    jq -e '.schema == \"nixome.config-apply.v1\" and
+      .status == \"passed\"' \"deployments/\$latest/apply.json\" &&
+    jq -e '.schema == \"nixome.setup-config.v1\" and
+      .status == \"passed\"' \"deployments/\$latest/setup.json\" &&
+    jq -e '.schema == \"nixome.qubes-topology.v1\"' \"deployments/\$latest/topology.json\" &&
+    find \"deployments/\$latest\" -maxdepth 2 -type f | sort"
+
 jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT" '
   .schema == "nixome.config-archive.v1" and
   .status == "passed" and
@@ -552,6 +573,10 @@ jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT"
   .validator == $validator and
   .vault == $vault and
   .archive.status == "passed" and
+  .deployment.schema == "nixome.config-deployment.v1" and
+  .deployment.status == "passed" and
+  .deployment_archive.schema == "nixome.config-vault-deployment.v1" and
+  .deployment_archive.status == "passed" and
   .setup.status == "passed" and
   .setup.domains_changed >= 1
 ' "$APPLY_JSON" >/dev/null || fail "config apply JSON did not pass"

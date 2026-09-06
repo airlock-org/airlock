@@ -16,8 +16,9 @@ plane in dom0, but moves the desired VM topology into Nix.
 - `default_kernel = ""`, so fresh config-only images can create TemplateVMs
   before a Fedora/Qubes VM kernel has been bootstrapped.
 - qrexec policy allowing only dom0 to call `nixome.Config.CandidateExport` on
-  `config-staging`, `nixome.Config.ValidateCandidate` on `config-validator`, and
-  `nixome.Config.ArchiveCandidate` on `config-vault`.
+  `config-staging`, `nixome.Config.ValidateCandidate` on `config-validator`,
+  `nixome.Config.ArchiveCandidate` on `config-vault`, and
+  `nixome.Config.ArchiveDeployment` on `config-vault`.
 
 The initial VM resource settings are sized for the nested 8 GiB developer VM:
 `config-vault` starts at 1024 MiB, while `config-staging` and `config-validator`
@@ -107,7 +108,7 @@ That command refuses to proceed unless `config-staging`, `config-validator`, and
 --no-build` and `nix eval .#nixome.topology --json`, checks the validation
 artifact, evaluated topology, and bundle commit in dom0, then sends the
 validated bundle plus evaluated topology to `config-vault` for archival.
-This records what dom0 is about to attempt before deployment logic exists.
+This records what dom0 is about to attempt before deployment.
 
 dom0 applies a validated candidate by running:
 
@@ -115,10 +116,29 @@ dom0 applies a validated candidate by running:
 sudo nixome-config-apply --apply
 ```
 
-That command performs the same staging-to-validator-to-vault flow, then applies
-the validator-produced `topology.json` with `nixome-setup-config --apply`.
-Dom0 transports and applies the artifact, but the candidate validity decision
-and Nix evaluation happen in `config-validator`.
+That command performs the same staging-to-validator-to-vault flow, applies the
+validator-produced `topology.json` with `nixome-setup-config --apply`, then asks
+`config-vault` to archive a deployment record. Dom0 transports and applies the
+artifact, but the candidate validity decision and Nix evaluation happen in
+`config-validator`.
+
+`config-vault` now has two durable artifact classes:
+
+```text
+candidates/<candidate-commit>/
+deployments/<timestamp>-<candidate-prefix>/
+latest-candidate
+latest-deployment
+latest-deployment-attempt
+```
+
+`candidates/` records validated source snapshots and evaluated topology before
+deployment. `deployments/` records what dom0 attempted after setup ran,
+including `deployment.json`, `apply.json`, `archive.json`, `setup.json`,
+`topology.json`, `validation.json`, `manifest.json`, and relevant dom0 logs.
+Passed deployments update both `latest-deployment` and
+`latest-deployment-attempt`; failed setup attempts update only
+`latest-deployment-attempt` when the vault can still be reached.
 
 ## Setup Path
 
@@ -191,7 +211,8 @@ the staging repository and validator workspace, edits and commits `flake.nix`
 in `config-staging`, evaluates `.#nixome.topology` in `config-validator`,
 archives the source and evaluated topology into `config-vault`, applies it from
 dom0, checks that `nixome-test-from-config` was created, and runs `uname -a`
-inside it through qrexec.
+inside it through qrexec. It also checks that `config-vault` wrote a deployment
+record for the successful apply.
 The machine-readable result is copied to:
 
 ```text
@@ -220,7 +241,8 @@ QubesDB starts.
 The validated smoke path reaches qrexec in the declared NixOS AppVMs, proves
 that `config-vault` has `/home/user/nixome-config-vault` initialized before
 qrexec accepts the repository status check, and proves that a staged Nix config
-can create a new AppVM that boots and serves qrexec. The next boundary is
-deployment records plus hardening the model: split role-specific guest roots
-when useful, classify setup changes that require VM restart or dom0 reboot, and
-validate the same path on physical Xen-capable hardware.
+can create a new AppVM that boots and serves qrexec. It also records the
+successful apply as a deployment in `config-vault`. The next boundary is
+hardening the model: split role-specific guest roots when useful, classify setup
+changes that require VM restart or dom0 reboot, and validate the same path on
+physical Xen-capable hardware.

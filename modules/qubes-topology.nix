@@ -125,6 +125,8 @@ let
     ${access.candidateValidateService} * @anyvm @anyvm deny
     ${access.archiveService} * dom0 ${access.vault} allow
     ${access.archiveService} * @anyvm @anyvm deny
+    ${access.archiveDeploymentService} * dom0 ${access.vault} allow
+    ${access.archiveDeploymentService} * @anyvm @anyvm deny
     EOF
   '';
 in
@@ -185,6 +187,12 @@ in
         type = lib.types.str;
         default = "nixome.Config.ArchiveCandidate";
         description = "qrexec service used by dom0 to archive a candidate into config-vault.";
+      };
+
+      archiveDeploymentService = lib.mkOption {
+        type = lib.types.str;
+        default = "nixome.Config.ArchiveDeployment";
+        description = "qrexec service used by dom0 to archive deployment records.";
       };
 
       vault = lib.mkOption {
