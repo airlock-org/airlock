@@ -9,17 +9,18 @@ TOPOLOGY="/etc/nixome/qubes-topology.json"
 APPLY=0
 PLAN=0
 LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
-RESULT_JSON="$LOG_DIR/qubes-reconcile.json"
-COMMAND_LOG="$LOG_DIR/qubes-reconcile.commands.log"
+RESULT_JSON="$LOG_DIR/setup-config.json"
+COMMAND_LOG="$LOG_DIR/setup-config.commands.log"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 KERNEL_BASE="${NIXOME_QUBES_KERNEL_BASE:-/var/lib/qubes/vm-kernels}"
+QUBES_XML="${NIXOME_QUBES_XML:-/var/lib/qubes/qubes.xml}"
 result_written=0
 
 usage() {
   cat >&2 <<'EOF'
-Usage: nixome-qubes-reconcile (--plan|--apply) [--topology PATH]
+Usage: nixome-setup-config (--plan|--apply) [--topology PATH]
 
-Reconcile the Qubes templates and domains declared by Nixome.
+Set up the Qubes templates and domains declared by Nixome.
 EOF
   exit 1
 }
@@ -87,7 +88,7 @@ write_result() {
 
   {
     printf '{'
-    printf '"schema":"nixome.qubes-reconcile.v1"'
+    printf '"schema":"nixome.setup-config.v1"'
     printf ',"status":'
     json_string "$status"
     printf ',"mode":'
@@ -116,7 +117,7 @@ write_result() {
 fail() {
   reason="$1"
   write_result failed "$reason"
-  printf 'nixome qubes reconcile failed: %s\n' "$reason" >&2
+  printf 'nixome setup-config failed: %s\n' "$reason" >&2
   exit 1
 }
 
@@ -165,10 +166,56 @@ json_value() {
   jq -r "$@" "$filter | if type == \"boolean\" then (if . then \"True\" else \"False\" end) elif . == null then \"none\" else tostring end" "$TOPOLOGY"
 }
 
+value_matches() {
+  desired="$1"
+  current="$2"
+
+  if [ "$desired" = "none" ]; then
+    case "$current" in
+      ""|none|None)
+        return 0
+        ;;
+    esac
+  fi
+
+  [ "$current" = "$desired" ]
+}
+
+global_pref_explicitly_set() {
+  pref="$1"
+
+  [ -r "$QUBES_XML" ] || return 1
+
+  python3 - "$QUBES_XML" "$pref" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+tree = ET.parse(sys.argv[1])
+properties = tree.getroot().find("properties")
+if properties is None:
+    sys.exit(1)
+
+for prop in properties.findall("property"):
+    if prop.get("name") == sys.argv[2]:
+        sys.exit(0)
+
+sys.exit(1)
+PY
+}
+
 set_pref() {
   domain="$1"
   pref="$2"
   value="$3"
+
+  if [ "$APPLY" = "1" ]; then
+    if current="$(qvm-prefs "$domain" "$pref" 2>/dev/null)"; then
+      if value_matches "$value" "$current"; then
+        printf 'pref current: %s %s=%s\n' "$domain" "$pref" "$value"
+        return
+      fi
+    fi
+  fi
 
   run_or_plan qvm-prefs "$domain" "$pref" "$value"
   prefs_changed=$((prefs_changed + 1))
@@ -177,6 +224,20 @@ set_pref() {
 set_global_pref() {
   pref="$1"
   value="$2"
+
+  if [ "$APPLY" = "1" ]; then
+    if current="$(qubes-prefs "$pref" 2>/dev/null)"; then
+      if value_matches "$value" "$current"; then
+        if [ -z "$value" ] && ! global_pref_explicitly_set "$pref"; then
+          run_or_plan qubes-prefs "$pref" "$value"
+          prefs_changed=$((prefs_changed + 1))
+          return
+        fi
+        printf 'global pref current: %s=%s\n' "$pref" "$value"
+        return
+      fi
+    fi
+  fi
 
   run_or_plan qubes-prefs "$pref" "$value"
   prefs_changed=$((prefs_changed + 1))
@@ -187,6 +248,15 @@ set_feature() {
   feature="$2"
   value="$3"
 
+  if [ "$APPLY" = "1" ]; then
+    if current="$(qvm-features "$domain" "$feature" 2>/dev/null)"; then
+      if value_matches "$value" "$current"; then
+        printf 'feature current: %s %s=%s\n' "$domain" "$feature" "$value"
+        return
+      fi
+    fi
+  fi
+
   run_or_plan qvm-features "$domain" "$feature" "$value"
   features_changed=$((features_changed + 1))
 }
@@ -195,6 +265,15 @@ set_service() {
   domain="$1"
   service="$2"
   value="$3"
+
+  if [ "$APPLY" = "1" ]; then
+    if current="$(qvm-service "$domain" "$service" 2>/dev/null)"; then
+      if value_matches "$value" "$current"; then
+        printf 'service current: %s %s=%s\n' "$domain" "$service" "$value"
+        return
+      fi
+    fi
+  fi
 
   run_or_plan qvm-service "$domain" "$service" "$value"
   services_changed=$((services_changed + 1))
@@ -268,6 +347,7 @@ for cmd in \
   qvm-service \
   qvm-template-postprocess \
   qubesd-query \
+  python3 \
   systemctl; do
   require_command "$cmd"
 done
@@ -283,14 +363,14 @@ systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qr
 schema="$(jq_get '.schema')"
 [ "$schema" = "nixome.qubes-topology.v1" ] || fail "unsupported topology schema: $schema"
 
-printf 'reconciling global prefs\n'
+printf 'setting up global prefs\n'
 mapfile -t global_pref_names < <(jq_get '.prefs | keys[]?')
 for pref in "${global_pref_names[@]}"; do
   value="$(json_value '.prefs[$pref]' --arg pref "$pref")"
   set_global_pref "$pref" "$value"
 done
 
-printf 'reconciling kernels\n'
+printf 'setting up kernels\n'
 mapfile -t kernel_names < <(jq_get '.kernels | keys[]?')
 for kernel in "${kernel_names[@]}"; do
   case "$kernel" in
@@ -331,7 +411,7 @@ for kernel in "${kernel_names[@]}"; do
   kernels_changed=$((kernels_changed + 1))
 done
 
-printf 'reconciling templates\n'
+printf 'setting up templates\n'
 mapfile -t template_names < <(jq_get '.templates | keys[]')
 for template in "${template_names[@]}"; do
   source="$(jq_get '.templates[$name].source // ""' --arg name "$template")"
@@ -358,7 +438,7 @@ for template in "${template_names[@]}"; do
   templates_changed=$((templates_changed + 1))
 done
 
-printf 'reconciling domains\n'
+printf 'setting up domains\n'
 mapfile -t domain_names < <(jq_get '.domains | keys[]')
 for domain in "${domain_names[@]}"; do
   class="$(jq_get '.domains[$name].class // "AppVM"' --arg name "$domain")"
@@ -405,5 +485,5 @@ for domain in "${domain_names[@]}"; do
   fi
 done
 
-write_result passed "Qubes topology reconcile completed"
+write_result passed "Qubes config setup completed"
 cat "$RESULT_JSON"

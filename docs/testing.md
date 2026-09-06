@@ -14,7 +14,7 @@ Runs:
 - `nix flake check --no-build`
 - the Nixome module contract check,
 - the lightweight `nixome-observe-dom0` package build,
-- the `nixome-qubes-reconcile` package build,
+- the `nixome-setup-config` package build,
 - evaluation of the config-system topology that declares `config-vault` and
   `config-mod`,
 - host capability detection into `.nixome-logs/host-capabilities.json`,
@@ -193,14 +193,14 @@ make vm-gui-config-image
 make vm-gui-config-run
 ```
 
-To run just the nested control-plane check plus the topology reconciler:
+To run just the nested control-plane check plus the topology setup command:
 
 ```bash
-make vm-config-reconcile
+make vm-config-setup
 ```
 
 This skips the Fedora template bootstrap and old qrexec/window smoke tests,
-then runs `sudo nixome-qubes-reconcile --apply` in the nested dom0. Reconcile
+then runs `sudo nixome-setup-config --apply` in the nested dom0. Setup
 logs are written under `.nixome-logs/` on the host and `/var/log/nixome/` in
 the nested dom0.
 
@@ -210,7 +210,7 @@ To run the current NixOS config-VM boot/qrexec proof:
 make vm-config-smoke
 ```
 
-This explicitly runs the dom0 topology reconcile, then starts `config-vault`
+This explicitly runs the dom0 topology setup, then starts `config-vault`
 and `config-mod`, runs `uname -a` through qrexec in both VMs, checks that
 `/home/user/nixome-config-vault` and `/home/user/nixome-config` already exist
 as clean Git repositories, validates the committed candidate in
@@ -229,7 +229,7 @@ The nested config image currently has 32 GiB of virtual disk capacity.
 
 The current NixOS guest template profile uses QubesDB, qrexec-agent, Qubes
 meminfo writer, and `/dev/mapper/dmroot` as the root device to match Qubes'
-normal Linux VM boot path. Import/create reconciliation is automated, and
+normal Linux VM boot path. Import/create setup is automated, and
 `make vm-config-smoke` currently proves that the declared NixOS AppVMs boot and
 serve qrexec under nested Xen.
 The config profile sets `default_kernel = ""` so fresh config-only images can

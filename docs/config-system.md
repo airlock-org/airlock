@@ -63,7 +63,7 @@ validated Git bundle from `config-mod`, checks the validation artifact and
 bundle commit in dom0, then sends the bundle to `config-vault` for archival.
 This records what dom0 is about to attempt before deployment logic exists.
 
-## Reconcile Path
+## Setup Path
 
 The dom0 module writes the desired topology to:
 
@@ -74,17 +74,19 @@ The dom0 module writes the desired topology to:
 Apply it from dom0 with:
 
 ```bash
-sudo nixome-qubes-reconcile --apply
+sudo nixome-setup-config --apply
 ```
 
 For a non-mutating preview:
 
 ```bash
-sudo nixome-qubes-reconcile --plan
+sudo nixome-setup-config --plan
 ```
 
-The reconciler currently imports missing templates, creates missing domains,
-and sets global prefs plus simple domain prefs/features/services. It does not
+The setup command currently imports missing templates, creates missing domains,
+and sets global prefs plus simple domain prefs/features/services. It is
+idempotent: if the declared templates, domains, prefs, features, services, and
+managed VM kernel files already match, it reports zero changes. It does not
 delete undeclared domains or perform full restart/reboot classification yet.
 
 ## Developer Commands
@@ -108,14 +110,14 @@ make vm-gui-config-image
 make vm-gui-config-run
 ```
 
-Run only the nested control-plane check plus topology reconcile:
+Run only the nested control-plane check plus topology setup:
 
 ```bash
-make vm-config-reconcile
+make vm-config-setup
 ```
 
 That target uses the config image, skips Fedora template bootstrap, skips the
-old qrexec/window smoke tests, and saves reconcile output under
+old qrexec/window smoke tests, and saves setup output under
 `.nixome-logs/`.
 
 Run the current NixOS config-VM runtime proof:
@@ -125,7 +127,7 @@ make vm-config-smoke
 ```
 
 That target builds and boots the nested config dom0 image, explicitly runs the
-dom0 topology reconcile, starts `config-vault` and `config-mod`, runs `uname -a`
+dom0 topology setup, starts `config-vault` and `config-mod`, runs `uname -a`
 through qrexec in both VMs, initializes the config modifier repository,
 validates the committed candidate inside `config-mod`, and verifies that dom0
 archives the validated candidate into `config-vault`.
@@ -138,7 +140,7 @@ The machine-readable result is copied to:
 ## Verified Boundary
 
 The template artifacts are NixOS root images packaged in the shape expected by
-`qvm-template-postprocess`. The explicit dom0 reconciler has imported those
+`qvm-template-postprocess`. The explicit dom0 setup command has imported those
 templates and created the two AppVMs in the nested dom0 test environment.
 
 The NixOS guests now boot in nested Xen with the normal Qubes dom0-provided VM
@@ -158,5 +160,5 @@ The verified smoke path reaches qrexec in both declared NixOS AppVMs and proves
 that `config-vault` has `/home/user/nixome-config-vault` initialized before
 qrexec accepts the repository status check. The next boundary is deployment
 from the archived commit plus hardening the model: split role-specific guest
-roots when useful, classify reconcile changes that require VM restart or dom0
+roots when useful, classify setup changes that require VM restart or dom0
 reboot, and validate the same path on physical Xen-capable hardware.

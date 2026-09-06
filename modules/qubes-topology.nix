@@ -107,7 +107,7 @@ let
     prefs = cfg.prefs;
   };
 
-  reconciler = pkgs.callPackage ../pkgs/nixome-qubes-reconcile { };
+  setupConfig = pkgs.callPackage ../pkgs/nixome-setup-config { };
   configArchive = pkgs.callPackage ../pkgs/nixome-config-archive { };
   configVmsSmoke = pkgs.callPackage ../pkgs/nixome-config-vms-smoke { };
 
@@ -127,12 +127,12 @@ let
 in
 {
   options.nixome.qubes = {
-    enable = lib.mkEnableOption "declarative Qubes topology reconciliation";
+    enable = lib.mkEnableOption "declarative Qubes config topology setup";
 
     templates = lib.mkOption {
       type = lib.types.attrsOf templateType;
       default = { };
-      description = "TemplateVMs that Nixome can import before reconciling domains.";
+      description = "TemplateVMs that Nixome can import before setting up domains.";
     };
 
     kernels = lib.mkOption {
@@ -150,7 +150,7 @@ in
     prefs = lib.mkOption {
       type = lib.types.attrsOf jsonScalar;
       default = { };
-      description = "Global qubes-prefs values. Reserved for the next reconciler layer.";
+      description = "Global qubes-prefs values for the setup-config layer.";
     };
 
     configAccessPolicy = {
@@ -205,7 +205,7 @@ in
     environment.systemPackages = [
       configArchive
       configVmsSmoke
-      reconciler
+      setupConfig
     ];
 
     virtualisation.qubes.packages = lib.optionals cfg.configAccessPolicy.enable [

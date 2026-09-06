@@ -15,7 +15,7 @@
 }:
 
 writeShellApplication {
-  name = "nixome-qubes-reconcile";
+  name = "nixome-setup-config";
   excludeShellChecks = [ "SC2016" ];
 
   runtimeInputs = [
@@ -24,6 +24,7 @@ writeShellApplication {
     gnugrep
     gnused
     jq
+    python3
     qubes-core-admin
     qubes-desktop-linux-common
     sudo
@@ -32,10 +33,10 @@ writeShellApplication {
     util-linux
   ];
 
-  text = builtins.readFile ../../scripts/reconcile-qubes-topology.sh;
+  text = builtins.readFile ../../scripts/setup-config.sh;
 
   meta = {
-    description = "Reconcile Nixome's declared Qubes topology on dom0";
+    description = "Set up Nixome's declared Qubes config topology on dom0";
     license = lib.licenses.mit;
     platforms = [ "x86_64-linux" ];
   };

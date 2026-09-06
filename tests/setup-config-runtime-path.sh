@@ -3,12 +3,12 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
-LOG="$LOG_DIR/reconcile-runtime-path.commands"
+LOG="$LOG_DIR/setup-config-runtime-path.commands"
 
 mkdir -p "$LOG_DIR"
 
-out="$(nix build "$ROOT#packages.x86_64-linux.nixome-qubes-reconcile" --no-link --print-out-paths)"
-wrapper="$out/bin/nixome-qubes-reconcile"
+out="$(nix build "$ROOT#packages.x86_64-linux.nixome-setup-config" --no-link --print-out-paths)"
+wrapper="$out/bin/nixome-setup-config"
 
 path_value="$(sed -n 's/^export PATH="\(.*\):\$PATH"$/\1/p' "$wrapper" | head -n 1)"
 if [ -z "$path_value" ]; then
@@ -22,17 +22,18 @@ required=(
   qvm-appmenus
   qvm-template-postprocess
   qubesd-query
+  python3
   runuser
   sudo
 )
 
-if ! env -i PATH="$path_value" "$BASH" -c '
+if ! env -i PATH="$path_value" "$BASH" -e -c '
   for cmd in "$@"; do
     command -v "$cmd"
   done
 ' _ "${required[@]}" > "$LOG"; then
-  printf 'reconciler runtime PATH is missing a Qubes template import helper; see %s\n' "$LOG" >&2
+  printf 'setup-config runtime PATH is missing a Qubes template import helper; see %s\n' "$LOG" >&2
   exit 1
 fi
 
-printf 'reconcile runtime path test ok\n'
+printf 'setup-config runtime path test ok\n'

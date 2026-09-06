@@ -91,7 +91,7 @@ Known gaps/TODOs found in module/package comments:
 - Fedora template/kernel installation is still imperative in the smoke path.
   Nixome has a development-only `nixome-qube-bootstrap` command using the
   existing `nixos-qubes-tools` RPM import helpers.
-- Nixome now also has an initial declarative topology reconciler for
+- Nixome now also has an initial declarative topology setup command for
   Nix-built template source directories and AppVM creation. It is intentionally
   narrow: import missing templates, create missing domains, and set simple
   prefs/features/services.

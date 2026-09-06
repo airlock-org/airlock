@@ -11,7 +11,7 @@ for:
 
 - a POC NixOS dom0 configuration,
 - NixOS Qube template artifacts for config-system experiments,
-- a first declarative Qubes topology reconciler,
+- a first declarative Qubes topology setup command,
 - local module/evaluation checks,
 - host capability reporting,
 - a development-only dom0 observation command,
@@ -82,14 +82,14 @@ For the first NixOS-template topology:
 ```bash
 make nixos-templates-dry-run
 make vm-gui-config-image-dry-run
-make vm-config-reconcile
+make vm-config-setup
 make vm-config-smoke
 ```
 
 That path builds a dom0 image whose Nix config declares `config-vault` and
 `config-mod`, imports their NixOS template sources through Qubes'
-`qvm-template-postprocess` during an explicit dom0 topology reconcile, applies
-simple prefs/features/services with `nixome-qubes-reconcile`, boots both NixOS
+`qvm-template-postprocess` during an explicit dom0 topology setup, applies
+simple prefs/features/services with `nixome-setup-config`, boots both NixOS
 AppVMs with the normal
 dom0-provided Qubes VM kernel, runs `uname -a` through qrexec in each VM, and
 checks that both role repositories exist before `config-mod` validates and

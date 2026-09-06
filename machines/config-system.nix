@@ -72,9 +72,6 @@ in
           os = "Linux";
           qrexec = "1";
         };
-        services = {
-          "meminfo-writer" = true;
-        };
       };
 
       nixome-nixos-config-mod = {
@@ -93,9 +90,6 @@ in
           "nixome-role" = "config-mod-template";
           os = "Linux";
           qrexec = "1";
-        };
-        services = {
-          "meminfo-writer" = true;
         };
       };
 
@@ -118,7 +112,6 @@ in
         };
         services = {
           "network-manager" = false;
-          "meminfo-writer" = true;
         };
       };
 
@@ -138,9 +131,6 @@ in
           "nixome-managed" = "1";
           "nixome-role" = "config-mod";
           "nixome-config-modifier" = "1";
-        };
-        services = {
-          "meminfo-writer" = true;
         };
       };
     };

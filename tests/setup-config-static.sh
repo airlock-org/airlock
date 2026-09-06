@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORK_DIR="${NIXOME_RECONCILE_STATIC_DIR:-$ROOT/.nixome-logs/reconcile-static}"
+WORK_DIR="${NIXOME_SETUP_CONFIG_STATIC_DIR:-$ROOT/.nixome-logs/setup-config-static}"
 BIN_DIR="$WORK_DIR/bin"
 KERNEL_DIR="$WORK_DIR/kernel/6.12.64-1.fc41"
 TEMPLATE_DIR="$WORK_DIR/template/nixome-nixos-test"
@@ -87,17 +87,17 @@ PATH="$BIN_DIR:$PATH" \
   NIXOME_QUBES_KERNEL_BASE="$KERNEL_BASE" \
   NIXOME_XEN_CAPABILITIES="$CAPABILITIES" \
   NIXOME_LOG_DIR="$LOG_DIR" \
-  bash "$ROOT/scripts/reconcile-qubes-topology.sh" --plan --topology "$TOPOLOGY" \
+  bash "$ROOT/scripts/setup-config.sh" --plan --topology "$TOPOLOGY" \
   > "$LOG_DIR/stdout.log" 2> "$LOG_DIR/stderr.log"
 
 jq -e '
-  .schema == "nixome.qubes-reconcile.v1" and
+  .schema == "nixome.setup-config.v1" and
   .status == "passed" and
   .mode == "plan" and
   .templates_changed == 1 and
   .kernels_changed == 1 and
   .domains_changed == 1 and
   .prefs_changed == 1
-' "$LOG_DIR/qubes-reconcile.json" >/dev/null
+' "$LOG_DIR/setup-config.json" >/dev/null
 
-printf 'reconcile topology static test ok\n'
+printf 'setup-config static test ok\n'
