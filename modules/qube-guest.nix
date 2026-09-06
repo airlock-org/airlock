@@ -16,6 +16,7 @@ let
     pkgs.e2fsprogs
     pkgs.findutils
     pkgs.gawk
+    pkgs.glibc.bin
     pkgs.gnugrep
     pkgs.kmod
     pkgs.qubes-core-qubesdb
@@ -616,6 +617,8 @@ in
           mount -o remount,bind,nosuid,nodev /home
         fi
 
+        install -d -m 0700 -o ${cfg.user} -g users /home/${cfg.user}
+
         mkdir -p /rw/usrlocal
         if ! mountpoint -q /usr/local; then
           mount --bind /rw/usrlocal /usr/local
@@ -665,14 +668,29 @@ in
       mode = "0555";
     };
 
+    environment.etc."qubes/rpc-config/nixome.Config.CandidateExport" = lib.mkIf hasConfigModRole {
+      text = "force-user='${cfg.user}'\n";
+      mode = "0444";
+    };
+
     environment.etc."qubes-rpc/nixome.Config.ArchiveCandidate" = lib.mkIf hasConfigVaultRole {
       source = configArchiveService;
       mode = "0555";
     };
 
+    environment.etc."qubes/rpc-config/nixome.Config.ArchiveCandidate" = lib.mkIf hasConfigVaultRole {
+      text = "force-user='${cfg.user}'\n";
+      mode = "0444";
+    };
+
     environment.etc."qubes-rpc/qubes.VMShell" = {
       source = vmShellService;
       mode = "0555";
+    };
+
+    environment.etc."qubes/rpc-config/qubes.VMShell" = {
+      text = "force-user='${cfg.user}'\n";
+      mode = "0444";
     };
 
     environment.systemPackages = [

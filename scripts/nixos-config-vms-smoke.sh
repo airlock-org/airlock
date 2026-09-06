@@ -7,6 +7,8 @@ COMMAND_LOG="$LOG_DIR/config-vms-smoke.commands.log"
 QVM_LS_LOG="$LOG_DIR/config-vms-qvm-ls.log"
 MOD_UNAME_LOG="$LOG_DIR/config-vms-config-mod-uname.log"
 VAULT_UNAME_LOG="$LOG_DIR/config-vms-config-vault-uname.log"
+MOD_USER_LOG="$LOG_DIR/config-vms-config-mod-user.log"
+VAULT_USER_LOG="$LOG_DIR/config-vms-config-vault-user.log"
 MOD_INIT_LOG="$LOG_DIR/config-vms-mod-init.log"
 MOD_VALIDATION_LOG="$LOG_DIR/config-vms-mod-validation.log"
 ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
@@ -17,6 +19,7 @@ QVM_PREFS_LOG="$LOG_DIR/config-vms-qvm-prefs.log"
 
 MOD="${NIXOME_CONFIG_MOD_VM:-config-mod}"
 VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
+QUBE_USER="${NIXOME_QUBE_USER:-user}"
 MOD_CONSOLE_LOG="$LOG_DIR/config-vms-$MOD-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 result_written=0
@@ -70,6 +73,10 @@ write_result() {
     json_file_string_or_null "$MOD_UNAME_LOG"
     printf ',"vault_uname":'
     json_file_string_or_null "$VAULT_UNAME_LOG"
+    printf ',"modifier_user":'
+    json_file_string_or_null "$MOD_USER_LOG"
+    printf ',"vault_user":'
+    json_file_string_or_null "$VAULT_USER_LOG"
     printf ',"modifier_init_log":'
     json_file_string_or_null "$MOD_INIT_LOG"
     printf ',"modifier_validation":'
@@ -213,9 +220,13 @@ start_vm "$MOD"
 
 run_qrexec_or_fail "$VAULT" "qrexec uname in $VAULT" "$VAULT_UNAME_LOG" "uname -a"
 run_qrexec_or_fail "$MOD" "qrexec uname in $MOD" "$MOD_UNAME_LOG" "uname -a"
+run_qrexec_or_fail "$VAULT" "qrexec user in $VAULT" "$VAULT_USER_LOG" "id -un"
+run_qrexec_or_fail "$MOD" "qrexec user in $MOD" "$MOD_USER_LOG" "id -un"
 
 grep -q 'Linux' "$VAULT_UNAME_LOG" || fail "vault uname output did not contain Linux"
 grep -q 'Linux' "$MOD_UNAME_LOG" || fail "modifier uname output did not contain Linux"
+grep -qx "$QUBE_USER" "$VAULT_USER_LOG" || fail "vault qrexec user was not $QUBE_USER"
+grep -qx "$QUBE_USER" "$MOD_USER_LOG" || fail "modifier qrexec user was not $QUBE_USER"
 
 run_qrexec_or_fail "$MOD" "config mod init" "$MOD_INIT_LOG" "nixome-config-mod-init"
 run_qrexec_or_fail "$MOD" "config mod validation in $MOD" "$MOD_VALIDATION_LOG" "nixome-config-mod-validate"
