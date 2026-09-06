@@ -267,6 +267,7 @@ remote_env_prefix() {
 ssh_command() {
   nix shell nixpkgs#sshpass -c sshpass -p "$SSH_PASSWORD" \
     ssh \
+      -F /dev/null \
       -o LogLevel=ERROR \
       -o StrictHostKeyChecking=no \
       -o UserKnownHostsFile=/dev/null \
