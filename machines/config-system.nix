@@ -1,5 +1,6 @@
 {
   lib,
+  nixomeConfigSeedInputs ? null,
   nixomeQubeKernel ? null,
   nixomeQubeKernelOpts ? null,
   nixomeTemplatePackages ? null,
@@ -8,6 +9,7 @@
 let
   haveTemplates = nixomeTemplatePackages != null;
   haveQubeKernel = nixomeQubeKernel != null && nixomeQubeKernelOpts != null;
+  haveConfigSeedInputs = nixomeConfigSeedInputs != null;
 in
 {
   assertions = [
@@ -19,7 +21,20 @@ in
       assertion = haveQubeKernel;
       message = "machines/config-system.nix requires nixomeQubeKernel and nixomeQubeKernelOpts specialArgs.";
     }
+    {
+      assertion = haveConfigSeedInputs;
+      message = "machines/config-system.nix requires nixomeConfigSeedInputs specialArgs.";
+    }
   ];
+
+  environment.etc = {
+    "nixome/config-seed-inputs/nixpkgs".source =
+      if haveConfigSeedInputs then nixomeConfigSeedInputs.nixpkgs else null;
+    "nixome/config-seed-inputs/nixos-qubes".source =
+      if haveConfigSeedInputs then nixomeConfigSeedInputs.nixosQubes else null;
+    "nixome/config-seed-inputs/nixome-support".source =
+      if haveConfigSeedInputs then nixomeConfigSeedInputs.nixomeSupport else null;
+  };
 
   nixome.qubes = {
     enable = true;

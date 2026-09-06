@@ -47,7 +47,7 @@ VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
 QUBE_USER="${NIXOME_QUBE_USER:-user}"
 DOM0_USER="${NIXOME_DOM0_USER:-${SUDO_USER:-nixome}}"
 APPLY_MESSAGE="${NIXOME_CONFIG_APPLY_MESSAGE:-smoke-applied-$(date -u +%Y%m%dT%H%M%SZ)}"
-CREATED_QUBE="${NIXOME_CONFIG_CREATED_QUBE:-nixome-test-from-config}"
+CREATED_QUBE="${NIXOME_CONFIG_CREATED_QUBE:-nixome-work-from-config}"
 STAGING_CONSOLE_LOG="$LOG_DIR/config-vms-$STAGING-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 VALIDATOR_CONSOLE_LOG="$LOG_DIR/config-vms-$VALIDATOR-console.log"
@@ -427,6 +427,12 @@ CONFIG_VMS_SEED_TEXT="$(cat "$NIXOME_CONFIG_VMS_SEED")"
 cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
 cd /home/$QUBE_USER/nixome-config
+nixpkgs_url="\$(sed -n 's/^  inputs\\.nixpkgs\\.url = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
+nixome_support_path="\$(sed -n 's/^      nixomeSupport = \\(.*\\);$/\\1/p' flake.nix | head -n 1)"
+nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = \\(.*\\);$/\\1/p' flake.nix | head -n 1)"
+[ -n "\$nixpkgs_url" ]
+[ -n "\$nixome_support_path" ]
+[ -n "\$nixos_qubes_path" ]
 mkdir -p nixome
 cat > nixome/config-vms.nix <<'CONFIGVMSNIXEOF'
 $CONFIG_VMS_SEED_TEXT
@@ -435,17 +441,30 @@ cat > flake.nix <<'NIXEOF'
 {
   description = "Nixome machine configuration candidate";
 
+  inputs.nixpkgs.url = "__NIXOME_NIXPKGS_URL__";
+
   outputs =
-    { self }:
+    { self, nixpkgs }:
     let
+      system = "x86_64-linux";
       topologySchema = import ./nixome/topology.nix;
       configVms = import ./nixome/config-vms.nix;
+      nixomeSupport = "__NIXOME_SUPPORT_PATH__";
+      nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
+      templateBuilders = import "\${nixomeSupport}/lib/nixome/qube-template.nix" {
+        inherit nixpkgs system;
+        inherit nixomeSupport nixosQubesSource;
+      };
+      templateSet = import ./nixome/templates.nix {
+        inherit system templateBuilders;
+      };
 
       config = configVms {
         appliedMessage = "$APPLY_MESSAGE";
-        extraDomains = {
+        extraTemplates = templateSet.topology.templates;
+        extraDomains = templateSet.topology.domains // {
           "$CREATED_QUBE" = {
-            template = "nixome-nixos-config-staging";
+            template = "nixome-nixos-work";
             label = "green";
             prefs = {
               memory = 1024;
@@ -465,8 +484,19 @@ cat > flake.nix <<'NIXEOF'
           };
         };
       };
+      topology = topologySchema.mkTopology config;
     in
     {
+      packages.\${system} = templateSet.packages;
+
+      checks.\${system}.topology = templateBuilders.pkgs.runCommand "nixome-config-topology-check"
+        {
+          topology = builtins.toJSON topology;
+        }
+        ''
+          printf '%s\n' "\$topology" > "\$out"
+        '';
+
       nixome = {
         metadata = {
           schema = "nixome.config-repo.v1";
@@ -475,13 +505,19 @@ cat > flake.nix <<'NIXEOF'
         };
 
         inherit config;
-        topology = topologySchema.mkTopology config;
+        inherit topology;
       };
     };
 }
 NIXEOF
+sed -i \
+  -e "s|__NIXOME_NIXPKGS_URL__|\$nixpkgs_url|g" \
+  -e "s|__NIXOME_NIXOS_QUBES_PATH__|\$nixos_qubes_path|g" \
+  -e "s|__NIXOME_SUPPORT_PATH__|\$nixome_support_path|g" \
+  flake.nix
 grep -F 'appliedMessage = "$APPLY_MESSAGE";' flake.nix
 grep -F 'configVms = import ./nixome/config-vms.nix;' flake.nix
+grep -F 'templateSet = import ./nixome/templates.nix;' flake.nix
 grep -F '"$CREATED_QUBE" = {' flake.nix
 git add flake.nix nixome/config-vms.nix
 git \
@@ -517,7 +553,9 @@ jq -e \
   '
     .schema == "nixome.qubes-topology.v1" and
     .prefs.default_kernel == "" and
-    .templates == {} and
+    .templates."nixome-nixos-work".import == true and
+    (.templates."nixome-nixos-work".source | test("^/nix/store/")) and
+    .templates."nixome-nixos-work".source_ref == null and
     .kernels == {} and
     .domains[$vault].class == "AppVM" and
     .domains[$vault].template == "nixome-nixos-config-vault" and
@@ -541,7 +579,10 @@ jq -e \
     .domains[$validator].prefs.include_in_backups == true and
     .domains[$validator].features."nixome-config-validator" == "1" and
     .domains[$validator].features."nixome-role" == "config-validator" and
-    .domains[$created].template == "nixome-nixos-config-staging"
+    .domains."nixome-nixos-work".class == "TemplateVM" and
+    .domains."nixome-nixos-work".features."nixome-template-source" == "staged-config" and
+    .domains."nixome-work".template == "nixome-nixos-work" and
+    .domains[$created].template == "nixome-nixos-work"
   ' "$APPLIED_TOPOLOGY_LOG" >/dev/null ||
   fail "applied topology does not define self-hosted config VMs"
 
@@ -571,7 +612,7 @@ run_or_fail \
   "read template for $CREATED_QUBE" \
   "$CREATED_QUBE_TEMPLATE_LOG" \
   qvm-prefs "$CREATED_QUBE" template
-grep -qx "nixome-nixos-config-staging" "$CREATED_QUBE_TEMPLATE_LOG" ||
+grep -qx "nixome-nixos-work" "$CREATED_QUBE_TEMPLATE_LOG" ||
   fail "config-created qube template did not match expected value"
 qvm-features \
   "$CREATED_QUBE" \

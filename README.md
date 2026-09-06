@@ -11,6 +11,7 @@ for:
 
 - a POC NixOS dom0 configuration,
 - NixOS Qube template artifacts for config-system experiments,
+- staged config-defined NixOS TemplateVM artifacts,
 - a first declarative Qubes topology setup command,
 - a small typed topology schema for staged Nix config candidates,
 - local module/evaluation checks,
@@ -88,18 +89,22 @@ make vm-config-smoke
 ```
 
 That path builds a dom0 image whose Nix config declares `config-vault`,
-`config-staging`, and `config-validator`, imports their NixOS template sources
-through Qubes' `qvm-template-postprocess` during an explicit dom0 topology
-setup, applies simple prefs/features/services with `nixome-setup-config`, boots
-the NixOS AppVMs with the normal dom0-provided Qubes VM kernel, runs `uname -a`
-through qrexec in each VM, and checks that the role repositories exist before
-`config-staging` exports a committed typed Nix config candidate. The validator
-evaluates normalized `.#nixome.topology`, dom0 archives it into `config-vault`,
-and `nixome-config-apply --apply` applies the validated topology JSON. The
-successful apply is then recorded under `deployments/` in `config-vault`. The
-smoke proves the staged Nix config re-declares the three config AppVMs, can
-create `nixome-test-from-config`, run `uname -a` inside it through qrexec, and
-preserve the deployment record. See
+`config-staging`, and `config-validator`, imports their bootstrap NixOS template
+sources through Qubes' `qvm-template-postprocess` during an explicit dom0
+topology setup, applies simple prefs/features/services with
+`nixome-setup-config`, boots the NixOS AppVMs with the normal dom0-provided
+Qubes VM kernel, runs `uname -a` through qrexec in each VM, and checks that the
+role repositories exist before `config-staging` exports a committed typed Nix
+config candidate. The validator evaluates normalized `.#nixome.topology` and
+dry-runs any staged template build references. dom0 archives the candidate into
+`config-vault`, builds template artifacts from the exact approved commit,
+rewrites those references to concrete store paths, and applies the resolved
+topology with `nixome-config-apply --apply`. The successful apply is then
+recorded under `deployments/` in `config-vault`. The smoke proves the staged Nix
+config re-declares the three config AppVMs, defines a staged
+`nixome-nixos-work` TemplateVM artifact, creates a `nixome-work-from-config`
+AppVM from that template, runs `uname -a` inside it through qrexec, and
+preserves the deployment record. See
 [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
 The config topology image keeps local build size down by sharing one NixOS
 guest root image between the TemplateVM source directories.
@@ -151,9 +156,9 @@ The Qubes smoke test creates `test-nixome-smoke` if needed, starts it, runs
 - `lib/nixome/topology.nix` is the shared topology schema/defaulting helper used
   by both dom0 topology generation and staged config candidates, including the
   constrained Nixome-owned qrexec policy schema.
-- The config-system TemplateVM source directories currently share one NixOS
-  guest root image to keep nested smoke builds practical; AppVM roles and
-  qrexec policy provide the current separation.
+- The bootstrap config-system TemplateVM source directories currently share one
+  NixOS guest root image to keep nested image builds practical; staged config
+  can now define additional NixOS TemplateVM contents as flake package outputs.
 - `machines/test.nix` is the first concrete NixOS dom0 configuration.
 - `tests/` contains layered feedback scripts.
 - `docs/` records upstream findings and the next test boundary.
@@ -163,10 +168,12 @@ The Qubes smoke test creates `test-nixome-smoke` if needed, starts it, runs
 The Fedora-template nested GUI/qrexec smoke path works on a host with KVM and
 nested virtualization. The NixOS-template
 `config-vault`/`config-staging`/`config-validator` path now evaluates, builds
-template artifacts, imports/creates the declared TemplateVMs and AppVMs, boots
-the NixOS AppVMs under nested Xen, proves qrexec with `uname -a`, and verifies
-the typed config candidate validation/archive/apply flow. The staged config now
-also generates Nixome-owned qrexec policy into
+bootstrap template artifacts, imports/creates the declared TemplateVMs and
+AppVMs, boots the NixOS AppVMs under nested Xen, proves qrexec with `uname -a`,
+and verifies the typed config candidate validation/archive/apply flow. The
+staged config now also defines a NixOS `nixome-nixos-work` TemplateVM package;
+dom0 builds/imports it from the validator-approved candidate and creates
+AppVMs from it. Staged config also generates Nixome-owned qrexec policy into
 `/var/lib/nixome/qubes-policy.d/90-nixome.policy`; Qubes' policy daemon is
 pointed at that combined runtime policy directory.
 Production security validation still requires a physical Xen-capable machine.

@@ -549,8 +549,12 @@ printf 'setting up templates\n'
 mapfile -t template_names < <(jq_get '.templates | keys[]')
 for template in "${template_names[@]}"; do
   source="$(jq_get '.templates[$name].source // ""' --arg name "$template")"
+  source_ref_type="$(jq_get '.templates[$name].source_ref.type // ""' --arg name "$template")"
   import_template="$(jq_get '.templates[$name].import // false' --arg name "$template")"
   skip_start="$(jq_get '.templates[$name].skip_start // true' --arg name "$template")"
+
+  [ -z "$source_ref_type" ] ||
+    fail "template source reference was not resolved before setup-config: $template"
 
   if template_exists "$template"; then
     printf 'template exists: %s\n' "$template"

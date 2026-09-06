@@ -7,6 +7,7 @@
   gnutar,
   jq,
   lib,
+  nix,
   python3,
   systemd,
   writeShellApplication,
@@ -26,6 +27,7 @@ writeShellApplication {
     gnugrep
     gnutar
     jq
+    nix
     python3.pkgs.qubes-core-qrexec.dom0
     setupConfig
     systemd

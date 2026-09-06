@@ -45,6 +45,10 @@ networking, and qrexec policy carry the runtime role distinction. Dedicated
 role-specific guest closures already evaluate/build and remain the hardening
 target once the authority flow is stable.
 
+The staged config now takes the next step for normal workload templates: it
+defines `nixome-nixos-work` as a NixOS TemplateVM package output and declares
+`nixome-work` as an AppVM based on that template.
+
 `config-staging` owns the editable candidate repository at:
 
 ```text
@@ -58,56 +62,85 @@ nixome-config-staging-init
 ```
 
 The seeded candidate defines `nixome.config` in `flake.nix`, imports the local
-`./nixome/topology.nix` schema helper plus `./nixome/config-vms.nix`, and exposes
-normalized `nixome.topology`:
+`./nixome/topology.nix` schema helper, `./nixome/config-vms.nix`, and
+`./nixome/templates.nix`, and exposes normalized `nixome.topology` plus a
+template package output:
 
 ```nix
 let
+  system = "x86_64-linux";
   topologySchema = import ./nixome/topology.nix;
   configVms = import ./nixome/config-vms.nix;
-  config = configVms { };
+  templateSet = import ./nixome/templates.nix { inherit system templateBuilders; };
+  config = configVms {
+    extraTemplates = templateSet.topology.templates;
+    extraDomains = templateSet.topology.domains;
+  };
 in
 {
+  packages.${system} = templateSet.packages;
   nixome.config = config;
   nixome.topology = topologySchema.mkTopology config;
 }
 ```
 
-That seed now re-declares `config-vault`, `config-staging`, and
-`config-validator` as offline AppVMs, so after first boot their Qubes-level
-runtime topology is owned by the normal config-staging -> config-validator ->
-dom0 apply path. Template import and VM kernel installation remain in the outer
-bootstrap dom0 image because those still refer to Nix-built artifacts in dom0's
-store.
+That seed re-declares `config-vault`, `config-staging`, and `config-validator`
+as offline AppVMs, so after first boot their Qubes-level runtime topology is
+owned by the normal config-staging -> config-validator -> dom0 apply path. It
+also declares:
+
+- `packages.x86_64-linux.nixome-nixos-work-template`, a Qubes template source
+  directory built from a NixOS guest module list.
+- `templates.nixome-nixos-work.source.build`, a topology reference to that
+  flake package output.
+- `domains.nixome-nixos-work`, the TemplateVM Qubes object and prefs/features
+  for booting the built root image with the dom0-provided Qubes VM kernel.
+- `domains.nixome-work`, an offline AppVM based on `nixome-nixos-work`.
+
+The config VM templates and VM kernel installation remain in the outer
+bootstrap dom0 image for now. Normal workload templates can now move into the
+staged config path.
 
 The schema currently checks domain classes, labels, Qube/template names,
-template and kernel source fields, JSON-safe prefs/features, boolean services,
-and constrained Nixome-owned qrexec policy rules. Managed qrexec service names
-must start with `nixome.`, bootstrap config services are reserved, actions are
-limited to `allow` and `deny`, allow rules cannot use `@anyvm`, and generated
-policy cannot target dom0. The schema also appends a catch-all deny rule for
-each managed service.
+template and kernel source fields, template build references, JSON-safe
+prefs/features, boolean services, and constrained Nixome-owned qrexec policy
+rules. Template sources can be concrete directories or references like:
+
+```nix
+templates.nixome-nixos-work.source = {
+  build = "packages.x86_64-linux.nixome-nixos-work-template";
+  subpath = "nixome-nixos-work";
+};
+```
+
+Managed qrexec service names must start with `nixome.`, bootstrap config
+services are reserved, actions are limited to `allow` and `deny`, allow rules
+cannot use `@anyvm`, and generated policy cannot target dom0. The schema also
+appends a catch-all deny rule for each managed service.
 
 The schema defaults AppVMs to `class = "AppVM"`, `netvm = null`,
 `prefs.autostart = false`, `prefs.include_in_backups = false`, empty
 `features`/`services`, and an empty generated qrexec policy.
 
-For this first apply proof, the Nix value declares the config AppVMs plus a
-small observable Qubes feature on `config-staging`:
+For this first apply proof, the Nix value declares the config AppVMs, the work
+TemplateVM/AppVM pair, plus a small observable Qubes feature on
+`config-staging`:
 
 ```text
 nixome-config-applied-message
 ```
 
-The runtime smoke then edits `flake.nix` to add `nixome-test-from-config`, an
-AppVM based on `nixome-nixos-config-staging`, and proves that dom0 creates it
-from the validator-produced topology. It also declares a generated
-`nixome.PolicyProbe` qrexec policy rule and proves dom0 can call that service in
-`config-vault` after apply.
+The runtime smoke then edits `flake.nix` to add `nixome-work-from-config`, an
+AppVM based on the staged-built `nixome-nixos-work` template, and proves that
+dom0 builds/imports that template and creates the AppVM from the
+validator-produced topology. It also declares a generated `nixome.PolicyProbe`
+qrexec policy rule and proves dom0 can call that service in `config-vault`
+after apply.
 
 `config-validator` validates candidates exported from `config-staging`,
 evaluates the schema-normalized `.#nixome.topology` to the `topology.json` apply
-artifact, and writes validation JSON under:
+artifact, dry-runs each declared template build reference with `nix build
+--dry-run`, and writes validation JSON under:
 
 ```text
 /home/user/nixome-config-validation
@@ -139,11 +172,23 @@ dom0 applies a validated candidate by running:
 sudo nixome-config-apply --apply
 ```
 
-That command performs the same staging-to-validator-to-vault flow, applies the
-validator-produced `topology.json` with `nixome-setup-config --apply`, then asks
-`config-vault` to archive a deployment record. Dom0 transports and applies the
-artifact, but the candidate validity decision and Nix evaluation happen in
-`config-validator`.
+That command performs the same staging-to-validator-to-vault flow, resolves
+template build references, applies the resolved topology with
+`nixome-setup-config --apply`, then asks `config-vault` to archive a deployment
+record. For each `templates.<name>.source.build`, dom0 builds the referenced
+package from the exact validated Git commit, verifies the built output contains
+`root.img` and `template.conf`, rewrites the topology source to that concrete
+store path, and passes the resolved `topology.json` to setup. Dom0 transports
+and applies the artifact, but the candidate validity decision and Nix topology
+evaluation happen in `config-validator`.
+
+The current seed uses generated literal `/nix/store` path pins for Nixome,
+`nixpkgs`, and `nixos-qubes` support sources. Candidate Nix commands therefore
+run with `--impure --offline --no-write-lock-file`: impure is needed to read
+those immutable store paths from the candidate flake, while offline keeps the
+path from fetching during validation or apply. A production design should
+replace this with a pure, content-addressed input mirror or a validator-built
+artifact transport.
 
 `config-vault` now has two durable artifact classes:
 
@@ -158,8 +203,9 @@ latest-deployment-attempt
 `candidates/` records validated source snapshots and evaluated topology before
 deployment. `deployments/` records what dom0 attempted after setup ran,
 including `deployment.json`, `apply.json`, `archive.json`, `setup.json`,
-`topology.json`, `validation.json`, `manifest.json`, and relevant dom0 logs.
-Passed deployments update both `latest-deployment` and
+`topology.json`, `validated-topology.json`, `template-builds.json`,
+`validation.json`, `manifest.json`, and relevant dom0 logs. Passed deployments
+update both `latest-deployment` and
 `latest-deployment-attempt`; failed setup attempts update only
 `latest-deployment-attempt` when the vault can still be reached.
 
@@ -232,11 +278,12 @@ dom0 topology setup, starts `config-vault`, `config-staging`, and
 `config-validator`, runs `uname -a` through qrexec in all three VMs, initializes
 the staging repository and validator workspace, edits and commits `flake.nix`
 in `config-staging`, evaluates `.#nixome.topology` in `config-validator`,
-archives the source and evaluated topology into `config-vault`, applies it from
-dom0, checks that `nixome-test-from-config` was created, and runs `uname -a`
-inside it through qrexec. It also checks that `config-vault` wrote a deployment
-record for the successful apply and that generated qrexec policy is installed
-and active.
+dry-runs the staged template build reference, archives the source and evaluated
+topology into `config-vault`, builds/imports `nixome-nixos-work` from the
+approved commit, checks that `nixome-work-from-config` was created from that
+template, and runs `uname -a` inside it through qrexec. It also checks that
+`config-vault` wrote a deployment record for the successful apply and that
+generated qrexec policy is installed and active.
 The machine-readable result is copied to:
 
 ```text
@@ -248,6 +295,10 @@ The machine-readable result is copied to:
 The template artifacts are NixOS root images packaged in the shape expected by
 `qvm-template-postprocess`. The explicit dom0 setup command has imported those
 templates and created the three AppVMs in the nested dom0 test environment.
+Local tests now also prove that a validated topology can contain a staged
+template build reference and that dom0 apply resolves it to a concrete template
+source before invoking setup. The full nested proof for the staged-built work
+TemplateVM is `make vm-config-smoke`.
 
 The NixOS guests now boot in nested Xen with the normal Qubes dom0-provided VM
 kernel/initramfs and kernel options such as `root=/dev/mapper/dmroot`. The

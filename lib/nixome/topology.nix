@@ -84,6 +84,55 @@ let
   expectNullOrStringOrPath =
     path: value: if value == null then null else expectStringOrPath path value;
 
+  expectFlakeOutputRef =
+    path: value:
+    let
+      ref = expectOptions path [
+        "build"
+        "attr"
+        "subpath"
+      ] value;
+      hasBuild = hasAttr "build" ref;
+      hasAttrName = hasAttr "attr" ref;
+      attr =
+        if hasBuild && hasAttrName then
+          fail path "build and attr cannot both be set"
+        else if hasBuild then
+          expectStringOrPath "${path}.build" ref.build
+        else if hasAttrName then
+          expectStringOrPath "${path}.attr" ref.attr
+        else
+          fail path "must set build or attr";
+      subpath = expectStringOrPath "${path}.subpath" (get ref "subpath" "");
+    in
+    if match "[A-Za-z0-9_+-]+(\\.[A-Za-z0-9_+-]+)*" attr == null then
+      fail path "invalid flake output reference ${toJSON attr}; expected dot-separated flake attribute path"
+    else if subpath != "" && match "[A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+)*" subpath == null then
+      fail "${path}.subpath" "invalid source subpath ${toJSON subpath}; expected a relative path without .."
+    else
+      {
+        type = "flake-output";
+        inherit attr subpath;
+      };
+
+  normalizeTemplateSource =
+    path: value:
+    if value == null then
+      {
+        source = null;
+        source_ref = null;
+      }
+    else if typeOf value == "set" then
+      {
+        source = null;
+        source_ref = expectFlakeOutputRef path value;
+      }
+    else
+      {
+        source = expectStringOrPath path value;
+        source_ref = null;
+      };
+
   checkKeys =
     path: allowed: attrs:
     let
@@ -283,11 +332,29 @@ let
       template = expectOptions "templates.${checkedName}" [
         "import"
         "source"
+        "sourceRef"
+        "source_ref"
         "skipStart"
         "skip_start"
       ] value;
       importTemplate = expectBool "templates.${checkedName}.import" (get template "import" false);
-      source = expectNullOrStringOrPath "templates.${checkedName}.source" (get template "source" null);
+      hasSource = hasAttr "source" template && template.source != null;
+      hasCamelSourceRef = hasAttr "sourceRef" template && template.sourceRef != null;
+      hasSnakeSourceRef = hasAttr "source_ref" template && template.source_ref != null;
+      rawSource =
+        if hasCamelSourceRef && hasSnakeSourceRef then
+          fail "templates.${checkedName}" "sourceRef and source_ref cannot both be set"
+        else if hasSource && (hasCamelSourceRef || hasSnakeSourceRef) then
+          fail "templates.${checkedName}" "source and sourceRef cannot both be set"
+        else if hasSource then
+          template.source
+        else if hasCamelSourceRef then
+          template.sourceRef
+        else if hasSnakeSourceRef then
+          template.source_ref
+        else
+          null;
+      sourceInfo = normalizeTemplateSource "templates.${checkedName}.source" rawSource;
       hasCamelSkip = hasAttr "skipStart" template;
       hasSnakeSkip = hasAttr "skip_start" template;
       camelSkip =
@@ -307,12 +374,12 @@ let
         else
           true;
     in
-    if importTemplate && source == null then
+    if importTemplate && sourceInfo.source == null && sourceInfo.source_ref == null then
       fail "templates.${checkedName}.source" "must be set when import is true"
     else
       {
         import = importTemplate;
-        inherit source;
+        inherit (sourceInfo) source source_ref;
         skip_start = skipStart;
       };
 

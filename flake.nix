@@ -135,6 +135,12 @@
           inherit templateName rootImageFile;
         };
 
+      nixomeConfigSeedInputs = {
+        nixpkgs = "${nixpkgs}";
+        nixosQubes = "${nixos-qubes}";
+        nixomeSupport = "${self}";
+      };
+
       mkModuleContractCheck =
         system:
         let
@@ -203,7 +209,10 @@
     {
       lib = {
         nixomeTopology = import ./lib/nixome/topology.nix;
+        nixomeQubeTemplate = import ./lib/nixome/qube-template.nix;
       };
+
+      nixome.seedInputs = nixomeConfigSeedInputs;
 
       overlays.nixomeImageBuildTools = nixomeImageBuildToolsOverlay;
 
@@ -330,6 +339,7 @@
             configStaging = self.packages.x86_64-linux.nixome-nixos-config-staging-template;
             configValidator = self.packages.x86_64-linux.nixome-nixos-config-validator-template;
           };
+          inherit nixomeConfigSeedInputs;
         };
         modules = [
           self.nixosModules.dom0
@@ -340,6 +350,9 @@
 
       nixosConfigurations.qube-template-config-system = lib.nixosSystem {
         system = "x86_64-linux";
+        specialArgs = {
+          inherit nixomeConfigSeedInputs;
+        };
         modules = [
           nixos-qubes.nixosModules.qubes
           (
@@ -359,6 +372,9 @@
 
       nixosConfigurations.qube-template-config-vault = lib.nixosSystem {
         system = "x86_64-linux";
+        specialArgs = {
+          inherit nixomeConfigSeedInputs;
+        };
         modules = [
           nixos-qubes.nixosModules.qubes
           (
@@ -378,6 +394,9 @@
 
       nixosConfigurations.qube-template-config-staging = lib.nixosSystem {
         system = "x86_64-linux";
+        specialArgs = {
+          inherit nixomeConfigSeedInputs;
+        };
         modules = [
           nixos-qubes.nixosModules.qubes
           (
@@ -397,6 +416,9 @@
 
       nixosConfigurations.qube-template-config-validator = lib.nixosSystem {
         system = "x86_64-linux";
+        specialArgs = {
+          inherit nixomeConfigSeedInputs;
+        };
         modules = [
           nixos-qubes.nixosModules.qubes
           (

@@ -30,6 +30,13 @@ cat > "$WORK_DIR/valid/flake.nix" <<'EOF'
           import = true;
           source = ./template-source;
         };
+        templates."nixome-built-template" = {
+          import = true;
+          source = {
+            build = "packages.x86_64-linux.nixome-built-template";
+            subpath = "nixome-built-template";
+          };
+        };
         kernels."6.12.64-1.fc41".source = ./kernel-source;
         prefs.default_kernel = "";
         domains."test-qube" = {
@@ -59,6 +66,14 @@ jq -e '
   .templates."nixome-template".import == true and
   .templates."nixome-template".skip_start == true and
   (.templates."nixome-template".source | test("/template-source$")) and
+  .templates."nixome-template".source_ref == null and
+  .templates."nixome-built-template".import == true and
+  .templates."nixome-built-template".source == null and
+  .templates."nixome-built-template".source_ref == {
+    "type": "flake-output",
+    "attr": "packages.x86_64-linux.nixome-built-template",
+    "subpath": "nixome-built-template"
+  } and
   (.kernels."6.12.64-1.fc41".source | test("/kernel-source$")) and
   .domains."test-qube".class == "AppVM" and
   .domains."test-qube".template == "nixome-template" and
@@ -141,6 +156,16 @@ expect_failure \
   "template-import-without-source" \
   "nixome.topology.templates.nixome-template.source: must be set when import is true" \
   '{ templates."nixome-template".import = true; }'
+
+expect_failure \
+  "template-source-and-source-ref" \
+  "source and sourceRef cannot both be set" \
+  '{ templates."nixome-template" = { import = true; source = ./template-source; sourceRef.build = "packages.x86_64-linux.template"; }; }'
+
+expect_failure \
+  "template-invalid-build-ref" \
+  "invalid flake output reference" \
+  '{ templates."nixome-template" = { import = true; source.build = "../bad"; }; }'
 
 expect_failure \
   "non-nixome-qrexec-service" \

@@ -12,6 +12,27 @@ let
     lib.types.path
     lib.types.str
   ];
+  templateSourceRefType = lib.types.submodule {
+    options = {
+      build = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Candidate flake output attribute that builds this template source.";
+      };
+
+      attr = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Alias for build.";
+      };
+
+      subpath = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Optional path inside the built output that contains root.img.";
+      };
+    };
+  };
   jsonScalar = lib.types.nullOr (
     lib.types.oneOf [
       lib.types.bool
@@ -29,9 +50,20 @@ let
       };
 
       source = lib.mkOption {
-        type = lib.types.nullOr sourcePath;
+        type = lib.types.nullOr (
+          lib.types.oneOf [
+            sourcePath
+            templateSourceRefType
+          ]
+        );
         default = null;
-        description = "Qubes template source directory containing root.img and template.conf.";
+        description = "Concrete template source directory or candidate flake build reference.";
+      };
+
+      sourceRef = lib.mkOption {
+        type = lib.types.nullOr templateSourceRefType;
+        default = null;
+        description = "Candidate flake output attribute that builds this template source.";
       };
 
       skipStart = lib.mkOption {
@@ -311,8 +343,8 @@ in
         message = "nixome.qubes.domains.${name}.template must be set for AppVM domains.";
       }) cfg.domains
       ++ lib.mapAttrsToList (name: template: {
-        assertion = !template.import || template.source != null;
-        message = "nixome.qubes.templates.${name}.source must be set when import is enabled.";
+        assertion = !template.import || template.source != null || template.sourceRef != null;
+        message = "nixome.qubes.templates.${name}.source or sourceRef must be set when import is enabled.";
       }) cfg.templates
       ++ lib.mapAttrsToList (name: kernel: {
         assertion = kernel.source != null;

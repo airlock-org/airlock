@@ -14,17 +14,56 @@ mkdir -p "$RESULT_DIR"
 mkdir -p "$WORK_DIR/nixome"
 cp "$ROOT/seeds/config-staging/flake.nix" "$WORK_DIR/flake.nix"
 cp "$ROOT/seeds/config-staging/nixome/config-vms.nix" "$WORK_DIR/nixome/config-vms.nix"
+cp "$ROOT/seeds/config-staging/nixome/templates.nix" "$WORK_DIR/nixome/templates.nix"
 cp "$ROOT/lib/nixome/topology.nix" "$WORK_DIR/nixome/topology.nix"
 
-nix flake check "$WORK_DIR" --no-build --show-trace
-nix eval --json "$WORK_DIR#nixome.topology" > "$TOPOLOGY_JSON"
+nixpkgs_path="$(nix eval --raw "$ROOT#nixome.seedInputs.nixpkgs")"
+nixos_qubes_path="$(nix eval --raw "$ROOT#nixome.seedInputs.nixosQubes")"
+nixome_support_path="$(nix eval --raw "$ROOT#nixome.seedInputs.nixomeSupport")"
+sed -i \
+  -e "s|__NIXOME_NIXPKGS_URL__|path:$nixpkgs_path|g" \
+  -e "s|__NIXOME_NIXOS_QUBES_PATH__|$nixos_qubes_path|g" \
+  -e "s|__NIXOME_SUPPORT_PATH__|$nixome_support_path|g" \
+  "$WORK_DIR/flake.nix"
+
+(
+  cd "$WORK_DIR"
+  nix \
+    --extra-experimental-features nix-command \
+    --extra-experimental-features flakes \
+    flake lock \
+    --impure \
+    --offline
+)
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  flake check \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  "$WORK_DIR" --no-build --show-trace
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json "$WORK_DIR#nixome.topology" > "$TOPOLOGY_JSON"
 
 jq -e '
   .schema == "nixome.qubes-topology.v1" and
   (.templates | type == "object") and
   (.kernels | type == "object") and
   (.prefs | type == "object") and
-  .templates == {} and
+  .templates."nixome-nixos-work".import == true and
+  .templates."nixome-nixos-work".source == null and
+  .templates."nixome-nixos-work".source_ref == {
+    "type": "flake-output",
+    "attr": "packages.x86_64-linux.nixome-nixos-work-template",
+    "subpath": "nixome-nixos-work"
+  } and
   .kernels == {} and
   .prefs.default_kernel == "" and
   (.domains | type == "object") and
@@ -68,6 +107,22 @@ jq -e '
   .domains."config-validator".features."nixome-role" == "config-validator" and
   .domains."config-validator".features."nixome-config-validator" == "1" and
   .domains."config-validator".services == {} and
+  .domains."nixome-nixos-work".class == "TemplateVM" and
+  .domains."nixome-nixos-work".label == "black" and
+  .domains."nixome-nixos-work".netvm == null and
+  .domains."nixome-nixos-work".prefs.default_user == "user" and
+  .domains."nixome-nixos-work".prefs.kernel == "6.12.64-1.fc41" and
+  (.domains."nixome-nixos-work".prefs.kernelopts | contains("init=/sbin/init")) and
+  .domains."nixome-nixos-work".features."nixome-role" == "work-template" and
+  .domains."nixome-nixos-work".features."nixome-template-source" == "staged-config" and
+  .domains."nixome-work".class == "AppVM" and
+  .domains."nixome-work".template == "nixome-nixos-work" and
+  .domains."nixome-work".label == "green" and
+  .domains."nixome-work".netvm == null and
+  .domains."nixome-work".prefs.include_in_backups == true and
+  .domains."nixome-work".features."nixome-role" == "work" and
+  .domains."nixome-work".features."nixome-template-source" == "staged-config" and
+  .domains."nixome-work".services."network-manager" == false and
   .qrexec_policy.rules == [
     {
       "service": "nixome.PolicyProbe",

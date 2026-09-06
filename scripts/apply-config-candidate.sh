@@ -8,7 +8,10 @@ ARCHIVE_STDOUT="$LOG_DIR/config-apply-archive.stdout.log"
 ARCHIVE_STDERR="$LOG_DIR/config-apply-archive.stderr.log"
 ARCHIVE_JSON="$LOG_DIR/config-archive.json"
 VALIDATED_CANDIDATE_TAR="$LOG_DIR/config-candidate-validated.tar"
+VALIDATED_TOPOLOGY_JSON="$LOG_DIR/config-apply-topology-validated.json"
 APPLY_TOPOLOGY_JSON="$LOG_DIR/config-apply-topology.json"
+TEMPLATE_BUILDS_JSON="$LOG_DIR/config-apply-template-builds.json"
+TEMPLATE_BUILD_LOG="$LOG_DIR/config-apply-template-builds.log"
 DEPLOYMENT_JSON="$LOG_DIR/config-deployment.json"
 DEPLOYMENT_TAR="$LOG_DIR/config-deployment.tar"
 DEPLOYMENT_ARCHIVE_STDOUT="$LOG_DIR/config-apply-deployment-archive.stdout.log"
@@ -108,6 +111,9 @@ write_result() {
     --arg deployment_id "$deployment_id" \
     --arg deployment_archive_service "$DEPLOYMENT_ARCHIVE_SERVICE" \
     --arg topology "$APPLY_TOPOLOGY_JSON" \
+    --arg validated_topology "$VALIDATED_TOPOLOGY_JSON" \
+    --arg template_builds "$TEMPLATE_BUILDS_JSON" \
+    --arg template_build_log "$TEMPLATE_BUILD_LOG" \
     --arg deployment_record "$DEPLOYMENT_JSON" \
     --arg deployment_tar "$DEPLOYMENT_TAR" \
     --arg deployment_archive_stdout "$DEPLOYMENT_ARCHIVE_STDOUT" \
@@ -135,6 +141,9 @@ write_result() {
       deployment_id: $deployment_id,
       deployment_archive_service: $deployment_archive_service,
       topology: $topology,
+      validated_topology: $validated_topology,
+      template_builds: $template_builds,
+      template_build_log: $template_build_log,
       deployment_record: $deployment_record,
       deployment_tar: $deployment_tar,
       deployment_archive_stdout: $deployment_archive_stdout,
@@ -251,6 +260,8 @@ build_deployment_tar() {
     --arg apply "apply.json" \
     --arg archive "archive.json" \
     --arg setup "setup.json" \
+    --arg template_builds "template-builds.json" \
+    --arg validated_topology "validated-topology.json" \
     --arg validation "validation.json" \
     --arg manifest "manifest.json" \
     --argjson archive_result "$archive_json" \
@@ -271,6 +282,8 @@ build_deployment_tar() {
         apply: $apply,
         archive: $archive,
         setup: $setup,
+        template_builds: $template_builds,
+        validated_topology: $validated_topology,
         validation: $validation,
         manifest: $manifest
       },
@@ -285,6 +298,8 @@ build_deployment_tar() {
   copy_or_empty "$ARCHIVE_JSON" "$record_dir/archive.json"
   copy_or_empty "$SETUP_JSON" "$record_dir/setup.json"
   copy_or_empty "$APPLY_TOPOLOGY_JSON" "$record_dir/topology.json"
+  copy_or_empty "$VALIDATED_TOPOLOGY_JSON" "$record_dir/validated-topology.json"
+  copy_or_empty "$TEMPLATE_BUILDS_JSON" "$record_dir/template-builds.json"
   copy_or_empty "$tmpdir/validation.json" "$record_dir/validation.json"
   copy_or_empty "$tmpdir/manifest.json" "$record_dir/manifest.json"
   copy_or_empty "$COMMAND_LOG" "$record_dir/logs/apply.commands.log"
@@ -292,6 +307,7 @@ build_deployment_tar() {
   copy_or_empty "$ARCHIVE_STDERR" "$record_dir/logs/archive.stderr.log"
   copy_or_empty "$SETUP_STDOUT" "$record_dir/logs/setup.stdout.log"
   copy_or_empty "$SETUP_STDERR" "$record_dir/logs/setup.stderr.log"
+  copy_or_empty "$TEMPLATE_BUILD_LOG" "$record_dir/logs/template-builds.log"
   copy_or_empty "$CLONE_LOG" "$record_dir/logs/clone.log"
   copy_or_empty "$CHECKOUT_LOG" "$record_dir/logs/checkout.log"
 
@@ -301,6 +317,8 @@ build_deployment_tar() {
     archive.json \
     setup.json \
     topology.json \
+    validated-topology.json \
+    template-builds.json \
     validation.json \
     manifest.json \
     logs/apply.commands.log \
@@ -308,6 +326,7 @@ build_deployment_tar() {
     logs/archive.stderr.log \
     logs/setup.stdout.log \
     logs/setup.stderr.log \
+    logs/template-builds.log \
     logs/clone.log \
     logs/checkout.log
 }
@@ -356,8 +375,152 @@ archive_deployment_or_fail() {
   write_result "$status" "$reason"
 }
 
+safe_log_name() {
+  printf '%s' "$1" | sed -e 's/[^A-Za-z0-9_.-]/_/g'
+}
+
+init_template_builds_json() {
+  : > "$TEMPLATE_BUILD_LOG"
+  jq -c -n \
+    --arg schema "nixome.template-builds.v1" \
+    '{schema: $schema, builds: []}' \
+    > "$TEMPLATE_BUILDS_JSON"
+}
+
+record_template_build() {
+  template="$1"
+  attr="$2"
+  subpath="$3"
+  status="$4"
+  output_path="$5"
+  source_path="$6"
+  log="$7"
+  tmp="$TEMPLATE_BUILDS_JSON.tmp"
+
+  jq -c \
+    --arg template "$template" \
+    --arg attr "$attr" \
+    --arg subpath "$subpath" \
+    --arg status "$status" \
+    --arg output_path "$output_path" \
+    --arg source_path "$source_path" \
+    --arg log "$log" \
+    '.builds += [{
+      template: $template,
+      attr: $attr,
+      subpath: $subpath,
+      status: $status,
+      output_path: $output_path,
+      source_path: $source_path,
+      log: $log
+    }]' \
+    "$TEMPLATE_BUILDS_JSON" > "$tmp"
+  mv "$tmp" "$TEMPLATE_BUILDS_JSON"
+}
+
+resolve_template_sources() {
+  topology="$1"
+  worktree="$2"
+  resolved="$3"
+
+  cp "$topology" "$VALIDATED_TOPOLOGY_JSON"
+  cp "$topology" "$resolved"
+  init_template_builds_json
+
+  mapfile -t template_refs < <(
+    jq -r '
+      .templates
+      | to_entries[]
+      | select(.value.source_ref != null)
+      | @base64
+    ' "$topology"
+  )
+
+  if [ "${#template_refs[@]}" -eq 0 ]; then
+    printf 'no staged template build references to resolve\n' >> "$TEMPLATE_BUILD_LOG"
+    return
+  fi
+
+  for encoded in "${template_refs[@]}"; do
+    template_json="$(printf '%s' "$encoded" | base64 -d)"
+    template="$(printf '%s' "$template_json" | jq -r '.key')"
+    attr="$(printf '%s' "$template_json" | jq -r '.value.source_ref.attr')"
+    subpath="$(printf '%s' "$template_json" | jq -r '.value.source_ref.subpath // ""')"
+    safe_template="$(safe_log_name "$template")"
+    build_log="$LOG_DIR/config-apply-template-build-$safe_template.log"
+    build_stdout="$tmpdir/config-apply-template-build-$safe_template.stdout"
+
+    {
+      printf 'template=%s\n' "$template"
+      printf 'attr=%s\n' "$attr"
+      printf 'subpath=%s\n' "$subpath"
+      printf '+ nix build --impure --offline --no-link --print-out-paths %s#%s\n' "$worktree" "$attr"
+    } > "$build_log"
+
+    if
+      nix \
+        --extra-experimental-features nix-command \
+        --extra-experimental-features flakes \
+        build \
+        --impure \
+        --offline \
+        --no-write-lock-file \
+        --no-link \
+        --print-out-paths \
+        --show-trace \
+        "$worktree#$attr" > "$build_stdout" 2>> "$build_log"
+    then
+      cat "$build_stdout" >> "$build_log"
+      output_path="$(awk 'NF { last = $0 } END { print last }' "$build_stdout")"
+    else
+      record_template_build "$template" "$attr" "$subpath" failed "" "" "$build_log"
+      cat "$build_log" >> "$TEMPLATE_BUILD_LOG" || true
+      fail "template build failed for $template from $attr"
+    fi
+
+    [ -n "$output_path" ] ||
+      fail "template build did not print an output path for $template from $attr"
+
+    source_path="$output_path"
+    if [ -n "$subpath" ]; then
+      source_path="$source_path/$subpath"
+    fi
+
+    [ -d "$source_path" ] ||
+      fail "built template source directory is missing for $template: $source_path"
+    [ -f "$source_path/root.img" ] ||
+      fail "built template source root.img is missing for $template: $source_path/root.img"
+    [ -f "$source_path/template.conf" ] ||
+      fail "built template source template.conf is missing for $template: $source_path/template.conf"
+
+    tmp_resolved="$resolved.tmp"
+    jq \
+      --arg name "$template" \
+      --arg source "$source_path" \
+      '.templates[$name].source = $source | .templates[$name].source_ref = null' \
+      "$resolved" > "$tmp_resolved"
+    mv "$tmp_resolved" "$resolved"
+
+    record_template_build "$template" "$attr" "$subpath" passed "$output_path" "$source_path" "$build_log"
+    cat "$build_log" >> "$TEMPLATE_BUILD_LOG" || true
+  done
+
+  unresolved="$(
+    jq -r '
+      .templates
+      | to_entries[]
+      | select(.value.source_ref != null)
+      | .key
+    ' "$resolved"
+  )"
+  [ -z "$unresolved" ] ||
+    fail "unresolved template source references remain: $unresolved"
+}
+
 for cmd in \
   awk \
+  base64 \
+  cat \
   cp \
   cut \
   date \
@@ -366,10 +529,13 @@ for cmd in \
   jq \
   mkdir \
   mktemp \
+  mv \
+  nix \
   nixome-config-archive-candidate \
   nixome-setup-config \
   qrexec-client \
   rm \
+  sed \
   systemctl \
   tar; do
   require_command "$cmd"
@@ -432,7 +598,7 @@ jq -e '
   (.prefs | type == "object") and
   (.domains | type == "object")
 ' "$topology" >/dev/null || fail "validated candidate topology JSON is invalid"
-cp "$topology" "$APPLY_TOPOLOGY_JSON"
+resolve_template_sources "$topology" "$worktree" "$APPLY_TOPOLOGY_JSON"
 
 printf '+ env NIXOME_LOG_DIR=%q nixome-setup-config --apply --topology %q\n' \
   "$LOG_DIR" \

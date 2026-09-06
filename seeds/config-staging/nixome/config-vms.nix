@@ -1,6 +1,10 @@
 {
   appliedMessage ? "initial",
+  extraTemplates ? { },
+  extraKernels ? { },
+  extraPrefs ? { },
   extraDomains ? { },
+  extraQrexecRules ? [ ],
 }:
 let
   configDomains = {
@@ -64,11 +68,12 @@ let
   };
 in
 {
-  templates = { };
-  kernels = { };
+  templates = extraTemplates;
+  kernels = extraKernels;
   prefs = {
     default_kernel = "";
-  };
+  }
+  // extraPrefs;
   domains = configDomains // extraDomains;
   qrexecPolicy.rules = [
     {
@@ -77,5 +82,6 @@ in
       target = "config-vault";
       action = "allow";
     }
-  ];
+  ]
+  ++ extraQrexecRules;
 }
