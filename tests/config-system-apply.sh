@@ -9,14 +9,24 @@ CANDIDATE_DIR="$WORK_DIR/candidate"
 LOG_DIR="$WORK_DIR/logs"
 CAPABILITIES="$WORK_DIR/xen-capabilities"
 PROFILE_SOURCE="$CANDIDATE_DIR/dom0-profile"
+HOST_SYSTEM_SOURCE="$CANDIDATE_DIR/dom0-system"
 SYSTEM_STATE_DIR="$WORK_DIR/state"
 SYSTEM_ETC_DIR="$WORK_DIR/etc"
 SYSTEM_PROFILE="$WORK_DIR/nixome-system-profile"
+HOST_SYSTEM_PROFILE="$WORK_DIR/host-system-profile"
+HOST_CURRENT_SYSTEM_LINK="$WORK_DIR/current-system"
 VALIDATED_TAR="$WORK_DIR/config-candidate-validated.tar"
 DEPLOYMENT_TAR_CAPTURE="$WORK_DIR/deployment.tar"
 
 rm -rf "$WORK_DIR"
-mkdir -p "$BIN_DIR" "$CANDIDATE_DIR" "$LOG_DIR" "$PROFILE_SOURCE/bin" "$PROFILE_SOURCE/share/nixome"
+mkdir -p \
+  "$BIN_DIR" \
+  "$CANDIDATE_DIR" \
+  "$LOG_DIR" \
+  "$PROFILE_SOURCE/bin" \
+  "$PROFILE_SOURCE/share/nixome" \
+  "$HOST_SYSTEM_SOURCE/bin" \
+  "$HOST_SYSTEM_SOURCE/etc"
 printf 'control_d\n' > "$CAPABILITIES"
 
 cat > "$PROFILE_SOURCE/share/nixome/profile.json" <<'EOF'
@@ -35,6 +45,21 @@ cp "$(dirname "$0")/../share/nixome/profile.json" "$NIXOME_SYSTEM_ETC_DIR/system
 printf 'activated\n' > "$NIXOME_SYSTEM_STATE_DIR/profile-activated"
 EOF
 chmod 0755 "$PROFILE_SOURCE/bin/nixome-dom0-profile-activate"
+
+cat > "$HOST_SYSTEM_SOURCE/etc/inside-config-message" <<'EOF'
+profile-from-test
+EOF
+
+cat > "$HOST_SYSTEM_SOURCE/bin/switch-to-configuration" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$1" > "$NIXOME_SYSTEM_STATE_DIR/host-switch-action"
+printf '%s\n' "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)" > "$NIXOME_SYSTEM_STATE_DIR/host-switch-source"
+ln -sfn "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)" "$NIXOME_HOST_CURRENT_SYSTEM_LINK"
+cp "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)/etc/inside-config-message" "$NIXOME_SYSTEM_ETC_DIR/inside-config-applied-message"
+EOF
+chmod 0755 "$HOST_SYSTEM_SOURCE/bin/switch-to-configuration"
 
 cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
 {
@@ -66,10 +91,11 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
           systemd.services = { };
           nixos = {
             system = {
-              enable = false;
+              enable = true;
               reason = "dom0 system change requires reboot";
-              source = null;
+              source = "__HOST_SYSTEM_SOURCE__";
               source_ref = null;
+              switch_action = "switch";
             };
             kernel = {
               enable = false;
@@ -99,15 +125,22 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
         };
         plan = {
           live_actions = [
-            {
-              type = "dom0-profile";
+          {
+            type = "dom0-profile";
               action = "run";
               source = "__PROFILE_SOURCE__";
               source_ref = null;
-              activation_command = "bin/nixome-dom0-profile-activate";
-              message = "profile-from-test";
-            }
-          ];
+            activation_command = "bin/nixome-dom0-profile-activate";
+            message = "profile-from-test";
+          }
+          {
+            type = "dom0-nixos-system";
+            action = "switch";
+            source = "__HOST_SYSTEM_SOURCE__";
+            source_ref = null;
+            reason = "dom0 system change requires reboot";
+          }
+        ];
           reboot_required = false;
           reboot_reasons = [ ];
         };
@@ -116,11 +149,17 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
 }
 EOF
 sed -i "s|__PROFILE_SOURCE__|dom0-profile|g" "$CANDIDATE_DIR/flake.nix"
+sed -i "s|__HOST_SYSTEM_SOURCE__|dom0-system|g" "$CANDIDATE_DIR/flake.nix"
 
 (
   cd "$CANDIDATE_DIR"
   git init -b main >/dev/null
-  git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.nix
+  git add \
+    dom0-profile/bin/nixome-dom0-profile-activate \
+    dom0-profile/share/nixome/profile.json \
+    dom0-system/bin/switch-to-configuration \
+    dom0-system/etc/inside-config-message \
+    flake.nix
   git \
     -c user.name='Nixome Test' \
     -c user.email='nixome-test@localhost' \
@@ -129,6 +168,7 @@ sed -i "s|__PROFILE_SOURCE__|dom0-profile|g" "$CANDIDATE_DIR/flake.nix"
 
 CANDIDATE_COMMIT="$(git -C "$CANDIDATE_DIR" rev-parse HEAD)"
 EXPECTED_PROFILE_SOURCE="$SYSTEM_STATE_DIR/sources/$CANDIDATE_COMMIT/dom0.profile"
+EXPECTED_HOST_SYSTEM_SOURCE="$SYSTEM_STATE_DIR/sources/$CANDIDATE_COMMIT/dom0.nixos.system"
 git -C "$CANDIDATE_DIR" bundle create "$WORK_DIR/config.bundle" HEAD refs/heads/main >/dev/null
 nix eval --json "$CANDIDATE_DIR#nixome.topology" > "$WORK_DIR/topology.json"
 nix eval --json "$CANDIDATE_DIR#nixome.system" > "$WORK_DIR/system.json"
@@ -226,17 +266,23 @@ PATH="$BIN_DIR:$PATH" \
   NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
   NIXOME_SYSTEM_ETC_DIR="$SYSTEM_ETC_DIR" \
   NIXOME_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
+  NIXOME_HOST_SYSTEM_PROFILE="$HOST_SYSTEM_PROFILE" \
+  NIXOME_HOST_CURRENT_SYSTEM_LINK="$HOST_CURRENT_SYSTEM_LINK" \
   bash "$ROOT/scripts/apply-config-candidate.sh" --apply \
   > "$WORK_DIR/stdout.log" 2> "$WORK_DIR/stderr.log"
 
 jq -e \
   --arg commit "$CANDIDATE_COMMIT" \
+  --arg expected_host_system_source "$EXPECTED_HOST_SYSTEM_SOURCE" \
   '
     .schema == "nixome.config-apply.v1" and
     .status == "passed" and
     .candidate_commit == $commit and
     .system_apply_result.status == "passed" and
     .system_apply_result.profile_status == "passed" and
+    .system_apply_result.host_system_status == "passed" and
+    .system_apply_result.host_system_source == $expected_host_system_source and
+    .system_apply_result.host_system_switch_action == "switch" and
     .system_apply_result.reboot_required == false and
     .deployment.status == "passed" and
     .deployment.system_apply.status == "passed"
@@ -247,15 +293,26 @@ jq -e '
   .message == "profile-from-test"
 ' "$SYSTEM_STATE_DIR/current-profile.json" >/dev/null
 
-jq -e '
+jq -e \
+  --arg expected_host_system_source "$EXPECTED_HOST_SYSTEM_SOURCE" \
+  '
   .schema == "nixome.system.v1" and
   .dom0.profile.message == "profile-from-test" and
+  .dom0.nixos.system.enable == true and
+  .dom0.nixos.system.source == $expected_host_system_source and
+  .dom0.nixos.system.switch_action == "switch" and
   .plan.reboot_required == false
 ' "$SYSTEM_STATE_DIR/current-system.json" >/dev/null
 
 grep -qx activated "$SYSTEM_STATE_DIR/profile-activated"
 [ "$(readlink "$SYSTEM_PROFILE")" = "$EXPECTED_PROFILE_SOURCE" ]
 [ -x "$EXPECTED_PROFILE_SOURCE/bin/nixome-dom0-profile-activate" ]
+[ "$(readlink "$HOST_SYSTEM_PROFILE")" = "$EXPECTED_HOST_SYSTEM_SOURCE" ]
+[ "$(readlink "$HOST_CURRENT_SYSTEM_LINK")" = "$EXPECTED_HOST_SYSTEM_SOURCE" ]
+[ -x "$EXPECTED_HOST_SYSTEM_SOURCE/bin/switch-to-configuration" ]
+grep -qx switch "$SYSTEM_STATE_DIR/host-switch-action"
+grep -qx "$EXPECTED_HOST_SYSTEM_SOURCE" "$SYSTEM_STATE_DIR/host-switch-source"
+grep -qx profile-from-test "$SYSTEM_ETC_DIR/inside-config-applied-message"
 
 tar -tf "$DEPLOYMENT_TAR_CAPTURE" | sort > "$WORK_DIR/deployment-members.txt"
 grep -Fx system.json "$WORK_DIR/deployment-members.txt" >/dev/null

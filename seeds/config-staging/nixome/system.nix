@@ -2,6 +2,7 @@
   appliedMessage ? "initial",
   extraPackages ? [ ],
   extraSystemdServices ? { },
+  dom0SystemAttr ? "nixosConfigurations.nixome-dom0.config.system.build.toplevel",
   rebootRequests ? { },
   system ? "x86_64-linux",
 }:
@@ -22,7 +23,13 @@
     systemd.services = extraSystemdServices;
 
     nixos = {
-      system = rebootRequests.system or null;
+      system = rebootRequests.system or {
+        source = {
+          build = dom0SystemAttr;
+        };
+        switchAction = "switch";
+        reason = "staged dom0 NixOS system generation";
+      };
       kernel = rebootRequests.kernel or null;
       xen = rebootRequests.xen or null;
       bootloader = rebootRequests.bootloader or null;

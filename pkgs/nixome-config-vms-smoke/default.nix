@@ -12,6 +12,12 @@ let
   configVmsSeed = builtins.toFile "nixome-config-vms.nix" (
     builtins.readFile ../../seeds/config-staging/nixome/config-vms.nix
   );
+  dom0HostSeed = builtins.toFile "nixome-dom0-host.nix" (
+    builtins.readFile ../../seeds/config-staging/nixome/dom0-host.nix
+  );
+  flakeSeed = builtins.toFile "nixome-config-flake.nix" (
+    builtins.readFile ../../seeds/config-staging/flake.nix
+  );
   systemSeed = builtins.toFile "nixome-system.nix" (
     builtins.readFile ../../seeds/config-staging/nixome/system.nix
   );
@@ -38,6 +44,8 @@ writeShellApplication {
 
   text = ''
     export NIXOME_CONFIG_VMS_SEED=${lib.escapeShellArg configVmsSeed}
+    export NIXOME_DOM0_HOST_SEED=${lib.escapeShellArg dom0HostSeed}
+    export NIXOME_FLAKE_SEED=${lib.escapeShellArg flakeSeed}
     export NIXOME_SYSTEM_SEED=${lib.escapeShellArg systemSeed}
     export NIXOME_TEMPLATES_SEED=${lib.escapeShellArg templatesSeed}
     export NIXOME_SYSTEM_SCHEMA_SEED=${lib.escapeShellArg systemSchemaSeed}

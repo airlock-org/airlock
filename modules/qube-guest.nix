@@ -83,8 +83,10 @@ let
 
   configStagingSeedFlake = builtins.readFile ../seeds/config-staging/flake.nix;
   configStagingConfigVms = builtins.readFile ../seeds/config-staging/nixome/config-vms.nix;
+  configStagingDom0Host = builtins.readFile ../seeds/config-staging/nixome/dom0-host.nix;
   configStagingDom0ProfileActivate = builtins.readFile ../seeds/config-staging/dom0-profile/bin/nixome-dom0-profile-activate;
   configStagingDom0ProfileJson = builtins.readFile ../seeds/config-staging/dom0-profile/share/nixome/profile.json;
+  configStagingLocal = builtins.readFile ../seeds/config-staging/nixome/local.nix;
   configStagingSystem = builtins.readFile ../seeds/config-staging/nixome/system.nix;
   configStagingTemplates = builtins.readFile ../seeds/config-staging/nixome/templates.nix;
   configStagingSystemSchema = builtins.readFile ../lib/nixome/system.nix;
@@ -151,6 +153,12 @@ let
         cat > nixome/config-vms.nix <<'EOF'
     ${configStagingConfigVms}
     EOF
+        cat > nixome/dom0-host.nix <<'EOF'
+    ${configStagingDom0Host}
+    EOF
+        cat > nixome/local.nix <<'EOF'
+    ${configStagingLocal}
+    EOF
         cat > nixome/system.nix <<'EOF'
     ${configStagingSystem}
     EOF
@@ -182,6 +190,8 @@ let
           dom0-profile/share/nixome/profile.json \
           flake.nix \
           nixome/config-vms.nix \
+          nixome/dom0-host.nix \
+          nixome/local.nix \
           nixome/prebuilt-template-sources.nix \
           nixome/system.nix \
           nixome/system-schema.nix \
@@ -857,6 +867,16 @@ let
             [ -n "$activation_command" ] || activation_command="bin/nixome-dom0-profile-activate"
             [ -x "$resolved/$activation_command" ] || {
               printf 'direct dom0 profile activation command is missing or not executable: %s/%s\n' "$source" "$activation_command" >> "$log"
+              exit 1
+            }
+          fi
+          if [ "$component" = "dom0.nixos.system" ]; then
+            [ -d "$resolved" ] || {
+              printf 'dom0 NixOS system source is not a directory: %s\n' "$source" >> "$log"
+              exit 1
+            }
+            [ -x "$resolved/bin/switch-to-configuration" ] || {
+              printf 'dom0 NixOS system source is missing bin/switch-to-configuration: %s\n' "$source" >> "$log"
               exit 1
             }
           fi

@@ -31,6 +31,9 @@ DOM0_SYSTEM_PLAN_LOG="$LOG_DIR/config-vms-dom0-system-plan.json"
 DOM0_SYSTEM_PROFILE_JSON_LOG="$LOG_DIR/config-vms-dom0-profile.json"
 DOM0_SYSTEM_APPLY_LOG="$LOG_DIR/config-vms-dom0-system-apply.json"
 DOM0_SYSTEM_PROFILE_LINK_LOG="$LOG_DIR/config-vms-dom0-system-profile-link.log"
+DOM0_HOST_CONFIG_MESSAGE_LOG="$LOG_DIR/config-vms-dom0-host-config-message.log"
+DOM0_HOST_SYSTEM_PROFILE_LINK_LOG="$LOG_DIR/config-vms-dom0-host-system-profile-link.log"
+DOM0_CURRENT_SYSTEM_LINK_LOG="$LOG_DIR/config-vms-dom0-current-system-link.log"
 ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
 ARCHIVE_JSON="$LOG_DIR/config-archive.json"
 APPLY_LOG="$LOG_DIR/config-vms-apply.log"
@@ -160,6 +163,12 @@ write_result() {
     json_file_value_or_null "$DOM0_SYSTEM_APPLY_LOG"
     printf ',"dom0_system_profile_link":'
     json_file_string_or_null "$DOM0_SYSTEM_PROFILE_LINK_LOG"
+    printf ',"dom0_host_config_message":'
+    json_file_string_or_null "$DOM0_HOST_CONFIG_MESSAGE_LOG"
+    printf ',"dom0_host_system_profile_link":'
+    json_file_string_or_null "$DOM0_HOST_SYSTEM_PROFILE_LINK_LOG"
+    printf ',"dom0_current_system_link":'
+    json_file_string_or_null "$DOM0_CURRENT_SYSTEM_LINK_LOG"
     printf ',"archive":'
     json_file_value_or_null "$ARCHIVE_JSON"
     printf ',"archive_log":'
@@ -438,6 +447,12 @@ run_qrexec_or_fail \
 if [ -z "${NIXOME_CONFIG_VMS_SEED:-}" ] || [ ! -r "$NIXOME_CONFIG_VMS_SEED" ]; then
   fail "missing config VM seed helper for smoke update"
 fi
+if [ -z "${NIXOME_DOM0_HOST_SEED:-}" ] || [ ! -r "$NIXOME_DOM0_HOST_SEED" ]; then
+  fail "missing dom0 host seed helper for smoke update"
+fi
+if [ -z "${NIXOME_FLAKE_SEED:-}" ] || [ ! -r "$NIXOME_FLAKE_SEED" ]; then
+  fail "missing flake seed helper for smoke update"
+fi
 if [ -z "${NIXOME_SYSTEM_SEED:-}" ] || [ ! -r "$NIXOME_SYSTEM_SEED" ]; then
   fail "missing system seed helper for smoke update"
 fi
@@ -451,6 +466,8 @@ if [ -z "${NIXOME_TOPOLOGY_SCHEMA_SEED:-}" ] || [ ! -r "$NIXOME_TOPOLOGY_SCHEMA_
   fail "missing topology schema seed helper for smoke update"
 fi
 CONFIG_VMS_SEED_TEXT="$(cat "$NIXOME_CONFIG_VMS_SEED")"
+DOM0_HOST_SEED_TEXT="$(cat "$NIXOME_DOM0_HOST_SEED")"
+FLAKE_SEED_TEXT="$(cat "$NIXOME_FLAKE_SEED")"
 SYSTEM_SEED_TEXT="$(cat "$NIXOME_SYSTEM_SEED")"
 TEMPLATES_SEED_TEXT="$(cat "$NIXOME_TEMPLATES_SEED")"
 SYSTEM_SCHEMA_SEED_TEXT="$(cat "$NIXOME_SYSTEM_SCHEMA_SEED")"
@@ -459,7 +476,7 @@ TOPOLOGY_SCHEMA_SEED_TEXT="$(cat "$NIXOME_TOPOLOGY_SCHEMA_SEED")"
 cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
 cd /home/$QUBE_USER/nixome-config
-nixpkgs_url="\$(sed -n 's/^  inputs\\.nixpkgs\\.url = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
+nixpkgs_url="\$(sed -n 's/^[[:space:]]*\\(inputs\\.\\)\\{0,1\\}nixpkgs\\.url = "\\(.*\\)";$/\\2/p' flake.nix | head -n 1)"
 nixome_support_path="\$(sed -n 's/^      nixomeSupport = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
 nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
 [ -n "\$nixpkgs_url" ]
@@ -467,9 +484,48 @@ nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = "\\(.*\\)";$/\\1/p' fla
 [ -n "\$nixos_qubes_path" ]
 mkdir -p dom0-profile/bin dom0-profile/share/nixome nixome
 rm -f dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json
+cat > flake.nix <<'FLAKENIXEOF'
+$FLAKE_SEED_TEXT
+FLAKENIXEOF
 cat > nixome/config-vms.nix <<'CONFIGVMSNIXEOF'
 $CONFIG_VMS_SEED_TEXT
 CONFIGVMSNIXEOF
+cat > nixome/dom0-host.nix <<'DOM0HOSTNIXEOF'
+$DOM0_HOST_SEED_TEXT
+DOM0HOSTNIXEOF
+cat > nixome/local.nix <<'LOCALNIXEOF'
+{
+  appliedMessage,
+  system,
+  templateSet,
+  ...
+}:
+{
+  topology.extraDomains = {
+    "$CREATED_QUBE" = {
+      template = "nixome-nixos-work";
+      label = "green";
+      prefs = {
+        memory = 1024;
+        maxmem = 2048;
+        vcpus = 1;
+      };
+      features = {
+        "nixome-created-from-config" = "1";
+        "nixome-created-from-config-message" = "$APPLY_MESSAGE";
+        "nixome-role" = "created-from-config";
+        os = "Linux";
+        qrexec = "1";
+      };
+      services = {
+        "network-manager" = false;
+      };
+    };
+  };
+
+  system.args = { };
+}
+LOCALNIXEOF
 cat > nixome/templates.nix <<'TEMPLATESNIXEOF'
 $TEMPLATES_SEED_TEXT
 TEMPLATESNIXEOF
@@ -508,163 +564,26 @@ if [ -n "\${NIXOME_SYSTEM_PROFILE:-}" ]; then
 fi
 PROFILEACTIVATEEOF
 chmod 0755 dom0-profile/bin/nixome-dom0-profile-activate
-cat > flake.nix <<'NIXEOF'
-{
-  description = "Nixome machine configuration candidate";
-
-  inputs.nixpkgs.url = "__NIXOME_NIXPKGS_URL__";
-
-  outputs =
-    { self, nixpkgs }:
-    let
-      system = "x86_64-linux";
-      topologySchema = import ./nixome/topology.nix;
-      systemSchema = import ./nixome/system-schema.nix;
-      configVms = import ./nixome/config-vms.nix;
-      systemConfig = import ./nixome/system.nix;
-      prebuiltTemplateSources = import ./nixome/prebuilt-template-sources.nix;
-      nixomeSupport = "__NIXOME_SUPPORT_PATH__";
-      nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
-      templateBuilders = import "\${nixomeSupport}/lib/nixome/qube-template.nix" {
-        inherit nixpkgs system;
-        inherit nixomeSupport nixosQubesSource;
-      };
-      templateSet = import ./nixome/templates.nix {
-        inherit
-          prebuiltTemplateSources
-          system
-          templateBuilders
-          ;
-      };
-
-      appliedMessage = "$APPLY_MESSAGE";
-      config = configVms {
-        inherit appliedMessage;
-        extraTemplates = templateSet.topology.templates;
-        extraDomains = templateSet.topology.domains // {
-          "$CREATED_QUBE" = {
-            template = "nixome-nixos-work";
-            label = "green";
-            prefs = {
-              memory = 1024;
-              maxmem = 2048;
-              vcpus = 1;
-            };
-            features = {
-              "nixome-created-from-config" = "1";
-              "nixome-created-from-config-message" = "$APPLY_MESSAGE";
-              "nixome-role" = "created-from-config";
-              os = "Linux";
-              qrexec = "1";
-            };
-            services = {
-              "network-manager" = false;
-            };
-          };
-        };
-      };
-      topology = topologySchema.mkTopology config;
-      machineSystemConfig = systemConfig { inherit appliedMessage system; };
-      machineSystem = systemSchema.mkSystem machineSystemConfig;
-      dom0Profile =
-        let
-          pkgs = templateBuilders.pkgs;
-        in
-        pkgs.runCommand "nixome-dom0-profile"
-          {
-            nativeBuildInputs = [ pkgs.jq ];
-            preferLocalBuild = true;
-            allowSubstitutes = false;
-            appliedMessage = machineSystem.dom0.profile.message;
-          }
-          ''
-            mkdir -p "\$out/bin" "\$out/share/nixome"
-            jq -c -n \\
-              --arg schema "nixome.dom0-profile.v1" \\
-              --arg message "\$appliedMessage" \\
-              --arg built_by "config-staging" \\
-              '{
-                schema: \$schema,
-                message: \$message,
-                built_by: \$built_by
-              }' > "\$out/share/nixome/profile.json"
-            cat > "\$out/bin/nixome-dom0-profile-activate" <<PROFILEACTIVATEEOF
-            #!\${pkgs.runtimeShell}
-            set -eu
-
-            state_dir="''\${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
-            etc_dir="''\${NIXOME_SYSTEM_ETC_DIR:-/etc/nixome}"
-
-            \${pkgs.coreutils}/bin/install -d -m 0755 "\$state_dir" "\$etc_dir"
-            \${pkgs.coreutils}/bin/cp "\$out/share/nixome/profile.json" "\$state_dir/current-profile.json"
-            \${pkgs.coreutils}/bin/cp "\$out/share/nixome/profile.json" "\$etc_dir/system-profile.json"
-
-            if [ -n "''\${NIXOME_SYSTEM_JSON:-}" ]; then
-              \${pkgs.coreutils}/bin/cp "\$NIXOME_SYSTEM_JSON" "\$state_dir/current-system.json"
-            fi
-            if [ -n "''\${NIXOME_SYSTEM_PLAN_JSON:-}" ]; then
-              \${pkgs.coreutils}/bin/cp "\$NIXOME_SYSTEM_PLAN_JSON" "\$state_dir/current-plan.json"
-            fi
-            if [ -n "''\${NIXOME_SYSTEM_PROFILE:-}" ]; then
-              printf '%s\n' "\$NIXOME_SYSTEM_PROFILE" > "\$state_dir/current-profile-link"
-            fi
-            PROFILEACTIVATEEOF
-            chmod 0555 "\$out/bin/nixome-dom0-profile-activate"
-          '';
-    in
-    {
-      packages.\${system} = templateSet.packages // {
-        nixome-dom0-profile = dom0Profile;
-      };
-
-      checks.\${system} = {
-        topology = templateBuilders.pkgs.runCommand "nixome-config-topology-check"
-          {
-            topology = builtins.toJSON topology;
-          }
-          ''
-            printf '%s\n' "\$topology" > "\$out"
-          '';
-        system = templateBuilders.pkgs.runCommand "nixome-config-system-check"
-          {
-            system = builtins.toJSON machineSystem;
-          }
-          ''
-            printf '%s\n' "\$system" > "\$out"
-          '';
-      };
-
-      nixome = {
-        metadata = {
-          schema = "nixome.config-repo.v1";
-          purpose = "candidate";
-          topology_schema = topologySchema.schema;
-          system_schema = systemSchema.schema;
-        };
-
-        inherit config;
-        system = machineSystem;
-        inherit topology;
-      };
-    };
-}
-NIXEOF
 sed -i \
   -e "s|__NIXOME_NIXPKGS_URL__|\$nixpkgs_url|g" \
   -e "s|__NIXOME_NIXOS_QUBES_PATH__|\$nixos_qubes_path|g" \
   -e "s|__NIXOME_SUPPORT_PATH__|\$nixome_support_path|g" \
   flake.nix
+sed -i 's|appliedMessage = "initial";|appliedMessage = "$APPLY_MESSAGE";|' flake.nix
+nix --extra-experimental-features nix-command --extra-experimental-features flakes flake lock --impure --offline
 grep -F 'appliedMessage = "$APPLY_MESSAGE";' flake.nix
 grep -F 'configVms = import ./nixome/config-vms.nix;' flake.nix
 grep -F 'systemConfig = import ./nixome/system.nix;' flake.nix
 grep -F 'templateSet = import ./nixome/templates.nix' flake.nix
 grep -F 'nixome-dom0-profile = dom0Profile;' flake.nix
-grep -F '"$CREATED_QUBE" = {' flake.nix
-git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.nix nixome/config-vms.nix nixome/prebuilt-template-sources.nix nixome/system.nix nixome/system-schema.nix nixome/templates.nix nixome/topology.nix
+grep -F 'nixosConfigurations.nixome-dom0 = nixomeDom0System;' flake.nix
+grep -F '"$CREATED_QUBE" = {' nixome/local.nix
+grep -F 'dom0SystemAttr ? "nixosConfigurations.nixome-dom0.config.system.build.toplevel"' nixome/system.nix
+git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.lock flake.nix nixome/config-vms.nix nixome/dom0-host.nix nixome/local.nix nixome/prebuilt-template-sources.nix nixome/system.nix nixome/system-schema.nix nixome/templates.nix nixome/topology.nix
 git \
   -c user.name='Nixome Config Smoke' \
   -c user.email='nixome-config-smoke@localhost' \
-  commit -m 'test config creates qube'
+  commit -m 'test config changes whole machine'
 git status --short --branch
 EOF
 run_qrexec_script_or_fail \
@@ -763,18 +682,35 @@ run_or_fail \
   "read system profile link" \
   "$DOM0_SYSTEM_PROFILE_LINK_LOG" \
   readlink /nix/var/nix/profiles/nixome-system
+run_or_fail \
+  "read host config message" \
+  "$DOM0_HOST_CONFIG_MESSAGE_LOG" \
+  cat /etc/nixome/inside-config-applied-message
+run_or_fail \
+  "read host system profile link" \
+  "$DOM0_HOST_SYSTEM_PROFILE_LINK_LOG" \
+  readlink -f /nix/var/nix/profiles/system
+run_or_fail \
+  "read current system link" \
+  "$DOM0_CURRENT_SYSTEM_LINK_LOG" \
+  readlink /run/current-system
 
 jq -e --arg apply_message "$APPLY_MESSAGE" '
   .schema == "nixome.system.v1" and
   .dom0.profile.message == $apply_message and
+  .dom0.nixos.system.enable == true and
+  (.dom0.nixos.system.source | test("^/nix/store/")) and
+  .dom0.nixos.system.source_ref == null and
+  .dom0.nixos.system.switch_action == "switch" and
   .plan.reboot_required == false and
-  any(.plan.live_actions[]; .type == "dom0-profile" and .message == $apply_message)
+  any(.plan.live_actions[]; .type == "dom0-profile" and .message == $apply_message) and
+  any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "switch")
 ' "$DOM0_SYSTEM_JSON_LOG" >/dev/null ||
   fail "applied dom0 system JSON did not match expected value"
 
 jq -e --arg apply_message "$APPLY_MESSAGE" '
-  .live_actions[0].type == "dom0-profile" and
-  .live_actions[0].message == $apply_message and
+  any(.live_actions[]; .type == "dom0-profile" and .message == $apply_message) and
+  any(.live_actions[]; .type == "dom0-nixos-system" and .action == "switch") and
   .reboot_required == false
 ' "$DOM0_SYSTEM_PLAN_LOG" >/dev/null ||
   fail "applied dom0 system plan did not match expected value"
@@ -790,9 +726,20 @@ jq -e '
   .schema == "nixome.system-apply.v1" and
   .status == "passed" and
   .profile_status == "passed" and
+  .host_system_status == "passed" and
+  (.host_system_source | test("^/nix/store/")) and
+  .host_system_switch_action == "switch" and
   .reboot_required == false
 ' "$DOM0_SYSTEM_APPLY_LOG" >/dev/null ||
   fail "dom0 system apply JSON did not pass"
+
+grep -qx "$APPLY_MESSAGE" "$DOM0_HOST_CONFIG_MESSAGE_LOG" ||
+  fail "inside-config host marker did not match expected value"
+host_system_source="$(jq -r '.host_system_source' "$DOM0_SYSTEM_APPLY_LOG")"
+grep -qx "$host_system_source" "$DOM0_HOST_SYSTEM_PROFILE_LINK_LOG" ||
+  fail "host system profile does not point at applied source"
+grep -qx "$host_system_source" "$DOM0_CURRENT_SYSTEM_LINK_LOG" ||
+  fail "current system link does not point at applied source"
 
 qvm-features "$STAGING" nixome-config-applied-message > "$APPLIED_FEATURE_LOG" 2>&1 ||
   fail "applied config feature is missing"
@@ -881,9 +828,11 @@ jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT"
   .system_apply_result.schema == "nixome.system-apply.v1" and
   .system_apply_result.status == "passed" and
   .system_apply_result.profile_status == "passed" and
+  .system_apply_result.host_system_status == "passed" and
   .system_apply_result.reboot_required == false and
   .deployment.system_apply.schema == "nixome.system-apply.v1" and
   .deployment.system_apply.status == "passed" and
+  .deployment.system_apply.host_system_status == "passed" and
   .setup.status == "passed" and
   .setup.domains_changed >= 1
 ' "$APPLY_JSON" >/dev/null || fail "config apply JSON did not pass"

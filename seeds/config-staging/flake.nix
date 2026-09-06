@@ -1,19 +1,45 @@
 {
   description = "Nixome machine configuration candidate";
 
-  inputs.nixpkgs.url = "__NIXOME_NIXPKGS_URL__";
+  inputs = {
+    nixpkgs.url = "__NIXOME_NIXPKGS_URL__";
+
+    nixos-qubes = {
+      url = "path:__NIXOME_NIXOS_QUBES_PATH__";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    nixome-support = {
+      url = "path:__NIXOME_SUPPORT_PATH__";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixos-qubes.follows = "nixos-qubes";
+    };
+  };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      nixos-qubes,
+      nixome-support,
+    }:
     let
       system = "x86_64-linux";
       topologySchema = import ./nixome/topology.nix;
       systemSchema = import ./nixome/system-schema.nix;
       configVms = import ./nixome/config-vms.nix;
       systemConfig = import ./nixome/system.nix;
+      localConfig = import ./nixome/local.nix {
+        inherit
+          appliedMessage
+          system
+          templateSet
+          ;
+      };
+      localTopology = localConfig.topology or { };
       prebuiltTemplateSources = import ./nixome/prebuilt-template-sources.nix;
-      nixomeSupport = "__NIXOME_SUPPORT_PATH__";
-      nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
+      nixomeSupport = "${nixome-support}";
+      nixosQubesSource = "${nixos-qubes}";
       templateBuilders = import "${nixomeSupport}/lib/nixome/qube-template.nix" {
         inherit nixpkgs system;
         inherit nixomeSupport nixosQubesSource;
@@ -29,12 +55,59 @@
       appliedMessage = "initial";
       config = configVms {
         inherit appliedMessage;
-        extraTemplates = templateSet.topology.templates;
-        extraDomains = templateSet.topology.domains;
+        extraTemplates = templateSet.topology.templates // (localTopology.extraTemplates or { });
+        extraKernels = localTopology.extraKernels or { };
+        extraPrefs = localTopology.extraPrefs or { };
+        extraDomains = templateSet.topology.domains // (localTopology.extraDomains or { });
+        extraQrexecRules = localTopology.extraQrexecRules or [ ];
       };
       topology = topologySchema.mkTopology config;
-      machineSystemConfig = systemConfig { inherit appliedMessage system; };
+      machineSystemConfig = systemConfig (
+        {
+          inherit appliedMessage system;
+        }
+        // (localConfig.system.args or { })
+      );
       machineSystem = systemSchema.mkSystem machineSystemConfig;
+      nixomeQubeKernelName = "6.12.64-1.fc41";
+      nixomeConfigSeedInputs = {
+        nixpkgs = "${nixpkgs}";
+        nixosQubes = "${nixos-qubes}";
+        nixomeSupport = "${nixome-support}";
+      };
+      nixomeDom0System = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit
+            appliedMessage
+            nixomeConfigSeedInputs
+            ;
+          nixomeQubeKernel = {
+            name = nixomeQubeKernelName;
+            package = nixome-support.packages.${system}.nixome-qubes-vm-kernel;
+          };
+          nixomeQubeKernelOpts = {
+            configSystem = templateBuilders.mkQubeKernelOpts nixome-support.nixosConfigurations.qube-template-config-system;
+          };
+          nixomeTemplatePackages = {
+            configSystem = nixome-support.packages.${system}.nixome-nixos-config-system-template;
+          };
+          nixomePrebuiltTemplatePackages = {
+            work = nixome-support.packages.${system}.nixome-nixos-work-template;
+          };
+          nixomePrebuiltTemplateSources = {
+            work = "${nixome-support.packages.${system}.nixome-nixos-work-template}/nixome-nixos-work";
+            nixome-nixos-work =
+              "${nixome-support.packages.${system}.nixome-nixos-work-template}/nixome-nixos-work";
+          };
+        };
+        modules = [
+          nixome-support.nixosModules.dom0
+          "${nixomeSupport}/machines/vm-gui.nix"
+          "${nixomeSupport}/machines/config-system.nix"
+          ./nixome/dom0-host.nix
+        ];
+      };
       dom0Profile =
         let
           pkgs = templateBuilders.pkgs;
@@ -117,5 +190,7 @@
         system = machineSystem;
         inherit topology;
       };
+
+      nixosConfigurations.nixome-dom0 = nixomeDom0System;
     };
 }

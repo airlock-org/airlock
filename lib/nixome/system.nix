@@ -12,6 +12,13 @@ let
     "reload"
   ];
 
+  switchActions = [
+    "switch"
+    "boot"
+    "test"
+    "dry-activate"
+  ];
+
   attrNames = builtins.attrNames;
   concatLists = builtins.concatLists;
   concatStringsSep = builtins.concatStringsSep;
@@ -253,6 +260,62 @@ let
       activation_action = activationAction;
     };
 
+  normalizeHostSystem =
+    value:
+    let
+      path = "dom0.nixos.system";
+      componentValue =
+        if value == null then
+          { }
+        else
+          expectOptions path [
+            "enable"
+            "reason"
+            "source"
+            "sourceRef"
+            "source_ref"
+            "switchAction"
+            "switch_action"
+          ] value;
+      sourceInfo = normalizeSourceOption path componentValue;
+      enable = expectBool "${path}.enable" (get componentValue "enable" (sourceIsSet sourceInfo));
+      reason = expectStringOrPath "${path}.reason" (
+        get componentValue "reason" "new dom0 NixOS system generation"
+      );
+      hasCamelAction = hasAttr "switchAction" componentValue;
+      hasSnakeAction = hasAttr "switch_action" componentValue;
+      camelAction =
+        if hasCamelAction then
+          expectEnum "${path}.switchAction" switchActions componentValue.switchAction
+        else
+          null;
+      snakeAction =
+        if hasSnakeAction then
+          expectEnum "${path}.switch_action" switchActions componentValue.switch_action
+        else
+          null;
+      switchAction =
+        if hasCamelAction && hasSnakeAction then
+          if camelAction == snakeAction then
+            camelAction
+          else
+            fail path "switchAction and switch_action disagree"
+        else if hasCamelAction then
+          camelAction
+        else if hasSnakeAction then
+          snakeAction
+        else
+          "switch";
+    in
+    if enable && !(sourceIsSet sourceInfo) then
+      fail path "enable is true but no source or sourceRef was provided"
+    else
+      {
+        inherit enable reason;
+        switch_action = switchAction;
+        inherit (sourceInfo) source source_ref;
+      };
+
   normalizeRebootComponent =
     component: value:
     let
@@ -348,7 +411,7 @@ let
       packages = imap normalizePackage (expectList "dom0.packages" (get dom0 "packages" [ ]));
       systemd = normalizeSystemd (get dom0 "systemd" { });
       nixos = {
-        system = normalizeRebootComponent "system" (get nixos "system" null);
+        system = normalizeHostSystem (get nixos "system" null);
         kernel = normalizeRebootComponent "kernel" (get nixos "kernel" null);
         xen = normalizeRebootComponent "xen" (get nixos "xen" null);
         bootloader = normalizeRebootComponent "bootloader" (get nixos "bootloader" null);
@@ -370,6 +433,16 @@ let
         inherit (service) reason;
       }
     ) (attrNames services);
+
+  hostSystemLiveAction =
+    hostSystem:
+    optional hostSystem.enable {
+      type = "dom0-nixos-system";
+      action = hostSystem.switch_action;
+      source = hostSystem.source;
+      source_ref = hostSystem.source_ref;
+      reason = hostSystem.reason;
+    };
 
   rebootReasons =
     nixos:
@@ -400,8 +473,16 @@ let
           activation_command = dom0.profile.activation_command;
           message = dom0.profile.message;
         }
+        ++ hostSystemLiveAction dom0.nixos.system
         ++ serviceLiveActions dom0.systemd.services;
-      reasons = rebootReasons dom0.nixos;
+      reasons = rebootReasons {
+        inherit (dom0.nixos)
+          bootloader
+          kernel
+          qubes
+          xen
+          ;
+      };
     in
     if requestedSchema != schema then
       fail "schema" "expected ${schema}, got ${toJSON requestedSchema}"
@@ -420,6 +501,7 @@ in
     activationActions
     mkSystem
     schema
+    switchActions
     systemdActions
     ;
 }

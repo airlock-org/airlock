@@ -10,6 +10,7 @@ TOPOLOGY_JSON="$RESULT_DIR/topology.json"
 SYSTEM_JSON="$RESULT_DIR/system.json"
 PROFILE_LINK="$RESULT_DIR/dom0-profile"
 PROFILE_JSON="$RESULT_DIR/dom0-profile.json"
+HOST_MESSAGE="$RESULT_DIR/host-message.txt"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -19,15 +20,17 @@ mkdir -p "$WORK_DIR/nixome"
 cp -R "$ROOT/seeds/config-staging/dom0-profile" "$WORK_DIR/dom0-profile"
 cp "$ROOT/seeds/config-staging/flake.nix" "$WORK_DIR/flake.nix"
 cp "$ROOT/seeds/config-staging/nixome/config-vms.nix" "$WORK_DIR/nixome/config-vms.nix"
+cp "$ROOT/seeds/config-staging/nixome/dom0-host.nix" "$WORK_DIR/nixome/dom0-host.nix"
+cp "$ROOT/seeds/config-staging/nixome/local.nix" "$WORK_DIR/nixome/local.nix"
 cp "$ROOT/seeds/config-staging/nixome/prebuilt-template-sources.nix" "$WORK_DIR/nixome/prebuilt-template-sources.nix"
 cp "$ROOT/seeds/config-staging/nixome/system.nix" "$WORK_DIR/nixome/system.nix"
 cp "$ROOT/seeds/config-staging/nixome/templates.nix" "$WORK_DIR/nixome/templates.nix"
 cp "$ROOT/lib/nixome/system.nix" "$WORK_DIR/nixome/system-schema.nix"
 cp "$ROOT/lib/nixome/topology.nix" "$WORK_DIR/nixome/topology.nix"
 
-nixpkgs_path="$(nix eval --raw "$ROOT#nixome.seedInputs.nixpkgs")"
-nixos_qubes_path="$(nix eval --raw "$ROOT#nixome.seedInputs.nixosQubes")"
-nixome_support_path="$(nix eval --raw "$ROOT#nixome.seedInputs.nixomeSupport")"
+nixpkgs_path="$(nixome_physical_store_path "$(nix eval --raw "$ROOT#nixome.seedInputs.nixpkgs")")"
+nixos_qubes_path="$(nixome_physical_store_path "$(nix eval --raw "$ROOT#nixome.seedInputs.nixosQubes")")"
+nixome_support_path="$(nixome_physical_store_path "$(nix eval --raw "$ROOT#nixome.seedInputs.nixomeSupport")")"
 sed -i \
   -e "s|__NIXOME_NIXPKGS_URL__|path:$nixpkgs_path|g" \
   -e "s|__NIXOME_NIXOS_QUBES_PATH__|$nixos_qubes_path|g" \
@@ -35,20 +38,12 @@ sed -i \
   "$WORK_DIR/flake.nix"
 
 extracted_nixpkgs_url="$(
-  sed -n 's/^  inputs\.nixpkgs\.url = "\(.*\)";$/\1/p' "$WORK_DIR/flake.nix" |
-    head -n 1
-)"
-extracted_nixome_support_path="$(
-  sed -n 's/^      nixomeSupport = "\(.*\)";$/\1/p' "$WORK_DIR/flake.nix" |
-    head -n 1
-)"
-extracted_nixos_qubes_path="$(
-  sed -n 's/^      nixosQubesSource = "\(.*\)";$/\1/p' "$WORK_DIR/flake.nix" |
+  sed -n 's/^[[:space:]]*\(inputs\.\)\{0,1\}nixpkgs\.url = "\(.*\)";$/\2/p' "$WORK_DIR/flake.nix" |
     head -n 1
 )"
 [ "$extracted_nixpkgs_url" = "path:$nixpkgs_path" ]
-[ "$extracted_nixome_support_path" = "$nixome_support_path" ]
-[ "$extracted_nixos_qubes_path" = "$nixos_qubes_path" ]
+grep -F "url = \"path:$nixome_support_path\";" "$WORK_DIR/flake.nix" >/dev/null
+grep -F "url = \"path:$nixos_qubes_path\";" "$WORK_DIR/flake.nix" >/dev/null
 
 (
   cd "$WORK_DIR"
@@ -83,6 +78,16 @@ nix \
   --offline \
   --no-write-lock-file \
   --json "$WORK_DIR#nixome.system" > "$SYSTEM_JSON"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixosConfigurations.nixome-dom0.config.environment.etc.\"nixome/inside-config-applied-message\".text" \
+  > "$HOST_MESSAGE"
 nix \
   --extra-experimental-features nix-command \
   --extra-experimental-features flakes \
@@ -193,27 +198,26 @@ jq -e '
   .dom0.profile.activation_command == "bin/nixome-dom0-profile-activate" and
   .dom0.profile.activation_action == "run" and
   .dom0.profile.message == "initial" and
+  .dom0.nixos.system.enable == true and
+  .dom0.nixos.system.source == null and
+  .dom0.nixos.system.source_ref == {
+    "type": "flake-output",
+    "attr": "nixosConfigurations.nixome-dom0.config.system.build.toplevel",
+    "subpath": ""
+  } and
+  .dom0.nixos.system.switch_action == "switch" and
   .dom0.packages == [
     {
       "name": "nixome-dom0-profile"
     }
   ] and
   .dom0.systemd.services == {} and
-  .dom0.nixos.system.enable == false and
   .dom0.nixos.kernel.enable == false and
   .dom0.nixos.xen.enable == false and
   .dom0.nixos.bootloader.enable == false and
   .dom0.nixos.qubes.enable == false and
-  .plan.live_actions == [
-    {
-      "type": "dom0-profile",
-      "action": "run",
-      "source": "dom0-profile",
-      "source_ref": null,
-      "activation_command": "bin/nixome-dom0-profile-activate",
-      "message": "initial"
-    }
-  ] and
+  any(.plan.live_actions[]; .type == "dom0-profile" and .message == "initial") and
+  any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "switch" and .source_ref.attr == "nixosConfigurations.nixome-dom0.config.system.build.toplevel") and
   .plan.reboot_required == false and
   .plan.reboot_reasons == []
 ' "$SYSTEM_JSON" >/dev/null
@@ -223,5 +227,6 @@ jq -e '
   .message == "initial" and
   .built_by == "config-staging"
 ' "$PROFILE_JSON" >/dev/null
+grep -qx initial "$HOST_MESSAGE"
 
 printf 'config candidate flake eval ok\n'

@@ -34,6 +34,9 @@ XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 SYSTEM_STATE_DIR="${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
 SYSTEM_ETC_DIR="${NIXOME_SYSTEM_ETC_DIR:-/etc/nixome}"
 SYSTEM_PROFILE="${NIXOME_SYSTEM_PROFILE:-/nix/var/nix/profiles/nixome-system}"
+HOST_SYSTEM_PROFILE="${NIXOME_HOST_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}"
+HOST_CURRENT_SYSTEM_LINK="${NIXOME_HOST_CURRENT_SYSTEM_LINK:-/run/current-system}"
+HOST_SYSTEM_ACTIVATION_LOG="$LOG_DIR/config-system-host-activation.log"
 
 STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
 VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
@@ -148,6 +151,7 @@ write_result() {
     --arg system_apply_path "$SYSTEM_APPLY_JSON" \
     --arg system_apply_log "$SYSTEM_APPLY_LOG" \
     --arg profile_activation_log "$PROFILE_ACTIVATION_LOG" \
+    --arg host_system_activation_log "$HOST_SYSTEM_ACTIVATION_LOG" \
     --arg template_builds "$TEMPLATE_BUILDS_JSON" \
     --arg template_build_log "$TEMPLATE_BUILD_LOG" \
     --arg deployment_record "$DEPLOYMENT_JSON" \
@@ -187,6 +191,7 @@ write_result() {
       system_apply: $system_apply_path,
       system_apply_log: $system_apply_log,
       profile_activation_log: $profile_activation_log,
+      host_system_activation_log: $host_system_activation_log,
       template_builds: $template_builds,
       template_build_log: $template_build_log,
       deployment_record: $deployment_record,
@@ -375,6 +380,7 @@ build_deployment_tar() {
   copy_or_empty "$SYSTEM_BUILD_LOG" "$record_dir/logs/system-builds.log"
   copy_or_empty "$SYSTEM_APPLY_LOG" "$record_dir/logs/system-apply.log"
   copy_or_empty "$PROFILE_ACTIVATION_LOG" "$record_dir/logs/profile-activation.log"
+  copy_or_empty "$HOST_SYSTEM_ACTIVATION_LOG" "$record_dir/logs/host-system-activation.log"
   copy_or_empty "$CLONE_LOG" "$record_dir/logs/clone.log"
   copy_or_empty "$CHECKOUT_LOG" "$record_dir/logs/checkout.log"
 
@@ -402,6 +408,7 @@ build_deployment_tar() {
     logs/system-builds.log \
     logs/system-apply.log \
     logs/profile-activation.log \
+    logs/host-system-activation.log \
     logs/clone.log \
     logs/checkout.log
 }
@@ -656,6 +663,28 @@ resolve_candidate_source_path() {
   esac
 }
 
+validate_system_source() {
+  component="$1"
+  source="$2"
+  source_physical="$3"
+  system_json="$4"
+
+  if [ "$component" = "dom0.profile" ]; then
+    activation_command="$(jq -r '.dom0.profile.activation_command // "bin/nixome-dom0-profile-activate"' "$system_json")"
+    [ -d "$source_physical" ] ||
+      fail "direct dom0 profile source is not a directory: $source"
+    [ -x "$source_physical/$activation_command" ] ||
+      fail "direct dom0 profile activation command is missing or not executable: $source/$activation_command"
+  fi
+
+  if [ "$component" = "dom0.nixos.system" ]; then
+    [ -d "$source_physical" ] ||
+      fail "dom0 NixOS system source is not a directory: $source"
+    [ -x "$source_physical/bin/switch-to-configuration" ] ||
+      fail "dom0 NixOS system source is missing bin/switch-to-configuration: $source"
+  fi
+}
+
 resolve_direct_system_sources() {
   resolved="$1"
   worktree="$2"
@@ -707,13 +736,7 @@ resolve_direct_system_sources() {
       resolved_source_physical="$persistent_source"
     fi
 
-    if [ "$component" = "dom0.profile" ]; then
-      activation_command="$(jq -r '.dom0.profile.activation_command // "bin/nixome-dom0-profile-activate"' "$resolved")"
-      [ -d "$resolved_source_physical" ] ||
-        fail "direct dom0 profile source is not a directory: $source"
-      [ -x "$resolved_source_physical/$activation_command" ] ||
-        fail "direct dom0 profile activation command is missing or not executable: $source/$activation_command"
-    fi
+    validate_system_source "$component" "$source" "$resolved_source_physical" "$resolved"
 
     printf 'direct system source component=%s source=%s resolved=%s\n' \
       "$component" \
@@ -808,6 +831,7 @@ resolve_system_sources() {
 
     [ -e "$source_path_physical" ] ||
       fail "built system source is missing for $component: $source_path"
+    validate_system_source "$component" "$source_path" "$source_path_physical" "$resolved"
 
     tmp_resolved="$resolved.tmp"
     jq \
@@ -841,18 +865,41 @@ install_profile_link() {
   fi
 }
 
+install_host_system_profile() {
+  host_system_source="$1"
+  host_system_source_physical="$2"
+  host_profile_parent="$(dirname "$HOST_SYSTEM_PROFILE")"
+
+  mkdir -p "$host_profile_parent"
+
+  if [ "${host_system_source#/nix/store/}" = "$host_system_source" ]; then
+    ln -sfn "$host_system_source_physical" "$HOST_SYSTEM_PROFILE"
+  elif nixome_store_uses_chroot; then
+    ln -sfn "$host_system_source_physical" "$HOST_SYSTEM_PROFILE"
+  else
+    nix-env -p "$HOST_SYSTEM_PROFILE" --set "$host_system_source"
+  fi
+}
+
 apply_system() {
   system_json="$1"
   status=passed
   reason="system plan applied"
   profile_status=skipped
+  host_system_status=skipped
   profile_source=""
   profile_source_physical=""
   profile_activation_command=""
+  host_system_enabled=false
+  host_system_source=""
+  host_system_source_physical=""
+  host_system_switch_action=""
+  host_current_system=""
   reboot_required="$(jq -r '.plan.reboot_required' "$system_json")"
   reboot_reasons="$(jq -c '.plan.reboot_reasons' "$system_json")"
 
   : > "$SYSTEM_APPLY_LOG"
+  : > "$HOST_SYSTEM_ACTIVATION_LOG"
   jq -c '.plan' "$system_json" > "$SYSTEM_PLAN_JSON"
 
   mkdir -p "$SYSTEM_STATE_DIR" "$SYSTEM_ETC_DIR"
@@ -902,6 +949,57 @@ apply_system() {
     printf 'no dom0 profile source declared\n' > "$PROFILE_ACTIVATION_LOG"
   fi
 
+  host_system_enabled="$(jq -r '.dom0.nixos.system.enable // false' "$system_json")"
+  host_system_source="$(jq -r '.dom0.nixos.system.source // ""' "$system_json")"
+  host_system_switch_action="$(jq -r '.dom0.nixos.system.switch_action // "switch"' "$system_json")"
+
+  if [ "$host_system_enabled" = true ]; then
+    [ -n "$host_system_source" ] ||
+      fail "dom0 NixOS system is enabled but source is empty"
+
+    case "$host_system_switch_action" in
+      switch|boot|test|dry-activate) ;;
+      *)
+        fail "unsupported dom0 NixOS switch action: $host_system_switch_action"
+        ;;
+    esac
+
+    host_system_source_physical="$(nixome_physical_store_path "$host_system_source")"
+    switch_to_configuration="$host_system_source_physical/bin/switch-to-configuration"
+
+    [ -d "$host_system_source_physical" ] ||
+      fail "dom0 NixOS system source is missing: $host_system_source"
+    [ -x "$switch_to_configuration" ] ||
+      fail "dom0 NixOS switch-to-configuration is missing or not executable: $host_system_source/bin/switch-to-configuration"
+
+    {
+      printf 'host_system_source=%s\n' "$host_system_source"
+      printf 'host_system_source_physical=%s\n' "$host_system_source_physical"
+      printf 'host_system_profile=%s\n' "$HOST_SYSTEM_PROFILE"
+      printf 'host_current_system_link=%s\n' "$HOST_CURRENT_SYSTEM_LINK"
+      printf 'switch_action=%s\n' "$host_system_switch_action"
+    } >> "$SYSTEM_APPLY_LOG"
+
+    install_host_system_profile "$host_system_source" "$host_system_source_physical" >> "$SYSTEM_APPLY_LOG" 2>&1 ||
+      fail "installing dom0 NixOS system profile failed"
+
+    if ! "$switch_to_configuration" "$host_system_switch_action" > "$HOST_SYSTEM_ACTIVATION_LOG" 2>&1; then
+      cat "$HOST_SYSTEM_ACTIVATION_LOG" >&2 || true
+      fail "dom0 NixOS switch-to-configuration $host_system_switch_action failed"
+    fi
+
+    if [ -L "$HOST_CURRENT_SYSTEM_LINK" ]; then
+      host_current_system="$(readlink "$HOST_CURRENT_SYSTEM_LINK" || true)"
+    fi
+
+    printf '%s\n' "$host_system_source" > "$SYSTEM_STATE_DIR/current-host-system"
+    printf '%s\n' "$HOST_SYSTEM_PROFILE" > "$SYSTEM_STATE_DIR/current-host-system-profile"
+    printf '%s\n' "$host_system_switch_action" > "$SYSTEM_STATE_DIR/current-host-system-switch-action"
+    host_system_status=passed
+  else
+    printf 'dom0 NixOS system generation is not enabled\n' > "$HOST_SYSTEM_ACTIVATION_LOG"
+  fi
+
   cp "$system_json" "$SYSTEM_ETC_DIR/system.json"
   cp "$SYSTEM_PLAN_JSON" "$SYSTEM_ETC_DIR/system-plan.json"
   cp "$SYSTEM_BUILDS_JSON" "$SYSTEM_STATE_DIR/last-system-builds.json"
@@ -911,15 +1009,23 @@ apply_system() {
     --arg status "$status" \
     --arg reason "$reason" \
     --arg profile_status "$profile_status" \
+    --arg host_system_status "$host_system_status" \
     --arg profile_source "$profile_source" \
     --arg profile_source_physical "$profile_source_physical" \
     --arg profile "$SYSTEM_PROFILE" \
+    --arg host_system_source "$host_system_source" \
+    --arg host_system_source_physical "$host_system_source_physical" \
+    --arg host_system_profile "$HOST_SYSTEM_PROFILE" \
+    --arg host_current_system_link "$HOST_CURRENT_SYSTEM_LINK" \
+    --arg host_current_system "$host_current_system" \
+    --arg host_system_switch_action "$host_system_switch_action" \
     --arg state_dir "$SYSTEM_STATE_DIR" \
     --arg etc_dir "$SYSTEM_ETC_DIR" \
     --arg plan "$SYSTEM_PLAN_JSON" \
     --arg system "$system_json" \
     --arg build_log "$SYSTEM_BUILD_LOG" \
     --arg activation_log "$PROFILE_ACTIVATION_LOG" \
+    --arg host_system_activation_log "$HOST_SYSTEM_ACTIVATION_LOG" \
     --argjson reboot_required "$reboot_required" \
     --argjson reboot_reasons "$reboot_reasons" \
     '{
@@ -927,15 +1033,23 @@ apply_system() {
       status: $status,
       reason: $reason,
       profile_status: $profile_status,
+      host_system_status: $host_system_status,
       profile_source: $profile_source,
       profile_source_physical: $profile_source_physical,
       profile: $profile,
+      host_system_source: $host_system_source,
+      host_system_source_physical: $host_system_source_physical,
+      host_system_profile: $host_system_profile,
+      host_current_system_link: $host_current_system_link,
+      host_current_system: $host_current_system,
+      host_system_switch_action: $host_system_switch_action,
       state_dir: $state_dir,
       etc_dir: $etc_dir,
       system: $system,
       plan: $plan,
       build_log: $build_log,
       activation_log: $activation_log,
+      host_system_activation_log: $host_system_activation_log,
       reboot_required: $reboot_required,
       reboot_reasons: $reboot_reasons
     }' > "$SYSTEM_APPLY_JSON"
@@ -962,6 +1076,7 @@ for cmd in \
   nixome-config-archive-candidate \
   nixome-setup-config \
   qrexec-client \
+  readlink \
   rm \
   sed \
   systemctl \

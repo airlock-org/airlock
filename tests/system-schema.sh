@@ -58,6 +58,7 @@ cat > "$WORK_DIR/reboot/flake.nix" <<'EOF'
               source = {
                 build = "nixosConfigurations.dom0.config.system.build.toplevel";
               };
+              switchAction = "switch";
               reason = "new dom0 system generation";
             };
             kernel.enable = true;
@@ -89,14 +90,15 @@ jq -e '
 jq -e '
   .schema == "nixome.system.v1" and
   .dom0.nixos.system.source_ref.attr == "nixosConfigurations.dom0.config.system.build.toplevel" and
+  .dom0.nixos.system.switch_action == "switch" and
   .dom0.nixos.system.enable == true and
   .dom0.nixos.kernel.enable == true and
   .dom0.nixos.xen.enable == true and
   .dom0.nixos.bootloader.enable == true and
   .dom0.nixos.qubes.enable == true and
   .plan.reboot_required == true and
-  (.plan.reboot_reasons | length) == 5 and
-  any(.plan.reboot_reasons[]; . == "new dom0 system generation") and
+  any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "switch" and .reason == "new dom0 system generation") and
+  (.plan.reboot_reasons | length) == 4 and
   any(.plan.reboot_reasons[]; . == "dom0 kernel change requires reboot") and
   any(.plan.reboot_reasons[]; . == "dom0 xen change requires reboot") and
   any(.plan.reboot_reasons[]; . == "dom0 bootloader change requires reboot") and
