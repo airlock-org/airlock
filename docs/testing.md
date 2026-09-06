@@ -254,7 +254,7 @@ The config topology image keeps local build size down by importing one shared
 NixOS config-system TemplateVM for the three config AppVMs. The VM runner can
 use either qcow2 or raw Nix-built base images and creates a writable qcow2
 overlay for runtime state.
-The nested config image currently has 32 GiB of virtual disk capacity.
+The nested config image currently has 128 GiB of sparse virtual disk capacity.
 
 The current NixOS guest template profile uses QubesDB, qrexec-agent, Qubes
 meminfo writer, and `/dev/mapper/dmroot` as the root device to match Qubes'
@@ -278,17 +278,24 @@ generated state with:
 
 ```bash
 make disk-usage
+make gc-roots
+make gc-dry-run
+make gc
 make clean-vm-disks
 make clean-vm-workdirs
 make clean-logs
 ```
 
 `make clean` removes VM work directories and logs while preserving the download
-cache and Nixome Nix store. `make clean-cache` removes the generated Qubes
-asset cache too, which means the next full GUI smoke may need to download the
-Qubes kernel RPMs and template RPM again. The runner keeps only one stale
-writable-overlay backup per image by default; adjust that with
-`NIXOME_VM_BACKUP_RETENTION`.
+cache and Nixome Nix store. `make gc-dry-run` and `make gc` operate only on
+the separate Nixome store under `/run/media/user/data/nixome/nix-root`; the GC
+script refuses to run against the host `/nix/store`. `make gc` refreshes
+Nixome-managed GC roots for current result links, VM backing images, and current
+JSON deployment artifacts, then collects up to `NIXOME_GC_MAX` bytes, default
+`10G`. `make clean-cache` removes the generated Qubes asset cache too, which
+means the next full GUI smoke may need to download the Qubes kernel RPMs and
+template RPM again. The runner keeps only one stale writable-overlay backup per
+image by default; adjust that with `NIXOME_VM_BACKUP_RETENTION`.
 
 ## Runtime Observation
 

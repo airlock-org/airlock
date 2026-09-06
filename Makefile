@@ -24,7 +24,7 @@ endif
 
 NIXOME_NIX ?= ./scripts/nixome-nix.sh
 
-.PHONY: ensure-generated-dirs build test nixos-templates nixos-templates-dry-run vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-config-setup vm-config-smoke disk-usage clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test nixos-templates nixos-templates-dry-run vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-config-setup vm-config-smoke disk-usage gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -89,6 +89,15 @@ vm-config-smoke: ensure-generated-dirs
 
 disk-usage:
 	./scripts/clean-generated.sh disk-usage
+
+gc-roots: ensure-generated-dirs
+	./scripts/gc-nixome-store.sh roots
+
+gc-dry-run: ensure-generated-dirs
+	./scripts/gc-nixome-store.sh dry-run
+
+gc: ensure-generated-dirs
+	./scripts/gc-nixome-store.sh run --max "$${NIXOME_GC_MAX:-10G}"
 
 clean: clean-generated
 
