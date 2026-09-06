@@ -37,7 +37,7 @@ VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
 VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
 QUBE_USER="${NIXOME_QUBE_USER:-user}"
 DOM0_USER="${NIXOME_DOM0_USER:-${SUDO_USER:-nixome}}"
-APPLY_MESSAGE="${NIXOME_CONFIG_APPLY_MESSAGE:-smoke-applied}"
+APPLY_MESSAGE="${NIXOME_CONFIG_APPLY_MESSAGE:-smoke-applied-$(date -u +%Y%m%dT%H%M%SZ)}"
 STAGING_CONSOLE_LOG="$LOG_DIR/config-vms-$STAGING-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 VALIDATOR_CONSOLE_LOG="$LOG_DIR/config-vms-$VALIDATOR-console.log"
@@ -260,6 +260,7 @@ for cmd in \
   grep \
   jq \
   journalctl \
+  date \
   nixome-config-apply \
   qvm-check \
   qvm-features \
