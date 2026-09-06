@@ -3,4 +3,5 @@
 /.nixome-logs/
 /.nixome-cache/
 /.nixome-vm/
+/.nixome-vm-*/
 /.direnv/

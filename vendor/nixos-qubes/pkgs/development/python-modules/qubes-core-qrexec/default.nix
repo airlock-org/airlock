@@ -16,6 +16,7 @@
   bash,
   socat,
   kmod,
+  linux-pam,
   setuptools,
   distutils,
 }:
@@ -106,9 +107,11 @@ let
     buildInputs = [
       qubes-core-vchan-xen
       util
+      linux-pam
     ];
 
     buildFlags = [ "all-vm" ];
+    makeFlags = makeFlags ++ [ "HAVE_PAM_APPL=1" ];
 
     installTargets = [ "install-vm" ];
 
@@ -117,8 +120,6 @@ let
       mv $out/usr/lib/* $out/lib/
       rm -d $out/usr/{lib,}
     '';
-
-    inherit makeFlags;
   };
 
   dom0 = dom0-core false;
@@ -158,31 +159,30 @@ let
 
       installTargets = [ "install-dom0" ];
 
-      postInstall =
-        ''
-          mkdir $out/libexec
-          mv $out/usr/sbin/* $out/libexec
-          mv $out/usr/bin $out/
-          mv $out/usr/lib/{qubes,tmpfiles.d} $out/lib/
-          rm -d $out/usr/{lib,sbin,}
-        ''
-        + optionalString isBootstrap ''
-          # This service is using binary from base package
-          rm $out/lib/systemd/system/qubes-qrexec-policy-daemon.service
-          # rpc services depend on base
-          rm -rf $out/etc/qubes/policy.d
-          rm -rf $out/etc/qubes-rpc
-          rm -d $out/{etc/{qubes,},lib/systemd/{system,}}
-        ''
-        + optionalString (!isBootstrap) ''
-          for rpcname in policy.List policy.Get policy.Replace policy.Remove \
-            policy.include.List policy.include.Get policy.include.Replace \
-            policy.include.Remove policy.GetFiles;
-          do
-            ln -sf ${base}/bin/qubes-policy-admin $out/etc/qubes-rpc/$rpcname
-          done
-          wrapPythonProgramsIn $out/etc/qubes-rpc ${base}
-        '';
+      postInstall = ''
+        mkdir $out/libexec
+        mv $out/usr/sbin/* $out/libexec
+        mv $out/usr/bin $out/
+        mv $out/usr/lib/{qubes,tmpfiles.d} $out/lib/
+        rm -d $out/usr/{lib,sbin,}
+      ''
+      + optionalString isBootstrap ''
+        # This service is using binary from base package
+        rm $out/lib/systemd/system/qubes-qrexec-policy-daemon.service
+        # rpc services depend on base
+        rm -rf $out/etc/qubes/policy.d
+        rm -rf $out/etc/qubes-rpc
+        rm -d $out/{etc/{qubes,},lib/systemd/{system,}}
+      ''
+      + optionalString (!isBootstrap) ''
+        for rpcname in policy.List policy.Get policy.Replace policy.Remove \
+          policy.include.List policy.include.Get policy.include.Replace \
+          policy.include.Remove policy.GetFiles;
+        do
+          ln -sf ${base}/bin/qubes-policy-admin $out/etc/qubes-rpc/$rpcname
+        done
+        wrapPythonProgramsIn $out/etc/qubes-rpc ${base}
+      '';
 
       inherit makeFlags;
     };
