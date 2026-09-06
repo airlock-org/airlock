@@ -8,17 +8,21 @@ QVM_LS_LOG="$LOG_DIR/config-vms-qvm-ls.log"
 STAGING_UNAME_LOG="$LOG_DIR/config-vms-config-staging-uname.log"
 VAULT_UNAME_LOG="$LOG_DIR/config-vms-config-vault-uname.log"
 VALIDATOR_UNAME_LOG="$LOG_DIR/config-vms-config-validator-uname.log"
+CREATED_QUBE_UNAME_LOG="$LOG_DIR/config-vms-created-qube-uname.log"
 STAGING_USER_LOG="$LOG_DIR/config-vms-config-staging-user.log"
 VAULT_USER_LOG="$LOG_DIR/config-vms-config-vault-user.log"
 VALIDATOR_USER_LOG="$LOG_DIR/config-vms-config-validator-user.log"
+CREATED_QUBE_USER_LOG="$LOG_DIR/config-vms-created-qube-user.log"
 STAGING_TEMPLATE_LOG="$LOG_DIR/config-vms-config-staging-template.log"
 VAULT_TEMPLATE_LOG="$LOG_DIR/config-vms-config-vault-template.log"
 VALIDATOR_TEMPLATE_LOG="$LOG_DIR/config-vms-config-validator-template.log"
+CREATED_QUBE_TEMPLATE_LOG="$LOG_DIR/config-vms-created-qube-template.log"
 STAGING_APPMENUS_LOG="$LOG_DIR/config-vms-config-staging-appmenus.log"
 VAULT_APPMENUS_LOG="$LOG_DIR/config-vms-config-vault-appmenus.log"
 VALIDATOR_APPMENUS_LOG="$LOG_DIR/config-vms-config-validator-appmenus.log"
 STAGING_INIT_LOG="$LOG_DIR/config-vms-config-staging-init.log"
 VALIDATOR_INIT_LOG="$LOG_DIR/config-vms-config-validator-init.log"
+STAGING_UPDATE_SCRIPT="$LOG_DIR/config-vms-config-staging-update.sh"
 STAGING_UPDATE_LOG="$LOG_DIR/config-vms-config-staging-update.log"
 STAGING_REPO_STATUS_LOG="$LOG_DIR/config-vms-config-staging-repo-status.log"
 VAULT_REPO_STATUS_LOG="$LOG_DIR/config-vms-config-vault-repo-status.log"
@@ -27,6 +31,7 @@ ARCHIVE_JSON="$LOG_DIR/config-archive.json"
 APPLY_LOG="$LOG_DIR/config-vms-apply.log"
 APPLY_JSON="$LOG_DIR/config-apply.json"
 APPLIED_FEATURE_LOG="$LOG_DIR/config-vms-applied-feature.log"
+CREATED_QUBE_FEATURE_LOG="$LOG_DIR/config-vms-created-qube-feature.log"
 VAULT_ARCHIVE_TREE_LOG="$LOG_DIR/config-vms-config-vault-archive-tree.log"
 JOURNAL_LOG="$LOG_DIR/config-vms-journal.log"
 LIBXL_LOG="$LOG_DIR/config-vms-libxl.log"
@@ -38,9 +43,11 @@ VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
 QUBE_USER="${NIXOME_QUBE_USER:-user}"
 DOM0_USER="${NIXOME_DOM0_USER:-${SUDO_USER:-nixome}}"
 APPLY_MESSAGE="${NIXOME_CONFIG_APPLY_MESSAGE:-smoke-applied-$(date -u +%Y%m%dT%H%M%SZ)}"
+CREATED_QUBE="${NIXOME_CONFIG_CREATED_QUBE:-nixome-test-from-config}"
 STAGING_CONSOLE_LOG="$LOG_DIR/config-vms-$STAGING-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 VALIDATOR_CONSOLE_LOG="$LOG_DIR/config-vms-$VALIDATOR-console.log"
+CREATED_QUBE_CONSOLE_LOG="$LOG_DIR/config-vms-$CREATED_QUBE-console.log"
 result_written=0
 
 mkdir -p "$LOG_DIR"
@@ -96,18 +103,26 @@ write_result() {
     json_file_string_or_null "$VAULT_UNAME_LOG"
     printf ',"validator_uname":'
     json_file_string_or_null "$VALIDATOR_UNAME_LOG"
+    printf ',"created_qube":'
+    json_string "$CREATED_QUBE"
+    printf ',"created_qube_uname":'
+    json_file_string_or_null "$CREATED_QUBE_UNAME_LOG"
     printf ',"staging_user":'
     json_file_string_or_null "$STAGING_USER_LOG"
     printf ',"vault_user":'
     json_file_string_or_null "$VAULT_USER_LOG"
     printf ',"validator_user":'
     json_file_string_or_null "$VALIDATOR_USER_LOG"
+    printf ',"created_qube_user":'
+    json_file_string_or_null "$CREATED_QUBE_USER_LOG"
     printf ',"staging_template":'
     json_file_string_or_null "$STAGING_TEMPLATE_LOG"
     printf ',"vault_template":'
     json_file_string_or_null "$VAULT_TEMPLATE_LOG"
     printf ',"validator_template":'
     json_file_string_or_null "$VALIDATOR_TEMPLATE_LOG"
+    printf ',"created_qube_template":'
+    json_file_string_or_null "$CREATED_QUBE_TEMPLATE_LOG"
     printf ',"staging_appmenus_log":'
     json_file_string_or_null "$STAGING_APPMENUS_LOG"
     printf ',"vault_appmenus_log":'
@@ -120,6 +135,8 @@ write_result() {
     json_file_string_or_null "$VALIDATOR_INIT_LOG"
     printf ',"staging_update_log":'
     json_file_string_or_null "$STAGING_UPDATE_LOG"
+    printf ',"staging_update_script":'
+    json_string "$STAGING_UPDATE_SCRIPT"
     printf ',"staging_repo_status":'
     json_file_string_or_null "$STAGING_REPO_STATUS_LOG"
     printf ',"vault_repo_status":'
@@ -134,6 +151,8 @@ write_result() {
     json_file_string_or_null "$APPLY_LOG"
     printf ',"applied_feature":'
     json_file_string_or_null "$APPLIED_FEATURE_LOG"
+    printf ',"created_qube_feature":'
+    json_file_string_or_null "$CREATED_QUBE_FEATURE_LOG"
     printf ',"vault_archive_tree":'
     json_file_string_or_null "$VAULT_ARCHIVE_TREE_LOG"
     printf ',"command_log":'
@@ -152,6 +171,8 @@ write_result() {
     json_string "$VAULT_CONSOLE_LOG"
     printf ',"validator_console_log":'
     json_string "$VALIDATOR_CONSOLE_LOG"
+    printf ',"created_qube_console_log":'
+    json_string "$CREATED_QUBE_CONSOLE_LOG"
     printf '}\n'
   } > "$RESULT_JSON"
   result_written=1
@@ -183,11 +204,19 @@ require_command() {
 collect_diagnostics() {
   qvm-ls > "$QVM_LS_LOG" 2>&1 || true
   {
-    for vm in "$VAULT" "$STAGING" "$VALIDATOR"; do
+    for vm in "$VAULT" "$STAGING" "$VALIDATOR" "$CREATED_QUBE"; do
       printf '== %s qvm-prefs ==\n' "$vm"
-      qvm-prefs "$vm" || true
+      if qvm-check "$vm" >/dev/null 2>&1; then
+        qvm-prefs "$vm" || true
+      else
+        printf 'missing domain\n'
+      fi
       printf '\n== %s qvm-features ==\n' "$vm"
-      qvm-features "$vm" || true
+      if qvm-check "$vm" >/dev/null 2>&1; then
+        qvm-features "$vm" || true
+      else
+        printf 'missing domain\n'
+      fi
       printf '\n'
     done
   } > "$QVM_PREFS_LOG" 2>&1 || true
@@ -201,6 +230,9 @@ collect_diagnostics() {
   tail -n 500 "/var/log/xen/console/guest-$VAULT.log" > "$VAULT_CONSOLE_LOG" 2>&1 || true
   tail -n 500 "/var/log/xen/console/guest-$STAGING.log" > "$STAGING_CONSOLE_LOG" 2>&1 || true
   tail -n 500 "/var/log/xen/console/guest-$VALIDATOR.log" > "$VALIDATOR_CONSOLE_LOG" 2>&1 || true
+  tail -n 500 \
+    "/var/log/xen/console/guest-$CREATED_QUBE.log" \
+    > "$CREATED_QUBE_CONSOLE_LOG" 2>&1 || true
 }
 
 run_or_fail() {
@@ -232,6 +264,27 @@ run_qrexec_or_fail() {
   run_or_fail "$description" "$output" "${qvm_run_args[@]}" "$vm" "$command"
 }
 
+run_qrexec_script_or_fail() {
+  vm="$1"
+  description="$2"
+  output="$3"
+  script="$4"
+  qvm_run_args=(qvm-run --pass-io)
+
+  if qvm-run --help 2>&1 | grep -q -- '--no-gui'; then
+    qvm_run_args+=(--no-gui)
+  fi
+
+  printf '+'
+  printf ' %q' "${qvm_run_args[@]}" "$vm" "bash -s"
+  printf ' < %q\n' "$script"
+
+  if ! "${qvm_run_args[@]}" "$vm" "bash -s" < "$script" > "$output" 2>&1; then
+    cat "$output" >&2 || true
+    fail "$description failed"
+  fi
+}
+
 run_appmenus_sync_or_fail() {
   template="$1"
   output="$2"
@@ -260,6 +313,7 @@ for cmd in \
   grep \
   jq \
   journalctl \
+  cat \
   date \
   nixome-config-apply \
   qvm-check \
@@ -269,7 +323,6 @@ for cmd in \
   qvm-start \
   qvm-sync-appmenus \
   runuser \
-  sed \
   systemctl \
   tail \
   tr; do
@@ -282,7 +335,20 @@ fi
 
 systemctl is-active --quiet qubes-db-dom0.service || fail "qubes-db-dom0.service is not active"
 systemctl is-active --quiet qubesd.service || fail "qubesd.service is not active"
-systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qrexec-policy-daemon.service is not active"
+systemctl is-active --quiet qubes-qrexec-policy-daemon.service ||
+  fail "qubes-qrexec-policy-daemon.service is not active"
+
+case "$CREATED_QUBE" in
+  ""|*[!A-Za-z0-9_.-]*)
+    fail "invalid configured test qube name: $CREATED_QUBE"
+    ;;
+esac
+
+case "$APPLY_MESSAGE" in
+  ""|*[!A-Za-z0-9_.:-]*)
+    fail "invalid configured apply message: $APPLY_MESSAGE"
+    ;;
+esac
 
 qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
 qvm-check "$STAGING" >/dev/null 2>&1 || fail "missing config staging VM: $STAGING"
@@ -328,24 +394,100 @@ run_qrexec_or_fail "$VAULT" "config vault repo status" "$VAULT_REPO_STATUS_LOG" 
 run_qrexec_or_fail "$STAGING" "config staging repo status" "$STAGING_REPO_STATUS_LOG" \
   "cd /home/$QUBE_USER/nixome-config && git status --short --branch"
 
-grep -q '^## main$' "$VAULT_REPO_STATUS_LOG" || fail "config vault repository is not initialized cleanly"
-grep -q '^## main$' "$STAGING_REPO_STATUS_LOG" || fail "config staging repository is not initialized cleanly"
+grep -q '^## main$' "$VAULT_REPO_STATUS_LOG" ||
+  fail "config vault repository is not initialized cleanly"
+grep -q '^## main$' "$STAGING_REPO_STATUS_LOG" ||
+  fail "config staging repository is not initialized cleanly"
 
 run_qrexec_or_fail "$STAGING" "config staging init" "$STAGING_INIT_LOG" "nixome-config-staging-init"
-run_qrexec_or_fail "$VALIDATOR" "config validator init" "$VALIDATOR_INIT_LOG" "nixome-config-validator-init"
+run_qrexec_or_fail \
+  "$VALIDATOR" \
+  "config validator init" \
+  "$VALIDATOR_INIT_LOG" \
+  "nixome-config-validator-init"
 
-run_qrexec_or_fail "$STAGING" "modify config candidate in $STAGING" "$STAGING_UPDATE_LOG" "
+cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
 cd /home/$QUBE_USER/nixome-config
-sed -i 's/\"nixome-config-applied-message\" = \"[^\"]*\";/\"nixome-config-applied-message\" = \"$APPLY_MESSAGE\";/' flake.nix
-grep -F '\"nixome-config-applied-message\" = \"$APPLY_MESSAGE\";' flake.nix
+cat > flake.nix <<'NIXEOF'
+{
+  description = "Nixome machine configuration candidate";
+
+  outputs = { self }: {
+    nixome = {
+      metadata = {
+        schema = "nixome.config-repo.v1";
+        purpose = "candidate";
+      };
+
+      topology = {
+        schema = "nixome.qubes-topology.v1";
+        templates = { };
+        kernels = { };
+        prefs = { };
+        domains = {
+          config-staging = {
+            class = "AppVM";
+            template = "nixome-nixos-config-staging";
+            label = "gray";
+            netvm = null;
+            prefs = { };
+            features = {
+              "nixome-config-applied-message" = "$APPLY_MESSAGE";
+            };
+            services = { };
+          };
+
+          "$CREATED_QUBE" = {
+            class = "AppVM";
+            template = "nixome-nixos-config-staging";
+            label = "green";
+            netvm = null;
+            prefs = {
+              autostart = false;
+              include_in_backups = false;
+              memory = 1024;
+              maxmem = 2048;
+              vcpus = 1;
+            };
+            features = {
+              "nixome-created-from-config" = "1";
+              "nixome-created-from-config-message" = "$APPLY_MESSAGE";
+              "nixome-role" = "created-from-config";
+              os = "Linux";
+              qrexec = "1";
+            };
+            services = {
+              "network-manager" = false;
+            };
+          };
+        };
+      };
+    };
+  };
+}
+NIXEOF
+grep -F '"nixome-config-applied-message" = "$APPLY_MESSAGE";' flake.nix
+grep -F '"$CREATED_QUBE" = {' flake.nix
 git add flake.nix
-git -c user.name='Nixome Config Smoke' -c user.email='nixome-config-smoke@localhost' commit -m 'test config apply'
+git \
+  -c user.name='Nixome Config Smoke' \
+  -c user.email='nixome-config-smoke@localhost' \
+  commit -m 'test config creates qube'
 git status --short --branch
-"
+EOF
+run_qrexec_script_or_fail \
+  "$STAGING" \
+  "modify config candidate in $STAGING" \
+  "$STAGING_UPDATE_LOG" \
+  "$STAGING_UPDATE_SCRIPT"
 
 run_or_fail "apply config candidate from $STAGING through $VALIDATOR" "$APPLY_LOG" \
-  env NIXOME_LOG_DIR="$LOG_DIR" NIXOME_CONFIG_STAGING_VM="$STAGING" NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" NIXOME_CONFIG_VAULT_VM="$VAULT" \
+  env \
+    NIXOME_LOG_DIR="$LOG_DIR" \
+    NIXOME_CONFIG_STAGING_VM="$STAGING" \
+    NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+    NIXOME_CONFIG_VAULT_VM="$VAULT" \
   nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
 
 qvm-features "$STAGING" nixome-config-applied-message > "$APPLIED_FEATURE_LOG" 2>&1 ||
@@ -353,8 +495,38 @@ qvm-features "$STAGING" nixome-config-applied-message > "$APPLIED_FEATURE_LOG" 2
 grep -qx "$APPLY_MESSAGE" "$APPLIED_FEATURE_LOG" ||
   fail "applied config feature did not match expected value"
 
-run_qrexec_or_fail "$VAULT" "config vault archive tree" "$VAULT_ARCHIVE_TREE_LOG" \
-  "cd /home/$QUBE_USER/nixome-config-vault && cat latest-candidate && find candidates -maxdepth 3 -type f | sort"
+qvm-check "$CREATED_QUBE" >/dev/null 2>&1 || fail "config-created qube is missing: $CREATED_QUBE"
+run_or_fail \
+  "read template for $CREATED_QUBE" \
+  "$CREATED_QUBE_TEMPLATE_LOG" \
+  qvm-prefs "$CREATED_QUBE" template
+grep -qx "nixome-nixos-config-staging" "$CREATED_QUBE_TEMPLATE_LOG" ||
+  fail "config-created qube template did not match expected value"
+qvm-features \
+  "$CREATED_QUBE" \
+  nixome-created-from-config-message \
+  > "$CREATED_QUBE_FEATURE_LOG" 2>&1 ||
+  fail "config-created qube feature is missing"
+grep -qx "$APPLY_MESSAGE" "$CREATED_QUBE_FEATURE_LOG" ||
+  fail "config-created qube feature did not match expected value"
+
+start_vm "$CREATED_QUBE"
+run_qrexec_or_fail \
+  "$CREATED_QUBE" \
+  "qrexec uname in $CREATED_QUBE" \
+  "$CREATED_QUBE_UNAME_LOG" \
+  "uname -a"
+run_qrexec_or_fail "$CREATED_QUBE" "qrexec user in $CREATED_QUBE" "$CREATED_QUBE_USER_LOG" "id -un"
+grep -q 'Linux' "$CREATED_QUBE_UNAME_LOG" || fail "created qube uname output did not contain Linux"
+grep -qx "$QUBE_USER" "$CREATED_QUBE_USER_LOG" || fail "created qube qrexec user was not $QUBE_USER"
+
+run_qrexec_or_fail \
+  "$VAULT" \
+  "config vault archive tree" \
+  "$VAULT_ARCHIVE_TREE_LOG" \
+  "cd /home/$QUBE_USER/nixome-config-vault &&
+    cat latest-candidate &&
+    find candidates -maxdepth 3 -type f | sort"
 
 jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT" '
   .schema == "nixome.config-archive.v1" and
@@ -377,9 +549,10 @@ jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT"
   .validator == $validator and
   .vault == $vault and
   .archive.status == "passed" and
-  .setup.status == "passed"
+  .setup.status == "passed" and
+  .setup.domains_changed >= 1
 ' "$APPLY_JSON" >/dev/null || fail "config apply JSON did not pass"
 
 collect_diagnostics
-write_result passed "NixOS config VMs booted, config-staging was edited, config-validator validated it, dom0 archived it, and setup-config applied the topology"
+write_result passed "staged Nix created a new qrexec-capable AppVM"
 cat "$RESULT_JSON"

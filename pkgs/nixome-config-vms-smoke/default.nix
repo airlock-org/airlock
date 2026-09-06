@@ -1,7 +1,6 @@
 {
   coreutils,
   gnugrep,
-  gnused,
   jq,
   lib,
   systemd,
@@ -14,7 +13,6 @@ writeShellApplication {
   runtimeInputs = [
     coreutils
     gnugrep
-    gnused
     jq
     systemd
   ];

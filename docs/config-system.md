@@ -50,6 +50,10 @@ apply proof, that Nix value declares a small observable Qubes feature on
 nixome-config-applied-message
 ```
 
+The runtime smoke then edits `flake.nix` to add `nixome-test-from-config`, an
+AppVM based on `nixome-nixos-config-staging`, and proves that dom0 creates it
+from the validator-produced topology.
+
 `config-validator` validates candidates exported from `config-staging`,
 evaluates `.#nixome.topology` to the `topology.json` apply artifact, and writes
 validation JSON under:
@@ -158,7 +162,8 @@ dom0 topology setup, starts `config-vault`, `config-staging`, and
 the staging repository and validator workspace, edits and commits `flake.nix`
 in `config-staging`, evaluates `.#nixome.topology` in `config-validator`,
 archives the source and evaluated topology into `config-vault`, applies it from
-dom0, and checks that the declared Qubes feature changed.
+dom0, checks that `nixome-test-from-config` was created, and runs `uname -a`
+inside it through qrexec.
 The machine-readable result is copied to:
 
 ```text
@@ -184,9 +189,10 @@ It also loads the Xen vchan support modules used by Qubes guests
 (`xen-evtchn`, `xen-gntalloc`, `xen-gntdev`, and `xen-privcmd`) before
 QubesDB starts.
 
-The validated smoke path reaches qrexec in the declared NixOS AppVMs and proves
+The validated smoke path reaches qrexec in the declared NixOS AppVMs, proves
 that `config-vault` has `/home/user/nixome-config-vault` initialized before
-qrexec accepts the repository status check. The next boundary is deployment from
-the archived commit plus hardening the model: split role-specific guest roots
+qrexec accepts the repository status check, and proves that a staged Nix config
+can create a new AppVM that boots and serves qrexec. The next boundary is
+deployment records plus hardening the model: split role-specific guest roots
 when useful, classify setup changes that require VM restart or dom0 reboot, and
 validate the same path on physical Xen-capable hardware.

@@ -1102,6 +1102,8 @@ in
 
         case "$qdb_role" in
           config-vault|config-staging|config-validator|config-system) role="$qdb_role" ;;
+          "") ;;
+          *) role=base ;;
         esac
 
         case "$vm_name" in

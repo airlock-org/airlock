@@ -94,7 +94,9 @@ AppVMs with the normal dom0-provided Qubes VM kernel, runs `uname -a` through
 qrexec in each VM, and checks that the role repositories exist before
 `config-staging` exports a committed Nix config candidate, `config-validator`
 evaluates `.#nixome.topology`, dom0 archives it into `config-vault`, and
-`nixome-config-apply --apply` applies the validated topology JSON. See
+`nixome-config-apply --apply` applies the validated topology JSON. The smoke
+now proves the staged Nix config can create `nixome-test-from-config` and run
+`uname -a` inside it through qrexec. See
 [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
 The config topology image keeps local build size down by sharing one NixOS
 guest root image between the TemplateVM source directories.
