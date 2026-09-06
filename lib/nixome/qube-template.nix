@@ -159,6 +159,7 @@ let
             nixome.qubeGuest.enable = true;
             documentation.enable = lib.mkDefault false;
             programs.command-not-found.enable = lib.mkDefault false;
+            system.nixos.versionSuffix = lib.mkForce "";
           }
         ]
         ++ modules;
