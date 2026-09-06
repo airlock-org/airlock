@@ -224,7 +224,7 @@ topology into `config-vault`, and applies the validated topology with
 `nixome-test-from-config` AppVM exists and that `uname -a` runs inside it
 through qrexec. It also checks that `config-vault` contains a successful
 deployment record for that apply, and that the staged config generated
-`/etc/qubes/policy.d/90-nixome.policy` with an active `nixome.PolicyProbe`
+`/var/lib/nixome/qubes-policy.d/90-nixome.policy` with an active `nixome.PolicyProbe`
 rule. The result JSON is written to:
 
 ```text

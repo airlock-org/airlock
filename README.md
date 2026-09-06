@@ -165,5 +165,7 @@ nested virtualization. The NixOS-template
 template artifacts, imports/creates the declared TemplateVMs and AppVMs, boots
 the NixOS AppVMs under nested Xen, proves qrexec with `uname -a`, and verifies
 the typed config candidate validation/archive/apply flow. The staged config now
-also generates Nixome-owned qrexec policy into `/etc/qubes/policy.d/90-nixome.policy`.
+also generates Nixome-owned qrexec policy into
+`/var/lib/nixome/qubes-policy.d/90-nixome.policy`; Qubes' policy daemon is
+pointed at that combined runtime policy directory.
 Production security validation still requires a physical Xen-capable machine.

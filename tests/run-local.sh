@@ -42,6 +42,7 @@ run_logged observe-package nix build "$ROOT#packages.x86_64-linux.nixome-observe
 run_logged setup-config-package nix build "$ROOT#packages.x86_64-linux.nixome-setup-config" --print-build-logs --show-trace
 run_logged setup-config-runtime-path "$ROOT/tests/setup-config-runtime-path.sh"
 run_logged config-topology-eval "$ROOT/tests/config-topology-eval.sh"
+run_logged qrexec-policy-path "$ROOT/tests/qrexec-policy-path.sh"
 run_logged topology-schema "$ROOT/tests/topology-schema.sh"
 run_logged config-candidate-flake "$ROOT/tests/config-candidate-flake.sh"
 run_logged host-capabilities "$ROOT/tests/host-capabilities.sh" --json "$LOG_DIR/host-capabilities.json"

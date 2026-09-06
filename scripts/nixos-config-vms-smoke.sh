@@ -514,7 +514,7 @@ run_or_fail "apply config candidate from $STAGING through $VALIDATOR" "$APPLY_LO
 run_or_fail \
   "read generated Nixome qrexec policy" \
   "$QREXEC_POLICY_FILE_LOG" \
-  cat /etc/qubes/policy.d/90-nixome.policy
+  cat /var/lib/nixome/qubes-policy.d/90-nixome.policy
 grep -Fx "nixome.PolicyProbe * dom0 config-vault allow" "$QREXEC_POLICY_FILE_LOG" >/dev/null ||
   fail "generated qrexec policy is missing PolicyProbe allow rule"
 grep -Fx "nixome.PolicyProbe * @anyvm @anyvm deny" "$QREXEC_POLICY_FILE_LOG" >/dev/null ||

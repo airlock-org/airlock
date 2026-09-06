@@ -150,6 +150,10 @@ let
   configApply = pkgs.callPackage ../pkgs/nixome-config-apply { };
   configArchive = pkgs.callPackage ../pkgs/nixome-config-archive { };
   configVmsSmoke = pkgs.callPackage ../pkgs/nixome-config-vms-smoke { };
+  qrexecPolicyStaticDir = "/etc/qubes/policy.d";
+  qrexecPolicyRuntimeDir = "/var/lib/nixome/qubes-policy.d";
+  qrexecManagedPolicyFile = "90-nixome.policy";
+  qrexecBase = pkgs.python3.pkgs.qubes-core-qrexec;
 
   configAccessPolicyPackage = pkgs.runCommand "nixome-config-access-policy" { } ''
         set -eu
@@ -167,6 +171,46 @@ let
     ${access.archiveDeploymentService} * dom0 ${access.vault} allow
     ${access.archiveDeploymentService} * @anyvm @anyvm deny
     EOF
+  '';
+
+  qrexecPolicyPathScript = pkgs.writeShellScript "nixome-qubes-policy-path" ''
+    set -euo pipefail
+
+    static_dir="''${NIXOME_QUBES_STATIC_POLICY_DIR:-${lib.escapeShellArg qrexecPolicyStaticDir}}"
+    runtime_dir="''${NIXOME_QUBES_POLICY_DIR:-${lib.escapeShellArg qrexecPolicyRuntimeDir}}"
+    managed_file="''${NIXOME_QUBES_MANAGED_POLICY_FILE:-${lib.escapeShellArg qrexecManagedPolicyFile}}"
+    managed_path="$runtime_dir/$managed_file"
+
+    ${pkgs.coreutils}/bin/install -d -m 0755 "$runtime_dir"
+
+    ${pkgs.findutils}/bin/find "$runtime_dir" -mindepth 1 -maxdepth 1 ! -name "$managed_file" -print0 |
+      while IFS= read -r -d "" path; do
+        ${pkgs.coreutils}/bin/rm -rf -- "$path"
+      done
+
+    if [ -d "$static_dir" ]; then
+      ${pkgs.findutils}/bin/find -L "$static_dir" -mindepth 1 -maxdepth 1 -print0 |
+        while IFS= read -r -d "" path; do
+          name="$(${pkgs.coreutils}/bin/basename "$path")"
+          [ "$name" != "$managed_file" ] || continue
+          target="$(${pkgs.coreutils}/bin/readlink -f "$path")"
+          ${pkgs.coreutils}/bin/ln -sfnT "$target" "$runtime_dir/$name"
+        done
+    fi
+
+    if [ -e "$managed_path" ]; then
+      ${pkgs.gnugrep}/bin/grep -Fx "# Managed by Nixome setup-config." "$managed_path" >/dev/null || {
+        printf 'refusing unmanaged Nixome qrexec policy file: %s\n' "$managed_path" >&2
+        exit 1
+      }
+    else
+      ${pkgs.coreutils}/bin/cat > "$managed_path" <<'EOF'
+    # Managed by Nixome setup-config.
+    # Source: nixome.qubes.topology.qrexec_policy.
+    # Bootstrap config transport policy remains in 30-nixome-config.policy.
+    EOF
+      ${pkgs.coreutils}/bin/chmod 0644 "$managed_path"
+    fi
   '';
 in
 {
@@ -289,5 +333,25 @@ in
     virtualisation.qubes.packages = lib.optionals cfg.configAccessPolicy.enable [
       configAccessPolicyPackage
     ];
+
+    systemd.services.nixome-qubes-policy-path = {
+      description = "Prepare the mutable Nixome qrexec policy path";
+      before = [ "qubes-qrexec-policy-daemon.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = qrexecPolicyPathScript;
+      };
+    };
+
+    systemd.services.qubes-qrexec-policy-daemon = {
+      overrideStrategy = "asDropin";
+      requires = [ "nixome-qubes-policy-path.service" ];
+      after = [ "nixome-qubes-policy-path.service" ];
+      serviceConfig.ExecStart = lib.mkForce [
+        ""
+        "${qrexecBase}/bin/qrexec-policy-daemon --policy-path ${qrexecPolicyRuntimeDir}"
+      ];
+    };
   };
 }

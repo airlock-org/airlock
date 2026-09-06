@@ -26,8 +26,13 @@ fetch/validate/archive/apply path. Additional Nixome-owned qrexec policy is
 declared in staged topology and rendered by `nixome-setup-config` to:
 
 ```text
-/etc/qubes/policy.d/90-nixome.policy
+/var/lib/nixome/qubes-policy.d/90-nixome.policy
 ```
+
+Static Qubes policy remains assembled by Nix under `/etc/qubes/policy.d`.
+Nixome prepares `/var/lib/nixome/qubes-policy.d` as a combined policy view at
+boot, symlinks the static rules into it, keeps `90-nixome.policy` mutable, and
+starts `qubes-qrexec-policy-daemon` with that runtime policy path.
 
 The initial VM resource settings are sized for the nested 8 GiB developer VM:
 `config-vault` starts at 1024 MiB, while `config-staging` and `config-validator`
