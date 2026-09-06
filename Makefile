@@ -1,6 +1,6 @@
 SHELL := bash
 
-.PHONY: build test nixos-templates nixos-templates-dry-run vm-image vm-image-dry-run vm-run vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-config-setup vm-config-smoke clean-vm-disks
+.PHONY: build test nixos-templates nixos-templates-dry-run vm-image vm-image-dry-run vm-run vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-config-setup vm-config-smoke disk-usage clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-logs clean-cache
 
 build:
 	nix build .#nixosConfigurations.test.config.system.build.toplevel --print-build-logs --show-trace
@@ -53,6 +53,23 @@ vm-config-setup:
 vm-config-smoke:
 	NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
 
+disk-usage:
+	./scripts/clean-generated.sh disk-usage
+
+clean: clean-generated
+
+clean-generated: clean-vm-workdirs clean-logs
+
+clean-vm: clean-vm-workdirs
+
 clean-vm-disks:
-	rm -rf .nixome-vm/*-result
-	rm -f .nixome-vm/*.qcow2 .nixome-vm/*.qcow2.*.bak .nixome-vm/*.monitor .nixome-vm/serial.log
+	./scripts/clean-generated.sh vm-disks
+
+clean-vm-workdirs:
+	./scripts/clean-generated.sh vm-workdirs
+
+clean-logs:
+	./scripts/clean-generated.sh logs
+
+clean-cache:
+	./scripts/clean-generated.sh cache

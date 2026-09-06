@@ -245,12 +245,25 @@ The config profile sets `default_kernel = ""` so fresh config-only images can
 create TemplateVMs before any Fedora/Qubes VM kernel bootstrap has run.
 
 The VM runner keeps generated writable qcow2 overlays and Nix build out-links
-under `.nixome-vm/`. They are safe to regenerate. If a local image build fails
-with `No space left on device`, run:
+under `.nixome-vm/`. They are safe to regenerate. Old experimental VM work
+directories match `.nixome-vm-*`. The host-side Qubes RPM/template download
+cache lives under `.nixome-cache/rpms/` and should normally be kept.
+
+If a local image build fails with `No space left on device`, inspect and clean
+generated state with:
 
 ```bash
+make disk-usage
 make clean-vm-disks
+make clean-vm-workdirs
+make clean-logs
 ```
+
+`make clean` removes VM work directories and logs while preserving the download
+cache. `make clean-cache` removes `.nixome-cache/` too, which means the next
+full GUI smoke may need to download the Qubes kernel RPMs and template RPM
+again. The runner keeps only one stale writable-overlay backup per image by
+default; adjust that with `NIXOME_VM_BACKUP_RETENTION`.
 
 ## Runtime Observation
 

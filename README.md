@@ -104,12 +104,24 @@ The config topology image keeps local build size down by sharing one NixOS
 guest root image between the TemplateVM source directories.
 
 Generated writable VM overlays and VM build out-links live under `.nixome-vm/`.
-If local image builds fail because the builder runs out of temporary disk
-space, remove only those generated VM artifacts with:
+Old one-off VM work directories also match `.nixome-vm-*`. The Qubes RPM and
+template downloads live under `.nixome-cache/rpms/`; keep that cache unless you
+intentionally want to re-download the large template RPM.
+
+Useful cleanup commands:
 
 ```bash
+make disk-usage
 make clean-vm-disks
+make clean-vm-workdirs
+make clean-logs
+make clean-cache
 ```
+
+`make clean` removes VM work directories and logs, but preserves
+`.nixome-cache/`. The VM runner keeps only one stale overlay backup per image by
+default; set `NIXOME_VM_BACKUP_RETENTION=0` to keep none, or a larger number if
+you want rollback overlays while iterating.
 
 On a booted Xen dom0 target with a Qubes template installed:
 

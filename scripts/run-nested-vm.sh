@@ -9,11 +9,19 @@ SMP="${NIXOME_VM_SMP:-4}"
 SSH_PORT="${NIXOME_VM_SSH_PORT:-2222}"
 DISPLAY_MODE="${NIXOME_VM_DISPLAY:-none}"
 VGA="${NIXOME_VM_VGA:-std}"
+BACKUP_RETENTION="${NIXOME_VM_BACKUP_RETENTION:-1}"
 OUT_LINK="$VM_DIR/${IMAGE_ATTR}-result"
 SERIAL_LOG="$VM_DIR/serial.log"
 MONITOR_SOCKET="$VM_DIR/${IMAGE_ATTR}.monitor"
 
 mkdir -p "$VM_DIR"
+
+case "$BACKUP_RETENTION" in
+  '' | *[!0-9]*)
+    printf 'error: NIXOME_VM_BACKUP_RETENTION must be a non-negative integer\n' >&2
+    exit 1
+    ;;
+esac
 
 if [ ! -e /dev/kvm ]; then
   printf 'error: /dev/kvm is missing; nested Xen needs KVM on the host\n' >&2
@@ -37,6 +45,22 @@ fi
 BASE_IMAGE="$(readlink -f "${base_images[0]}")"
 RUN_DISK="$VM_DIR/${IMAGE_ATTR}.qcow2"
 RUN_DISK_BACKUP_TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+
+prune_run_disk_backups() {
+  local disk_name
+  local index
+  local backup
+  disk_name="$(basename "$RUN_DISK")"
+  index=0
+
+  while IFS= read -r backup; do
+    if [ "$index" -ge "$BACKUP_RETENTION" ]; then
+      printf 'removing old writable overlay backup: %s\n' "$backup"
+      unlink "$backup"
+    fi
+    index=$((index + 1))
+  done < <(find "$VM_DIR" -maxdepth 1 -type f -name "$disk_name.*.bak" | sort -r)
+}
 
 qemu_out="$(nix build --no-link --print-out-paths "$ROOT#qemu-kvm")"
 qemu_utils_out="$(nix build --no-link --print-out-paths "$ROOT#qemu-utils")"
@@ -68,6 +92,7 @@ if [ -e "$RUN_DISK" ]; then
     backup_disk="$RUN_DISK.$RUN_DISK_BACKUP_TIMESTAMP.bak"
     printf 'base image changed; moving stale writable overlay to: %s\n' "$backup_disk"
     mv "$RUN_DISK" "$backup_disk"
+    prune_run_disk_backups
   fi
 fi
 
