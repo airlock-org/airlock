@@ -9,7 +9,6 @@ source "$ROOT/scripts/lib/nixome-env.sh"
 
 NIX_STORE_BIN="${NIXOME_NIX_STORE_BIN:-nix-store}"
 QEMU_IMG_BIN="${NIXOME_QEMU_IMG_BIN:-qemu-img}"
-GC_MAX="${NIXOME_GC_MAX:-10G}"
 ALLOW_NONSTANDARD_DATA_ROOT="${NIXOME_GC_ALLOW_NONSTANDARD_DATA_ROOT:-0}"
 ALLOW_RUNNING_VM="${NIXOME_GC_ALLOW_RUNNING_VM:-0}"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
@@ -17,11 +16,11 @@ VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
 
 usage() {
   cat <<'EOF'
-usage: gc-nixome-store.sh MODE [--max SIZE]
+usage: gc-nixome-store.sh MODE
 
 Modes:
   dry-run   Refresh Nixome GC roots and list dead paths without deleting them.
-  run       Refresh Nixome GC roots and collect up to SIZE, default 10G.
+  run       Refresh Nixome GC roots and delete all unreachable store paths.
   roots     Refresh Nixome GC roots only.
 
 This script refuses to operate on the host /nix/store. It is intended for the
@@ -36,11 +35,6 @@ die() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --max)
-      shift
-      [ "$#" -gt 0 ] || die "--max requires a size"
-      GC_MAX="$1"
-      ;;
     --help|-h)
       usage
       exit 0
@@ -271,7 +265,7 @@ run_nix_store_gc() {
       env NIX_CONFIG="$nix_config" "$NIX_STORE_BIN" --gc --print-dead > "$dead_log"
       ;;
     run)
-      env NIX_CONFIG="$nix_config" "$NIX_STORE_BIN" --gc --max-freed "$GC_MAX" | tee "$gc_log"
+      env NIX_CONFIG="$nix_config" "$NIX_STORE_BIN" --gc | tee "$gc_log"
       ;;
   esac
 }
@@ -298,7 +292,7 @@ case "$MODE" in
     printf 'Dead path count:  %s\n' "$dead_count"
     ;;
   run)
-    printf 'GC max freed:     %s\n' "$GC_MAX"
+    printf 'GC mode:          full\n'
     run_nix_store_gc
     printf 'GC log:           %s\n' "$gc_log"
     ;;

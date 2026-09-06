@@ -50,7 +50,7 @@ case "$*" in
   "--gc --print-dead")
     printf '/nix/store/deadbeefdeadbeefdeadbeefdeadbeef-dead\n'
     ;;
-  "--gc --max-freed 1G")
+  "--gc")
     printf 'freed 0 bytes\n'
     ;;
   *)
@@ -114,9 +114,9 @@ env \
   NIXOME_LOG_DIR="$LOG_DIR" \
   NIXOME_NIX_STORE_BIN="$BIN_DIR/nix-store" \
   NIXOME_QEMU_IMG_BIN="$BIN_DIR/qemu-img" \
-  "$ROOT/scripts/gc-nixome-store.sh" run --max 1G > "$WORK_DIR/run.out"
+  "$ROOT/scripts/gc-nixome-store.sh" run > "$WORK_DIR/run.out"
 
-grep -F 'ARGS=[--gc][--max-freed][1G]' "$MOCK_LOG" >/dev/null
+grep -F 'ARGS=[--gc]' "$MOCK_LOG" >/dev/null
 
 if env \
   NIXOME_DATA_ROOT="/tmp/nixome-gc-nonstandard-$$" \

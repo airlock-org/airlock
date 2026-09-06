@@ -145,10 +145,10 @@ cache and the Nixome Nix store. `make gc-dry-run` and `make gc` operate only
 on the separate Nixome store under `/run/media/user/data/nixome/nix-root`; the
 GC script refuses to run against the host `/nix/store`. `make gc` refreshes
 Nixome-managed GC roots for current result links, VM backing images, and current
-JSON deployment artifacts, then collects up to `NIXOME_GC_MAX` bytes, default
-`10G`. The VM runner keeps only one stale overlay backup per image by default;
-set `NIXOME_VM_BACKUP_RETENTION=0` to keep none, or a larger number if you want
-rollback overlays while iterating.
+JSON deployment artifacts, then deletes all unreachable paths in the Nixome
+custom store. The VM runner keeps only one stale overlay backup per image by
+default; set `NIXOME_VM_BACKUP_RETENTION=0` to keep none, or a larger number if
+you want rollback overlays while iterating.
 
 On a booted Xen dom0 target with a Qubes template installed:
 

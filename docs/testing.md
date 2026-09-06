@@ -291,11 +291,11 @@ cache and Nixome Nix store. `make gc-dry-run` and `make gc` operate only on
 the separate Nixome store under `/run/media/user/data/nixome/nix-root`; the GC
 script refuses to run against the host `/nix/store`. `make gc` refreshes
 Nixome-managed GC roots for current result links, VM backing images, and current
-JSON deployment artifacts, then collects up to `NIXOME_GC_MAX` bytes, default
-`10G`. `make clean-cache` removes the generated Qubes asset cache too, which
-means the next full GUI smoke may need to download the Qubes kernel RPMs and
-template RPM again. The runner keeps only one stale writable-overlay backup per
-image by default; adjust that with `NIXOME_VM_BACKUP_RETENTION`.
+JSON deployment artifacts, then deletes all unreachable paths in the Nixome
+custom store. `make clean-cache` removes the generated Qubes asset cache too,
+which means the next full GUI smoke may need to download the Qubes kernel RPMs
+and template RPM again. The runner keeps only one stale writable-overlay backup
+per image by default; adjust that with `NIXOME_VM_BACKUP_RETENTION`.
 
 ## Runtime Observation
 

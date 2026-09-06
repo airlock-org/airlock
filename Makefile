@@ -97,7 +97,7 @@ gc-dry-run: ensure-generated-dirs
 	./scripts/gc-nixome-store.sh dry-run
 
 gc: ensure-generated-dirs
-	./scripts/gc-nixome-store.sh run --max "$${NIXOME_GC_MAX:-10G}"
+	./scripts/gc-nixome-store.sh run
 
 clean: clean-generated
 
