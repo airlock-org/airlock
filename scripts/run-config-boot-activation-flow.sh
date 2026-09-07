@@ -125,4 +125,11 @@ jq -e \
   fail "verify run did not boot into staged dom0 generation" "$expected_host_system_source"
 
 write_result passed "staged dom0 generation became the running boot generation" "$expected_host_system_source"
-cat "$RESULT_JSON"
+jq -c '{
+  schema,
+  status,
+  reason,
+  expected_host_system_source,
+  stage_status: .stage.status,
+  verify_status: .verify.status
+}' "$RESULT_JSON"

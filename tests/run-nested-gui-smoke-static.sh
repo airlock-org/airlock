@@ -16,6 +16,8 @@ grep -F 'vm-config-boot-activate-flow' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_RUN_CONFIG_BOOT_VERIFY=1' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
 grep -F 'NIXOME_SHUTDOWN_VM_ON_SUCCESS=1' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
+grep -F 'stage_status: .stage.status' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
+! grep -F 'cat "$RESULT_JSON"' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_REASON' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_RUN_CONFIG_BOOT_VERIFY' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
