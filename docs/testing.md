@@ -226,7 +226,7 @@ the nested dom0.
 To run the current NixOS config-VM boot/qrexec proof:
 
 ```bash
-make vm-config-smoke
+make vm-config-flow
 ```
 
 This starts from a fresh writable VM disk, explicitly runs the dom0 topology
@@ -265,10 +265,11 @@ The nested config image currently has 128 GiB of sparse virtual disk capacity.
 The current NixOS guest template profile uses QubesDB, qrexec-agent, Qubes
 meminfo writer, and `/dev/mapper/dmroot` as the root device to match Qubes'
 normal Linux VM boot path. Import/create setup is automated, and
-`make vm-config-smoke` currently proves that the declared NixOS AppVMs boot and
+`make vm-config-flow` currently proves that the declared NixOS AppVMs boot and
 serve qrexec under nested Xen, and that a staged Nix topology can add one more
 AppVM, generate Nixome-owned qrexec policy, and record the deployment in
 `config-vault`.
+`make vm-config-smoke` remains as a compatibility alias.
 The config profile sets `default_kernel = ""` so fresh config-only images can
 create TemplateVMs before any Fedora/Qubes VM kernel bootstrap has run.
 

@@ -82,14 +82,16 @@ the nested dom0 under `/var/cache/nixome/qubes-rpms/` before import. The
 template RPM is about 2 GB. Logs and JSON results are written under the same
 generated data root.
 
-For the first NixOS-template topology:
+For the first NixOS-template topology and config-authority flow:
 
 ```bash
 make nixos-templates-dry-run
 make vm-gui-config-image-dry-run
 make vm-config-setup
-make vm-config-smoke
+make vm-config-flow
 ```
+
+`make vm-config-smoke` remains as a compatibility alias.
 
 That path builds a dom0 image whose Nix config declares `config-vault`,
 `config-staging`, and `config-validator`, imports one shared bootstrap NixOS

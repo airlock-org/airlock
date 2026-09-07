@@ -289,7 +289,7 @@ the generated log directory.
 Run the current NixOS config-VM runtime proof:
 
 ```bash
-make vm-config-smoke
+make vm-config-flow
 ```
 
 That target builds and boots the nested config dom0 image, explicitly runs the
@@ -310,6 +310,8 @@ The machine-readable result is copied to:
 /run/media/user/data/nixome/logs/vm-gui-config-vms-smoke.json
 ```
 
+`make vm-config-smoke` remains as a compatibility alias.
+
 ## Validated Boundary
 
 The template artifacts are NixOS root images packaged in the shape expected by
@@ -319,7 +321,7 @@ nested dom0 test environment.
 Local tests now also prove that a validated topology can contain a staged
 template build reference and that dom0 apply resolves it to a concrete template
 source before invoking setup. The full nested proof for the prebuilt work
-TemplateVM source and candidate apply path is `make vm-config-smoke`.
+TemplateVM source and candidate apply path is `make vm-config-flow`.
 
 The NixOS guests now boot in nested Xen with the normal Qubes dom0-provided VM
 kernel/initramfs and kernel options such as `root=/dev/mapper/dmroot`. The
