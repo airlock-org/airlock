@@ -22,6 +22,7 @@ SYSTEMD_ACTIONS_JSON="$LOG_DIR/config-system-systemd-actions.json"
 SYSTEMD_ACTIONS_LOG="$LOG_DIR/config-system-systemd-actions.log"
 TEMPLATE_BUILDS_JSON="$LOG_DIR/config-apply-template-builds.json"
 TEMPLATE_BUILD_LOG="$LOG_DIR/config-apply-template-builds.log"
+UNSUPPORTED_DOMAIN_BACKENDS_JSON="$LOG_DIR/config-apply-unsupported-domain-backends.json"
 DEPLOYMENT_JSON="$LOG_DIR/config-deployment.json"
 DEPLOYMENT_TAR="$LOG_DIR/config-deployment.tar"
 DEPLOYMENT_ARCHIVE_STDOUT="$LOG_DIR/config-apply-deployment-archive.stdout.log"
@@ -132,6 +133,7 @@ write_result() {
   setup_json="$(json_file_or_null "$SETUP_JSON")"
   system_apply_json="$(json_file_or_null "$SYSTEM_APPLY_JSON")"
   systemd_actions_json="$(json_file_or_null "$SYSTEMD_ACTIONS_JSON")"
+  unsupported_domain_backends_json="$(json_file_or_null "$UNSUPPORTED_DOMAIN_BACKENDS_JSON")"
   deployment_json="$(json_file_or_null "$DEPLOYMENT_JSON")"
   deployment_archive_json="$(json_file_or_null "$DEPLOYMENT_ARCHIVE_JSON")"
 
@@ -160,6 +162,7 @@ write_result() {
     --arg systemd_actions_log "$SYSTEMD_ACTIONS_LOG" \
     --arg template_builds "$TEMPLATE_BUILDS_JSON" \
     --arg template_build_log "$TEMPLATE_BUILD_LOG" \
+    --arg unsupported_domain_backends "$UNSUPPORTED_DOMAIN_BACKENDS_JSON" \
     --arg deployment_record "$DEPLOYMENT_JSON" \
     --arg deployment_tar "$DEPLOYMENT_TAR" \
     --arg deployment_archive_stdout "$DEPLOYMENT_ARCHIVE_STDOUT" \
@@ -178,6 +181,7 @@ write_result() {
     --argjson deployment "$deployment_json" \
     --argjson deployment_archive "$deployment_archive_json" \
     --argjson systemd_actions_result "$systemd_actions_json" \
+    --argjson unsupported_domain_backends_result "$unsupported_domain_backends_json" \
     '{
       schema: $schema,
       status: $status,
@@ -203,6 +207,7 @@ write_result() {
       systemd_actions_log: $systemd_actions_log,
       template_builds: $template_builds,
       template_build_log: $template_build_log,
+      unsupported_domain_backends: $unsupported_domain_backends,
       deployment_record: $deployment_record,
       deployment_tar: $deployment_tar,
       deployment_archive_stdout: $deployment_archive_stdout,
@@ -219,6 +224,7 @@ write_result() {
       setup: $setup,
       system_apply_result: $system_apply,
       systemd_actions_result: $systemd_actions_result,
+      unsupported_domain_backends_result: $unsupported_domain_backends_result,
       deployment: $deployment,
       deployment_archive: $deployment_archive
     }' > "$RESULT_JSON"
@@ -346,6 +352,7 @@ build_deployment_tar() {
   setup_json="$(json_file_or_null "$SETUP_JSON")"
   system_apply_json="$(json_file_or_null "$SYSTEM_APPLY_JSON")"
   systemd_actions_json="$(json_file_or_null "$SYSTEMD_ACTIONS_JSON")"
+  unsupported_domain_backends_json="$(json_file_or_null "$UNSUPPORTED_DOMAIN_BACKENDS_JSON")"
 
   jq -c -n \
     --arg schema "nixome.config-deployment.v1" \
@@ -369,6 +376,7 @@ build_deployment_tar() {
     --arg archive "archive.json" \
     --arg setup "setup.json" \
     --arg template_builds "template-builds.json" \
+    --arg unsupported_domain_backends "unsupported-domain-backends.json" \
     --arg validated_topology "validated-topology.json" \
     --arg validation "validation.json" \
     --arg manifest "manifest.json" \
@@ -376,6 +384,7 @@ build_deployment_tar() {
     --argjson setup_result "$setup_json" \
     --argjson system_apply_result "$system_apply_json" \
     --argjson systemd_actions_result "$systemd_actions_json" \
+    --argjson unsupported_domain_backends_result "$unsupported_domain_backends_json" \
     '{
       schema: $schema,
       status: $status,
@@ -399,6 +408,7 @@ build_deployment_tar() {
         archive: $archive,
         setup: $setup,
         template_builds: $template_builds,
+        unsupported_domain_backends: $unsupported_domain_backends,
         validated_topology: $validated_topology,
         validation: $validation,
         manifest: $manifest
@@ -406,7 +416,8 @@ build_deployment_tar() {
       archive: $archive_result,
       setup: $setup_result,
       system_apply: $system_apply_result,
-      systemd_actions: $systemd_actions_result
+      systemd_actions: $systemd_actions_result,
+      unsupported_domain_backends: $unsupported_domain_backends_result
     }' > "$DEPLOYMENT_JSON"
 
   write_result "$status" "$reason"
@@ -418,6 +429,7 @@ build_deployment_tar() {
   copy_or_empty "$APPLY_TOPOLOGY_JSON" "$record_dir/topology.json"
   copy_or_empty "$VALIDATED_TOPOLOGY_JSON" "$record_dir/validated-topology.json"
   copy_or_empty "$TEMPLATE_BUILDS_JSON" "$record_dir/template-builds.json"
+  copy_or_empty "$UNSUPPORTED_DOMAIN_BACKENDS_JSON" "$record_dir/unsupported-domain-backends.json"
   copy_or_empty "$VALIDATED_SYSTEM_JSON" "$record_dir/system.json"
   copy_or_empty "$APPLY_SYSTEM_JSON" "$record_dir/resolved-system.json"
   copy_or_empty "$SYSTEM_PLAN_JSON" "$record_dir/system-plan.json"
@@ -448,6 +460,7 @@ build_deployment_tar() {
     topology.json \
     validated-topology.json \
     template-builds.json \
+    unsupported-domain-backends.json \
     system.json \
     resolved-system.json \
     system-plan.json \
@@ -514,6 +527,49 @@ archive_deployment_or_fail() {
 
   write_result "$status" "$reason"
   persist_deployment_state "$status"
+}
+
+write_unsupported_domain_backends_json() {
+  local topology_file="$1"
+  local reason="nix-closure domain materializer is not implemented yet"
+
+  jq -c \
+    --arg schema "nixome.unsupported-domain-backends.v1" \
+    --arg reason "$reason" \
+    '{
+      schema: $schema,
+      domains: [
+        (.domains // {})
+        | to_entries[]
+        | select((.value.backend.type // "qubes-template") == "nix-closure")
+        | {
+            domain: .key,
+            backend: .value.backend.type,
+            reason: $reason
+          }
+      ]
+    }' \
+    "$topology_file" > "$UNSUPPORTED_DOMAIN_BACKENDS_JSON"
+}
+
+preflight_apply_domain_backends() {
+  local topology_file="$1"
+  local count=0
+  local names=""
+  local reason=""
+
+  write_unsupported_domain_backends_json "$topology_file"
+  count="$(jq -r '.domains | length' "$UNSUPPORTED_DOMAIN_BACKENDS_JSON")"
+  [ "$count" = "0" ] && return 0
+
+  names="$(
+    jq -r '.domains[].domain' "$UNSUPPORTED_DOMAIN_BACKENDS_JSON" |
+      awk 'BEGIN { sep = "" } { printf "%s%s", sep, $0; sep = "," } END { printf "\n" }'
+  )"
+  reason="nix-closure domain materializer is not implemented yet: $names"
+  archive_deployment_or_fail failed "$reason"
+  printf 'config apply failed: %s\n' "$reason" >&2
+  exit 1
 }
 
 safe_log_name() {
@@ -1387,6 +1443,16 @@ jq -e '
     (.plan.reboot_required | type == "boolean") and
     (.plan.reboot_reasons | type == "array")
 ' "$system_json" >/dev/null || fail "validated candidate system JSON is invalid"
+
+cp "$topology" "$VALIDATED_TOPOLOGY_JSON"
+cp "$topology" "$APPLY_TOPOLOGY_JSON"
+cp "$system_json" "$VALIDATED_SYSTEM_JSON"
+cp "$system_json" "$APPLY_SYSTEM_JSON"
+init_template_builds_json
+init_system_builds_json
+init_systemd_actions_json
+preflight_apply_domain_backends "$topology"
+
 resolve_template_sources "$topology" "$worktree" "$APPLY_TOPOLOGY_JSON"
 resolve_system_sources "$system_json" "$worktree" "$APPLY_SYSTEM_JSON"
 

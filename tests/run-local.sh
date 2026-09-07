@@ -148,6 +148,7 @@ run_logged config-vault-deployment-archive "$ROOT/tests/config-vault-deployment-
 run_logged config-boot-verify "$ROOT/tests/config-boot-verify.sh"
 run_logged config-status "$ROOT/tests/config-status.sh"
 run_logged config-apply-template-build-ref "$ROOT/tests/config-apply-template-build-ref.sh"
+run_logged config-apply-unsupported-domain-backend "$ROOT/tests/config-apply-unsupported-domain-backend.sh"
 run_logged config-system-apply "$ROOT/tests/config-system-apply.sh"
 run_logged config-system-apply-boot "$ROOT/tests/config-system-apply-boot.sh"
 run_logged run-nested-gui-smoke-static "$ROOT/tests/run-nested-gui-smoke-static.sh"

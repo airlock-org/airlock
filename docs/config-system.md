@@ -138,6 +138,12 @@ That fail-fast behavior keeps the current POC honest: TemplateVM-backed domains
 continue to work, while closure-backed domains cannot be silently created as
 the wrong Qubes object type.
 
+`nixome-config-apply --apply` performs the same check immediately after
+candidate validation and archival. If a candidate declares a `nix-closure`
+domain today, dom0 records a failed deployment attempt in `config-vault` and
+stops before building template sources, building system sources, or invoking
+`nixome-setup-config`.
+
 `config-staging` owns the editable candidate repository at:
 
 ```text
