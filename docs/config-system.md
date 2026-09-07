@@ -315,7 +315,10 @@ and sets global prefs plus simple domain prefs/features/services. It records
 changed objects in `live_actions`, and records affected running domains in
 `restart_actions` with `restart_required = true` when a changed pref, feature,
 or service may require the Qube to restart before the new setting fully takes
-effect. It is
+effect. A successful `--apply` writes the active topology and setup result to
+`/var/lib/nixome/system/current-topology.json` and
+`/var/lib/nixome/system/current-setup.json`, so a freshly set up machine remains
+observable even after transient logs are cleaned. It is
 idempotent: if the declared templates, domains, prefs, features, services, and
 managed VM kernel files already match, it reports zero changes. It does not
 delete undeclared domains. Dom0 host system generation switching and explicit

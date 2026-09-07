@@ -17,9 +17,10 @@ MUTATION_LOG="$WORK_DIR/mutations.log"
 QUBES_XML="$WORK_DIR/qubes.xml"
 POLICY_DIR="$WORK_DIR/policy.d"
 POLICY_FILE="$POLICY_DIR/90-nixome.policy"
+SYSTEM_STATE_DIR="$WORK_DIR/state"
 
 rm -rf "$WORK_DIR"
-mkdir -p "$BIN_DIR" "$KERNEL_DIR" "$KERNEL_TARGET" "$TEMPLATE_DIR" "$LOG_DIR" "$POLICY_DIR"
+mkdir -p "$BIN_DIR" "$KERNEL_DIR" "$KERNEL_TARGET" "$TEMPLATE_DIR" "$LOG_DIR" "$POLICY_DIR" "$SYSTEM_STATE_DIR"
 
 printf 'control_d\n' > "$CAPABILITIES"
 for file in vmlinuz initramfs modules.img; do
@@ -176,6 +177,7 @@ PATH="$BIN_DIR:$PATH" \
   NIXOME_QUBES_KERNEL_BASE="$KERNEL_BASE" \
   NIXOME_QUBES_XML="$QUBES_XML" \
   NIXOME_QUBES_POLICY_DIR="$POLICY_DIR" \
+  NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
   NIXOME_XEN_CAPABILITIES="$CAPABILITIES" \
   NIXOME_LOG_DIR="$LOG_DIR" \
   "$BASH" "$ROOT/scripts/setup-config.sh" --apply --topology "$TOPOLOGY" \
@@ -193,6 +195,17 @@ jq -e '
   .services_changed == 0 and
   .qrexec_policy_changed == 0
 ' "$LOG_DIR/setup-config.json" >/dev/null
+
+jq -e '
+  .schema == "nixome.setup-config.v1" and
+  .status == "passed" and
+  .restart_required == false and
+  .restart_actions == []
+' "$SYSTEM_STATE_DIR/current-setup.json" >/dev/null
+jq -e '
+  .schema == "nixome.qubes-topology.v1" and
+  .domains."config-vault".prefs.memory == 1024
+' "$SYSTEM_STATE_DIR/current-topology.json" >/dev/null
 
 if [ -s "$MUTATION_LOG" ]; then
   printf 'setup-config mutated an already matching config topology:\n' >&2

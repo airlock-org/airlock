@@ -102,10 +102,12 @@ config-system TemplateVM through Qubes' `qvm-template-postprocess` during an
 explicit dom0 topology setup, applies simple prefs/features/services with
 `nixome-setup-config`, boots the NixOS AppVMs with the normal dom0-provided
 Qubes VM kernel, runs `uname -a` through qrexec in each VM, and checks that the
-role repositories exist before `config-staging` exports a committed typed Nix
-config candidate. The validator evaluates normalized `.#nixome.topology` and
-dry-runs any staged template build references. The default seeded candidate uses
-a prebuilt concrete Nix store template source path for `nixome-nixos-work`, so
+role repositories exist. Standalone setup now also persists the current
+topology and setup result under `/var/lib/nixome/system/` for durable status
+inspection. After setup, `config-staging` exports a committed typed Nix config
+candidate. The validator evaluates normalized `.#nixome.topology` and dry-runs
+any staged template build references. The default seeded candidate uses a
+prebuilt concrete Nix store template source path for `nixome-nixos-work`, so
 dom0 can import that template during apply without rebuilding it in the nested
 VM. dom0 archives the candidate into `config-vault` and applies the resolved
 topology with `nixome-config-apply --apply`. The successful apply is then

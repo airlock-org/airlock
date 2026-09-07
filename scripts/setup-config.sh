@@ -13,6 +13,8 @@ RESULT_JSON="$LOG_DIR/setup-config.json"
 COMMAND_LOG="$LOG_DIR/setup-config.commands.log"
 LIVE_ACTIONS_JSONL="$LOG_DIR/setup-config-live-actions.jsonl"
 RESTART_ACTIONS_JSONL="$LOG_DIR/setup-config-restart-actions.jsonl"
+SYSTEM_STATE_DIR="${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
+PERSIST_STATE="${NIXOME_SETUP_CONFIG_PERSIST_STATE:-1}"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 KERNEL_BASE="${NIXOME_QUBES_KERNEL_BASE:-/var/lib/qubes/vm-kernels}"
 QUBES_XML="${NIXOME_QUBES_XML:-/var/lib/qubes/qubes.xml}"
@@ -251,6 +253,26 @@ run_or_plan() {
   if [ "$APPLY" = "1" ]; then
     "$@"
   fi
+}
+
+persist_setup_state() {
+  case "$PERSIST_STATE" in
+    1|true|yes) ;;
+    0|false|no)
+      printf 'setup state persistence disabled\n'
+      return 0
+      ;;
+    *)
+      fail "unsupported NIXOME_SETUP_CONFIG_PERSIST_STATE value: $PERSIST_STATE"
+      ;;
+  esac
+
+  [ "$APPLY" = "1" ] || return 0
+
+  mkdir -p "$SYSTEM_STATE_DIR"
+  cp "$TOPOLOGY" "$SYSTEM_STATE_DIR/current-topology.json"
+  cp "$RESULT_JSON" "$SYSTEM_STATE_DIR/current-setup.json"
+  printf 'persisted setup state: %s\n' "$SYSTEM_STATE_DIR"
 }
 
 domain_exists() {
@@ -735,4 +757,5 @@ for domain in "${domain_names[@]}"; do
 done
 
 write_result passed "Qubes config setup completed"
+persist_setup_state
 cat "$RESULT_JSON"

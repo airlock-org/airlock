@@ -11,9 +11,10 @@ CAPABILITIES="$WORK_DIR/xen-capabilities"
 LOG_DIR="$WORK_DIR/logs"
 MUTATION_LOG="$WORK_DIR/mutations.log"
 POLICY_DIR="$WORK_DIR/policy.d"
+SYSTEM_STATE_DIR="$WORK_DIR/state"
 
 rm -rf "$WORK_DIR"
-mkdir -p "$BIN_DIR" "$LOG_DIR" "$POLICY_DIR"
+mkdir -p "$BIN_DIR" "$LOG_DIR" "$POLICY_DIR" "$SYSTEM_STATE_DIR"
 
 printf 'control_d\n' > "$CAPABILITIES"
 : > "$MUTATION_LOG"
@@ -81,6 +82,7 @@ PATH="$BIN_DIR:$PATH" \
   MUTATION_LOG="$MUTATION_LOG" \
   NIXOME_XEN_CAPABILITIES="$CAPABILITIES" \
   NIXOME_QUBES_POLICY_DIR="$POLICY_DIR" \
+  NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
   NIXOME_LOG_DIR="$LOG_DIR" \
   "$BASH" "$ROOT/scripts/setup-config.sh" --apply --topology "$TOPOLOGY" \
   > "$LOG_DIR/stdout.log" 2> "$LOG_DIR/stderr.log"
@@ -92,6 +94,12 @@ jq -e '
   .prefs_changed == 1 and
   .qrexec_policy_changed == 1
 ' "$LOG_DIR/setup-config.json" >/dev/null
+
+jq -e '
+  .schema == "nixome.setup-config.v1" and
+  .status == "passed" and
+  .prefs_changed == 1
+' "$SYSTEM_STATE_DIR/current-setup.json" >/dev/null
 
 grep -Fx 'qubes-prefs <default_kernel> <>' "$MUTATION_LOG" >/dev/null
 

@@ -13,9 +13,10 @@ POLICY_DIR="$WORK_DIR/policy.d"
 POLICY_FILE="$POLICY_DIR/90-nixome.policy"
 MUTATION_LOG="$WORK_DIR/mutations.log"
 SYSTEMCTL_LOG="$WORK_DIR/systemctl.log"
+SYSTEM_STATE_DIR="$WORK_DIR/state"
 
 rm -rf "$WORK_DIR"
-mkdir -p "$BIN_DIR" "$LOG_DIR" "$POLICY_DIR"
+mkdir -p "$BIN_DIR" "$LOG_DIR" "$POLICY_DIR" "$SYSTEM_STATE_DIR"
 
 printf 'control_d\n' > "$CAPABILITIES"
 : > "$MUTATION_LOG"
@@ -93,6 +94,7 @@ PATH="$BIN_DIR:$PATH" \
   SYSTEMCTL_LOG="$SYSTEMCTL_LOG" \
   NIXOME_XEN_CAPABILITIES="$CAPABILITIES" \
   NIXOME_QUBES_POLICY_DIR="$POLICY_DIR" \
+  NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
   NIXOME_LOG_DIR="$LOG_DIR" \
   "$BASH" "$ROOT/scripts/setup-config.sh" --apply --topology "$TOPOLOGY" \
   > "$LOG_DIR/first-stdout.log" 2> "$LOG_DIR/first-stderr.log"
@@ -128,6 +130,7 @@ PATH="$BIN_DIR:$PATH" \
   SYSTEMCTL_LOG="$SYSTEMCTL_LOG" \
   NIXOME_XEN_CAPABILITIES="$CAPABILITIES" \
   NIXOME_QUBES_POLICY_DIR="$POLICY_DIR" \
+  NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
   NIXOME_LOG_DIR="$LOG_DIR" \
   "$BASH" "$ROOT/scripts/setup-config.sh" --apply --topology "$TOPOLOGY" \
   > "$LOG_DIR/second-stdout.log" 2> "$LOG_DIR/second-stderr.log"
@@ -138,6 +141,16 @@ jq -e '
   .mode == "apply" and
   .qrexec_policy_changed == 0
 ' "$LOG_DIR/setup-config.json" >/dev/null
+
+jq -e '
+  .schema == "nixome.setup-config.v1" and
+  .status == "passed" and
+  .qrexec_policy_changed == 0
+' "$SYSTEM_STATE_DIR/current-setup.json" >/dev/null
+jq -e '
+  .schema == "nixome.qubes-topology.v1" and
+  (.qrexec_policy.rules | length) == 2
+' "$SYSTEM_STATE_DIR/current-topology.json" >/dev/null
 
 if [ -s "$SYSTEMCTL_LOG" ]; then
   printf 'idempotent qrexec policy apply restarted the policy daemon:\n' >&2
