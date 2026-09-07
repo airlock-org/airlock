@@ -203,7 +203,8 @@ generated log directory, and removes the test qube on success if it created it.
   `/var/lib/nixome/system/current-topology.json`, falling back to the bootstrap
   image topology, and includes durable current/last deployment records from the
   same state directory. It also reports `pending_reboot` from the active system
-  plan.
+  plan and `pending_vm_restarts` from the latest topology setup result, so
+  automation can distinguish host reboot work from Qube restart work.
 - `modules/qube-guest.nix`, `pkgs/nixome-qubes-template`, and
   `modules/qubes-topology.nix` are the first pieces for NixOS-backed Qubes
   templates and declarative topology setup.

@@ -7,6 +7,7 @@ BOOT_TOPOLOGY_JSON="${NIXOME_CONFIG_STATUS_BOOT_TOPOLOGY_JSON:-/etc/nixome/qubes
 CURRENT_TOPOLOGY_JSON="${NIXOME_CONFIG_STATUS_CURRENT_TOPOLOGY_JSON:-$SYSTEM_STATE_DIR/current-topology.json}"
 TOPOLOGY_OVERRIDE="${NIXOME_CONFIG_STATUS_TOPOLOGY_JSON:-}"
 SETUP_JSON="${NIXOME_CONFIG_STATUS_SETUP_JSON:-$LOG_DIR/setup-config.json}"
+CURRENT_SETUP_JSON="${NIXOME_CONFIG_STATUS_CURRENT_SETUP_JSON:-$SYSTEM_STATE_DIR/current-setup.json}"
 APPLY_JSON="${NIXOME_CONFIG_STATUS_APPLY_JSON:-$LOG_DIR/config-apply.json}"
 QREXEC_POLICY_DIR="${NIXOME_QUBES_POLICY_DIR:-/var/lib/nixome/qubes-policy.d}"
 QREXEC_MANAGED_POLICY="${NIXOME_QUBES_MANAGED_POLICY_FILE:-90-nixome.policy}"
@@ -109,7 +110,15 @@ else
   topology_source="boot"
   topology_json="$boot_topology_json"
 fi
-setup_json="$(json_file_or_null "$SETUP_JSON")"
+setup_log_json="$(json_file_or_null "$SETUP_JSON")"
+current_setup_json="$(json_file_or_null "$CURRENT_SETUP_JSON")"
+if [ "$setup_log_json" != null ]; then
+  setup_json="$setup_log_json"
+  setup_source="log"
+else
+  setup_json="$current_setup_json"
+  setup_source="current"
+fi
 apply_json="$(json_file_or_null "$APPLY_JSON")"
 current_system_json="$(json_file_or_null "$SYSTEM_STATE_DIR/current-system.json")"
 current_plan_json="$(json_file_or_null "$SYSTEM_STATE_DIR/current-plan.json")"
@@ -135,6 +144,8 @@ jq -n \
   --arg boot_topology_path "$BOOT_TOPOLOGY_JSON" \
   --arg current_topology_path "$CURRENT_TOPOLOGY_JSON" \
   --arg setup_path "$SETUP_JSON" \
+  --arg setup_source "$setup_source" \
+  --arg current_setup_path "$CURRENT_SETUP_JSON" \
   --arg apply_path "$APPLY_JSON" \
   --arg system_state_dir "$SYSTEM_STATE_DIR" \
   --arg qrexec_policy_file "$QREXEC_POLICY_FILE" \
@@ -151,6 +162,8 @@ jq -n \
   --argjson topology "$topology_json" \
   --argjson boot_topology "$boot_topology_json" \
   --argjson current_topology "$current_topology_json" \
+  --argjson setup_log "$setup_log_json" \
+  --argjson current_setup "$current_setup_json" \
   --argjson setup "$setup_json" \
   --argjson apply "$apply_json" \
   --argjson current_system "$current_system_json" \
@@ -220,6 +233,22 @@ jq -n \
        ((plan_array("reboot_actions") | length) == 0) and
        ((plan_array("reboot_reasons") | length) > 0));
 
+    def setup_array($field):
+      if (($setup[$field]? | type) == "array") then $setup[$field] else [] end;
+
+    def pending_vm_restart_actions:
+      setup_array("restart_actions");
+
+    def pending_vm_restart_reasons:
+      pending_vm_restart_actions | map(.reason // empty) | unique;
+
+    def pending_vm_restart_domains:
+      pending_vm_restart_actions | map(.domain // empty) | map(select(. != "")) | unique;
+
+    def pending_vm_restart_required:
+      (($setup.restart_required? | type) == "boolean" and $setup.restart_required) or
+      ((pending_vm_restart_actions | length) > 0);
+
     {
       schema: "nixome.config-status.v1",
       status: status,
@@ -228,6 +257,7 @@ jq -n \
         boot_topology: $boot_topology_path,
         current_topology: $current_topology_path,
         setup: $setup_path,
+        current_setup: $current_setup_path,
         apply: $apply_path,
         system_state_dir: $system_state_dir,
         qrexec_policy_file: $qrexec_policy_file
@@ -261,6 +291,12 @@ jq -n \
         actions: pending_reboot_actions,
         reasons: pending_reboot_reasons
       },
+      pending_vm_restarts: {
+        required: pending_vm_restart_required,
+        actions: pending_vm_restart_actions,
+        domains: pending_vm_restart_domains,
+        reasons: pending_vm_restart_reasons
+      },
       deployment: {
         current: $current_deployment,
         last_attempt: $last_deployment,
@@ -268,6 +304,9 @@ jq -n \
         last_apply_result: $last_config_apply
       },
       setup: $setup,
+      setup_source: $setup_source,
+      setup_log: $setup_log,
+      current_setup: $current_setup,
       apply: $apply,
       system: {
         state_dir: $system_state_dir,

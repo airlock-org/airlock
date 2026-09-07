@@ -202,15 +202,18 @@ That command reads the active topology, latest setup/apply artifacts,
 domain list when `qvm-ls` is available, and the Nixome-managed qrexec policy
 file. It prefers `/var/lib/nixome/system/current-topology.json`, which
 `nixome-config-apply` updates after successful topology setup, and falls back to
-the bootstrap topology at `/etc/nixome/qubes-topology.json`. After the vault
-accepts a deployment record, dom0 also keeps
+the bootstrap topology at `/etc/nixome/qubes-topology.json`. It prefers the
+latest setup result from the log directory, falling back to the durable
+`/var/lib/nixome/system/current-setup.json` when transient logs are gone. After
+the vault accepts a deployment record, dom0 also keeps
 `/var/lib/nixome/system/current-deployment.json`,
 `current-config-apply.json`, `last-deployment.json`, and
 `last-config-apply.json` so status remains useful after transient logs are
 rotated. Profile and `/run/current-system` symlinks are reported as both raw
 link targets and resolved store paths. The top-level `pending_reboot` object
 summarizes the active plan's reboot requirement, reasons, and structured
-actions for automation.
+actions for automation. The top-level `pending_vm_restarts` object summarizes
+Qubes domain changes that were applied while the affected domain was running.
 
 The current seed uses generated literal `/nix/store` path pins for Nixome,
 `nixpkgs`, and `nixos-qubes` support sources. Candidate Nix commands therefore
@@ -308,7 +311,11 @@ sudo nixome-setup-config --plan
 ```
 
 The setup command currently imports missing templates, creates missing domains,
-and sets global prefs plus simple domain prefs/features/services. It is
+and sets global prefs plus simple domain prefs/features/services. It records
+changed objects in `live_actions`, and records affected running domains in
+`restart_actions` with `restart_required = true` when a changed pref, feature,
+or service may require the Qube to restart before the new setting fully takes
+effect. It is
 idempotent: if the declared templates, domains, prefs, features, services, and
 managed VM kernel files already match, it reports zero changes. It does not
 delete undeclared domains. Dom0 host system generation switching and explicit

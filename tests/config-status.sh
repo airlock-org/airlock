@@ -15,6 +15,7 @@ RESULT_JSON="$WORK_DIR/status.json"
 CURRENT_RESULT_JSON="$WORK_DIR/status-current.json"
 REBOOT_RESULT_JSON="$WORK_DIR/status-reboot.json"
 REBOOT_CONSUMED_RESULT_JSON="$WORK_DIR/status-reboot-consumed.json"
+CURRENT_SETUP_RESULT_JSON="$WORK_DIR/status-current-setup.json"
 PROFILE_DIR="$WORK_DIR/profiles"
 STORE_DIR="$WORK_DIR/store"
 SYSTEM_PROFILE="$PROFILE_DIR/nixome-system"
@@ -99,7 +100,32 @@ cat > "$CURRENT_TOPOLOGY_JSON" <<'EOF'
 EOF
 
 cat > "$LOG_DIR/setup-config.json" <<'EOF'
-{"schema":"nixome.setup-config.v1","status":"passed","domains_changed":2}
+{
+  "schema": "nixome.setup-config.v1",
+  "status": "passed",
+  "domains_changed": 2,
+  "restart_required": true,
+  "restart_actions": [
+    {
+      "type": "domain-pref",
+      "action": "restart",
+      "domain": "config-vault",
+      "field": "memory",
+      "value": "1024",
+      "reason": "domain is running; restart required for this change to fully take effect",
+      "state": "Running"
+    }
+  ],
+  "live_actions": [
+    {
+      "type": "domain-pref",
+      "action": "set",
+      "domain": "config-vault",
+      "field": "memory",
+      "value": "1024"
+    }
+  ]
+}
 EOF
 
 cat > "$LOG_DIR/config-apply.json" <<'EOF'
@@ -197,7 +223,14 @@ jq -e '
   .pending_reboot.required == false and
   .pending_reboot.actions == [] and
   .pending_reboot.reasons == [] and
+  .pending_vm_restarts.required == true and
+  (.pending_vm_restarts.actions | length) == 1 and
+  .pending_vm_restarts.actions[0].domain == "config-vault" and
+  .pending_vm_restarts.domains == ["config-vault"] and
+  .pending_vm_restarts.reasons == ["domain is running; restart required for this change to fully take effect"] and
+  .setup_source == "log" and
   .setup.status == "passed" and
+  (.setup.restart_actions | length) == 1 and
   .apply.status == "passed" and
   .deployment.current.deployment_id == "deployment-current" and
   .deployment.last_attempt.deployment_id == "deployment-last-attempt" and
@@ -298,11 +331,48 @@ jq -e '
   .pending_reboot.required == false and
   .pending_reboot.actions == [] and
   .pending_reboot.reasons == [] and
+  .pending_vm_restarts.required == true and
   .system.pending_reboot.required == false and
   .system.pending_reboot.actions == [] and
   .system.pending_reboot.reasons == [] and
   .system.current_plan.reboot_required == true and
   (.system.current_plan.reboot_actions | length) == 1
 ' "$REBOOT_CONSUMED_RESULT_JSON" >/dev/null
+
+mv "$LOG_DIR/setup-config.json" "$LOG_DIR/setup-config.json.saved"
+cat > "$STATE_DIR/current-setup.json" <<'EOF'
+{
+  "schema": "nixome.setup-config.v1",
+  "status": "passed",
+  "domains_changed": 0,
+  "restart_required": false,
+  "restart_actions": []
+}
+EOF
+
+env \
+  PATH="$BIN_DIR:$PATH" \
+  NIXOME_QVM_LS_BIN="$BIN_DIR/qvm-ls" \
+  NIXOME_CONFIG_STATUS_BOOT_TOPOLOGY_JSON="$TOPOLOGY_JSON" \
+  NIXOME_LOG_DIR="$LOG_DIR" \
+  NIXOME_SYSTEM_STATE_DIR="$STATE_DIR" \
+  NIXOME_QUBES_POLICY_DIR="$POLICY_DIR" \
+  NIXOME_CONFIG_STATUS_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
+  NIXOME_CONFIG_STATUS_HOST_SYSTEM_PROFILE="$HOST_SYSTEM_PROFILE" \
+  NIXOME_CONFIG_STATUS_RUN_CURRENT_SYSTEM="$RUN_CURRENT_SYSTEM" \
+  "$wrapper" > "$CURRENT_SETUP_RESULT_JSON"
+
+jq -e '
+  .schema == "nixome.config-status.v1" and
+  .setup_source == "current" and
+  .paths.current_setup != "" and
+  .setup.status == "passed" and
+  .setup_log == null and
+  .current_setup.status == "passed" and
+  .pending_vm_restarts.required == false and
+  .pending_vm_restarts.actions == [] and
+  .pending_vm_restarts.domains == [] and
+  .pending_vm_restarts.reasons == []
+' "$CURRENT_SETUP_RESULT_JSON" >/dev/null
 
 printf 'config status test ok\n'
