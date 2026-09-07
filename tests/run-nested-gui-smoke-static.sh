@@ -4,15 +4,22 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 bash -n "$ROOT/scripts/run-nested-gui-smoke.sh"
+bash -n "$ROOT/scripts/run-config-boot-activation-flow.sh"
 bash -n "$ROOT/scripts/nixos-config-vms-smoke.sh"
+bash -n "$ROOT/scripts/config-boot-verify.sh"
 
 grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'vm-config-boot-flow' "$ROOT/Makefile" >/dev/null
+grep -F 'vm-config-boot-activate-flow' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot' "$ROOT/Makefile" >/dev/null
+grep -F 'NIXOME_RUN_CONFIG_BOOT_VERIFY=1' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
+grep -F 'NIXOME_SHUTDOWN_VM_ON_SUCCESS=1' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_REASON' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_RUN_CONFIG_BOOT_VERIFY' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'nixome-config-boot-verify' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'if $DOM0_SYSTEM_SWITCH_ACTION_NIX == "switch" then' \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'EXPECTED_SYSTEMD_ACTIONS_STATUS="skipped"' \

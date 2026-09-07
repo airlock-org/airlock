@@ -20,11 +20,14 @@ AUTO_GC_AFTER_RUN="${NIXOME_AUTO_GC_AFTER_RUN:-0}"
 BOOTSTRAP_QUBES="${NIXOME_BOOTSTRAP_QUBES:-1}"
 RUN_SETUP_CONFIG="${NIXOME_RUN_SETUP_CONFIG:-0}"
 RUN_CONFIG_VMS_SMOKE="${NIXOME_RUN_CONFIG_VMS_SMOKE:-0}"
+RUN_CONFIG_BOOT_VERIFY="${NIXOME_RUN_CONFIG_BOOT_VERIFY:-0}"
 RUN_QREXEC_SMOKE="${NIXOME_RUN_QUBES_SMOKE:-1}"
 RUN_GUI_SMOKE="${NIXOME_RUN_GUI_SMOKE:-1}"
 CACHE_QUBES_ASSETS="${NIXOME_CACHE_QUBES_ASSETS:-1}"
 CACHE_DIR="${NIXOME_QUBES_CACHE_DIR:-$ROOT/.nixome-cache/rpms}"
 GUEST_CACHE_DIR="/var/cache/nixome/qubes-rpms"
+SHUTDOWN_VM_ON_SUCCESS="${NIXOME_SHUTDOWN_VM_ON_SUCCESS:-0}"
+SHUTDOWN_WAIT_SECONDS="${NIXOME_VM_SHUTDOWN_WAIT_SECONDS:-180}"
 
 TEMPLATE="${NIXOME_QUBES_TEMPLATE:-fedora-43-xfce}"
 TEMPLATE_URL="${NIXOME_QUBES_TEMPLATE_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/templates-itl/rpm/qubes-template-fedora-43-xfce-4.3.0-202601041226.noarch.rpm}"
@@ -48,6 +51,9 @@ SETUP_CONFIG_STDERR="$LOG_DIR/vm-gui-setup-config.stderr.log"
 CONFIG_VMS_JSON="$LOG_DIR/vm-gui-config-vms-smoke.json"
 CONFIG_VMS_STDOUT="$LOG_DIR/vm-gui-config-vms-smoke.stdout.log"
 CONFIG_VMS_STDERR="$LOG_DIR/vm-gui-config-vms-smoke.stderr.log"
+CONFIG_BOOT_VERIFY_JSON="$LOG_DIR/vm-gui-config-boot-verify.json"
+CONFIG_BOOT_VERIFY_STDOUT="$LOG_DIR/vm-gui-config-boot-verify.stdout.log"
+CONFIG_BOOT_VERIFY_STDERR="$LOG_DIR/vm-gui-config-boot-verify.stderr.log"
 QREXEC_JSON="$LOG_DIR/vm-gui-qrexec-smoke.json"
 QREXEC_STDERR="$LOG_DIR/vm-gui-qrexec-smoke.stderr.log"
 GUI_JSON="$LOG_DIR/vm-gui-window-smoke.json"
@@ -78,6 +84,9 @@ rm -f \
   "$CONFIG_VMS_JSON" \
   "$CONFIG_VMS_STDOUT" \
   "$CONFIG_VMS_STDERR" \
+  "$CONFIG_BOOT_VERIFY_JSON" \
+  "$CONFIG_BOOT_VERIFY_STDOUT" \
+  "$CONFIG_BOOT_VERIFY_STDERR" \
   "$QREXEC_JSON" \
   "$QREXEC_STDERR" \
   "$GUI_JSON" \
@@ -297,6 +306,21 @@ config_vms_env_prefix() {
   printf '%s' "$prefix"
 }
 
+config_boot_verify_env_prefix() {
+  local prefix="env"
+  local name
+
+  for name in \
+    NIXOME_EXPECTED_APPLIED_MESSAGE \
+    NIXOME_EXPECTED_HOST_SYSTEM_SOURCE; do
+    if [ -n "${!name+x}" ]; then
+      prefix="$prefix $name=$(shell_quote "${!name}")"
+    fi
+  done
+
+  printf '%s' "$prefix"
+}
+
 ssh_command() {
   SSHPASS="$SSH_PASSWORD" nix shell nixpkgs#sshpass -c sshpass -e \
     ssh \
@@ -343,6 +367,9 @@ collect_diagnostics() {
   remote 'sudo -n cat /var/log/nixome/config-vms-config-vault-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-vault-console.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-config-staging-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-staging-console.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-config-validator-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-validator-console.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-boot-verify.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-boot-verify-status.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify-status.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-boot-verify-marker.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify-marker.log" 2>/dev/null || true
 }
 
 extract_json_result() {
@@ -360,6 +387,40 @@ extract_json_result() {
       exit 1
     }
   ' "$input" > "$output"
+}
+
+shutdown_vm_on_success() {
+  case "$SHUTDOWN_VM_ON_SUCCESS" in
+    1|true|yes)
+      ;;
+    0|false|no)
+      return 0
+      ;;
+    *)
+      printf 'warning: ignoring unsupported NIXOME_SHUTDOWN_VM_ON_SUCCESS value: %s\n' "$SHUTDOWN_VM_ON_SUCCESS" >&2
+      return 0
+      ;;
+  esac
+
+  if [ "$KEEP_VM" = "1" ] || [ -z "$vm_pid" ] || ! kill -0 "$vm_pid" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  printf 'vm: requesting guest shutdown\n'
+  remote 'sudo -n systemctl poweroff' >/dev/null 2>&1 || true
+
+  local deadline
+  deadline=$((SECONDS + SHUTDOWN_WAIT_SECONDS))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if ! kill -0 "$vm_pid" >/dev/null 2>&1; then
+      wait "$vm_pid" >/dev/null 2>&1 || true
+      vm_pid=""
+      return 0
+    fi
+    sleep 2
+  done
+
+  printf 'warning: VM did not shut down within %s seconds; cleanup will terminate it\n' "$SHUTDOWN_WAIT_SECONDS" >&2
 }
 
 prepare_cached_bootstrap_assets
@@ -484,6 +545,27 @@ else
   printf '{"schema":"nixome.config-vms-smoke.v1","status":"skipped","reason":"NIXOME_RUN_CONFIG_VMS_SMOKE=0"}\n' > "$CONFIG_VMS_JSON"
 fi
 
+if [ "$RUN_CONFIG_BOOT_VERIFY" = "1" ]; then
+  printf 'config-boot: verifying dom0 booted into staged generation\n'
+  config_boot_verify_env="$(config_boot_verify_env_prefix)"
+  if ! remote "sudo -n $config_boot_verify_env NIXOME_LOG_DIR=/var/log/nixome nixome-config-boot-verify" > "$CONFIG_BOOT_VERIFY_STDOUT" 2> "$CONFIG_BOOT_VERIFY_STDERR"; then
+    remote 'sudo -n cat /var/log/nixome/config-boot-verify.json 2>/dev/null || true' > "$CONFIG_BOOT_VERIFY_JSON" 2>/dev/null || true
+    collect_diagnostics
+    cat "$CONFIG_BOOT_VERIFY_STDERR" >&2 || true
+    exit 1
+  fi
+  if ! extract_json_result "nixome.config-boot-verify.v1" "$CONFIG_BOOT_VERIFY_STDOUT" "$CONFIG_BOOT_VERIFY_JSON"; then
+    remote 'sudo -n cat /var/log/nixome/config-boot-verify.json 2>/dev/null || true' > "$CONFIG_BOOT_VERIFY_JSON" 2>/dev/null || true
+    if ! grep -q '"schema":"nixome.config-boot-verify.v1"' "$CONFIG_BOOT_VERIFY_JSON"; then
+      collect_diagnostics
+      printf 'config boot verify did not emit result JSON; see %s\n' "$CONFIG_BOOT_VERIFY_STDOUT" >&2
+      exit 1
+    fi
+  fi
+else
+  printf '{"schema":"nixome.config-boot-verify.v1","status":"skipped","reason":"NIXOME_RUN_CONFIG_BOOT_VERIFY=0"}\n' > "$CONFIG_BOOT_VERIFY_JSON"
+fi
+
 if [ "$RUN_QREXEC_SMOKE" = "1" ]; then
   printf 'qrexec: running uname smoke test\n'
   if ! remote "env NIXOME_LOG_DIR=/tmp/nixome-logs NIXOME_TEST_TEMPLATE=$(shell_quote "$TEMPLATE") NIXOME_TEST_QUBE=$(shell_quote "$QUBE") NIXOME_TEST_CLEANUP=0 nixome-qubes-smoke" > "$QREXEC_JSON" 2> "$QREXEC_STDERR"; then
@@ -508,11 +590,13 @@ fi
 
 remote 'qvm-ls || true' > "$QVM_LS_LOG" 2>/dev/null || true
 collect_diagnostics
+shutdown_vm_on_success
 
 printf 'nested GUI smoke completed\n'
 printf 'observe: %s\n' "$OBSERVE_JSON"
 printf 'bootstrap: %s\n' "$BOOTSTRAP_JSON"
 printf 'setup-config: %s\n' "$SETUP_CONFIG_JSON"
 printf 'config-vms: %s\n' "$CONFIG_VMS_JSON"
+printf 'config-boot: %s\n' "$CONFIG_BOOT_VERIFY_JSON"
 printf 'qrexec: %s\n' "$QREXEC_JSON"
 printf 'gui: %s\n' "$GUI_JSON"

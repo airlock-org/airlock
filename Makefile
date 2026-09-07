@@ -26,7 +26,7 @@ endif
 
 NIXOME_NIX ?= ./scripts/nixome-nix.sh
 
-.PHONY: ensure-generated-dirs build test nixos-templates nixos-templates-dry-run vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-config-setup vm-config-flow vm-config-boot-flow vm-config-template-flow vm-config-smoke disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test nixos-templates nixos-templates-dry-run vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-config-setup vm-config-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-template-flow vm-config-smoke disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -92,6 +92,9 @@ vm-config-flow: ensure-generated-dirs gc-auto
 
 vm-config-boot-flow: ensure-generated-dirs gc-auto
 	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
+
+vm-config-boot-activate-flow: ensure-generated-dirs gc-auto
+	./scripts/run-config-boot-activation-flow.sh
 
 vm-config-template-flow: ensure-generated-dirs gc-auto
 	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh

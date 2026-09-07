@@ -181,6 +181,7 @@ let
   setupConfig = pkgs.callPackage ../pkgs/nixome-setup-config { };
   configApply = pkgs.callPackage ../pkgs/nixome-config-apply { };
   configArchive = pkgs.callPackage ../pkgs/nixome-config-archive { };
+  configBootVerify = pkgs.callPackage ../pkgs/nixome-config-boot-verify { };
   configStatus = pkgs.callPackage ../pkgs/nixome-config-status { };
   configVmsSmoke = pkgs.callPackage ../pkgs/nixome-config-vms-smoke { };
   qrexecPolicyStaticDir = "/etc/qubes/policy.d";
@@ -359,6 +360,7 @@ in
     environment.systemPackages = [
       configApply
       configArchive
+      configBootVerify
       configStatus
       configVmsSmoke
       setupConfig
