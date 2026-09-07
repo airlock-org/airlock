@@ -158,9 +158,9 @@ record_domain_restart_if_running() {
   value="$4"
   state=""
 
-  [ "$APPLY" = "1" ] || return
+  [ "$APPLY" = "1" ] || return 0
   state="$(domain_state "$domain" || true)"
-  [ "$state" = "Running" ] || return
+  [ "$state" = "Running" ] || return 0
 
   record_action \
     "$RESTART_ACTIONS_JSONL" \
@@ -251,7 +251,16 @@ run_or_plan() {
   printf '\n'
 
   if [ "$APPLY" = "1" ]; then
+    set +e
     "$@"
+    rc="$?"
+    set -e
+    if [ "$rc" != "0" ]; then
+      printf 'command failed with exit %s:' "$rc"
+      printf ' %q' "$@"
+      printf '\n'
+      return "$rc"
+    fi
   fi
 }
 
@@ -414,6 +423,40 @@ set_service() {
   services_changed=$((services_changed + 1))
   record_live_action domain-service set "$domain" "$service" "$value"
   record_domain_restart_if_running "$domain" domain-service "$service" "$value"
+}
+
+is_preferred_domain_pref() {
+  case "$1" in
+    virt_mode|kernel|kernelopts|memory|maxmem|qrexec_timeout|default_user)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+domain_pref_names() {
+  domain="$1"
+  local pref
+  local name
+  local names=()
+
+  mapfile -t names < <(jq_get '.domains[$name].prefs | keys[]?' --arg name "$domain")
+
+  for pref in virt_mode kernel kernelopts memory maxmem qrexec_timeout default_user; do
+    for name in "${names[@]}"; do
+      if [ "$name" = "$pref" ]; then
+        printf '%s\n' "$name"
+      fi
+    done
+  done
+
+  for name in "${names[@]}"; do
+    if ! is_preferred_domain_pref "$name"; then
+      printf '%s\n' "$name"
+    fi
+  done
 }
 
 is_qubes_name() {
@@ -736,7 +779,7 @@ for domain in "${domain_names[@]}"; do
       set_pref "$domain" netvm "$netvm"
     fi
 
-    mapfile -t pref_names < <(jq_get '.domains[$name].prefs | keys[]?' --arg name "$domain")
+    mapfile -t pref_names < <(domain_pref_names "$domain")
     for pref in "${pref_names[@]}"; do
       value="$(json_value '.domains[$name].prefs[$pref]' --arg name "$domain" --arg pref "$pref")"
       set_pref "$domain" "$pref" "$value"
