@@ -297,6 +297,18 @@ qvm_run_probe() {
   timeout "$QREXEC_TIMEOUT_SECONDS" "${qvm_run_args[@]}" "$vm" "$command" > "$output" 2>&1
 }
 
+qvm_volume_list_has_volume() {
+  vm="$1"
+  volume="$2"
+
+  qvm-volume list "$vm" |
+    awk -v volume="$volume" '
+      NR == 1 { next }
+      $3 == volume || $1 ~ "/" volume "$" { found = 1 }
+      END { exit found ? 0 : 1 }
+    '
+}
+
 wait_for_qrexec() {
   vm="$1"
   label="$2"
@@ -779,7 +791,7 @@ qvm-ls --raw-data --fields NAME,CLASS | grep -Fx "$DOMAIN|StandaloneVM" >/dev/nu
   fail "domain is not a StandaloneVM"
 qvm-volume info "$DOMAIN:store" >/dev/null 2>&1 ||
   fail "Qubes store volume was not created"
-qvm-volume list "$DOMAIN" | grep -F "$DOMAIN:store" >/dev/null ||
+qvm_volume_list_has_volume "$DOMAIN" store ||
   fail "Qubes volume list does not include the store volume"
 
 grep -F "nixome.NixStoreRuntimeCheck * dom0 $DOMAIN allow" "$POLICY_LOG" >/dev/null ||
