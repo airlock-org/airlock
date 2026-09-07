@@ -17,17 +17,22 @@ HOST_SYSTEM_PROFILE="$WORK_DIR/host-system-profile"
 HOST_CURRENT_SYSTEM_LINK="$WORK_DIR/current-system"
 VALIDATED_TAR="$WORK_DIR/config-candidate-validated.tar"
 DEPLOYMENT_TAR_CAPTURE="$WORK_DIR/deployment.tar"
+READ_ONLY_TOPOLOGY_TARGET="$WORK_DIR/read-only-boot-topology.json"
 
 rm -rf "$WORK_DIR"
 mkdir -p \
   "$BIN_DIR" \
   "$CANDIDATE_DIR" \
   "$LOG_DIR" \
+  "$SYSTEM_ETC_DIR" \
   "$PROFILE_SOURCE/bin" \
   "$PROFILE_SOURCE/share/nixome" \
   "$HOST_SYSTEM_SOURCE/bin" \
   "$HOST_SYSTEM_SOURCE/etc"
 printf 'control_d\n' > "$CAPABILITIES"
+printf '{"schema":"nixome.qubes-topology.v1","domains":{}}\n' > "$READ_ONLY_TOPOLOGY_TARGET"
+chmod 0444 "$READ_ONLY_TOPOLOGY_TARGET"
+ln -s "$READ_ONLY_TOPOLOGY_TARGET" "$SYSTEM_ETC_DIR/qubes-topology.json"
 
 cat > "$PROFILE_SOURCE/share/nixome/profile.json" <<'EOF'
 {"schema":"nixome.dom0-profile.v1","message":"profile-from-test","built_by":"config-system-apply-test"}
@@ -349,6 +354,15 @@ jq -e \
   .dom0.systemd.services."nixome-test-reload.service".action == "reload" and
   .plan.reboot_required == false
 ' "$SYSTEM_STATE_DIR/current-system.json" >/dev/null
+jq -e '
+  .schema == "nixome.qubes-topology.v1" and
+  (.domains | length) == 0
+' "$SYSTEM_STATE_DIR/current-topology.json" >/dev/null
+jq -e '
+  .schema == "nixome.setup-config.v1" and
+  .status == "passed"
+' "$SYSTEM_STATE_DIR/current-setup.json" >/dev/null
+[ "$(readlink "$SYSTEM_ETC_DIR/qubes-topology.json")" = "$READ_ONLY_TOPOLOGY_TARGET" ]
 
 grep -qx activated "$SYSTEM_STATE_DIR/profile-activated"
 grep -Fx "restart nixome-test-restart.service" "$SYSTEM_STATE_DIR/systemctl-calls" >/dev/null
@@ -425,6 +439,10 @@ jq -e '
   .deployment.system_apply.status == "failed" and
   .deployment_archive.status == "passed"
 ' "$FAIL_LOG_DIR/config-apply.json" >/dev/null
+jq -e '
+  .schema == "nixome.qubes-topology.v1" and
+  (.domains | length) == 0
+' "$FAIL_SYSTEM_STATE_DIR/current-topology.json" >/dev/null
 
 mkdir -p "$WORK_DIR/deployment-failed-extract"
 tar -C "$WORK_DIR/deployment-failed-extract" -xf "$FAIL_DEPLOYMENT_TAR_CAPTURE" deployment.json system-apply.json systemd-actions.json

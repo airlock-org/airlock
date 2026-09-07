@@ -1113,11 +1113,10 @@ finish_system_apply_failed() {
 }
 
 persist_current_topology() {
-  mkdir -p "$SYSTEM_STATE_DIR" "$SYSTEM_ETC_DIR"
+  mkdir -p "$SYSTEM_STATE_DIR"
   cp "$APPLY_TOPOLOGY_JSON" "$SYSTEM_STATE_DIR/current-topology.json"
   cp "$VALIDATED_TOPOLOGY_JSON" "$SYSTEM_STATE_DIR/current-validated-topology.json"
   cp "$SETUP_JSON" "$SYSTEM_STATE_DIR/current-setup.json"
-  cp "$APPLY_TOPOLOGY_JSON" "$SYSTEM_ETC_DIR/qubes-topology.json"
 }
 
 apply_system() {
