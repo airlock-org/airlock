@@ -502,23 +502,26 @@ let
           cp -a "$store_path" "$root/$store_entry"
         done < ${closure}/store-paths
 
-        used_bytes="$(du -sb "$root" | awk '{ print $1 }')"
+        used_apparent_bytes="$(du -sb "$root" | awk '{ print $1 }')"
+        used_bytes="$(du -sB1 "$root" | awk '{ print $1 }')"
         used_inodes="$(find "$root" -mindepth 1 -printf x | wc -c)"
         requested_spare_bytes="$((${toString additionalSpaceMiB} * 1024 * 1024))"
-        metadata_spare_bytes="$((used_bytes / 4 + 256 * 1024 * 1024))"
+        inode_spare="$((used_inodes / 2 + 8192))"
+        inode_count="$((used_inodes + inode_spare))"
+        metadata_spare_bytes="$((used_bytes / 2 + 512 * 1024 * 1024 + inode_count * 512))"
         if [ "$requested_spare_bytes" -gt "$metadata_spare_bytes" ]; then
           spare_bytes="$requested_spare_bytes"
         else
           spare_bytes="$metadata_spare_bytes"
         fi
-        inode_spare="$((used_inodes / 4 + 4096))"
-        inode_count="$((used_inodes + inode_spare))"
         image_bytes="$((used_bytes + spare_bytes))"
+        image_bytes="$((((image_bytes + 1048575) / 1048576) * 1048576))"
         truncate -s "$image_bytes" "$out/store.img"
-        mkfs.ext4 -q -F -L nixstore -N "$inode_count" -d "$root" "$out/store.img"
+        mkfs.ext4 -q -F -m 0 -L nixstore -N "$inode_count" -d "$root" "$out/store.img"
 
         cp ${closure}/store-paths "$out/store-paths"
         {
+          printf 'used_apparent_bytes=%s\n' "$used_apparent_bytes"
           printf 'used_bytes=%s\n' "$used_bytes"
           printf 'used_inodes=%s\n' "$used_inodes"
           printf 'requested_spare_bytes=%s\n' "$requested_spare_bytes"
@@ -529,7 +532,7 @@ let
           printf 'image_bytes=%s\n' "$image_bytes"
         } > "$out/image-sizing.txt"
         cat > "$out/manifest.json" <<EOF
-        {"schema":"nixome.store-closure-image.v1","name":"${name}","image":"store.img","mountpoint":"/nix/store","device":"${device}","read_only":true,"sizing":"used-plus-proportional-spare","inode_sizing":"used-plus-25-percent-and-floor"}
+        {"schema":"nixome.store-closure-image.v1","name":"${name}","image":"store.img","mountpoint":"/nix/store","device":"${device}","read_only":true,"sizing":"allocated-used-plus-metadata-spare","inode_sizing":"used-plus-50-percent-and-floor"}
         EOF
       '';
 

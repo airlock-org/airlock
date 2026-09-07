@@ -31,10 +31,11 @@ jq -e '
   .mountpoint == "/nix/store" and
   .device == "/dev/xvde" and
   .read_only == true and
-  .sizing == "used-plus-proportional-spare" and
-  .inode_sizing == "used-plus-25-percent-and-floor"
+  .sizing == "allocated-used-plus-metadata-spare" and
+  .inode_sizing == "used-plus-50-percent-and-floor"
 ' "$STORE_IMAGE_OUT/manifest.json" >/dev/null
 
+grep -E '^used_apparent_bytes=[1-9][0-9]*$' "$STORE_IMAGE_OUT/image-sizing.txt" >/dev/null
 grep -E '^used_bytes=[1-9][0-9]*$' "$STORE_IMAGE_OUT/image-sizing.txt" >/dev/null
 grep -E '^used_inodes=[1-9][0-9]*$' "$STORE_IMAGE_OUT/image-sizing.txt" >/dev/null
 grep -E '^spare_bytes=[1-9][0-9]*$' "$STORE_IMAGE_OUT/image-sizing.txt" >/dev/null
