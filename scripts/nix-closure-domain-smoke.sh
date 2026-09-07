@@ -471,6 +471,8 @@ store_device="$(
 mount_source="$(findmnt -rn -T /nix/store -o SOURCE)"
 mount_options="$(findmnt -rn -T /nix/store -o OPTIONS)"
 current_system="$(readlink -f /run/current-system)"
+guest_user="$(id -un)"
+home_dir="${HOME:-/home/$guest_user}"
 
 printf 'cmdline=%s\n' "$(cat /proc/cmdline)"
 printf 'system_path=%s\n' "$system_path"
@@ -478,6 +480,8 @@ printf 'store_device=%s\n' "$store_device"
 printf 'mount_source=%s\n' "$mount_source"
 printf 'mount_options=%s\n' "$mount_options"
 printf 'current_system=%s\n' "$current_system"
+printf 'guest_user=%s\n' "$guest_user"
+printf 'home_dir=%s\n' "$home_dir"
 printf 'system_state=%s\n' "$(systemctl is-system-running 2>/dev/null || true)"
 printf 'qubes_name=%s\n' "$(qubesdb-read /name 2>/dev/null || true)"
 printf 'domain_role=%s\n' "$(cat /etc/nixome/domain-role)"
@@ -494,7 +498,10 @@ case ",$mount_options," in
 esac
 
 printf '\n== findmnt ==\n'
-findmnt / /nix/store /rw /home /usr/local /run /var || true
+for mount_path in / /nix/store /rw /home /usr/local /run /var "$home_dir"; do
+  printf '%s ' "$mount_path"
+  findmnt -rn -T "$mount_path" -o TARGET,SOURCE,OPTIONS || true
+done
 printf '\n== lsblk ==\n'
 lsblk -o NAME,RO,SIZE,FSTYPE,MOUNTPOINTS
 printf '\n== services ==\n'
@@ -507,10 +514,12 @@ case "$(cat /etc/nixome/domain-role)" in
   *) echo "unexpected domain role" >&2; exit 1 ;;
 esac
 
-touch /rw/nixome-closure-smoke-persistent
-mkdir -p "$HOME" /usr/local/nixome-smoke
-touch "$HOME/nixome-closure-smoke-home"
-touch /usr/local/nixome-smoke/write-test
+[ -d /rw ]
+[ -d /rw/home ]
+[ -d /usr/local ]
+[ -d "$home_dir" ]
+[ -w "$home_dir" ]
+touch "$home_dir/nixome-closure-smoke-home"
 test -d /run/qubes
 test -d /var/log/qubes
 
@@ -534,9 +543,14 @@ run_guest_probe() {
 run_persistence_probe() {
   cat > "$GUEST_PROBE_SCRIPT.persistence" <<'EOF'
 set -eu
-test -f /rw/nixome-closure-smoke-persistent
-test -f "$HOME/nixome-closure-smoke-home"
-test -f /usr/local/nixome-smoke/write-test
+guest_user="$(id -un)"
+home_dir="${HOME:-/home/$guest_user}"
+test -d /rw
+test -d /rw/home
+test -d /usr/local
+test -d "$home_dir"
+test -w "$home_dir"
+test -f "$home_dir/nixome-closure-smoke-home"
 findmnt -rn -T /nix/store -o OPTIONS | grep -E '(^|,)ro(,|$)'
 printf 'persistence_probe=passed\n'
 EOF

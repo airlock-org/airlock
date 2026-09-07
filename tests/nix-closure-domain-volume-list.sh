@@ -28,6 +28,12 @@ if grep -F 'grep -F "$DOMAIN:store"' "$SCRIPT" >/dev/null; then
 fi
 
 grep -F 'qvm_volume_list_has_volume "$DOMAIN" store' "$SCRIPT" >/dev/null
+grep -F 'touch "$home_dir/nixome-closure-smoke-home"' "$SCRIPT" >/dev/null
+
+if grep -F 'touch /rw/nixome-closure-smoke-persistent' "$SCRIPT" >/dev/null; then
+  printf 'nix-closure-domain-smoke.sh still writes directly to /rw as the qrexec user\n' >&2
+  exit 1
+fi
 
 printf 'store_options=ro,nodev,relatime\n' > "$WORK_DIR/store-options.log"
 grep -E '^store_options=([^,]+,)*ro(,|$)' "$WORK_DIR/store-options.log" >/dev/null
