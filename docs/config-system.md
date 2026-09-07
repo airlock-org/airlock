@@ -42,8 +42,9 @@ For this POC the three config roles share one NixOS guest TemplateVM. That
 shared image carries the vault archive tooling, staging export tooling, and
 validator tooling; the AppVM names, Qubes features, offline networking, and
 qrexec policy carry the runtime role distinction. Dedicated role-specific guest
-closures still evaluate/build and remain a hardening target once the authority
-flow is stable.
+closures and template package outputs are exposed as buildable artifacts, but
+the runtime topology does not switch to them yet. That remains a hardening
+target once the authority flow is stable.
 
 The staged config now takes the next step for normal workload templates: it
 defines `nixome-nixos-work` as a NixOS TemplateVM package output and declares

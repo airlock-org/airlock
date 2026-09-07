@@ -234,6 +234,9 @@ generated log directory, and removes the test qube on success if it created it.
   for all three config AppVM roles to keep nested image builds practical; staged
   config can now define dom0 host modules and additional NixOS TemplateVM
   contents in `nixome/machine.nix` as first-class machine configuration.
+  Role-specific config template artifacts for vault, staging, and validator are
+  exposed as separate build outputs, but the runtime topology still uses the
+  shared config-system TemplateVM.
 - `machines/test.nix` is the first concrete NixOS dom0 configuration.
 - `tests/` contains layered feedback scripts.
 - `docs/` records upstream findings and the next test boundary.

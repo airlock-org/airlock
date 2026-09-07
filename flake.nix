@@ -244,6 +244,18 @@
             configuration = self.nixosConfigurations.qube-template-config-system;
             imageName = "nixome-nixos-config-system";
           };
+          configVaultRootImage = mkQubeRootImage system {
+            configuration = self.nixosConfigurations.qube-template-config-vault;
+            imageName = "nixome-nixos-config-vault";
+          };
+          configStagingRootImage = mkQubeRootImage system {
+            configuration = self.nixosConfigurations.qube-template-config-staging;
+            imageName = "nixome-nixos-config-staging";
+          };
+          configValidatorRootImage = mkQubeRootImage system {
+            configuration = self.nixosConfigurations.qube-template-config-validator;
+            imageName = "nixome-nixos-config-validator";
+          };
         in
         {
           nixome-config-apply = pkgs.callPackage ./pkgs/nixome-config-apply { };
@@ -273,17 +285,20 @@
             templateName = "nixome-nixos-config-system";
             rootImageFile = "${configSystemRootImage}/root.img";
           };
+          nixome-nixos-config-vault-root-image = configVaultRootImage;
           nixome-nixos-config-vault-template = mkQubesTemplatePackage system {
             templateName = "nixome-nixos-config-vault";
-            rootImageFile = "${configSystemRootImage}/root.img";
+            rootImageFile = "${configVaultRootImage}/root.img";
           };
+          nixome-nixos-config-staging-root-image = configStagingRootImage;
           nixome-nixos-config-staging-template = mkQubesTemplatePackage system {
             templateName = "nixome-nixos-config-staging";
-            rootImageFile = "${configSystemRootImage}/root.img";
+            rootImageFile = "${configStagingRootImage}/root.img";
           };
+          nixome-nixos-config-validator-root-image = configValidatorRootImage;
           nixome-nixos-config-validator-template = mkQubesTemplatePackage system {
             templateName = "nixome-nixos-config-validator";
-            rootImageFile = "${configSystemRootImage}/root.img";
+            rootImageFile = "${configValidatorRootImage}/root.img";
           };
           nixome-nixos-work-template = stagedTemplateSet.packages.nixome-nixos-work-template;
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;

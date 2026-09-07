@@ -15,8 +15,14 @@ GUEST_INIT_BEFORE_JSON="$WORK_DIR/guest-init-before.json"
 GUEST_QREXEC_REQUIRES_JSON="$WORK_DIR/guest-qrexec-requires.json"
 GUEST_QREXEC_AFTER_JSON="$WORK_DIR/guest-qrexec-after.json"
 GUEST_VALIDATOR_ROLE_JSON="$WORK_DIR/guest-validator-role.json"
+GUEST_VAULT_HOSTNAME_JSON="$WORK_DIR/guest-vault-hostname.json"
+GUEST_STAGING_HOSTNAME_JSON="$WORK_DIR/guest-staging-hostname.json"
+GUEST_VALIDATOR_HOSTNAME_JSON="$WORK_DIR/guest-validator-hostname.json"
 GUEST_VALIDATOR_RPC_MODE_JSON="$WORK_DIR/guest-validator-rpc-mode.json"
 GUEST_DEPLOYMENT_RPC_MODE_JSON="$WORK_DIR/guest-deployment-rpc-mode.json"
+GUEST_VAULT_ROOT_IMAGE_DRV="$WORK_DIR/guest-vault-root-image.drv"
+GUEST_STAGING_ROOT_IMAGE_DRV="$WORK_DIR/guest-staging-root-image.drv"
+GUEST_VALIDATOR_ROOT_IMAGE_DRV="$WORK_DIR/guest-validator-root-image.drv"
 SETUP_CONFIG_WANTED_BY_JSON="$WORK_DIR/setup-config-wanted-by.json"
 SETUP_CONFIG_AFTER_JSON="$WORK_DIR/setup-config-after.json"
 SETUP_CONFIG_WANTS_JSON="$WORK_DIR/setup-config-wants.json"
@@ -44,8 +50,14 @@ nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.sy
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.systemd.services.qubes-qrexec-agent.requires" > "$GUEST_QREXEC_REQUIRES_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.systemd.services.qubes-qrexec-agent.after" > "$GUEST_QREXEC_AFTER_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-validator.config.nixome.qubeGuest.role" > "$GUEST_VALIDATOR_ROLE_JSON"
+nix eval --json "$ROOT#nixosConfigurations.qube-template-config-vault.config.networking.hostName" > "$GUEST_VAULT_HOSTNAME_JSON"
+nix eval --json "$ROOT#nixosConfigurations.qube-template-config-staging.config.networking.hostName" > "$GUEST_STAGING_HOSTNAME_JSON"
+nix eval --json "$ROOT#nixosConfigurations.qube-template-config-validator.config.networking.hostName" > "$GUEST_VALIDATOR_HOSTNAME_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.Config.ValidateCandidate\".mode" > "$GUEST_VALIDATOR_RPC_MODE_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.Config.ArchiveDeployment\".mode" > "$GUEST_DEPLOYMENT_RPC_MODE_JSON"
+nix path-info --derivation "$ROOT#nixome-nixos-config-vault-root-image" > "$GUEST_VAULT_ROOT_IMAGE_DRV"
+nix path-info --derivation "$ROOT#nixome-nixos-config-staging-root-image" > "$GUEST_STAGING_ROOT_IMAGE_DRV"
+nix path-info --derivation "$ROOT#nixome-nixos-config-validator-root-image" > "$GUEST_VALIDATOR_ROOT_IMAGE_DRV"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.wantedBy" > "$SETUP_CONFIG_WANTED_BY_JSON"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.after" > "$SETUP_CONFIG_AFTER_JSON"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.wants" > "$SETUP_CONFIG_WANTS_JSON"
@@ -126,6 +138,22 @@ jq -e '
 jq -e '
   . == "config-validator"
 ' "$GUEST_VALIDATOR_ROLE_JSON" >/dev/null
+
+jq -e '
+  . == "nixome-config-vault-template"
+' "$GUEST_VAULT_HOSTNAME_JSON" >/dev/null
+
+jq -e '
+  . == "nixome-config-staging-template"
+' "$GUEST_STAGING_HOSTNAME_JSON" >/dev/null
+
+jq -e '
+  . == "nixome-config-validator-template"
+' "$GUEST_VALIDATOR_HOSTNAME_JSON" >/dev/null
+
+grep -F 'nixome-nixos-config-vault-root-image.drv' "$GUEST_VAULT_ROOT_IMAGE_DRV" >/dev/null
+grep -F 'nixome-nixos-config-staging-root-image.drv' "$GUEST_STAGING_ROOT_IMAGE_DRV" >/dev/null
+grep -F 'nixome-nixos-config-validator-root-image.drv' "$GUEST_VALIDATOR_ROOT_IMAGE_DRV" >/dev/null
 
 jq -e '
   . == "0555"
