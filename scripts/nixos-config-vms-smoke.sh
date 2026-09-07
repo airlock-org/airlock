@@ -1104,6 +1104,9 @@ jq -e \
   --arg switch_action "$DOM0_SYSTEM_SWITCH_ACTION" \
   --arg reason "$DOM0_SYSTEM_REASON" \
   '
+    def pending_vm_restart($domain; $type):
+      any(.pending_vm_restarts.actions[]?; .domain == $domain and .type == $type);
+
     .schema == "nixome.config-status.v1" and
     .status == "applied" and
     (.topology.domain_names | index($staging)) and
@@ -1123,6 +1126,16 @@ jq -e \
     .apply.status == "passed" and
     .system.last_apply.status == "passed" and
     .system.host_system_profile_resolved_target == $host_system_source and
+    .pending_vm_restarts.required == true and
+    (.pending_vm_restarts.domains | index($staging)) and
+    (.pending_vm_restarts.domains | index($vault)) and
+    (.pending_vm_restarts.domains | index($validator)) and
+    pending_vm_restart($staging; "domain-store") and
+    pending_vm_restart($staging; "domain-system") and
+    pending_vm_restart($vault; "domain-store") and
+    pending_vm_restart($vault; "domain-system") and
+    pending_vm_restart($validator; "domain-store") and
+    pending_vm_restart($validator; "domain-system") and
     (
       if $switch_action == "switch" then
         .pending_reboot.required == false and
@@ -1225,6 +1238,9 @@ jq -e \
   --arg switch_action "$DOM0_SYSTEM_SWITCH_ACTION" \
   --arg reason "$DOM0_SYSTEM_REASON" \
   '
+  def setup_restart_action($domain; $type):
+    any(.setup.restart_actions[]?; .domain == $domain and .type == $type);
+
   .schema == "nixome.config-apply.v1" and
   .status == "passed" and
   .staging == $staging and
@@ -1265,7 +1281,14 @@ jq -e \
     end
   ) and
   .setup.status == "passed" and
-  .setup.domains_changed >= 1
+  .setup.domains_changed >= 1 and
+  .setup.restart_required == true and
+  setup_restart_action($staging; "domain-store") and
+  setup_restart_action($staging; "domain-system") and
+  setup_restart_action($vault; "domain-store") and
+  setup_restart_action($vault; "domain-system") and
+  setup_restart_action($validator; "domain-store") and
+  setup_restart_action($validator; "domain-system")
 ' "$APPLY_JSON" >/dev/null || fail "config apply JSON did not pass"
 
 collect_diagnostics
