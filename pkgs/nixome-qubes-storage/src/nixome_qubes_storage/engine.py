@@ -335,14 +335,19 @@ def require_tool(name, envvar=None):
 
 
 def run_checked(command, *, input_text=None):
+    run_kwargs = {}
+    if input_text is None:
+        run_kwargs["stdin"] = subprocess.DEVNULL
+    else:
+        run_kwargs["input"] = input_text
+
     result = subprocess.run(
         command,
-        input=input_text,
-        stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         check=False,
+        **run_kwargs,
     )
     if result.returncode != 0:
         fail(
