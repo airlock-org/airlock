@@ -10,6 +10,7 @@ NIX_ROOT="$DATA_ROOT/nix-root"
 STORE_DIR="$NIX_ROOT/nix/store"
 VM_DIR="$DATA_ROOT/vm"
 LOG_DIR="$DATA_ROOT/logs"
+RESULT_LINK_DIR="$DATA_ROOT/result-links"
 BIN_DIR="$WORK_DIR/bin"
 MOCK_LOG="$WORK_DIR/mock.log"
 
@@ -19,10 +20,13 @@ mkdir -p \
   "$STORE_DIR/11111111111111111111111111111111-vm-image" \
   "$STORE_DIR/22222222222222222222222222222222-backing-image" \
   "$STORE_DIR/33333333333333333333333333333333-system" \
+  "$STORE_DIR/44444444444444444444444444444444-tool" \
   "$VM_DIR" \
-  "$LOG_DIR"
+  "$LOG_DIR" \
+  "$RESULT_LINK_DIR"
 
 ln -s "$STORE_DIR/11111111111111111111111111111111-vm-image" "$VM_DIR/nixome-vm-gui-config-image-result"
+ln -s /nix/store/44444444444444444444444444444444-tool "$RESULT_LINK_DIR/qemu-kvm-result"
 touch "$VM_DIR/nixome-vm-gui-config-image.qcow2"
 
 cat > "$LOG_DIR/config-apply.json" <<'EOF'
@@ -88,6 +92,7 @@ env \
   NIXOME_NIX_STORE="$NIX_ROOT" \
   NIXOME_VM_DIR="$VM_DIR" \
   NIXOME_LOG_DIR="$LOG_DIR" \
+  NIXOME_RESULT_LINK_DIR="$RESULT_LINK_DIR" \
   NIXOME_NIX_STORE_BIN="$BIN_DIR/nix-store" \
   NIXOME_QEMU_IMG_BIN="$BIN_DIR/qemu-img" \
   "$ROOT/scripts/gc-nixome-store.sh" dry-run > "$WORK_DIR/dry-run.out"
@@ -100,6 +105,7 @@ grep -Fx 'ARGS=[--gc][--print-dead]' "$MOCK_LOG" >/dev/null
 grep -F '/nix/store/11111111111111111111111111111111-vm-image' "$MANIFEST" >/dev/null
 grep -F '/nix/store/22222222222222222222222222222222-backing-image' "$MANIFEST" >/dev/null
 grep -F '/nix/store/33333333333333333333333333333333-system' "$MANIFEST" >/dev/null
+grep -F '/nix/store/44444444444444444444444444444444-tool' "$MANIFEST" >/dev/null
 ! grep -F '99999999999999999999999999999999-do-not-root' "$MANIFEST" >/dev/null
 grep -F 'Dead path count:  1' "$WORK_DIR/dry-run.out" >/dev/null
 
@@ -112,6 +118,7 @@ env \
   NIXOME_NIX_STORE="$NIX_ROOT" \
   NIXOME_VM_DIR="$VM_DIR" \
   NIXOME_LOG_DIR="$LOG_DIR" \
+  NIXOME_RESULT_LINK_DIR="$RESULT_LINK_DIR" \
   NIXOME_NIX_STORE_BIN="$BIN_DIR/nix-store" \
   NIXOME_QEMU_IMG_BIN="$BIN_DIR/qemu-img" \
   "$ROOT/scripts/gc-nixome-store.sh" run > "$WORK_DIR/run.out"
@@ -128,6 +135,7 @@ env \
   NIXOME_NIX_STORE="$NIX_ROOT" \
   NIXOME_VM_DIR="$VM_DIR" \
   NIXOME_LOG_DIR="$LOG_DIR" \
+  NIXOME_RESULT_LINK_DIR="$RESULT_LINK_DIR" \
   NIXOME_NIX_STORE_BIN="$BIN_DIR/nix-store" \
   NIXOME_QEMU_IMG_BIN="$BIN_DIR/qemu-img" \
   "$ROOT/scripts/gc-nixome-store.sh" auto > "$WORK_DIR/auto.out"

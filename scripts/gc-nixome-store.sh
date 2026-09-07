@@ -14,6 +14,7 @@ ALLOW_RUNNING_VM="${NIXOME_GC_ALLOW_RUNNING_VM:-0}"
 AUTO_THRESHOLD_GIB="${NIXOME_GC_AUTO_THRESHOLD_GIB:-80}"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
+RESULT_LINK_DIR="${NIXOME_RESULT_LINK_DIR:-${NIXOME_DATA_ROOT:-$ROOT/.nixome}/result-links}"
 
 usage() {
   cat <<'EOF'
@@ -203,7 +204,7 @@ root_out_links() {
   local target
 
   shopt -s nullglob
-  for link in "$ROOT"/result "$ROOT"/result-* "$VM_DIR"/*-result; do
+  for link in "$ROOT"/result "$ROOT"/result-* "$VM_DIR"/*-result "$RESULT_LINK_DIR"/*; do
     [ -L "$link" ] || continue
     target="$(readlink_target "$link")" || continue
     add_gc_root "outlink-$(basename "$link")" "$target" "out-link:$link"

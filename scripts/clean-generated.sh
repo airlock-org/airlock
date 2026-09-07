@@ -8,6 +8,7 @@ VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 CACHE_DIR="${NIXOME_QUBES_CACHE_DIR:-$ROOT/.nixome-cache/rpms}"
 CACHE_ROOT="${CACHE_DIR%/rpms}"
+RESULT_LINK_DIR="${NIXOME_RESULT_LINK_DIR:-${NIXOME_DATA_ROOT:-$ROOT/.nixome}/result-links}"
 
 usage() {
   cat <<EOF
@@ -17,6 +18,7 @@ Modes:
   disk-usage  Show generated Nixome directory sizes.
   vm-disks    Remove generated overlays/out-links in the VM work directory.
   vm-workdirs Remove generated VM work directories.
+  result-links Remove generated Nix result links under the data root.
   logs        Remove generated logs.
   cache       Remove generated cache, including cached Qubes RPM/template assets.
 EOF
@@ -66,6 +68,7 @@ clean_vm_workdirs() {
 show_disk_usage() {
   local paths=(
     "$VM_DIR" \
+    "$RESULT_LINK_DIR" \
     "$LOG_DIR" \
     "$CACHE_ROOT" \
   )
@@ -92,6 +95,9 @@ case "$MODE" in
     ;;
   vm-workdirs)
     clean_vm_workdirs
+    ;;
+  result-links)
+    delete_path "$RESULT_LINK_DIR"
     ;;
   logs)
     delete_path "$LOG_DIR"

@@ -145,6 +145,8 @@ The source tree, Nix code, scripts, docs, and Git history stay in
 `/home/user/dev/nixome`. The Nixome Nix store is a chroot local store at
 `/run/media/user/data/nixome/nix-root`; logical store paths remain
 `/nix/store/...`, but the physical files live under that data-disk root.
+Named build roots that should survive Nixome-only GC live under
+`/run/media/user/data/nixome/result-links`.
 
 If `/run/media/user/data` is not available, Nixome refuses to use the host
 `/nix/store` by default. Set `NIXOME_DATA_ROOT` to another data-backed path, or

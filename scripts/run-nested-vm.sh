@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/nixome-env.sh"
 VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
+RESULT_LINK_DIR="${NIXOME_RESULT_LINK_DIR:-${NIXOME_DATA_ROOT:-$ROOT/.nixome}/result-links}"
 IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-image}"
 MEMORY="${NIXOME_VM_MEMORY:-8192}"
 SMP="${NIXOME_VM_SMP:-4}"
@@ -18,7 +19,7 @@ OUT_LINK="$VM_DIR/${IMAGE_ATTR}-result"
 SERIAL_LOG="$VM_DIR/serial.log"
 MONITOR_SOCKET="$VM_DIR/${IMAGE_ATTR}.monitor"
 
-mkdir -p "$VM_DIR"
+mkdir -p "$VM_DIR" "$RESULT_LINK_DIR"
 
 case "$BACKUP_RETENTION" in
   '' | *[!0-9]*)
@@ -51,6 +52,19 @@ base_image_out="$(nix build "$ROOT#$IMAGE_ATTR" --no-link --print-out-paths --pr
 base_image_out="$(awk 'NF { last = $0 } END { print last }' <<< "$base_image_out")"
 base_image_out_physical="$(nixome_physical_store_path "$base_image_out")"
 ln -sfn "$base_image_out_physical" "$OUT_LINK"
+
+build_attr_with_result_link() {
+  local attr="$1"
+  local name="$2"
+  local out
+
+  out="$(nix build "$ROOT#$attr" \
+    --out-link "$RESULT_LINK_DIR/$name" \
+    --print-out-paths \
+    --print-build-logs \
+    --show-trace)"
+  awk 'NF { last = $0 } END { print last }' <<< "$out"
+}
 
 mapfile -t base_images < <(find -L "$base_image_out_physical" -maxdepth 1 -type f \( -name '*.qcow2' -o -name '*.img' \) | sort)
 if [ "${#base_images[@]}" -ne 1 ]; then
@@ -93,9 +107,9 @@ prune_run_disk_backups() {
   done < <(find "$VM_DIR" -maxdepth 1 -type f -name "$disk_name.*.bak" | sort -r)
 }
 
-qemu_out="$(nix build --no-link --print-out-paths "$ROOT#qemu-kvm")"
-qemu_utils_out="$(nix build --no-link --print-out-paths "$ROOT#qemu-utils")"
-ovmf_out="$(nix build --no-link --print-out-paths "$ROOT#ovmf-fd")"
+qemu_out="$(build_attr_with_result_link qemu-kvm qemu-kvm-result)"
+qemu_utils_out="$(build_attr_with_result_link qemu-utils qemu-utils-result)"
+ovmf_out="$(build_attr_with_result_link ovmf-fd ovmf-fd-result)"
 
 BASE_FORMAT="$(
   nixome_run_store_path "$qemu_utils_out/bin/qemu-img" info --output=json "$BASE_IMAGE" |
