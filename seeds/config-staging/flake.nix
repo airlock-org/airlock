@@ -21,6 +21,7 @@
         pkgs = templateBuilders.pkgs;
       };
       localTopology = localConfig.topology or { };
+      localConfigVms = localConfig.configVms or { };
       localDom0 = localConfig.dom0 or { };
       localDom0Host = localDom0.host or { };
       localDom0HostModule =
@@ -37,11 +38,12 @@
           else
             { }
         );
-      localDom0HostModules =
-        [ localDom0HostModule ]
-        ++ (if localDom0Host ? configuration then [ localDom0Host.configuration ] else [ ])
-        ++ (localDom0Host.modules or [ ])
-        ++ (localDom0.extraModules or [ ]);
+      localDom0HostModules = [
+        localDom0HostModule
+      ]
+      ++ (if localDom0Host ? configuration then [ localDom0Host.configuration ] else [ ])
+      ++ (localDom0Host.modules or [ ])
+      ++ (localDom0.extraModules or [ ]);
       prebuiltTemplateSources = import ./nixome/prebuilt-template-sources.nix;
       nixomeSupport = "__NIXOME_SUPPORT_PATH__";
       nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
@@ -65,7 +67,13 @@
 
       appliedMessage = "initial";
       config = configVms {
-        inherit appliedMessage;
+        inherit appliedMessage system;
+        configVms = localConfigVms;
+        configRoleKernelOpts = {
+          config-vault = templateBuilders.mkQubeKernelOpts configVaultGuest;
+          config-staging = templateBuilders.mkQubeKernelOpts configStagingGuest;
+          config-validator = templateBuilders.mkQubeKernelOpts configValidatorGuest;
+        };
         extraTemplates = templateSet.topology.templates // (localTopology.extraTemplates or { });
         extraKernels = localTopology.extraKernels or { };
         extraPrefs = localTopology.extraPrefs or { };
@@ -106,6 +114,32 @@
         nixosQubes = nixosQubesSource;
         inherit nixomeSupport;
       };
+      mkConfigGuest =
+        role: hostName:
+        nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = {
+            inherit
+              nixomeConfigSeedInputs
+              ;
+            nixomePrebuiltTemplateSources = prebuiltTemplateSources;
+          };
+          modules = [
+            "${nixpkgs}/nixos/modules/profiles/minimal.nix"
+            "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
+            "${nixomeSupport}/modules/qube-guest.nix"
+            {
+              nixpkgs.overlays = templateBuilders.qubesOverlays;
+              nixpkgs.config.allowUnfreePredicate = allowUnfreePredicate;
+              nixome.qubeGuest.enable = true;
+              nixome.qubeGuest.role = role;
+              networking.hostName = hostName;
+              documentation.enable = nixpkgs.lib.mkDefault false;
+              programs.command-not-found.enable = nixpkgs.lib.mkDefault false;
+              system.nixos.versionSuffix = nixpkgs.lib.mkForce "";
+            }
+          ];
+        };
       configSystemGuest = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
@@ -133,13 +167,40 @@
           }
         ];
       };
+      configVaultGuest = mkConfigGuest "config-vault" "nixome-config-vault-template";
+      configStagingGuest = mkConfigGuest "config-staging" "nixome-config-staging-template";
+      configValidatorGuest = mkConfigGuest "config-validator" "nixome-config-validator-template";
       configSystemRootImage = templateBuilders.mkQubeRootImage {
         configuration = configSystemGuest;
         imageName = "nixome-nixos-config-system";
       };
+      configVaultRootImage = templateBuilders.mkQubeRootImage {
+        configuration = configVaultGuest;
+        imageName = "nixome-nixos-config-vault";
+      };
+      configStagingRootImage = templateBuilders.mkQubeRootImage {
+        configuration = configStagingGuest;
+        imageName = "nixome-nixos-config-staging";
+      };
+      configValidatorRootImage = templateBuilders.mkQubeRootImage {
+        configuration = configValidatorGuest;
+        imageName = "nixome-nixos-config-validator";
+      };
       configSystemTemplate = templateBuilders.mkQubesTemplatePackage {
         templateName = "nixome-nixos-config-system";
         rootImageFile = "${configSystemRootImage}/root.img";
+      };
+      configVaultTemplate = templateBuilders.mkQubesTemplatePackage {
+        templateName = "nixome-nixos-config-vault";
+        rootImageFile = "${configVaultRootImage}/root.img";
+      };
+      configStagingTemplate = templateBuilders.mkQubesTemplatePackage {
+        templateName = "nixome-nixos-config-staging";
+        rootImageFile = "${configStagingRootImage}/root.img";
+      };
+      configValidatorTemplate = templateBuilders.mkQubesTemplatePackage {
+        templateName = "nixome-nixos-config-validator";
+        rootImageFile = "${configValidatorRootImage}/root.img";
       };
       nixomeDom0System = nixpkgs.lib.nixosSystem {
         inherit system;
@@ -223,6 +284,9 @@
     {
       packages.${system} = templateSet.packages // {
         nixome-dom0-profile = dom0Profile;
+        nixome-nixos-config-vault-template = configVaultTemplate;
+        nixome-nixos-config-staging-template = configStagingTemplate;
+        nixome-nixos-config-validator-template = configValidatorTemplate;
       };
 
       checks.${system} = {
@@ -253,6 +317,11 @@
         };
 
         inherit config;
+        configRoleTemplateConfigurations = {
+          config-vault = configVaultGuest;
+          config-staging = configStagingGuest;
+          config-validator = configValidatorGuest;
+        };
         templateConfigurations = templateSet.configurations;
         system = machineSystem;
         inherit topology;

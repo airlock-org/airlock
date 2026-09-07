@@ -38,13 +38,21 @@ The initial VM resource settings are sized for the nested 8 GiB developer VM:
 `config-vault` starts at 1024 MiB, while `config-staging` and `config-validator`
 start at 2048 MiB. A physical Nixome host can raise these declaratively later.
 
-For this POC the three config roles share one NixOS guest TemplateVM. That
+For this POC the three config roles default to one NixOS guest TemplateVM. That
 shared image carries the vault archive tooling, staging export tooling, and
 validator tooling; the AppVM names, Qubes features, offline networking, and
-qrexec policy carry the runtime role distinction. Dedicated role-specific guest
-closures and template package outputs are exposed as buildable artifacts, but
-the runtime topology does not switch to them yet. That remains a hardening
-target once the authority flow is stable.
+qrexec policy carry the runtime role distinction. The staged config can switch
+to separate role-specific TemplateVMs with:
+
+```nix
+configVms.templateMode = "dedicated";
+```
+
+That emits dedicated `nixome-nixos-config-vault`,
+`nixome-nixos-config-staging`, and `nixome-nixos-config-validator` TemplateVM
+imports whose source packages are built from the same validated candidate
+flake. The default remains `"shared"` to keep nested developer image builds and
+first-boot setup fast.
 
 The staged config now takes the next step for normal workload templates: it
 defines `nixome-nixos-work` as a NixOS TemplateVM package output and declares
@@ -104,8 +112,9 @@ in
 
 That seed re-declares `config-vault`, `config-staging`, and `config-validator`
 as offline AppVMs, so after first boot their Qubes-level runtime topology is
-owned by the normal config-staging -> config-validator -> dom0 apply path. It
-also declares:
+owned by the normal config-staging -> config-validator -> dom0 apply path. The
+seed also exposes optional role-specific config TemplateVM package outputs for
+the dedicated mode. It also declares:
 
 - `packages.x86_64-linux.nixome-nixos-work-template`, a Qubes template source
   directory built from a NixOS guest module list.

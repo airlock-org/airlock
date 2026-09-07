@@ -20,6 +20,9 @@ EXTRA_HOST_CONFIGURATION="$RESULT_DIR/extra-host-configuration.txt"
 EXTRA_HOST_PACKAGE="$RESULT_DIR/extra-host-package.json"
 HOST_SYSTEM_DERIVATIONS="$RESULT_DIR/dom0-system-derivations.txt"
 LOCAL_TEMPLATE_DERIVATION="$RESULT_DIR/local-template-derivation.txt"
+CONFIG_VAULT_TEMPLATE_DERIVATION="$RESULT_DIR/config-vault-template-derivation.txt"
+CONFIG_STAGING_TEMPLATE_DERIVATION="$RESULT_DIR/config-staging-template-derivation.txt"
+CONFIG_VALIDATOR_TEMPLATE_DERIVATION="$RESULT_DIR/config-validator-template-derivation.txt"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -316,6 +319,14 @@ cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
     };
   };
 
+  configVms = {
+    templateMode = "dedicated";
+    domains = {
+      config-vault.prefs.memory = 1536;
+      config-staging.label = "yellow";
+    };
+  };
+
   dom0.host = {
     packages = with pkgs; [
       hello
@@ -414,6 +425,33 @@ nix \
   --derivation \
   "$WORK_DIR#packages.x86_64-linux.nixome-nixos-dev-template" \
   > "$LOCAL_TEMPLATE_DERIVATION"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  path-info \
+  --impure \
+  --offline \
+  --derivation \
+  "$WORK_DIR#packages.x86_64-linux.nixome-nixos-config-vault-template" \
+  > "$CONFIG_VAULT_TEMPLATE_DERIVATION"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  path-info \
+  --impure \
+  --offline \
+  --derivation \
+  "$WORK_DIR#packages.x86_64-linux.nixome-nixos-config-staging-template" \
+  > "$CONFIG_STAGING_TEMPLATE_DERIVATION"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  path-info \
+  --impure \
+  --offline \
+  --derivation \
+  "$WORK_DIR#packages.x86_64-linux.nixome-nixos-config-validator-template" \
+  > "$CONFIG_VALIDATOR_TEMPLATE_DERIVATION"
 
 grep -qx initial-extra "$EXTRA_HOST_MESSAGE"
 grep -qx "Nixome local extra module fixture" "$EXTRA_HOST_SERVICE"
@@ -421,8 +459,24 @@ grep -qx initial-configuration "$EXTRA_HOST_CONFIGURATION"
 jq -e '. == true' "$EXTRA_HOST_PACKAGE" >/dev/null
 grep -qx dev-configuration "$LOCAL_TEMPLATE_CONFIGURATION"
 [ -s "$LOCAL_TEMPLATE_DERIVATION" ]
+[ -s "$CONFIG_VAULT_TEMPLATE_DERIVATION" ]
+[ -s "$CONFIG_STAGING_TEMPLATE_DERIVATION" ]
+[ -s "$CONFIG_VALIDATOR_TEMPLATE_DERIVATION" ]
 jq -e '
   .schema == "nixome.qubes-topology.v1" and
+  .templates."nixome-nixos-config-vault".import == true and
+  .templates."nixome-nixos-config-vault".source == null and
+  .templates."nixome-nixos-config-vault".source_ref == {
+    "type": "flake-output",
+    "attr": "packages.x86_64-linux.nixome-nixos-config-vault-template",
+    "subpath": "nixome-nixos-config-vault"
+  } and
+  .templates."nixome-nixos-config-staging".import == true and
+  .templates."nixome-nixos-config-staging".source_ref.attr == "packages.x86_64-linux.nixome-nixos-config-staging-template" and
+  .templates."nixome-nixos-config-staging".source_ref.subpath == "nixome-nixos-config-staging" and
+  .templates."nixome-nixos-config-validator".import == true and
+  .templates."nixome-nixos-config-validator".source_ref.attr == "packages.x86_64-linux.nixome-nixos-config-validator-template" and
+  .templates."nixome-nixos-config-validator".source_ref.subpath == "nixome-nixos-config-validator" and
   .templates."nixome-nixos-dev".import == true and
   .templates."nixome-nixos-dev".source == null and
   .templates."nixome-nixos-dev".source_ref == {
@@ -430,6 +484,24 @@ jq -e '
     "attr": "packages.x86_64-linux.nixome-nixos-dev-template",
     "subpath": "nixome-nixos-dev"
   } and
+  .domains."nixome-nixos-config-vault".class == "TemplateVM" and
+  .domains."nixome-nixos-config-vault".label == "black" and
+  .domains."nixome-nixos-config-vault".netvm == null and
+  .domains."nixome-nixos-config-vault".prefs.default_user == "user" and
+  .domains."nixome-nixos-config-vault".prefs.kernel == "6.12.64-1.fc41" and
+  (.domains."nixome-nixos-config-vault".prefs.kernelopts | contains("init=/sbin/init")) and
+  .domains."nixome-nixos-config-vault".features."nixome-role" == "config-vault-template" and
+  .domains."nixome-nixos-config-staging".class == "TemplateVM" and
+  .domains."nixome-nixos-config-staging".label == "gray" and
+  .domains."nixome-nixos-config-staging".features."nixome-role" == "config-staging-template" and
+  .domains."nixome-nixos-config-validator".class == "TemplateVM" and
+  .domains."nixome-nixos-config-validator".label == "blue" and
+  .domains."nixome-nixos-config-validator".features."nixome-role" == "config-validator-template" and
+  .domains."config-vault".template == "nixome-nixos-config-vault" and
+  .domains."config-vault".prefs.memory == 1536 and
+  .domains."config-staging".template == "nixome-nixos-config-staging" and
+  .domains."config-staging".label == "yellow" and
+  .domains."config-validator".template == "nixome-nixos-config-validator" and
   .domains."nixome-nixos-dev".class == "TemplateVM" and
   .domains."nixome-nixos-dev".label == "black" and
   .domains."nixome-nixos-dev".netvm == null and

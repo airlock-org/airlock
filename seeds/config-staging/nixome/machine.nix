@@ -48,6 +48,16 @@
     extraQrexecRules = [ ];
   };
 
+  # Config authority VMs are fixed-name system roles. The default keeps all
+  # three AppVMs on one shared TemplateVM so nested development stays practical.
+  # Set templateMode = "dedicated" to make config-vault, config-staging, and
+  # config-validator use separate role-specific TemplateVM artifacts built from
+  # this same candidate flake.
+  configVms = {
+    templateMode = "shared";
+    domains = { };
+  };
+
   # Add dom0 host configuration here. These fields compile into normal NixOS
   # modules inside nixosConfigurations.nixome-dom0.
   dom0.host = {
