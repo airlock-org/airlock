@@ -15,6 +15,8 @@ PROFILE_JSON="$RESULT_DIR/dom0-profile.json"
 HOST_MESSAGE="$RESULT_DIR/host-message.txt"
 EXTRA_HOST_MESSAGE="$RESULT_DIR/extra-host-message.txt"
 EXTRA_HOST_SERVICE="$RESULT_DIR/extra-host-service.txt"
+EXTRA_HOST_CONFIGURATION="$RESULT_DIR/extra-host-configuration.txt"
+EXTRA_HOST_PACKAGE="$RESULT_DIR/extra-host-package.json"
 HOST_SYSTEM_DERIVATIONS="$RESULT_DIR/dom0-system-derivations.txt"
 LOCAL_TEMPLATE_DERIVATION="$RESULT_DIR/local-template-derivation.txt"
 
@@ -310,19 +312,20 @@ cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
     };
   };
 
-  dom0.extraModules = [
-    (
-      { pkgs, ... }:
-      {
-        environment.etc."nixome/local-dom0-extra-module".text = "${appliedMessage}-extra\n";
-        systemd.services.nixome-local-extra-module = {
-          description = "Nixome local extra module fixture";
-          serviceConfig.Type = "oneshot";
-          script = "${pkgs.coreutils}/bin/true";
-        };
-      }
-    )
-  ];
+  dom0.host = {
+    packages = with pkgs; [
+      hello
+    ];
+    etc."nixome/local-dom0-extra-module".text = "${appliedMessage}-extra\n";
+    systemd.services.nixome-local-extra-module = {
+      description = "Nixome local extra module fixture";
+      serviceConfig.Type = "oneshot";
+      script = "${pkgs.coreutils}/bin/true";
+    };
+    configuration = {
+      environment.etc."nixome/local-dom0-host-configuration".text = "${appliedMessage}-configuration\n";
+    };
+  };
 
   system.args = {
     dom0SystemSwitchAction = "boot";
@@ -358,6 +361,27 @@ nix \
   --impure \
   --offline \
   --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixosConfigurations.nixome-dom0.config.environment.etc.\"nixome/local-dom0-host-configuration\".text" \
+  > "$EXTRA_HOST_CONFIGURATION"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json \
+  --apply 'packages: builtins.any (package: (package.pname or package.name or "") == "hello") packages' \
+  "$WORK_DIR#nixosConfigurations.nixome-dom0.config.environment.systemPackages" \
+  > "$EXTRA_HOST_PACKAGE"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
   --json "$WORK_DIR#nixome.topology" > "$LOCAL_TOPOLOGY_JSON"
 nix \
   --extra-experimental-features nix-command \
@@ -379,6 +403,8 @@ nix \
 
 grep -qx initial-extra "$EXTRA_HOST_MESSAGE"
 grep -qx "Nixome local extra module fixture" "$EXTRA_HOST_SERVICE"
+grep -qx initial-configuration "$EXTRA_HOST_CONFIGURATION"
+jq -e '. == true' "$EXTRA_HOST_PACKAGE" >/dev/null
 [ -s "$LOCAL_TEMPLATE_DERIVATION" ]
 jq -e '
   .schema == "nixome.qubes-topology.v1" and

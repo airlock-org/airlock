@@ -241,13 +241,32 @@ replace this with a pure, content-addressed input mirror or a validator-built
 artifact transport.
 
 The staged dom0 NixOS system is built from the Nixome support modules,
-`./nixome/dom0-host.nix`, and any modules listed in
-`nixome/machine.nix` under `dom0.extraModules`. This gives the editable inside
-config a direct path to normal NixOS host changes such as packages, systemd
-units, boot options, kernel options, and Qubes package overlays without
-changing the bootstrap module layout. `nixome.system` records the apply plan
-and source references; the NixOS modules define the actual host closure that
-dom0 builds and switches.
+`./nixome/dom0-host.nix`, and host fields in `nixome/machine.nix`. The normal
+edit surface is:
+
+```nix
+dom0.host = {
+  packages = with pkgs; [ vim ];
+  etc."nixome/example".text = "hello\n";
+  systemd.services.nixome-example = {
+    description = "Nixome example service";
+    serviceConfig.Type = "oneshot";
+    script = "${pkgs.coreutils}/bin/true";
+  };
+  configuration = {
+    boot.kernelParams = [ "loglevel=4" ];
+  };
+  modules = [ ];
+};
+```
+
+These fields compile into normal NixOS modules inside
+`nixosConfigurations.nixome-dom0`, so they can affect packages, systemd units,
+boot options, kernel options, and Qubes package overlays without changing the
+bootstrap module layout. `dom0.extraModules` remains as a compatibility escape
+hatch, but new config should prefer `dom0.host`. `nixome.system` records the
+apply plan and source references; the NixOS modules define the actual host
+closure that dom0 builds and switches.
 
 TemplateVM contents are defined in Nix as well. The seeded
 `nixome/templates.nix` turns `templates.definitions` from `nixome/machine.nix`

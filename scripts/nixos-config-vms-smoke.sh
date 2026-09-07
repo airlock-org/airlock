@@ -36,6 +36,7 @@ DOM0_SYSTEM_APPLY_LOG="$LOG_DIR/config-vms-dom0-system-apply.json"
 DOM0_SYSTEM_PROFILE_LINK_LOG="$LOG_DIR/config-vms-dom0-system-profile-link.log"
 DOM0_HOST_CONFIG_MESSAGE_LOG="$LOG_DIR/config-vms-dom0-host-config-message.log"
 DOM0_EXTRA_MODULE_MESSAGE_LOG="$LOG_DIR/config-vms-dom0-extra-module-message.log"
+DOM0_HOST_CONFIGURATION_MESSAGE_LOG="$LOG_DIR/config-vms-dom0-host-configuration-message.log"
 DOM0_EXTRA_MODULE_RESTARTED_LOG="$LOG_DIR/config-vms-dom0-extra-module-restarted.log"
 DOM0_SYSTEMD_ACTIONS_LOG="$LOG_DIR/config-vms-dom0-systemd-actions.json"
 DOM0_HOST_SYSTEM_PROFILE_LINK_LOG="$LOG_DIR/config-vms-dom0-host-system-profile-link.log"
@@ -212,6 +213,8 @@ write_result() {
     json_file_string_or_null "$DOM0_HOST_CONFIG_MESSAGE_LOG"
     printf ',"dom0_extra_module_message":'
     json_file_string_or_null "$DOM0_EXTRA_MODULE_MESSAGE_LOG"
+    printf ',"dom0_host_configuration_message":'
+    json_file_string_or_null "$DOM0_HOST_CONFIGURATION_MESSAGE_LOG"
     printf ',"dom0_extra_module_restarted":'
     json_file_string_or_null "$DOM0_EXTRA_MODULE_RESTARTED_LOG"
     printf ',"dom0_systemd_actions":'
@@ -704,23 +707,24 @@ $EXTRA_TEMPLATE_DEFINITIONS_NIX
     };
   };
 
-  dom0.extraModules = [
-    (
-      { pkgs, ... }:
-      {
-        environment.etc."nixome/local-dom0-extra-module".text = "$APPLY_MESSAGE-extra\n";
-        systemd.services.nixome-local-extra-module = {
-          description = "Nixome local extra module fixture";
-          serviceConfig.Type = "oneshot";
-          serviceConfig.RemainAfterExit = true;
-          script = ''
-            \${pkgs.coreutils}/bin/install -d -m 0755 /var/lib/nixome/system
-            printf '%s\n' "$APPLY_MESSAGE" > /var/lib/nixome/system/local-extra-module-restarted
-          '';
-        };
-      }
-    )
-  ];
+  dom0.host = {
+    packages = with pkgs; [
+      hello
+    ];
+    etc."nixome/local-dom0-extra-module".text = "$APPLY_MESSAGE-extra\n";
+    systemd.services.nixome-local-extra-module = {
+      description = "Nixome local extra module fixture";
+      serviceConfig.Type = "oneshot";
+      serviceConfig.RemainAfterExit = true;
+      script = ''
+        \${pkgs.coreutils}/bin/install -d -m 0755 /var/lib/nixome/system
+        printf '%s\n' "$APPLY_MESSAGE" > /var/lib/nixome/system/local-extra-module-restarted
+      '';
+    };
+    configuration = {
+      environment.etc."nixome/local-dom0-host-configuration".text = "$APPLY_MESSAGE-configuration\n";
+    };
+  };
 
   system.args = {
     dom0SystemSwitchAction = $DOM0_SYSTEM_SWITCH_ACTION_NIX;
@@ -929,6 +933,10 @@ if [ "$DOM0_SYSTEM_SWITCH_ACTION" = "switch" ]; then
     "$DOM0_EXTRA_MODULE_MESSAGE_LOG" \
     cat /etc/nixome/local-dom0-extra-module
   run_or_fail \
+    "read local dom0 host configuration message" \
+    "$DOM0_HOST_CONFIGURATION_MESSAGE_LOG" \
+    cat /etc/nixome/local-dom0-host-configuration
+  run_or_fail \
     "read local dom0 extra module restart marker" \
     "$DOM0_EXTRA_MODULE_RESTARTED_LOG" \
     cat /var/lib/nixome/system/local-extra-module-restarted
@@ -1048,6 +1056,8 @@ if [ "$DOM0_SYSTEM_SWITCH_ACTION" = "switch" ]; then
     fail "inside-config host marker did not match expected value"
   grep -qx "$APPLY_MESSAGE-extra" "$DOM0_EXTRA_MODULE_MESSAGE_LOG" ||
     fail "inside-config local dom0 extra module marker did not match expected value"
+  grep -qx "$APPLY_MESSAGE-configuration" "$DOM0_HOST_CONFIGURATION_MESSAGE_LOG" ||
+    fail "inside-config local dom0 host configuration marker did not match expected value"
   grep -qx "$APPLY_MESSAGE" "$DOM0_EXTRA_MODULE_RESTARTED_LOG" ||
     fail "inside-config local dom0 extra module restart marker did not match expected value"
 fi

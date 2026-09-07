@@ -21,7 +21,27 @@
         pkgs = templateBuilders.pkgs;
       };
       localTopology = localConfig.topology or { };
-      localDom0ExtraModules = localConfig.dom0.extraModules or [ ];
+      localDom0 = localConfig.dom0 or { };
+      localDom0Host = localDom0.host or { };
+      localDom0HostModule =
+        { ... }:
+        {
+          environment.systemPackages = localDom0Host.packages or [ ];
+          environment.etc = localDom0Host.etc or { };
+        }
+        // (
+          if localDom0Host ? systemd then
+            {
+              systemd = localDom0Host.systemd;
+            }
+          else
+            { }
+        );
+      localDom0HostModules =
+        [ localDom0HostModule ]
+        ++ (if localDom0Host ? configuration then [ localDom0Host.configuration ] else [ ])
+        ++ (localDom0Host.modules or [ ])
+        ++ (localDom0.extraModules or [ ]);
       prebuiltTemplateSources = import ./nixome/prebuilt-template-sources.nix;
       nixomeSupport = "__NIXOME_SUPPORT_PATH__";
       nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
@@ -152,7 +172,7 @@
           }
           ./nixome/dom0-host.nix
         ]
-        ++ localDom0ExtraModules;
+        ++ localDom0HostModules;
       };
       dom0Profile =
         let

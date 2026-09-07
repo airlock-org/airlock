@@ -45,8 +45,23 @@
     extraQrexecRules = [ ];
   };
 
-  # Add NixOS modules for dom0. These are evaluated into the candidate
-  # nixosConfigurations.nixome-dom0 system generation.
+  # Add dom0 host configuration here. These fields compile into normal NixOS
+  # modules inside nixosConfigurations.nixome-dom0.
+  dom0.host = {
+    packages = [ ];
+    etc = { };
+    systemd = { };
+
+    # For ordinary NixOS options that do not have a high-level field here.
+    configuration = { };
+
+    # Advanced escape hatch: raw NixOS modules appended after the high-level
+    # host fields.
+    modules = [ ];
+  };
+
+  # Backward-compatible raw NixOS modules for dom0. Prefer dom0.host for new
+  # config.
   dom0.extraModules = [ ];
 
   # Change system args such as dom0SystemSwitchAction = "boot" when a candidate
