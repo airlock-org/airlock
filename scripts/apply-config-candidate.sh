@@ -1032,134 +1032,11 @@ install_host_system_profile() {
   fi
 }
 
-apply_system() {
-  system_json="$1"
-  status=passed
-  reason="system plan applied"
-  profile_status=skipped
-  host_system_status=skipped
-  systemd_status=skipped
-  profile_source=""
-  profile_source_physical=""
-  profile_activation_command=""
-  host_system_enabled=false
-  host_system_source=""
-  host_system_source_physical=""
-  host_system_switch_action=""
-  host_current_system=""
-  systemd_apply_rc=0
-  reboot_required="$(jq -r '.plan.reboot_required' "$system_json")"
-  reboot_reasons="$(jq -c '.plan.reboot_reasons' "$system_json")"
+write_system_apply_json() {
+  local systemd_actions_result
 
-  : > "$SYSTEM_APPLY_LOG"
-  : > "$HOST_SYSTEM_ACTIVATION_LOG"
-  jq -c '.plan' "$system_json" > "$SYSTEM_PLAN_JSON"
-
-  mkdir -p "$SYSTEM_STATE_DIR" "$SYSTEM_ETC_DIR"
-  cp "$system_json" "$SYSTEM_STATE_DIR/last-system.json"
-  cp "$SYSTEM_PLAN_JSON" "$SYSTEM_STATE_DIR/last-plan.json"
-
-  profile_source="$(jq -r '.dom0.profile.source // ""' "$system_json")"
-  profile_activation_command="$(jq -r '.dom0.profile.activation_command // "bin/nixome-dom0-profile-activate"' "$system_json")"
-  profile_activation_action="$(jq -r '.dom0.profile.activation_action // "run"' "$system_json")"
-
-  if [ -n "$profile_source" ]; then
-    profile_source_physical="$(nixome_physical_store_path "$profile_source")"
-    activation_path="$profile_source_physical/$profile_activation_command"
-    [ -d "$profile_source_physical" ] ||
-      fail "dom0 profile source is missing: $profile_source"
-    [ -x "$activation_path" ] ||
-      fail "dom0 profile activation command is missing or not executable: $profile_source/$profile_activation_command"
-
-    {
-      printf 'profile_source=%s\n' "$profile_source"
-      printf 'profile_source_physical=%s\n' "$profile_source_physical"
-      printf 'profile=%s\n' "$SYSTEM_PROFILE"
-      printf 'activation_command=%s\n' "$profile_activation_command"
-      printf 'activation_action=%s\n' "$profile_activation_action"
-    } >> "$SYSTEM_APPLY_LOG"
-
-    install_profile_link "$profile_source" "$profile_source_physical" >> "$SYSTEM_APPLY_LOG" 2>&1 ||
-      fail "installing dom0 profile failed"
-
-    if [ "$profile_activation_action" = run ]; then
-      if ! env \
-        NIXOME_SYSTEM_JSON="$system_json" \
-        NIXOME_SYSTEM_PLAN_JSON="$SYSTEM_PLAN_JSON" \
-        NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
-        NIXOME_SYSTEM_ETC_DIR="$SYSTEM_ETC_DIR" \
-        NIXOME_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
-        "$activation_path" > "$PROFILE_ACTIVATION_LOG" 2>&1; then
-        cat "$PROFILE_ACTIVATION_LOG" >&2 || true
-        fail "dom0 profile activation failed"
-      fi
-    else
-      printf 'activation action is %s; not running profile activation\n' "$profile_activation_action" > "$PROFILE_ACTIVATION_LOG"
-    fi
-
-    profile_status=passed
-  else
-    printf 'no dom0 profile source declared\n' > "$PROFILE_ACTIVATION_LOG"
-  fi
-
-  host_system_enabled="$(jq -r '.dom0.nixos.system.enable // false' "$system_json")"
-  host_system_source="$(jq -r '.dom0.nixos.system.source // ""' "$system_json")"
-  host_system_switch_action="$(jq -r '.dom0.nixos.system.switch_action // "switch"' "$system_json")"
-
-  if [ "$host_system_enabled" = true ]; then
-    [ -n "$host_system_source" ] ||
-      fail "dom0 NixOS system is enabled but source is empty"
-
-    case "$host_system_switch_action" in
-      switch|boot|test|dry-activate) ;;
-      *)
-        fail "unsupported dom0 NixOS switch action: $host_system_switch_action"
-        ;;
-    esac
-
-    host_system_source_physical="$(nixome_physical_store_path "$host_system_source")"
-    switch_to_configuration="$host_system_source_physical/bin/switch-to-configuration"
-
-    [ -d "$host_system_source_physical" ] ||
-      fail "dom0 NixOS system source is missing: $host_system_source"
-    [ -x "$switch_to_configuration" ] ||
-      fail "dom0 NixOS switch-to-configuration is missing or not executable: $host_system_source/bin/switch-to-configuration"
-
-    {
-      printf 'host_system_source=%s\n' "$host_system_source"
-      printf 'host_system_source_physical=%s\n' "$host_system_source_physical"
-      printf 'host_system_profile=%s\n' "$HOST_SYSTEM_PROFILE"
-      printf 'host_current_system_link=%s\n' "$HOST_CURRENT_SYSTEM_LINK"
-      printf 'switch_action=%s\n' "$host_system_switch_action"
-    } >> "$SYSTEM_APPLY_LOG"
-
-    install_host_system_profile "$host_system_source" "$host_system_source_physical" >> "$SYSTEM_APPLY_LOG" 2>&1 ||
-      fail "installing dom0 NixOS system profile failed"
-
-    if ! "$switch_to_configuration" "$host_system_switch_action" > "$HOST_SYSTEM_ACTIVATION_LOG" 2>&1; then
-      cat "$HOST_SYSTEM_ACTIVATION_LOG" >&2 || true
-      fail "dom0 NixOS switch-to-configuration $host_system_switch_action failed"
-    fi
-
-    if [ -L "$HOST_CURRENT_SYSTEM_LINK" ]; then
-      host_current_system="$(readlink "$HOST_CURRENT_SYSTEM_LINK" || true)"
-    fi
-
-    printf '%s\n' "$host_system_source" > "$SYSTEM_STATE_DIR/current-host-system"
-    printf '%s\n' "$HOST_SYSTEM_PROFILE" > "$SYSTEM_STATE_DIR/current-host-system-profile"
-    printf '%s\n' "$host_system_switch_action" > "$SYSTEM_STATE_DIR/current-host-system-switch-action"
-    host_system_status=passed
-  else
-    printf 'dom0 NixOS system generation is not enabled\n' > "$HOST_SYSTEM_ACTIVATION_LOG"
-  fi
-
-  if apply_systemd_actions "$system_json"; then
-    systemd_status="$(jq -r '.status' "$SYSTEMD_ACTIONS_JSON")"
-  else
-    systemd_apply_rc="$?"
-    systemd_status="$(jq -r '.status // "failed"' "$SYSTEMD_ACTIONS_JSON" 2>/dev/null || printf 'failed')"
-    status=failed
-    reason="systemd live actions failed"
+  if [ ! -r "$SYSTEMD_ACTIONS_JSON" ]; then
+    init_systemd_actions_json
   fi
 
   cp "$system_json" "$SYSTEM_ETC_DIR/system.json"
@@ -1226,6 +1103,163 @@ apply_system() {
       reboot_reasons: $reboot_reasons
     }' > "$SYSTEM_APPLY_JSON"
   cp "$SYSTEM_APPLY_JSON" "$SYSTEM_STATE_DIR/last-apply.json"
+}
+
+finish_system_apply_failed() {
+  status=failed
+  reason="$1"
+  printf 'system apply failed: %s\n' "$reason" >> "$SYSTEM_APPLY_LOG"
+  write_system_apply_json
+}
+
+apply_system() {
+  system_json="$1"
+  status=passed
+  reason="system plan applied"
+  profile_status=skipped
+  host_system_status=skipped
+  systemd_status=skipped
+  profile_source=""
+  profile_source_physical=""
+  profile_activation_command=""
+  host_system_enabled=false
+  host_system_source=""
+  host_system_source_physical=""
+  host_system_switch_action=""
+  host_current_system=""
+  systemd_apply_rc=0
+  reboot_required="$(jq -r '.plan.reboot_required' "$system_json")"
+  reboot_reasons="$(jq -c '.plan.reboot_reasons' "$system_json")"
+
+  : > "$SYSTEM_APPLY_LOG"
+  : > "$HOST_SYSTEM_ACTIVATION_LOG"
+  jq -c '.plan' "$system_json" > "$SYSTEM_PLAN_JSON"
+
+  mkdir -p "$SYSTEM_STATE_DIR" "$SYSTEM_ETC_DIR"
+  cp "$system_json" "$SYSTEM_STATE_DIR/last-system.json"
+  cp "$SYSTEM_PLAN_JSON" "$SYSTEM_STATE_DIR/last-plan.json"
+
+  profile_source="$(jq -r '.dom0.profile.source // ""' "$system_json")"
+  profile_activation_command="$(jq -r '.dom0.profile.activation_command // "bin/nixome-dom0-profile-activate"' "$system_json")"
+  profile_activation_action="$(jq -r '.dom0.profile.activation_action // "run"' "$system_json")"
+
+  if [ -n "$profile_source" ]; then
+    profile_source_physical="$(nixome_physical_store_path "$profile_source")"
+    activation_path="$profile_source_physical/$profile_activation_command"
+    if [ ! -d "$profile_source_physical" ]; then
+      finish_system_apply_failed "dom0 profile source is missing: $profile_source"
+      return 1
+    fi
+    if [ ! -x "$activation_path" ]; then
+      finish_system_apply_failed "dom0 profile activation command is missing or not executable: $profile_source/$profile_activation_command"
+      return 1
+    fi
+
+    {
+      printf 'profile_source=%s\n' "$profile_source"
+      printf 'profile_source_physical=%s\n' "$profile_source_physical"
+      printf 'profile=%s\n' "$SYSTEM_PROFILE"
+      printf 'activation_command=%s\n' "$profile_activation_command"
+      printf 'activation_action=%s\n' "$profile_activation_action"
+    } >> "$SYSTEM_APPLY_LOG"
+
+    if ! install_profile_link "$profile_source" "$profile_source_physical" >> "$SYSTEM_APPLY_LOG" 2>&1; then
+      finish_system_apply_failed "installing dom0 profile failed"
+      return 1
+    fi
+
+    if [ "$profile_activation_action" = run ]; then
+      if ! env \
+        NIXOME_SYSTEM_JSON="$system_json" \
+        NIXOME_SYSTEM_PLAN_JSON="$SYSTEM_PLAN_JSON" \
+        NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
+        NIXOME_SYSTEM_ETC_DIR="$SYSTEM_ETC_DIR" \
+        NIXOME_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
+        "$activation_path" > "$PROFILE_ACTIVATION_LOG" 2>&1; then
+        cat "$PROFILE_ACTIVATION_LOG" >&2 || true
+        finish_system_apply_failed "dom0 profile activation failed"
+        return 1
+      fi
+    else
+      printf 'activation action is %s; not running profile activation\n' "$profile_activation_action" > "$PROFILE_ACTIVATION_LOG"
+    fi
+
+    profile_status=passed
+  else
+    printf 'no dom0 profile source declared\n' > "$PROFILE_ACTIVATION_LOG"
+  fi
+
+  host_system_enabled="$(jq -r '.dom0.nixos.system.enable // false' "$system_json")"
+  host_system_source="$(jq -r '.dom0.nixos.system.source // ""' "$system_json")"
+  host_system_switch_action="$(jq -r '.dom0.nixos.system.switch_action // "switch"' "$system_json")"
+
+  if [ "$host_system_enabled" = true ]; then
+    if [ -z "$host_system_source" ]; then
+      finish_system_apply_failed "dom0 NixOS system is enabled but source is empty"
+      return 1
+    fi
+
+    case "$host_system_switch_action" in
+      switch|boot|test|dry-activate) ;;
+      *)
+        finish_system_apply_failed "unsupported dom0 NixOS switch action: $host_system_switch_action"
+        return 1
+        ;;
+    esac
+
+    host_system_source_physical="$(nixome_physical_store_path "$host_system_source")"
+    switch_to_configuration="$host_system_source_physical/bin/switch-to-configuration"
+
+    if [ ! -d "$host_system_source_physical" ]; then
+      finish_system_apply_failed "dom0 NixOS system source is missing: $host_system_source"
+      return 1
+    fi
+    if [ ! -x "$switch_to_configuration" ]; then
+      finish_system_apply_failed "dom0 NixOS switch-to-configuration is missing or not executable: $host_system_source/bin/switch-to-configuration"
+      return 1
+    fi
+
+    {
+      printf 'host_system_source=%s\n' "$host_system_source"
+      printf 'host_system_source_physical=%s\n' "$host_system_source_physical"
+      printf 'host_system_profile=%s\n' "$HOST_SYSTEM_PROFILE"
+      printf 'host_current_system_link=%s\n' "$HOST_CURRENT_SYSTEM_LINK"
+      printf 'switch_action=%s\n' "$host_system_switch_action"
+    } >> "$SYSTEM_APPLY_LOG"
+
+    if ! install_host_system_profile "$host_system_source" "$host_system_source_physical" >> "$SYSTEM_APPLY_LOG" 2>&1; then
+      finish_system_apply_failed "installing dom0 NixOS system profile failed"
+      return 1
+    fi
+
+    if ! "$switch_to_configuration" "$host_system_switch_action" > "$HOST_SYSTEM_ACTIVATION_LOG" 2>&1; then
+      cat "$HOST_SYSTEM_ACTIVATION_LOG" >&2 || true
+      finish_system_apply_failed "dom0 NixOS switch-to-configuration $host_system_switch_action failed"
+      return 1
+    fi
+
+    if [ -L "$HOST_CURRENT_SYSTEM_LINK" ]; then
+      host_current_system="$(readlink "$HOST_CURRENT_SYSTEM_LINK" || true)"
+    fi
+
+    printf '%s\n' "$host_system_source" > "$SYSTEM_STATE_DIR/current-host-system"
+    printf '%s\n' "$HOST_SYSTEM_PROFILE" > "$SYSTEM_STATE_DIR/current-host-system-profile"
+    printf '%s\n' "$host_system_switch_action" > "$SYSTEM_STATE_DIR/current-host-system-switch-action"
+    host_system_status=passed
+  else
+    printf 'dom0 NixOS system generation is not enabled\n' > "$HOST_SYSTEM_ACTIVATION_LOG"
+  fi
+
+  if apply_systemd_actions "$system_json"; then
+    systemd_status="$(jq -r '.status' "$SYSTEMD_ACTIONS_JSON")"
+  else
+    systemd_apply_rc="$?"
+    systemd_status="$(jq -r '.status // "failed"' "$SYSTEMD_ACTIONS_JSON" 2>/dev/null || printf 'failed')"
+    status=failed
+    reason="systemd live actions failed"
+  fi
+
+  write_system_apply_json
   [ "$systemd_apply_rc" = 0 ]
 }
 

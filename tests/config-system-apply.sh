@@ -54,6 +54,11 @@ cat > "$HOST_SYSTEM_SOURCE/bin/switch-to-configuration" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [ "${NIXOME_FAIL_HOST_SWITCH:-0}" = "1" ]; then
+  printf 'fixture host switch failed\n' >&2
+  exit 42
+fi
+
 printf '%s\n' "$1" > "$NIXOME_SYSTEM_STATE_DIR/host-switch-action"
 printf '%s\n' "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)" > "$NIXOME_SYSTEM_STATE_DIR/host-switch-source"
 ln -sfn "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)" "$NIXOME_HOST_CURRENT_SYSTEM_LINK"
@@ -379,5 +384,64 @@ jq -e '
   .artifacts.systemd_actions == "systemd-actions.json" and
   .systemd_actions.status == "passed"
 ' "$WORK_DIR/deployment-extract/deployment.json" >/dev/null
+
+FAIL_LOG_DIR="$WORK_DIR/fail-logs"
+FAIL_SYSTEM_STATE_DIR="$WORK_DIR/fail-state"
+FAIL_SYSTEM_ETC_DIR="$WORK_DIR/fail-etc"
+FAIL_SYSTEM_PROFILE="$WORK_DIR/fail-nixome-system-profile"
+FAIL_HOST_SYSTEM_PROFILE="$WORK_DIR/fail-host-system-profile"
+FAIL_HOST_CURRENT_SYSTEM_LINK="$WORK_DIR/fail-current-system"
+FAIL_DEPLOYMENT_TAR_CAPTURE="$WORK_DIR/deployment-failed.tar"
+mkdir -p "$FAIL_LOG_DIR"
+
+if PATH="$BIN_DIR:$PATH" \
+  CANDIDATE_COMMIT_FIXTURE="$CANDIDATE_COMMIT" \
+  DEPLOYMENT_TAR_CAPTURE_FIXTURE="$FAIL_DEPLOYMENT_TAR_CAPTURE" \
+  VALIDATED_TAR_FIXTURE="$VALIDATED_TAR" \
+  NIXOME_FAIL_HOST_SWITCH=1 \
+  NIXOME_XEN_CAPABILITIES="$CAPABILITIES" \
+  NIXOME_LOG_DIR="$FAIL_LOG_DIR" \
+  NIXOME_USE_HOST_NIX_STORE=1 \
+  NIXOME_SYSTEM_STATE_DIR="$FAIL_SYSTEM_STATE_DIR" \
+  NIXOME_SYSTEM_ETC_DIR="$FAIL_SYSTEM_ETC_DIR" \
+  NIXOME_SYSTEM_PROFILE="$FAIL_SYSTEM_PROFILE" \
+  NIXOME_HOST_SYSTEM_PROFILE="$FAIL_HOST_SYSTEM_PROFILE" \
+  NIXOME_HOST_CURRENT_SYSTEM_LINK="$FAIL_HOST_CURRENT_SYSTEM_LINK" \
+  bash "$ROOT/scripts/apply-config-candidate.sh" --apply \
+  > "$WORK_DIR/fail-stdout.log" 2> "$WORK_DIR/fail-stderr.log"; then
+  printf 'expected failing host system switch to fail config apply\n' >&2
+  exit 1
+fi
+
+jq -e '
+  .schema == "nixome.config-apply.v1" and
+  .status == "failed" and
+  .reason == "system apply failed" and
+  .system_apply_result.status == "failed" and
+  .system_apply_result.profile_status == "passed" and
+  .system_apply_result.host_system_status == "skipped" and
+  .system_apply_result.reason == "dom0 NixOS switch-to-configuration switch failed" and
+  .deployment.status == "failed" and
+  .deployment.system_apply.status == "failed" and
+  .deployment_archive.status == "passed"
+' "$FAIL_LOG_DIR/config-apply.json" >/dev/null
+
+mkdir -p "$WORK_DIR/deployment-failed-extract"
+tar -C "$WORK_DIR/deployment-failed-extract" -xf "$FAIL_DEPLOYMENT_TAR_CAPTURE" deployment.json system-apply.json systemd-actions.json
+jq -e '
+  .schema == "nixome.config-deployment.v1" and
+  .status == "failed" and
+  .reason == "system apply failed" and
+  .system_apply.status == "failed"
+' "$WORK_DIR/deployment-failed-extract/deployment.json" >/dev/null
+jq -e '
+  .schema == "nixome.system-apply.v1" and
+  .status == "failed" and
+  .reason == "dom0 NixOS switch-to-configuration switch failed"
+' "$WORK_DIR/deployment-failed-extract/system-apply.json" >/dev/null
+jq -e '
+  .schema == "nixome.systemd-actions.v1" and
+  .status == "skipped"
+' "$WORK_DIR/deployment-failed-extract/systemd-actions.json" >/dev/null
 
 printf 'config system apply test ok\n'

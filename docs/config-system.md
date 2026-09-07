@@ -215,7 +215,7 @@ including `deployment.json`, `apply.json`, `archive.json`, `setup.json`,
 `topology.json`, `validated-topology.json`, `template-builds.json`,
 `validation.json`, `manifest.json`, `systemd-actions.json`, and relevant dom0
 logs. Passed deployments update both `latest-deployment` and
-`latest-deployment-attempt`; failed setup attempts update only
+`latest-deployment-attempt`; failed setup or system-apply attempts update only
 `latest-deployment-attempt` when the vault can still be reached.
 
 ## Setup Path
