@@ -153,6 +153,21 @@ make vm-config-warm-flow
 make vm-nix-closure-warm-flow
 ```
 
+`make vm-nix-closure-warm-flow` imports the current local closures for
+`nixome-setup-config`, `nixome-nix-closure-domain-smoke`, and the
+`nixome-closure` Qubes storage adapter into the running nested dom0 before it
+runs the focused NixOS-domain lifecycle test. The synced commands are exposed
+under:
+
+```text
+/run/nixome-warm/bin
+```
+
+and `qubesd.service` receives a temporary `/run/systemd/system` override that
+prepends the synced storage adapter and the required `dmsetup`/`losetup` tools.
+This makes warm iterations test the current checkout without recreating the
+whole nested dom0 disk.
+
 The cold targets remain the reproducibility checks:
 
 ```bash

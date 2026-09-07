@@ -17,6 +17,10 @@ IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-image}"
 DISPLAY_MODE="${NIXOME_VM_DISPLAY:-gtk}"
 KEEP_VM="${NIXOME_KEEP_VM:-0}"
 AUTO_GC_AFTER_RUN="${NIXOME_AUTO_GC_AFTER_RUN:-0}"
+SYNC_DOM0_TOOLS="${NIXOME_SYNC_DOM0_TOOLS:-0}"
+REMOTE_WARM_BIN_DIR="${NIXOME_NESTED_WARM_BIN_DIR:-/run/nixome-warm/bin}"
+SETUP_CONFIG_COMMAND="${NIXOME_SETUP_CONFIG_COMMAND:-nixome-setup-config}"
+NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="${NIXOME_NIX_CLOSURE_DOMAIN_SMOKE_COMMAND:-nixome-nix-closure-domain-smoke}"
 
 BOOTSTRAP_QUBES="${NIXOME_BOOTSTRAP_QUBES:-1}"
 RUN_SETUP_CONFIG="${NIXOME_RUN_SETUP_CONFIG:-0}"
@@ -65,6 +69,9 @@ NIX_CLOSURE_JSON="$LOG_DIR/vm-gui-nix-closure-domain-smoke.json"
 NIX_CLOSURE_STDOUT="$LOG_DIR/vm-gui-nix-closure-domain-smoke.stdout.log"
 NIX_CLOSURE_STDERR="$LOG_DIR/vm-gui-nix-closure-domain-smoke.stderr.log"
 NIX_CLOSURE_COMMANDS_LOG="$LOG_DIR/vm-gui-nix-closure-domain-smoke.commands.log"
+SYNC_DOM0_TOOLS_JSON="$LOG_DIR/vm-gui-sync-dom0-tools.json"
+SYNC_DOM0_TOOLS_STDOUT="$LOG_DIR/vm-gui-sync-dom0-tools.stdout.log"
+SYNC_DOM0_TOOLS_STDERR="$LOG_DIR/vm-gui-sync-dom0-tools.stderr.log"
 QREXEC_JSON="$LOG_DIR/vm-gui-qrexec-smoke.json"
 QREXEC_STDERR="$LOG_DIR/vm-gui-qrexec-smoke.stderr.log"
 GUI_JSON="$LOG_DIR/vm-gui-window-smoke.json"
@@ -107,6 +114,9 @@ rm -f \
   "$NIX_CLOSURE_STDOUT" \
   "$NIX_CLOSURE_STDERR" \
   "$NIX_CLOSURE_COMMANDS_LOG" \
+  "$SYNC_DOM0_TOOLS_JSON" \
+  "$SYNC_DOM0_TOOLS_STDOUT" \
+  "$SYNC_DOM0_TOOLS_STDERR" \
   "$QREXEC_JSON" \
   "$QREXEC_STDERR" \
   "$GUI_JSON" \
@@ -380,6 +390,36 @@ remote() {
   ssh_command "$1"
 }
 
+sync_dom0_tools() {
+  case "$SYNC_DOM0_TOOLS" in
+    1|true|yes)
+      ;;
+    0|false|no)
+      printf '{"schema":"nixome.nested-dom0-tool-sync.v1","status":"skipped","reason":"NIXOME_SYNC_DOM0_TOOLS=0"}\n' > "$SYNC_DOM0_TOOLS_JSON"
+      return 0
+      ;;
+    *)
+      printf 'unsupported NIXOME_SYNC_DOM0_TOOLS value: %s\n' "$SYNC_DOM0_TOOLS" >&2
+      exit 1
+      ;;
+  esac
+
+  printf 'warm-sync: syncing current dom0 tools into nested VM\n'
+  if ! NIXOME_LOG_DIR="$LOG_DIR" "$ROOT/scripts/sync-nested-dom0-tools.sh" > "$SYNC_DOM0_TOOLS_STDOUT" 2> "$SYNC_DOM0_TOOLS_STDERR"; then
+    collect_diagnostics
+    cat "$SYNC_DOM0_TOOLS_STDERR" >&2 || true
+    exit 1
+  fi
+  if ! extract_json_result "nixome.nested-dom0-tool-sync.v1" "$SYNC_DOM0_TOOLS_STDOUT" "$SYNC_DOM0_TOOLS_JSON"; then
+    collect_diagnostics
+    printf 'warm-sync did not emit result JSON; see %s\n' "$SYNC_DOM0_TOOLS_STDOUT" >&2
+    exit 1
+  fi
+
+  SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"
+  NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"
+}
+
 collect_diagnostics() {
   remote 'systemctl --failed --no-legend || true' > "$FAILED_UNITS_LOG" 2>/dev/null || true
   remote 'journalctl -b --no-pager -n 320 -u qubesd -u qubes-core -u libvirtd -u qubes-db-dom0 -u qubes-qrexec-policy-daemon -u nixome-qubes-store-init -u nixome-setup-config || true' > "$JOURNAL_LOG" 2>/dev/null || true
@@ -582,6 +622,7 @@ if ! remote 'systemctl is-active libvirtd qubesd qubes-db-dom0 qubes-qrexec-poli
 fi
 
 wait_for_setup_config_boot_unit
+sync_dom0_tools
 
 if [ "$BOOTSTRAP_QUBES" = "1" ]; then
   printf 'bootstrap: installing/checking Qubes VM kernel and template\n'
@@ -603,7 +644,8 @@ fi
 
 if [ "$RUN_SETUP_CONFIG" = "1" ]; then
   printf 'setup-config: applying declared Qubes topology\n'
-  if ! remote "sudo -n env NIXOME_LOG_DIR=/var/log/nixome nixome-setup-config --apply" > "$SETUP_CONFIG_STDOUT" 2> "$SETUP_CONFIG_STDERR"; then
+  setup_config_command="$(shell_quote "$SETUP_CONFIG_COMMAND")"
+  if ! remote "sudo -n env NIXOME_LOG_DIR=/var/log/nixome $setup_config_command --apply" > "$SETUP_CONFIG_STDOUT" 2> "$SETUP_CONFIG_STDERR"; then
     remote 'sudo -n cat /var/log/nixome/setup-config.json 2>/dev/null || true' > "$SETUP_CONFIG_JSON" 2>/dev/null || true
     collect_diagnostics
     cat "$SETUP_CONFIG_STDERR" >&2 || true
@@ -668,7 +710,8 @@ fi
 if [ "$RUN_NIX_CLOSURE_SMOKE" = "1" ]; then
   printf 'nix-closure: running standalone closure-backed domain lifecycle test\n'
   nix_closure_env="$(nix_closure_env_prefix)"
-  if ! remote "sudo -n $nix_closure_env NIXOME_LOG_DIR=/var/log/nixome nixome-nix-closure-domain-smoke" > "$NIX_CLOSURE_STDOUT" 2> "$NIX_CLOSURE_STDERR"; then
+  nix_closure_domain_smoke_command="$(shell_quote "$NIX_CLOSURE_DOMAIN_SMOKE_COMMAND")"
+  if ! remote "sudo -n $nix_closure_env NIXOME_LOG_DIR=/var/log/nixome $nix_closure_domain_smoke_command" > "$NIX_CLOSURE_STDOUT" 2> "$NIX_CLOSURE_STDERR"; then
     remote 'sudo -n cat /var/log/nixome/nix-closure-domain-smoke.json 2>/dev/null || true' > "$NIX_CLOSURE_JSON" 2>/dev/null || true
     collect_diagnostics
     cat "$NIX_CLOSURE_STDERR" >&2 || true
@@ -719,6 +762,7 @@ printf 'setup-config boot: %s\n' "$SETUP_CONFIG_BOOT_JSON"
 printf 'setup-config: %s\n' "$SETUP_CONFIG_JSON"
 printf 'config-vms: %s\n' "$CONFIG_VMS_JSON"
 printf 'config-boot: %s\n' "$CONFIG_BOOT_VERIFY_JSON"
+printf 'warm-sync: %s\n' "$SYNC_DOM0_TOOLS_JSON"
 printf 'nix-closure: %s\n' "$NIX_CLOSURE_JSON"
 printf 'qrexec: %s\n' "$QREXEC_JSON"
 printf 'gui: %s\n' "$GUI_JSON"

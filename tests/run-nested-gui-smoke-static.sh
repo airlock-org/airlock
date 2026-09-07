@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 bash -n "$ROOT/scripts/run-nested-gui-smoke.sh"
+bash -n "$ROOT/scripts/sync-nested-dom0-tools.sh"
 bash -n "$ROOT/scripts/run-config-boot-activation-flow.sh"
 bash -n "$ROOT/scripts/nixos-config-vms-smoke.sh"
 bash -n "$ROOT/scripts/config-boot-verify.sh"
@@ -43,7 +44,17 @@ grep -F 'assert_nix_closure_domain "$VAULT"' \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 ! grep -F 'cat >> "$STAGING_UPDATE_SCRIPT"' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN=1' "$ROOT/Makefile" >/dev/null
+grep -F 'NIXOME_SYNC_DOM0_TOOLS=1' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_SYNC_DOM0_TOOLS' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'sync-nested-dom0-tools.sh' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'vm-gui-sync-dom0-tools.json' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'nix-store --export' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
+grep -F 'sudo -n nix-store --import' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
+grep -F 'PYTHONPATH=' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
+grep -F 'systemctl restart qubesd.service' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
 grep -F 'CONFIG_VMS_STAGING_UPDATE_LOG' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'config-vms-config-staging-update.sh' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'sudo -n $config_vms_env NIXOME_LOG_DIR=/var/log/nixome nixome-config-vms-smoke' \
