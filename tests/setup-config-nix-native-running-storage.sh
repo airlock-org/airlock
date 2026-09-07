@@ -107,7 +107,10 @@ cat > "$TOPOLOGY" <<EOF
           "mode": "shared-closure",
           "source": "$NEW_STORE_SOURCE",
           "source_ref": null,
+          "view_backend": "erofs-blobmap",
           "mountpoint": "/nix/store",
+          "blob_device": "/dev/xvdf",
+          "chunk_size": 65536,
           "device": "/dev/xvde",
           "read_only": true
         },
@@ -150,7 +153,7 @@ if [ "\$#" -eq 2 ]; then
     config-staging:memory) printf '1024\\n' ;;
     config-staging:virt_mode) printf 'pvh\\n' ;;
     config-staging:kernel) printf 'old-kernel\\n' ;;
-    config-staging:kernelopts) printf 'console=hvc0 init=/sbin/init nixome.system=$OLD_SYSTEM_SOURCE nixome.storedev=/dev/xvde\\n' ;;
+    config-staging:kernelopts) printf 'console=hvc0 init=/sbin/init nixome.system=$OLD_SYSTEM_SOURCE nixome.storedev=/dev/xvde nixome.storefmt=erofs nixome.storeblobdev=/dev/xvdf\\n' ;;
     *) exit 1 ;;
   esac
   exit 0
@@ -168,9 +171,14 @@ if [ "\$#" -eq 2 ]; then
     config-staging:nixome-store-source) printf '$OLD_STORE_SOURCE\\n' ;;
     config-staging:nixome-store-image) printf '$OLD_STORE_SOURCE\\n' ;;
     config-staging:nixome-store-mode) printf 'shared-closure\\n' ;;
+    config-staging:nixome-store-view-backend) printf 'erofs-blobmap\\n' ;;
     config-staging:nixome-store-generation) printf '1\\n' ;;
     config-staging:nixome-store-closure-hash) printf 'old-closure\\n' ;;
-    config-staging:nixome-store-view-image) printf '/var/lib/nixome/closure-store/domains/config-staging/generations/1/store.img\\n' ;;
+    config-staging:nixome-store-view-image) printf '/var/lib/nixome/closure-store/domains/config-staging/generations/1/store.erofs\\n' ;;
+    config-staging:nixome-store-filesystem) printf 'erofs\\n' ;;
+    config-staging:nixome-store-blob-map) printf '/var/lib/nixome/closure-store/domains/config-staging/generations/1/store.blob-map.json\\n' ;;
+    config-staging:nixome-store-blob-volume) printf 'store-data\\n' ;;
+    config-staging:nixome-store-blob-device) printf '/dev/xvdf\\n' ;;
     config-staging:nixome-store-mountpoint) printf '/nix/store\\n' ;;
     config-staging:nixome-store-device) printf '/dev/xvde\\n' ;;
     config-staging:nixome-store-read-only) printf 'True\\n' ;;

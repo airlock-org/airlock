@@ -182,11 +182,13 @@ jq -e '
 WORK_GEN1_VIEW="$(jq -r '.store.view_dir' "$RESULT_DIR/work-gen1.json")"
 WORK_GEN1_IMAGE="$(jq -r '.canonical_metadata_image' "$RESULT_DIR/work-gen1.json")"
 WORK_GEN1_BLOB_MAP="$(jq -r '.canonical_blob_map' "$RESULT_DIR/work-gen1.json")"
+WORK_GEN1_LOGICAL_BLOB_SIZE="$(jq -r '.blob_logical_size' "$RESULT_DIR/work-gen1.json")"
 [ -d "$WORK_GEN1_VIEW" ]
 [ -f "$WORK_GEN1_IMAGE" ]
 [ -f "$WORK_GEN1_BLOB_MAP" ]
 [ ! -w "$WORK_GEN1_IMAGE" ]
 [ ! -e "$(dirname "$WORK_GEN1_IMAGE")/store.img" ]
+[ "$(jq -r '.central_blob' "$WORK_GEN1_BLOB_MAP")" = "$POOL/chunks/data.blob" ]
 
 pool_inode="$(stat -c '%d:%i' "$POOL/objects/store/$COMMON/bin/payload")"
 view_inode="$(stat -c '%d:%i' "$WORK_GEN1_VIEW/$COMMON/bin/payload")"
@@ -243,7 +245,8 @@ fsck.erofs --device="$DEV_GEN1_LOGICAL_BLOB" --extract="$DEV_GEN1_EXTRACT" "$DEV
 [ ! -e "$DEV_GEN1_EXTRACT/$WORK_UNIQUE_1" ]
 BLOB_AFTER_DEV_GEN1="$(stat -c %s "$POOL/chunks/data.blob")"
 DEV_LOGICAL_BLOB_SIZE="$(jq -r '.blob_logical_size' "$RESULT_DIR/dev-gen1.json")"
-[ "$((BLOB_AFTER_DEV_GEN1 - BLOB_AFTER_WORK_GEN1))" -lt "$DEV_LOGICAL_BLOB_SIZE" ]
+DEV_PHYSICAL_BYTES_ADDED="$((BLOB_AFTER_DEV_GEN1 - BLOB_AFTER_WORK_GEN1))"
+[ "$DEV_PHYSICAL_BYTES_ADDED" -lt "$DEV_LOGICAL_BLOB_SIZE" ]
 
 run_engine_json symlink-gen admit \
   --pool-root "$POOL" \
@@ -265,6 +268,7 @@ jq -e '
 [ -L "$POOL/objects/store/$SYMLINK_SYSTEM" ]
 [ "$(readlink "$POOL/objects/store/$SYMLINK_SYSTEM")" = "$SYMLINK_TARGET" ]
 [ -L "$(jq -r '.store.view_dir' "$RESULT_DIR/symlink-gen.json")/$SYMLINK_SYSTEM" ]
+BLOB_AFTER_SYMLINK_GEN="$(stat -c %s "$POOL/chunks/data.blob")"
 
 run_engine_json work-gen2 admit \
   --pool-root "$POOL" \
@@ -278,6 +282,10 @@ run_engine_json work-gen2 admit \
   --additional-space-mib 1 \
   --retain false
 
+BLOB_AFTER_WORK_GEN2="$(stat -c %s "$POOL/chunks/data.blob")"
+WORK_GEN2_LOGICAL_BLOB_SIZE="$(jq -r '.blob_logical_size' "$RESULT_DIR/work-gen2.json")"
+WORK_GEN2_PHYSICAL_BYTES_ADDED="$((BLOB_AFTER_WORK_GEN2 - BLOB_AFTER_SYMLINK_GEN))"
+
 jq -e '
   .domain == "work" and
   .generation == 2 and
@@ -285,8 +293,10 @@ jq -e '
   .current_generation == 2 and
   .objects_total == 3 and
   .objects_admitted == 2 and
-  .objects_reused == 1
+  .objects_reused == 1 and
+  .chunks_reused > 0
 ' "$RESULT_DIR/work-gen2.json" >/dev/null
+[ "$WORK_GEN2_PHYSICAL_BYTES_ADDED" -lt "$WORK_GEN2_LOGICAL_BLOB_SIZE" ]
 
 run_engine_json rollback-work rollback \
   --pool-root "$POOL" \
@@ -359,5 +369,43 @@ jq -e '
   .chunk_count > 0 and
   .chunk_blob_size > 0
 ' "$RESULT_DIR/status.json" >/dev/null
+
+jq -n \
+  --arg schema "nixome.closure-store.physical-sharing.v1" \
+  --arg status "passed" \
+  --arg central_blob "$POOL/chunks/data.blob" \
+  --argjson work_gen1_logical_blob_size "$WORK_GEN1_LOGICAL_BLOB_SIZE" \
+  --argjson work_gen1_chunks_admitted "$(jq -r '.chunks_admitted' "$RESULT_DIR/work-gen1.json")" \
+  --argjson dev_gen1_logical_blob_size "$DEV_LOGICAL_BLOB_SIZE" \
+  --argjson dev_gen1_physical_bytes_added "$DEV_PHYSICAL_BYTES_ADDED" \
+  --argjson dev_gen1_chunks_admitted "$(jq -r '.chunks_admitted' "$RESULT_DIR/dev-gen1.json")" \
+  --argjson dev_gen1_chunks_reused "$(jq -r '.chunks_reused' "$RESULT_DIR/dev-gen1.json")" \
+  --argjson work_gen2_logical_blob_size "$WORK_GEN2_LOGICAL_BLOB_SIZE" \
+  --argjson work_gen2_physical_bytes_added "$WORK_GEN2_PHYSICAL_BYTES_ADDED" \
+  --argjson work_gen2_chunks_admitted "$(jq -r '.chunks_admitted' "$RESULT_DIR/work-gen2.json")" \
+  --argjson work_gen2_chunks_reused "$(jq -r '.chunks_reused' "$RESULT_DIR/work-gen2.json")" \
+  '{
+    schema: $schema,
+    status: $status,
+    central_blob: $central_blob,
+    work_gen1: {
+      logical_blob_size: $work_gen1_logical_blob_size,
+      chunks_admitted: $work_gen1_chunks_admitted
+    },
+    dev_gen1: {
+      logical_blob_size: $dev_gen1_logical_blob_size,
+      physical_bytes_added: $dev_gen1_physical_bytes_added,
+      chunks_admitted: $dev_gen1_chunks_admitted,
+      chunks_reused: $dev_gen1_chunks_reused,
+      sharing_verified: ($dev_gen1_physical_bytes_added < $dev_gen1_logical_blob_size)
+    },
+    work_gen2: {
+      logical_blob_size: $work_gen2_logical_blob_size,
+      physical_bytes_added: $work_gen2_physical_bytes_added,
+      chunks_admitted: $work_gen2_chunks_admitted,
+      chunks_reused: $work_gen2_chunks_reused,
+      sharing_verified: ($work_gen2_physical_bytes_added < $work_gen2_logical_blob_size)
+    }
+  }' > "$RESULT_DIR/physical-sharing.json"
 
 printf 'closure-store engine test ok\n'

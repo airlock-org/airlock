@@ -2082,6 +2082,17 @@ in
             sed -n 's|^nixome.storedev=||p' |
             head -n 1
         )"
+        store_format="$(
+          tr ' ' '\n' < /proc/cmdline |
+            sed -n 's|^nixome.storefmt=||p' |
+            head -n 1
+        )"
+        store_blob_device="$(
+          tr ' ' '\n' < /proc/cmdline |
+            sed -n 's|^nixome.storeblobdev=||p' |
+            head -n 1
+        )"
+        [ -n "$store_format" ] || store_format="ext4"
 
         [ -n "$system_path" ] || {
           echo "missing nixome.system kernel option" >&2
@@ -2109,6 +2120,12 @@ in
           echo "/nix/store source mismatch: $mount_source != $store_device" >&2
           exit 1
         }
+        if [ "$store_format" = "erofs" ] && [ -n "$store_blob_device" ]; then
+          [ -b "$store_blob_device" ] || {
+            echo "store blob device is missing: $store_blob_device" >&2
+            exit 1
+          }
+        fi
         case ",$mount_options," in
           *,ro,*) ;;
           *)
@@ -2126,6 +2143,8 @@ in
 
         printf 'system=%s\n' "$system_path"
         printf 'store_device=%s\n' "$store_device"
+        printf 'store_format=%s\n' "$store_format"
+        printf 'store_blob_device=%s\n' "$store_blob_device"
         printf 'store_options=%s\n' "$mount_options"
       '';
       mode = "0555";

@@ -376,6 +376,7 @@ async def ensure_shared_store_loaded(qubes, args, admission):
     app, vm = load_domain(qubes, args.domain)
     _pool, pool_created = await ensure_pool(app, args.pool_name, args.pool_root)
     volume_created = False
+    volumes_created = []
     metadata_changed = pool_created
 
     desired = shared_volume_configs(args.pool_name, args.domain, admission)
@@ -424,11 +425,15 @@ async def ensure_shared_store_loaded(qubes, args, admission):
         vm.volume_config["store"] = desired["store"].copy()
         store_volume = vm.storage.init_volume("store", desired["store"].copy())
         await maybe_await(store_volume.create())
+        if current_volume is None:
+            volumes_created.append("store")
         if "store-data" in desired:
             vm.volume_config["store-data"] = desired["store-data"].copy()
             blob_volume = vm.storage.init_volume("store-data", desired["store-data"].copy())
             await maybe_await(blob_volume.create())
-        volume_created = current_volume is None
+            if current_blob_volume is None:
+                volumes_created.append("store-data")
+        volume_created = bool(volumes_created)
         metadata_changed = True
 
     if metadata_changed:
@@ -469,6 +474,7 @@ async def ensure_shared_store_loaded(qubes, args, admission):
         "source": args.source,
         "read_only": True,
         "volume_created": volume_created,
+        "volumes_created": volumes_created,
         "image_imported": False,
         "view_created": admission["view_created"],
         "metadata_changed": metadata_changed,
@@ -566,6 +572,7 @@ async def ensure_shared_store(args):
             "source": args.source,
             "read_only": True,
             "volume_created": False,
+            "volumes_created": [],
             "image_imported": False,
             "view_created": False,
             "metadata_changed": False,

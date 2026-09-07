@@ -13,6 +13,7 @@ linux-kernel:6.12.64-1.fc41                       nixome-closure-smoke  kernel  
 varlibqubes:appvms/nixome-closure-smoke/private   nixome-closure-smoke  private      No
 varlibqubes:appvms/nixome-closure-smoke/root      nixome-closure-smoke  root         No
 varlibqubes:appvms/nixome-closure-smoke/store     nixome-closure-smoke  store        No
+varlibqubes:appvms/nixome-closure-smoke/store-data nixome-closure-smoke store-data   No
 varlibqubes:appvms/nixome-closure-smoke/volatile  nixome-closure-smoke  volatile     No
 EOF
 
@@ -28,6 +29,7 @@ if grep -F 'grep -F "$DOMAIN:store"' "$SCRIPT" >/dev/null; then
 fi
 
 grep -F 'qvm_volume_list_has_volume "$DOMAIN" store' "$SCRIPT" >/dev/null
+grep -F 'qvm_volume_list_has_volume "$DOMAIN" store-data' "$SCRIPT" >/dev/null
 grep -F 'touch "$home_dir/nixome-closure-smoke-home"' "$SCRIPT" >/dev/null
 
 if grep -F 'touch /rw/nixome-closure-smoke-persistent' "$SCRIPT" >/dev/null; then

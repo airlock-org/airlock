@@ -1,6 +1,7 @@
 {
   coreutils,
   e2fsprogs,
+  erofs-utils,
   gnugrep,
   gnused,
   jq,
@@ -18,6 +19,7 @@ writeShellApplication {
   runtimeInputs = [
     coreutils
     e2fsprogs
+    erofs-utils
     gnugrep
     gnused
     jq

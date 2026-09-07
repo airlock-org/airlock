@@ -77,7 +77,7 @@ A `nix-closure` domain is represented as:
 ```text
 Nix system closure
 + small root image
-+ read-only Nix store volume
++ read-only closure store volumes
 + private persistent state
 + volatile state
 + VM resources
@@ -87,12 +87,13 @@ Nix system closure
 
 Dom0 resolves build references from the validator-approved candidate, imports
 the small root image into the Qubes `root` volume, admits the exact closure into
-the Nixome closure store, creates a separate Qubes `store` volume from the
-selected generation, and sets prefs/features/services/policy. The store volume
-is attached at `/dev/xvde` and mounted read-only at `/nix/store` by the early
-guest bootstrap before the real NixOS init runs. The topology schema currently
-constrains the first extra store volume to `/dev/xvde` because that is the
-validated Qubes/libvirt ordering for this path.
+the Nixome closure store, creates separate Qubes volumes for the selected
+generation, and sets prefs/features/services/policy. The EROFS metadata volume
+is attached at `/dev/xvde`. The filtered blob-data volume is attached at
+`/dev/xvdf`. Early guest bootstrap mounts `/dev/xvde` read-only at
+`/nix/store` with `/dev/xvdf` as its external EROFS blob device before the real
+NixOS init runs. The topology schema currently constrains those devices because
+that is the validated Qubes/libvirt ordering for this path.
 
 The current shared-closure backend keeps immutable store objects once in:
 
@@ -100,17 +101,41 @@ The current shared-closure backend keeps immutable store objects once in:
 /var/lib/nixome/closure-store/objects/store
 ```
 
+The default runtime view no longer creates a full per-closure ext4 `store.img`.
+Instead, each exact closure gets:
+
+```text
+/var/lib/nixome/closure-store/views/by-closure/<closure>/store.erofs
+/var/lib/nixome/closure-store/views/by-closure/<closure>/store.blob-map.json
+/var/lib/nixome/closure-store/views/by-closure/<closure>/chunk-refs
+```
+
+`store.erofs` is a small EROFS metadata image containing only the declared
+closure namespace. `store.blob-map.json` maps that closure's logical blob
+offsets to immutable chunks in:
+
+```text
+/var/lib/nixome/closure-store/chunks/data.blob
+/var/lib/nixome/closure-store/chunks/metadata/<sha256>.json
+```
+
+At VM start, the Qubes `nixome-closure` storage pool asks the storage engine to
+create a read-only device-mapper view from the closure blob map. The guest
+receives only that filtered `/dev/mapper/nixome-*` block device as `store-data`;
+it never receives the global chunk blob or an unfiltered global store mount.
+Root inside the guest can read only the bytes referenced by the declared
+closure view.
+
 Each domain generation records an exact closure manifest under:
 
 ```text
 /var/lib/nixome/closure-store/domains/<domain>/generations/<n>/manifest.json
 ```
 
-The Qubes-facing volume is produced by the `nixome-closure` storage pool. Today
-that pool materializes a read-only ext4 view image for the generation so it fits
-Qubes' block-volume contract. The object pool and generation metadata are the
-authoritative state; deeper block-level deduplication between different closure
-images remains future storage-driver work.
+The Qubes-facing volumes are produced by the `nixome-closure` storage pool.
+The object pool, chunk metadata, closure views, and generation manifests are the
+authoritative state. The older full ext4 image path remains only as the explicit
+`closure-image`/`ext4-image` fallback for tests and recovery.
 
 ## Warm Integration Loop
 
@@ -288,8 +313,15 @@ normally no-ops. There is no timer.
 
 ## Remaining Architecture Work
 
-The current implementation gives each NixOS domain its own read-only store
-image. Identical store objects are not physically deduplicated across unrelated
-domains yet. The next storage milestone is a Qubes storage pool/volume driver
-or equivalent backend that can materialize per-domain read-only closure views
-while sharing immutable Nix store objects below the VM boundary.
+The default `shared-closure` path physically shares identical EROFS blob chunks
+across unrelated NixOS domains and generations, while preserving independent
+read-only closure views. Remaining storage work is narrower:
+
+- compacting `chunks/data.blob` after GC; today stale chunk metadata is removed,
+  but the central blob file is append-only.
+- replacing the temporary EROFS blob produced during admission with a direct
+  chunk/index writer if this becomes a bottleneck.
+- running repeated warm and final cold Qubes/Xen lifecycle tests for the EROFS
+  external-blob mount path.
+- eventually moving from chunk-level sharing to a stronger object/extent backend
+  if measurements show chunk packing is not good enough.

@@ -382,7 +382,13 @@ check_source_paths() {
   root_source="$(feature_value nixome-root-source)"
   store_source="$(feature_value nixome-store-source)"
   store_mode="$(feature_value nixome-store-mode)"
+  store_view_backend="$(feature_value nixome-store-view-backend)"
+  store_filesystem="$(feature_value nixome-store-filesystem)"
+  store_blob_device="$(feature_value nixome-store-blob-device)"
+  store_blob_map="$(feature_value nixome-store-blob-map)"
   [ -n "$store_mode" ] || store_mode="closure-image"
+  [ -n "$store_view_backend" ] || store_view_backend="ext4-image"
+  [ -n "$store_filesystem" ] || store_filesystem="ext4"
   if [ "$store_mode" = "shared-closure" ]; then
     store_image="$(feature_value nixome-store-view-image)"
   else
@@ -393,6 +399,7 @@ check_source_paths() {
   root_source_physical="$(nixome_physical_store_path "$root_source")"
   store_source_physical="$(nixome_physical_store_path "$store_source")"
   store_image_physical="$(nixome_physical_store_path "$store_image")"
+  store_blob_map_physical="$(nixome_physical_store_path "$store_blob_map")"
 
   [ -n "$root_source" ] || fail "missing nixome-root-source feature"
   [ -n "$store_source" ] || fail "missing nixome-store-source feature"
@@ -414,6 +421,13 @@ check_source_paths() {
       [ -f "$store_source_physical/manifest.json" ] ||
         fail "store closure source is missing manifest.json: $store_source/manifest.json"
       [ -f "$store_image_physical" ] || fail "store view image path is missing: $store_image"
+      if [ "$store_view_backend" = "erofs-blobmap" ]; then
+        [ "$store_filesystem" = "erofs" ] ||
+          fail "shared closure erofs-blobmap did not report erofs filesystem"
+        [ -n "$store_blob_device" ] || fail "missing nixome-store-blob-device feature"
+        [ -n "$store_blob_map" ] || fail "missing nixome-store-blob-map feature"
+        [ -f "$store_blob_map_physical" ] || fail "store blob map path is missing: $store_blob_map"
+      fi
       ;;
     *)
       fail "unsupported store mode for $DOMAIN: $store_mode"
@@ -438,6 +452,28 @@ check_root_image_has_no_store() {
     fail "root image contains unexpected /nix/store entries: $entries"
 }
 
+reconstruct_blob_view() {
+  map="$1"
+  output="$2"
+  python3 - "$map" "$output" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+blob_map = json.loads(Path(sys.argv[1]).read_text())
+output = Path(sys.argv[2])
+with Path(blob_map["central_blob"]).open("rb") as source, output.open("wb") as target:
+    for extent in blob_map["extents"]:
+        source.seek(int(extent["central_offset"]))
+        data = source.read(int(extent["length"]))
+        if len(data) != int(extent["length"]):
+            raise SystemExit("central blob extent is truncated")
+        target.seek(int(extent["logical_offset"]))
+        target.write(data)
+    target.truncate(int(blob_map["logical_size"]))
+PY
+}
+
 check_store_image_contains_system() {
   system_entry="${system_source#/nix/store/}"
   [ "$system_entry" != "$system_source" ] ||
@@ -456,7 +492,18 @@ check_store_image_contains_system() {
     elif [ -f "$(dirname "$store_source_physical")/store-paths" ]; then
       grep -Fx "$system_source" "$(dirname "$store_source_physical")/store-paths"
     fi
-    debugfs -R "stat /$system_entry/init" "$store_image_physical"
+    if [ "$store_view_backend" = "erofs-blobmap" ]; then
+      logical_blob="$LOG_DIR/nix-closure-domain-store.blob"
+      extract_dir="$LOG_DIR/nix-closure-domain-store-extract"
+      chmod -R u+w "$extract_dir" 2>/dev/null || true
+      rm -rf "$extract_dir"
+      mkdir -p "$extract_dir"
+      reconstruct_blob_view "$store_blob_map_physical" "$logical_blob"
+      fsck.erofs --device="$logical_blob" --extract="$extract_dir" "$store_image_physical"
+      [ -x "$extract_dir/$system_entry/init" ]
+    else
+      debugfs -R "stat /$system_entry/init" "$store_image_physical"
+    fi
   } > "$STORE_IMAGE_CHECK_LOG" 2>&1 ||
     fail "store image does not contain declared system init"
 }
@@ -476,6 +523,12 @@ run_runtime_service_check() {
     fail "runtime service did not report expected system source"
   grep -Fx "store_device=$store_device" "$RUNTIME_SERVICE_LOG" >/dev/null ||
     fail "runtime service did not report expected store device"
+  grep -Fx "store_format=$store_filesystem" "$RUNTIME_SERVICE_LOG" >/dev/null ||
+    fail "runtime service did not report expected store filesystem"
+  if [ "$store_filesystem" = "erofs" ]; then
+    grep -Fx "store_blob_device=$store_blob_device" "$RUNTIME_SERVICE_LOG" >/dev/null ||
+      fail "runtime service did not report expected store blob device"
+  fi
   grep -E '^store_options=([^,]+,)*ro(,|$)' "$RUNTIME_SERVICE_LOG" >/dev/null ||
     fail "runtime service did not report read-only store mount"
 }
@@ -494,6 +547,17 @@ store_device="$(
     sed -n 's|^nixome.storedev=||p' |
     head -n 1
 )"
+store_format="$(
+  tr ' ' '\n' < /proc/cmdline |
+    sed -n 's|^nixome.storefmt=||p' |
+    head -n 1
+)"
+store_blob_device="$(
+  tr ' ' '\n' < /proc/cmdline |
+    sed -n 's|^nixome.storeblobdev=||p' |
+    head -n 1
+)"
+[ -n "$store_format" ] || store_format="ext4"
 mount_source="$(findmnt -rn -T /nix/store -o SOURCE)"
 mount_options="$(findmnt -rn -T /nix/store -o OPTIONS)"
 current_system="$(readlink -f /run/current-system)"
@@ -503,6 +567,8 @@ home_dir="${HOME:-/home/$guest_user}"
 printf 'cmdline=%s\n' "$(cat /proc/cmdline)"
 printf 'system_path=%s\n' "$system_path"
 printf 'store_device=%s\n' "$store_device"
+printf 'store_format=%s\n' "$store_format"
+printf 'store_blob_device=%s\n' "$store_blob_device"
 printf 'mount_source=%s\n' "$mount_source"
 printf 'mount_options=%s\n' "$mount_options"
 printf 'current_system=%s\n' "$current_system"
@@ -518,6 +584,10 @@ printf 'applied_message=%s\n' "$(cat /etc/nixome/applied-message)"
 [ "$current_system" = "$system_path" ]
 [ -x "$system_path/init" ]
 [ "$mount_source" = "$store_device" ]
+if [ "$store_format" = "erofs" ]; then
+  [ -n "$store_blob_device" ]
+  [ -b "$store_blob_device" ]
+fi
 case ",$mount_options," in
   *,ro,*) ;;
   *) echo "/nix/store is not read-only: $mount_options" >&2; exit 1 ;;
@@ -843,6 +913,16 @@ qvm-prefs "$DOMAIN" kernelopts > "$KERNEL_OPTS_LOG" 2>&1
   fail "kernelopts nixome.system does not match declared system"
 [ "$(extract_kernelopt nixome.storedev)" = "$store_device" ] ||
   fail "kernelopts nixome.storedev does not match declared store device"
+[ "$(extract_kernelopt nixome.storefmt)" = "$store_filesystem" ] ||
+  fail "kernelopts nixome.storefmt does not match declared store filesystem"
+if [ "$store_filesystem" = "erofs" ]; then
+  [ "$(extract_kernelopt nixome.storeblobdev)" = "$store_blob_device" ] ||
+    fail "kernelopts nixome.storeblobdev does not match declared blob device"
+  qvm-volume info "$DOMAIN:store-data" >/dev/null 2>&1 ||
+    fail "Qubes store-data volume was not created"
+  qvm_volume_list_has_volume "$DOMAIN" store-data ||
+    fail "Qubes volume list does not include the store-data volume"
+fi
 
 check_root_image_has_no_store
 check_store_image_contains_system

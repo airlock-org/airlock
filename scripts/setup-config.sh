@@ -1021,7 +1021,13 @@ install_nix_domain_store() {
       return "$rc"
     fi
 
-    if printf '%s\n' "$helper_output" | jq -e '.volume_created == true' >/dev/null; then
+    while IFS= read -r created_volume; do
+      [ -n "$created_volume" ] || continue
+      store_volumes_changed=$((store_volumes_changed + 1))
+      record_live_action domain-store-volume create "$domain" volume "$created_volume"
+    done < <(printf '%s\n' "$helper_output" | jq -r '.volumes_created[]?')
+    if ! printf '%s\n' "$helper_output" | jq -e 'has("volumes_created")' >/dev/null &&
+      printf '%s\n' "$helper_output" | jq -e '.volume_created == true' >/dev/null; then
       store_volumes_changed=$((store_volumes_changed + 1))
       record_live_action domain-store-volume create "$domain" volume store
     fi
@@ -1049,9 +1055,15 @@ install_nix_domain_store() {
       restart_qubesd_after_storage_change
     fi
   else
-    store_volumes_changed=$((store_volumes_changed + 1))
+    if [ "$store_view_backend" = "erofs-blobmap" ]; then
+      store_volumes_changed=$((store_volumes_changed + 2))
+      record_live_action domain-store-volume create "$domain" volume store
+      record_live_action domain-store-volume create "$domain" volume store-data
+    else
+      store_volumes_changed=$((store_volumes_changed + 1))
+      record_live_action domain-store-volume create "$domain" volume store
+    fi
     store_images_changed=$((store_images_changed + 1))
-    record_live_action domain-store-volume create "$domain" volume store
     if [ "$store_mode" = "closure-image" ]; then
       record_live_action domain-store import "$domain" source "$store_source"
     else

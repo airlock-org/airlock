@@ -196,9 +196,17 @@ class ClosureVolume(qubes.storage.Volume):
             from nixome_qubes_storage import engine
 
             result = engine.attach_blob_view(self.pool.root_dir, self.domain_name, self.generation)
-        except engine.EngineError as exc:
+        except Exception as exc:
             raise qubes.exc.StoragePoolException(str(exc)) from exc
-        return result["device"]
+        device = result.get("device")
+        if not device:
+            raise qubes.exc.StoragePoolException(f"nixome blob-map attach did not return a device for {self.vid}")
+        central_blob = result.get("central_blob")
+        if central_blob and os.path.realpath(device) == os.path.realpath(central_blob):
+            raise qubes.exc.StoragePoolException("refusing to expose the global Nixome chunk blob to a guest")
+        if not device.startswith("/dev/mapper/"):
+            raise qubes.exc.StoragePoolException(f"nixome blob-map attach returned an unfiltered device: {device}")
+        return device
 
     def detach_blob_view(self):
         if not self.domain_name or self.generation is None:
@@ -207,7 +215,7 @@ class ClosureVolume(qubes.storage.Volume):
             from nixome_qubes_storage import engine
 
             engine.detach_blob_view(self.pool.root_dir, self.domain_name, self.generation)
-        except engine.EngineError as exc:
+        except Exception as exc:
             raise qubes.exc.StoragePoolException(str(exc)) from exc
 
     def is_dirty(self):
