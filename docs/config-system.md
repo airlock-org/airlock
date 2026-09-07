@@ -202,7 +202,13 @@ That command reads the active topology, latest setup/apply artifacts,
 domain list when `qvm-ls` is available, and the Nixome-managed qrexec policy
 file. It prefers `/var/lib/nixome/system/current-topology.json`, which
 `nixome-config-apply` updates after successful topology setup, and falls back to
-the bootstrap topology at `/etc/nixome/qubes-topology.json`.
+the bootstrap topology at `/etc/nixome/qubes-topology.json`. After the vault
+accepts a deployment record, dom0 also keeps
+`/var/lib/nixome/system/current-deployment.json`,
+`current-config-apply.json`, `last-deployment.json`, and
+`last-config-apply.json` so status remains useful after transient logs are
+rotated. Profile and `/run/current-system` symlinks are reported as both raw
+link targets and resolved store paths.
 
 The current seed uses generated literal `/nix/store` path pins for Nixome,
 `nixpkgs`, and `nixos-qubes` support sources. Candidate Nix commands therefore

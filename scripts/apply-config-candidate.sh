@@ -513,6 +513,7 @@ archive_deployment_or_fail() {
     fail "vault deployment candidate did not match: $deployment_archive_candidate"
 
   write_result "$status" "$reason"
+  persist_deployment_state "$status"
 }
 
 safe_log_name() {
@@ -1117,6 +1118,23 @@ persist_current_topology() {
   cp "$APPLY_TOPOLOGY_JSON" "$SYSTEM_STATE_DIR/current-topology.json"
   cp "$VALIDATED_TOPOLOGY_JSON" "$SYSTEM_STATE_DIR/current-validated-topology.json"
   cp "$SETUP_JSON" "$SYSTEM_STATE_DIR/current-setup.json"
+}
+
+persist_deployment_state() {
+  local deployment_status="$1"
+
+  mkdir -p "$SYSTEM_STATE_DIR"
+  cp "$DEPLOYMENT_JSON" "$SYSTEM_STATE_DIR/last-deployment.json"
+  cp "$RESULT_JSON" "$SYSTEM_STATE_DIR/last-config-apply.json"
+  printf '%s\n' "$deployment_id" > "$SYSTEM_STATE_DIR/last-deployment-id"
+  printf '%s\n' "$candidate_commit" > "$SYSTEM_STATE_DIR/last-candidate-commit"
+
+  if [ "$deployment_status" = passed ]; then
+    cp "$DEPLOYMENT_JSON" "$SYSTEM_STATE_DIR/current-deployment.json"
+    cp "$RESULT_JSON" "$SYSTEM_STATE_DIR/current-config-apply.json"
+    printf '%s\n' "$deployment_id" > "$SYSTEM_STATE_DIR/current-deployment-id"
+    printf '%s\n' "$candidate_commit" > "$SYSTEM_STATE_DIR/current-candidate-commit"
+  fi
 }
 
 apply_system() {

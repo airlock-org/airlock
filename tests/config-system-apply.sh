@@ -337,6 +337,35 @@ jq -e \
     .deployment.systemd_actions.status == "passed"
   ' "$LOG_DIR/config-apply.json" >/dev/null
 
+jq -e \
+  --arg commit "$CANDIDATE_COMMIT" \
+  '
+    .schema == "nixome.config-deployment.v1" and
+    .status == "passed" and
+    .candidate_commit == $commit
+  ' "$SYSTEM_STATE_DIR/current-deployment.json" >/dev/null
+jq -e \
+  --arg commit "$CANDIDATE_COMMIT" \
+  '
+    .schema == "nixome.config-deployment.v1" and
+    .status == "passed" and
+    .candidate_commit == $commit
+  ' "$SYSTEM_STATE_DIR/last-deployment.json" >/dev/null
+jq -e \
+  --arg commit "$CANDIDATE_COMMIT" \
+  '
+    .schema == "nixome.config-apply.v1" and
+    .status == "passed" and
+    .candidate_commit == $commit
+  ' "$SYSTEM_STATE_DIR/current-config-apply.json" >/dev/null
+jq -e \
+  --arg commit "$CANDIDATE_COMMIT" \
+  '
+    .schema == "nixome.config-apply.v1" and
+    .status == "passed" and
+    .candidate_commit == $commit
+  ' "$SYSTEM_STATE_DIR/last-config-apply.json" >/dev/null
+
 jq -e '
   .schema == "nixome.dom0-profile.v1" and
   .message == "profile-from-test"
@@ -443,6 +472,22 @@ jq -e '
   .schema == "nixome.qubes-topology.v1" and
   (.domains | length) == 0
 ' "$FAIL_SYSTEM_STATE_DIR/current-topology.json" >/dev/null
+jq -e \
+  --arg commit "$CANDIDATE_COMMIT" \
+  '
+    .schema == "nixome.config-deployment.v1" and
+    .status == "failed" and
+    .candidate_commit == $commit
+  ' "$FAIL_SYSTEM_STATE_DIR/last-deployment.json" >/dev/null
+jq -e \
+  --arg commit "$CANDIDATE_COMMIT" \
+  '
+    .schema == "nixome.config-apply.v1" and
+    .status == "failed" and
+    .candidate_commit == $commit
+  ' "$FAIL_SYSTEM_STATE_DIR/last-config-apply.json" >/dev/null
+[ ! -e "$FAIL_SYSTEM_STATE_DIR/current-deployment.json" ]
+[ ! -e "$FAIL_SYSTEM_STATE_DIR/current-config-apply.json" ]
 
 mkdir -p "$WORK_DIR/deployment-failed-extract"
 tar -C "$WORK_DIR/deployment-failed-extract" -xf "$FAIL_DEPLOYMENT_TAR_CAPTURE" deployment.json system-apply.json systemd-actions.json

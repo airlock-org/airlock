@@ -12,6 +12,9 @@ QREXEC_POLICY_DIR="${NIXOME_QUBES_POLICY_DIR:-/var/lib/nixome/qubes-policy.d}"
 QREXEC_MANAGED_POLICY="${NIXOME_QUBES_MANAGED_POLICY_FILE:-90-nixome.policy}"
 QREXEC_POLICY_FILE="$QREXEC_POLICY_DIR/$QREXEC_MANAGED_POLICY"
 QVM_LS_BIN="${NIXOME_QVM_LS_BIN:-qvm-ls}"
+SYSTEM_PROFILE_PATH="${NIXOME_CONFIG_STATUS_SYSTEM_PROFILE:-/nix/var/nix/profiles/nixome-system}"
+HOST_SYSTEM_PROFILE_PATH="${NIXOME_CONFIG_STATUS_HOST_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}"
+RUN_CURRENT_SYSTEM_PATH="${NIXOME_CONFIG_STATUS_RUN_CURRENT_SYSTEM:-/run/current-system}"
 
 tmpdir="$(mktemp -d)"
 cleanup() {
@@ -34,6 +37,14 @@ readlink_or_empty() {
 
   if [ -L "$path" ]; then
     readlink "$path" || true
+  fi
+}
+
+readlink_f_or_empty() {
+  local path="$1"
+
+  if [ -e "$path" ] || [ -L "$path" ]; then
+    readlink -f "$path" || true
   fi
 }
 
@@ -103,6 +114,10 @@ apply_json="$(json_file_or_null "$APPLY_JSON")"
 current_system_json="$(json_file_or_null "$SYSTEM_STATE_DIR/current-system.json")"
 current_plan_json="$(json_file_or_null "$SYSTEM_STATE_DIR/current-plan.json")"
 last_apply_json="$(json_file_or_null "$SYSTEM_STATE_DIR/last-apply.json")"
+current_deployment_json="$(json_file_or_null "$SYSTEM_STATE_DIR/current-deployment.json")"
+last_deployment_json="$(json_file_or_null "$SYSTEM_STATE_DIR/last-deployment.json")"
+current_config_apply_json="$(json_file_or_null "$SYSTEM_STATE_DIR/current-config-apply.json")"
+last_config_apply_json="$(json_file_or_null "$SYSTEM_STATE_DIR/last-config-apply.json")"
 qvm_domains="$(qvm_domains_json)"
 qvm_status="$(cat "$tmpdir/qvm-ls.status" 2>/dev/null || printf unknown)"
 qvm_available=false
@@ -124,12 +139,15 @@ jq -n \
   --arg system_state_dir "$SYSTEM_STATE_DIR" \
   --arg qrexec_policy_file "$QREXEC_POLICY_FILE" \
   --arg qvm_status "$qvm_status" \
-  --arg system_profile "/nix/var/nix/profiles/nixome-system" \
-  --arg system_profile_target "$(readlink_or_empty /nix/var/nix/profiles/nixome-system)" \
-  --arg host_system_profile "/nix/var/nix/profiles/system" \
-  --arg host_system_profile_target "$(readlink_or_empty /nix/var/nix/profiles/system)" \
-  --arg run_current_system "/run/current-system" \
-  --arg run_current_system_target "$(readlink_or_empty /run/current-system)" \
+  --arg system_profile "$SYSTEM_PROFILE_PATH" \
+  --arg system_profile_target "$(readlink_or_empty "$SYSTEM_PROFILE_PATH")" \
+  --arg system_profile_resolved_target "$(readlink_f_or_empty "$SYSTEM_PROFILE_PATH")" \
+  --arg host_system_profile "$HOST_SYSTEM_PROFILE_PATH" \
+  --arg host_system_profile_target "$(readlink_or_empty "$HOST_SYSTEM_PROFILE_PATH")" \
+  --arg host_system_profile_resolved_target "$(readlink_f_or_empty "$HOST_SYSTEM_PROFILE_PATH")" \
+  --arg run_current_system "$RUN_CURRENT_SYSTEM_PATH" \
+  --arg run_current_system_target "$(readlink_or_empty "$RUN_CURRENT_SYSTEM_PATH")" \
+  --arg run_current_system_resolved_target "$(readlink_f_or_empty "$RUN_CURRENT_SYSTEM_PATH")" \
   --argjson topology "$topology_json" \
   --argjson boot_topology "$boot_topology_json" \
   --argjson current_topology "$current_topology_json" \
@@ -138,6 +156,10 @@ jq -n \
   --argjson current_system "$current_system_json" \
   --argjson current_plan "$current_plan_json" \
   --argjson last_apply "$last_apply_json" \
+  --argjson current_deployment "$current_deployment_json" \
+  --argjson last_deployment "$last_deployment_json" \
+  --argjson current_config_apply "$current_config_apply_json" \
+  --argjson last_config_apply "$last_config_apply_json" \
   --argjson qvm_domains "$qvm_domains" \
   --argjson qvm_available "$qvm_available" \
   --argjson qrexec_policy_exists "$policy_exists" \
@@ -189,6 +211,12 @@ jq -n \
         exists: $qrexec_policy_exists,
         rule_count: $qrexec_policy_rule_count
       },
+      deployment: {
+        current: $current_deployment,
+        last_attempt: $last_deployment,
+        current_apply: $current_config_apply,
+        last_apply_result: $last_config_apply
+      },
       setup: $setup,
       apply: $apply,
       system: {
@@ -198,10 +226,13 @@ jq -n \
         last_apply: $last_apply,
         profile: $system_profile,
         profile_target: $system_profile_target,
+        profile_resolved_target: $system_profile_resolved_target,
         host_system_profile: $host_system_profile,
         host_system_profile_target: $host_system_profile_target,
+        host_system_profile_resolved_target: $host_system_profile_resolved_target,
         run_current_system: $run_current_system,
-        run_current_system_target: $run_current_system_target
+        run_current_system_target: $run_current_system_target,
+        run_current_system_resolved_target: $run_current_system_resolved_target
       }
     }
   '

@@ -857,9 +857,15 @@ jq -e \
     any(.qvm.managed_domains[]; .name == $vault) and
     any(.qvm.managed_domains[]; .name == $validator) and
     .qrexec_policy.exists == true and
+    .deployment.current.status == "passed" and
+    .deployment.last_attempt.status == "passed" and
+    .deployment.current.candidate_commit == .apply.candidate_commit and
+    .deployment.current_apply.status == "passed" and
     .apply.status == "passed" and
     .system.last_apply.status == "passed" and
-    .system.run_current_system_target == $host_system_source
+    .system.host_system_profile_resolved_target == $host_system_source and
+    .system.run_current_system_target == $host_system_source and
+    .system.run_current_system_resolved_target == $host_system_source
   ' "$CONFIG_STATUS_LOG" >/dev/null ||
   fail "config status JSON did not match applied state"
 
