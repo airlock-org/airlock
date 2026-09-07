@@ -147,6 +147,7 @@
       checkDom0Host =
         value:
         checkDom0Keys "host" [
+          "apply"
           "configuration"
           "etc"
           "modules"
@@ -154,6 +155,33 @@
           "packages"
           "systemd"
         ] (expectDom0Attrs "host" value);
+      checkDom0HostApply =
+        value:
+        let
+          apply = checkDom0Keys "host.apply" [
+            "mode"
+            "reason"
+          ] (expectDom0Attrs "host.apply" value);
+          mode = apply.mode or "auto";
+        in
+        if !(builtins.elem mode [ "auto" "switch" "boot" ]) then
+          throw "nixome.dom0.host.apply.mode: expected one of auto, switch, boot"
+        else
+          {
+            inherit mode;
+          }
+          // (
+            if apply ? reason then
+              {
+                reason =
+                  if builtins.typeOf apply.reason == "string" || builtins.typeOf apply.reason == "path" then
+                    apply.reason
+                  else
+                    throw "nixome.dom0.host.apply.reason: expected a string or path, got ${builtins.typeOf apply.reason}";
+              }
+            else
+              { }
+          );
       localDom0 = checkDom0Keys "" [
         "extraModules"
         "host"
@@ -174,6 +202,36 @@
           else
             { }
         );
+      hasNonEmptyAttrs =
+        value: builtins.typeOf value == "set" && builtins.attrNames value != [ ];
+      hasNonEmptyList =
+        value: builtins.typeOf value == "list" && value != [ ];
+      localDom0HostApply = checkDom0HostApply (localDom0Host.apply or { });
+      localDom0HostHasUnknownLiveSafety =
+        hasNonEmptyList (localDom0Host.overlays or [ ])
+        || hasNonEmptyAttrs (localDom0Host.configuration or { })
+        || hasNonEmptyList (localDom0Host.modules or [ ])
+        || hasNonEmptyList (localDom0.extraModules or [ ]);
+      autoDom0SystemSwitchAction =
+        if localDom0HostApply.mode == "boot" then
+          "boot"
+        else if localDom0HostApply.mode == "switch" then
+          "switch"
+        else if localDom0HostHasUnknownLiveSafety then
+          "boot"
+        else
+          "switch";
+      autoDom0SystemReason =
+        if localDom0HostApply ? reason then
+          localDom0HostApply.reason
+        else if autoDom0SystemSwitchAction == "boot" then
+          "dom0 host config includes arbitrary NixOS modules or overlays"
+        else
+          "dom0 host userland config can be applied live";
+      automaticSystemArgs = {
+        dom0SystemSwitchAction = autoDom0SystemSwitchAction;
+        dom0SystemReason = autoDom0SystemReason;
+      };
       localDom0HostModules = [
         localDom0HostModule
       ]
@@ -218,7 +276,8 @@
       };
       topology = topologySchema.mkTopology config;
       machineSystemConfig = systemConfig (
-        {
+        automaticSystemArgs
+        // {
           inherit appliedMessage system;
         }
         // (localConfig.system.args or { })

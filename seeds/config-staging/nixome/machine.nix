@@ -73,6 +73,15 @@
   # modules inside nixosConfigurations.nixome-dom0. Use overlays for dom0
   # package/version overrides.
   dom0.host = {
+    # Automatic apply classification:
+    # - packages, etc, and systemd fields default to an in-session switch
+    # - overlays, configuration, modules, and dom0.extraModules default to the
+    #   next boot generation because they can affect Xen/kernel/early services
+    # Override only when you know the change class:
+    # apply.mode = "switch"; # force live switch
+    # apply.mode = "boot";   # force next boot generation
+    apply.mode = "auto";
+
     overlays = [ ];
     packages = [ ];
     etc = { };
@@ -90,7 +99,7 @@
   # config.
   dom0.extraModules = [ ];
 
-  # Change system args such as dom0SystemSwitchAction = "boot" when a candidate
-  # should install a generation for the next reboot instead of switching live.
+  # Low-level escape hatch. These values override dom0.host.apply classification
+  # and are mainly for tests or unusual hand-authored plans.
   system.args = { };
 }

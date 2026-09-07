@@ -270,6 +270,8 @@ edit surface is:
 
 ```nix
 dom0.host = {
+  apply.mode = "auto";
+
   overlays = [
     (final: prev: {
       # Example: override or replace dom0 packages here.
@@ -299,6 +301,26 @@ remains as a compatibility escape hatch, but new config should prefer
 NixOS modules define the actual host closure that dom0 builds and switches.
 Unknown top-level `nixome/machine.nix`, `dom0`, and `dom0.host` option names
 fail during Nix evaluation.
+
+Host apply classification is automatic by default. Changes limited to
+`dom0.host.packages`, `dom0.host.etc`, and `dom0.host.systemd` are classified
+as live dom0 userland changes and use `switch-to-configuration switch`.
+Changes that touch `dom0.host.overlays`, `dom0.host.configuration`,
+`dom0.host.modules`, or `dom0.extraModules` are classified conservatively as a
+next-boot generation because those surfaces can affect boot, Xen, package
+overrides, kernel settings, or early services. A candidate can override the
+default when the operator knows the class:
+
+```nix
+dom0.host.apply = {
+  mode = "switch"; # force live switch
+  reason = "operator classified this host module as live-safe";
+};
+```
+
+Use `mode = "boot"` to force a next-boot generation. The lower-level
+`system.args.dom0SystemSwitchAction` field still exists as an escape hatch and
+overrides this classifier.
 
 TemplateVM contents are defined in Nix as well. The seeded
 `nixome/templates.nix` turns `templates.definitions` from `nixome/machine.nix`
@@ -337,9 +359,9 @@ The generated topology then imports the built template through
 that TemplateVM. This keeps Qubes' VM lifecycle and qrexec model intact while
 moving guest root contents into the inside Nix config.
 
-The plan separates `live_actions` from `reboot_actions`: a normal
-`dom0.nixos.system.switchAction = "switch"` is treated as live, while
-`switchAction = "boot"` installs the next boot generation and records a pending
+The plan separates `live_actions` from `reboot_actions`: a classified live
+dom0 generation uses `dom0.nixos.system.switchAction = "switch"`, while a
+classified boot generation uses `switchAction = "boot"` and records a pending
 reboot. Kernel, Xen, bootloader, and Qubes package-set requests are also
 reported as structured reboot actions with `reboot_required = true`.
 Consumers of `nixome.system.v1` require both the structured action arrays and

@@ -10,6 +10,7 @@ TOPOLOGY_JSON="$RESULT_DIR/topology.json"
 LOCAL_TOPOLOGY_JSON="$RESULT_DIR/local-topology.json"
 SYSTEM_JSON="$RESULT_DIR/system.json"
 LOCAL_SYSTEM_JSON="$RESULT_DIR/local-system.json"
+OVERRIDE_SYSTEM_JSON="$RESULT_DIR/override-system.json"
 LOCAL_TEMPLATE_CONFIGURATION="$RESULT_DIR/local-template-configuration.txt"
 PROFILE_LINK="$RESULT_DIR/dom0-profile"
 PROFILE_JSON="$RESULT_DIR/dom0-profile.json"
@@ -34,6 +35,8 @@ CONFIG_VALIDATOR_GUEST_HOSTNAME="$RESULT_DIR/config-validator-guest-hostname.txt
 CONFIG_VALIDATOR_GUEST_SERVICE="$RESULT_DIR/config-validator-guest-service.txt"
 INVALID_TEMPLATE_LOG="$RESULT_DIR/invalid-template.log"
 INVALID_CONFIG_VMS_LOG="$RESULT_DIR/invalid-config-vms.log"
+INVALID_DOM0_HOST_APPLY_LOG="$RESULT_DIR/invalid-dom0-host-apply.log"
+INVALID_DOM0_HOST_APPLY_REASON_LOG="$RESULT_DIR/invalid-dom0-host-apply-reason.log"
 INVALID_DOM0_HOST_LOG="$RESULT_DIR/invalid-dom0-host.log"
 INVALID_TOP_LEVEL_LOG="$RESULT_DIR/invalid-top-level.log"
 
@@ -259,6 +262,7 @@ jq -e '
     "subpath": ""
   } and
   .dom0.nixos.system.switch_action == "switch" and
+  .dom0.nixos.system.reason == "dom0 host userland config can be applied live" and
   .dom0.packages == [
     {
       "name": "nixome-dom0-profile"
@@ -393,10 +397,7 @@ cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
     ];
   };
 
-  system.args = {
-    dom0SystemSwitchAction = "boot";
-    dom0SystemReason = "test next boot generation";
-  };
+  system.args = { };
 }
 EOF
 
@@ -674,16 +675,51 @@ jq -e '
 jq -e '
   .schema == "nixome.system.v1" and
   .dom0.nixos.system.switch_action == "boot" and
-  .dom0.nixos.system.reason == "test next boot generation" and
+  .dom0.nixos.system.reason == "dom0 host config includes arbitrary NixOS modules or overlays" and
   .dom0.systemd.services == {} and
   any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "boot") and
   .plan.reboot_required == true and
   (.plan.reboot_actions | length) == 1 and
   .plan.reboot_actions[0].type == "dom0-nixos-system" and
   .plan.reboot_actions[0].switch_action == "boot" and
-  .plan.reboot_actions[0].reason == "test next boot generation" and
-  .plan.reboot_reasons == ["test next boot generation"]
+  .plan.reboot_actions[0].reason == "dom0 host config includes arbitrary NixOS modules or overlays" and
+  .plan.reboot_reasons == ["dom0 host config includes arbitrary NixOS modules or overlays"]
 ' "$LOCAL_SYSTEM_JSON" >/dev/null
+
+cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
+{ ... }:
+{
+  dom0.host = {
+    apply = {
+      mode = "switch";
+      reason = "operator classified host module safe for live switch";
+    };
+    modules = [
+      ({ ... }: {
+        environment.etc."nixome/manual-live-host-module".text = "manual-live\n";
+      })
+    ];
+  };
+}
+EOF
+
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json "$WORK_DIR#nixome.system" > "$OVERRIDE_SYSTEM_JSON"
+jq -e '
+  .schema == "nixome.system.v1" and
+  .dom0.nixos.system.switch_action == "switch" and
+  .dom0.nixos.system.reason == "operator classified host module safe for live switch" and
+  any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "switch") and
+  .plan.reboot_required == false and
+  .plan.reboot_actions == [] and
+  .plan.reboot_reasons == []
+' "$OVERRIDE_SYSTEM_JSON" >/dev/null
 
 cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
 { ... }:
@@ -728,6 +764,48 @@ if nix \
 fi
 grep -Fq 'nixome.configVms.guests: unknown role(s): config-stagin' \
   "$INVALID_CONFIG_VMS_LOG"
+
+cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
+{ ... }:
+{
+  dom0.host.apply.mode = "live";
+}
+EOF
+
+if nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json "$WORK_DIR#nixome.system" > /dev/null 2> "$INVALID_DOM0_HOST_APPLY_LOG"; then
+  printf 'invalid dom0.host.apply definition unexpectedly evaluated\n' >&2
+  exit 1
+fi
+grep -Fq 'nixome.dom0.host.apply.mode: expected one of auto, switch, boot' \
+  "$INVALID_DOM0_HOST_APPLY_LOG"
+
+cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
+{ ... }:
+{
+  dom0.host.apply.reason = true;
+}
+EOF
+
+if nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json "$WORK_DIR#nixome.system" > /dev/null 2> "$INVALID_DOM0_HOST_APPLY_REASON_LOG"; then
+  printf 'invalid dom0.host.apply reason unexpectedly evaluated\n' >&2
+  exit 1
+fi
+grep -Fq 'nixome.dom0.host.apply.reason: expected a string or path, got bool' \
+  "$INVALID_DOM0_HOST_APPLY_REASON_LOG"
 
 cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
 { ... }:
