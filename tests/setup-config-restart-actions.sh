@@ -56,17 +56,17 @@ cat > "$TOPOLOGY" <<EOF
     }
   },
   "domains": {
-    "config-vault": {
+    "legacy-fedora-app": {
       "class": "AppVM",
-      "template": "nixome-nixos-test",
-      "label": "black",
+      "template": "fedora-44-xfce",
+      "label": "green",
       "netvm": null,
       "prefs": {
         "autostart": false,
         "memory": 1024
       },
       "features": {
-        "nixome-role": "config-vault"
+        "nixome-role": "legacy-fedora-app"
       },
       "services": {
         "network-manager": false
@@ -84,13 +84,13 @@ cat > "$BIN_DIR/qvm-ls" <<'EOF'
 case "$*" in
   *"--fields NAME,STATE"*)
     printf 'dom0|Running\n'
-    printf 'nixome-nixos-test|Halted\n'
-    printf 'config-vault|Running\n'
+    printf 'fedora-44-xfce|Halted\n'
+    printf 'legacy-fedora-app|Running\n'
     ;;
   *)
     printf 'dom0\n'
-    printf 'nixome-nixos-test\n'
-    printf 'config-vault\n'
+    printf 'fedora-44-xfce\n'
+    printf 'legacy-fedora-app\n'
     ;;
 esac
 EOF
@@ -121,10 +121,10 @@ cat > "$BIN_DIR/qvm-prefs" <<'EOF'
 #!/usr/bin/env bash
 if [ "$#" -eq 2 ]; then
   case "$1:$2" in
-    config-vault:label) printf 'black\n' ;;
-    config-vault:netvm) printf 'none\n' ;;
-    config-vault:autostart) printf 'False\n' ;;
-    config-vault:memory) printf '512\n' ;;
+    legacy-fedora-app:label) printf 'green\n' ;;
+    legacy-fedora-app:netvm) printf 'none\n' ;;
+    legacy-fedora-app:autostart) printf 'False\n' ;;
+    legacy-fedora-app:memory) printf '512\n' ;;
     *) exit 1 ;;
   esac
   exit 0
@@ -135,8 +135,8 @@ EOF
 
 cat > "$BIN_DIR/qvm-features" <<'EOF'
 #!/usr/bin/env bash
-if [ "$#" -eq 2 ] && [ "$1:$2" = "config-vault:nixome-role" ]; then
-  printf 'config-vault\n'
+if [ "$#" -eq 2 ] && [ "$1:$2" = "legacy-fedora-app:nixome-role" ]; then
+  printf 'legacy-fedora-app\n'
   exit 0
 fi
 printf 'qvm-features %s\n' "$*" >> "$MUTATION_LOG"
@@ -145,7 +145,7 @@ EOF
 
 cat > "$BIN_DIR/qvm-service" <<'EOF'
 #!/usr/bin/env bash
-if [ "$#" -eq 2 ] && [ "$1:$2" = "config-vault:network-manager" ]; then
+if [ "$#" -eq 2 ] && [ "$1:$2" = "legacy-fedora-app:network-manager" ]; then
   printf 'on\n'
   exit 0
 fi
@@ -202,21 +202,21 @@ jq -e '
   (.live_actions[] | select(
     .type == "domain-pref" and
     .action == "set" and
-    .domain == "config-vault" and
+    .domain == "legacy-fedora-app" and
     .field == "memory" and
     .value == "1024"
   )) and
   (.live_actions[] | select(
     .type == "domain-service" and
     .action == "set" and
-    .domain == "config-vault" and
+    .domain == "legacy-fedora-app" and
     .field == "network-manager" and
     .value == "off"
   )) and
   (.restart_actions[] | select(
     .type == "domain-pref" and
     .action == "restart" and
-    .domain == "config-vault" and
+    .domain == "legacy-fedora-app" and
     .field == "memory" and
     .value == "1024" and
     .state == "Running"
@@ -224,7 +224,7 @@ jq -e '
   (.restart_actions[] | select(
     .type == "domain-service" and
     .action == "restart" and
-    .domain == "config-vault" and
+    .domain == "legacy-fedora-app" and
     .field == "network-manager" and
     .value == "off" and
     .state == "Running"
@@ -239,23 +239,23 @@ jq -e '
 ' "$SYSTEM_STATE_DIR/current-setup.json" >/dev/null
 jq -e '
   .schema == "nixome.qubes-topology.v1" and
-  .domains."config-vault".prefs.memory == 1024 and
-  .domains."config-vault".services."network-manager" == false
+  .domains."legacy-fedora-app".prefs.memory == 1024 and
+  .domains."legacy-fedora-app".services."network-manager" == false
 ' "$SYSTEM_STATE_DIR/current-topology.json" >/dev/null
 
 jq -e '
   .restart_actions[]
-  | select(.domain == "config-vault")
+  | select(.domain == "legacy-fedora-app")
   | .reason == "domain is running; restart required for this change to fully take effect"
 ' "$LOG_DIR/setup-config.json" >/dev/null
 
-if ! grep -Fx 'qvm-prefs config-vault memory 1024' "$MUTATION_LOG" >/dev/null; then
+if ! grep -Fx 'qvm-prefs legacy-fedora-app memory 1024' "$MUTATION_LOG" >/dev/null; then
   printf 'missing qvm-prefs mutation\n' >&2
   cat "$MUTATION_LOG" >&2
   exit 1
 fi
 
-if ! grep -Fx 'qvm-service config-vault network-manager off' "$MUTATION_LOG" >/dev/null; then
+if ! grep -Fx 'qvm-service legacy-fedora-app network-manager off' "$MUTATION_LOG" >/dev/null; then
   printf 'missing qvm-service mutation\n' >&2
   cat "$MUTATION_LOG" >&2
   exit 1

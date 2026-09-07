@@ -8,9 +8,9 @@
 }:
 let
   cfg = config.nixome.qubeGuest;
-  hasConfigVaultRole = cfg.role == "config-vault" || cfg.role == "config-system";
-  hasConfigStagingRole = cfg.role == "config-staging" || cfg.role == "config-system";
-  hasConfigValidatorRole = cfg.role == "config-validator" || cfg.role == "config-system";
+  hasConfigVaultRole = cfg.role == "config-vault";
+  hasConfigStagingRole = cfg.role == "config-staging";
+  hasConfigValidatorRole = cfg.role == "config-validator";
   hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole;
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
 
@@ -51,7 +51,7 @@ let
     pkgs.util-linux
   ];
 
-  rolePackages = rec {
+  rolePackages = {
     base = [ ];
     config-vault = [
       configVaultInit
@@ -83,7 +83,6 @@ let
       pkgs.jq
       pkgs.nix
     ];
-    config-system = config-vault ++ config-staging ++ config-validator;
   };
 
   configStagingSeedFlake = builtins.readFile ../seeds/config-staging/flake.nix;
@@ -1482,7 +1481,7 @@ let
     vm_name="$("$qubesdb_read" /name 2>/dev/null || true)"
 
     case "$qdb_role" in
-      config-vault|config-staging|config-validator|config-system) role="$qdb_role" ;;
+      config-vault|config-staging|config-validator) role="$qdb_role" ;;
       "") ;;
       *) role=base ;;
     esac
@@ -1591,7 +1590,7 @@ let
 in
 {
   options.nixome.qubeGuest = {
-    enable = lib.mkEnableOption "a Nixome NixOS Qubes guest template";
+    enable = lib.mkEnableOption "a Nixome NixOS Qubes guest domain";
 
     role = lib.mkOption {
       type = lib.types.enum [
@@ -1599,16 +1598,15 @@ in
         "config-vault"
         "config-staging"
         "config-validator"
-        "config-system"
       ];
       default = "base";
-      description = "Nixome role-specific userspace to place in the guest template.";
+      description = "Nixome role-specific userspace to place in the guest domain.";
     };
 
     user = lib.mkOption {
       type = lib.types.str;
       default = "user";
-      description = "Primary unprivileged user in the guest template.";
+      description = "Primary unprivileged user in the guest domain.";
     };
 
     configRepoPath = lib.mkOption {
@@ -1934,7 +1932,7 @@ in
         qdb_role="$(qubesdb-read /features/nixome-role 2>/dev/null || true)"
 
         case "$qdb_role" in
-          config-vault|config-staging|config-validator|config-system) role="$qdb_role" ;;
+          config-vault|config-staging|config-validator) role="$qdb_role" ;;
           "") ;;
           *) role=base ;;
         esac
@@ -1964,11 +1962,6 @@ in
             run_as_user ${configStagingInit}/bin/nixome-config-staging-init
             ;;
           config-validator)
-            run_as_user ${configValidatorInit}/bin/nixome-config-validator-init
-            ;;
-          config-system)
-            run_as_user ${configVaultInit}/bin/nixome-config-vault-init
-            run_as_user ${configStagingInit}/bin/nixome-config-staging-init
             run_as_user ${configValidatorInit}/bin/nixome-config-validator-init
             ;;
           *)

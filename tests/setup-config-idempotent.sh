@@ -9,7 +9,7 @@ BIN_DIR="$WORK_DIR/bin"
 KERNEL_DIR="$WORK_DIR/kernel/6.12.64-1.fc41"
 KERNEL_BASE="$WORK_DIR/vm-kernels"
 KERNEL_TARGET="$KERNEL_BASE/6.12.64-1.fc41"
-TEMPLATE_DIR="$WORK_DIR/template/nixome-nixos-test"
+TEMPLATE_DIR="$WORK_DIR/template/fedora-44-xfce"
 TOPOLOGY="$WORK_DIR/topology.json"
 CAPABILITIES="$WORK_DIR/xen-capabilities"
 LOG_DIR="$WORK_DIR/logs"
@@ -53,7 +53,7 @@ cat > "$TOPOLOGY" <<EOF
 {
   "schema": "nixome.qubes-topology.v1",
   "templates": {
-    "nixome-nixos-test": {
+    "fedora-44-xfce": {
       "import": true,
       "skip_start": true,
       "source": "$TEMPLATE_DIR"
@@ -65,17 +65,17 @@ cat > "$TOPOLOGY" <<EOF
     }
   },
   "domains": {
-    "config-vault": {
+    "legacy-fedora-app": {
       "class": "AppVM",
-      "template": "nixome-nixos-test",
-      "label": "black",
+      "template": "fedora-44-xfce",
+      "label": "green",
       "netvm": null,
       "prefs": {
         "autostart": false,
         "memory": 1024
       },
       "features": {
-        "nixome-role": "config-vault"
+        "nixome-role": "legacy-fedora-app"
       },
       "services": {
         "network-manager": false
@@ -90,7 +90,7 @@ EOF
 
 cat > "$BIN_DIR/qvm-ls" <<'EOF'
 #!/usr/bin/env bash
-printf 'dom0\nnixome-nixos-test\nconfig-vault\n'
+printf 'dom0\nfedora-44-xfce\nlegacy-fedora-app\n'
 EOF
 
 cat > "$BIN_DIR/systemctl" <<'EOF'
@@ -119,10 +119,10 @@ cat > "$BIN_DIR/qvm-prefs" <<'EOF'
 #!/usr/bin/env bash
 if [ "$#" -eq 2 ]; then
   case "$1:$2" in
-    config-vault:label) printf 'black\n' ;;
-    config-vault:netvm) printf 'none\n' ;;
-    config-vault:autostart) printf 'False\n' ;;
-    config-vault:memory) printf '1024\n' ;;
+    legacy-fedora-app:label) printf 'green\n' ;;
+    legacy-fedora-app:netvm) printf 'none\n' ;;
+    legacy-fedora-app:autostart) printf 'False\n' ;;
+    legacy-fedora-app:memory) printf '1024\n' ;;
     *) exit 1 ;;
   esac
   exit 0
@@ -133,8 +133,8 @@ EOF
 
 cat > "$BIN_DIR/qvm-features" <<'EOF'
 #!/usr/bin/env bash
-if [ "$#" -eq 2 ] && [ "$1:$2" = "config-vault:nixome-role" ]; then
-  printf 'config-vault\n'
+if [ "$#" -eq 2 ] && [ "$1:$2" = "legacy-fedora-app:nixome-role" ]; then
+  printf 'legacy-fedora-app\n'
   exit 0
 fi
 printf 'qvm-features %s\n' "$*" >> "$MUTATION_LOG"
@@ -143,7 +143,7 @@ EOF
 
 cat > "$BIN_DIR/qvm-service" <<'EOF'
 #!/usr/bin/env bash
-if [ "$#" -eq 2 ] && [ "$1:$2" = "config-vault:network-manager" ]; then
+if [ "$#" -eq 2 ] && [ "$1:$2" = "legacy-fedora-app:network-manager" ]; then
   printf 'off\n'
   exit 0
 fi
@@ -204,7 +204,7 @@ jq -e '
 ' "$SYSTEM_STATE_DIR/current-setup.json" >/dev/null
 jq -e '
   .schema == "nixome.qubes-topology.v1" and
-  .domains."config-vault".prefs.memory == 1024
+  .domains."legacy-fedora-app".prefs.memory == 1024
 ' "$SYSTEM_STATE_DIR/current-topology.json" >/dev/null
 
 if [ -s "$MUTATION_LOG" ]; then
