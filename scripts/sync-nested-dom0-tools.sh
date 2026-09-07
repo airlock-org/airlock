@@ -10,7 +10,8 @@ SSH_PORT="${NIXOME_VM_SSH_PORT:-2222}"
 SSH_USER="${NIXOME_VM_SSH_USER:-nixome}"
 SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
 REMOTE_BIN_DIR="${NIXOME_NESTED_WARM_BIN_DIR:-/run/nixome-warm/bin}"
-REMOTE_DROPIN="/run/systemd/system/qubesd.service.d/90-nixome-warm-tools.conf"
+REMOTE_DROPIN="/run/systemd/system/qubesd.service.d/zz-nixome-warm-tools.conf"
+REMOTE_OLD_DROPIN="/run/systemd/system/qubesd.service.d/90-nixome-warm-tools.conf"
 RESTART_QUBESD="${NIXOME_NESTED_WARM_RESTART_QUBESD:-1}"
 
 mkdir -p "$LOG_DIR"
@@ -135,11 +136,12 @@ ssh_base "sudo -n mkdir -p $(shell_quote "$REMOTE_BIN_DIR") /run/systemd/system/
 ssh_base "sudo -n ln -sfn $(shell_quote "$setup_config_out/bin/nixome-setup-config") $(shell_quote "$REMOTE_BIN_DIR/nixome-setup-config")"
 ssh_base "sudo -n ln -sfn $(shell_quote "$nix_closure_out/bin/nixome-nix-closure-domain-smoke") $(shell_quote "$REMOTE_BIN_DIR/nixome-nix-closure-domain-smoke")"
 scp_base "$dropin" "$SSH_USER@127.0.0.1:/tmp/nixome-warm-tools-qubesd.conf"
-ssh_base "sudo -n mv /tmp/nixome-warm-tools-qubesd.conf $(shell_quote "$REMOTE_DROPIN") && sudo -n systemctl daemon-reload"
+ssh_base "sudo -n unlink $(shell_quote "$REMOTE_OLD_DROPIN") 2>/dev/null || true; sudo -n mv /tmp/nixome-warm-tools-qubesd.conf $(shell_quote "$REMOTE_DROPIN") && sudo -n systemctl daemon-reload"
 
 qubesd_restarted=false
 case "$RESTART_QUBESD" in
   1|true|yes)
+    ssh_base 'sudo -n systemctl reset-failed qubesd.service || true'
     ssh_base 'sudo -n systemctl restart qubesd.service'
     qubesd_restarted=true
     ;;
