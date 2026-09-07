@@ -633,6 +633,7 @@ def admit_blob_chunks(root, temp_blob, chunk_size, txid):
     reused = 0
     chunk_refs = []
     extents = []
+    pending_metadata = []
     blob_path = ensure_chunk_blob(root)
 
     with lock_path.open("a+", encoding="utf-8") as lock:
@@ -663,18 +664,18 @@ def admit_blob_chunks(root, temp_blob, chunk_size, txid):
                     if padding:
                         backing.write(b"\0" * padding)
                     backing.write(chunk)
-                    backing.flush()
-                    os.fsync(backing.fileno())
-                    atomic_json(
-                        meta_path,
+                    pending_metadata.append(
                         {
-                            "schema": "nixome.closure-store.chunk.v1",
-                            "hash": digest,
-                            "offset": central_offset,
-                            "size": len(chunk),
-                            "admitted_at": utc_now(),
-                            "transaction": txid,
-                        },
+                            "path": meta_path,
+                            "payload": {
+                                "schema": "nixome.closure-store.chunk.v1",
+                                "hash": digest,
+                                "offset": central_offset,
+                                "size": len(chunk),
+                                "admitted_at": utc_now(),
+                                "transaction": txid,
+                            },
+                        }
                     )
                     admitted += 1
 
@@ -687,6 +688,15 @@ def admit_blob_chunks(root, temp_blob, chunk_size, txid):
                     }
                 )
                 logical_offset += len(chunk)
+
+            if pending_metadata:
+                backing.flush()
+                os.fsync(backing.fileno())
+
+        for metadata in pending_metadata:
+            atomic_json(metadata["path"], metadata["payload"])
+        if pending_metadata:
+            fsync_dir(root / "chunks" / "metadata")
 
         fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 

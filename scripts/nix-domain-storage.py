@@ -206,6 +206,58 @@ def validate_shared_store_volume(vm, domain, expected):
             )
 
 
+def frontend_name(device_path):
+    if device_path.startswith("/dev/"):
+        return device_path[len("/dev/") :]
+    return device_path
+
+
+def qubes_boot_frontends(volume_names):
+    fixed = {
+        "root": "xvda",
+        "private": "xvdb",
+        "volatile": "xvdc",
+        "kernel": "xvdd",
+    }
+    extra_letters = list("efghijklmnopqrstuvwxy")
+    extra_index = 0
+    result = {}
+    for name in volume_names:
+        if name in fixed:
+            result[name] = fixed[name]
+            continue
+        if extra_index >= len(extra_letters):
+            fail("too many non-standard boot volumes for deterministic frontend assignment")
+        result[name] = f"xvd{extra_letters[extra_index]}"
+        extra_index += 1
+    return result
+
+
+def validate_shared_store_frontends(vm, domain, store_device, store_blob_device, view_backend):
+    volume_names = list(vm.volumes.keys())
+    frontends = qubes_boot_frontends(volume_names)
+    expected = {"store": frontend_name(store_device)}
+    if view_backend == "erofs-blobmap":
+        expected["store-data"] = frontend_name(store_blob_device)
+
+    for volume_name, target in expected.items():
+        actual = frontends.get(volume_name)
+        if actual != target:
+            fail(
+                "Qubes boot frontend assignment mismatch for "
+                f"{domain}:{volume_name}: expected {target}, got {actual or 'absent'}; "
+                f"volume order is {', '.join(volume_names)}"
+            )
+
+    for volume_name, target in expected.items():
+        for other_name, other_target in frontends.items():
+            if other_name != volume_name and other_target == target:
+                fail(
+                    "Qubes boot frontend target is occupied for "
+                    f"{domain}:{volume_name}: {target} is also assigned to {other_name}"
+                )
+
+
 def load_domain(qubes, domain):
     app = qubes.Qubes()
     if domain not in app.domains:
@@ -436,6 +488,14 @@ async def ensure_shared_store_loaded(qubes, args, admission):
         volume_created = bool(volumes_created)
         metadata_changed = True
 
+    validate_shared_store_frontends(
+        vm,
+        args.domain,
+        args.device,
+        args.blob_device,
+        admission.get("view_backend", args.view_backend),
+    )
+
     if metadata_changed:
         app.save(lock=False)
 
@@ -462,6 +522,13 @@ async def ensure_shared_store_loaded(qubes, args, admission):
             "blob_map": admission.get("blob_map"),
             "blob_logical_size": admission.get("blob_logical_size"),
         },
+    )
+    validate_shared_store_frontends(
+        verify_vm,
+        args.domain,
+        args.device,
+        args.blob_device,
+        admission.get("view_backend", args.view_backend),
     )
     verify_app.close()
     app.close()
@@ -561,9 +628,10 @@ async def ensure_shared_store(args):
         getattr(vm.volumes.get("store"), "path", "") if "store" in vm.volumes else "",
     )
     store_pool = pool_name(vm.volumes["store"].pool) if "store" in vm.volumes else ""
-    app.close()
 
     if not needs_mutation:
+        validate_shared_store_frontends(vm, args.domain, args.device, args.blob_device, view_backend)
+        app.close()
         return {
             "schema": "nixome.nix-domain-storage.v1",
             "domain": args.domain,
@@ -586,6 +654,8 @@ async def ensure_shared_store(args):
             "canonical_view_image": view_image,
             "view_backend": view_backend,
         }
+
+    app.close()
 
     if vm_running:
         fail(f"shared store source changed but domain is running: {args.domain}")
