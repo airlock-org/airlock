@@ -53,6 +53,7 @@ set -euo pipefail
 case "$*" in
   "--gc --print-dead")
     printf '/nix/store/deadbeefdeadbeefdeadbeefdeadbeef-dead\n'
+    printf 'removing stale temporary roots file fixture\n' >&2
     ;;
   "--gc")
     printf 'freed 0 bytes\n'
@@ -108,6 +109,18 @@ grep -F '/nix/store/33333333333333333333333333333333-system' "$MANIFEST" >/dev/n
 grep -F '/nix/store/44444444444444444444444444444444-tool' "$MANIFEST" >/dev/null
 ! grep -F '99999999999999999999999999999999-do-not-root' "$MANIFEST" >/dev/null
 grep -F 'Dead path count:  1' "$WORK_DIR/dry-run.out" >/dev/null
+grep -F 'Dead stderr log:' "$WORK_DIR/dry-run.out" >/dev/null
+grep -F 'Result JSON:' "$WORK_DIR/dry-run.out" >/dev/null
+grep -F 'removing stale temporary roots file fixture' "$LOG_DIR/nixome-store-gc-dead-paths.stderr.log" >/dev/null
+jq -e '
+  .schema == "nixome.store-gc.v1" and
+  .mode == "dry-run" and
+  .nix_root == "'"$NIX_ROOT"'" and
+  .root_count == 4 and
+  .dead_count == 1 and
+  .gc_ran == false and
+  .dead_stderr_log == "'"$LOG_DIR"'/nixome-store-gc-dead-paths.stderr.log"
+' "$LOG_DIR/nixome-store-gc.json" >/dev/null
 
 env \
   PATH="$BIN_DIR:$PATH" \
@@ -124,6 +137,13 @@ env \
   "$ROOT/scripts/gc-nixome-store.sh" run > "$WORK_DIR/run.out"
 
 grep -Fx 'ARGS=[--gc]' "$MOCK_LOG" >/dev/null
+grep -F 'GC output tail:' "$WORK_DIR/run.out" >/dev/null
+grep -F 'freed 0 bytes' "$WORK_DIR/run.out" >/dev/null
+jq -e '
+  .schema == "nixome.store-gc.v1" and
+  .mode == "run" and
+  .gc_ran == true
+' "$LOG_DIR/nixome-store-gc.json" >/dev/null
 
 env \
   PATH="$BIN_DIR:$PATH" \
@@ -143,6 +163,12 @@ env \
 grep -F 'Auto decision:    running full GC' "$WORK_DIR/auto.out" >/dev/null
 [ "$(grep -Fxc 'ARGS=[--gc][--print-dead]' "$MOCK_LOG")" = 2 ]
 [ "$(grep -Fxc 'ARGS=[--gc]' "$MOCK_LOG")" = 2 ]
+jq -e '
+  .schema == "nixome.store-gc.v1" and
+  .mode == "auto" and
+  .gc_ran == true and
+  .dead_count == 1
+' "$LOG_DIR/nixome-store-gc.json" >/dev/null
 
 if env \
   NIXOME_DATA_ROOT="/tmp/nixome-gc-nonstandard-$$" \

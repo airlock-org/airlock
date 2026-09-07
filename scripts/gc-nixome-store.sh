@@ -74,8 +74,15 @@ store_dir="$nix_root/nix/store"
 gcroots_dir="$nix_root/nix/var/nix/gcroots/nixome"
 lock_file="${NIXOME_DATA_ROOT:-$ROOT/.nixome}/gc.lock"
 dead_log="$LOG_DIR/nixome-store-gc-dead-paths.log"
+dead_stderr_log="$LOG_DIR/nixome-store-gc-dead-paths.stderr.log"
 gc_log="$LOG_DIR/nixome-store-gc.log"
+result_json="$LOG_DIR/nixome-store-gc.json"
 manifest="$gcroots_dir/manifest.tsv"
+dead_count=0
+gc_ran=false
+store_bytes_before=0
+store_bytes_after=0
+threshold_bytes=0
 
 [ "${NIXOME_USE_HOST_NIX_STORE:-0}" != "1" ] ||
   die "refusing to GC while NIXOME_USE_HOST_NIX_STORE=1"
@@ -277,10 +284,11 @@ run_nix_store_gc() {
 
   case "$MODE" in
     auto|dry-run)
-      env NIX_CONFIG="$nix_config" "$NIX_STORE_BIN" --gc --print-dead > "$dead_log"
+      env NIX_CONFIG="$nix_config" "$NIX_STORE_BIN" --gc --print-dead \
+        > "$dead_log" 2> "$dead_stderr_log"
       ;;
     run)
-      env NIX_CONFIG="$nix_config" "$NIX_STORE_BIN" --gc | tee "$gc_log"
+      run_full_gc
       ;;
   esac
 }
@@ -297,10 +305,63 @@ run_full_gc() {
   local nix_config
   nix_config="store = $nix_root"
 
-  env NIX_CONFIG="$nix_config" "$NIX_STORE_BIN" --gc | tee "$gc_log"
+  env NIX_CONFIG="$nix_config" "$NIX_STORE_BIN" --gc > "$gc_log" 2>&1
+  gc_ran=true
+  if [ -s "$gc_log" ]; then
+    printf 'GC output tail:\n'
+    tail -n 20 "$gc_log"
+  fi
+}
+
+store_size_bytes() {
+  du -s -B1 "$nix_root" | awk '{ print $1 }'
+}
+
+write_result_json() {
+  jq -c -n \
+    --arg schema "nixome.store-gc.v1" \
+    --arg mode "$MODE" \
+    --arg data_root "$data_root" \
+    --arg nix_root "$nix_root" \
+    --arg store_dir "$store_dir" \
+    --arg gcroots_dir "$gcroots_dir" \
+    --arg manifest "$manifest" \
+    --arg dead_log "$dead_log" \
+    --arg dead_stderr_log "$dead_stderr_log" \
+    --arg gc_log "$gc_log" \
+    --arg result_json "$result_json" \
+    --argjson root_count "$root_count" \
+    --argjson auto_threshold_gib "$AUTO_THRESHOLD_GIB" \
+    --argjson threshold_bytes "$threshold_bytes" \
+    --argjson store_bytes_before "$store_bytes_before" \
+    --argjson store_bytes_after "$store_bytes_after" \
+    --argjson dead_count "$dead_count" \
+    --argjson gc_ran "$gc_ran" \
+    '{
+      schema: $schema,
+      mode: $mode,
+      data_root: $data_root,
+      nix_root: $nix_root,
+      store_dir: $store_dir,
+      gcroots_dir: $gcroots_dir,
+      root_manifest: $manifest,
+      root_count: $root_count,
+      auto_threshold_gib: $auto_threshold_gib,
+      threshold_bytes: $threshold_bytes,
+      store_bytes_before: $store_bytes_before,
+      store_bytes_after: $store_bytes_after,
+      dead_count: $dead_count,
+      gc_ran: $gc_ran,
+      dead_log: $dead_log,
+      dead_stderr_log: $dead_stderr_log,
+      gc_log: $gc_log,
+      result_json: $result_json
+    }' > "$result_json"
 }
 
 refresh_roots
+store_bytes_before="$(store_size_bytes)"
+threshold_bytes=$((AUTO_THRESHOLD_GIB * 1024 * 1024 * 1024))
 print_summary
 
 case "$MODE" in
@@ -310,13 +371,12 @@ case "$MODE" in
   auto)
     run_nix_store_gc
     dead_count="$(grep -c '^/nix/store/' "$dead_log" || true)"
-    store_bytes="$(du -s -B1 "$nix_root" | awk '{ print $1 }')"
-    threshold_bytes=$((AUTO_THRESHOLD_GIB * 1024 * 1024 * 1024))
     printf 'Auto threshold:   %s GiB\n' "$AUTO_THRESHOLD_GIB"
-    printf 'Store bytes:      %s\n' "$store_bytes"
+    printf 'Store bytes:      %s\n' "$store_bytes_before"
     printf 'Dead path list:   %s\n' "$dead_log"
+    printf 'Dead stderr log:  %s\n' "$dead_stderr_log"
     printf 'Dead path count:  %s\n' "$dead_count"
-    if [ "$dead_count" -gt 0 ] && [ "$store_bytes" -ge "$threshold_bytes" ]; then
+    if [ "$dead_count" -gt 0 ] && [ "$store_bytes_before" -ge "$threshold_bytes" ]; then
       printf 'Auto decision:    running full GC\n'
       run_full_gc
       printf 'GC log:           %s\n' "$gc_log"
@@ -328,6 +388,7 @@ case "$MODE" in
     run_nix_store_gc
     dead_count="$(grep -c '^/nix/store/' "$dead_log" || true)"
     printf 'Dead path list:   %s\n' "$dead_log"
+    printf 'Dead stderr log:  %s\n' "$dead_stderr_log"
     printf 'Dead path count:  %s\n' "$dead_count"
     ;;
   run)
@@ -336,3 +397,7 @@ case "$MODE" in
     printf 'GC log:           %s\n' "$gc_log"
     ;;
 esac
+
+store_bytes_after="$(store_size_bytes)"
+write_result_json
+printf 'Result JSON:      %s\n' "$result_json"
