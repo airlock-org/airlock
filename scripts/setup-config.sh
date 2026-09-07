@@ -63,7 +63,7 @@ fi
 mkdir -p "$LOG_DIR"
 : > "$COMMAND_LOG"
 
-exec > >(tee -a "$COMMAND_LOG") 2>&1
+exec >> "$COMMAND_LOG" 2>&1
 trap write_unexpected_failure EXIT
 
 templates_changed=0

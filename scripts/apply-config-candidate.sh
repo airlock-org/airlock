@@ -112,7 +112,7 @@ done
 mkdir -p "$LOG_DIR"
 : > "$COMMAND_LOG"
 
-exec > >(tee -a "$COMMAND_LOG") 2>&1
+exec >> "$COMMAND_LOG" 2>&1
 trap cleanup EXIT
 
 json_file_or_null() {
