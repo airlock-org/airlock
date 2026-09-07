@@ -187,6 +187,39 @@ jq -n \
       else []
       end;
 
+    def dom0_generation_active:
+      $host_system_profile_resolved_target != "" and
+      $run_current_system_resolved_target != "" and
+      $host_system_profile_resolved_target == $run_current_system_resolved_target;
+
+    def dom0_system_boot_action:
+      (.type? == "dom0-nixos-system") and
+      ((.switch_action? // .action? // "") == "boot");
+
+    def pending_reboot_actions:
+      plan_array("reboot_actions")
+      | if dom0_generation_active then
+          map(select(dom0_system_boot_action | not))
+        else
+          .
+        end;
+
+    def pending_reboot_reasons:
+      pending_reboot_actions as $actions
+      | if ($actions | length) > 0 then
+          $actions | map(.reason // empty)
+        elif plan_bool("reboot_required") and ((plan_array("reboot_actions") | length) == 0) then
+          plan_array("reboot_reasons")
+        else
+          []
+        end;
+
+    def pending_reboot_required:
+      (pending_reboot_actions | length) > 0 or
+      (plan_bool("reboot_required") and
+       ((plan_array("reboot_actions") | length) == 0) and
+       ((plan_array("reboot_reasons") | length) > 0));
+
     {
       schema: "nixome.config-status.v1",
       status: status,
@@ -224,9 +257,9 @@ jq -n \
         rule_count: $qrexec_policy_rule_count
       },
       pending_reboot: {
-        required: plan_bool("reboot_required"),
-        actions: plan_array("reboot_actions"),
-        reasons: plan_array("reboot_reasons")
+        required: pending_reboot_required,
+        actions: pending_reboot_actions,
+        reasons: pending_reboot_reasons
       },
       deployment: {
         current: $current_deployment,
@@ -241,9 +274,9 @@ jq -n \
         current_system: $current_system,
         current_plan: $current_plan,
         pending_reboot: {
-          required: plan_bool("reboot_required"),
-          actions: plan_array("reboot_actions"),
-          reasons: plan_array("reboot_reasons")
+          required: pending_reboot_required,
+          actions: pending_reboot_actions,
+          reasons: pending_reboot_reasons
         },
         last_apply: $last_apply,
         profile: $system_profile,

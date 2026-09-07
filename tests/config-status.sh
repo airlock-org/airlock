@@ -14,6 +14,7 @@ CURRENT_TOPOLOGY_JSON="$STATE_DIR/current-topology.json"
 RESULT_JSON="$WORK_DIR/status.json"
 CURRENT_RESULT_JSON="$WORK_DIR/status-current.json"
 REBOOT_RESULT_JSON="$WORK_DIR/status-reboot.json"
+REBOOT_CONSUMED_RESULT_JSON="$WORK_DIR/status-reboot-consumed.json"
 PROFILE_DIR="$WORK_DIR/profiles"
 STORE_DIR="$WORK_DIR/store"
 SYSTEM_PROFILE="$PROFILE_DIR/nixome-system"
@@ -133,7 +134,7 @@ cat > "$STATE_DIR/last-config-apply.json" <<'EOF'
 {"schema":"nixome.config-apply.v1","status":"failed","deployment_id":"deployment-last-attempt"}
 EOF
 
-mkdir -p "$STORE_DIR/nixome-profile" "$STORE_DIR/host-system"
+mkdir -p "$STORE_DIR/nixome-profile" "$STORE_DIR/host-system" "$STORE_DIR/old-host-system"
 ln -s "$STORE_DIR/nixome-profile" "$SYSTEM_PROFILE"
 ln -s "$STORE_DIR/host-system" "$PROFILE_DIR/system-2-link"
 ln -s system-2-link "$HOST_SYSTEM_PROFILE"
@@ -254,6 +255,7 @@ cat > "$STATE_DIR/current-plan.json" <<'EOF'
   "reboot_reasons": ["install next dom0 boot generation"]
 }
 EOF
+ln -sfn "$STORE_DIR/old-host-system" "$RUN_CURRENT_SYSTEM"
 
 env \
   PATH="$BIN_DIR:$PATH" \
@@ -276,5 +278,31 @@ jq -e '
   .system.pending_reboot.required == true and
   (.system.pending_reboot.actions | length) == 1
 ' "$REBOOT_RESULT_JSON" >/dev/null
+
+ln -sfn "$STORE_DIR/host-system" "$RUN_CURRENT_SYSTEM"
+
+env \
+  PATH="$BIN_DIR:$PATH" \
+  NIXOME_QVM_LS_BIN="$BIN_DIR/qvm-ls" \
+  NIXOME_CONFIG_STATUS_BOOT_TOPOLOGY_JSON="$TOPOLOGY_JSON" \
+  NIXOME_LOG_DIR="$LOG_DIR" \
+  NIXOME_SYSTEM_STATE_DIR="$STATE_DIR" \
+  NIXOME_QUBES_POLICY_DIR="$POLICY_DIR" \
+  NIXOME_CONFIG_STATUS_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
+  NIXOME_CONFIG_STATUS_HOST_SYSTEM_PROFILE="$HOST_SYSTEM_PROFILE" \
+  NIXOME_CONFIG_STATUS_RUN_CURRENT_SYSTEM="$RUN_CURRENT_SYSTEM" \
+  "$wrapper" > "$REBOOT_CONSUMED_RESULT_JSON"
+
+jq -e '
+  .schema == "nixome.config-status.v1" and
+  .pending_reboot.required == false and
+  .pending_reboot.actions == [] and
+  .pending_reboot.reasons == [] and
+  .system.pending_reboot.required == false and
+  .system.pending_reboot.actions == [] and
+  .system.pending_reboot.reasons == [] and
+  .system.current_plan.reboot_required == true and
+  (.system.current_plan.reboot_actions | length) == 1
+' "$REBOOT_CONSUMED_RESULT_JSON" >/dev/null
 
 printf 'config status test ok\n'
