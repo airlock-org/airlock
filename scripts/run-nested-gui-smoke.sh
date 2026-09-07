@@ -327,7 +327,7 @@ config_boot_verify_env_prefix() {
 }
 
 ssh_command() {
-  SSHPASS="$SSH_PASSWORD" nix shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     ssh \
       -F /dev/null \
       -o LogLevel=ERROR \

@@ -35,5 +35,10 @@ grep -F 'NIXOME_AUTO_GC_AFTER_RUN=1' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'sudo -n $config_vms_env NIXOME_LOG_DIR=/var/log/nixome nixome-config-vms-smoke' \
   "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F '"$ROOT/scripts/nixome-nix.sh" shell nixpkgs#sshpass' \
+  "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F '"$ROOT/scripts/nixome-nix.sh" shell nixpkgs#sshpass' \
+  "$ROOT/scripts/ssh-nested-vm.sh" >/dev/null
+! grep -R -F 'nix shell nixpkgs#sshpass' "$ROOT/scripts" >/dev/null
 
 printf '{"schema":"nixome.run-nested-gui-smoke-static.v1","status":"passed"}\n'

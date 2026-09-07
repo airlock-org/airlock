@@ -10,7 +10,7 @@ SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
 
 export SSHPASS="$SSH_PASSWORD"
 
-exec nix shell nixpkgs#sshpass -c sshpass -e \
+exec "$ROOT/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
   ssh \
     -F /dev/null \
     -o LogLevel=ERROR \
