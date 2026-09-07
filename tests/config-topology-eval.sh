@@ -12,8 +12,12 @@ TOPOLOGY_JSON="$WORK_DIR/topology.json"
 GUEST_INIT_WANTED_BY_JSON="$WORK_DIR/guest-init-wanted-by.json"
 GUEST_INIT_AFTER_JSON="$WORK_DIR/guest-init-after.json"
 GUEST_INIT_BEFORE_JSON="$WORK_DIR/guest-init-before.json"
+GUEST_INIT_SCRIPT_JSON="$WORK_DIR/guest-init-script.json"
 GUEST_QREXEC_REQUIRES_JSON="$WORK_DIR/guest-qrexec-requires.json"
 GUEST_QREXEC_AFTER_JSON="$WORK_DIR/guest-qrexec-after.json"
+GUEST_CONFIG_NIX_STORE_ROOT="$WORK_DIR/guest-config-nix-store-root.txt"
+GUEST_STAGING_CONFIG_NIX_PACKAGE_JSON="$WORK_DIR/guest-staging-config-nix-package.json"
+GUEST_VALIDATOR_CONFIG_NIX_PACKAGE_JSON="$WORK_DIR/guest-validator-config-nix-package.json"
 GUEST_VALIDATOR_ROLE_JSON="$WORK_DIR/guest-validator-role.json"
 GUEST_VAULT_HOSTNAME_JSON="$WORK_DIR/guest-vault-hostname.json"
 GUEST_STAGING_HOSTNAME_JSON="$WORK_DIR/guest-staging-hostname.json"
@@ -50,8 +54,18 @@ nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.nixome.qubes.top
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.wantedBy" > "$GUEST_INIT_WANTED_BY_JSON"
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.after" > "$GUEST_INIT_AFTER_JSON"
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.before" > "$GUEST_INIT_BEFORE_JSON"
+nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.script" > "$GUEST_INIT_SCRIPT_JSON"
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.systemd.services.qubes-qrexec-agent.requires" > "$GUEST_QREXEC_REQUIRES_JSON"
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.systemd.services.qubes-qrexec-agent.after" > "$GUEST_QREXEC_AFTER_JSON"
+nix eval --raw "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.nixome.qubeGuest.configNixStoreRoot" > "$GUEST_CONFIG_NIX_STORE_ROOT"
+nix eval --json \
+  --apply 'packages: builtins.any (package: (package.pname or package.name or "") == "nixome-config-nix") packages' \
+  "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.environment.systemPackages" \
+  > "$GUEST_STAGING_CONFIG_NIX_PACKAGE_JSON"
+nix eval --json \
+  --apply 'packages: builtins.any (package: (package.pname or package.name or "") == "nixome-config-nix") packages' \
+  "$ROOT#nixosConfigurations.nixome-domain-config-validator.config.environment.systemPackages" \
+  > "$GUEST_VALIDATOR_CONFIG_NIX_PACKAGE_JSON"
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-validator.config.nixome.qubeGuest.role" > "$GUEST_VALIDATOR_ROLE_JSON"
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-vault.config.networking.hostName" > "$GUEST_VAULT_HOSTNAME_JSON"
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.networking.hostName" > "$GUEST_STAGING_HOSTNAME_JSON"
@@ -152,6 +166,12 @@ jq -e '
 jq -e '
   index("qubes-qrexec-agent.service") != null
 ' "$GUEST_INIT_BEFORE_JSON" >/dev/null
+
+jq -r . "$GUEST_INIT_SCRIPT_JSON" | grep -F 'HOME=/home/user' >/dev/null
+jq -r . "$GUEST_INIT_SCRIPT_JSON" | grep -F 'nixome-config-nix/bin' >/dev/null
+grep -qx '/home/user/.local/share/nixome/nix-root' "$GUEST_CONFIG_NIX_STORE_ROOT"
+jq -e '. == true' "$GUEST_STAGING_CONFIG_NIX_PACKAGE_JSON" >/dev/null
+jq -e '. == true' "$GUEST_VALIDATOR_CONFIG_NIX_PACKAGE_JSON" >/dev/null
 
 jq -e '
   index("nixome-config-guest-init.service") != null

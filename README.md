@@ -103,6 +103,10 @@ Each config VM is a Qubes `StandaloneVM` with:
 - private persistent state,
 - normal Qubes qrexec/policy/network controls.
 
+`config-staging` and `config-validator` run candidate Nix checks through
+`nixome-config-nix`, backed by private writable state, so their own system
+`/nix/store` remains read-only.
+
 The old NixOS TemplateVM path for config domains has been removed. Generic
 Qubes TemplateVM support remains for Fedora, Debian, and other conventional
 guests.

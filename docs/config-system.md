@@ -118,6 +118,16 @@ qrexec policy.
 
 `config-validator` validates exported candidates, evaluates
 `.#nixome.topology` and `.#nixome.system`, and dry-runs referenced builds.
+Because the VM system store is read-only, config validation runs Nix through
+`nixome-config-nix`, which uses a private writable chroot store rooted at:
+
+```text
+/home/user/.local/share/nixome/nix-root
+```
+
+That keeps `/nix/store` as the immutable system identity of the running guest
+while still allowing `config-staging` and `config-validator` to lock, evaluate,
+and dry-run candidate flakes.
 
 `config-vault` owns the historical archive:
 

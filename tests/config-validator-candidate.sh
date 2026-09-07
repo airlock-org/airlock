@@ -11,6 +11,9 @@ VALIDATED_TAR="$WORK_DIR/config-candidate-validated.tar"
 VALIDATOR_STDERR="$WORK_DIR/validator.stderr.log"
 MEMBERS="$WORK_DIR/validated-members.txt"
 
+if [ -e "$WORK_DIR/nix-root" ]; then
+  chmod -R u+w "$WORK_DIR/nix-root" 2>/dev/null || true
+fi
 rm -rf "$WORK_DIR"
 mkdir -p "$CANDIDATE_DIR/dom0-profile/bin" "$CANDIDATE_DIR/dom0-profile/share/nixome" "$VALIDATION_DIR"
 
@@ -186,6 +189,7 @@ validator_cmd="$(
 )"
 
 NIXOME_CONFIG_VALIDATION_DIR="$VALIDATION_DIR" \
+  NIXOME_CONFIG_NIX_STORE_ROOT="$WORK_DIR/nix-root" \
   nixome_run_store_path "$validator_cmd" \
   < "$STAGED_TAR" \
   > "$VALIDATED_TAR" \

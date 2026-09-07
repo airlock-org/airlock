@@ -34,11 +34,13 @@ let
     pkgs.findutils
     pkgs.gnugrep
     pkgs.kmod
+    pkgs.qubes-core-qubesdb
     pkgs.systemd
     pkgs.util-linux
   ];
 
   roleInitPath = lib.makeBinPath [
+    configNix
     pkgs.coreutils
     pkgs.gawk
     pkgs.git
@@ -64,6 +66,7 @@ let
       configStagingExportCandidate
       configStagingInit
       configStagingValidate
+      (lib.hiPrio configNix)
       pkgs.gawk
       pkgs.git
       pkgs.gnutar
@@ -73,6 +76,7 @@ let
     config-validator = [
       configValidatorValidateCandidate
       configValidatorInit
+      (lib.hiPrio configNix)
       pkgs.gawk
       pkgs.git
       pkgs.gnutar
@@ -94,6 +98,34 @@ let
   configStagingTopologySchema = builtins.readFile ../lib/nixome/topology.nix;
   configStagingPrebuiltTemplateSources = lib.generators.toPretty { } nixomePrebuiltTemplateSources;
   haveConfigSeedInputs = nixomeConfigSeedInputs != null;
+  configNixWrapper = pkgs.writeShellScript "nixome-config-nix" ''
+    set -eu
+
+    for arg in "$@"; do
+      case "$arg" in
+        --store|--store=*)
+          exec ${pkgs.nix}/bin/nix "$@"
+          ;;
+      esac
+    done
+
+    store_root="''${NIXOME_CONFIG_NIX_STORE_ROOT:-${cfg.configNixStoreRoot}}"
+    case "$store_root" in
+      /*) ;;
+      *)
+        printf 'NIXOME_CONFIG_NIX_STORE_ROOT must be absolute: %s\n' "$store_root" >&2
+        exit 1
+        ;;
+    esac
+
+    mkdir -p "$store_root"
+    exec ${pkgs.nix}/bin/nix --store "$store_root" "$@"
+  '';
+  configNix = pkgs.runCommand "nixome-config-nix" { } ''
+    mkdir -p "$out/bin"
+    ln -s ${configNixWrapper} "$out/bin/nixome-config-nix"
+    ln -s ${configNixWrapper} "$out/bin/nix"
+  '';
 
   configVaultInit = pkgs.writeShellScriptBin "nixome-config-vault-init" ''
         set -eu
@@ -199,7 +231,7 @@ let
           nixome/system.nix \
           nixome/system-schema.nix \
           nixome/topology.nix
-        ${pkgs.nix}/bin/nix \
+        ${configNix}/bin/nixome-config-nix \
           --extra-experimental-features nix-command \
           --extra-experimental-features flakes \
           flake lock \
@@ -680,7 +712,7 @@ let
           name="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.name')"
           attr="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.ref.attr')"
           printf 'checking %s=%s attr=%s\n' "$kind" "$name" "$attr" >> "$log"
-          ${pkgs.nix}/bin/nix \
+          ${configNix}/bin/nixome-config-nix \
             --extra-experimental-features nix-command \
             --extra-experimental-features flakes \
             build \
@@ -767,7 +799,7 @@ let
             name="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.name')"
             attr="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.ref.attr')"
             printf 'checking system=%s attr=%s\n' "$name" "$attr" >> "$log"
-            ${pkgs.nix}/bin/nix \
+            ${configNix}/bin/nixome-config-nix \
               --extra-experimental-features nix-command \
               --extra-experimental-features flakes \
               build \
@@ -840,7 +872,7 @@ let
     }
 
     if [ -f flake.nix ]; then
-      if ${pkgs.nix}/bin/nix \
+      if ${configNix}/bin/nixome-config-nix \
         --extra-experimental-features nix-command \
         --extra-experimental-features flakes \
         flake check \
@@ -861,7 +893,7 @@ let
     fi
 
     if [ -f flake.nix ]; then
-      if ${pkgs.nix}/bin/nix \
+      if ${configNix}/bin/nixome-config-nix \
         --extra-experimental-features nix-command \
         --extra-experimental-features flakes \
         eval \
@@ -909,7 +941,7 @@ let
         printf 'skipped because nix eval .#nixome.topology did not pass\n' > "$template_refs_log"
       fi
 
-      if ${pkgs.nix}/bin/nix \
+      if ${configNix}/bin/nixome-config-nix \
         --extra-experimental-features nix-command \
         --extra-experimental-features flakes \
         eval \
@@ -1590,6 +1622,12 @@ in
       default = "/home/${cfg.user}/nixome-config-vault";
       description = "Archived candidate repository path in the config-vault role.";
     };
+
+    configNixStoreRoot = lib.mkOption {
+      type = lib.types.str;
+      default = "/home/${cfg.user}/.local/share/nixome/nix-root";
+      description = "Private writable chroot Nix store root for config validation in read-only-store guests.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -1609,6 +1647,10 @@ in
       {
         assertion = lib.hasPrefix "/home/" cfg.configArchivePath;
         message = "nixome.qubeGuest.configArchivePath should live under /home for Qubes private storage.";
+      }
+      {
+        assertion = lib.hasPrefix "/home/" cfg.configNixStoreRoot;
+        message = "nixome.qubeGuest.configNixStoreRoot should live under /home for Qubes private storage.";
       }
     ];
 

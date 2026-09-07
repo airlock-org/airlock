@@ -11,6 +11,9 @@ STDERR_LOG="$WORK_DIR/stderr.log"
 DIRTY_STDOUT_LOG="$WORK_DIR/dirty-stdout.log"
 DIRTY_STDERR_LOG="$WORK_DIR/dirty-stderr.log"
 
+if [ -e "$WORK_DIR/nix-root" ]; then
+  chmod -R u+w "$WORK_DIR/nix-root" 2>/dev/null || true
+fi
 rm -rf "$WORK_DIR"
 mkdir -p "$CANDIDATE_DIR/dom0-profile/bin" "$CANDIDATE_DIR/dom0-profile/share/nixome" "$VALIDATION_DIR"
 
@@ -117,6 +120,7 @@ validator_tool="$validator_package/bin/nixome-config-staging-validate"
 
 NIXOME_CONFIG_REPO_PATH="$CANDIDATE_DIR" \
   NIXOME_CONFIG_VALIDATION_DIR="$VALIDATION_DIR" \
+  NIXOME_CONFIG_NIX_STORE_ROOT="$WORK_DIR/nix-root" \
   nixome_run_store_path "$validator_tool" \
   > "$STDOUT_LOG" \
   2> "$STDERR_LOG"
@@ -157,6 +161,7 @@ grep -Fx system.json "$WORK_DIR/validated-members.txt" >/dev/null
 printf 'dirty\n' >> "$CANDIDATE_DIR/README.md"
 if NIXOME_CONFIG_REPO_PATH="$CANDIDATE_DIR" \
   NIXOME_CONFIG_VALIDATION_DIR="$VALIDATION_DIR" \
+  NIXOME_CONFIG_NIX_STORE_ROOT="$WORK_DIR/nix-root" \
   nixome_run_store_path "$validator_tool" \
   > "$DIRTY_STDOUT_LOG" \
   2> "$DIRTY_STDERR_LOG"; then
