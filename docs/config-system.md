@@ -241,6 +241,11 @@ link targets and resolved store paths. The top-level `pending_reboot` object
 summarizes the active plan's reboot requirement, reasons, and structured
 actions for automation. The top-level `pending_vm_restarts` object summarizes
 Qubes domain changes that were applied while the affected domain was running.
+The top-level `host_generation` object is the compact dom0 generation summary:
+it reports whether `/nix/var/nix/profiles/system` matches
+`/run/current-system`, the currently running system store path, any staged
+boot-generation source, the last dom0 system apply result, and the same
+pending-reboot decision in one place.
 
 The current seed uses generated literal `/nix/store` path pins for Nixome,
 `nixpkgs`, and `nixos-qubes` support sources. Candidate Nix commands therefore

@@ -249,9 +249,46 @@ jq -n \
       (($setup.restart_required? | type) == "boolean" and $setup.restart_required) or
       ((pending_vm_restart_actions | length) > 0);
 
+    def host_generation:
+      {
+        active: dom0_generation_active,
+        current_source: $run_current_system_resolved_target,
+        staged_source: (
+          if pending_reboot_required then
+            ($last_apply.host_system_source // $host_system_profile_resolved_target)
+          else
+            ""
+          end
+        ),
+        profile: {
+          path: $host_system_profile,
+          target: $host_system_profile_target,
+          resolved_target: $host_system_profile_resolved_target
+        },
+        running: {
+          path: $run_current_system,
+          target: $run_current_system_target,
+          resolved_target: $run_current_system_resolved_target
+        },
+        last_apply: {
+          status: ($last_apply.status // null),
+          host_system_status: ($last_apply.host_system_status // null),
+          source: ($last_apply.host_system_source // ""),
+          source_physical: ($last_apply.host_system_source_physical // ""),
+          switch_action: ($last_apply.host_system_switch_action // ""),
+          reboot_required: ($last_apply.reboot_required // false)
+        },
+        pending_reboot: {
+          required: pending_reboot_required,
+          actions: pending_reboot_actions,
+          reasons: pending_reboot_reasons
+        }
+      };
+
     {
       schema: "nixome.config-status.v1",
       status: status,
+      host_generation: host_generation,
       paths: {
         topology: $topology_path,
         boot_topology: $boot_topology_path,
@@ -317,6 +354,7 @@ jq -n \
           actions: pending_reboot_actions,
           reasons: pending_reboot_reasons
         },
+        host_generation: host_generation,
         last_apply: $last_apply,
         profile: $system_profile,
         profile_target: $system_profile_target,

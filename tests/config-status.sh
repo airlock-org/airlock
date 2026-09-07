@@ -140,8 +140,15 @@ cat > "$STATE_DIR/current-plan.json" <<'EOF'
 {"live_actions":[],"reboot_actions":[],"reboot_required":false,"reboot_reasons":[]}
 EOF
 
-cat > "$STATE_DIR/last-apply.json" <<'EOF'
-{"schema":"nixome.system-apply.v1","status":"passed","host_system_status":"passed"}
+cat > "$STATE_DIR/last-apply.json" <<EOF
+{
+  "schema": "nixome.system-apply.v1",
+  "status": "passed",
+  "host_system_status": "passed",
+  "host_system_source": "$STORE_DIR/host-system",
+  "host_system_switch_action": "switch",
+  "reboot_required": false
+}
 EOF
 
 cat > "$STATE_DIR/current-deployment.json" <<'EOF'
@@ -223,6 +230,14 @@ jq -e '
   .pending_reboot.required == false and
   .pending_reboot.actions == [] and
   .pending_reboot.reasons == [] and
+  .host_generation.active == true and
+  .host_generation.current_source == $host_system_target and
+  .host_generation.staged_source == "" and
+  .host_generation.profile.resolved_target == $host_system_target and
+  .host_generation.running.resolved_target == $host_system_target and
+  .host_generation.last_apply.source == $host_system_target and
+  .host_generation.last_apply.switch_action == "switch" and
+  .host_generation.pending_reboot.required == false and
   .pending_vm_restarts.required == true and
   (.pending_vm_restarts.actions | length) == 1 and
   .pending_vm_restarts.actions[0].domain == "config-vault" and
@@ -240,6 +255,9 @@ jq -e '
   .system.current_plan.reboot_actions == [] and
   .system.current_plan.reboot_required == false and
   .system.pending_reboot.required == false and
+  .system.host_generation.active == true and
+  .system.host_generation.current_source == $host_system_target and
+  .system.host_generation.last_apply.source == $host_system_target and
   .system.last_apply.host_system_status == "passed" and
   .system.profile_target == $profile_target and
   .system.profile_resolved_target == $profile_target and
@@ -308,9 +326,17 @@ jq -e '
   (.pending_reboot.actions | length) == 1 and
   .pending_reboot.actions[0].type == "dom0-nixos-system" and
   .pending_reboot.reasons == ["install next dom0 boot generation"] and
+  .host_generation.active == false and
+  .host_generation.current_source == $old_host_system_target and
+  .host_generation.staged_source == $host_system_target and
+  .host_generation.pending_reboot.required == true and
   .system.pending_reboot.required == true and
-  (.system.pending_reboot.actions | length) == 1
-' "$REBOOT_RESULT_JSON" >/dev/null
+  (.system.pending_reboot.actions | length) == 1 and
+  .system.host_generation.active == false
+' \
+  --arg host_system_target "$STORE_DIR/host-system" \
+  --arg old_host_system_target "$STORE_DIR/old-host-system" \
+  "$REBOOT_RESULT_JSON" >/dev/null
 
 ln -sfn "$STORE_DIR/host-system" "$RUN_CURRENT_SYSTEM"
 
@@ -331,13 +357,20 @@ jq -e '
   .pending_reboot.required == false and
   .pending_reboot.actions == [] and
   .pending_reboot.reasons == [] and
+  .host_generation.active == true and
+  .host_generation.current_source == $host_system_target and
+  .host_generation.staged_source == "" and
+  .host_generation.pending_reboot.required == false and
   .pending_vm_restarts.required == true and
   .system.pending_reboot.required == false and
   .system.pending_reboot.actions == [] and
   .system.pending_reboot.reasons == [] and
+  .system.host_generation.active == true and
   .system.current_plan.reboot_required == true and
   (.system.current_plan.reboot_actions | length) == 1
-' "$REBOOT_CONSUMED_RESULT_JSON" >/dev/null
+' \
+  --arg host_system_target "$STORE_DIR/host-system" \
+  "$REBOOT_CONSUMED_RESULT_JSON" >/dev/null
 
 mv "$LOG_DIR/setup-config.json" "$LOG_DIR/setup-config.json.saved"
 cat > "$STATE_DIR/current-setup.json" <<'EOF'
