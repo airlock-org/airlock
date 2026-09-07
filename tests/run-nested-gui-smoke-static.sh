@@ -23,6 +23,8 @@ grep -F 'nixome-config-boot-verify' "$ROOT/scripts/run-nested-gui-smoke.sh" >/de
 grep -F 'NIXOME_SETUP_CONFIG_BOOT_WAIT_SECONDS' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'wait_for_setup_config_boot_unit' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'systemctl cat nixome-setup-config.service' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'vm-gui-setup-config-boot.json' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'copy_boot_setup_config_artifacts' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'copy_boot_setup_config_result' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'if $DOM0_SYSTEM_SWITCH_ACTION_NIX == "switch" then' \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null

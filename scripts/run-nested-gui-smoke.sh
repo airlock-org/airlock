@@ -46,6 +46,8 @@ JOURNAL_LOG="$LOG_DIR/vm-gui-journal.log"
 BOOTSTRAP_JSON="$LOG_DIR/vm-gui-bootstrap.json"
 BOOTSTRAP_STDOUT="$LOG_DIR/vm-gui-bootstrap.stdout.log"
 BOOTSTRAP_STDERR="$LOG_DIR/vm-gui-bootstrap.stderr.log"
+SETUP_CONFIG_BOOT_JSON="$LOG_DIR/vm-gui-setup-config-boot.json"
+SETUP_CONFIG_BOOT_COMMANDS_LOG="$LOG_DIR/vm-gui-setup-config-boot.commands.log"
 SETUP_CONFIG_JSON="$LOG_DIR/vm-gui-setup-config.json"
 SETUP_CONFIG_STDOUT="$LOG_DIR/vm-gui-setup-config.stdout.log"
 SETUP_CONFIG_STDERR="$LOG_DIR/vm-gui-setup-config.stderr.log"
@@ -79,6 +81,8 @@ rm -f \
   "$BOOTSTRAP_JSON" \
   "$BOOTSTRAP_STDOUT" \
   "$BOOTSTRAP_STDERR" \
+  "$SETUP_CONFIG_BOOT_JSON" \
+  "$SETUP_CONFIG_BOOT_COMMANDS_LOG" \
   "$SETUP_CONFIG_JSON" \
   "$SETUP_CONFIG_STDOUT" \
   "$SETUP_CONFIG_STDERR" \
@@ -346,6 +350,10 @@ collect_diagnostics() {
   remote 'journalctl -b --no-pager -n 320 -u qubesd -u qubes-core -u libvirtd -u qubes-db-dom0 -u qubes-qrexec-policy-daemon -u nixome-qubes-store-init -u nixome-setup-config || true' > "$JOURNAL_LOG" 2>/dev/null || true
   remote 'qvm-ls || true' > "$QVM_LS_LOG" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/qubes-bootstrap.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-bootstrap.commands.log" 2>/dev/null || true
+  [ -s "$SETUP_CONFIG_BOOT_JSON" ] ||
+    remote 'sudo -n cat /var/log/nixome/setup-config.json 2>/dev/null || true' > "$SETUP_CONFIG_BOOT_JSON" 2>/dev/null || true
+  [ -s "$SETUP_CONFIG_BOOT_COMMANDS_LOG" ] ||
+    remote 'sudo -n cat /var/log/nixome/setup-config.commands.log 2>/dev/null || true' > "$SETUP_CONFIG_BOOT_COMMANDS_LOG" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/setup-config.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-setup-config.commands.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-smoke.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-smoke.commands.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-archive.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.json" 2>/dev/null || true
@@ -401,14 +409,32 @@ wait_for_setup_config_boot_unit() {
     collect_diagnostics
     exit 1
   fi
+
+  copy_boot_setup_config_artifacts || true
+}
+
+copy_boot_setup_config_artifacts() {
+  local copied=1
+
+  if remote 'sudo -n test -r /var/log/nixome/setup-config.json' >/dev/null 2>&1; then
+    remote 'sudo -n cat /var/log/nixome/setup-config.json' > "$SETUP_CONFIG_BOOT_JSON" 2>/dev/null || true
+    copied=0
+  fi
+
+  if remote 'sudo -n test -r /var/log/nixome/setup-config.commands.log' >/dev/null 2>&1; then
+    remote 'sudo -n cat /var/log/nixome/setup-config.commands.log' > "$SETUP_CONFIG_BOOT_COMMANDS_LOG" 2>/dev/null || true
+    copied=0
+  fi
+
+  return "$copied"
 }
 
 copy_boot_setup_config_result() {
-  if remote 'sudo -n test -r /var/log/nixome/setup-config.json' >/dev/null 2>&1; then
-    remote 'sudo -n cat /var/log/nixome/setup-config.json' > "$SETUP_CONFIG_JSON" 2>/dev/null || true
-    if grep -q '"schema":"nixome.setup-config.v1"' "$SETUP_CONFIG_JSON"; then
-      return 0
-    fi
+  copy_boot_setup_config_artifacts || return 1
+
+  if grep -q '"schema":"nixome.setup-config.v1"' "$SETUP_CONFIG_BOOT_JSON"; then
+    cp "$SETUP_CONFIG_BOOT_JSON" "$SETUP_CONFIG_JSON"
+    return 0
   fi
 
   return 1
@@ -624,6 +650,7 @@ shutdown_vm_on_success
 printf 'nested GUI smoke completed\n'
 printf 'observe: %s\n' "$OBSERVE_JSON"
 printf 'bootstrap: %s\n' "$BOOTSTRAP_JSON"
+printf 'setup-config boot: %s\n' "$SETUP_CONFIG_BOOT_JSON"
 printf 'setup-config: %s\n' "$SETUP_CONFIG_JSON"
 printf 'config-vms: %s\n' "$CONFIG_VMS_JSON"
 printf 'config-boot: %s\n' "$CONFIG_BOOT_VERIFY_JSON"
