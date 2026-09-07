@@ -1,7 +1,12 @@
 {
   buildPythonPackage,
+  e2fsprogs,
+  erofs-utils,
   lib,
+  lvm2,
+  makeWrapper,
   setuptools,
+  util-linux,
 }:
 
 buildPythonPackage {
@@ -12,8 +17,19 @@ buildPythonPackage {
   src = ./src;
 
   nativeBuildInputs = [
+    makeWrapper
     setuptools
   ];
+
+  postFixup = ''
+    wrapProgram "$out/bin/nixome-closure-store" \
+      --prefix PATH : ${lib.makeBinPath [
+        e2fsprogs
+        erofs-utils
+        lvm2
+        util-linux
+      ]}
+  '';
 
   pythonImportsCheck = [
     "nixome_qubes_storage"

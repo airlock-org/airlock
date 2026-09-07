@@ -14,6 +14,7 @@ cleanup() {
 
 trap cleanup EXIT
 
+chmod -R u+w "$RESULT_DIR" 2>/dev/null || true
 rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR" "$WORK_DIR/physical-store" "$WORK_DIR/closures" "$WORK_DIR/bin"
 
@@ -24,11 +25,27 @@ PYTHONPATH="$ROOT/pkgs/nixome-qubes-storage/src"
 export PYTHONPATH
 export PYTHONDONTWRITEBYTECODE=1
 
+if ! command -v mkfs.erofs >/dev/null 2>&1 || ! command -v fsck.erofs >/dev/null 2>&1; then
+  EROFS_UTILS="$(
+    while IFS= read -r output; do
+      physical="$(nixome_physical_store_path "$output")"
+      [ -x "$physical/bin/mkfs.erofs" ] && printf '%s\n' "$physical"
+    done < <(nix build --no-link --print-out-paths nixpkgs#erofs-utils) |
+      head -n 1
+  )"
+  PATH="$EROFS_UTILS/bin:$PATH"
+fi
+
 make_store_object() {
   entry="$1"
   content="$2"
   mkdir -p "$PHYSICAL_STORE/$entry/bin"
-  printf '%s\n' "$content" > "$PHYSICAL_STORE/$entry/bin/payload"
+  python3 - "$PHYSICAL_STORE/$entry/bin/payload" "$content" <<'PY'
+import sys
+from pathlib import Path
+
+Path(sys.argv[1]).write_bytes((sys.argv[2] + "\n").encode() * 65536)
+PY
   chmod 0555 "$PHYSICAL_STORE/$entry" "$PHYSICAL_STORE/$entry/bin"
   chmod 0444 "$PHYSICAL_STORE/$entry/bin/payload"
 }
@@ -50,6 +67,28 @@ run_engine_json() {
   name="$1"
   shift
   "${ENGINE[@]}" "$@" > "$RESULT_DIR/$name.json"
+}
+
+reconstruct_blob_view() {
+  map="$1"
+  output="$2"
+  python3 - "$map" "$output" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+blob_map = json.loads(Path(sys.argv[1]).read_text())
+output = Path(sys.argv[2])
+with Path(blob_map["central_blob"]).open("rb") as source, output.open("wb") as target:
+    for extent in blob_map["extents"]:
+        source.seek(int(extent["central_offset"]))
+        data = source.read(int(extent["length"]))
+        if len(data) != int(extent["length"]):
+            raise SystemExit("central blob extent is truncated")
+        target.seek(int(extent["logical_offset"]))
+        target.write(data)
+    target.truncate(int(blob_map["logical_size"]))
+PY
 }
 
 COMMON="11111111111111111111111111111111-common"
@@ -129,19 +168,42 @@ jq -e '
   .read_only == true and
   .store.mode == "shared-closure" and
   .store.device == "/dev/xvde" and
+  .store.blob_device == "/dev/xvdf" and
   .store.mountpoint == "/nix/store" and
-  .store.image_contains_materialized_store_copy == true
+  .store.filesystem == "erofs" and
+  .store.view_backend == "erofs-blobmap" and
+  .store.image_contains_materialized_store_copy == false and
+  .filesystem == "erofs" and
+  .view_backend == "erofs-blobmap" and
+  .chunks_total > 0 and
+  .chunks_admitted > 0
 ' "$RESULT_DIR/work-gen1.json" >/dev/null
 
 WORK_GEN1_VIEW="$(jq -r '.store.view_dir' "$RESULT_DIR/work-gen1.json")"
-WORK_GEN1_IMAGE="$(jq -r '.canonical_view_image' "$RESULT_DIR/work-gen1.json")"
+WORK_GEN1_IMAGE="$(jq -r '.canonical_metadata_image' "$RESULT_DIR/work-gen1.json")"
+WORK_GEN1_BLOB_MAP="$(jq -r '.canonical_blob_map' "$RESULT_DIR/work-gen1.json")"
 [ -d "$WORK_GEN1_VIEW" ]
 [ -f "$WORK_GEN1_IMAGE" ]
+[ -f "$WORK_GEN1_BLOB_MAP" ]
 [ ! -w "$WORK_GEN1_IMAGE" ]
+[ ! -e "$(dirname "$WORK_GEN1_IMAGE")/store.img" ]
 
 pool_inode="$(stat -c '%d:%i' "$POOL/objects/store/$COMMON/bin/payload")"
 view_inode="$(stat -c '%d:%i' "$WORK_GEN1_VIEW/$COMMON/bin/payload")"
 [ "$pool_inode" = "$view_inode" ]
+
+WORK_GEN1_LOGICAL_BLOB="$RESULT_DIR/work-gen1.blob"
+WORK_GEN1_EXTRACT="$RESULT_DIR/work-gen1-extract"
+mkdir -p "$WORK_GEN1_EXTRACT"
+reconstruct_blob_view "$WORK_GEN1_BLOB_MAP" "$WORK_GEN1_LOGICAL_BLOB"
+fsck.erofs --device="$WORK_GEN1_LOGICAL_BLOB" --extract="$WORK_GEN1_EXTRACT" "$WORK_GEN1_IMAGE" \
+  > "$RESULT_DIR/work-gen1-fsck.log"
+[ -f "$WORK_GEN1_EXTRACT/$COMMON/bin/payload" ]
+[ -f "$WORK_GEN1_EXTRACT/$WORK_SYSTEM_1/bin/payload" ]
+[ -f "$WORK_GEN1_EXTRACT/$WORK_UNIQUE_1/bin/payload" ]
+[ ! -e "$WORK_GEN1_EXTRACT/$DEV_UNIQUE_1" ]
+
+BLOB_AFTER_WORK_GEN1="$(stat -c %s "$POOL/chunks/data.blob")"
 
 run_engine_json dev-gen1 admit \
   --pool-root "$POOL" \
@@ -159,12 +221,29 @@ jq -e '
   .generation == 1 and
   .objects_total == 3 and
   .objects_admitted == 2 and
-  .objects_reused == 1
+  .objects_reused == 1 and
+  .chunks_total > 0 and
+  .chunks_reused > 0
 ' "$RESULT_DIR/dev-gen1.json" >/dev/null
 
 DEV_GEN1_VIEW="$(jq -r '.store.view_dir' "$RESULT_DIR/dev-gen1.json")"
 [ -e "$DEV_GEN1_VIEW/$COMMON/bin/payload" ]
 [ ! -e "$DEV_GEN1_VIEW/$WORK_UNIQUE_1" ]
+DEV_GEN1_IMAGE="$(jq -r '.canonical_metadata_image' "$RESULT_DIR/dev-gen1.json")"
+DEV_GEN1_BLOB_MAP="$(jq -r '.canonical_blob_map' "$RESULT_DIR/dev-gen1.json")"
+DEV_GEN1_LOGICAL_BLOB="$RESULT_DIR/dev-gen1.blob"
+DEV_GEN1_EXTRACT="$RESULT_DIR/dev-gen1-extract"
+mkdir -p "$DEV_GEN1_EXTRACT"
+reconstruct_blob_view "$DEV_GEN1_BLOB_MAP" "$DEV_GEN1_LOGICAL_BLOB"
+fsck.erofs --device="$DEV_GEN1_LOGICAL_BLOB" --extract="$DEV_GEN1_EXTRACT" "$DEV_GEN1_IMAGE" \
+  > "$RESULT_DIR/dev-gen1-fsck.log"
+[ -f "$DEV_GEN1_EXTRACT/$COMMON/bin/payload" ]
+[ -f "$DEV_GEN1_EXTRACT/$DEV_SYSTEM_1/bin/payload" ]
+[ -f "$DEV_GEN1_EXTRACT/$DEV_UNIQUE_1/bin/payload" ]
+[ ! -e "$DEV_GEN1_EXTRACT/$WORK_UNIQUE_1" ]
+BLOB_AFTER_DEV_GEN1="$(stat -c %s "$POOL/chunks/data.blob")"
+DEV_LOGICAL_BLOB_SIZE="$(jq -r '.blob_logical_size' "$RESULT_DIR/dev-gen1.json")"
+[ "$((BLOB_AFTER_DEV_GEN1 - BLOB_AFTER_WORK_GEN1))" -lt "$DEV_LOGICAL_BLOB_SIZE" ]
 
 run_engine_json symlink-gen admit \
   --pool-root "$POOL" \
@@ -230,7 +309,9 @@ jq -e '
   (.removed_objects | index("'"$WORK_UNIQUE_2"'")) != null and
   (.removed_objects | index("'"$COMMON"'")) == null and
   (.removed_objects | index("'"$WORK_UNIQUE_1"'")) == null and
-  (.removed_objects | index("'"$DEV_UNIQUE_1"'")) == null
+  (.removed_objects | index("'"$DEV_UNIQUE_1"'")) == null and
+  (.removed_views | length) >= 1 and
+  .chunk_blob_append_only == true
 ' "$RESULT_DIR/gc.json" >/dev/null
 
 ALT_STORE="$WORK_DIR/alternate-store"
@@ -274,7 +355,9 @@ jq -e '
   .domains.work.current == 1 and
   .domains.dev.current == 1 and
   .domains."symlink-domain".current == 1 and
-  .object_count == 7
+  .object_count == 7 and
+  .chunk_count > 0 and
+  .chunk_blob_size > 0
 ' "$RESULT_DIR/status.json" >/dev/null
 
 printf 'closure-store engine test ok\n'

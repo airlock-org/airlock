@@ -856,6 +856,11 @@ is_nix_closure_boot_feature() {
     nixome-store-generation|\
     nixome-store-closure-hash|\
     nixome-store-view-image|\
+    nixome-store-view-backend|\
+    nixome-store-blob-device|\
+    nixome-store-blob-volume|\
+    nixome-store-blob-map|\
+    nixome-store-filesystem|\
     nixome-store-mountpoint|\
     nixome-store-device|\
     nixome-store-read-only)
@@ -920,6 +925,8 @@ ensure_nix_closure_kernelopts() {
   domain="$1"
   system_source="$2"
   store_device="$3"
+  store_filesystem="$4"
+  store_blob_device="$5"
   opts="$(json_value '.domains[$name].prefs.kernelopts // ""' --arg name "$domain")"
 
   if [ -z "$opts" ] || [ "$opts" = "null" ]; then
@@ -941,6 +948,10 @@ ensure_nix_closure_kernelopts() {
 
   opts="$(append_kernelopt_if_missing "$opts" nixome.system "$system_source")"
   opts="$(append_kernelopt_if_missing "$opts" nixome.storedev "$store_device")"
+  opts="$(append_kernelopt_if_missing "$opts" nixome.storefmt "$store_filesystem")"
+  if [ "$store_filesystem" = "erofs" ]; then
+    opts="$(append_kernelopt_if_missing "$opts" nixome.storeblobdev "$store_blob_device")"
+  fi
 
   set_pref "$domain" kernelopts "$opts"
 }
@@ -955,11 +966,16 @@ install_nix_domain_store() {
   kernel_name="$7"
   store_device="$8"
   store_mountpoint="$9"
+  store_blob_device="${10}"
+  store_view_backend="${11}"
+  store_chunk_size="${12}"
   helper_output=""
   nix_domain_store_deferred=0
   nix_domain_store_generation=""
   nix_domain_store_closure_hash=""
   nix_domain_store_view_image=""
+  nix_domain_store_blob_map=""
+  nix_domain_store_blob_volume=""
 
   if [ "$APPLY" = "1" ] && nix_domain_store_current "$domain" "$store_source" "$store_mode"; then
     printf 'Nix-native store source current: %s source=%s\n' "$domain" "$store_source"
@@ -978,7 +994,10 @@ install_nix_domain_store() {
     --root "$root_source" \
     --kernel "$kernel_name" \
     --device "$store_device" \
-    --mountpoint "$store_mountpoint"
+    --blob-device "$store_blob_device" \
+    --mountpoint "$store_mountpoint" \
+    --view-backend "$store_view_backend" \
+    --chunk-size "$store_chunk_size"
   printf '\n'
 
   if [ "$APPLY" = "1" ]; then
@@ -989,7 +1008,10 @@ install_nix_domain_store() {
       --root "$root_source" \
       --kernel "$kernel_name" \
       --device "$store_device" \
-      --mountpoint "$store_mountpoint")"
+      --blob-device "$store_blob_device" \
+      --mountpoint "$store_mountpoint" \
+      --view-backend "$store_view_backend" \
+      --chunk-size "$store_chunk_size")"
     rc="$?"
     set -e
     printf '%s\n' "$helper_output"
@@ -1017,6 +1039,8 @@ install_nix_domain_store() {
     nix_domain_store_generation="$(printf '%s\n' "$helper_output" | jq -r '.generation // ""')"
     nix_domain_store_closure_hash="$(printf '%s\n' "$helper_output" | jq -r '.closure_hash // ""')"
     nix_domain_store_view_image="$(printf '%s\n' "$helper_output" | jq -r '.view_image // .image // ""')"
+    nix_domain_store_blob_map="$(printf '%s\n' "$helper_output" | jq -r '.blob_map // ""')"
+    nix_domain_store_blob_volume="$(printf '%s\n' "$helper_output" | jq -r '.blob_volume // ""')"
 
     if printf '%s\n' "$helper_output" | jq -e '.qubesd_restarted == true' >/dev/null; then
       qubesd_restarts=$((qubesd_restarts + 1))
@@ -1099,6 +1123,10 @@ setup_nix_closure_domain() {
   store_mode="$(jq_get '.domains[$name].backend.store.mode // "shared-closure"' --arg name "$domain")"
   store_mountpoint="$(jq_get '.domains[$name].backend.store.mountpoint // "/nix/store"' --arg name "$domain")"
   store_device="$(jq_get '.domains[$name].backend.store.device // "/dev/xvde"' --arg name "$domain")"
+  store_blob_device="$(jq_get '.domains[$name].backend.store.blob_device // .domains[$name].backend.store.blobDevice // "/dev/xvdf"' --arg name "$domain")"
+  store_view_backend="$(jq_get '.domains[$name].backend.store.view_backend // .domains[$name].backend.store.viewBackend // "erofs-blobmap"' --arg name "$domain")"
+  store_chunk_size="$(jq_get '.domains[$name].backend.store.chunk_size // .domains[$name].backend.store.chunkSize // 65536' --arg name "$domain")"
+  store_filesystem="ext4"
   root_image=""
   store_artifact=""
   nix_domain_root_deferred=0
@@ -1115,10 +1143,21 @@ setup_nix_closure_domain() {
     fail "Nix-native domain store source is missing: $domain"
   [ "$store_mode" = "closure-image" ] || [ "$store_mode" = "shared-closure" ] ||
     fail "unsupported Nix-native domain store mode for $domain: $store_mode"
+  [ "$store_view_backend" = "ext4-image" ] || [ "$store_view_backend" = "erofs-blobmap" ] ||
+    fail "unsupported Nix-native domain store view backend for $domain: $store_view_backend"
+  if [ "$store_mode" = "closure-image" ] && [ "$store_view_backend" != "ext4-image" ]; then
+    fail "closure-image store mode requires ext4-image view backend for $domain"
+  fi
+  if [ "$store_view_backend" = "erofs-blobmap" ]; then
+    store_filesystem="erofs"
+  fi
   [ "$store_mountpoint" = "/nix/store" ] ||
     fail "unsupported Nix-native domain store mountpoint for $domain: $store_mountpoint"
   [ "$store_device" = "/dev/xvde" ] ||
     fail "unsupported Nix-native domain store device for $domain: $store_device"
+  if [ "$store_filesystem" = "erofs" ] && [ "$store_blob_device" != "/dev/xvdf" ]; then
+    fail "unsupported Nix-native domain store blob device for $domain: $store_blob_device"
+  fi
 
   root_image="$(resolve_root_image_file "$root_source")"
   store_artifact="$(resolve_store_artifact "$store_source" "$store_mode")"
@@ -1149,7 +1188,10 @@ setup_nix_closure_domain() {
     "$root_source" \
     "$kernel_name" \
     "$store_device" \
-    "$store_mountpoint"
+    "$store_mountpoint" \
+    "$store_blob_device" \
+    "$store_view_backend" \
+    "$store_chunk_size"
   if [ "$nix_domain_root_deferred" = "1" ] || [ "$nix_domain_store_deferred" = "1" ]; then
     nix_domain_storage_deferred=1
   fi
@@ -1164,7 +1206,7 @@ setup_nix_closure_domain() {
       fi
     else
       set_pref "$domain" kernel "$kernel_name"
-      ensure_nix_closure_kernelopts "$domain" "$system_source" "$store_device"
+      ensure_nix_closure_kernelopts "$domain" "$system_source" "$store_device" "$store_filesystem" "$store_blob_device"
     fi
 
     if jq -e --arg name "$domain" '.domains[$name] | has("netvm")' "$TOPOLOGY" >/dev/null; then
@@ -1178,6 +1220,8 @@ setup_nix_closure_domain() {
       set_feature "$domain" nixome-store-source "$store_source"
       set_feature "$domain" nixome-store-image "$store_artifact"
       set_feature "$domain" nixome-store-mode "$store_mode"
+      set_feature "$domain" nixome-store-view-backend "$store_view_backend"
+      set_feature "$domain" nixome-store-filesystem "$store_filesystem"
       if [ -n "$nix_domain_store_generation" ]; then
         set_feature "$domain" nixome-store-generation "$nix_domain_store_generation"
       fi
@@ -1187,8 +1231,17 @@ setup_nix_closure_domain() {
       if [ -n "$nix_domain_store_view_image" ]; then
         set_feature "$domain" nixome-store-view-image "$nix_domain_store_view_image"
       fi
+      if [ -n "$nix_domain_store_blob_map" ]; then
+        set_feature "$domain" nixome-store-blob-map "$nix_domain_store_blob_map"
+      fi
+      if [ -n "$nix_domain_store_blob_volume" ]; then
+        set_feature "$domain" nixome-store-blob-volume "$nix_domain_store_blob_volume"
+      fi
       set_feature "$domain" nixome-store-mountpoint "$store_mountpoint"
       set_feature "$domain" nixome-store-device "$store_device"
+      if [ "$store_filesystem" = "erofs" ]; then
+        set_feature "$domain" nixome-store-blob-device "$store_blob_device"
+      fi
       set_feature "$domain" nixome-store-read-only "True"
     fi
 

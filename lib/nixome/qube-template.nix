@@ -64,8 +64,20 @@ let
     configuration:
     {
       storeDevice ? "/dev/xvde",
+      storeFormat ? "ext4",
+      storeBlobDevice ? null,
     }:
-    "${mkQubeKernelOpts configuration} nixome.system=${configuration.config.system.build.toplevel} nixome.storedev=${storeDevice}";
+    lib.concatStringsSep " " (
+      [
+        (mkQubeKernelOpts configuration)
+        "nixome.system=${configuration.config.system.build.toplevel}"
+        "nixome.storedev=${storeDevice}"
+        "nixome.storefmt=${storeFormat}"
+      ]
+      ++ lib.optionals (storeBlobDevice != null) [
+        "nixome.storeblobdev=${storeBlobDevice}"
+      ]
+    );
 
   mkNixClosureEarlyInit =
     pkgs.runCommand "nixome-nix-closure-early-init"
@@ -224,14 +236,103 @@ let
             return 0;
         }
 
-        static int try_store_device(const char *device, const char *system_path, int noisy) {
+        static int run_program(const char *path, char *const argv[], int noisy) {
+            pid_t pid;
+            int status;
+
+            pid = fork();
+            if (pid < 0) {
+                if (noisy) {
+                    log_errno("cannot fork %s", path);
+                }
+                return -1;
+            }
+            if (pid == 0) {
+                execv(path, argv);
+                _exit(127);
+            }
+            if (waitpid(pid, &status, 0) < 0) {
+                if (noisy) {
+                    log_errno("cannot wait for %s", path);
+                }
+                return -1;
+            }
+            return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        }
+
+        static void try_mount_kernel_modules(void) {
+            const char *devices[] = { "/dev/xvdd", "/dev/vdd", "/dev/sdd", NULL };
+            const char *fstypes[] = { "ext4", "ext3", NULL };
+            int i;
+
+            if (path_is_mountpoint("/lib/modules")) {
+                return;
+            }
+            if (mkdir_p("/lib/modules", 0755) != 0) {
+                log_errno("cannot create /lib/modules");
+                return;
+            }
+            for (i = 0; devices[i] != NULL; i++) {
+                int j;
+                if (access(devices[i], R_OK) != 0) {
+                    continue;
+                }
+                for (j = 0; fstypes[j] != NULL; j++) {
+                    if (mount(devices[i], "/lib/modules", fstypes[j], MS_RDONLY | MS_NODEV, "ro") == 0) {
+                        log_msg("mounted Qubes kernel modules from %s", devices[i]);
+                        return;
+                    }
+                }
+            }
+        }
+
+        static void try_modprobe(const char *module) {
+            char *const argv[] = { "/sbin/modprobe", (char *)module, NULL };
+            if (access("/sbin/modprobe", X_OK) != 0) {
+                return;
+            }
+            if (run_program("/sbin/modprobe", argv, 0) == 0) {
+                log_msg("loaded kernel module %s", module);
+            }
+        }
+
+        static int try_store_device(const char *device, const char *system_path,
+                                    const char *store_format, const char *blob_device,
+                                    int noisy) {
+            const char *fstype = store_format;
+            char mount_data[PATH_MAX + 32];
+
             if (access(device, R_OK) != 0) {
                 return 0;
             }
+            if (strcmp(store_format, "erofs") == 0) {
+                if (blob_device == NULL || blob_device[0] == '\0') {
+                    if (noisy) {
+                        log_msg("erofs store requires nixome.storeblobdev");
+                    }
+                    return 0;
+                }
+                if (access(blob_device, R_OK) != 0) {
+                    if (noisy) {
+                        log_errno("cannot access candidate store blob device %s", blob_device);
+                    }
+                    return 0;
+                }
+                if (snprintf(mount_data, sizeof(mount_data), "ro,device=%s", blob_device) >= (int)sizeof(mount_data)) {
+                    errno = ENAMETOOLONG;
+                    if (noisy) {
+                        log_errno("store blob device option is too long");
+                    }
+                    return 0;
+                }
+            } else {
+                fstype = "ext4";
+                snprintf(mount_data, sizeof(mount_data), "ro");
+            }
 
-            if (mount(device, "/nix/store", "ext4", MS_RDONLY | MS_NODEV, "ro") != 0) {
+            if (mount(device, "/nix/store", fstype, MS_RDONLY | MS_NODEV, mount_data) != 0) {
                 if (noisy) {
-                    log_errno("cannot mount candidate store device %s", device);
+                    log_errno("cannot mount %s candidate store device %s", fstype, device);
                 }
                 return 0;
             }
@@ -252,6 +353,8 @@ let
 
         static int mount_store(const char *system_path) {
             char explicit_device[PATH_MAX] = "";
+            char explicit_blob_device[PATH_MAX] = "/dev/xvdf";
+            char store_format[32] = "ext4";
             const char *fallback_devices[] = {
                 "/dev/xvde", "/dev/xvdf", "/dev/xvdg", "/dev/xvdh",
                 "/dev/xvdi", "/dev/xvdj", "/dev/xvdk", "/dev/xvdl",
@@ -272,12 +375,27 @@ let
             }
 
             read_cmdline_option("nixome.storedev", explicit_device, sizeof(explicit_device));
+            read_cmdline_option("nixome.storeblobdev", explicit_blob_device, sizeof(explicit_blob_device));
+            read_cmdline_option("nixome.storefmt", store_format, sizeof(store_format));
+            if (strcmp(store_format, "erofs") == 0) {
+                try_mount_kernel_modules();
+                try_modprobe("erofs");
+            } else if (strcmp(store_format, "ext4") != 0) {
+                log_msg("unsupported nixome.storefmt=%s", store_format);
+                return 0;
+            }
 
             for (attempt = 0; attempt < 30; attempt++) {
                 int i;
 
                 if (explicit_device[0] != '\0' &&
-                    try_store_device(explicit_device, system_path, attempt == 29)) {
+                    try_store_device(
+                        explicit_device,
+                        system_path,
+                        store_format,
+                        explicit_blob_device,
+                        attempt == 29
+                    )) {
                     return 1;
                 }
 
@@ -286,7 +404,13 @@ let
                         strcmp(explicit_device, fallback_devices[i]) == 0) {
                         continue;
                     }
-                    if (try_store_device(fallback_devices[i], system_path, 0)) {
+                    if (try_store_device(
+                        fallback_devices[i],
+                        system_path,
+                        store_format,
+                        explicit_blob_device,
+                        0
+                    )) {
                         return 1;
                     }
                 }
@@ -425,6 +549,7 @@ let
 
         root="$PWD/root"
         mkdir -p \
+          "$root/bin" \
           "$root/dev" \
           "$root/etc" \
           "$root/home" \
@@ -442,6 +567,8 @@ let
           "$out"
 
         ln -s /run "$root/var/run"
+        install -m 0555 ${pkgs.pkgsStatic.busybox}/bin/busybox "$root/bin/busybox"
+        ln -s /bin/busybox "$root/sbin/modprobe"
         chmod 0555 "$root/nix/store"
         install -m 0555 ${mkNixClosureEarlyInit}/sbin/init "$root/sbin/init"
 
@@ -451,6 +578,8 @@ let
           printf 'init=/sbin/init\n'
           printf 'store_mountpoint=/nix/store\n'
           printf 'store_device_default=/dev/xvde\n'
+          printf 'store_blob_device_default=/dev/xvdf\n'
+          printf 'store_formats=ext4 erofs\n'
         } > "$out/MANAGED_BY_NIXOME"
 
         (cd "$root" && find . -mindepth 1 -print | sort) > "$out/root-files.txt"
@@ -459,7 +588,7 @@ let
         mkfs.ext4 -q -F -L nixroot -d "$root" "$out/root.img"
 
         cat > "$out/manifest.json" <<EOF
-        {"schema":"nixome.nix-closure-root-image.v1","name":"${imageName}","image":"root.img","contains_store":false,"init":"/sbin/init","store_mountpoint":"/nix/store","store_device_default":"/dev/xvde"}
+        {"schema":"nixome.nix-closure-root-image.v1","name":"${imageName}","image":"root.img","contains_store":false,"init":"/sbin/init","store_mountpoint":"/nix/store","store_device_default":"/dev/xvde","store_blob_device_default":"/dev/xvdf","store_formats":["ext4","erofs"]}
         EOF
       '';
 
@@ -597,6 +726,8 @@ let
       configurationName ? "nixome-domain-${builtins.replaceStrings [ "." ] [ "-" ] name}",
       rootImageName ? "${configurationName}-root-image",
       storeMode ? "shared-closure",
+      storeViewBackend ? if storeMode == "closure-image" then "ext4-image" else "erofs-blobmap",
+      storeChunkSize ? 65536,
       storeArtifactName ? "${configurationName}-${
         if storeMode == "closure-image" then "store-image" else "store-closure"
       }",
@@ -608,6 +739,7 @@ let
       services ? { },
       rootImageSizeMiB ? 512,
       storeDevice ? "/dev/xvde",
+      storeBlobDevice ? "/dev/xvdf",
     }:
     let
       configuration = lib.nixosSystem {
@@ -655,12 +787,34 @@ let
           null
         else
           throw "mkNixNativeDomain.storeMode must be closure-image or shared-closure";
+      _storeViewBackendCheck =
+        if
+          builtins.elem storeViewBackend [
+            "ext4-image"
+            "erofs-blobmap"
+          ]
+        then
+          null
+        else
+          throw "mkNixNativeDomain.storeViewBackend must be ext4-image or erofs-blobmap";
+      _storeModeBackendCheck =
+        if storeMode == "closure-image" && storeViewBackend != "ext4-image" then
+          throw "mkNixNativeDomain closure-image storeMode must use ext4-image storeViewBackend"
+        else
+          null;
+      storeFormat = if storeViewBackend == "erofs-blobmap" then "erofs" else "ext4";
+      storeBlobDeviceOpt = if storeViewBackend == "erofs-blobmap" then storeBlobDevice else null;
       rootImage = mkNixClosureRootImage {
         imageName = rootImageName;
         rootImageSizeMiB = rootImageSizeMiBEffective;
       };
       storeArtifact =
-        if _storeModeCheck == null && storeMode == "closure-image" then
+        if
+          _storeModeCheck == null
+          && _storeViewBackendCheck == null
+          && _storeModeBackendCheck == null
+          && storeMode == "closure-image"
+        then
           mkNixStoreClosureImage {
             name = storeArtifactName;
             rootPaths = [ configuration.config.system.build.toplevel ];
@@ -678,7 +832,10 @@ let
         default_user = "user";
         include_in_backups = true;
         kernel = kernelName;
-        kernelopts = mkNixClosureKernelOpts configuration { inherit storeDevice; };
+        kernelopts = mkNixClosureKernelOpts configuration {
+          inherit storeDevice storeFormat;
+          storeBlobDevice = storeBlobDeviceOpt;
+        };
         memory = 1024;
         maxmem = 2048;
         qrexec_timeout = 120;
@@ -717,6 +874,9 @@ let
             };
             mountpoint = "/nix/store";
             device = storeDevice;
+            blobDevice = storeBlobDeviceOpt;
+            viewBackend = storeViewBackend;
+            chunkSize = storeChunkSize;
             readOnly = true;
           };
         };
@@ -733,7 +893,10 @@ let
         ;
       storeImage = storeArtifact;
       storeImageName = storeArtifactName;
-      kernelopts = mkNixClosureKernelOpts configuration { inherit storeDevice; };
+      kernelopts = mkNixClosureKernelOpts configuration {
+        inherit storeDevice storeFormat;
+        storeBlobDevice = storeBlobDeviceOpt;
+      };
       configurationName = configurationName;
     };
 in

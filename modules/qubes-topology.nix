@@ -161,6 +161,27 @@ let
         description = "Guest block device expected to expose the closure view.";
       };
 
+      blobDevice = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = "/dev/xvdf";
+        description = "Guest block device expected to expose the shared immutable blob view.";
+      };
+
+      viewBackend = lib.mkOption {
+        type = lib.types.enum [
+          "ext4-image"
+          "erofs-blobmap"
+        ];
+        default = "erofs-blobmap";
+        description = "Runtime representation for shared-closure store views.";
+      };
+
+      chunkSize = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 65536;
+        description = "Chunk size in bytes for shared immutable blob storage.";
+      };
+
       readOnly = lib.mkOption {
         type = lib.types.bool;
         default = true;

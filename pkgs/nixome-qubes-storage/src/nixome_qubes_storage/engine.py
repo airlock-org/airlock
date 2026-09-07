@@ -1,7 +1,9 @@
 import argparse
+import fcntl
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -18,6 +20,12 @@ SCHEMA_ROLLBACK = "nixome.closure-store.rollback.v1"
 SCHEMA_GC = "nixome.closure-store.gc.v1"
 SCHEMA_RECOVERY = "nixome.closure-store.recovery.v1"
 SCHEMA_STATUS = "nixome.closure-store.status.v1"
+SCHEMA_BLOB_MAP = "nixome.closure-store.blob-map.v1"
+
+VIEW_BACKEND_EXT4_IMAGE = "ext4-image"
+VIEW_BACKEND_EROFS_BLOBMAP = "erofs-blobmap"
+DEFAULT_VIEW_BACKEND = VIEW_BACKEND_EROFS_BLOBMAP
+DEFAULT_CHUNK_SIZE = 64 * 1024
 
 
 class EngineError(RuntimeError):
@@ -276,8 +284,11 @@ def ensure_pool(root):
     for subdir in [
         "objects/store",
         "objects/metadata",
+        "chunks/metadata",
         "domains",
         "images/by-closure",
+        "views/by-closure",
+        "runtime",
         "transactions",
         "tmp",
     ]:
@@ -290,9 +301,60 @@ def ensure_pool(root):
                 "schema": SCHEMA_POOL,
                 "created_at": utc_now(),
                 "object_key": "nix-store-basename",
+                "chunk_store": {
+                    "schema": "nixome.closure-store.chunk-store.v1",
+                    "data": "chunks/data.blob",
+                    "metadata": "chunks/metadata",
+                    "object_key": "sha256",
+                },
             },
         )
     return root
+
+
+def parse_size(value, name):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        fail(f"{name} must be an integer: {value!r}")
+    if parsed <= 0:
+        fail(f"{name} must be positive: {value!r}")
+    return parsed
+
+
+def require_tool(name, envvar=None):
+    override = os.environ.get(envvar) if envvar else None
+    if override:
+        if not os.path.exists(override):
+            fail(f"{envvar} points to a missing executable: {override}")
+        return override
+    found = shutil.which(name)
+    if found:
+        return found
+    fail(f"required executable is missing from PATH: {name}")
+
+
+def run_checked(command, *, input_text=None):
+    result = subprocess.run(
+        command,
+        input=input_text,
+        stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        fail(
+            "command failed with exit "
+            f"{result.returncode}: {' '.join(command)}\n"
+            f"{result.stderr.strip() or result.stdout.strip()}"
+        )
+    return result
+
+
+def align_up(value, alignment):
+    return ((value + alignment - 1) // alignment) * alignment
 
 
 def run_verify(paths, mode):
@@ -507,21 +569,340 @@ def create_ext4_image(view_dir, image_path, additional_space_mib):
     }
 
 
-def materialize_view(root, domain, generation, paths, closure_id, additional_space_mib):
-    generation_dir = Path(root) / "domains" / domain / "generations" / str(generation)
-    view_dir = generation_dir / "view"
-    store_dir = view_dir
+def chunk_blob_path(root):
+    return Path(root) / "chunks" / "data.blob"
+
+
+def chunk_meta_path(root, digest):
+    return Path(root) / "chunks" / "metadata" / f"{digest}.json"
+
+
+def ensure_chunk_blob(root):
+    path = chunk_blob_path(root)
+    if not path.exists():
+        with path.open("wb") as handle:
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(path, 0o600)
+        fsync_dir(path.parent)
+    return path
+
+
+def hash_bytes(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def verify_blob_chunk(blob_path, offset, size, digest):
+    with Path(blob_path).open("rb") as handle:
+        handle.seek(offset)
+        data = handle.read(size)
+    if len(data) != size:
+        fail(f"central chunk blob is truncated at offset {offset}")
+    if hash_bytes(data) != digest:
+        fail(f"central chunk blob hash mismatch at offset {offset}")
+
+
+def merge_blob_extents(extents):
+    merged = []
+    for extent in extents:
+        if (
+            merged
+            and merged[-1]["logical_offset"] + merged[-1]["length"] == extent["logical_offset"]
+            and merged[-1]["central_offset"] + merged[-1]["length"] == extent["central_offset"]
+        ):
+            merged[-1]["length"] += extent["length"]
+        else:
+            merged.append(dict(extent))
+    return merged
+
+
+def admit_blob_chunks(root, temp_blob, chunk_size, txid):
+    root = Path(root)
+    temp_blob = Path(temp_blob)
+    chunk_size = parse_size(chunk_size, "chunk size")
+    if chunk_size % 512 != 0:
+        fail(f"chunk size must be 512-byte aligned: {chunk_size}")
+
+    blob_size = temp_blob.stat().st_size
+    if blob_size % 512 != 0:
+        fail(f"temporary EROFS blob is not 512-byte aligned: {temp_blob}")
+
+    lock_path = root / "chunks" / "data.blob.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    admitted = 0
+    reused = 0
+    chunk_refs = []
+    extents = []
+    blob_path = ensure_chunk_blob(root)
+
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        with temp_blob.open("rb") as source, blob_path.open("r+b") as backing:
+            logical_offset = 0
+            while True:
+                chunk = source.read(chunk_size)
+                if not chunk:
+                    break
+                if len(chunk) % 512 != 0:
+                    fail(f"temporary EROFS blob chunk is not 512-byte aligned at {logical_offset}")
+
+                digest = hash_bytes(chunk)
+                meta_path = chunk_meta_path(root, digest)
+                if meta_path.exists():
+                    meta = read_json(meta_path)
+                    central_offset = int(meta["offset"])
+                    central_size = int(meta["size"])
+                    if central_size != len(chunk):
+                        fail(f"central chunk size mismatch for {digest}")
+                    verify_blob_chunk(blob_path, central_offset, central_size, digest)
+                    reused += 1
+                else:
+                    backing.seek(0, os.SEEK_END)
+                    central_offset = align_up(backing.tell(), 4096)
+                    padding = central_offset - backing.tell()
+                    if padding:
+                        backing.write(b"\0" * padding)
+                    backing.write(chunk)
+                    backing.flush()
+                    os.fsync(backing.fileno())
+                    atomic_json(
+                        meta_path,
+                        {
+                            "schema": "nixome.closure-store.chunk.v1",
+                            "hash": digest,
+                            "offset": central_offset,
+                            "size": len(chunk),
+                            "admitted_at": utc_now(),
+                            "transaction": txid,
+                        },
+                    )
+                    admitted += 1
+
+                chunk_refs.append(digest)
+                extents.append(
+                    {
+                        "logical_offset": logical_offset,
+                        "central_offset": central_offset,
+                        "length": len(chunk),
+                    }
+                )
+                logical_offset += len(chunk)
+
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+    return {
+        "blob": str(blob_path),
+        "blob_logical_size": blob_size,
+        "chunk_size": chunk_size,
+        "chunk_count": len(chunk_refs),
+        "chunks_admitted": admitted,
+        "chunks_reused": reused,
+        "chunk_refs": chunk_refs,
+        "extents": merge_blob_extents(extents),
+    }
+
+
+def write_blob_map(path, payload):
+    atomic_json(path, payload, mode=0o444)
+
+
+def write_chunk_refs(path, refs):
+    atomic_write(path, "".join(f"{ref}\n" for ref in refs), mode=0o444)
+
+
+def read_chunk_refs(path):
+    if not path:
+        return []
+    return [
+        line.strip()
+        for line in Path(path).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def canonical_view_root(store):
+    for key in ("canonical_metadata_image", "canonical_blob_map", "canonical_chunk_refs"):
+        value = store.get(key)
+        if value:
+            return str(Path(value).parent)
+    canonical_image = store.get("canonical_image")
+    if canonical_image and "/views/by-closure/" in canonical_image:
+        return str(Path(canonical_image).parent)
+    return None
+
+
+def create_erofs_metadata_image(view_dir, metadata_path, temp_blob_path, chunk_size):
+    mkfs_erofs = require_tool("mkfs.erofs", "NIXOME_MKFS_EROFS")
+    if temp_blob_path.exists():
+        temp_blob_path.unlink()
+    with temp_blob_path.open("wb") as handle:
+        handle.truncate(0)
+    run_checked(
+        [
+            mkfs_erofs,
+            "--quiet",
+            "--blobdev",
+            str(temp_blob_path),
+            "--chunksize",
+            str(chunk_size),
+            str(metadata_path),
+            str(view_dir),
+        ]
+    )
+    os.chmod(metadata_path, 0o444)
+    os.chmod(temp_blob_path, 0o400)
+
+
+def safe_dm_component(value):
+    cleaned = re.sub(r"[^A-Za-z0-9_.+-]", "-", value)
+    return cleaned[:48] if cleaned else "domain"
+
+
+def blob_dm_name(domain, generation, closure_hash):
+    short_hash = closure_hash[:16] if closure_hash else "unknown"
+    return f"nixome-{safe_dm_component(domain)}-{generation}-{short_hash}"
+
+
+def dm_path(name):
+    return f"/dev/mapper/{name}"
+
+
+def dm_exists(name):
+    dmsetup = require_tool("dmsetup", "NIXOME_DMSETUP")
+    result = subprocess.run(
+        [dmsetup, "info", name],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def ensure_loop_for_blob(blob_path):
+    losetup = require_tool("losetup", "NIXOME_LOSETUP")
+    blob_path = os.path.abspath(blob_path)
+    result = subprocess.run(
+        [losetup, "-j", blob_path, "--output", "NAME", "--noheadings"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        loops = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if loops:
+            run_checked([losetup, "-c", loops[0]])
+            return loops[0]
+
+    created = run_checked([losetup, "--find", "--show", "--read-only", blob_path])
+    loop = created.stdout.strip()
+    if not loop:
+        fail(f"losetup did not report a loop device for {blob_path}")
+    return loop
+
+
+def dm_table_for_extents(blob_map, backing_device):
+    lines = []
+    expected_logical = 0
+    for extent in blob_map.get("extents", []):
+        logical = int(extent["logical_offset"])
+        central = int(extent["central_offset"])
+        length = int(extent["length"])
+        if logical != expected_logical:
+            fail(f"non-contiguous blob map at logical offset {logical}, expected {expected_logical}")
+        if logical % 512 != 0 or central % 512 != 0 or length % 512 != 0:
+            fail("blob map extent is not 512-byte aligned")
+        lines.append(f"{logical // 512} {length // 512} linear {backing_device} {central // 512}")
+        expected_logical += length
+    logical_size = int(blob_map["logical_size"])
+    if expected_logical != logical_size:
+        fail(f"blob map size mismatch: {expected_logical} != {logical_size}")
+    return "\n".join(lines) + "\n"
+
+
+def attach_blob_view(root, domain, generation):
+    root = ensure_pool(root)
+    domain = safe_domain_name(domain)
+    generation = int(generation)
+    manifest = read_json(generation_manifest_path(root, domain, generation))
+    store = manifest.get("store", {})
+    if store.get("view_backend") != VIEW_BACKEND_EROFS_BLOBMAP:
+        fail(f"generation is not an EROFS blob-map view: {domain} generation {generation}")
+
+    blob_map_path = store.get("canonical_blob_map") or store.get("blob_map")
+    if not blob_map_path:
+        fail(f"generation is missing blob map: {domain} generation {generation}")
+    blob_map = read_json(blob_map_path)
+    central_blob = blob_map["central_blob"]
+    if not os.path.exists(central_blob):
+        fail(f"central chunk blob is missing: {central_blob}")
+
+    loop = ensure_loop_for_blob(central_blob)
+    name = blob_dm_name(domain, generation, store.get("closure_hash", ""))
+    path = dm_path(name)
+    if not dm_exists(name):
+        table = dm_table_for_extents(blob_map, loop)
+        dmsetup = require_tool("dmsetup", "NIXOME_DMSETUP")
+        table_path = root / "runtime" / f"{name}.table"
+        atomic_write(table_path, table, mode=0o400)
+        run_checked([dmsetup, "-r", "create", name, "--table", str(table_path)])
+        run_checked([dmsetup, "mknodes", name])
+
+    return {
+        "schema": "nixome.closure-store.attach.v1",
+        "status": "passed",
+        "pool_root": str(root),
+        "domain": domain,
+        "generation": generation,
+        "view_backend": VIEW_BACKEND_EROFS_BLOBMAP,
+        "blob_map": blob_map_path,
+        "central_blob": central_blob,
+        "loop": loop,
+        "dm_name": name,
+        "device": path,
+        "read_only": True,
+    }
+
+
+def detach_blob_view(root, domain, generation):
+    root = ensure_pool(root)
+    domain = safe_domain_name(domain)
+    generation = int(generation)
+    manifest = read_json(generation_manifest_path(root, domain, generation))
+    store = manifest.get("store", {})
+    name = blob_dm_name(domain, generation, store.get("closure_hash", ""))
+    removed = False
+    if dm_exists(name):
+        dmsetup = require_tool("dmsetup", "NIXOME_DMSETUP")
+        result = subprocess.run(
+            [dmsetup, "remove", "--deferred", name],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            fail(f"cannot remove device-mapper view {name}: {result.stderr.strip()}")
+        removed = True
+    return {
+        "schema": "nixome.closure-store.detach.v1",
+        "status": "passed",
+        "pool_root": str(root),
+        "domain": domain,
+        "generation": generation,
+        "dm_name": name,
+        "device": dm_path(name),
+        "removed": removed,
+    }
+
+
+def materialize_ext4_view(root, generation_dir, view_dir, closure_id, additional_space_mib):
     image_dir = Path(root) / "images/by-closure" / closure_id
     image_path = image_dir / "store.img"
     image_manifest = image_dir / "manifest.json"
-
-    if view_dir.exists():
-        remove_path(view_dir)
-    view_dir.mkdir(parents=True)
-    for logical_path in sorted(paths):
-        link_object_into_view(root, store_entry(logical_path), store_dir / store_entry(logical_path))
-    chmod_readonly(view_dir)
-    fsync_dir(generation_dir)
 
     image_dir.mkdir(parents=True, exist_ok=True)
     image_created = False
@@ -535,6 +916,8 @@ def materialize_view(root, domain, generation, paths, closure_id, additional_spa
                 "image": str(image_path),
                 "mountpoint": "/nix/store",
                 "read_only": True,
+                "filesystem": "ext4",
+                "view_backend": VIEW_BACKEND_EXT4_IMAGE,
                 "sizing": sizing,
                 "image_contains_materialized_store_copy": True,
             },
@@ -549,12 +932,163 @@ def materialize_view(root, domain, generation, paths, closure_id, additional_spa
     os.symlink(os.path.relpath(image_path, generation_dir), generation_image)
     fsync_dir(generation_dir)
     return {
+        "view_backend": VIEW_BACKEND_EXT4_IMAGE,
+        "filesystem": "ext4",
         "view_dir": str(view_dir),
         "image": str(generation_image),
         "canonical_image": str(image_path),
+        "metadata_image": str(generation_image),
+        "canonical_metadata_image": str(image_path),
+        "blob_map": None,
+        "canonical_blob_map": None,
+        "chunk_refs": None,
+        "canonical_chunk_refs": None,
+        "blob_device": None,
+        "blob_volume": None,
+        "blob_logical_size": None,
+        "chunk_size": None,
+        "chunk_count": 0,
+        "chunks_admitted": 0,
+        "chunks_reused": 0,
         "image_created": image_created,
         "sizing": sizing,
+        "image_contains_materialized_store_copy": True,
     }
+
+
+def materialize_erofs_blobmap_view(root, generation_dir, view_dir, closure_id, chunk_size, txid):
+    view_root = Path(root) / "views/by-closure" / closure_id
+    metadata_image = view_root / "store.erofs"
+    blob_map = view_root / "store.blob-map.json"
+    chunk_refs = view_root / "chunk-refs"
+    view_manifest = view_root / "manifest.json"
+    view_root.mkdir(parents=True, exist_ok=True)
+
+    view_created = False
+    if not metadata_image.exists() or not blob_map.exists() or not chunk_refs.exists():
+        tmp_dir = Path(root) / "tmp" / f"erofs-view-{closure_id}-{txid}"
+        if tmp_dir.exists():
+            remove_path(tmp_dir)
+        tmp_dir.mkdir(parents=True)
+        tmp_metadata = tmp_dir / "store.erofs"
+        tmp_blob = tmp_dir / "store.blob"
+        create_erofs_metadata_image(view_dir, tmp_metadata, tmp_blob, chunk_size)
+        chunk_map = admit_blob_chunks(root, tmp_blob, chunk_size, txid)
+
+        final_tmp_metadata = view_root / f".store.erofs.tmp-{uuid.uuid4().hex}"
+        shutil.copy2(tmp_metadata, final_tmp_metadata)
+        os.chmod(final_tmp_metadata, 0o444)
+        os.replace(final_tmp_metadata, metadata_image)
+
+        write_blob_map(
+            blob_map,
+            {
+                "schema": SCHEMA_BLOB_MAP,
+                "closure_hash": closure_id,
+                "filesystem": "erofs",
+                "view_backend": VIEW_BACKEND_EROFS_BLOBMAP,
+                "metadata_image": str(metadata_image),
+                "central_blob": chunk_map["blob"],
+                "logical_size": chunk_map["blob_logical_size"],
+                "chunk_size": chunk_map["chunk_size"],
+                "chunk_count": chunk_map["chunk_count"],
+                "chunks_admitted": chunk_map["chunks_admitted"],
+                "chunks_reused": chunk_map["chunks_reused"],
+                "extents": chunk_map["extents"],
+            },
+        )
+        write_chunk_refs(chunk_refs, chunk_map["chunk_refs"])
+        atomic_json(
+            view_manifest,
+            {
+                "schema": "nixome.closure-store.view-erofs-blobmap.v1",
+                "closure_hash": closure_id,
+                "filesystem": "erofs",
+                "view_backend": VIEW_BACKEND_EROFS_BLOBMAP,
+                "metadata_image": str(metadata_image),
+                "blob_map": str(blob_map),
+                "chunk_refs": str(chunk_refs),
+                "read_only": True,
+                "image_contains_materialized_store_copy": False,
+            },
+        )
+        remove_path(tmp_dir)
+        fsync_dir(view_root)
+        view_created = True
+
+    blob_map_payload = read_json(blob_map)
+    generation_metadata = generation_dir / "store.erofs"
+    generation_blob_map = generation_dir / "store.blob-map.json"
+    generation_chunk_refs = generation_dir / "chunk-refs"
+    for target, source in [
+        (generation_metadata, metadata_image),
+        (generation_blob_map, blob_map),
+        (generation_chunk_refs, chunk_refs),
+    ]:
+        if target.exists() or target.is_symlink():
+            target.unlink()
+        os.symlink(os.path.relpath(source, generation_dir), target)
+    fsync_dir(generation_dir)
+
+    return {
+        "view_backend": VIEW_BACKEND_EROFS_BLOBMAP,
+        "filesystem": "erofs",
+        "view_dir": str(view_dir),
+        "image": str(generation_metadata),
+        "canonical_image": str(metadata_image),
+        "metadata_image": str(generation_metadata),
+        "canonical_metadata_image": str(metadata_image),
+        "blob_map": str(generation_blob_map),
+        "canonical_blob_map": str(blob_map),
+        "chunk_refs": str(generation_chunk_refs),
+        "canonical_chunk_refs": str(chunk_refs),
+        "blob_device": "/dev/xvdf",
+        "blob_volume": "store-data",
+        "blob_logical_size": blob_map_payload["logical_size"],
+        "chunk_size": blob_map_payload["chunk_size"],
+        "chunk_count": blob_map_payload["chunk_count"],
+        "chunks_admitted": blob_map_payload.get("chunks_admitted", 0),
+        "chunks_reused": blob_map_payload.get("chunks_reused", 0),
+        "image_created": view_created,
+        "sizing": {
+            "metadata_image_bytes": os.path.getsize(metadata_image),
+            "blob_logical_size": blob_map_payload["logical_size"],
+            "chunk_size": blob_map_payload["chunk_size"],
+            "chunk_count": blob_map_payload["chunk_count"],
+            "extent_count": len(blob_map_payload.get("extents", [])),
+        },
+        "image_contains_materialized_store_copy": False,
+    }
+
+
+def materialize_view(
+    root,
+    domain,
+    generation,
+    paths,
+    closure_id,
+    additional_space_mib,
+    view_backend,
+    chunk_size,
+    txid,
+):
+    generation_dir = Path(root) / "domains" / domain / "generations" / str(generation)
+    view_dir = generation_dir / "view"
+    store_dir = view_dir
+
+    if view_dir.exists():
+        remove_path(view_dir)
+    view_dir.mkdir(parents=True)
+    for logical_path in sorted(paths):
+        link_object_into_view(root, store_entry(logical_path), store_dir / store_entry(logical_path))
+    chmod_readonly(view_dir)
+    fsync_dir(generation_dir)
+
+    if view_backend == VIEW_BACKEND_EXT4_IMAGE:
+        return materialize_ext4_view(root, generation_dir, view_dir, closure_id, additional_space_mib)
+    if view_backend == VIEW_BACKEND_EROFS_BLOBMAP:
+        return materialize_erofs_blobmap_view(root, generation_dir, view_dir, closure_id, chunk_size, txid)
+    fail(f"unsupported closure view backend: {view_backend}")
 
 
 def generation_manifest_path(root, domain, generation):
@@ -630,6 +1164,9 @@ def admit_generation(args):
         paths,
         closure_id,
         args.additional_space_mib,
+        args.view_backend,
+        args.chunk_size,
+        txid,
     )
     manifest_path = generation_dir / "manifest.json"
     manifest = {
@@ -657,13 +1194,26 @@ def admit_generation(args):
             "source": args.closure_source,
             "mountpoint": args.store_mountpoint,
             "device": args.store_device,
+            "blob_device": args.store_blob_device if view["blob_volume"] else None,
+            "blob_volume": view["blob_volume"],
             "read_only": True,
+            "filesystem": view["filesystem"],
+            "view_backend": view["view_backend"],
             "paths": paths,
             "object_count": len(paths),
             "view_dir": view["view_dir"],
             "image": view["image"],
             "canonical_image": view["canonical_image"],
-            "image_contains_materialized_store_copy": True,
+            "metadata_image": view["metadata_image"],
+            "canonical_metadata_image": view["canonical_metadata_image"],
+            "blob_map": view["blob_map"],
+            "canonical_blob_map": view["canonical_blob_map"],
+            "chunk_refs": view["chunk_refs"],
+            "canonical_chunk_refs": view["canonical_chunk_refs"],
+            "blob_logical_size": view["blob_logical_size"],
+            "chunk_size": view["chunk_size"],
+            "chunk_count": view["chunk_count"],
+            "image_contains_materialized_store_copy": view["image_contains_materialized_store_copy"],
         },
         "verification": verification,
         "retention": {
@@ -704,11 +1254,25 @@ def admit_generation(args):
         "objects_total": len(paths),
         "objects_admitted": len(admitted),
         "objects_reused": len(reused),
+        "chunks_total": view["chunk_count"],
+        "chunks_admitted": view["chunks_admitted"],
+        "chunks_reused": view["chunks_reused"],
         "admitted": admitted,
         "reused": reused,
         "view_created": view["image_created"],
         "view_image": view["image"],
         "canonical_view_image": view["canonical_image"],
+        "metadata_image": view["metadata_image"],
+        "canonical_metadata_image": view["canonical_metadata_image"],
+        "blob_map": view["blob_map"],
+        "canonical_blob_map": view["canonical_blob_map"],
+        "chunk_refs": view["chunk_refs"],
+        "canonical_chunk_refs": view["canonical_chunk_refs"],
+        "blob_device": args.store_blob_device if view["blob_volume"] else None,
+        "blob_volume": view["blob_volume"],
+        "blob_logical_size": view["blob_logical_size"],
+        "filesystem": view["filesystem"],
+        "view_backend": view["view_backend"],
         "view_size": os.path.getsize(view["canonical_image"]),
         "read_only": True,
     }
@@ -739,6 +1303,18 @@ def switch(args):
         "manifest": str(generation_manifest_path(root, domain, generation)),
         "view_image": manifest["store"]["image"],
         "canonical_view_image": manifest["store"]["canonical_image"],
+        "metadata_image": manifest["store"].get("metadata_image", manifest["store"]["image"]),
+        "canonical_metadata_image": manifest["store"].get(
+            "canonical_metadata_image", manifest["store"]["canonical_image"]
+        ),
+        "blob_map": manifest["store"].get("blob_map"),
+        "canonical_blob_map": manifest["store"].get("canonical_blob_map"),
+        "chunk_refs": manifest["store"].get("chunk_refs"),
+        "canonical_chunk_refs": manifest["store"].get("canonical_chunk_refs"),
+        "blob_device": manifest["store"].get("blob_device"),
+        "blob_volume": manifest["store"].get("blob_volume"),
+        "filesystem": manifest["store"].get("filesystem", "ext4"),
+        "view_backend": manifest["store"].get("view_backend", VIEW_BACKEND_EXT4_IMAGE),
         "read_only": True,
     }
 
@@ -795,6 +1371,8 @@ def gc(args):
     root = ensure_pool(args.pool_root)
     live_objects = set()
     live_images = set()
+    live_views = set()
+    live_chunks = set()
     retained_generations = set()
     removed_generations = []
 
@@ -813,7 +1391,14 @@ def gc(args):
                 retained_generations.add((domain, gen))
                 for path in manifest["store"]["paths"]:
                     live_objects.add(store_entry(path))
-                live_images.add(manifest["store"]["canonical_image"])
+                store = manifest["store"]
+                if store.get("view_backend", VIEW_BACKEND_EXT4_IMAGE) == VIEW_BACKEND_EXT4_IMAGE:
+                    live_images.add(store["canonical_image"])
+                view_root = canonical_view_root(store)
+                if view_root:
+                    live_views.add(view_root)
+                for chunk in read_chunk_refs(store.get("canonical_chunk_refs") or store.get("chunk_refs")):
+                    live_chunks.add(chunk)
             else:
                 generation_dir = manifest_path.parent
                 remove_path(generation_dir)
@@ -838,6 +1423,19 @@ def gc(args):
             remove_path(image_dir)
             removed_images.append(image_dir.name)
 
+    removed_views = []
+    for view_dir in sorted((root / "views/by-closure").iterdir()):
+        if str(view_dir) not in live_views:
+            remove_path(view_dir)
+            removed_views.append(view_dir.name)
+
+    removed_chunks = []
+    for meta in sorted((root / "chunks/metadata").glob("*.json")):
+        digest = meta.stem
+        if digest not in live_chunks:
+            meta.unlink()
+            removed_chunks.append(digest)
+
     return {
         "schema": SCHEMA_GC,
         "status": "passed",
@@ -849,6 +1447,11 @@ def gc(args):
         "removed_generations": removed_generations,
         "removed_objects": removed_objects,
         "removed_images": removed_images,
+        "removed_views": removed_views,
+        "removed_chunks": removed_chunks,
+        "chunk_blob": str(chunk_blob_path(root)),
+        "chunk_blob_append_only": True,
+        "chunk_blob_compaction": "not implemented",
     }
 
 
@@ -864,14 +1467,22 @@ def status(args):
                 "system": manifest["system"],
                 "closure_hash": manifest["store"]["closure_hash"],
                 "object_count": manifest["store"]["object_count"],
+                "filesystem": manifest["store"].get("filesystem", "ext4"),
+                "view_backend": manifest["store"].get("view_backend", VIEW_BACKEND_EXT4_IMAGE),
+                "chunk_count": manifest["store"].get("chunk_count", 0),
             }
         )
     object_count = len(list((root / "objects/store").iterdir()))
+    chunk_count = len(list((root / "chunks/metadata").glob("*.json")))
+    chunk_blob = chunk_blob_path(root)
     return {
         "schema": SCHEMA_STATUS,
         "status": "passed",
         "pool_root": str(root),
         "object_count": object_count,
+        "chunk_count": chunk_count,
+        "chunk_blob": str(chunk_blob),
+        "chunk_blob_size": os.path.getsize(chunk_blob) if chunk_blob.exists() else 0,
         "domains": domains,
     }
 
@@ -892,10 +1503,21 @@ def build_parser():
     admit_parser.add_argument("--root-source", default="")
     admit_parser.add_argument("--kernel-name", default="")
     admit_parser.add_argument("--store-device", default="/dev/xvde")
+    admit_parser.add_argument("--store-blob-device", default="/dev/xvdf")
     admit_parser.add_argument("--store-mountpoint", default="/nix/store")
     admit_parser.add_argument("--physical-store-root", default=default_physical_store_root())
     admit_parser.add_argument("--verify-mode", default=os.environ.get("NIXOME_CLOSURE_STORE_VERIFY", "nix-store"), choices=["none", "tree", "nix-store", "nix-store-trust"])
     admit_parser.add_argument("--additional-space-mib", type=int, default=256)
+    admit_parser.add_argument(
+        "--view-backend",
+        default=os.environ.get("NIXOME_CLOSURE_STORE_VIEW_BACKEND", DEFAULT_VIEW_BACKEND),
+        choices=[VIEW_BACKEND_EXT4_IMAGE, VIEW_BACKEND_EROFS_BLOBMAP],
+    )
+    admit_parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=int(os.environ.get("NIXOME_CLOSURE_STORE_CHUNK_SIZE", DEFAULT_CHUNK_SIZE)),
+    )
     admit_parser.add_argument("--approved-by", default="dom0")
     admit_parser.add_argument("--approval-source", default="")
     admit_parser.add_argument(
@@ -936,6 +1558,18 @@ def build_parser():
     status_parser = sub.add_parser("status")
     add_common(status_parser)
     status_parser.set_defaults(func=status)
+
+    attach_parser = sub.add_parser("attach-blob-view")
+    add_common(attach_parser)
+    attach_parser.add_argument("--domain", required=True)
+    attach_parser.add_argument("--generation", required=True)
+    attach_parser.set_defaults(func=lambda args: attach_blob_view(args.pool_root, args.domain, args.generation))
+
+    detach_parser = sub.add_parser("detach-blob-view")
+    add_common(detach_parser)
+    detach_parser.add_argument("--domain", required=True)
+    detach_parser.add_argument("--generation", required=True)
+    detach_parser.set_defaults(func=lambda args: detach_blob_view(args.pool_root, args.domain, args.generation))
 
     return parser
 

@@ -75,6 +75,10 @@ let
     path: value:
     if typeOf value == "bool" then value else fail path "expected a boolean, got ${typeOf value}";
 
+  expectInt =
+    path: value:
+    if typeOf value == "int" then value else fail path "expected an integer, got ${typeOf value}";
+
   expectList =
     path: value:
     if typeOf value == "list" then value else fail path "expected a list, got ${typeOf value}";
@@ -488,6 +492,12 @@ let
           "source_ref"
           "mountpoint"
           "device"
+          "blobDevice"
+          "blob_device"
+          "viewBackend"
+          "view_backend"
+          "chunkSize"
+          "chunk_size"
           "readOnly"
           "read_only"
         ] value;
@@ -498,6 +508,17 @@ let
         sourceInfo = normalizeSourceOption path store;
         mountpoint = expectStringOrPath "${path}.mountpoint" (get store "mountpoint" "/nix/store");
         device = expectStringOrPath "${path}.device" (get store "device" "/dev/xvde");
+        blobDeviceRaw = get store "blobDevice" (get store "blob_device" "/dev/xvdf");
+        blobDevice =
+          if blobDeviceRaw == null then
+            null
+          else
+            expectStringOrPath "${path}.blobDevice" blobDeviceRaw;
+        viewBackend = expectEnum "${path}.viewBackend" [
+          "ext4-image"
+          "erofs-blobmap"
+        ] (get store "viewBackend" (get store "view_backend" "erofs-blobmap"));
+        chunkSize = expectInt "${path}.chunkSize" (get store "chunkSize" (get store "chunk_size" 65536));
         hasCamelReadOnly = hasAttr "readOnly" store;
         hasSnakeReadOnly = hasAttr "read_only" store;
         camelReadOnly = if hasCamelReadOnly then expectBool "${path}.readOnly" store.readOnly else null;
@@ -519,13 +540,29 @@ let
         fail "${path}.mountpoint" "currently must be /nix/store"
       else if device != "/dev/xvde" then
         fail "${path}.device" "currently must be /dev/xvde"
+      else if viewBackend == "erofs-blobmap" && blobDevice != "/dev/xvdf" then
+        fail "${path}.blobDevice" "currently must be /dev/xvdf for erofs-blobmap stores"
+      else if viewBackend == "erofs-blobmap" && chunkSize <= 0 then
+        fail "${path}.chunkSize" "must be positive"
+      else if mode == "closure-image" && viewBackend != "ext4-image" then
+        fail "${path}.viewBackend" "closure-image stores must use ext4-image"
       else if readOnly != true then
         fail path "nix-closure store views must be read-only"
       else if !(sourceIsSet sourceInfo) then
         fail "${path}.source" "must be set for nix-closure stores"
       else
         {
-          inherit mode mountpoint device;
+          inherit
+            mode
+            mountpoint
+            device
+            blobDevice
+            viewBackend
+            chunkSize
+            ;
+          blob_device = blobDevice;
+          view_backend = viewBackend;
+          chunk_size = chunkSize;
           read_only = readOnly;
           inherit (sourceInfo) source source_ref;
         };

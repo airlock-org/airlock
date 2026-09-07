@@ -30,13 +30,29 @@ OUTPUT_JSON="$RESULT_DIR/helper-output.json"
 OUTPUT_2_JSON="$RESULT_DIR/helper-output-2.json"
 export PYTHONDONTWRITEBYTECODE=1
 
+if ! command -v mkfs.erofs >/dev/null 2>&1; then
+  EROFS_UTILS="$(
+    while IFS= read -r output; do
+      physical="$(nixome_physical_store_path "$output")"
+      [ -x "$physical/bin/mkfs.erofs" ] && printf '%s\n' "$physical"
+    done < <(nix build --no-link --print-out-paths nixpkgs#erofs-utils) |
+      head -n 1
+  )"
+  PATH="$EROFS_UTILS/bin:$PATH"
+fi
+
 COMMON="11111111111111111111111111111111-common"
 SYSTEM="22222222222222222222222222222222-system"
 UNIQUE="33333333333333333333333333333333-unique"
 
 for entry in "$COMMON" "$SYSTEM" "$UNIQUE"; do
   mkdir -p "$WORK_DIR/nix-root/nix/store/$entry/bin"
-  printf '%s\n' "$entry" > "$WORK_DIR/nix-root/nix/store/$entry/bin/payload"
+  python3 - "$WORK_DIR/nix-root/nix/store/$entry/bin/payload" "$entry" <<'PY'
+import sys
+from pathlib import Path
+
+Path(sys.argv[1]).write_bytes((sys.argv[2] + "\n").encode() * 8192)
+PY
   chmod -R a-w "$WORK_DIR/nix-root/nix/store/$entry"
 done
 
@@ -301,14 +317,21 @@ jq -e '
   .qubesd_restart_required == false and
   .qubesd_restarted == true and
   .generation == 1 and
+  .filesystem == "erofs" and
+  .view_backend == "erofs-blobmap" and
   .objects_total == 3 and
   .objects_admitted == 3 and
-  .objects_reused == 0
+  .objects_reused == 0 and
+  .chunks_total > 0 and
+  .chunks_admitted > 0
 ' "$OUTPUT_JSON" >/dev/null
 
-VIEW_IMAGE="$(jq -r '.view_image' "$OUTPUT_JSON")"
+VIEW_IMAGE="$(jq -r '.metadata_image' "$OUTPUT_JSON")"
+BLOB_MAP="$(jq -r '.blob_map' "$OUTPUT_JSON")"
 [ -f "$VIEW_IMAGE" ]
+[ -f "$BLOB_MAP" ]
 [ ! -w "$VIEW_IMAGE" ]
+[ ! -e "$(dirname "$VIEW_IMAGE")/store.img" ]
 
 jq -e '
   .pools."nixome-closure".driver == "nixome-closure" and
@@ -318,8 +341,18 @@ jq -e '
   .domains."nix-native-work".volume_config.store.save_on_stop == true and
   .domains."nix-native-work".volume_config.store.source == null and
   .domains."nix-native-work".volume_config.store.generation == "1" and
+  .domains."nix-native-work".volume_config.store.view_kind == "metadata-image" and
   (.domains."nix-native-work".volume_config.store.view_path | length) > 0 and
-  (.domains."nix-native-work".volume_config.store.manifest_path | length) > 0
+  (.domains."nix-native-work".volume_config.store.manifest_path | length) > 0 and
+  .domains."nix-native-work".volume_config."store-data".pool == "nixome-closure" and
+  .domains."nix-native-work".volume_config."store-data".rw == false and
+  .domains."nix-native-work".volume_config."store-data".snap_on_start == false and
+  .domains."nix-native-work".volume_config."store-data".save_on_stop == true and
+  .domains."nix-native-work".volume_config."store-data".source == null and
+  .domains."nix-native-work".volume_config."store-data".generation == "1" and
+  .domains."nix-native-work".volume_config."store-data".view_kind == "erofs-blob-map" and
+  (.domains."nix-native-work".volume_config."store-data".blob_map_path | length) > 0 and
+  (.domains."nix-native-work".volume_config."store-data".blob_logical_size > 0)
 ' "$SAVE_JSON" >/dev/null
 
 tmp_state="$WORK_DIR/state-with-features.json"
@@ -328,9 +361,11 @@ jq \
   --arg generation "$(jq -r '.generation' "$OUTPUT_JSON")" \
   --arg closure_hash "$(jq -r '.closure_hash' "$OUTPUT_JSON")" \
   --arg view_image "$(jq -r '.view_image' "$OUTPUT_JSON")" \
+  --arg view_backend "$(jq -r '.view_backend' "$OUTPUT_JSON")" \
   '.domains."nix-native-work".features = {
     "nixome-store-source": $source,
     "nixome-store-mode": "shared-closure",
+    "nixome-store-view-backend": $view_backend,
     "nixome-store-generation": $generation,
     "nixome-store-closure-hash": $closure_hash,
     "nixome-store-view-image": $view_image
@@ -361,6 +396,7 @@ jq -e '
   .view_created == false and
   .metadata_changed == false and
   .qubesd_restarted == false and
+  .view_backend == "erofs-blobmap" and
   .generation == "1"
 ' "$OUTPUT_2_JSON" >/dev/null
 

@@ -169,6 +169,11 @@ in
       after = [ "nixome-qubes-store-init.service" ];
       requires = [ "nixome-qubes-store-init.service" ];
       environment.PYTHONPATH = lib.mkBefore "${qubesStorage}/${pkgs.python3.sitePackages}";
+      path = [
+        pkgs.erofs-utils
+        pkgs.lvm2
+        pkgs.util-linux
+      ];
     };
 
     systemd.tmpfiles.rules = [
