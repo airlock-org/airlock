@@ -38,6 +38,7 @@ run_logged flake-check-no-build nix flake check "$ROOT" --no-build --show-trace
 run_logged module-contract nix build "$ROOT#checks.x86_64-linux.module-contract" --print-build-logs --show-trace
 run_logged config-apply-package nix build "$ROOT#packages.x86_64-linux.nixome-config-apply" --print-build-logs --show-trace
 run_logged config-archive-package nix build "$ROOT#packages.x86_64-linux.nixome-config-archive-candidate" --print-build-logs --show-trace
+run_logged config-status-package nix build "$ROOT#packages.x86_64-linux.nixome-config-status" --print-build-logs --show-trace
 run_logged config-vms-smoke-package nix build "$ROOT#packages.x86_64-linux.nixome-config-vms-smoke" --print-build-logs --show-trace
 run_logged observe-package nix build "$ROOT#packages.x86_64-linux.nixome-observe-dom0" --print-build-logs --show-trace
 run_logged setup-config-package nix build "$ROOT#packages.x86_64-linux.nixome-setup-config" --print-build-logs --show-trace
@@ -51,6 +52,7 @@ run_logged system-schema "$ROOT/tests/system-schema.sh"
 run_logged config-candidate-flake "$ROOT/tests/config-candidate-flake.sh"
 run_logged config-validator-candidate "$ROOT/tests/config-validator-candidate.sh"
 run_logged config-vault-deployment-archive "$ROOT/tests/config-vault-deployment-archive.sh"
+run_logged config-status "$ROOT/tests/config-status.sh"
 run_logged config-apply-template-build-ref "$ROOT/tests/config-apply-template-build-ref.sh"
 run_logged config-system-apply "$ROOT/tests/config-system-apply.sh"
 run_logged host-capabilities "$ROOT/tests/host-capabilities.sh" --json "$LOG_DIR/host-capabilities.json"

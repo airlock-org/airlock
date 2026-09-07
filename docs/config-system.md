@@ -191,6 +191,17 @@ machine-readable JSON. Dom0 transports and applies the artifact, but the
 candidate validity decision plus Nix topology/system evaluation happen in
 `config-validator`.
 
+dom0 can report the current config-system state as JSON with:
+
+```bash
+nixome-config-status
+```
+
+That command reads the declared topology, latest setup/apply artifacts,
+`/var/lib/nixome/system` state, current system profile links, Qubes runtime
+domain list when `qvm-ls` is available, and the Nixome-managed qrexec policy
+file.
+
 The current seed uses generated literal `/nix/store` path pins for Nixome,
 `nixpkgs`, and `nixos-qubes` support sources. Candidate Nix commands therefore
 run with `--impure --offline --no-write-lock-file`: impure is needed to read
