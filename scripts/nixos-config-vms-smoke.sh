@@ -37,6 +37,7 @@ DOM0_EXTRA_MODULE_RESTARTED_LOG="$LOG_DIR/config-vms-dom0-extra-module-restarted
 DOM0_SYSTEMD_ACTIONS_LOG="$LOG_DIR/config-vms-dom0-systemd-actions.json"
 DOM0_HOST_SYSTEM_PROFILE_LINK_LOG="$LOG_DIR/config-vms-dom0-host-system-profile-link.log"
 DOM0_CURRENT_SYSTEM_LINK_LOG="$LOG_DIR/config-vms-dom0-current-system-link.log"
+CONFIG_STATUS_LOG="$LOG_DIR/config-vms-config-status.json"
 ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
 ARCHIVE_JSON="$LOG_DIR/config-archive.json"
 APPLY_LOG="$LOG_DIR/config-vms-apply.log"
@@ -178,6 +179,8 @@ write_result() {
     json_file_string_or_null "$DOM0_HOST_SYSTEM_PROFILE_LINK_LOG"
     printf ',"dom0_current_system_link":'
     json_file_string_or_null "$DOM0_CURRENT_SYSTEM_LINK_LOG"
+    printf ',"config_status":'
+    json_file_value_or_null "$CONFIG_STATUS_LOG"
     printf ',"archive":'
     json_file_value_or_null "$ARCHIVE_JSON"
     printf ',"archive_log":'
@@ -361,6 +364,7 @@ for cmd in \
   cat \
   date \
   nixome-config-apply \
+  nixome-config-status \
   qrexec-client \
   readlink \
   qvm-check \
@@ -829,6 +833,35 @@ grep -qx "$host_system_source" "$DOM0_HOST_SYSTEM_PROFILE_LINK_LOG" ||
   fail "host system profile does not point at applied source"
 grep -qx "$host_system_source" "$DOM0_CURRENT_SYSTEM_LINK_LOG" ||
   fail "current system link does not point at applied source"
+
+run_or_fail \
+  "read config status" \
+  "$CONFIG_STATUS_LOG" \
+  nixome-config-status
+jq -e \
+  --arg staging "$STAGING" \
+  --arg vault "$VAULT" \
+  --arg validator "$VALIDATOR" \
+  --arg created "$CREATED_QUBE" \
+  --arg host_system_source "$host_system_source" \
+  '
+    .schema == "nixome.config-status.v1" and
+    .status == "applied" and
+    (.topology.domain_names | index($staging)) and
+    (.topology.domain_names | index($vault)) and
+    (.topology.domain_names | index($validator)) and
+    (.topology.domain_names | index($created)) and
+    .qvm.available == true and
+    .qvm.status == "ok" and
+    any(.qvm.managed_domains[]; .name == $staging) and
+    any(.qvm.managed_domains[]; .name == $vault) and
+    any(.qvm.managed_domains[]; .name == $validator) and
+    .qrexec_policy.exists == true and
+    .apply.status == "passed" and
+    .system.last_apply.status == "passed" and
+    .system.run_current_system_target == $host_system_source
+  ' "$CONFIG_STATUS_LOG" >/dev/null ||
+  fail "config status JSON did not match applied state"
 
 qvm-features "$STAGING" nixome-config-applied-message > "$APPLIED_FEATURE_LOG" 2>&1 ||
   fail "applied config feature is missing"

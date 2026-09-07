@@ -306,6 +306,7 @@ collect_diagnostics() {
   remote 'sudo -n cat /var/log/nixome/config-vms-journal.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-journal.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-libxl.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-libxl.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-qvm-prefs.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-qvm-prefs.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-vms-config-status.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-status.json" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-config-vault-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-vault-console.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-config-staging-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-staging-console.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-config-validator-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-validator-console.log" 2>/dev/null || true

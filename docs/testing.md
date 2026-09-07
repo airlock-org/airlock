@@ -250,7 +250,9 @@ contains a successful deployment record for that apply, including the dom0
 system apply result and systemd action result, and that the staged config
 generated
 `/var/lib/nixome/qubes-policy.d/90-nixome.policy` with an active `nixome.PolicyProbe`
-rule. The result JSON is written to:
+rule. It also runs `nixome-config-status` and checks that the status JSON sees
+the applied topology, live Qubes domains, qrexec policy file, and current dom0
+system link. The result JSON is written to:
 
 ```text
 /run/media/user/data/nixome/logs/vm-gui-config-vms-smoke.json

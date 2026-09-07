@@ -314,7 +314,9 @@ the validated concrete template source, checks that `nixome-work-from-config`
 was created from that template, and runs `uname -a` inside it through qrexec.
 It also checks that
 `config-vault` wrote a deployment record for the successful apply and that
-generated qrexec policy is installed and active.
+generated qrexec policy is installed and active. After apply it also runs
+`nixome-config-status` inside dom0 and checks that the JSON summary matches the
+applied topology, live Qubes domains, qrexec policy, and current system link.
 The machine-readable result is copied to:
 
 ```text
