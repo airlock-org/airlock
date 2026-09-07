@@ -253,6 +253,8 @@ class Qubes:
             json.dump(payload, handle, sort_keys=True)
 
     def close(self):
+        for vm in self.domains.values():
+            del vm.app
         return None
 PY
 

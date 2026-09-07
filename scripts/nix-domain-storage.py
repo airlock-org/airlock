@@ -441,12 +441,14 @@ async def ensure_shared_store(args):
 
     app, vm = load_domain(qubes, args.domain)
     needs_mutation = shared_volume_needs_mutation(vm, args.source)
+    vm_running = vm.is_running()
     generation = vm.features.get("nixome-store-generation", "")
     closure_hash = vm.features.get("nixome-store-closure-hash", "")
     view_image = vm.features.get(
         "nixome-store-view-image",
         getattr(vm.volumes.get("store"), "path", "") if "store" in vm.volumes else "",
     )
+    store_pool = pool_name(vm.volumes["store"].pool) if "store" in vm.volumes else ""
     app.close()
 
     if not needs_mutation:
@@ -464,14 +466,14 @@ async def ensure_shared_store(args):
             "qubesd_restart_required": False,
             "qubesd_restarted": False,
             "qubesd_was_active": False,
-            "pool": pool_name(vm.volumes["store"].pool),
+            "pool": store_pool,
             "generation": generation,
             "closure_hash": closure_hash,
             "view_image": view_image,
             "canonical_view_image": view_image,
         }
 
-    if vm.is_running():
+    if vm_running:
         fail(f"shared store source changed but domain is running: {args.domain}")
 
     def operation():
