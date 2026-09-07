@@ -30,8 +30,13 @@ jq -e '
   .schema == "nixome.store-closure-image.v1" and
   .mountpoint == "/nix/store" and
   .device == "/dev/xvde" and
-  .read_only == true
+  .read_only == true and
+  .sizing == "used-plus-proportional-spare"
 ' "$STORE_IMAGE_OUT/manifest.json" >/dev/null
+
+grep -E '^used_bytes=[1-9][0-9]*$' "$STORE_IMAGE_OUT/image-sizing.txt" >/dev/null
+grep -E '^spare_bytes=[1-9][0-9]*$' "$STORE_IMAGE_OUT/image-sizing.txt" >/dev/null
+grep -E '^image_bytes=[1-9][0-9]*$' "$STORE_IMAGE_OUT/image-sizing.txt" >/dev/null
 
 debugfs -R "stat /$STORE_ENTRY" "$STORE_IMAGE_OUT/store.img" \
   > "$RESULT_DIR/debugfs-store-entry.txt" \

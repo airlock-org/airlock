@@ -641,13 +641,27 @@ let
         done < ${closure}/store-paths
 
         used_bytes="$(du -sb "$root" | awk '{ print $1 }')"
-        image_bytes="$((used_bytes + (${toString additionalSpaceMiB} * 1024 * 1024)))"
+        requested_spare_bytes="$((${toString additionalSpaceMiB} * 1024 * 1024))"
+        metadata_spare_bytes="$((used_bytes / 4 + 256 * 1024 * 1024))"
+        if [ "$requested_spare_bytes" -gt "$metadata_spare_bytes" ]; then
+          spare_bytes="$requested_spare_bytes"
+        else
+          spare_bytes="$metadata_spare_bytes"
+        fi
+        image_bytes="$((used_bytes + spare_bytes))"
         truncate -s "$image_bytes" "$out/store.img"
         mkfs.ext4 -q -F -L nixstore -d "$root" "$out/store.img"
 
         cp ${closure}/store-paths "$out/store-paths"
+        {
+          printf 'used_bytes=%s\n' "$used_bytes"
+          printf 'requested_spare_bytes=%s\n' "$requested_spare_bytes"
+          printf 'metadata_spare_bytes=%s\n' "$metadata_spare_bytes"
+          printf 'spare_bytes=%s\n' "$spare_bytes"
+          printf 'image_bytes=%s\n' "$image_bytes"
+        } > "$out/image-sizing.txt"
         cat > "$out/manifest.json" <<EOF
-        {"schema":"nixome.store-closure-image.v1","name":"${name}","image":"store.img","mountpoint":"/nix/store","device":"${device}","read_only":true}
+        {"schema":"nixome.store-closure-image.v1","name":"${name}","image":"store.img","mountpoint":"/nix/store","device":"${device}","read_only":true,"sizing":"used-plus-proportional-spare"}
         EOF
       '';
 
