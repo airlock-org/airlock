@@ -350,6 +350,7 @@ Run the current NixOS config-VM runtime proof:
 
 ```bash
 make vm-config-flow
+make vm-config-template-flow
 ```
 
 That target builds and boots the nested config dom0 image, explicitly runs the
@@ -373,6 +374,12 @@ The machine-readable result is copied to:
 ```
 
 `make vm-config-smoke` remains as a compatibility alias.
+
+`make vm-config-template-flow` enables
+`NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE=1`. In that mode the staged config adds a
+second TemplateVM definition with no prebuilt source, so dom0 resolves the
+validated flake build reference, imports the built TemplateVM, creates an AppVM
+from it, starts the AppVM, and checks qrexec.
 
 ## Validated Boundary
 

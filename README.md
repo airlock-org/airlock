@@ -89,6 +89,7 @@ make nixos-templates-dry-run
 make vm-gui-config-image-dry-run
 make vm-config-setup
 make vm-config-flow
+make vm-config-template-flow
 ```
 
 `make vm-config-smoke` remains as a compatibility alias.
@@ -116,7 +117,10 @@ Inside `config-staging`, `nixome/local.nix` can add
 `templates.definitions.<template-name>` entries. Each entry provides NixOS
 modules for a TemplateVM root plus optional Qubes domain/AppVM defaults; the
 candidate flake exposes the resulting template package and topology source
-reference.
+reference. `make vm-config-template-flow` runs the heavier version of the
+nested proof: the staged config adds a second TemplateVM definition, dom0 builds
+that template package during apply, imports it, creates an AppVM from it, and
+checks qrexec in that AppVM.
 The config topology image keeps local build size down by using one NixOS
 config-system TemplateVM for all three config AppVM roles.
 
@@ -218,4 +222,7 @@ topology imports it by concrete Nix store path, and dom0 creates
 AppVMs from it. Staged config also generates Nixome-owned qrexec policy into
 `/var/lib/nixome/qubes-policy.d/90-nixome.policy`; Qubes' policy daemon is
 pointed at that combined runtime policy directory.
+The heavier `make vm-config-template-flow` path additionally proves a staged
+TemplateVM definition that has no prebuilt source, so dom0 must build and import
+the TemplateVM from the validated candidate before starting its AppVM.
 Production security validation still requires a physical Xen-capable machine.
