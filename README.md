@@ -183,7 +183,8 @@ generated log directory, and removes the test qube on success if it created it.
   policy state as JSON. It prefers the last successfully set up topology from
   `/var/lib/nixome/system/current-topology.json`, falling back to the bootstrap
   image topology, and includes durable current/last deployment records from the
-  same state directory.
+  same state directory. It also reports `pending_reboot` from the active system
+  plan.
 - `modules/qube-guest.nix`, `pkgs/nixome-qubes-template`, and
   `modules/qubes-topology.nix` are the first pieces for NixOS-backed Qubes
   templates and declarative topology setup.

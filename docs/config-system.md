@@ -208,7 +208,9 @@ accepts a deployment record, dom0 also keeps
 `current-config-apply.json`, `last-deployment.json`, and
 `last-config-apply.json` so status remains useful after transient logs are
 rotated. Profile and `/run/current-system` symlinks are reported as both raw
-link targets and resolved store paths.
+link targets and resolved store paths. The top-level `pending_reboot` object
+summarizes the active plan's reboot requirement, reasons, and structured
+actions for automation.
 
 The current seed uses generated literal `/nix/store` path pins for Nixome,
 `nixpkgs`, and `nixos-qubes` support sources. Candidate Nix commands therefore

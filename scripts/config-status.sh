@@ -175,6 +175,18 @@ jq -n \
       else "unknown"
       end;
 
+    def plan_bool($field):
+      if (($current_plan[$field]? | type) == "boolean") then $current_plan[$field]
+      elif (($last_apply[$field]? | type) == "boolean") then $last_apply[$field]
+      else false
+      end;
+
+    def plan_array($field):
+      if (($current_plan[$field]? | type) == "array") then $current_plan[$field]
+      elif (($last_apply[$field]? | type) == "array") then $last_apply[$field]
+      else []
+      end;
+
     {
       schema: "nixome.config-status.v1",
       status: status,
@@ -211,6 +223,11 @@ jq -n \
         exists: $qrexec_policy_exists,
         rule_count: $qrexec_policy_rule_count
       },
+      pending_reboot: {
+        required: plan_bool("reboot_required"),
+        actions: plan_array("reboot_actions"),
+        reasons: plan_array("reboot_reasons")
+      },
       deployment: {
         current: $current_deployment,
         last_attempt: $last_deployment,
@@ -223,6 +240,11 @@ jq -n \
         state_dir: $system_state_dir,
         current_system: $current_system,
         current_plan: $current_plan,
+        pending_reboot: {
+          required: plan_bool("reboot_required"),
+          actions: plan_array("reboot_actions"),
+          reasons: plan_array("reboot_reasons")
+        },
         last_apply: $last_apply,
         profile: $system_profile,
         profile_target: $system_profile_target,

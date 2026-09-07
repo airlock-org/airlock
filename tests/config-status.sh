@@ -13,6 +13,7 @@ TOPOLOGY_JSON="$WORK_DIR/topology.json"
 CURRENT_TOPOLOGY_JSON="$STATE_DIR/current-topology.json"
 RESULT_JSON="$WORK_DIR/status.json"
 CURRENT_RESULT_JSON="$WORK_DIR/status-current.json"
+REBOOT_RESULT_JSON="$WORK_DIR/status-reboot.json"
 PROFILE_DIR="$WORK_DIR/profiles"
 STORE_DIR="$WORK_DIR/store"
 SYSTEM_PROFILE="$PROFILE_DIR/nixome-system"
@@ -192,6 +193,9 @@ jq -e '
   (.qvm.managed_domains | length) == 2 and
   .qrexec_policy.exists == true and
   .qrexec_policy.rule_count == 2 and
+  .pending_reboot.required == false and
+  .pending_reboot.actions == [] and
+  .pending_reboot.reasons == [] and
   .setup.status == "passed" and
   .apply.status == "passed" and
   .deployment.current.deployment_id == "deployment-current" and
@@ -201,6 +205,7 @@ jq -e '
   .system.current_system.dom0.profile.message == "from-test" and
   .system.current_plan.reboot_actions == [] and
   .system.current_plan.reboot_required == false and
+  .system.pending_reboot.required == false and
   .system.last_apply.host_system_status == "passed" and
   .system.profile_target == $profile_target and
   .system.profile_resolved_target == $profile_target and
@@ -234,5 +239,42 @@ jq -e '
   (.topology.domain_names | index("nixome-work-from-current")) and
   (.qvm.managed_domains | length) == 2
 ' "$CURRENT_RESULT_JSON" >/dev/null
+
+cat > "$STATE_DIR/current-plan.json" <<'EOF'
+{
+  "live_actions": [],
+  "reboot_actions": [
+    {
+      "type": "dom0-nixos-system",
+      "action": "boot",
+      "reason": "install next dom0 boot generation"
+    }
+  ],
+  "reboot_required": true,
+  "reboot_reasons": ["install next dom0 boot generation"]
+}
+EOF
+
+env \
+  PATH="$BIN_DIR:$PATH" \
+  NIXOME_QVM_LS_BIN="$BIN_DIR/qvm-ls" \
+  NIXOME_CONFIG_STATUS_BOOT_TOPOLOGY_JSON="$TOPOLOGY_JSON" \
+  NIXOME_LOG_DIR="$LOG_DIR" \
+  NIXOME_SYSTEM_STATE_DIR="$STATE_DIR" \
+  NIXOME_QUBES_POLICY_DIR="$POLICY_DIR" \
+  NIXOME_CONFIG_STATUS_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
+  NIXOME_CONFIG_STATUS_HOST_SYSTEM_PROFILE="$HOST_SYSTEM_PROFILE" \
+  NIXOME_CONFIG_STATUS_RUN_CURRENT_SYSTEM="$RUN_CURRENT_SYSTEM" \
+  "$wrapper" > "$REBOOT_RESULT_JSON"
+
+jq -e '
+  .schema == "nixome.config-status.v1" and
+  .pending_reboot.required == true and
+  (.pending_reboot.actions | length) == 1 and
+  .pending_reboot.actions[0].type == "dom0-nixos-system" and
+  .pending_reboot.reasons == ["install next dom0 boot generation"] and
+  .system.pending_reboot.required == true and
+  (.system.pending_reboot.actions | length) == 1
+' "$REBOOT_RESULT_JSON" >/dev/null
 
 printf 'config status test ok\n'
