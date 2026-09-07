@@ -59,7 +59,9 @@ first-boot setup fast.
 `configVms.guests.config-validator` customize the dedicated role TemplateVMs.
 Those guest entries support the same high-level content fields as normal
 template definitions: `hostName`, `packages`, `etc`, `systemd`,
-`configuration`, and `modules`.
+`configuration`, and `modules`. Staged template definitions and config-role
+guest definitions reject unknown option names during Nix evaluation, so common
+typos fail in `config-validator` instead of being ignored.
 
 The staged config now takes the next step for normal workload templates: it
 defines `nixome-nixos-work` as a NixOS TemplateVM package output and declares

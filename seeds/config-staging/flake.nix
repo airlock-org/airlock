@@ -22,6 +22,83 @@
       };
       localTopology = localConfig.topology or { };
       localConfigVms = localConfig.configVms or { };
+      configVmRoles = [
+        "config-vault"
+        "config-staging"
+        "config-validator"
+      ];
+      checkConfigKeys =
+        path: allowed: attrs:
+        let
+          unknown = builtins.filter (name: !(builtins.elem name allowed)) (builtins.attrNames attrs);
+          prefix = "nixome.configVms${if path == "" then "" else ".${path}"}";
+        in
+        if unknown == [ ] then
+          attrs
+        else
+          throw "${prefix}: unknown option(s): ${nixpkgs.lib.concatStringsSep ", " unknown}";
+      expectConfigAttrs =
+        path: value:
+        let
+          prefix = "nixome.configVms${if path == "" then "" else ".${path}"}";
+        in
+        if builtins.typeOf value == "set" then
+          value
+        else
+          throw "${prefix}: expected an attribute set, got ${builtins.typeOf value}";
+      checkConfigDomainOverride =
+        path: value:
+        checkConfigKeys path [
+          "features"
+          "label"
+          "netvm"
+          "prefs"
+          "services"
+          "template"
+        ] (expectConfigAttrs path value);
+      checkConfigGuest =
+        path: value:
+        checkConfigKeys path [
+          "configuration"
+          "etc"
+          "hostName"
+          "hostname"
+          "modules"
+          "packages"
+          "systemd"
+        ] (expectConfigAttrs path value);
+      checkConfigRoleAttrs =
+        path: attrs:
+        let
+          unknown = builtins.filter (role: !(builtins.elem role configVmRoles)) (builtins.attrNames attrs);
+        in
+        if unknown == [ ] then
+          attrs
+        else
+          throw "nixome.configVms.${path}: unknown role(s): ${nixpkgs.lib.concatStringsSep ", " unknown}";
+      checkedConfigVms =
+        let
+          checked = checkConfigKeys "" [
+            "domains"
+            "guests"
+            "sharedGuest"
+            "templateMode"
+          ] (expectConfigAttrs "" localConfigVms);
+          rawDomains = checkConfigRoleAttrs "domains" (checked.domains or { });
+          rawGuests = checkConfigRoleAttrs "guests" (checked.guests or { });
+          checkedDomains = builtins.mapAttrs (
+            role: value: checkConfigDomainOverride "domains.${role}" value
+          ) rawDomains;
+          checkedGuests = builtins.mapAttrs (
+            role: value: checkConfigGuest "guests.${role}" value
+          ) rawGuests;
+        in
+        checked
+        // {
+          domains = checkedDomains;
+          guests = checkedGuests;
+          sharedGuest = checkConfigGuest "sharedGuest" (checked.sharedGuest or { });
+        };
       localDom0 = localConfig.dom0 or { };
       localDom0Host = localDom0.host or { };
       localDom0HostModule =
@@ -68,7 +145,7 @@
       appliedMessage = "initial";
       config = configVms {
         inherit appliedMessage system;
-        configVms = localConfigVms;
+        configVms = checkedConfigVms;
         configRoleKernelOpts = {
           config-vault = templateBuilders.mkQubeKernelOpts configVaultGuest;
           config-staging = templateBuilders.mkQubeKernelOpts configStagingGuest;
@@ -148,7 +225,7 @@
       mkConfigGuest =
         role: defaultHostName:
         let
-          definition = (localConfigVms.guests or { }).${role} or { };
+          definition = (checkedConfigVms.guests or { }).${role} or { };
         in
         nixpkgs.lib.nixosSystem {
           inherit system;
@@ -177,7 +254,7 @@
         };
       configSystemGuest =
         let
-          definition = localConfigVms.sharedGuest or { };
+          definition = checkedConfigVms.sharedGuest or { };
         in
         nixpkgs.lib.nixosSystem {
           inherit system;

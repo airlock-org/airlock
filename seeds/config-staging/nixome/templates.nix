@@ -17,6 +17,90 @@ let
   pkgs = templateBuilders.pkgs;
   lib = pkgs.lib;
 
+  mapAttrs =
+    f: attrs:
+    listToAttrs (
+      map (name: {
+        inherit name;
+        value = f name (getAttr name attrs);
+      }) (attrNames attrs)
+    );
+
+  fail = path: message: throw "nixome.templates.${path}: ${message}";
+
+  expectAttrs =
+    path: value:
+    if builtins.typeOf value == "set" then
+      value
+    else
+      fail path "expected an attribute set, got ${builtins.typeOf value}";
+
+  checkKeys =
+    path: allowed: attrs:
+    let
+      unknown = builtins.filter (name: !(builtins.elem name allowed)) (attrNames attrs);
+    in
+    if unknown == [ ] then attrs else fail path "unknown option(s): ${lib.concatStringsSep ", " unknown}";
+
+  normalizeDomainOverride =
+    path: value:
+    checkKeys path [
+      "class"
+      "features"
+      "label"
+      "netvm"
+      "prefs"
+      "services"
+      "template"
+    ] (expectAttrs path value);
+
+  normalizeAppVms =
+    templateName: value:
+    mapAttrs (
+      appName: appVm:
+      normalizeDomainOverride "definitions.${templateName}.appVms.${appName}" appVm
+    ) (expectAttrs "definitions.${templateName}.appVms" value);
+
+  normalizeTemplateDefinition =
+    name: value:
+    let
+      checked = checkKeys "definitions.${name}" [
+        "additionalSpace"
+        "appVms"
+        "configuration"
+        "domain"
+        "etc"
+        "guestRole"
+        "hostName"
+        "hostname"
+        "imageName"
+        "import"
+        "kernel"
+        "modules"
+        "netvmAppmenus"
+        "packageName"
+        "packages"
+        "prebuiltSourceKeys"
+        "role"
+        "skipStart"
+        "sourceLabel"
+        "subpath"
+        "systemd"
+        "templateAppmenus"
+        "templateConf"
+        "vmAppmenus"
+      ] (expectAttrs "definitions.${name}" value);
+    in
+    checked
+    // {
+      appVms = normalizeAppVms name (checked.appVms or { });
+      domain =
+        if hasAttr "domain" checked then
+          normalizeDomainOverride "definitions.${name}.domain" checked.domain
+        else
+          { };
+    };
+
   defaultTemplateConf = {
     qrexec = "1";
     virt-mode = "pvh";
@@ -69,7 +153,7 @@ let
     };
   };
 
-  templateDefinitions = baseTemplateDefinitions // extraTemplateDefinitions;
+  templateDefinitions = mapAttrs normalizeTemplateDefinition (baseTemplateDefinitions // extraTemplateDefinitions);
 
   mkTemplateDomain =
     name: definition: builtTemplate:
