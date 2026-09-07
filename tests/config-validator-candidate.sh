@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/nixome-env.sh"
 WORK_DIR="${NIXOME_CONFIG_VALIDATOR_CANDIDATE_DIR:-${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}/config-validator-candidate}"
 CANDIDATE_DIR="$WORK_DIR/candidate"
+PORTABLE_SOURCE="$WORK_DIR/portable-seed-input-source"
+PORTABLE_SOURCE_LINK="$WORK_DIR/portable-seed-input"
 VALIDATION_DIR="$WORK_DIR/validation"
 STAGED_TAR="$WORK_DIR/config-candidate-staged.tar"
 VALIDATED_TAR="$WORK_DIR/config-candidate-validated.tar"
@@ -16,6 +18,9 @@ if [ -e "$WORK_DIR/nix-root" ]; then
 fi
 rm -rf "$WORK_DIR"
 mkdir -p "$CANDIDATE_DIR/dom0-profile/bin" "$CANDIDATE_DIR/dom0-profile/share/nixome" "$VALIDATION_DIR"
+mkdir -p "$PORTABLE_SOURCE"
+printf 'portable-validator-test\n' > "$PORTABLE_SOURCE/marker"
+ln -s "$PORTABLE_SOURCE" "$PORTABLE_SOURCE_LINK"
 
 cat > "$CANDIDATE_DIR/dom0-profile/share/nixome/profile.json" <<'EOF'
 {"schema":"nixome.dom0-profile.v1","message":"validator-test","built_by":"config-validator-candidate-test"}
@@ -32,7 +37,12 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
 {
   description = "Nixome config validator fixture";
 
-  outputs = { self }: let
+  inputs.portable-source = {
+    url = "path:__PORTABLE_SOURCE_LINK__";
+    flake = false;
+  };
+
+  outputs = { self, portable-source }: let
     mkFixturePackage = name: builtins.derivation {
       inherit name;
       system = "x86_64-linux";
@@ -115,7 +125,7 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
           source_ref = null;
           activation_command = "bin/nixome-dom0-profile-activate";
           activation_action = "none";
-          message = "validator-test";
+          message = builtins.readFile "${portable-source}/marker";
         };
         packages = [ ];
         systemd.services = { };
@@ -162,6 +172,7 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
   };
 }
 EOF
+sed -i "s|__PORTABLE_SOURCE_LINK__|$PORTABLE_SOURCE_LINK|g" "$CANDIDATE_DIR/flake.nix"
 
 (
   cd "$CANDIDATE_DIR"
@@ -213,7 +224,8 @@ jq -e '
 ' "$WORK_DIR/validation.json" >/dev/null
 
 jq -e '.schema == "nixome.qubes-topology.v1"' "$WORK_DIR/topology.json" >/dev/null
-jq -e '.schema == "nixome.system.v1"' "$WORK_DIR/system.json" >/dev/null
+jq -e '.schema == "nixome.system.v1" and .dom0.profile.message == "portable-validator-test\n"' \
+  "$WORK_DIR/system.json" >/dev/null
 topology_refs_log="$(jq -r '.checks[] | select(.name == "nix-template-source-refs-dry-run").log' "$WORK_DIR/validation.json")"
 grep -F 'checking nix-domain=nix-native-work.system attr=packages.x86_64-linux.nix-work-system' \
   "$topology_refs_log" >/dev/null

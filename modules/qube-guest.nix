@@ -98,6 +98,12 @@ let
   configStagingTopologySchema = builtins.readFile ../lib/nixome/topology.nix;
   configStagingPrebuiltTemplateSources = lib.generators.toPretty { } nixomePrebuiltTemplateSources;
   haveConfigSeedInputs = nixomeConfigSeedInputs != null;
+  configSeedInputGuestPaths = {
+    nixpkgs = "/etc/nixome/config-seed-inputs/nixpkgs";
+    nixpkgsLibvirt105 = "/etc/nixome/config-seed-inputs/nixpkgs-libvirt_10_5";
+    nixosQubes = "/etc/nixome/config-seed-inputs/nixos-qubes";
+    nixomeSupport = "/etc/nixome/config-seed-inputs/nixome-support";
+  };
   configNixWrapper = pkgs.writeShellScript "nixome-config-nix" ''
     set -eu
 
@@ -213,10 +219,10 @@ let
           exit 1
         fi
         ${pkgs.gnused}/bin/sed -i \
-          -e ${lib.escapeShellArg "s|__NIXOME_NIXPKGS_URL__|path:${if haveConfigSeedInputs then nixomeConfigSeedInputs.nixpkgs else ""}|g"} \
-          -e ${lib.escapeShellArg "s|__NIXPKGS_LIBVIRT_10_5_PATH__|${if haveConfigSeedInputs then nixomeConfigSeedInputs.nixpkgsLibvirt105 or "" else ""}|g"} \
-          -e ${lib.escapeShellArg "s|__NIXOME_NIXOS_QUBES_PATH__|${if haveConfigSeedInputs then nixomeConfigSeedInputs.nixosQubes else ""}|g"} \
-          -e ${lib.escapeShellArg "s|__NIXOME_SUPPORT_PATH__|${if haveConfigSeedInputs then nixomeConfigSeedInputs.nixomeSupport else ""}|g"} \
+          -e ${lib.escapeShellArg "s|__NIXOME_NIXPKGS_URL__|path:${configSeedInputGuestPaths.nixpkgs}|g"} \
+          -e ${lib.escapeShellArg "s|__NIXPKGS_LIBVIRT_10_5_PATH__|${configSeedInputGuestPaths.nixpkgsLibvirt105}|g"} \
+          -e ${lib.escapeShellArg "s|__NIXOME_NIXOS_QUBES_PATH__|${configSeedInputGuestPaths.nixosQubes}|g"} \
+          -e ${lib.escapeShellArg "s|__NIXOME_SUPPORT_PATH__|${configSeedInputGuestPaths.nixomeSupport}|g"} \
           flake.nix
         ${pkgs.git}/bin/git add \
           README.md \

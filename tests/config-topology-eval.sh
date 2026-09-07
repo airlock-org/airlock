@@ -43,6 +43,8 @@ QREXEC_POLICY_DAEMON_REQUIRES_JSON="$WORK_DIR/qrexec-policy-daemon-requires.json
 QREXEC_POLICY_DAEMON_EXECSTART_JSON="$WORK_DIR/qrexec-policy-daemon-execstart.json"
 CONFIG_ACCESS_POLICY_PKG="$WORK_DIR/config-access-policy-package"
 CONFIG_ACCESS_POLICY_FILE="$WORK_DIR/30-nixome-config.policy"
+GUEST_STAGING_INIT_PKG="$WORK_DIR/guest-staging-init-package"
+GUEST_STAGING_INIT_SCRIPT="$WORK_DIR/guest-staging-init.sh"
 
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
@@ -97,6 +99,15 @@ in
   builtins.head matches
 ' --no-link --print-out-paths > "$CONFIG_ACCESS_POLICY_PKG"
 cp "$(nixome_physical_store_path "$(cat "$CONFIG_ACCESS_POLICY_PKG")")/etc/qubes/policy.d/30-nixome-config.policy" "$CONFIG_ACCESS_POLICY_FILE"
+nix build --impure --expr '
+let
+  packages = (builtins.getFlake "git+file://'"$ROOT"'").nixosConfigurations."nixome-domain-config-staging".config.environment.systemPackages;
+  matches = builtins.filter (package: package.name == "nixome-config-staging-init") packages;
+in
+  builtins.head matches
+' --no-link --print-out-paths > "$GUEST_STAGING_INIT_PKG"
+cp "$(nixome_physical_store_path "$(cat "$GUEST_STAGING_INIT_PKG")")/bin/nixome-config-staging-init" \
+  "$GUEST_STAGING_INIT_SCRIPT"
 
 jq -e '
   ."config-vault".class == "StandaloneVM" and
@@ -170,6 +181,16 @@ jq -e '
 jq -r . "$GUEST_INIT_SCRIPT_JSON" | grep -F 'HOME=/home/user' >/dev/null
 jq -r . "$GUEST_INIT_SCRIPT_JSON" | grep -F 'nixome-config-nix/bin' >/dev/null
 grep -qx '/home/user/.local/share/nixome/nix-root' "$GUEST_CONFIG_NIX_STORE_ROOT"
+grep -F 's|__NIXOME_NIXPKGS_URL__|path:/etc/nixome/config-seed-inputs/nixpkgs|g' \
+  "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
+grep -F 's|__NIXPKGS_LIBVIRT_10_5_PATH__|/etc/nixome/config-seed-inputs/nixpkgs-libvirt_10_5|g' \
+  "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
+grep -F 's|__NIXOME_NIXOS_QUBES_PATH__|/etc/nixome/config-seed-inputs/nixos-qubes|g' \
+  "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
+grep -F 's|__NIXOME_SUPPORT_PATH__|/etc/nixome/config-seed-inputs/nixome-support|g' \
+  "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
+! grep -F 's|__NIXOME_NIXPKGS_URL__|path:/nix/store/' "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
+! grep -F 's|__NIXOME_SUPPORT_PATH__|/nix/store/' "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
 jq -e '. == true' "$GUEST_STAGING_CONFIG_NIX_PACKAGE_JSON" >/dev/null
 jq -e '. == true' "$GUEST_VALIDATOR_CONFIG_NIX_PACKAGE_JSON" >/dev/null
 
