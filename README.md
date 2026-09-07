@@ -144,7 +144,13 @@ the staged config adds a second TemplateVM definition, dom0 builds that
 template package during apply, imports it, creates an AppVM from it, and checks
 qrexec in that AppVM.
 The config topology image keeps local build size down by using one NixOS
-config-system TemplateVM for all three config AppVM roles.
+config-system TemplateVM for all three config AppVM roles. The inside config
+can also customize config-role TemplateVM contents: `configVms.sharedGuest`
+affects the shared template, while `configVms.guests.config-vault`,
+`configVms.guests.config-staging`, and `configVms.guests.config-validator`
+affect the role-specific templates when `configVms.templateMode = "dedicated"`.
+Those guest entries accept `hostName`, `packages`, `etc`, `systemd`,
+`configuration`, and `modules`.
 
 When `/run/media/user/data` is mounted, generated writable VM overlays, logs,
 temporary files, Qubes RPM/template downloads, and Nixome Nix build outputs

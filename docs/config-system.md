@@ -54,6 +54,13 @@ imports whose source packages are built from the same validated candidate
 flake. The default remains `"shared"` to keep nested developer image builds and
 first-boot setup fast.
 
+`configVms.sharedGuest` customizes the shared config-system TemplateVM.
+`configVms.guests.config-vault`, `configVms.guests.config-staging`, and
+`configVms.guests.config-validator` customize the dedicated role TemplateVMs.
+Those guest entries support the same high-level content fields as normal
+template definitions: `hostName`, `packages`, `etc`, `systemd`,
+`configuration`, and `modules`.
+
 The staged config now takes the next step for normal workload templates: it
 defines `nixome-nixos-work` as a NixOS TemplateVM package output and declares
 `nixome-work` as an AppVM based on that template.

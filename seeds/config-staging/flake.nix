@@ -114,8 +114,42 @@
         nixosQubes = nixosQubesSource;
         inherit nixomeSupport;
       };
+      mkGuestContentModule =
+        defaultHostName: definition:
+        let
+          hasCamelHostName = definition ? hostName;
+          hasLowerHostName = definition ? hostname;
+          hostName =
+            if hasCamelHostName then
+              definition.hostName
+            else if hasLowerHostName then
+              definition.hostname
+            else
+              defaultHostName;
+        in
+        { ... }:
+        {
+          networking.hostName = nixpkgs.lib.mkOverride 900 hostName;
+          environment.systemPackages = definition.packages or [ ];
+          environment.etc = definition.etc or { };
+        }
+        // (
+          if definition ? systemd then
+            {
+              systemd = definition.systemd;
+            }
+          else
+            { }
+        );
+      guestExtraModules =
+        definition:
+        (if definition ? configuration then [ definition.configuration ] else [ ])
+        ++ (definition.modules or [ ]);
       mkConfigGuest =
-        role: hostName:
+        role: defaultHostName:
+        let
+          definition = (localConfigVms.guests or { }).${role} or { };
+        in
         nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = {
@@ -133,40 +167,46 @@
               nixpkgs.config.allowUnfreePredicate = allowUnfreePredicate;
               nixome.qubeGuest.enable = true;
               nixome.qubeGuest.role = role;
-              networking.hostName = hostName;
               documentation.enable = nixpkgs.lib.mkDefault false;
               programs.command-not-found.enable = nixpkgs.lib.mkDefault false;
               system.nixos.versionSuffix = nixpkgs.lib.mkForce "";
             }
-          ];
+            (mkGuestContentModule defaultHostName definition)
+          ]
+          ++ guestExtraModules definition;
         };
-      configSystemGuest = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          inherit
-            nixomeConfigSeedInputs
-            ;
-          nixomePrebuiltTemplateSources = prebuiltTemplateSources;
-          nixomePrebuiltTemplatePackages = {
-            work = templateSet.packages.nixome-nixos-work-template;
+      configSystemGuest =
+        let
+          definition = localConfigVms.sharedGuest or { };
+        in
+        nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = {
+            inherit
+              nixomeConfigSeedInputs
+              ;
+            nixomePrebuiltTemplateSources = prebuiltTemplateSources;
+            nixomePrebuiltTemplatePackages = {
+              work = templateSet.packages.nixome-nixos-work-template;
+            };
           };
+          modules = [
+            "${nixpkgs}/nixos/modules/profiles/minimal.nix"
+            "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
+            "${nixomeSupport}/modules/qube-guest.nix"
+            {
+              nixpkgs.overlays = templateBuilders.qubesOverlays;
+              nixpkgs.config.allowUnfreePredicate = allowUnfreePredicate;
+              nixome.qubeGuest.enable = true;
+              nixome.qubeGuest.role = "config-system";
+              documentation.enable = nixpkgs.lib.mkDefault false;
+              programs.command-not-found.enable = nixpkgs.lib.mkDefault false;
+              system.nixos.versionSuffix = nixpkgs.lib.mkForce "";
+            }
+            (mkGuestContentModule "nixome-config-system-template" definition)
+          ]
+          ++ guestExtraModules definition;
         };
-        modules = [
-          "${nixpkgs}/nixos/modules/profiles/minimal.nix"
-          "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
-          "${nixomeSupport}/modules/qube-guest.nix"
-          {
-            nixpkgs.overlays = templateBuilders.qubesOverlays;
-            nixpkgs.config.allowUnfreePredicate = allowUnfreePredicate;
-            nixome.qubeGuest.enable = true;
-            nixome.qubeGuest.role = "config-system";
-            networking.hostName = "nixome-config-system-template";
-            documentation.enable = nixpkgs.lib.mkDefault false;
-            programs.command-not-found.enable = nixpkgs.lib.mkDefault false;
-            system.nixos.versionSuffix = nixpkgs.lib.mkForce "";
-          }
-        ];
-      };
       configVaultGuest = mkConfigGuest "config-vault" "nixome-config-vault-template";
       configStagingGuest = mkConfigGuest "config-staging" "nixome-config-staging-template";
       configValidatorGuest = mkConfigGuest "config-validator" "nixome-config-validator-template";
@@ -322,6 +362,7 @@
           config-staging = configStagingGuest;
           config-validator = configValidatorGuest;
         };
+        configSystemTemplateConfiguration = configSystemGuest;
         templateConfigurations = templateSet.configurations;
         system = machineSystem;
         inherit topology;

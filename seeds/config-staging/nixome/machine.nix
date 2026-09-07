@@ -53,8 +53,19 @@
   # Set templateMode = "dedicated" to make config-vault, config-staging, and
   # config-validator use separate role-specific TemplateVM artifacts built from
   # this same candidate flake.
+  #
+  # sharedGuest customizes the shared nixome-nixos-config-system TemplateVM.
+  # guests.<role> customizes the dedicated role TemplateVMs when templateMode =
+  # "dedicated". Supported guest fields match normal template definitions:
+  # hostName, packages, etc, systemd, configuration, and modules.
   configVms = {
     templateMode = "shared";
+    sharedGuest = { };
+    guests = {
+      config-vault = { };
+      config-staging = { };
+      config-validator = { };
+    };
     domains = { };
   };
 

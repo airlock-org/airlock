@@ -23,6 +23,14 @@ LOCAL_TEMPLATE_DERIVATION="$RESULT_DIR/local-template-derivation.txt"
 CONFIG_VAULT_TEMPLATE_DERIVATION="$RESULT_DIR/config-vault-template-derivation.txt"
 CONFIG_STAGING_TEMPLATE_DERIVATION="$RESULT_DIR/config-staging-template-derivation.txt"
 CONFIG_VALIDATOR_TEMPLATE_DERIVATION="$RESULT_DIR/config-validator-template-derivation.txt"
+CONFIG_SHARED_GUEST_HOSTNAME="$RESULT_DIR/config-shared-guest-hostname.txt"
+CONFIG_SHARED_GUEST_ETC="$RESULT_DIR/config-shared-guest-etc.txt"
+CONFIG_VAULT_GUEST_ETC="$RESULT_DIR/config-vault-guest-etc.txt"
+CONFIG_STAGING_GUEST_ETC="$RESULT_DIR/config-staging-guest-etc.txt"
+CONFIG_STAGING_GUEST_CONFIGURATION="$RESULT_DIR/config-staging-guest-configuration.txt"
+CONFIG_STAGING_GUEST_PACKAGE="$RESULT_DIR/config-staging-guest-package.json"
+CONFIG_VALIDATOR_GUEST_HOSTNAME="$RESULT_DIR/config-validator-guest-hostname.txt"
+CONFIG_VALIDATOR_GUEST_SERVICE="$RESULT_DIR/config-validator-guest-service.txt"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -321,6 +329,32 @@ cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
 
   configVms = {
     templateMode = "dedicated";
+    sharedGuest = {
+      hostName = "nixome-config-system-custom";
+      etc."nixome/config-role-content".text = "shared\n";
+    };
+    guests = {
+      config-vault = {
+        etc."nixome/config-role-content".text = "vault\n";
+      };
+      config-staging = {
+        packages = with pkgs; [
+          ripgrep
+        ];
+        etc."nixome/config-role-content".text = "staging\n";
+        configuration = {
+          environment.etc."nixome/config-role-configuration".text = "staging-configuration\n";
+        };
+      };
+      config-validator = {
+        hostName = "nixome-validator-custom";
+        systemd.services.nixome-validator-fixture = {
+          description = "Nixome validator role fixture";
+          serviceConfig.Type = "oneshot";
+          script = "${pkgs.coreutils}/bin/true";
+        };
+      };
+    };
     domains = {
       config-vault.prefs.memory = 1536;
       config-staging.label = "yellow";
@@ -452,6 +486,87 @@ nix \
   --derivation \
   "$WORK_DIR#packages.x86_64-linux.nixome-nixos-config-validator-template" \
   > "$CONFIG_VALIDATOR_TEMPLATE_DERIVATION"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixome.configSystemTemplateConfiguration.config.networking.hostName" \
+  > "$CONFIG_SHARED_GUEST_HOSTNAME"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixome.configSystemTemplateConfiguration.config.environment.etc.\"nixome/config-role-content\".text" \
+  > "$CONFIG_SHARED_GUEST_ETC"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixome.configRoleTemplateConfigurations.config-vault.config.environment.etc.\"nixome/config-role-content\".text" \
+  > "$CONFIG_VAULT_GUEST_ETC"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixome.configRoleTemplateConfigurations.config-staging.config.environment.etc.\"nixome/config-role-content\".text" \
+  > "$CONFIG_STAGING_GUEST_ETC"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixome.configRoleTemplateConfigurations.config-staging.config.environment.etc.\"nixome/config-role-configuration\".text" \
+  > "$CONFIG_STAGING_GUEST_CONFIGURATION"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json \
+  --apply 'packages: builtins.any (package: (package.pname or package.name or "") == "ripgrep") packages' \
+  "$WORK_DIR#nixome.configRoleTemplateConfigurations.config-staging.config.environment.systemPackages" \
+  > "$CONFIG_STAGING_GUEST_PACKAGE"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixome.configRoleTemplateConfigurations.config-validator.config.networking.hostName" \
+  > "$CONFIG_VALIDATOR_GUEST_HOSTNAME"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixome.configRoleTemplateConfigurations.config-validator.config.systemd.services.nixome-validator-fixture.description" \
+  > "$CONFIG_VALIDATOR_GUEST_SERVICE"
 
 grep -qx initial-extra "$EXTRA_HOST_MESSAGE"
 grep -qx "Nixome local extra module fixture" "$EXTRA_HOST_SERVICE"
@@ -462,6 +577,14 @@ grep -qx dev-configuration "$LOCAL_TEMPLATE_CONFIGURATION"
 [ -s "$CONFIG_VAULT_TEMPLATE_DERIVATION" ]
 [ -s "$CONFIG_STAGING_TEMPLATE_DERIVATION" ]
 [ -s "$CONFIG_VALIDATOR_TEMPLATE_DERIVATION" ]
+grep -qx nixome-config-system-custom "$CONFIG_SHARED_GUEST_HOSTNAME"
+grep -qx shared "$CONFIG_SHARED_GUEST_ETC"
+grep -qx vault "$CONFIG_VAULT_GUEST_ETC"
+grep -qx staging "$CONFIG_STAGING_GUEST_ETC"
+grep -qx staging-configuration "$CONFIG_STAGING_GUEST_CONFIGURATION"
+jq -e '. == true' "$CONFIG_STAGING_GUEST_PACKAGE" >/dev/null
+grep -qx nixome-validator-custom "$CONFIG_VALIDATOR_GUEST_HOSTNAME"
+grep -qx "Nixome validator role fixture" "$CONFIG_VALIDATOR_GUEST_SERVICE"
 jq -e '
   .schema == "nixome.qubes-topology.v1" and
   .templates."nixome-nixos-config-vault".import == true and
