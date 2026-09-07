@@ -38,6 +38,7 @@ MATERIALIZATIONS_LOG="$LOG_DIR/nix-closure-domain-materializations.json"
 BUILDS_LOG="$LOG_DIR/nix-closure-domain-builds.json"
 SETUP_LOG="$LOG_DIR/nix-closure-domain-setup.json"
 POLICY_LOG="$LOG_DIR/nix-closure-domain-policy.log"
+QUBES_XML_LOG="$LOG_DIR/nix-closure-domain-qubes.xml"
 
 DOMAIN="${NIXOME_NIX_CLOSURE_DOMAIN:-nixome-closure-smoke}"
 STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
@@ -195,6 +196,7 @@ write_result() {
 
 collect_diagnostics() {
   qvm-ls --raw-data --fields NAME,STATE,CLASS,LABEL,TEMPLATE > "$QVM_LS_LOG" 2>&1 || true
+  cp /var/lib/qubes/qubes.xml "$QUBES_XML_LOG" 2>/dev/null || true
   if qvm-check "$DOMAIN" >/dev/null 2>&1; then
     qvm-prefs "$DOMAIN" > "$QVM_PREFS_LOG" 2>&1 || true
     qvm-features "$DOMAIN" > "$QVM_FEATURES_LOG" 2>&1 || true

@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import shutil
+import subprocess
 import sys
 
 
@@ -33,6 +34,37 @@ def load_qubes():
     return qubes
 
 
+def systemctl_available():
+    return shutil.which("systemctl") is not None
+
+
+def qubesd_is_active():
+    forced = os.environ.get("NIXOME_NIX_DOMAIN_STORAGE_QUBESD_ACTIVE")
+    if forced is not None:
+        return forced in ("1", "true", "yes")
+    if not systemctl_available():
+        return False
+    return (
+        subprocess.run(
+            ["systemctl", "is-active", "--quiet", "qubesd.service"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+def run_systemctl(action):
+    subprocess.run(
+        ["systemctl", action, "qubesd.service"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
+        timeout=60,
+    )
+
+
 async def import_image(vm, volume_name, image_path):
     size = os.stat(image_path).st_size
     import_path = await maybe_await(vm.storage.import_data(volume_name, size))
@@ -45,29 +77,67 @@ async def import_image(vm, volume_name, image_path):
         await maybe_await(vm.storage.import_data_end(volume_name, success))
 
 
-async def ensure_store(domain, image_path, source):
-    qubes = load_qubes()
+def volume_needs_mutation(vm, image_path, source):
+    image_size = os.stat(image_path).st_size
+    existing_source = vm.features.get("nixome-store-source", None)
+    if "store" not in vm.volumes:
+        return True
+    store_volume = vm.volumes["store"]
+    return (
+        existing_source != source
+        or bool(store_volume.rw)
+        or int(store_volume.size) != int(image_size)
+    )
 
-    if not os.path.isfile(image_path):
-        fail(f"store image does not exist: {image_path}")
 
-    app = qubes.Qubes()
-    if domain not in app.domains:
-        fail(f"domain does not exist: {domain}")
-
-    vm = app.domains[domain]
+def validate_vm(vm, domain):
     vm_class = getattr(vm, "klass", vm.__class__.__name__)
     if vm_class != "StandaloneVM":
         fail(f"domain is not a StandaloneVM: {domain}")
-
     if vm.storage is None:
+        import qubes.storage
+
         vm.storage = qubes.storage.Storage(vm)
+
+
+def validate_store_volume(vm, domain, image_path):
+    image_size = os.stat(image_path).st_size
+    if "store" not in vm.volumes:
+        fail(f"store volume was not persisted for domain: {domain}")
+    store_volume = vm.volumes["store"]
+    if store_volume.snap_on_start:
+        fail(f"store volume must not use snap_on_start: {domain}")
+    if not store_volume.save_on_stop:
+        fail(f"store volume must use save_on_stop: {domain}")
+    if store_volume.source is not None:
+        fail(f"store volume must not have a source volume: {domain}")
+    if store_volume.rw:
+        fail(f"store volume must be read-only after import: {domain}")
+    if int(store_volume.size) != int(image_size):
+        fail(
+            "store volume size does not match imported image for "
+            f"{domain}: {store_volume.size} != {image_size}"
+        )
+
+
+def load_domain(qubes, domain):
+    app = qubes.Qubes()
+    if domain not in app.domains:
+        fail(f"domain does not exist: {domain}")
+    vm = app.domains[domain]
+    validate_vm(vm, domain)
+    return app, vm
+
+
+async def ensure_store_loaded(qubes, domain, image_path, source):
+    app, vm = load_domain(qubes, domain)
 
     image_size = os.stat(image_path).st_size
     existing_source = vm.features.get("nixome-store-source", None)
     volume_created = False
     metadata_changed = False
     image_imported = False
+    size_changed = False
 
     if "store" not in vm.volumes:
         if vm.is_running():
@@ -91,6 +161,7 @@ async def ensure_store(domain, image_path, source):
         metadata_changed = True
     else:
         store_volume = vm.volumes["store"]
+        size_changed = int(store_volume.size) != int(image_size)
         if store_volume.snap_on_start:
             fail(f"store volume must not use snap_on_start: {domain}")
         if not store_volume.save_on_stop:
@@ -98,7 +169,7 @@ async def ensure_store(domain, image_path, source):
         if store_volume.source is not None:
             fail(f"store volume must not have a source volume: {domain}")
 
-    should_import = volume_created or existing_source != source
+    should_import = volume_created or existing_source != source or size_changed
     if should_import:
         if vm.is_running():
             fail(f"store image changed but domain is running: {domain}")
@@ -122,7 +193,12 @@ async def ensure_store(domain, image_path, source):
         metadata_changed = True
 
     if metadata_changed or image_imported:
-        app.save()
+        app.save(lock=False)
+
+    verify_app, verify_vm = load_domain(qubes, domain)
+    validate_store_volume(verify_vm, domain, image_path)
+    verify_app.close()
+    app.close()
 
     result = {
         "schema": "nixome.nix-domain-storage.v1",
@@ -135,7 +211,39 @@ async def ensure_store(domain, image_path, source):
         "image_imported": image_imported,
         "metadata_changed": metadata_changed,
         "qubesd_restart_required": metadata_changed or image_imported,
+        "qubesd_restarted": False,
     }
+    return result
+
+
+async def ensure_store(domain, image_path, source):
+    qubes = load_qubes()
+
+    if not os.path.isfile(image_path):
+        fail(f"store image does not exist: {image_path}")
+
+    app, vm = load_domain(qubes, domain)
+    needs_mutation = volume_needs_mutation(vm, image_path, source)
+    app.close()
+
+    qubesd_was_active = False
+    qubesd_stopped = False
+    if needs_mutation:
+        qubesd_was_active = qubesd_is_active()
+        if qubesd_was_active:
+            run_systemctl("stop")
+            qubesd_stopped = True
+
+    try:
+        result = await ensure_store_loaded(qubes, domain, image_path, source)
+    finally:
+        if qubesd_stopped:
+            run_systemctl("start")
+
+    if qubesd_stopped:
+        result["qubesd_restart_required"] = False
+        result["qubesd_restarted"] = True
+    result["qubesd_was_active"] = qubesd_was_active
     print(json.dumps(result, sort_keys=True))
 
 

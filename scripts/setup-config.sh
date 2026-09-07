@@ -895,7 +895,10 @@ install_nix_domain_store() {
       record_live_action domain-store import "$domain" source "$store_source"
     fi
 
-    if printf '%s\n' "$helper_output" | jq -e '.qubesd_restart_required == true' >/dev/null; then
+    if printf '%s\n' "$helper_output" | jq -e '.qubesd_restarted == true' >/dev/null; then
+      qubesd_restarts=$((qubesd_restarts + 1))
+      record_live_action systemd restart "" service qubesd.service
+    elif printf '%s\n' "$helper_output" | jq -e '.qubesd_restart_required == true' >/dev/null; then
       restart_qubesd_after_storage_change
     fi
   else

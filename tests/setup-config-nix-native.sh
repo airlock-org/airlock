@@ -189,7 +189,7 @@ cat > "$BIN_DIR/nixome-nix-domain-storage" <<'EOF'
 #!/usr/bin/env bash
 printf 'nixome-nix-domain-storage %s\n' "$*" >> "$MUTATION_LOG"
 cat <<JSON
-{"schema":"nixome.nix-domain-storage.v1","domain":"$2","volume":"store","image":"$3","source":"$4","read_only":true,"volume_created":true,"image_imported":true,"metadata_changed":true,"qubesd_restart_required":true}
+{"schema":"nixome.nix-domain-storage.v1","domain":"$2","volume":"store","image":"$3","source":"$4","read_only":true,"volume_created":true,"image_imported":true,"metadata_changed":true,"qubesd_restart_required":false,"qubesd_restarted":true}
 JSON
 EOF
 
@@ -247,7 +247,8 @@ jq -e '
   .unsupported_domains_count == 0 and
   any(.live_actions[]; .type == "domain-root" and .action == "import" and .domain == "nix-native-work") and
   any(.live_actions[]; .type == "domain-store" and .action == "import" and .domain == "nix-native-work") and
-  any(.live_actions[]; .type == "domain-store-volume" and .action == "create" and .domain == "nix-native-work")
+  any(.live_actions[]; .type == "domain-store-volume" and .action == "create" and .domain == "nix-native-work") and
+  any(.live_actions[]; .type == "systemd" and .action == "restart" and .field == "service" and .value == "qubesd.service")
 ' "$APPLY_LOG_DIR/setup-config.json" >/dev/null
 
 grep -Fx 'qvm-create --class AppVM --label red --template fedora-44-xfce legacy-fedora-app' "$MUTATION_LOG" >/dev/null

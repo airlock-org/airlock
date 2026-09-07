@@ -16,6 +16,8 @@ IMAGE="$WORK_DIR/store.img"
 IMPORT_PATH="$WORK_DIR/import-target.img"
 SAVE_JSON="$RESULT_DIR/fake-qubes-save.json"
 OUTPUT_JSON="$RESULT_DIR/helper-output.json"
+SYSTEMCTL_LOG="$RESULT_DIR/systemctl.log"
+STATE_JSON="$WORK_DIR/fake-qubes-state.json"
 
 printf 'nixome-store-image\n' > "$IMAGE"
 
@@ -110,29 +112,60 @@ class VM:
 class Qubes:
     def __init__(self):
         domain = os.environ["NIXOME_FAKE_QUBES_DOMAIN"]
-        self.domains = {domain: VM(domain)}
+        state = os.environ["NIXOME_FAKE_QUBES_STATE_JSON"]
+        vm = VM(domain)
+        if os.path.exists(state):
+            with open(state, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            vm.volumes = {
+                name: storage.Volume(config)
+                for name, config in data["volumes"].items()
+            }
+            vm.volume_config = {
+                name: volume.as_json()
+                for name, volume in vm.volumes.items()
+            }
+        self.domains = {domain: vm}
 
-    def save(self):
+    def save(self, lock=True):
         domain, vm = next(iter(self.domains.items()))
+        payload = {
+            "domain": domain,
+            "volumes": {
+                name: volume.as_json()
+                for name, volume in sorted(vm.volumes.items())
+            },
+            "events": vm.events,
+        }
         with open(os.environ["NIXOME_FAKE_QUBES_SAVE_JSON"], "w", encoding="utf-8") as handle:
-            json.dump(
-                {
-                    "domain": domain,
-                    "volumes": {
-                        name: volume.as_json()
-                        for name, volume in sorted(vm.volumes.items())
-                    },
-                    "events": vm.events,
-                },
-                handle,
-                sort_keys=True,
-            )
+            json.dump(payload, handle, sort_keys=True)
+        with open(os.environ["NIXOME_FAKE_QUBES_STATE_JSON"], "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, sort_keys=True)
+
+    def close(self):
+        return None
 PY
 
-PYTHONPATH="$WORK_DIR/fake" \
+mkdir -p "$WORK_DIR/bin"
+cat > "$WORK_DIR/bin/systemctl" <<'EOF'
+#!/usr/bin/env bash
+printf 'systemctl %s\n' "$*" >> "$NIXOME_FAKE_SYSTEMCTL_LOG"
+case "$1" in
+  is-active|stop|start)
+    exit 0
+    ;;
+esac
+exit 1
+EOF
+chmod 0755 "$WORK_DIR/bin/systemctl"
+
+PATH="$WORK_DIR/bin:$PATH" \
+  PYTHONPATH="$WORK_DIR/fake" \
   NIXOME_FAKE_QUBES_DOMAIN=nix-native-work \
   NIXOME_FAKE_QUBES_IMPORT_PATH="$IMPORT_PATH" \
   NIXOME_FAKE_QUBES_SAVE_JSON="$SAVE_JSON" \
+  NIXOME_FAKE_QUBES_STATE_JSON="$STATE_JSON" \
+  NIXOME_FAKE_SYSTEMCTL_LOG="$SYSTEMCTL_LOG" \
   python3 "$ROOT/scripts/nix-domain-storage.py" \
     ensure-store nix-native-work "$IMAGE" /nix/store/example-source \
     > "$OUTPUT_JSON"
@@ -145,7 +178,9 @@ jq -e '
   .volume_created == true and
   .image_imported == true and
   .metadata_changed == true and
-  .qubesd_restart_required == true
+  .qubesd_restart_required == false and
+  .qubesd_restarted == true and
+  .qubesd_was_active == true
 ' "$OUTPUT_JSON" >/dev/null
 
 cmp -s "$IMAGE" "$IMPORT_PATH"
@@ -162,5 +197,12 @@ jq -e '
     ["import_data_end", "store", true]
   ]
 ' "$SAVE_JSON" >/dev/null
+
+cat > "$RESULT_DIR/expected-systemctl.log" <<'EOF'
+systemctl is-active --quiet qubesd.service
+systemctl stop qubesd.service
+systemctl start qubesd.service
+EOF
+cmp -s "$RESULT_DIR/expected-systemctl.log" "$SYSTEMCTL_LOG"
 
 printf 'nix-domain storage helper test ok\n'
