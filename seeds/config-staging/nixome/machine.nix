@@ -52,10 +52,9 @@
   #
   domains = { };
 
-  # Declare Nix-native domains here. The current materializer creates a Qubes
-  # StandaloneVM from a Nix-built root image and records the immutable system
-  # closure plus read-only store image metadata. The longer-term storage backend
-  # will mount that store image directly as /nix/store.
+  # Declare Nix-native domains here. The materializer creates a Qubes
+  # StandaloneVM from a small Nixome root image plus a separate read-only Nix
+  # store closure image mounted at /nix/store during early boot.
   #
   # nixNative.domains.work-nix = {
   #   label = "green";

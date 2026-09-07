@@ -487,12 +487,14 @@ let
           "sourceRef"
           "source_ref"
           "mountpoint"
+          "device"
           "readOnly"
           "read_only"
         ] value;
         mode = expectEnum "${path}.mode" [ "closure-image" ] (get store "mode" "closure-image");
         sourceInfo = normalizeSourceOption path store;
         mountpoint = expectStringOrPath "${path}.mountpoint" (get store "mountpoint" "/nix/store");
+        device = expectStringOrPath "${path}.device" (get store "device" "/dev/xvde");
         hasCamelReadOnly = hasAttr "readOnly" store;
         hasSnakeReadOnly = hasAttr "read_only" store;
         camelReadOnly = if hasCamelReadOnly then expectBool "${path}.readOnly" store.readOnly else null;
@@ -512,13 +514,15 @@ let
       in
       if mountpoint != "/nix/store" then
         fail "${path}.mountpoint" "currently must be /nix/store"
+      else if device != "/dev/xvde" then
+        fail "${path}.device" "currently must be /dev/xvde"
       else if readOnly != true then
         fail path "nix-closure store views must be read-only"
       else if !(sourceIsSet sourceInfo) then
         fail "${path}.source" "must be set for closure-image stores"
       else
         {
-          inherit mode mountpoint;
+          inherit mode mountpoint device;
           read_only = readOnly;
           inherit (sourceInfo) source source_ref;
         };

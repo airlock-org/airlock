@@ -133,6 +133,7 @@
           "prefs"
           "services"
           "systemd"
+          "rootImageSizeMiB"
         ] (expectNixNativeAttrs path value);
       checkedNixNative =
         let
@@ -319,8 +320,9 @@
             (mkGuestContentModule name definition)
           ]
           ++ guestExtraModules definition;
-          additionalRootSpace = definition.additionalRootSpace or "1024M";
+          additionalRootSpace = definition.additionalRootSpace or null;
           additionalStoreSpaceMiB = definition.additionalStoreSpaceMiB or 256;
+          rootImageSizeMiB = definition.rootImageSizeMiB or 512;
           kernelName = definition.kernel or nixomeQubeKernelName;
           label = definition.label or "green";
           netvm = definition.netvm or null;

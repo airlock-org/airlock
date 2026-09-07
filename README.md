@@ -141,11 +141,12 @@ the same definition also declares Qubes TemplateVM/AppVM defaults. The
 candidate flake exposes both the template package source reference and
 `nixome.templateConfigurations` for direct evaluation.
 `nixNative.domains.<domain-name>` entries declare Nix-native domains. The
-current implementation builds a NixOS guest system, a Qubes-compatible root
-image, and a read-only store closure image; dom0 applies that as a Qubes
-StandaloneVM by importing the root image and recording the system/store
-materialization metadata. The store image is not yet mounted as `/nix/store`;
-that is the next storage milestone.
+implementation builds a NixOS guest system, a small Qubes-compatible root image,
+and a separate read-only store closure image. dom0 applies that as a Qubes
+StandaloneVM by importing the root image, creating/importing a `store` volume,
+and booting with `/sbin/init` mounting that volume read-only at `/nix/store`
+before the real NixOS init starts. The store image is laid out so its filesystem
+root is the `/nix/store` contents, not a nested `/nix/store` directory.
 `make vm-config-template-flow` runs the heavier version of the nested proof:
 the staged config adds a second TemplateVM definition, dom0 builds that
 template package during apply, imports it, creates an AppVM from it, and checks

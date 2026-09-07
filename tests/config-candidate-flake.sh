@@ -753,6 +753,7 @@ jq -e '
   .domains."nix-native-work".backend.root.mode == "qubes-root-image" and
   .domains."nix-native-work".backend.store.source == "dom0-profile" and
   .domains."nix-native-work".backend.store.mode == "closure-image" and
+  .domains."nix-native-work".backend.store.device == "/dev/xvde" and
   .domains."nix-native-work".backend.store.read_only == true and
   .domains."nix-native-generated".class == "StandaloneVM" and
   .domains."nix-native-generated".template == null and
@@ -768,7 +769,11 @@ jq -e '
   .domains."nix-native-generated".backend.root.source_ref.attr == "packages.x86_64-linux.nixome-domain-nix-native-generated-root-image" and
   .domains."nix-native-generated".backend.root.source_ref.subpath == "root.img" and
   .domains."nix-native-generated".backend.store.source_ref.attr == "packages.x86_64-linux.nixome-domain-nix-native-generated-store-image" and
-  .domains."nix-native-generated".backend.store.source_ref.subpath == "store.img"
+  .domains."nix-native-generated".backend.store.source_ref.subpath == "store.img" and
+  .domains."nix-native-generated".backend.store.device == "/dev/xvde" and
+  .domains."nix-native-generated".backend.store.read_only == true and
+  (.domains."nix-native-generated".prefs.kernelopts | contains("nixome.system=/nix/store/")) and
+  (.domains."nix-native-generated".prefs.kernelopts | contains("nixome.storedev=/dev/xvde"))
 ' "$LOCAL_TOPOLOGY_JSON" >/dev/null
 
 jq -e '

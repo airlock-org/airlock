@@ -239,6 +239,12 @@
         system:
         let
           pkgs = pkgsFor system;
+          templateBuilders = import ./lib/nixome/qube-template.nix {
+            inherit nixpkgs system;
+            nixpkgsLibvirt105Source = "${nixpkgs-libvirt_10_5}";
+            nixomeSupport = "${self}";
+            nixosQubesSource = "${nixos-qubes}";
+          };
           stagedTemplateSet = mkStagedTemplateSet system;
           configSystemRootImage = mkQubeRootImage system {
             configuration = self.nixosConfigurations.qube-template-config-system;
@@ -279,6 +285,17 @@
             };
             kernelVersion = "6.12.64-1";
             fedoraVersion = "fc41";
+          };
+          nixome-nix-closure-root-image-test = templateBuilders.mkNixClosureRootImage {
+            imageName = "nixome-nix-closure-root-image-test";
+            rootImageSizeMiB = 64;
+          };
+          nixome-nix-closure-store-image-test = templateBuilders.mkNixStoreClosureImage {
+            name = "nixome-nix-closure-store-image-test";
+            rootPaths = [
+              (pkgs.writeText "nixome-store-image-test-root" "nixome-store-image-test\n")
+            ];
+            additionalSpaceMiB = 16;
           };
           nixome-nixos-config-system-root-image = configSystemRootImage;
           nixome-nixos-config-system-template = mkQubesTemplatePackage system {

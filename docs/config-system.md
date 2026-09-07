@@ -138,12 +138,17 @@ backend.
 
 The active implementation is a Qubes-compatible bridge. A `nix-closure` domain
 is created as a Qubes `StandaloneVM`; dom0 resolves the declared Nix system,
-root image, and store image sources, imports the root image into the Qubes
-`domain:root` volume, then applies prefs, features, services, networking, and
-Nixome-owned qrexec policy. The imported root volume is writable because that
-is the current Qubes boot path. The separate read-only store image is built,
-validated, and recorded as deployment metadata, but it is not mounted as
-`/nix/store` yet.
+small root image, and store image sources, imports the root image into the
+Qubes `domain:root` volume, creates/imports a separate Qubes `store` volume,
+then applies prefs, features, services, networking, and Nixome-owned qrexec
+policy. The root volume remains writable Qubes state. The `store` volume is
+persisted read-only in `qubes.xml`, attached by Qubes as an ordinary block
+volume, and mounted at `/nix/store` by the early `/sbin/init` bootstrap before
+the real NixOS init runs. Today the topology is constrained to `/dev/xvde`,
+which matches Qubes' first non-standard Xen block-device slot when `store` is
+the first extra VM volume. The store image's filesystem root is the store
+contents themselves, so mounting the volume at `/nix/store` exposes normal
+paths like `/nix/store/<hash>-name`.
 
 The high-level staged edit surface for this path is:
 

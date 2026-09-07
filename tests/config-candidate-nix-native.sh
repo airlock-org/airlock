@@ -9,6 +9,7 @@ WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nixome-config-candidate-nix-native.XXXXXX
 TOPOLOGY_JSON="$RESULT_DIR/topology.json"
 HOSTNAME_TXT="$RESULT_DIR/hostname.txt"
 ETC_TXT="$RESULT_DIR/etc.txt"
+RUNTIME_CHECK="$RESULT_DIR/runtime-check.sh"
 INVALID_LOG="$RESULT_DIR/invalid.log"
 
 rm -rf "$RESULT_DIR"
@@ -93,9 +94,23 @@ nix \
   --raw \
   "$WORK_DIR#nixosConfigurations.nixome-domain-nix-native-generated.config.environment.etc.\"nixome/nix-native-role\".text" \
   > "$ETC_TXT"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixosConfigurations.nixome-domain-nix-native-generated.config.environment.etc.\"qubes-rpc/nixome.NixStoreRuntimeCheck\".text" \
+  > "$RUNTIME_CHECK"
 
 grep -qx nix-native-generated "$HOSTNAME_TXT"
 grep -qx generated "$ETC_TXT"
+grep -Fq "sed -n 's|^nixome.storedev=||p'" "$RUNTIME_CHECK"
+grep -Fq 'mount_source="$(findmnt -rn -T /nix/store -o SOURCE)"' "$RUNTIME_CHECK"
+grep -Fq 'case ",$mount_options," in' "$RUNTIME_CHECK"
+grep -Fq '*,ro,*)' "$RUNTIME_CHECK"
 jq -e '
   .domains."nix-native-generated".class == "StandaloneVM" and
   .domains."nix-native-generated".template == null and
@@ -113,7 +128,12 @@ jq -e '
   .domains."nix-native-generated".backend.root.source_ref.subpath == "root.img" and
   .domains."nix-native-generated".backend.store.mode == "closure-image" and
   .domains."nix-native-generated".backend.store.source_ref.attr == "packages.x86_64-linux.nixome-domain-nix-native-generated-store-image" and
-  .domains."nix-native-generated".backend.store.source_ref.subpath == "store.img"
+  .domains."nix-native-generated".backend.store.source_ref.subpath == "store.img" and
+  .domains."nix-native-generated".backend.store.mountpoint == "/nix/store" and
+  .domains."nix-native-generated".backend.store.device == "/dev/xvde" and
+  .domains."nix-native-generated".backend.store.read_only == true and
+  (.domains."nix-native-generated".prefs.kernelopts | contains("nixome.system=/nix/store/")) and
+  (.domains."nix-native-generated".prefs.kernelopts | contains("nixome.storedev=/dev/xvde"))
 ' "$TOPOLOGY_JSON" >/dev/null
 
 cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'

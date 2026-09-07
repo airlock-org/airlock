@@ -43,6 +43,24 @@ cat > "$TOPOLOGY" <<EOF
   "templates": {},
   "kernels": {},
   "domains": {
+    "legacy-fedora-app": {
+      "class": "AppVM",
+      "template": "fedora-44-xfce",
+      "label": "red",
+      "netvm": null,
+      "prefs": {
+        "autostart": false
+      },
+      "features": {
+        "nixome-managed": "1",
+        "nixome-role": "legacy-fedora-app"
+      },
+      "services": {},
+      "backend": {
+        "type": "qubes-template",
+        "template": "fedora-44-xfce"
+      }
+    },
     "nix-native-work": {
       "class": "StandaloneVM",
       "template": null,
@@ -167,6 +185,14 @@ exit 97
 EOF
 done
 
+cat > "$BIN_DIR/nixome-nix-domain-storage" <<'EOF'
+#!/usr/bin/env bash
+printf 'nixome-nix-domain-storage %s\n' "$*" >> "$MUTATION_LOG"
+cat <<JSON
+{"schema":"nixome.nix-domain-storage.v1","domain":"$2","volume":"store","image":"$3","source":"$4","read_only":true,"volume_created":true,"image_imported":true,"metadata_changed":true,"qubesd_restart_required":true}
+JSON
+EOF
+
 chmod 0755 "$BIN_DIR"/*
 
 PATH="$BIN_DIR:$PATH" \
@@ -183,14 +209,21 @@ jq -e '
   .schema == "nixome.setup-config.v1" and
   .status == "passed" and
   .mode == "plan" and
-  .domains_changed == 1 and
+  .domains_changed == 2 and
   .root_images_changed == 1 and
+  .store_volumes_changed == 1 and
+  .store_images_changed == 1 and
   .unsupported_domains_count == 0
 ' "$PLAN_LOG_DIR/setup-config.json" >/dev/null
 grep -F '+ qvm-create --class StandaloneVM --label green nix-native-work' \
   "$PLAN_LOG_DIR/setup-config.commands.log" >/dev/null
+grep -F '+ qvm-create --class AppVM --label red --template fedora-44-xfce legacy-fedora-app' \
+  "$PLAN_LOG_DIR/setup-config.commands.log" >/dev/null
 grep -F "+ qvm-volume import nix-native-work:root $ROOT_IMAGE" \
   "$PLAN_LOG_DIR/setup-config.commands.log" >/dev/null
+grep -F "+ nixome-nix-domain-storage ensure-store nix-native-work $STORE_IMAGE $STORE_SOURCE" \
+  "$PLAN_LOG_DIR/setup-config.commands.log" >/dev/null
+[ "$(grep -c '^+ nixome-nix-domain-storage ensure-store ' "$PLAN_LOG_DIR/setup-config.commands.log")" = "1" ]
 
 PATH="$BIN_DIR:$PATH" \
   MUTATION_LOG="$MUTATION_LOG" \
@@ -206,17 +239,27 @@ jq -e '
   .schema == "nixome.setup-config.v1" and
   .status == "passed" and
   .mode == "apply" and
-  .domains_changed == 1 and
+  .domains_changed == 2 and
   .root_images_changed == 1 and
+  .store_volumes_changed == 1 and
+  .store_images_changed == 1 and
+  .qubesd_restarts == 1 and
   .unsupported_domains_count == 0 and
-  any(.live_actions[]; .type == "domain-root" and .action == "import" and .domain == "nix-native-work")
+  any(.live_actions[]; .type == "domain-root" and .action == "import" and .domain == "nix-native-work") and
+  any(.live_actions[]; .type == "domain-store" and .action == "import" and .domain == "nix-native-work") and
+  any(.live_actions[]; .type == "domain-store-volume" and .action == "create" and .domain == "nix-native-work")
 ' "$APPLY_LOG_DIR/setup-config.json" >/dev/null
 
+grep -Fx 'qvm-create --class AppVM --label red --template fedora-44-xfce legacy-fedora-app' "$MUTATION_LOG" >/dev/null
 grep -Fx 'qvm-create --class StandaloneVM --label green nix-native-work' "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-volume import nix-native-work:root $ROOT_IMAGE" "$MUTATION_LOG" >/dev/null
 grep -Fx 'qvm-prefs nix-native-work kernel 6.12.64-1.fc41' "$MUTATION_LOG" >/dev/null
+grep -Fx "qvm-prefs nix-native-work kernelopts console=hvc0 init=/sbin/init nixome.system=$SYSTEM_SOURCE nixome.storedev=/dev/xvde" "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-features nix-native-work nixome-root-source $ROOT_SOURCE" "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-features nix-native-work nixome-store-source $STORE_SOURCE" "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-features nix-native-work nixome-store-image $STORE_IMAGE" "$MUTATION_LOG" >/dev/null
+grep -Fx "qvm-features nix-native-work nixome-store-device /dev/xvde" "$MUTATION_LOG" >/dev/null
+grep -Fx "nixome-nix-domain-storage ensure-store nix-native-work $STORE_IMAGE $STORE_SOURCE" "$MUTATION_LOG" >/dev/null
+[ "$(grep -c '^nixome-nix-domain-storage ensure-store ' "$MUTATION_LOG")" = "1" ]
 
 printf 'setup-config nix-native materialization test ok\n'

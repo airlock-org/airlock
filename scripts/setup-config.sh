@@ -23,6 +23,7 @@ POLICY_DIR="${NIXOME_QUBES_POLICY_DIR:-/var/lib/nixome/qubes-policy.d}"
 MANAGED_POLICY_FILE="${NIXOME_QUBES_MANAGED_POLICY_FILE:-90-nixome.policy}"
 MANAGED_POLICY_PATH="$POLICY_DIR/$MANAGED_POLICY_FILE"
 RENDERED_POLICY="$LOG_DIR/$MANAGED_POLICY_FILE.rendered"
+NIX_DOMAIN_STORAGE_HELPER="${NIXOME_NIX_DOMAIN_STORAGE_HELPER:-nixome-nix-domain-storage}"
 result_written=0
 
 nixome_store_uses_chroot() {
@@ -99,6 +100,9 @@ services_changed=0
 qrexec_policy_changed=0
 unsupported_domains_count=0
 root_images_changed=0
+store_volumes_changed=0
+store_images_changed=0
+qubesd_restarts=0
 
 json_escape() {
   printf '%s' "$1" | sed \
@@ -114,8 +118,9 @@ json_string() {
 }
 
 json_lines_array() {
-  file="$1"
-  first=1
+  local file="$1"
+  local first=1
+  local line
 
   printf '['
   if [ -s "$file" ]; then
@@ -133,14 +138,14 @@ json_lines_array() {
 }
 
 record_action() {
-  file="$1"
-  type="$2"
-  action="$3"
-  domain="${4:-}"
-  field="${5:-}"
-  value="${6:-}"
-  reason="${7:-}"
-  state="${8:-}"
+  local file="$1"
+  local type="$2"
+  local action="$3"
+  local domain="${4:-}"
+  local field="${5:-}"
+  local value="${6:-}"
+  local reason="${7:-}"
+  local state="${8:-}"
 
   jq -c -n \
     --arg type "$type" \
@@ -167,9 +172,9 @@ record_live_action() {
 }
 
 record_unsupported_domain() {
-  domain="$1"
-  backend="$2"
-  reason="$3"
+  local domain="$1"
+  local backend="$2"
+  local reason="$3"
 
   jq -c -n \
     --arg domain "$domain" \
@@ -190,11 +195,11 @@ domain_state() {
 }
 
 record_domain_restart_if_running() {
-  domain="$1"
-  type="$2"
-  field="$3"
-  value="$4"
-  state=""
+  local domain="$1"
+  local type="$2"
+  local field="$3"
+  local value="$4"
+  local state=""
 
   [ "$APPLY" = "1" ] || return 0
   state="$(domain_state "$domain" || true)"
@@ -238,6 +243,9 @@ write_result() {
     printf ',"services_changed":%s' "$services_changed"
     printf ',"qrexec_policy_changed":%s' "$qrexec_policy_changed"
     printf ',"root_images_changed":%s' "$root_images_changed"
+    printf ',"store_volumes_changed":%s' "$store_volumes_changed"
+    printf ',"store_images_changed":%s' "$store_images_changed"
+    printf ',"qubesd_restarts":%s' "$qubesd_restarts"
     printf ',"live_actions":'
     json_lines_array "$LIVE_ACTIONS_JSONL"
     printf ',"restart_actions":'
@@ -306,6 +314,17 @@ run_or_plan() {
       return "$rc"
     fi
   fi
+}
+
+restart_qubesd_after_storage_change() {
+  printf '+ systemctl try-restart qubesd.service\n'
+
+  if [ "$APPLY" = "1" ]; then
+    systemctl try-restart qubesd.service
+  fi
+
+  qubesd_restarts=$((qubesd_restarts + 1))
+  record_live_action systemd try-restart "" service qubesd.service
 }
 
 persist_setup_state() {
@@ -756,6 +775,15 @@ nix_domain_root_current() {
   [ "$current" = "$root_source" ]
 }
 
+nix_domain_store_current() {
+  domain="$1"
+  store_source="$2"
+
+  [ "$APPLY" = "1" ] || return 1
+  current="$(qvm-features "$domain" nixome-store-source 2>/dev/null || true)"
+  [ "$current" = "$store_source" ]
+}
+
 install_nix_domain_root() {
   domain="$1"
   root_source="$2"
@@ -775,6 +803,107 @@ install_nix_domain_root() {
   run_or_plan qvm-volume import "$domain:root" "$root_image"
   root_images_changed=$((root_images_changed + 1))
   record_live_action domain-root import "$domain" source "$root_source"
+}
+
+append_kernelopt_if_missing() {
+  opts="$1"
+  key="$2"
+  value="$3"
+
+  if printf '%s\n' "$opts" | tr ' ' '\n' | grep -q "^$key="; then
+    current="$(
+      printf '%s\n' "$opts" |
+        tr ' ' '\n' |
+        sed -n "s|^$key=||p" |
+        head -n 1
+    )"
+    [ "$current" = "$value" ] ||
+      fail "nix-closure kernelopts $key=$current does not match expected $value"
+    printf '%s\n' "$opts"
+    return
+  fi
+
+  if [ -n "$opts" ]; then
+    printf '%s %s=%s\n' "$opts" "$key" "$value"
+  else
+    printf '%s=%s\n' "$key" "$value"
+  fi
+}
+
+ensure_nix_closure_kernelopts() {
+  domain="$1"
+  system_source="$2"
+  store_device="$3"
+  opts="$(json_value '.domains[$name].prefs.kernelopts // ""' --arg name "$domain")"
+
+  if [ -z "$opts" ] || [ "$opts" = "null" ]; then
+    opts="console=hvc0 init=/sbin/init"
+  fi
+
+  if printf '%s\n' "$opts" | tr ' ' '\n' | grep -q '^init='; then
+    current_init="$(
+      printf '%s\n' "$opts" |
+        tr ' ' '\n' |
+        sed -n 's|^init=||p' |
+        head -n 1
+    )"
+    [ "$current_init" = "/sbin/init" ] ||
+      fail "nix-closure kernelopts init=$current_init does not match expected /sbin/init"
+  else
+    opts="$opts init=/sbin/init"
+  fi
+
+  opts="$(append_kernelopt_if_missing "$opts" nixome.system "$system_source")"
+  opts="$(append_kernelopt_if_missing "$opts" nixome.storedev "$store_device")"
+
+  set_pref "$domain" kernelopts "$opts"
+}
+
+install_nix_domain_store() {
+  domain="$1"
+  store_source="$2"
+  store_image="$3"
+  helper_output=""
+
+  if [ "$APPLY" = "1" ] && nix_domain_store_current "$domain" "$store_source"; then
+    printf 'Nix-native store source current: %s source=%s\n' "$domain" "$store_source"
+  fi
+
+  printf '+'
+  printf ' %q' "$NIX_DOMAIN_STORAGE_HELPER" ensure-store "$domain" "$store_image" "$store_source"
+  printf '\n'
+
+  if [ "$APPLY" = "1" ]; then
+    set +e
+    helper_output="$("$NIX_DOMAIN_STORAGE_HELPER" ensure-store "$domain" "$store_image" "$store_source")"
+    rc="$?"
+    set -e
+    printf '%s\n' "$helper_output"
+    if [ "$rc" != "0" ]; then
+      printf 'command failed with exit %s: %q ensure-store %q %q %q\n' \
+        "$rc" "$NIX_DOMAIN_STORAGE_HELPER" "$domain" "$store_image" "$store_source"
+      return "$rc"
+    fi
+
+    if printf '%s\n' "$helper_output" | jq -e '.volume_created == true' >/dev/null; then
+      store_volumes_changed=$((store_volumes_changed + 1))
+      record_live_action domain-store-volume create "$domain" volume store
+    fi
+
+    if printf '%s\n' "$helper_output" | jq -e '.image_imported == true' >/dev/null; then
+      store_images_changed=$((store_images_changed + 1))
+      record_live_action domain-store import "$domain" source "$store_source"
+    fi
+
+    if printf '%s\n' "$helper_output" | jq -e '.qubesd_restart_required == true' >/dev/null; then
+      restart_qubesd_after_storage_change
+    fi
+  else
+    store_volumes_changed=$((store_volumes_changed + 1))
+    store_images_changed=$((store_images_changed + 1))
+    record_live_action domain-store-volume create "$domain" volume store
+    record_live_action domain-store import "$domain" source "$store_source"
+  fi
 }
 
 install_domain_kernel_source() {
@@ -839,6 +968,7 @@ setup_nix_closure_domain() {
   store_source="$(jq_get '.domains[$name].backend.store.source // ""' --arg name "$domain")"
   store_mode="$(jq_get '.domains[$name].backend.store.mode // "closure-image"' --arg name "$domain")"
   store_mountpoint="$(jq_get '.domains[$name].backend.store.mountpoint // "/nix/store"' --arg name "$domain")"
+  store_device="$(jq_get '.domains[$name].backend.store.device // "/dev/xvde"' --arg name "$domain")"
   root_image=""
   store_image=""
 
@@ -854,6 +984,8 @@ setup_nix_closure_domain() {
     fail "unsupported Nix-native domain store mode for $domain: $store_mode"
   [ "$store_mountpoint" = "/nix/store" ] ||
     fail "unsupported Nix-native domain store mountpoint for $domain: $store_mountpoint"
+  [ "$store_device" = "/dev/xvde" ] ||
+    fail "unsupported Nix-native domain store device for $domain: $store_device"
 
   root_image="$(resolve_root_image_file "$root_source")"
   store_image="$(resolve_store_image_file "$store_source")"
@@ -872,10 +1004,12 @@ setup_nix_closure_domain() {
   fi
 
   install_nix_domain_root "$domain" "$root_source" "$root_image"
+  install_nix_domain_store "$domain" "$store_source" "$store_image"
 
   if [ "$APPLY" = "1" ] || domain_exists "$domain"; then
     set_pref "$domain" label "$label"
     set_pref "$domain" kernel "$kernel_name"
+    ensure_nix_closure_kernelopts "$domain" "$system_source" "$store_device"
 
     if jq -e --arg name "$domain" '.domains[$name] | has("netvm")' "$TOPOLOGY" >/dev/null; then
       set_pref "$domain" netvm "$netvm"
@@ -887,10 +1021,12 @@ setup_nix_closure_domain() {
     set_feature "$domain" nixome-store-source "$store_source"
     set_feature "$domain" nixome-store-image "$store_image"
     set_feature "$domain" nixome-store-mountpoint "$store_mountpoint"
+    set_feature "$domain" nixome-store-device "$store_device"
     set_feature "$domain" nixome-store-read-only "True"
 
     mapfile -t pref_names < <(domain_pref_names "$domain")
     for pref in "${pref_names[@]}"; do
+      [ "$pref" != "kernelopts" ] || continue
       [ "$pref" != "kernel" ] || continue
       value="$(json_value '.domains[$name].prefs[$pref]' --arg name "$domain" --arg pref "$pref")"
       set_pref "$domain" "$pref" "$value"
@@ -928,6 +1064,7 @@ for cmd in \
   qvm-service \
   qvm-template-postprocess \
   qvm-volume \
+  "$NIX_DOMAIN_STORAGE_HELPER" \
   qubesd-query \
   python3 \
   rm \

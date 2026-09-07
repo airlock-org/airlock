@@ -142,6 +142,7 @@ jq -e '
     "subpath": ""
   } and
   .domains."nix-work".backend.store.mountpoint == "/nix/store" and
+  .domains."nix-work".backend.store.device == "/dev/xvde" and
   .domains."nix-work".backend.store.read_only == true and
   .domains."nix-work".backend.state.persistent == "nix-work-private" and
   .domains."nix-work".backend.state.volatile == null and
@@ -264,6 +265,11 @@ expect_failure \
   "nix-closure-writable-store" \
   "nix-closure store views must be read-only" \
   '{ domains.bad.backend = { type = "nix-closure"; system.sourceRef.build = "nixosConfigurations.bad.config.system.build.toplevel"; kernel.name = "6.12.64-1.fc41"; root.sourceRef.build = "packages.x86_64-linux.bad-root"; store = { sourceRef.build = "packages.x86_64-linux.bad-store"; readOnly = false; }; }; }'
+
+expect_failure \
+  "nix-closure-unsupported-store-device" \
+  "nixome.topology.domains.bad.backend.store.device: currently must be /dev/xvde" \
+  '{ domains.bad.backend = { type = "nix-closure"; system.sourceRef.build = "nixosConfigurations.bad.config.system.build.toplevel"; kernel.name = "6.12.64-1.fc41"; root.sourceRef.build = "packages.x86_64-linux.bad-root"; store = { sourceRef.build = "packages.x86_64-linux.bad-store"; device = "/dev/xvdf"; }; }; }'
 
 expect_failure \
   "nix-closure-missing-root" \

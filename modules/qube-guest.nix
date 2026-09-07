@@ -1993,6 +1993,69 @@ in
       mode = "0444";
     };
 
+    environment.etc."qubes-rpc/nixome.NixStoreRuntimeCheck" = {
+      text = ''#!${pkgs.runtimeShell}
+        set -eu
+
+        export PATH=${lib.makeBinPath [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.gnused
+          pkgs.util-linux
+        ]}
+
+        system_path="$(
+          tr ' ' '\n' < /proc/cmdline |
+            sed -n 's|^nixome.system=||p' |
+            head -n 1
+        )"
+        store_device="$(
+          tr ' ' '\n' < /proc/cmdline |
+            sed -n 's|^nixome.storedev=||p' |
+            head -n 1
+        )"
+
+        [ -n "$system_path" ] || {
+          echo "missing nixome.system kernel option" >&2
+          exit 1
+        }
+        [ -n "$store_device" ] || {
+          echo "missing nixome.storedev kernel option" >&2
+          exit 1
+        }
+        [ -x "$system_path/init" ] || {
+          echo "system init is not executable: $system_path/init" >&2
+          exit 1
+        }
+
+        current_system="$(readlink -f /run/current-system)"
+        [ "$current_system" = "$system_path" ] || {
+          echo "current system mismatch: $current_system != $system_path" >&2
+          exit 1
+        }
+
+        mount_source="$(findmnt -rn -T /nix/store -o SOURCE)"
+        mount_options="$(findmnt -rn -T /nix/store -o OPTIONS)"
+
+        [ "$mount_source" = "$store_device" ] || {
+          echo "/nix/store source mismatch: $mount_source != $store_device" >&2
+          exit 1
+        }
+        case ",$mount_options," in
+          *,ro,*) ;;
+          *)
+            echo "/nix/store is not mounted read-only: $mount_options" >&2
+            exit 1
+            ;;
+        esac
+
+        printf 'system=%s\n' "$system_path"
+        printf 'store_device=%s\n' "$store_device"
+        printf 'store_options=%s\n' "$mount_options"
+      '';
+      mode = "0555";
+    };
+
     environment.etc."qubes-rpc/nixome.PolicyProbe" = lib.mkIf hasConfigRole {
       source = policyProbeService;
       mode = "0555";

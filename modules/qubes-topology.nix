@@ -152,6 +152,12 @@ let
         description = "Guest mountpoint for the closure view.";
       };
 
+      device = lib.mkOption {
+        type = lib.types.str;
+        default = "/dev/xvde";
+        description = "Guest block device expected to expose the closure view.";
+      };
+
       readOnly = lib.mkOption {
         type = lib.types.bool;
         default = true;
