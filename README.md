@@ -130,7 +130,8 @@ default to `/run/media/user/data/nixome/`. Source code, Nix files, scripts,
 docs, and Git history remain in this repository. The Nix store is a chroot
 local store rooted at `/run/media/user/data/nixome/nix-root`, so store paths
 still have logical names like `/nix/store/...` while the bytes live on the data
-disk.
+disk. Long nested VM proof targets run `make gc-auto` before booting and opt
+into a post-run auto-GC pass when the VM is not being kept alive.
 
 If that data path is not available, Nixome refuses to use the host `/nix/store`
 by default. Set `NIXOME_DATA_ROOT` to another data-backed path, or set

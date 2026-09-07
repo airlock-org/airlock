@@ -15,6 +15,7 @@ VM_START_WAIT_SECONDS="${NIXOME_VM_START_WAIT_SECONDS:-$VM_TIMEOUT}"
 IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-image}"
 DISPLAY_MODE="${NIXOME_VM_DISPLAY:-gtk}"
 KEEP_VM="${NIXOME_KEEP_VM:-0}"
+AUTO_GC_AFTER_RUN="${NIXOME_AUTO_GC_AFTER_RUN:-0}"
 
 BOOTSTRAP_QUBES="${NIXOME_BOOTSTRAP_QUBES:-1}"
 RUN_SETUP_CONFIG="${NIXOME_RUN_SETUP_CONFIG:-0}"
@@ -92,6 +93,17 @@ cleanup() {
     kill "$vm_pid" >/dev/null 2>&1 || true
     wait "$vm_pid" >/dev/null 2>&1 || true
   fi
+
+  case "$AUTO_GC_AFTER_RUN" in
+    1|true|yes)
+      "$ROOT/scripts/gc-nixome-store.sh" auto || true
+      ;;
+    0|false|no)
+      ;;
+    *)
+      printf 'warning: ignoring unsupported NIXOME_AUTO_GC_AFTER_RUN value: %s\n' "$AUTO_GC_AFTER_RUN" >&2
+      ;;
+  esac
 }
 
 trap cleanup EXIT INT TERM
