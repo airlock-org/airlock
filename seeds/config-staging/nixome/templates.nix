@@ -14,6 +14,8 @@ let
   listToAttrs = builtins.listToAttrs;
   map = builtins.map;
   tail = builtins.tail;
+  pkgs = templateBuilders.pkgs;
+  lib = pkgs.lib;
 
   defaultTemplateConf = {
     qrexec = "1";
@@ -52,20 +54,12 @@ let
       ];
       role = "work-template";
       sourceLabel = "staged-config";
-      modules = [
-        (
-          { pkgs, ... }:
-          {
-            nixome.qubeGuest.role = "base";
-            networking.hostName = "nixome-work-template";
-            environment.etc."nixome/template-role".text = "work\n";
-            environment.systemPackages = with pkgs; [
-              git
-              jq
-              nano
-            ];
-          }
-        )
+      hostName = "nixome-work-template";
+      etc."nixome/template-role".text = "work\n";
+      packages = with pkgs; [
+        git
+        jq
+        nano
       ];
       appVms.nixome-work = {
         features = {
@@ -134,11 +128,38 @@ let
     let
       definition = getAttr name templateDefinitions;
       packageName = definition.packageName or "${name}-template";
-      modules =
-        if hasAttr "modules" definition then
-          definition.modules
+      hasDeclaredHostName = hasAttr "hostName" definition || hasAttr "hostname" definition;
+      hostName =
+        if hasAttr "hostName" definition then
+          definition.hostName
+        else if hasAttr "hostname" definition then
+          definition.hostname
         else
-          throw "nixome.templates.${name}.modules must be set";
+          name;
+      contentModule =
+        { ... }:
+        {
+          nixome.qubeGuest.role = lib.mkDefault (definition.guestRole or "base");
+          environment.systemPackages = definition.packages or [ ];
+          environment.etc = definition.etc or { };
+        }
+        // (
+          if hasDeclaredHostName then
+            {
+              networking.hostName = hostName;
+            }
+          else
+            { }
+        )
+        // (
+          if hasAttr "systemd" definition then
+            {
+              systemd = definition.systemd;
+            }
+          else
+            { }
+        );
+      modules = [ contentModule ] ++ (definition.modules or [ ]);
       builtTemplate = templateBuilders.mkNixosQubeTemplate {
         templateName = name;
         imageName = definition.imageName or name;

@@ -236,17 +236,18 @@ The current seed uses generated literal `/nix/store` path pins for Nixome,
 `nixpkgs`, and `nixos-qubes` support sources. Candidate Nix commands therefore
 run with `--impure --offline --no-write-lock-file`: impure is needed to read
 those immutable store paths from the candidate flake, while offline keeps the
-path from fetching during validation or apply. A production design should
+path from fetching during validation or apply. A later production design should
 replace this with a pure, content-addressed input mirror or a validator-built
 artifact transport.
 
 The staged dom0 NixOS system is built from the Nixome support modules,
 `./nixome/dom0-host.nix`, and any modules listed in
-`nixome/machine.nix` under `dom0.extraModules`. This gives the editable inside config a direct
-path to normal NixOS host changes such as packages, systemd units, boot options,
-kernel options, and Qubes package overlays without changing the bootstrap
-module layout. `nixome.system` records the apply plan and source references;
-the NixOS modules define the actual host closure that dom0 builds and switches.
+`nixome/machine.nix` under `dom0.extraModules`. This gives the editable inside
+config a direct path to normal NixOS host changes such as packages, systemd
+units, boot options, kernel options, and Qubes package overlays without
+changing the bootstrap module layout. `nixome.system` records the apply plan
+and source references; the NixOS modules define the actual host closure that
+dom0 builds and switches.
 
 TemplateVM contents are defined in Nix as well. The seeded
 `nixome/templates.nix` turns `templates.definitions` from `nixome/machine.nix`
@@ -255,16 +256,14 @@ into both flake packages and topology entries. A local config can add:
 ```nix
 templates.definitions.nixome-nixos-dev = {
   role = "dev-template";
-  modules = [
-    ({ pkgs, ... }: {
-      networking.hostName = "nixome-dev-template";
-      environment.systemPackages = with pkgs; [
-        git
-        jq
-        ripgrep
-      ];
-    })
+  sourceLabel = "local-config";
+  hostName = "nixome-dev-template";
+  packages = with pkgs; [
+    git
+    jq
+    ripgrep
   ];
+  etc."nixome/template-role".text = "dev\n";
   appVms.nixome-dev = {
     label = "blue";
     prefs.memory = 1536;
@@ -272,6 +271,10 @@ templates.definitions.nixome-nixos-dev = {
   };
 };
 ```
+
+Advanced template definitions can still append raw NixOS modules with
+`modules = [ ({ pkgs, ... }: { ... }) ]`, and the high-level fields compile
+into the same module system.
 
 The generated topology then imports the built template through
 `qvm-template-postprocess` if it is missing and creates the declared AppVMs from

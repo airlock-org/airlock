@@ -273,6 +273,7 @@ fi
 cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
 {
   appliedMessage,
+  pkgs,
   system,
   templateSet,
   ...
@@ -289,20 +290,12 @@ cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
   templates.definitions.nixome-nixos-dev = {
     role = "dev-template";
     sourceLabel = "local-config";
-    modules = [
-      (
-        { pkgs, ... }:
-        {
-          nixome.qubeGuest.role = "base";
-          networking.hostName = "nixome-dev-template";
-          environment.etc."nixome/template-role".text = "dev\n";
-          environment.systemPackages = with pkgs; [
-            git
-            jq
-            ripgrep
-          ];
-        }
-      )
+    hostName = "nixome-dev-template";
+    etc."nixome/template-role".text = "dev\n";
+    packages = with pkgs; [
+      git
+      jq
+      ripgrep
     ];
     domain.features."nixome-dev-template" = "1";
     appVms.nixome-dev = {

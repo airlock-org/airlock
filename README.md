@@ -130,12 +130,13 @@ staged generation and `nixome-config-status` no longer reports a pending
 reboot.
 Inside `config-staging`, `nixome/machine.nix` can add
 `templates.definitions.<template-name>` entries. Each entry provides NixOS
-modules for a TemplateVM root plus optional Qubes domain/AppVM defaults; the
-candidate flake exposes the resulting template package and topology source
-reference. `make vm-config-template-flow` runs the heavier version of the
-nested proof: the staged config adds a second TemplateVM definition, dom0 builds
-that template package during apply, imports it, creates an AppVM from it, and
-checks qrexec in that AppVM.
+content through high-level fields such as `hostName`, `packages`, `etc`, and
+optional raw `modules`, plus Qubes domain/AppVM defaults; the candidate flake
+exposes the resulting template package and topology source reference.
+`make vm-config-template-flow` runs the heavier version of the nested proof:
+the staged config adds a second TemplateVM definition, dom0 builds that
+template package during apply, imports it, creates an AppVM from it, and checks
+qrexec in that AppVM.
 The config topology image keeps local build size down by using one NixOS
 config-system TemplateVM for all three config AppVM roles.
 
