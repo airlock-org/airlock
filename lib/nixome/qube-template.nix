@@ -618,6 +618,7 @@ let
         nativeBuildInputs = [
           pkgs.coreutils
           pkgs.e2fsprogs
+          pkgs.findutils
           pkgs.gawk
         ];
         preferLocalBuild = true;
@@ -641,6 +642,7 @@ let
         done < ${closure}/store-paths
 
         used_bytes="$(du -sb "$root" | awk '{ print $1 }')"
+        used_inodes="$(find "$root" -mindepth 1 -printf x | wc -c)"
         requested_spare_bytes="$((${toString additionalSpaceMiB} * 1024 * 1024))"
         metadata_spare_bytes="$((used_bytes / 4 + 256 * 1024 * 1024))"
         if [ "$requested_spare_bytes" -gt "$metadata_spare_bytes" ]; then
@@ -648,20 +650,25 @@ let
         else
           spare_bytes="$metadata_spare_bytes"
         fi
+        inode_spare="$((used_inodes / 4 + 4096))"
+        inode_count="$((used_inodes + inode_spare))"
         image_bytes="$((used_bytes + spare_bytes))"
         truncate -s "$image_bytes" "$out/store.img"
-        mkfs.ext4 -q -F -L nixstore -d "$root" "$out/store.img"
+        mkfs.ext4 -q -F -L nixstore -N "$inode_count" -d "$root" "$out/store.img"
 
         cp ${closure}/store-paths "$out/store-paths"
         {
           printf 'used_bytes=%s\n' "$used_bytes"
+          printf 'used_inodes=%s\n' "$used_inodes"
           printf 'requested_spare_bytes=%s\n' "$requested_spare_bytes"
           printf 'metadata_spare_bytes=%s\n' "$metadata_spare_bytes"
           printf 'spare_bytes=%s\n' "$spare_bytes"
+          printf 'inode_spare=%s\n' "$inode_spare"
+          printf 'inode_count=%s\n' "$inode_count"
           printf 'image_bytes=%s\n' "$image_bytes"
         } > "$out/image-sizing.txt"
         cat > "$out/manifest.json" <<EOF
-        {"schema":"nixome.store-closure-image.v1","name":"${name}","image":"store.img","mountpoint":"/nix/store","device":"${device}","read_only":true,"sizing":"used-plus-proportional-spare"}
+        {"schema":"nixome.store-closure-image.v1","name":"${name}","image":"store.img","mountpoint":"/nix/store","device":"${device}","read_only":true,"sizing":"used-plus-proportional-spare","inode_sizing":"used-plus-25-percent-and-floor"}
         EOF
       '';
 
