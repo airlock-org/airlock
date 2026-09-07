@@ -44,6 +44,7 @@ grep -F 'assert_nix_closure_domain "$VAULT"' \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 ! grep -F 'cat >> "$STAGING_UPDATE_SCRIPT"' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN=1' "$ROOT/Makefile" >/dev/null
+grep -F 'NIXOME_KEEP_VM=1' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_SYNC_DOM0_TOOLS=1' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_VM_SKIP_BASE_BUILD=1' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
