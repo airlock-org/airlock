@@ -15,6 +15,7 @@ DISPLAY_MODE="${NIXOME_VM_DISPLAY:-none}"
 VGA="${NIXOME_VM_VGA:-std}"
 BACKUP_RETENTION="${NIXOME_VM_BACKUP_RETENTION:-1}"
 FRESH="${NIXOME_VM_FRESH:-0}"
+SKIP_BASE_BUILD="${NIXOME_VM_SKIP_BASE_BUILD:-0}"
 OUT_LINK="$VM_DIR/${IMAGE_ATTR}-result"
 SERIAL_LOG="$VM_DIR/serial.log"
 MONITOR_SOCKET="$VM_DIR/${IMAGE_ATTR}.monitor"
@@ -37,6 +38,15 @@ case "$FRESH" in
     ;;
 esac
 
+case "$SKIP_BASE_BUILD" in
+  0 | 1)
+    ;;
+  *)
+    printf 'error: NIXOME_VM_SKIP_BASE_BUILD must be 0 or 1\n' >&2
+    exit 1
+    ;;
+esac
+
 if [ ! -e /dev/kvm ]; then
   printf 'error: /dev/kvm is missing; nested Xen needs KVM on the host\n' >&2
   exit 1
@@ -47,11 +57,22 @@ if ! awk -F: '/flags|Features/ { print $2; exit }' /proc/cpuinfo | grep -Eqw 'vm
   exit 1
 fi
 
-printf 'building/resolving Nixome VM base image: .#%s\n' "$IMAGE_ATTR"
-base_image_out="$(nix build "$ROOT#$IMAGE_ATTR" --no-link --print-out-paths --print-build-logs --show-trace)"
-base_image_out="$(awk 'NF { last = $0 } END { print last }' <<< "$base_image_out")"
-base_image_out_physical="$(nixome_physical_store_path "$base_image_out")"
-ln -sfn "$base_image_out_physical" "$OUT_LINK"
+if [ "$SKIP_BASE_BUILD" = "1" ]; then
+  [ -e "$OUT_LINK" ] ||
+    {
+      printf 'error: NIXOME_VM_SKIP_BASE_BUILD=1 but base image result link is missing: %s\n' "$OUT_LINK" >&2
+      exit 1
+    }
+  printf 'using existing Nixome VM base image result link: %s\n' "$OUT_LINK"
+  base_image_out_physical="$(readlink -f "$OUT_LINK")"
+  base_image_out="$base_image_out_physical"
+else
+  printf 'building/resolving Nixome VM base image: .#%s\n' "$IMAGE_ATTR"
+  base_image_out="$(nix build "$ROOT#$IMAGE_ATTR" --no-link --print-out-paths --print-build-logs --show-trace)"
+  base_image_out="$(awk 'NF { last = $0 } END { print last }' <<< "$base_image_out")"
+  base_image_out_physical="$(nixome_physical_store_path "$base_image_out")"
+  ln -sfn "$base_image_out_physical" "$OUT_LINK"
+fi
 
 build_attr_with_result_link() {
   local attr="$1"

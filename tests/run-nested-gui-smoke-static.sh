@@ -45,8 +45,11 @@ grep -F 'assert_nix_closure_domain "$VAULT"' \
 ! grep -F 'cat >> "$STAGING_UPDATE_SCRIPT"' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN=1' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_SYNC_DOM0_TOOLS=1' "$ROOT/Makefile" >/dev/null
+grep -F 'NIXOME_VM_SKIP_BASE_BUILD=1' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_SYNC_DOM0_TOOLS' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_VM_SKIP_BASE_BUILD' "$ROOT/scripts/run-nested-vm.sh" >/dev/null
+grep -F 'using existing Nixome VM base image result link' "$ROOT/scripts/run-nested-vm.sh" >/dev/null
 grep -F 'sync-nested-dom0-tools.sh' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'vm-gui-sync-dom0-tools.json' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null

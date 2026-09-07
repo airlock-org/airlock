@@ -156,8 +156,10 @@ make vm-nix-closure-warm-flow
 `make vm-nix-closure-warm-flow` imports the current local closures for
 `nixome-setup-config`, `nixome-nix-closure-domain-smoke`, and the
 `nixome-closure` Qubes storage adapter into the running nested dom0 before it
-runs the focused NixOS-domain lifecycle test. The synced commands are exposed
-under:
+runs the focused NixOS-domain lifecycle test. It also sets
+`NIXOME_VM_SKIP_BASE_BUILD=1`, so it reuses the existing nested base-image
+result link instead of resolving a new base image for every warm iteration. The
+synced commands are exposed under:
 
 ```text
 /run/nixome-warm/bin
