@@ -9,6 +9,7 @@ WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nixome-config-candidate-flake.XXXXXX")"
 TOPOLOGY_JSON="$RESULT_DIR/topology.json"
 LOCAL_TOPOLOGY_JSON="$RESULT_DIR/local-topology.json"
 SYSTEM_JSON="$RESULT_DIR/system.json"
+LOCAL_SYSTEM_JSON="$RESULT_DIR/local-system.json"
 PROFILE_LINK="$RESULT_DIR/dom0-profile"
 PROFILE_JSON="$RESULT_DIR/dom0-profile.json"
 HOST_MESSAGE="$RESULT_DIR/host-message.txt"
@@ -329,7 +330,10 @@ cat > "$WORK_DIR/nixome/local.nix" <<'EOF'
     )
   ];
 
-  system.args = { };
+  system.args = {
+    dom0SystemSwitchAction = "boot";
+    dom0SystemReason = "test next boot generation";
+  };
 }
 EOF
 
@@ -361,6 +365,14 @@ nix \
   --offline \
   --no-write-lock-file \
   --json "$WORK_DIR#nixome.topology" > "$LOCAL_TOPOLOGY_JSON"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json "$WORK_DIR#nixome.system" > "$LOCAL_SYSTEM_JSON"
 nix \
   --extra-experimental-features nix-command \
   --extra-experimental-features flakes \
@@ -399,5 +411,19 @@ jq -e '
   .domains."nixome-dev".features."nixome-template-source" == "local-config" and
   .domains."nixome-dev".services."network-manager" == false
 ' "$LOCAL_TOPOLOGY_JSON" >/dev/null
+
+jq -e '
+  .schema == "nixome.system.v1" and
+  .dom0.nixos.system.switch_action == "boot" and
+  .dom0.nixos.system.reason == "test next boot generation" and
+  .dom0.systemd.services == {} and
+  any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "boot") and
+  .plan.reboot_required == true and
+  (.plan.reboot_actions | length) == 1 and
+  .plan.reboot_actions[0].type == "dom0-nixos-system" and
+  .plan.reboot_actions[0].switch_action == "boot" and
+  .plan.reboot_actions[0].reason == "test next boot generation" and
+  .plan.reboot_reasons == ["test next boot generation"]
+' "$LOCAL_SYSTEM_JSON" >/dev/null
 
 printf 'config candidate flake eval ok\n'

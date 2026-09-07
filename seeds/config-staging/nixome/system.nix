@@ -3,6 +3,8 @@
   extraPackages ? [ ],
   extraSystemdServices ? { },
   dom0SystemAttr ? "nixosConfigurations.nixome-dom0.config.system.build.toplevel",
+  dom0SystemSwitchAction ? "switch",
+  dom0SystemReason ? "staged dom0 NixOS system generation",
   rebootRequests ? { },
   system ? "x86_64-linux",
 }:
@@ -27,8 +29,8 @@
         source = {
           build = dom0SystemAttr;
         };
-        switchAction = "switch";
-        reason = "staged dom0 NixOS system generation";
+        switchAction = dom0SystemSwitchAction;
+        reason = dom0SystemReason;
       };
       kernel = rebootRequests.kernel or null;
       xen = rebootRequests.xen or null;

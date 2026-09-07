@@ -67,6 +67,21 @@ CREATED_QUBE="${NIXOME_CONFIG_CREATED_QUBE:-nixome-work-from-config}"
 BUILD_EXTRA_TEMPLATE="${NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE:-0}"
 EXTRA_TEMPLATE="${NIXOME_CONFIG_EXTRA_TEMPLATE:-nixome-nixos-dev}"
 EXTRA_QUBE="${NIXOME_CONFIG_EXTRA_QUBE:-nixome-dev-from-config}"
+DOM0_SYSTEM_SWITCH_ACTION="${NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION:-switch}"
+case "$DOM0_SYSTEM_SWITCH_ACTION" in
+  switch)
+    DOM0_SYSTEM_REASON="${NIXOME_CONFIG_DOM0_SYSTEM_REASON:-staged dom0 NixOS system generation}"
+    EXPECTED_SYSTEMD_ACTIONS_STATUS="passed"
+    ;;
+  boot)
+    DOM0_SYSTEM_REASON="${NIXOME_CONFIG_DOM0_SYSTEM_REASON:-install next dom0 boot generation}"
+    EXPECTED_SYSTEMD_ACTIONS_STATUS="skipped"
+    ;;
+  *)
+    printf 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION must be switch or boot\n' >&2
+    exit 1
+    ;;
+esac
 STAGING_CONSOLE_LOG="$LOG_DIR/config-vms-$STAGING-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 VALIDATOR_CONSOLE_LOG="$LOG_DIR/config-vms-$VALIDATOR-console.log"
@@ -153,6 +168,10 @@ write_result() {
     json_string "$EXTRA_TEMPLATE"
     printf ',"extra_qube":'
     json_string "$EXTRA_QUBE"
+    printf ',"dom0_system_switch_action":'
+    json_string "$DOM0_SYSTEM_SWITCH_ACTION"
+    printf ',"dom0_system_reason":'
+    json_string "$DOM0_SYSTEM_REASON"
     printf ',"extra_qube_uname":'
     json_file_string_or_null "$EXTRA_QUBE_UNAME_LOG"
     printf ',"extra_qube_user":'
@@ -413,6 +432,9 @@ for cmd in \
   require_command "$cmd"
 done
 
+DOM0_SYSTEM_SWITCH_ACTION_NIX="$(json_string "$DOM0_SYSTEM_SWITCH_ACTION")"
+DOM0_SYSTEM_REASON_NIX="$(json_string "$DOM0_SYSTEM_REASON")"
+
 if ! [ -r /proc/xen/capabilities ] || ! grep -qw control_d /proc/xen/capabilities; then
   fail "host is not a Xen control domain"
 fi
@@ -432,6 +454,10 @@ case "$BUILD_EXTRA_TEMPLATE" in
   0|1) ;;
   *) fail "NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE must be 0 or 1" ;;
 esac
+
+if [ "$DOM0_SYSTEM_SWITCH_ACTION" = "boot" ] && [ "$BUILD_EXTRA_TEMPLATE" = "1" ]; then
+  fail "NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE=1 is currently only supported with dom0 system switch mode"
+fi
 
 if [ "$BUILD_EXTRA_TEMPLATE" = "1" ]; then
   case "$EXTRA_TEMPLATE" in
@@ -686,11 +712,16 @@ $EXTRA_TEMPLATE_DEFINITIONS_NIX
     )
   ];
 
-  system.args.extraSystemdServices = {
-    "nixome-local-extra-module" = {
-      action = "restart";
-      reason = "restart local extra module fixture";
-    };
+  system.args = {
+    dom0SystemSwitchAction = $DOM0_SYSTEM_SWITCH_ACTION_NIX;
+    dom0SystemReason = $DOM0_SYSTEM_REASON_NIX;
+    extraSystemdServices =
+      if $DOM0_SYSTEM_SWITCH_ACTION_NIX == "switch" then {
+        "nixome-local-extra-module" = {
+          action = "restart";
+          reason = "restart local extra module fixture";
+        };
+      } else { };
   };
 }
 LOCALNIXEOF
@@ -877,18 +908,20 @@ run_or_fail \
   "read system profile link" \
   "$DOM0_SYSTEM_PROFILE_LINK_LOG" \
   readlink /nix/var/nix/profiles/nixome-system
-run_or_fail \
-  "read host config message" \
-  "$DOM0_HOST_CONFIG_MESSAGE_LOG" \
-  cat /etc/nixome/inside-config-applied-message
-run_or_fail \
-  "read local dom0 extra module message" \
-  "$DOM0_EXTRA_MODULE_MESSAGE_LOG" \
-  cat /etc/nixome/local-dom0-extra-module
-run_or_fail \
-  "read local dom0 extra module restart marker" \
-  "$DOM0_EXTRA_MODULE_RESTARTED_LOG" \
-  cat /var/lib/nixome/system/local-extra-module-restarted
+if [ "$DOM0_SYSTEM_SWITCH_ACTION" = "switch" ]; then
+  run_or_fail \
+    "read host config message" \
+    "$DOM0_HOST_CONFIG_MESSAGE_LOG" \
+    cat /etc/nixome/inside-config-applied-message
+  run_or_fail \
+    "read local dom0 extra module message" \
+    "$DOM0_EXTRA_MODULE_MESSAGE_LOG" \
+    cat /etc/nixome/local-dom0-extra-module
+  run_or_fail \
+    "read local dom0 extra module restart marker" \
+    "$DOM0_EXTRA_MODULE_RESTARTED_LOG" \
+    cat /var/lib/nixome/system/local-extra-module-restarted
+fi
 run_or_fail \
   "read systemd live action result" \
   "$DOM0_SYSTEMD_ACTIONS_LOG" \
@@ -902,28 +935,61 @@ run_or_fail \
   "$DOM0_CURRENT_SYSTEM_LINK_LOG" \
   readlink /run/current-system
 
-jq -e --arg apply_message "$APPLY_MESSAGE" '
+jq -e \
+  --arg apply_message "$APPLY_MESSAGE" \
+  --arg switch_action "$DOM0_SYSTEM_SWITCH_ACTION" \
+  --arg reason "$DOM0_SYSTEM_REASON" \
+  '
   .schema == "nixome.system.v1" and
   .dom0.profile.message == $apply_message and
   .dom0.nixos.system.enable == true and
   (.dom0.nixos.system.source | test("^/nix/store/")) and
   .dom0.nixos.system.source_ref == null and
-  .dom0.nixos.system.switch_action == "switch" and
-  .dom0.systemd.services."nixome-local-extra-module".action == "restart" and
-  .plan.reboot_actions == [] and
-  .plan.reboot_required == false and
+  .dom0.nixos.system.switch_action == $switch_action and
   any(.plan.live_actions[]; .type == "dom0-profile" and .message == $apply_message) and
-  any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "switch") and
-  any(.plan.live_actions[]; .type == "systemd-service" and .name == "nixome-local-extra-module" and .action == "restart")
+  any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == $switch_action) and
+  (
+    if $switch_action == "switch" then
+      .dom0.systemd.services."nixome-local-extra-module".action == "restart" and
+      .plan.reboot_actions == [] and
+      .plan.reboot_required == false and
+      .plan.reboot_reasons == [] and
+      any(.plan.live_actions[]; .type == "systemd-service" and .name == "nixome-local-extra-module" and .action == "restart")
+    else
+      .dom0.systemd.services == {} and
+      .plan.reboot_required == true and
+      (.plan.reboot_actions | length) == 1 and
+      .plan.reboot_actions[0].type == "dom0-nixos-system" and
+      .plan.reboot_actions[0].switch_action == "boot" and
+      .plan.reboot_actions[0].reason == $reason and
+      .plan.reboot_reasons == [$reason]
+    end
+  )
 ' "$DOM0_SYSTEM_JSON_LOG" >/dev/null ||
   fail "applied dom0 system JSON did not match expected value"
 
-jq -e --arg apply_message "$APPLY_MESSAGE" '
+jq -e \
+  --arg apply_message "$APPLY_MESSAGE" \
+  --arg switch_action "$DOM0_SYSTEM_SWITCH_ACTION" \
+  --arg reason "$DOM0_SYSTEM_REASON" \
+  '
   any(.live_actions[]; .type == "dom0-profile" and .message == $apply_message) and
-  any(.live_actions[]; .type == "dom0-nixos-system" and .action == "switch") and
-  any(.live_actions[]; .type == "systemd-service" and .name == "nixome-local-extra-module" and .action == "restart") and
-  .reboot_actions == [] and
-  .reboot_required == false
+  any(.live_actions[]; .type == "dom0-nixos-system" and .action == $switch_action) and
+  (
+    if $switch_action == "switch" then
+      any(.live_actions[]; .type == "systemd-service" and .name == "nixome-local-extra-module" and .action == "restart") and
+      .reboot_actions == [] and
+      .reboot_required == false and
+      .reboot_reasons == []
+    else
+      .reboot_required == true and
+      (.reboot_actions | length) == 1 and
+      .reboot_actions[0].type == "dom0-nixos-system" and
+      .reboot_actions[0].switch_action == "boot" and
+      .reboot_actions[0].reason == $reason and
+      .reboot_reasons == [$reason]
+    end
+  )
 ' "$DOM0_SYSTEM_PLAN_LOG" >/dev/null ||
   fail "applied dom0 system plan did not match expected value"
 
@@ -934,31 +1000,53 @@ jq -e --arg apply_message "$APPLY_MESSAGE" '
 ' "$DOM0_SYSTEM_PROFILE_JSON_LOG" >/dev/null ||
   fail "applied dom0 profile JSON did not match expected value"
 
-jq -e '
+jq -e \
+  --arg switch_action "$DOM0_SYSTEM_SWITCH_ACTION" \
+  --arg reason "$DOM0_SYSTEM_REASON" \
+  '
   .schema == "nixome.system-apply.v1" and
   .status == "passed" and
   .profile_status == "passed" and
   .host_system_status == "passed" and
-  .systemd_status == "passed" and
-  .systemd_actions_result.status == "passed" and
-  any(.systemd_actions_result.actions[]; .name == "nixome-local-extra-module" and .action == "restart" and .status == "passed") and
   (.host_system_source | test("^/nix/store/")) and
-  .host_system_switch_action == "switch" and
-  .reboot_required == false
+  .host_system_switch_action == $switch_action and
+  (
+    if $switch_action == "switch" then
+      .systemd_status == "passed" and
+      .systemd_actions_result.status == "passed" and
+      any(.systemd_actions_result.actions[]; .name == "nixome-local-extra-module" and .action == "restart" and .status == "passed") and
+      .reboot_actions == [] and
+      .reboot_required == false and
+      .reboot_reasons == []
+    else
+      .systemd_status == "skipped" and
+      .systemd_actions_result.status == "skipped" and
+      .systemd_actions_result.actions == [] and
+      .reboot_required == true and
+      (.reboot_actions | length) == 1 and
+      .reboot_actions[0].type == "dom0-nixos-system" and
+      .reboot_actions[0].switch_action == "boot" and
+      .reboot_reasons == [$reason]
+    end
+  )
 ' "$DOM0_SYSTEM_APPLY_LOG" >/dev/null ||
   fail "dom0 system apply JSON did not pass"
 
-grep -qx "$APPLY_MESSAGE" "$DOM0_HOST_CONFIG_MESSAGE_LOG" ||
-  fail "inside-config host marker did not match expected value"
-grep -qx "$APPLY_MESSAGE-extra" "$DOM0_EXTRA_MODULE_MESSAGE_LOG" ||
-  fail "inside-config local dom0 extra module marker did not match expected value"
-grep -qx "$APPLY_MESSAGE" "$DOM0_EXTRA_MODULE_RESTARTED_LOG" ||
-  fail "inside-config local dom0 extra module restart marker did not match expected value"
+if [ "$DOM0_SYSTEM_SWITCH_ACTION" = "switch" ]; then
+  grep -qx "$APPLY_MESSAGE" "$DOM0_HOST_CONFIG_MESSAGE_LOG" ||
+    fail "inside-config host marker did not match expected value"
+  grep -qx "$APPLY_MESSAGE-extra" "$DOM0_EXTRA_MODULE_MESSAGE_LOG" ||
+    fail "inside-config local dom0 extra module marker did not match expected value"
+  grep -qx "$APPLY_MESSAGE" "$DOM0_EXTRA_MODULE_RESTARTED_LOG" ||
+    fail "inside-config local dom0 extra module restart marker did not match expected value"
+fi
 host_system_source="$(jq -r '.host_system_source' "$DOM0_SYSTEM_APPLY_LOG")"
 grep -qx "$host_system_source" "$DOM0_HOST_SYSTEM_PROFILE_LINK_LOG" ||
   fail "host system profile does not point at applied source"
-grep -qx "$host_system_source" "$DOM0_CURRENT_SYSTEM_LINK_LOG" ||
-  fail "current system link does not point at applied source"
+if [ "$DOM0_SYSTEM_SWITCH_ACTION" = "switch" ]; then
+  grep -qx "$host_system_source" "$DOM0_CURRENT_SYSTEM_LINK_LOG" ||
+    fail "current system link does not point at applied source"
+fi
 
 run_or_fail \
   "read config status" \
@@ -970,6 +1058,8 @@ jq -e \
   --arg validator "$VALIDATOR" \
   --arg created "$CREATED_QUBE" \
   --arg host_system_source "$host_system_source" \
+  --arg switch_action "$DOM0_SYSTEM_SWITCH_ACTION" \
+  --arg reason "$DOM0_SYSTEM_REASON" \
   '
     .schema == "nixome.config-status.v1" and
     .status == "applied" and
@@ -990,8 +1080,25 @@ jq -e \
     .apply.status == "passed" and
     .system.last_apply.status == "passed" and
     .system.host_system_profile_resolved_target == $host_system_source and
-    .system.run_current_system_target == $host_system_source and
-    .system.run_current_system_resolved_target == $host_system_source
+    (
+      if $switch_action == "switch" then
+        .pending_reboot.required == false and
+        .pending_reboot.actions == [] and
+        .pending_reboot.reasons == [] and
+        .system.pending_reboot.required == false and
+        .system.run_current_system_target == $host_system_source and
+        .system.run_current_system_resolved_target == $host_system_source
+      else
+        .pending_reboot.required == true and
+        (.pending_reboot.actions | length) == 1 and
+        .pending_reboot.actions[0].type == "dom0-nixos-system" and
+        .pending_reboot.actions[0].switch_action == "boot" and
+        .pending_reboot.reasons == [$reason] and
+        .system.pending_reboot.required == true and
+        (.system.pending_reboot.actions | length) == 1 and
+        .system.pending_reboot.reasons == [$reason]
+      end
+    )
   ' "$CONFIG_STATUS_LOG" >/dev/null ||
   fail "config status JSON did not match applied state"
 
@@ -1092,8 +1199,8 @@ run_qrexec_or_fail \
       .status == \"passed\"' \"deployments/\$latest/setup.json\" &&
     jq -e '.schema == \"nixome.qubes-topology.v1\"' \"deployments/\$latest/topology.json\" &&
     jq -e '.schema == \"nixome.systemd-actions.v1\" and
-      .status == \"passed\"' \"deployments/\$latest/systemd-actions.json\" &&
-    jq -e '.systemd_actions.status == \"passed\"' \"deployments/\$latest/deployment.json\" &&
+      .status == \"$EXPECTED_SYSTEMD_ACTIONS_STATUS\"' \"deployments/\$latest/systemd-actions.json\" &&
+    jq -e '.systemd_actions.status == \"$EXPECTED_SYSTEMD_ACTIONS_STATUS\"' \"deployments/\$latest/deployment.json\" &&
     find \"deployments/\$latest\" -maxdepth 2 -type f | sort"
 
 jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT" '
@@ -1113,7 +1220,13 @@ jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT"
   any(.validation.checks[]; .name == "nix-system-source-refs-dry-run" and .status == "passed")
 ' "$ARCHIVE_JSON" >/dev/null || fail "config archive JSON did not pass"
 
-jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT" '
+jq -e \
+  --arg staging "$STAGING" \
+  --arg validator "$VALIDATOR" \
+  --arg vault "$VAULT" \
+  --arg switch_action "$DOM0_SYSTEM_SWITCH_ACTION" \
+  --arg reason "$DOM0_SYSTEM_REASON" \
+  '
   .schema == "nixome.config-apply.v1" and
   .status == "passed" and
   .staging == $staging and
@@ -1128,15 +1241,31 @@ jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT"
   .system_apply_result.status == "passed" and
   .system_apply_result.profile_status == "passed" and
   .system_apply_result.host_system_status == "passed" and
-    .system_apply_result.systemd_status == "passed" and
-    .systemd_actions_result.status == "passed" and
-    .system_apply_result.reboot_actions == [] and
-    .system_apply_result.reboot_required == false and
-    .deployment.system_apply.schema == "nixome.system-apply.v1" and
-    .deployment.system_apply.status == "passed" and
-    .deployment.system_apply.host_system_status == "passed" and
-    .deployment.system_apply.reboot_actions == [] and
-    .deployment.systemd_actions.status == "passed" and
+  .deployment.system_apply.schema == "nixome.system-apply.v1" and
+  .deployment.system_apply.status == "passed" and
+  .deployment.system_apply.host_system_status == "passed" and
+  (
+    if $switch_action == "switch" then
+      .system_apply_result.systemd_status == "passed" and
+      .systemd_actions_result.status == "passed" and
+      .system_apply_result.reboot_actions == [] and
+      .system_apply_result.reboot_required == false and
+      .deployment.system_apply.reboot_actions == [] and
+      .deployment.system_apply.reboot_required == false and
+      .deployment.systemd_actions.status == "passed"
+    else
+      .system_apply_result.systemd_status == "skipped" and
+      .systemd_actions_result.status == "skipped" and
+      .system_apply_result.reboot_required == true and
+      (.system_apply_result.reboot_actions | length) == 1 and
+      .system_apply_result.reboot_actions[0].type == "dom0-nixos-system" and
+      .system_apply_result.reboot_reasons == [$reason] and
+      .deployment.system_apply.reboot_required == true and
+      (.deployment.system_apply.reboot_actions | length) == 1 and
+      .deployment.system_apply.reboot_reasons == [$reason] and
+      .deployment.systemd_actions.status == "skipped"
+    end
+  ) and
   .setup.status == "passed" and
   .setup.domains_changed >= 1
 ' "$APPLY_JSON" >/dev/null || fail "config apply JSON did not pass"
