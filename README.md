@@ -128,11 +128,17 @@ unchanged. `make vm-config-boot-activate-flow` then boots the same writable VM
 disk a second time and verifies that `/run/current-system` has advanced to the
 staged generation and `nixome-config-status` no longer reports a pending
 reboot.
-Inside `config-staging`, `nixome/machine.nix` can add
-`templates.definitions.<template-name>` entries. Each entry provides NixOS
-content through high-level fields such as `hostName`, `packages`, `etc`, and
-optional raw `modules`, plus Qubes domain/AppVM defaults; the candidate flake
-exposes the resulting template package and topology source reference.
+Inside `config-staging`, `nixome/machine.nix` is the normal edit surface.
+`dom0.host` can add dom0 packages, `/etc` files, systemd units, ordinary NixOS
+module options under `configuration`, and raw modules when needed. Those fields
+become the candidate `nixosConfigurations.nixome-dom0` closure that dom0
+builds and switches.
+`templates.definitions.<template-name>` entries do the same for NixOS
+TemplateVM contents: high-level fields such as `hostName`, `packages`, `etc`,
+`systemd`, and `configuration` compile into a guest NixOS module stack, while
+the same definition also declares Qubes TemplateVM/AppVM defaults. The
+candidate flake exposes both the template package source reference and
+`nixome.templateConfigurations` for direct evaluation.
 `make vm-config-template-flow` runs the heavier version of the nested proof:
 the staged config adds a second TemplateVM definition, dom0 builds that
 template package during apply, imports it, creates an AppVM from it, and checks
@@ -175,7 +181,9 @@ cache and the Nixome Nix store. `make gc-auto`, `make gc-dry-run`, and
 `/run/media/user/data/nixome/nix-root`; the GC script refuses to run against the
 host `/nix/store`. `make gc-auto` runs automatically before heavy VM/image
 targets and runs a full guarded GC only when the Nixome store is over
-`NIXOME_GC_AUTO_THRESHOLD_GIB`, default `80`. `make gc` refreshes
+`NIXOME_GC_AUTO_THRESHOLD_GIB`, default `80`. GC writes concise terminal output,
+full detail logs, and machine-readable
+`/run/media/user/data/nixome/logs/nixome-store-gc.json`. `make gc` refreshes
 Nixome-managed GC roots for current result links, VM backing images, and current
 JSON deployment artifacts, then deletes all unreachable paths in the Nixome
 custom store. Named build results are linked under
@@ -224,8 +232,8 @@ generated log directory, and removes the test qube on success if it created it.
   constrained Nixome-owned qrexec policy schema.
 - The bootstrap config-system topology currently uses one NixOS guest TemplateVM
   for all three config AppVM roles to keep nested image builds practical; staged
-  config can now define additional NixOS TemplateVM contents in
-  `nixome/machine.nix` as first-class template definitions.
+  config can now define dom0 host modules and additional NixOS TemplateVM
+  contents in `nixome/machine.nix` as first-class machine configuration.
 - `machines/test.nix` is the first concrete NixOS dom0 configuration.
 - `tests/` contains layered feedback scripts.
 - `docs/` records upstream findings and the next test boundary.

@@ -250,8 +250,8 @@ source plus evaluated artifacts into `config-vault`, and applies the validated
 topology/system plan with `nixome-config-apply --apply`. It then
 checks that the applied topology re-declared `config-vault`, `config-staging`,
 and `config-validator`, checks that the staged dom0 system generation updated
-`/run/current-system`, checks that a staged `machine.nix` extra dom0 module wrote
-an `/etc/nixome` marker and restarted its declared systemd unit, checks that
+`/run/current-system`, checks that staged `machine.nix` `dom0.host` fields wrote
+`/etc/nixome` markers and restarted a declared systemd unit, checks that
 the Nix-declared `nixome-work-from-config` AppVM exists, and verifies that
 `uname -a` runs inside it through qrexec. It also checks that `config-vault`
 contains a successful deployment record for that apply, including the dom0
@@ -328,7 +328,9 @@ operate only on the separate Nixome store under
 `/run/media/user/data/nixome/nix-root`; the GC script refuses to run against the
 host `/nix/store`. `make gc-auto` runs automatically before heavy VM/image
 targets and runs a full guarded GC only when the Nixome store is over
-`NIXOME_GC_AUTO_THRESHOLD_GIB`, default `80`. `make gc` refreshes
+`NIXOME_GC_AUTO_THRESHOLD_GIB`, default `80`. Each GC run writes concise
+terminal output plus `nixome.store-gc.v1` JSON at
+`/run/media/user/data/nixome/logs/nixome-store-gc.json`. `make gc` refreshes
 Nixome-managed GC roots for current result links, VM backing images, and current
 JSON deployment artifacts, then deletes all unreachable paths in the Nixome
 custom store. `make clean-cache` removes the generated Qubes asset cache too,
