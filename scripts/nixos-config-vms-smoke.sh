@@ -828,7 +828,8 @@ grep -F 'configVms = import ./nixome/config-vms.nix;' flake.nix
 grep -F 'systemConfig = import ./nixome/system.nix;' flake.nix
 grep -F 'rawLocalConfig = import ./nixome/machine.nix {' flake.nix
 grep -F 'nixome-dom0-profile = dom0Profile;' flake.nix
-grep -F 'nixosConfigurations.nixome-dom0 = nixomeDom0System;' flake.nix
+grep -F 'nixosConfigurations = nixNativeConfigurations // {' flake.nix
+grep -F 'nixome-dom0 = nixomeDom0System;' flake.nix
 grep -F 'nixNative.domains."$CREATED_QUBE" = {' nixome/machine.nix
 grep -F 'dom0SystemAttr ? "nixosConfigurations.nixome-dom0.config.system.build.toplevel"' nixome/system.nix
 git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.lock flake.nix nixome/config-vms.nix nixome/dom0-host.nix nixome/local.nix nixome/machine.nix nixome/prebuilt-template-sources.nix nixome/system.nix nixome/system-schema.nix nixome/topology.nix

@@ -34,6 +34,10 @@ grep -F 'EXPECTED_SYSTEMD_ACTIONS_STATUS="skipped"' \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F "grep -F 'rawLocalConfig = import ./nixome/machine.nix {' flake.nix" \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
+grep -F "grep -F 'nixosConfigurations = nixNativeConfigurations // {' flake.nix" \
+  "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
+grep -F "grep -F 'nixome-dom0 = nixomeDom0System;' flake.nix" \
+  "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F "grep -F 'nixNative.domains." "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'assert_nix_closure_domain "$VAULT"' \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
