@@ -31,6 +31,7 @@ let
 
   guestDiagnosticsPath = [
     pkgs.coreutils
+    pkgs.findutils
     pkgs.gnugrep
     pkgs.kmod
     pkgs.systemd
@@ -1838,6 +1839,30 @@ in
       unitConfig.OnFailure = [ "nixome-qubes-rw-init-diagnostics.service" ];
     };
 
+    systemd.services.nixome-config-guest-init-diagnostics = lib.mkIf hasConfigRole {
+      description = "Print Nixome config guest diagnostics to the console";
+      path = guestDiagnosticsPath;
+      script = ''
+        set +e
+        echo "nixome guest diagnostics: nixome-config-guest-init.service failed"
+        systemctl --no-pager status nixome-config-guest-init.service
+        journalctl -b --no-pager -u nixome-config-guest-init.service -n 160
+        echo "nixome guest diagnostics: Qubes identity"
+        qubesdb-read /name
+        qubesdb-read /features/nixome-role
+        echo "nixome guest diagnostics: filesystem state"
+        findmnt / /rw /home /nix /nix/store
+        ls -ld /rw /rw/home /home /home/${cfg.user} /nix /nix/store
+        echo "nixome guest diagnostics: config paths"
+        find /home/${cfg.user} -maxdepth 3 -mindepth 1 -print
+      '';
+      serviceConfig = {
+        Type = "oneshot";
+        StandardOutput = "journal+console";
+        StandardError = "journal+console";
+      };
+    };
+
     systemd.services.nixome-config-guest-init = lib.mkIf hasConfigRole {
       description = "Initialize Nixome config repositories in Qubes private storage";
       wantedBy = [ "multi-user.target" ];
@@ -1874,7 +1899,13 @@ in
 
         run_as_user() {
           ${pkgs.util-linux}/bin/runuser -u ${lib.escapeShellArg cfg.user} -- \
-            ${pkgs.coreutils}/bin/env PATH=${lib.escapeShellArg roleInitPath} "$@"
+            ${pkgs.coreutils}/bin/env \
+              HOME=/home/${lib.escapeShellArg cfg.user} \
+              USER=${lib.escapeShellArg cfg.user} \
+              LOGNAME=${lib.escapeShellArg cfg.user} \
+              XDG_CACHE_HOME=/home/${lib.escapeShellArg cfg.user}/.cache \
+              PATH=${lib.escapeShellArg roleInitPath} \
+              "$@"
         }
 
         case "$role" in
@@ -1901,6 +1932,7 @@ in
         Type = "oneshot";
         RemainAfterExit = true;
       };
+      unitConfig.OnFailure = [ "nixome-config-guest-init-diagnostics.service" ];
     };
 
     systemd.services.qubes-db = {
