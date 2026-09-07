@@ -18,6 +18,7 @@ EXTRA_HOST_MESSAGE="$RESULT_DIR/extra-host-message.txt"
 EXTRA_HOST_SERVICE="$RESULT_DIR/extra-host-service.txt"
 EXTRA_HOST_CONFIGURATION="$RESULT_DIR/extra-host-configuration.txt"
 EXTRA_HOST_PACKAGE="$RESULT_DIR/extra-host-package.json"
+EXTRA_HOST_OVERLAY_PACKAGE="$RESULT_DIR/extra-host-overlay-package.json"
 HOST_SYSTEM_DERIVATIONS="$RESULT_DIR/dom0-system-derivations.txt"
 LOCAL_TEMPLATE_DERIVATION="$RESULT_DIR/local-template-derivation.txt"
 CONFIG_VAULT_TEMPLATE_DERIVATION="$RESULT_DIR/config-vault-template-derivation.txt"
@@ -364,6 +365,11 @@ cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
   };
 
   dom0.host = {
+    overlays = [
+      (final: prev: {
+        nixomeOverlayProbe = final.writeText "nixome-overlay-probe" "overlay\n";
+      })
+    ];
     packages = with pkgs; [
       hello
     ];
@@ -376,6 +382,13 @@ cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
     configuration = {
       environment.etc."nixome/local-dom0-host-configuration".text = "${appliedMessage}-configuration\n";
     };
+    modules = [
+      ({ pkgs, ... }: {
+        environment.systemPackages = [
+          pkgs.nixomeOverlayProbe
+        ];
+      })
+    ];
   };
 
   system.args = {
@@ -426,6 +439,17 @@ nix \
   --apply 'packages: builtins.any (package: (package.pname or package.name or "") == "hello") packages' \
   "$WORK_DIR#nixosConfigurations.nixome-dom0.config.environment.systemPackages" \
   > "$EXTRA_HOST_PACKAGE"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json \
+  --apply 'packages: builtins.any (package: (package.pname or package.name or "") == "nixome-overlay-probe") packages' \
+  "$WORK_DIR#nixosConfigurations.nixome-dom0.config.environment.systemPackages" \
+  > "$EXTRA_HOST_OVERLAY_PACKAGE"
 nix \
   --extra-experimental-features nix-command \
   --extra-experimental-features flakes \
@@ -574,6 +598,7 @@ grep -qx initial-extra "$EXTRA_HOST_MESSAGE"
 grep -qx "Nixome local extra module fixture" "$EXTRA_HOST_SERVICE"
 grep -qx initial-configuration "$EXTRA_HOST_CONFIGURATION"
 jq -e '. == true' "$EXTRA_HOST_PACKAGE" >/dev/null
+jq -e '. == true' "$EXTRA_HOST_OVERLAY_PACKAGE" >/dev/null
 grep -qx dev-configuration "$LOCAL_TEMPLATE_CONFIGURATION"
 [ -s "$LOCAL_TEMPLATE_DERIVATION" ]
 [ -s "$CONFIG_VAULT_TEMPLATE_DERIVATION" ]

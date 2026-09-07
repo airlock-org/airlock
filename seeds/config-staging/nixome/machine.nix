@@ -70,8 +70,10 @@
   };
 
   # Add dom0 host configuration here. These fields compile into normal NixOS
-  # modules inside nixosConfigurations.nixome-dom0.
+  # modules inside nixosConfigurations.nixome-dom0. Use overlays for dom0
+  # package/version overrides.
   dom0.host = {
+    overlays = [ ];
     packages = [ ];
     etc = { };
     systemd = { };

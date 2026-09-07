@@ -104,6 +104,7 @@
       localDom0HostModule =
         { ... }:
         {
+          nixpkgs.overlays = localDom0Host.overlays or [ ];
           environment.systemPackages = localDom0Host.packages or [ ];
           environment.etc = localDom0Host.etc or { };
         }

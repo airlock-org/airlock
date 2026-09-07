@@ -270,6 +270,11 @@ edit surface is:
 
 ```nix
 dom0.host = {
+  overlays = [
+    (final: prev: {
+      # Example: override or replace dom0 packages here.
+    })
+  ];
   packages = with pkgs; [ vim ];
   etc."nixome/example".text = "hello\n";
   systemd.services.nixome-example = {
@@ -287,10 +292,11 @@ dom0.host = {
 These fields compile into normal NixOS modules inside
 `nixosConfigurations.nixome-dom0`, so they can affect packages, systemd units,
 boot options, kernel options, and Qubes package overlays without changing the
-bootstrap module layout. `dom0.extraModules` remains as a compatibility escape
-hatch, but new config should prefer `dom0.host`. `nixome.system` records the
-apply plan and source references; the NixOS modules define the actual host
-closure that dom0 builds and switches.
+bootstrap module layout. Use `dom0.host.overlays` for ordinary dom0
+package/version overrides, including Qubes package overrides. `dom0.extraModules`
+remains as a compatibility escape hatch, but new config should prefer
+`dom0.host`. `nixome.system` records the apply plan and source references; the
+NixOS modules define the actual host closure that dom0 builds and switches.
 
 TemplateVM contents are defined in Nix as well. The seeded
 `nixome/templates.nix` turns `templates.definitions` from `nixome/machine.nix`

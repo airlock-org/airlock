@@ -130,9 +130,9 @@ staged generation and `nixome-config-status` no longer reports a pending
 reboot.
 Inside `config-staging`, `nixome/machine.nix` is the normal edit surface.
 `dom0.host` can add dom0 packages, `/etc` files, systemd units, ordinary NixOS
-module options under `configuration`, and raw modules when needed. Those fields
-become the candidate `nixosConfigurations.nixome-dom0` closure that dom0
-builds and switches.
+module options under `configuration`, overlays for dom0 package/version
+overrides, and raw modules when needed. Those fields become the candidate
+`nixosConfigurations.nixome-dom0` closure that dom0 builds and switches.
 `templates.definitions.<template-name>` entries do the same for NixOS
 TemplateVM contents: high-level fields such as `hostName`, `packages`, `etc`,
 `systemd`, and `configuration` compile into a guest NixOS module stack, while
