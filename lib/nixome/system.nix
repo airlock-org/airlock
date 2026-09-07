@@ -444,14 +444,29 @@ let
       reason = hostSystem.reason;
     };
 
-  rebootReasons =
+  hostSystemRebootAction =
+    hostSystem:
+    optional (hostSystem.enable && hostSystem.switch_action == "boot") {
+      type = "dom0-nixos-system";
+      switch_action = hostSystem.switch_action;
+      source = hostSystem.source;
+      source_ref = hostSystem.source_ref;
+      reason = hostSystem.reason;
+    };
+
+  rebootComponentActions =
     nixos:
     concatMap (
       name:
       let
         component = getAttr name nixos;
       in
-      optional component.enable component.reason
+      optional component.enable {
+        type = "dom0-nixos-${name}";
+        source = component.source;
+        source_ref = component.source_ref;
+        reason = component.reason;
+      }
     ) (attrNames nixos);
 
   mkSystem =
@@ -475,14 +490,17 @@ let
         }
         ++ hostSystemLiveAction dom0.nixos.system
         ++ serviceLiveActions dom0.systemd.services;
-      reasons = rebootReasons {
-        inherit (dom0.nixos)
-          bootloader
-          kernel
-          qubes
-          xen
-          ;
-      };
+      rebootActions =
+        hostSystemRebootAction dom0.nixos.system
+        ++ rebootComponentActions {
+          inherit (dom0.nixos)
+            bootloader
+            kernel
+            qubes
+            xen
+            ;
+        };
+      reasons = map (action: action.reason) rebootActions;
     in
     if requestedSchema != schema then
       fail "schema" "expected ${schema}, got ${toJSON requestedSchema}"
@@ -491,7 +509,8 @@ let
         inherit schema dom0;
         plan = {
           live_actions = liveActions;
-          reboot_required = reasons != [ ];
+          reboot_actions = rebootActions;
+          reboot_required = rebootActions != [ ];
           reboot_reasons = reasons;
         };
       };

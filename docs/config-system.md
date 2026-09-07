@@ -225,6 +225,11 @@ path to normal NixOS host changes such as packages, systemd units, boot options,
 kernel options, and Qubes package overlays without changing the bootstrap
 module layout. `nixome.system` records the apply plan and source references;
 the NixOS modules define the actual host closure that dom0 builds and switches.
+The plan separates `live_actions` from `reboot_actions`: a normal
+`dom0.nixos.system.switchAction = "switch"` is treated as live, while
+`switchAction = "boot"` installs the next boot generation and records a pending
+reboot. Kernel, Xen, bootloader, and Qubes package-set requests are also
+reported as structured reboot actions with `reboot_required = true`.
 
 `config-vault` now has two durable artifact classes:
 

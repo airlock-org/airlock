@@ -7,12 +7,14 @@ LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nixome-system-schema.XXXXXX")"
 VALID_JSON="$LOG_DIR/system-schema-valid.json"
 REBOOT_JSON="$LOG_DIR/system-schema-reboot.json"
+BOOT_JSON="$LOG_DIR/system-schema-boot.json"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-mkdir -p "$LOG_DIR" "$WORK_DIR/valid/nixome" "$WORK_DIR/reboot/nixome"
+mkdir -p "$LOG_DIR" "$WORK_DIR/valid/nixome" "$WORK_DIR/reboot/nixome" "$WORK_DIR/boot/nixome"
 cp "$ROOT/lib/nixome/system.nix" "$WORK_DIR/valid/nixome/system-schema.nix"
 cp "$ROOT/lib/nixome/system.nix" "$WORK_DIR/reboot/nixome/system-schema.nix"
+cp "$ROOT/lib/nixome/system.nix" "$WORK_DIR/boot/nixome/system-schema.nix"
 
 cat > "$WORK_DIR/valid/flake.nix" <<'EOF'
 {
@@ -72,8 +74,32 @@ cat > "$WORK_DIR/reboot/flake.nix" <<'EOF'
 }
 EOF
 
+cat > "$WORK_DIR/boot/flake.nix" <<'EOF'
+{
+  outputs =
+    { self }:
+    let
+      systemSchema = import ./nixome/system-schema.nix;
+    in
+    {
+      nixome.system = systemSchema.mkSystem {
+        dom0 = {
+          nixos.system = {
+            source = {
+              build = "nixosConfigurations.dom0.config.system.build.toplevel";
+            };
+            switchAction = "boot";
+            reason = "install next dom0 boot generation";
+          };
+        };
+      };
+    };
+}
+EOF
+
 nix eval --json "$WORK_DIR/valid#nixome.system" > "$VALID_JSON"
 nix eval --json "$WORK_DIR/reboot#nixome.system" > "$REBOOT_JSON"
+nix eval --json "$WORK_DIR/boot#nixome.system" > "$BOOT_JSON"
 
 jq -e '
   .schema == "nixome.system.v1" and
@@ -83,6 +109,7 @@ jq -e '
   .dom0.packages[0].name == "nixome-dom0-profile" and
   .dom0.systemd.services."nixome-example".action == "restart" and
   .plan.reboot_required == false and
+  .plan.reboot_actions == [] and
   any(.plan.live_actions[]; .type == "dom0-profile" and .message == "hello") and
   any(.plan.live_actions[]; .type == "systemd-service" and .name == "nixome-example" and .action == "restart")
 ' "$VALID_JSON" >/dev/null
@@ -98,11 +125,27 @@ jq -e '
   .dom0.nixos.qubes.enable == true and
   .plan.reboot_required == true and
   any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "switch" and .reason == "new dom0 system generation") and
+  (.plan.reboot_actions | length) == 4 and
+  any(.plan.reboot_actions[]; .type == "dom0-nixos-kernel" and .reason == "dom0 kernel change requires reboot") and
+  any(.plan.reboot_actions[]; .type == "dom0-nixos-xen" and .reason == "dom0 xen change requires reboot") and
+  any(.plan.reboot_actions[]; .type == "dom0-nixos-bootloader" and .reason == "dom0 bootloader change requires reboot") and
+  any(.plan.reboot_actions[]; .type == "dom0-nixos-qubes" and .reason == "dom0 qubes change requires reboot") and
   (.plan.reboot_reasons | length) == 4 and
   any(.plan.reboot_reasons[]; . == "dom0 kernel change requires reboot") and
   any(.plan.reboot_reasons[]; . == "dom0 xen change requires reboot") and
   any(.plan.reboot_reasons[]; . == "dom0 bootloader change requires reboot") and
   any(.plan.reboot_reasons[]; . == "dom0 qubes change requires reboot")
 ' "$REBOOT_JSON" >/dev/null
+
+jq -e '
+  .schema == "nixome.system.v1" and
+  .dom0.nixos.system.switch_action == "boot" and
+  .plan.reboot_required == true and
+  any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "boot" and .reason == "install next dom0 boot generation") and
+  (.plan.reboot_actions | length) == 1 and
+  any(.plan.reboot_actions[]; .type == "dom0-nixos-system" and .switch_action == "boot" and .reason == "install next dom0 boot generation") and
+  (.plan.reboot_reasons | length) == 1 and
+  .plan.reboot_reasons[0] == "install next dom0 boot generation"
+' "$BOOT_JSON" >/dev/null
 
 printf 'system schema eval ok\n'
