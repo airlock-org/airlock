@@ -278,6 +278,7 @@ generated state with:
 
 ```bash
 make disk-usage
+make gc-auto
 make gc-roots
 make gc-dry-run
 make gc
@@ -287,9 +288,12 @@ make clean-logs
 ```
 
 `make clean` removes VM work directories and logs while preserving the download
-cache and Nixome Nix store. `make gc-dry-run` and `make gc` operate only on
-the separate Nixome store under `/run/media/user/data/nixome/nix-root`; the GC
-script refuses to run against the host `/nix/store`. `make gc` refreshes
+cache and Nixome Nix store. `make gc-auto`, `make gc-dry-run`, and `make gc`
+operate only on the separate Nixome store under
+`/run/media/user/data/nixome/nix-root`; the GC script refuses to run against the
+host `/nix/store`. `make gc-auto` runs automatically before heavy VM/image
+targets and runs a full guarded GC only when the Nixome store is over
+`NIXOME_GC_AUTO_THRESHOLD_GIB`, default `80`. `make gc` refreshes
 Nixome-managed GC roots for current result links, VM backing images, and current
 JSON deployment artifacts, then deletes all unreachable paths in the Nixome
 custom store. `make clean-cache` removes the generated Qubes asset cache too,

@@ -24,7 +24,7 @@ endif
 
 NIXOME_NIX ?= ./scripts/nixome-nix.sh
 
-.PHONY: ensure-generated-dirs build test nixos-templates nixos-templates-dry-run vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-config-setup vm-config-smoke disk-usage gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test nixos-templates nixos-templates-dry-run vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-config-setup vm-config-smoke disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -39,56 +39,59 @@ build: ensure-generated-dirs
 test: ensure-generated-dirs
 	./tests/run-local.sh
 
-nixos-templates: ensure-generated-dirs
+nixos-templates: ensure-generated-dirs gc-auto
 	$(NIXOME_NIX) build .#nixome-nixos-config-system-template .#nixome-nixos-work-template --print-build-logs --show-trace
 
 nixos-templates-dry-run: ensure-generated-dirs
 	$(NIXOME_NIX) build .#nixome-nixos-config-system-template .#nixome-nixos-work-template --dry-run --show-trace
 
-vm-image: ensure-generated-dirs
+vm-image: ensure-generated-dirs gc-auto
 	$(NIXOME_NIX) build .#nixome-vm-image --print-build-logs --show-trace
 
 vm-image-dry-run: ensure-generated-dirs
 	$(NIXOME_NIX) build .#nixome-vm-image --dry-run --show-trace
 
-vm-run: ensure-generated-dirs
+vm-run: ensure-generated-dirs gc-auto
 	./scripts/run-nested-vm.sh
 
 vm-ssh: ensure-generated-dirs
 	./scripts/ssh-nested-vm.sh
 
-vm-gui-image: ensure-generated-dirs
+vm-gui-image: ensure-generated-dirs gc-auto
 	$(NIXOME_NIX) build .#nixome-vm-gui-image --print-build-logs --show-trace
 
 vm-gui-image-dry-run: ensure-generated-dirs
 	$(NIXOME_NIX) build .#nixome-vm-gui-image --dry-run --show-trace
 
-vm-gui-run: ensure-generated-dirs
+vm-gui-run: ensure-generated-dirs gc-auto
 	NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-image NIXOME_VM_DISPLAY=gtk ./scripts/run-nested-vm.sh
 
-vm-gui-config-image: ensure-generated-dirs
+vm-gui-config-image: ensure-generated-dirs gc-auto
 	$(NIXOME_NIX) build .#nixome-vm-gui-config-image --print-build-logs --show-trace
 
 vm-gui-config-image-dry-run: ensure-generated-dirs
 	$(NIXOME_NIX) build .#nixome-vm-gui-config-image --dry-run --show-trace
 
-vm-gui-config-run: ensure-generated-dirs
+vm-gui-config-run: ensure-generated-dirs gc-auto
 	NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=gtk ./scripts/run-nested-vm.sh
 
-vm-gui-check: ensure-generated-dirs
+vm-gui-check: ensure-generated-dirs gc-auto
 	NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
 
-vm-gui-smoke: ensure-generated-dirs
+vm-gui-smoke: ensure-generated-dirs gc-auto
 	./scripts/run-nested-gui-smoke.sh
 
-vm-config-setup: ensure-generated-dirs
+vm-config-setup: ensure-generated-dirs gc-auto
 	NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
 
-vm-config-smoke: ensure-generated-dirs
+vm-config-smoke: ensure-generated-dirs gc-auto
 	NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
 
 disk-usage:
 	./scripts/clean-generated.sh disk-usage
+
+gc-auto: ensure-generated-dirs
+	./scripts/gc-nixome-store.sh auto
 
 gc-roots: ensure-generated-dirs
 	./scripts/gc-nixome-store.sh roots

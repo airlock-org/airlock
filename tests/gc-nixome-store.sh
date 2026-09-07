@@ -96,7 +96,7 @@ ROOTS_DIR="$NIX_ROOT/nix/var/nix/gcroots/nixome"
 MANIFEST="$ROOTS_DIR/manifest.tsv"
 
 grep -F 'store = '"$NIX_ROOT" "$MOCK_LOG" >/dev/null
-grep -F 'ARGS=[--gc][--print-dead]' "$MOCK_LOG" >/dev/null
+grep -Fx 'ARGS=[--gc][--print-dead]' "$MOCK_LOG" >/dev/null
 grep -F '/nix/store/11111111111111111111111111111111-vm-image' "$MANIFEST" >/dev/null
 grep -F '/nix/store/22222222222222222222222222222222-backing-image' "$MANIFEST" >/dev/null
 grep -F '/nix/store/33333333333333333333333333333333-system' "$MANIFEST" >/dev/null
@@ -116,7 +116,25 @@ env \
   NIXOME_QEMU_IMG_BIN="$BIN_DIR/qemu-img" \
   "$ROOT/scripts/gc-nixome-store.sh" run > "$WORK_DIR/run.out"
 
-grep -F 'ARGS=[--gc]' "$MOCK_LOG" >/dev/null
+grep -Fx 'ARGS=[--gc]' "$MOCK_LOG" >/dev/null
+
+env \
+  PATH="$BIN_DIR:$PATH" \
+  NIXOME_GC_ALLOW_NONSTANDARD_DATA_ROOT=1 \
+  NIXOME_GC_AUTO_THRESHOLD_GIB=0 \
+  NIXOME_GC_TEST_MOCK_LOG="$MOCK_LOG" \
+  NIXOME_DATA_ROOT="$DATA_ROOT" \
+  NIXOME_NIX_ROOT="$NIX_ROOT" \
+  NIXOME_NIX_STORE="$NIX_ROOT" \
+  NIXOME_VM_DIR="$VM_DIR" \
+  NIXOME_LOG_DIR="$LOG_DIR" \
+  NIXOME_NIX_STORE_BIN="$BIN_DIR/nix-store" \
+  NIXOME_QEMU_IMG_BIN="$BIN_DIR/qemu-img" \
+  "$ROOT/scripts/gc-nixome-store.sh" auto > "$WORK_DIR/auto.out"
+
+grep -F 'Auto decision:    running full GC' "$WORK_DIR/auto.out" >/dev/null
+[ "$(grep -Fxc 'ARGS=[--gc][--print-dead]' "$MOCK_LOG")" = 2 ]
+[ "$(grep -Fxc 'ARGS=[--gc]' "$MOCK_LOG")" = 2 ]
 
 if env \
   NIXOME_DATA_ROOT="/tmp/nixome-gc-nonstandard-$$" \

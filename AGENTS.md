@@ -13,3 +13,6 @@
 - Do not make full GUI support block the first qrexec/VM lifecycle milestone.
 - Commit changes after each coherent conceptual change when practical. Use
   judgment about granularity, but avoid bundling unrelated work into one commit.
+- Long Nixome image/template/VM iterations can grow the custom store quickly.
+  Run `make gc-auto` periodically and after large failed build loops. Use only
+  the guarded Nixome GC targets; do not garbage collect the host `/nix/store`.

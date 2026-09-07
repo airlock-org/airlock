@@ -131,6 +131,7 @@ Useful cleanup commands:
 
 ```bash
 make disk-usage
+make gc-auto
 make gc-roots
 make gc-dry-run
 make gc
@@ -141,9 +142,12 @@ make clean-cache
 ```
 
 `make clean` removes VM work directories and logs, but preserves the download
-cache and the Nixome Nix store. `make gc-dry-run` and `make gc` operate only
-on the separate Nixome store under `/run/media/user/data/nixome/nix-root`; the
-GC script refuses to run against the host `/nix/store`. `make gc` refreshes
+cache and the Nixome Nix store. `make gc-auto`, `make gc-dry-run`, and
+`make gc` operate only on the separate Nixome store under
+`/run/media/user/data/nixome/nix-root`; the GC script refuses to run against the
+host `/nix/store`. `make gc-auto` runs automatically before heavy VM/image
+targets and runs a full guarded GC only when the Nixome store is over
+`NIXOME_GC_AUTO_THRESHOLD_GIB`, default `80`. `make gc` refreshes
 Nixome-managed GC roots for current result links, VM backing images, and current
 JSON deployment artifacts, then deletes all unreachable paths in the Nixome
 custom store. The VM runner keeps only one stale overlay backup per image by

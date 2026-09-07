@@ -11,6 +11,7 @@ NIX_STORE_BIN="${NIXOME_NIX_STORE_BIN:-nix-store}"
 QEMU_IMG_BIN="${NIXOME_QEMU_IMG_BIN:-qemu-img}"
 ALLOW_NONSTANDARD_DATA_ROOT="${NIXOME_GC_ALLOW_NONSTANDARD_DATA_ROOT:-0}"
 ALLOW_RUNNING_VM="${NIXOME_GC_ALLOW_RUNNING_VM:-0}"
+AUTO_THRESHOLD_GIB="${NIXOME_GC_AUTO_THRESHOLD_GIB:-80}"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
 
@@ -19,6 +20,7 @@ usage() {
 usage: gc-nixome-store.sh MODE
 
 Modes:
+  auto      Refresh roots and run full GC when the Nixome store is large.
   dry-run   Refresh Nixome GC roots and list dead paths without deleting them.
   run       Refresh Nixome GC roots and delete all unreachable store paths.
   roots     Refresh Nixome GC roots only.
@@ -48,7 +50,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$MODE" in
-  dry-run|run|roots) ;;
+  auto|dry-run|run|roots) ;;
   --help|-h)
     usage
     exit 0
@@ -93,7 +95,19 @@ esac
 [ "$nix_root" != "/nix" ] || die "refusing to use /nix as Nix root"
 [ "$nix_root" != "/nix/store" ] || die "refusing to use /nix/store as Nix root"
 [ "$store_dir" != "/nix/store" ] || die "refusing to use host /nix/store"
-[ -d "$store_dir" ] || die "Nixome store directory is missing: $store_dir"
+if [ ! -d "$store_dir" ]; then
+  if [ "$MODE" = auto ]; then
+    printf 'Nixome store directory is missing; auto GC skipped: %s\n' "$store_dir"
+    exit 0
+  fi
+  die "Nixome store directory is missing: $store_dir"
+fi
+
+case "$AUTO_THRESHOLD_GIB" in
+  ''|*[!0-9]*)
+    die "NIXOME_GC_AUTO_THRESHOLD_GIB must be a non-negative integer"
+    ;;
+esac
 
 if [ "$ALLOW_RUNNING_VM" != "1" ]; then
   if pgrep -f "qemu-system.*${VM_DIR}" >/dev/null 2>&1; then
@@ -261,7 +275,7 @@ run_nix_store_gc() {
   nix_config="store = $nix_root"
 
   case "$MODE" in
-    dry-run)
+    auto|dry-run)
       env NIX_CONFIG="$nix_config" "$NIX_STORE_BIN" --gc --print-dead > "$dead_log"
       ;;
     run)
@@ -278,12 +292,36 @@ print_summary() {
   printf 'Rooted paths:     %s\n' "$root_count"
 }
 
+run_full_gc() {
+  local nix_config
+  nix_config="store = $nix_root"
+
+  env NIX_CONFIG="$nix_config" "$NIX_STORE_BIN" --gc | tee "$gc_log"
+}
+
 refresh_roots
 print_summary
 
 case "$MODE" in
   roots)
     printf 'Root manifest:    %s\n' "$manifest"
+    ;;
+  auto)
+    run_nix_store_gc
+    dead_count="$(grep -c '^/nix/store/' "$dead_log" || true)"
+    store_bytes="$(du -s -B1 "$nix_root" | awk '{ print $1 }')"
+    threshold_bytes=$((AUTO_THRESHOLD_GIB * 1024 * 1024 * 1024))
+    printf 'Auto threshold:   %s GiB\n' "$AUTO_THRESHOLD_GIB"
+    printf 'Store bytes:      %s\n' "$store_bytes"
+    printf 'Dead path list:   %s\n' "$dead_log"
+    printf 'Dead path count:  %s\n' "$dead_count"
+    if [ "$dead_count" -gt 0 ] && [ "$store_bytes" -ge "$threshold_bytes" ]; then
+      printf 'Auto decision:    running full GC\n'
+      run_full_gc
+      printf 'GC log:           %s\n' "$gc_log"
+    else
+      printf 'Auto decision:    skipped\n'
+    fi
     ;;
   dry-run)
     run_nix_store_gc
