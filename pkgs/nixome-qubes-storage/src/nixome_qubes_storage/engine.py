@@ -857,7 +857,7 @@ def attach_blob_view(root, domain, generation):
         dmsetup = require_tool("dmsetup", "NIXOME_DMSETUP")
         table_path = root / "runtime" / f"{name}.table"
         atomic_write(table_path, table, mode=0o400)
-        run_checked([dmsetup, "-r", "create", name, "--table", str(table_path)])
+        run_checked([dmsetup, "-r", "create", name], input_text=table)
         run_checked([dmsetup, "mknodes", name])
 
     return {
