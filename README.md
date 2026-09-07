@@ -12,6 +12,7 @@ for:
 - a POC NixOS dom0 configuration,
 - NixOS Qube template artifacts for config-system experiments,
 - staged config-defined NixOS TemplateVM artifacts,
+- staged config-defined Nix-native StandaloneVM root images,
 - a first declarative Qubes topology setup command,
 - a small typed topology schema for staged Nix config candidates,
 - local module/evaluation checks,
@@ -139,6 +140,12 @@ TemplateVM contents: high-level fields such as `hostName`, `packages`, `etc`,
 the same definition also declares Qubes TemplateVM/AppVM defaults. The
 candidate flake exposes both the template package source reference and
 `nixome.templateConfigurations` for direct evaluation.
+`nixNative.domains.<domain-name>` entries declare Nix-native domains. The
+current implementation builds a NixOS guest system, a Qubes-compatible root
+image, and a read-only store closure image; dom0 applies that as a Qubes
+StandaloneVM by importing the root image and recording the system/store
+materialization metadata. The store image is not yet mounted as `/nix/store`;
+that is the next storage milestone.
 `make vm-config-template-flow` runs the heavier version of the nested proof:
 the staged config adds a second TemplateVM definition, dom0 builds that
 template package during apply, imports it, creates an AppVM from it, and checks

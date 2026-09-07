@@ -151,7 +151,7 @@ printf 'qvm-service %s\n' "$*" >> "$MUTATION_LOG"
 exit 0
 EOF
 
-for command in qvm-create qvm-template-postprocess; do
+for command in qvm-create qvm-template-postprocess qvm-volume; do
   cat > "$BIN_DIR/$command" <<'EOF'
 #!/usr/bin/env bash
 printf '%s %s\n' "$0" "$*" >> "$MUTATION_LOG"

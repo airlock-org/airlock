@@ -22,6 +22,9 @@ SYSTEMD_ACTIONS_JSON="$LOG_DIR/config-system-systemd-actions.json"
 SYSTEMD_ACTIONS_LOG="$LOG_DIR/config-system-systemd-actions.log"
 TEMPLATE_BUILDS_JSON="$LOG_DIR/config-apply-template-builds.json"
 TEMPLATE_BUILD_LOG="$LOG_DIR/config-apply-template-builds.log"
+NIX_DOMAIN_BUILDS_JSON="$LOG_DIR/config-apply-nix-domain-builds.json"
+NIX_DOMAIN_BUILD_LOG="$LOG_DIR/config-apply-nix-domain-builds.log"
+NIX_DOMAIN_MATERIALIZATIONS_JSON="$LOG_DIR/config-apply-nix-domain-materializations.json"
 UNSUPPORTED_DOMAIN_BACKENDS_JSON="$LOG_DIR/config-apply-unsupported-domain-backends.json"
 DEPLOYMENT_JSON="$LOG_DIR/config-deployment.json"
 DEPLOYMENT_TAR="$LOG_DIR/config-deployment.tar"
@@ -133,6 +136,8 @@ write_result() {
   setup_json="$(json_file_or_null "$SETUP_JSON")"
   system_apply_json="$(json_file_or_null "$SYSTEM_APPLY_JSON")"
   systemd_actions_json="$(json_file_or_null "$SYSTEMD_ACTIONS_JSON")"
+  nix_domain_builds_json="$(json_file_or_null "$NIX_DOMAIN_BUILDS_JSON")"
+  nix_domain_materializations_json="$(json_file_or_null "$NIX_DOMAIN_MATERIALIZATIONS_JSON")"
   unsupported_domain_backends_json="$(json_file_or_null "$UNSUPPORTED_DOMAIN_BACKENDS_JSON")"
   deployment_json="$(json_file_or_null "$DEPLOYMENT_JSON")"
   deployment_archive_json="$(json_file_or_null "$DEPLOYMENT_ARCHIVE_JSON")"
@@ -162,6 +167,9 @@ write_result() {
     --arg systemd_actions_log "$SYSTEMD_ACTIONS_LOG" \
     --arg template_builds "$TEMPLATE_BUILDS_JSON" \
     --arg template_build_log "$TEMPLATE_BUILD_LOG" \
+    --arg nix_domain_builds "$NIX_DOMAIN_BUILDS_JSON" \
+    --arg nix_domain_build_log "$NIX_DOMAIN_BUILD_LOG" \
+    --arg nix_domain_materializations "$NIX_DOMAIN_MATERIALIZATIONS_JSON" \
     --arg unsupported_domain_backends "$UNSUPPORTED_DOMAIN_BACKENDS_JSON" \
     --arg deployment_record "$DEPLOYMENT_JSON" \
     --arg deployment_tar "$DEPLOYMENT_TAR" \
@@ -181,6 +189,8 @@ write_result() {
     --argjson deployment "$deployment_json" \
     --argjson deployment_archive "$deployment_archive_json" \
     --argjson systemd_actions_result "$systemd_actions_json" \
+    --argjson nix_domain_builds_result "$nix_domain_builds_json" \
+    --argjson nix_domain_materializations_result "$nix_domain_materializations_json" \
     --argjson unsupported_domain_backends_result "$unsupported_domain_backends_json" \
     '{
       schema: $schema,
@@ -207,6 +217,9 @@ write_result() {
       systemd_actions_log: $systemd_actions_log,
       template_builds: $template_builds,
       template_build_log: $template_build_log,
+      nix_domain_builds: $nix_domain_builds,
+      nix_domain_build_log: $nix_domain_build_log,
+      nix_domain_materializations: $nix_domain_materializations,
       unsupported_domain_backends: $unsupported_domain_backends,
       deployment_record: $deployment_record,
       deployment_tar: $deployment_tar,
@@ -224,6 +237,8 @@ write_result() {
       setup: $setup,
       system_apply_result: $system_apply,
       systemd_actions_result: $systemd_actions_result,
+      nix_domain_builds_result: $nix_domain_builds_result,
+      nix_domain_materializations_result: $nix_domain_materializations_result,
       unsupported_domain_backends_result: $unsupported_domain_backends_result,
       deployment: $deployment,
       deployment_archive: $deployment_archive
@@ -352,6 +367,8 @@ build_deployment_tar() {
   setup_json="$(json_file_or_null "$SETUP_JSON")"
   system_apply_json="$(json_file_or_null "$SYSTEM_APPLY_JSON")"
   systemd_actions_json="$(json_file_or_null "$SYSTEMD_ACTIONS_JSON")"
+  nix_domain_builds_json="$(json_file_or_null "$NIX_DOMAIN_BUILDS_JSON")"
+  nix_domain_materializations_json="$(json_file_or_null "$NIX_DOMAIN_MATERIALIZATIONS_JSON")"
   unsupported_domain_backends_json="$(json_file_or_null "$UNSUPPORTED_DOMAIN_BACKENDS_JSON")"
 
   jq -c -n \
@@ -376,6 +393,8 @@ build_deployment_tar() {
     --arg archive "archive.json" \
     --arg setup "setup.json" \
     --arg template_builds "template-builds.json" \
+    --arg nix_domain_builds "nix-domain-builds.json" \
+    --arg nix_domain_materializations "nix-domain-materializations.json" \
     --arg unsupported_domain_backends "unsupported-domain-backends.json" \
     --arg validated_topology "validated-topology.json" \
     --arg validation "validation.json" \
@@ -384,6 +403,8 @@ build_deployment_tar() {
     --argjson setup_result "$setup_json" \
     --argjson system_apply_result "$system_apply_json" \
     --argjson systemd_actions_result "$systemd_actions_json" \
+    --argjson nix_domain_builds_result "$nix_domain_builds_json" \
+    --argjson nix_domain_materializations_result "$nix_domain_materializations_json" \
     --argjson unsupported_domain_backends_result "$unsupported_domain_backends_json" \
     '{
       schema: $schema,
@@ -408,6 +429,8 @@ build_deployment_tar() {
         archive: $archive,
         setup: $setup,
         template_builds: $template_builds,
+        nix_domain_builds: $nix_domain_builds,
+        nix_domain_materializations: $nix_domain_materializations,
         unsupported_domain_backends: $unsupported_domain_backends,
         validated_topology: $validated_topology,
         validation: $validation,
@@ -417,6 +440,8 @@ build_deployment_tar() {
       setup: $setup_result,
       system_apply: $system_apply_result,
       systemd_actions: $systemd_actions_result,
+      nix_domain_builds: $nix_domain_builds_result,
+      nix_domain_materializations: $nix_domain_materializations_result,
       unsupported_domain_backends: $unsupported_domain_backends_result
     }' > "$DEPLOYMENT_JSON"
 
@@ -429,6 +454,8 @@ build_deployment_tar() {
   copy_or_empty "$APPLY_TOPOLOGY_JSON" "$record_dir/topology.json"
   copy_or_empty "$VALIDATED_TOPOLOGY_JSON" "$record_dir/validated-topology.json"
   copy_or_empty "$TEMPLATE_BUILDS_JSON" "$record_dir/template-builds.json"
+  copy_or_empty "$NIX_DOMAIN_BUILDS_JSON" "$record_dir/nix-domain-builds.json"
+  copy_or_empty "$NIX_DOMAIN_MATERIALIZATIONS_JSON" "$record_dir/nix-domain-materializations.json"
   copy_or_empty "$UNSUPPORTED_DOMAIN_BACKENDS_JSON" "$record_dir/unsupported-domain-backends.json"
   copy_or_empty "$VALIDATED_SYSTEM_JSON" "$record_dir/system.json"
   copy_or_empty "$APPLY_SYSTEM_JSON" "$record_dir/resolved-system.json"
@@ -444,6 +471,7 @@ build_deployment_tar() {
   copy_or_empty "$SETUP_STDOUT" "$record_dir/logs/setup.stdout.log"
   copy_or_empty "$SETUP_STDERR" "$record_dir/logs/setup.stderr.log"
   copy_or_empty "$TEMPLATE_BUILD_LOG" "$record_dir/logs/template-builds.log"
+  copy_or_empty "$NIX_DOMAIN_BUILD_LOG" "$record_dir/logs/nix-domain-builds.log"
   copy_or_empty "$SYSTEM_BUILD_LOG" "$record_dir/logs/system-builds.log"
   copy_or_empty "$SYSTEM_APPLY_LOG" "$record_dir/logs/system-apply.log"
   copy_or_empty "$PROFILE_ACTIVATION_LOG" "$record_dir/logs/profile-activation.log"
@@ -460,6 +488,8 @@ build_deployment_tar() {
     topology.json \
     validated-topology.json \
     template-builds.json \
+    nix-domain-builds.json \
+    nix-domain-materializations.json \
     unsupported-domain-backends.json \
     system.json \
     resolved-system.json \
@@ -475,6 +505,7 @@ build_deployment_tar() {
     logs/setup.stdout.log \
     logs/setup.stderr.log \
     logs/template-builds.log \
+    logs/nix-domain-builds.log \
     logs/system-builds.log \
     logs/system-apply.log \
     logs/profile-activation.log \
@@ -530,46 +561,18 @@ archive_deployment_or_fail() {
 }
 
 write_unsupported_domain_backends_json() {
-  local topology_file="$1"
-  local reason="nix-closure domain materializer is not implemented yet"
+  local _topology_file="$1"
 
-  jq -c \
+  jq -c -n \
     --arg schema "nixome.unsupported-domain-backends.v1" \
-    --arg reason "$reason" \
-    '{
-      schema: $schema,
-      domains: [
-        (.domains // {})
-        | to_entries[]
-        | select((.value.backend.type // "qubes-template") == "nix-closure")
-        | {
-            domain: .key,
-            backend: .value.backend.type,
-            reason: $reason
-          }
-      ]
-    }' \
-    "$topology_file" > "$UNSUPPORTED_DOMAIN_BACKENDS_JSON"
+    '{schema: $schema, domains: []}' \
+    > "$UNSUPPORTED_DOMAIN_BACKENDS_JSON"
 }
 
 preflight_apply_domain_backends() {
   local topology_file="$1"
-  local count=0
-  local names=""
-  local reason=""
 
   write_unsupported_domain_backends_json "$topology_file"
-  count="$(jq -r '.domains | length' "$UNSUPPORTED_DOMAIN_BACKENDS_JSON")"
-  [ "$count" = "0" ] && return 0
-
-  names="$(
-    jq -r '.domains[].domain' "$UNSUPPORTED_DOMAIN_BACKENDS_JSON" |
-      awk 'BEGIN { sep = "" } { printf "%s%s", sep, $0; sep = "," } END { printf "\n" }'
-  )"
-  reason="nix-closure domain materializer is not implemented yet: $names"
-  archive_deployment_or_fail failed "$reason"
-  printf 'config apply failed: %s\n' "$reason" >&2
-  exit 1
 }
 
 safe_log_name() {
@@ -582,6 +585,21 @@ init_template_builds_json() {
     --arg schema "nixome.template-builds.v1" \
     '{schema: $schema, builds: []}' \
     > "$TEMPLATE_BUILDS_JSON"
+}
+
+init_nix_domain_builds_json() {
+  : > "$NIX_DOMAIN_BUILD_LOG"
+  jq -c -n \
+    --arg schema "nixome.nix-domain-builds.v1" \
+    '{schema: $schema, builds: []}' \
+    > "$NIX_DOMAIN_BUILDS_JSON"
+}
+
+init_nix_domain_materializations_json() {
+  jq -c -n \
+    --arg schema "nixome.nix-domain-materializations.v1" \
+    '{schema: $schema, domains: []}' \
+    > "$NIX_DOMAIN_MATERIALIZATIONS_JSON"
 }
 
 record_template_build() {
@@ -613,6 +631,40 @@ record_template_build() {
     }]' \
     "$TEMPLATE_BUILDS_JSON" > "$tmp"
   mv "$tmp" "$TEMPLATE_BUILDS_JSON"
+}
+
+record_nix_domain_build() {
+  domain="$1"
+  component="$2"
+  attr="$3"
+  subpath="$4"
+  status="$5"
+  output_path="$6"
+  source_path="$7"
+  log="$8"
+  tmp="$NIX_DOMAIN_BUILDS_JSON.tmp"
+
+  jq -c \
+    --arg domain "$domain" \
+    --arg component "$component" \
+    --arg attr "$attr" \
+    --arg subpath "$subpath" \
+    --arg status "$status" \
+    --arg output_path "$output_path" \
+    --arg source_path "$source_path" \
+    --arg log "$log" \
+    '.builds += [{
+      domain: $domain,
+      component: $component,
+      attr: $attr,
+      subpath: $subpath,
+      status: $status,
+      output_path: $output_path,
+      source_path: $source_path,
+      log: $log
+    }]' \
+    "$NIX_DOMAIN_BUILDS_JSON" > "$tmp"
+  mv "$tmp" "$NIX_DOMAIN_BUILDS_JSON"
 }
 
 resolve_template_sources() {
@@ -904,6 +956,212 @@ validate_system_source() {
     [ -x "$source_physical/bin/switch-to-configuration" ] ||
       fail "dom0 NixOS system source is missing bin/switch-to-configuration: $source"
   fi
+}
+
+validate_nix_domain_source() {
+  component="$1"
+  domain="$2"
+  source="$3"
+  source_physical="$4"
+
+  case "$component" in
+    system)
+      [ -d "$source_physical" ] ||
+        fail "Nix-native domain system source is not a directory for $domain: $source"
+      [ -e "$source_physical/init" ] ||
+        fail "Nix-native domain system source is missing init for $domain: $source/init"
+      ;;
+    kernel)
+      [ -d "$source_physical" ] ||
+        fail "Nix-native domain kernel source is not a directory for $domain: $source"
+      [ -f "$source_physical/vmlinuz" ] ||
+        fail "Nix-native domain kernel source is missing vmlinuz for $domain: $source/vmlinuz"
+      ;;
+    initrd|modules)
+      [ -e "$source_physical" ] ||
+        fail "Nix-native domain $component source is missing for $domain: $source"
+      ;;
+    root)
+      if [ -d "$source_physical" ]; then
+        [ -f "$source_physical/root.img" ] ||
+          fail "Nix-native domain root image directory is missing root.img for $domain: $source/root.img"
+      else
+        [ -f "$source_physical" ] ||
+          fail "Nix-native domain root image source is not a file for $domain: $source"
+      fi
+      ;;
+    store)
+      if [ -d "$source_physical" ]; then
+        [ -f "$source_physical/store.img" ] ||
+          fail "Nix-native domain store image directory is missing store.img for $domain: $source/store.img"
+      else
+        [ -f "$source_physical" ] ||
+          fail "Nix-native domain store image source is not a file for $domain: $source"
+      fi
+      ;;
+    *)
+      fail "unsupported Nix-native domain component for $domain: $component"
+      ;;
+  esac
+}
+
+resolve_nix_domain_sources() {
+  topology="$1"
+  worktree="$2"
+  resolved="$3"
+  encoded_components=()
+  encoded=""
+
+  init_nix_domain_builds_json
+  init_nix_domain_materializations_json
+
+  mapfile -t encoded_components < <(
+    jq -r '
+      (.domains // {})
+      | to_entries[]
+      | select((.value.backend.type // "qubes-template") == "nix-closure")
+      | .key as $domain
+      | (.value.backend // {}) as $backend
+      | [
+          { domain: $domain, component: "system", path: ["domains", $domain, "backend", "system"], value: ($backend.system // {}) },
+          { domain: $domain, component: "kernel", path: ["domains", $domain, "backend", "kernel"], value: ($backend.kernel // {}) },
+          { domain: $domain, component: "initrd", path: ["domains", $domain, "backend", "initrd"], value: ($backend.initrd // {}) },
+          { domain: $domain, component: "modules", path: ["domains", $domain, "backend", "modules"], value: ($backend.modules // {}) },
+          { domain: $domain, component: "root", path: ["domains", $domain, "backend", "root"], value: ($backend.root // {}) },
+          { domain: $domain, component: "store", path: ["domains", $domain, "backend", "store"], value: ($backend.store // {}) }
+        ]
+      | .[]
+      | select((.value.source_ref // null) != null or (.value.source // null) != null)
+      | {
+          domain: .domain,
+          component: .component,
+          path: .path,
+          source: (.value.source // null),
+          ref: (.value.source_ref // null)
+        }
+      | @base64
+    ' "$resolved"
+  )
+
+  if [ "${#encoded_components[@]}" -eq 0 ]; then
+    printf 'no Nix-native domain source refs or direct sources to resolve\n' >> "$NIX_DOMAIN_BUILD_LOG"
+  fi
+
+  for encoded in "${encoded_components[@]}"; do
+    component_json="$(printf '%s' "$encoded" | base64 -d)"
+    domain="$(printf '%s' "$component_json" | jq -r '.domain')"
+    component="$(printf '%s' "$component_json" | jq -r '.component')"
+    source_path_json="$(printf '%s' "$component_json" | jq -c '.path')"
+    safe_domain="$(safe_log_name "$domain")"
+    safe_component="$(safe_log_name "$component")"
+    build_log="$LOG_DIR/config-apply-nix-domain-build-$safe_domain-$safe_component.log"
+    build_stdout="$tmpdir/config-apply-nix-domain-build-$safe_domain-$safe_component.stdout"
+    output_path=""
+    source_path=""
+    source_path_physical=""
+
+    if printf '%s' "$component_json" | jq -e '.ref != null' >/dev/null; then
+      attr="$(printf '%s' "$component_json" | jq -r '.ref.attr')"
+      subpath="$(printf '%s' "$component_json" | jq -r '.ref.subpath // ""')"
+
+      {
+        printf 'domain=%s\n' "$domain"
+        printf 'component=%s\n' "$component"
+        printf 'attr=%s\n' "$attr"
+        printf 'subpath=%s\n' "$subpath"
+      } > "$build_log"
+
+      if nix_build_print_path "$worktree" "$attr" "$build_stdout" "$build_log"; then
+        cat "$build_stdout" >> "$build_log"
+        output_path="$(awk 'NF { last = $0 } END { print last }' "$build_stdout")"
+      else
+        record_nix_domain_build "$domain" "$component" "$attr" "$subpath" failed "" "" "$build_log"
+        cat "$build_log" >> "$NIX_DOMAIN_BUILD_LOG" || true
+        cat "$build_log" >&2 || true
+        fail "Nix-native domain build failed for $domain.$component from $attr"
+      fi
+
+      [ -n "$output_path" ] ||
+        fail "Nix-native domain build did not print an output path for $domain.$component from $attr"
+
+      source_path="$output_path"
+      if [ -n "$subpath" ]; then
+        source_path="$source_path/$subpath"
+      fi
+      source_path_physical="$(nixome_physical_store_path "$source_path")"
+      [ -e "$source_path_physical" ] ||
+        fail "built Nix-native domain source is missing for $domain.$component: $source_path"
+      validate_nix_domain_source "$component" "$domain" "$source_path" "$source_path_physical"
+
+      record_nix_domain_build "$domain" "$component" "$attr" "$subpath" passed "$output_path" "$source_path" "$build_log"
+      cat "$build_log" >> "$NIX_DOMAIN_BUILD_LOG" || true
+    else
+      source="$(printf '%s' "$component_json" | jq -r '.source // ""')"
+      [ -n "$source" ] ||
+        fail "empty direct Nix-native domain source for $domain.$component"
+
+      source_path="$(resolve_candidate_source_path "$domain.$component" "$worktree" "$source")"
+      source_path_physical="$(nixome_physical_store_path "$source_path")"
+      [ -e "$source_path_physical" ] ||
+        fail "direct Nix-native domain source is missing for $domain.$component: $source"
+
+      case "$source" in
+        /*) ;;
+        *)
+          persistent_source="$SYSTEM_STATE_DIR/sources/$candidate_commit/nix-domain-$safe_domain-$safe_component"
+          rm -rf "$persistent_source"
+          mkdir -p "$(dirname "$persistent_source")"
+          cp -a "$source_path_physical" "$persistent_source"
+          source_path="$persistent_source"
+          source_path_physical="$persistent_source"
+          ;;
+      esac
+
+      validate_nix_domain_source "$component" "$domain" "$source" "$source_path_physical"
+
+      {
+        printf 'domain=%s\n' "$domain"
+        printf 'component=%s\n' "$component"
+        printf 'direct_source=%s\n' "$source"
+        printf 'resolved_source=%s\n' "$source_path"
+      } >> "$NIX_DOMAIN_BUILD_LOG"
+    fi
+
+    tmp_resolved="$resolved.tmp"
+    jq \
+      --argjson path "$source_path_json" \
+      --arg source "$source_path" \
+      'setpath($path + ["source"]; $source) | setpath($path + ["source_ref"]; null)' \
+      "$resolved" > "$tmp_resolved"
+    mv "$tmp_resolved" "$resolved"
+  done
+
+  jq -c \
+    --arg schema "nixome.nix-domain-materializations.v1" \
+    '{
+      schema: $schema,
+      domains: [
+        (.domains // {})
+        | to_entries[]
+        | select((.value.backend.type // "qubes-template") == "nix-closure")
+        | {
+            domain: .key,
+            class: .value.class,
+            label: .value.label,
+            netvm: .value.netvm,
+            prefs: (.value.prefs // {}),
+            features: (.value.features // {}),
+            services: (.value.services // {}),
+            system: .value.backend.system,
+            kernel: .value.backend.kernel,
+            initrd: .value.backend.initrd,
+            modules: .value.backend.modules,
+            root: (.value.backend.root // null),
+            store: .value.backend.store,
+            state: .value.backend.state
+          }
+      ]
+    }' "$resolved" > "$NIX_DOMAIN_MATERIALIZATIONS_JSON"
 }
 
 resolve_direct_system_sources() {
@@ -1451,9 +1709,12 @@ cp "$system_json" "$APPLY_SYSTEM_JSON"
 init_template_builds_json
 init_system_builds_json
 init_systemd_actions_json
+init_nix_domain_builds_json
+init_nix_domain_materializations_json
 preflight_apply_domain_backends "$topology"
 
 resolve_template_sources "$topology" "$worktree" "$APPLY_TOPOLOGY_JSON"
+resolve_nix_domain_sources "$APPLY_TOPOLOGY_JSON" "$worktree" "$APPLY_TOPOLOGY_JSON"
 resolve_system_sources "$system_json" "$worktree" "$APPLY_SYSTEM_JSON"
 
 printf '+ env NIXOME_LOG_DIR=%q nixome-setup-config --apply --topology %q\n' \

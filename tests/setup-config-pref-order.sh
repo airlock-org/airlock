@@ -97,7 +97,7 @@ esac
 exit 1
 EOF
 
-for command in qubes-prefs qvm-create qvm-features qvm-service qvm-template-postprocess qubesd-query; do
+for command in qubes-prefs qvm-create qvm-features qvm-service qvm-template-postprocess qvm-volume qubesd-query; do
   cat > "$BIN_DIR/$command" <<'EOF'
 #!/usr/bin/env bash
 exit 0

@@ -38,9 +38,8 @@
   # };
   templates.definitions = { };
 
-  # Declare additional domains here. Nixome supports the existing Qubes
-  # TemplateVM/AppVM model and has a schema-level model for future Nix-native
-  # closure-backed domains.
+  # Declare additional traditional Qubes domains here. Nixome supports the
+  # existing TemplateVM/AppVM model alongside Nix-native domains.
   #
   # Traditional Qubes-backed domain:
   #
@@ -51,20 +50,25 @@
   #   netvm = "sys-firewall";
   # };
   #
-  # Future Nix-native domain. This validates as topology, but current dom0
-  # setup refuses to apply it until the closure image materializer exists.
+  domains = { };
+
+  # Declare Nix-native domains here. The current materializer creates a Qubes
+  # StandaloneVM from a Nix-built root image and records the immutable system
+  # closure plus read-only store image metadata. The longer-term storage backend
+  # will mount that store image directly as /nix/store.
   #
-  # domains.work-nix = {
-  #   backend = {
-  #     type = "nix-closure";
-  #     system.sourceRef.build = "nixosConfigurations.work.config.system.build.toplevel";
-  #     kernel.name = "6.12.64-1.fc41";
-  #     store.sourceRef.build = "packages.x86_64-linux.work-store-image";
-  #   };
+  # nixNative.domains.work-nix = {
   #   label = "green";
   #   netvm = null;
+  #   packages = with pkgs; [
+  #     git
+  #     jq
+  #   ];
+  #   configuration = {
+  #     environment.etc."nixome/domain-role".text = "work-nix\n";
+  #   };
   # };
-  domains = { };
+  nixNative.domains = { };
 
   # Add or override raw Qubes topology entries here. These become normalized
   # nixome.topology JSON in config-validator before dom0 applies them.

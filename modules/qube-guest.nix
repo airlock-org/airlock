@@ -654,6 +654,7 @@ let
                   { component: "kernel", ref: ($backend.kernel.source_ref // null) },
                   { component: "initrd", ref: ($backend.initrd.source_ref // null) },
                   { component: "modules", ref: ($backend.modules.source_ref // null) },
+                  { component: "root", ref: ($backend.root.source_ref // null) },
                   { component: "store", ref: ($backend.store.source_ref // null) }
                 ]
               | .[]
@@ -1146,6 +1147,9 @@ let
         $0 != "topology.json" &&
         $0 != "validated-topology.json" &&
         $0 != "template-builds.json" &&
+        $0 != "nix-domain-builds.json" &&
+        $0 != "nix-domain-materializations.json" &&
+        $0 != "unsupported-domain-backends.json" &&
         $0 != "system.json" &&
         $0 != "resolved-system.json" &&
         $0 != "system-plan.json" &&
@@ -1160,6 +1164,7 @@ let
         $0 != "logs/setup.stdout.log" &&
         $0 != "logs/setup.stderr.log" &&
         $0 != "logs/template-builds.log" &&
+        $0 != "logs/nix-domain-builds.log" &&
         $0 != "logs/system-builds.log" &&
         $0 != "logs/system-apply.log" &&
         $0 != "logs/profile-activation.log" &&
@@ -1181,6 +1186,9 @@ let
       topology.json \
       validated-topology.json \
       template-builds.json \
+      nix-domain-builds.json \
+      nix-domain-materializations.json \
+      unsupported-domain-backends.json \
       system.json \
       resolved-system.json \
       system-plan.json \
@@ -1208,6 +1216,9 @@ let
     topology_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/topology.json")"
     validated_topology_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validated-topology.json")"
     template_builds_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/template-builds.json")"
+    nix_domain_builds_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/nix-domain-builds.json")"
+    nix_domain_materializations_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/nix-domain-materializations.json")"
+    unsupported_domain_backends_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/unsupported-domain-backends.json")"
     system_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/system.json")"
     resolved_system_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/resolved-system.json")"
     system_apply_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/system-apply.json")"
@@ -1265,6 +1276,18 @@ let
     }
     [ "$template_builds_schema" = "nixome.template-builds.v1" ] || {
       printf 'unsupported template builds schema: %s\n' "$template_builds_schema" >&2
+      exit 1
+    }
+    [ "$nix_domain_builds_schema" = "nixome.nix-domain-builds.v1" ] || {
+      printf 'unsupported Nix-native domain builds schema: %s\n' "$nix_domain_builds_schema" >&2
+      exit 1
+    }
+    [ "$nix_domain_materializations_schema" = "nixome.nix-domain-materializations.v1" ] || {
+      printf 'unsupported Nix-native domain materializations schema: %s\n' "$nix_domain_materializations_schema" >&2
+      exit 1
+    }
+    [ "$unsupported_domain_backends_schema" = "nixome.unsupported-domain-backends.v1" ] || {
+      printf 'unsupported domain backend report schema: %s\n' "$unsupported_domain_backends_schema" >&2
       exit 1
     }
     [ "$system_schema" = "nixome.system.v1" ] || {
@@ -1342,6 +1365,9 @@ let
       topology.json \
       validated-topology.json \
       template-builds.json \
+      nix-domain-builds.json \
+      nix-domain-materializations.json \
+      unsupported-domain-backends.json \
       system.json \
       resolved-system.json \
       system-plan.json \
@@ -1359,6 +1385,7 @@ let
       setup.stdout.log \
       setup.stderr.log \
       template-builds.log \
+      nix-domain-builds.log \
       system-builds.log \
       system-apply.log \
       profile-activation.log \

@@ -43,6 +43,7 @@
         "configVms"
         "domains"
         "dom0"
+        "nixNative"
         "system"
         "templates"
         "topology"
@@ -95,6 +96,54 @@
           "packages"
           "systemd"
         ] (expectConfigAttrs path value);
+      checkNixNativeKeys =
+        path: allowed: attrs:
+        let
+          unknown = builtins.filter (name: !(builtins.elem name allowed)) (builtins.attrNames attrs);
+          prefix = "nixome.nixNative${if path == "" then "" else ".${path}"}";
+        in
+        if unknown == [ ] then
+          attrs
+        else
+          throw "${prefix}: unknown option(s): ${nixpkgs.lib.concatStringsSep ", " unknown}";
+      expectNixNativeAttrs =
+        path: value:
+        let
+          prefix = "nixome.nixNative${if path == "" then "" else ".${path}"}";
+        in
+        if builtins.typeOf value == "set" then
+          value
+        else
+          throw "${prefix}: expected an attribute set, got ${builtins.typeOf value}";
+      checkNixNativeDomain =
+        path: value:
+        checkNixNativeKeys path [
+          "additionalRootSpace"
+          "additionalStoreSpaceMiB"
+          "configuration"
+          "etc"
+          "features"
+          "hostName"
+          "hostname"
+          "kernel"
+          "label"
+          "modules"
+          "netvm"
+          "packages"
+          "prefs"
+          "services"
+          "systemd"
+        ] (expectNixNativeAttrs path value);
+      checkedNixNative =
+        let
+          checked = checkNixNativeKeys "" [ "domains" ] (expectNixNativeAttrs "" (localConfig.nixNative or { }));
+        in
+        checked
+        // {
+          domains = builtins.mapAttrs (
+            name: value: checkNixNativeDomain "domains.${name}" value
+          ) (checked.domains or { });
+        };
       checkConfigRoleAttrs =
         path: attrs:
         let
@@ -262,6 +311,45 @@
           templateBuilders
           ;
       };
+      nixNativeDomainEntries = builtins.mapAttrs (
+        name: definition:
+        templateBuilders.mkNixNativeDomain {
+          inherit name;
+          modules = [
+            (mkGuestContentModule name definition)
+          ]
+          ++ guestExtraModules definition;
+          additionalRootSpace = definition.additionalRootSpace or "1024M";
+          additionalStoreSpaceMiB = definition.additionalStoreSpaceMiB or 256;
+          kernelName = definition.kernel or nixomeQubeKernelName;
+          label = definition.label or "green";
+          netvm = definition.netvm or null;
+          prefs = definition.prefs or { };
+          features = definition.features or { };
+          services = definition.services or { };
+        }
+      ) checkedNixNative.domains;
+      nixNativeTopologyDomains = builtins.mapAttrs (_name: entry: entry.domain) nixNativeDomainEntries;
+      nixNativePackages = builtins.listToAttrs (
+        nixpkgs.lib.concatLists (
+          map (name: [
+            {
+              name = nixNativeDomainEntries.${name}.rootImageName;
+              value = nixNativeDomainEntries.${name}.rootImage;
+            }
+            {
+              name = nixNativeDomainEntries.${name}.storeImageName;
+              value = nixNativeDomainEntries.${name}.storeImage;
+            }
+          ]) (builtins.attrNames nixNativeDomainEntries)
+        )
+      );
+      nixNativeConfigurations = builtins.listToAttrs (
+        map (name: {
+          name = nixNativeDomainEntries.${name}.configurationName;
+          value = nixNativeDomainEntries.${name}.configuration;
+        }) (builtins.attrNames nixNativeDomainEntries)
+      );
 
       appliedMessage = "initial";
       config = configVms {
@@ -275,7 +363,11 @@
         extraTemplates = templateSet.topology.templates // (localTopology.extraTemplates or { });
         extraKernels = localTopology.extraKernels or { };
         extraPrefs = localTopology.extraPrefs or { };
-        extraDomains = templateSet.topology.domains // localDomains // (localTopology.extraDomains or { });
+        extraDomains =
+          templateSet.topology.domains
+          // nixNativeTopologyDomains
+          // localDomains
+          // (localTopology.extraDomains or { });
         extraQrexecRules = localTopology.extraQrexecRules or [ ];
       };
       topology = topologySchema.mkTopology config;
@@ -521,7 +613,7 @@
           '';
     in
     {
-      packages.${system} = templateSet.packages // {
+      packages.${system} = templateSet.packages // nixNativePackages // {
         nixome-dom0-profile = dom0Profile;
         nixome-nixos-config-vault-template = configVaultTemplate;
         nixome-nixos-config-staging-template = configStagingTemplate;
@@ -563,10 +655,13 @@
         };
         configSystemTemplateConfiguration = configSystemGuest;
         templateConfigurations = templateSet.configurations;
+        nixNativeConfigurations = nixNativeConfigurations;
         system = machineSystem;
         inherit topology;
       };
 
-      nixosConfigurations.nixome-dom0 = nixomeDom0System;
+      nixosConfigurations = nixNativeConfigurations // {
+        nixome-dom0 = nixomeDom0System;
+      };
     };
 }

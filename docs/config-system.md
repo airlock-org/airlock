@@ -96,9 +96,19 @@ domains.work = {
     type = "nix-closure";
     system.sourceRef.build = "nixosConfigurations.work.config.system.build.toplevel";
     kernel.name = "6.12.64-1.fc41";
+    root = {
+      mode = "qubes-root-image";
+      sourceRef = {
+        build = "packages.x86_64-linux.work-root-image";
+        subpath = "root.img";
+      };
+    };
     store = {
       mode = "closure-image";
-      sourceRef.build = "packages.x86_64-linux.work-store-image";
+      sourceRef = {
+        build = "packages.x86_64-linux.work-store-image";
+        subpath = "store.img";
+      };
     };
   };
   label = "green";
@@ -126,23 +136,29 @@ filesystem service. That preserves independent VM runtime behavior while
 allowing common immutable Nix store objects to be deduplicated by the storage
 backend.
 
-This is not the active boot path yet. The schema and validator can describe and
-check `nix-closure` domain references, but `nixome-setup-config --apply`
-currently refuses those domains before mutating Qubes state with:
+The active implementation is a Qubes-compatible bridge. A `nix-closure` domain
+is created as a Qubes `StandaloneVM`; dom0 resolves the declared Nix system,
+root image, and store image sources, imports the root image into the Qubes
+`domain:root` volume, then applies prefs, features, services, networking, and
+Nixome-owned qrexec policy. The imported root volume is writable because that
+is the current Qubes boot path. The separate read-only store image is built,
+validated, and recorded as deployment metadata, but it is not mounted as
+`/nix/store` yet.
 
-```text
-nix-closure domain materializer is not implemented yet
+The high-level staged edit surface for this path is:
+
+```nix
+nixNative.domains.work = {
+  label = "green";
+  netvm = null;
+  packages = with pkgs; [ git jq ];
+  etc."nixome/domain-role".text = "work\n";
+};
 ```
 
-That fail-fast behavior keeps the current POC honest: TemplateVM-backed domains
-continue to work, while closure-backed domains cannot be silently created as
-the wrong Qubes object type.
-
-`nixome-config-apply --apply` performs the same check immediately after
-candidate validation and archival. If a candidate declares a `nix-closure`
-domain today, dom0 records a failed deployment attempt in `config-vault` and
-stops before building template sources, building system sources, or invoking
-`nixome-setup-config`.
+That expands to a NixOS guest configuration, a root image package, a store
+closure image package, and a normalized `backend.type = "nix-closure"` topology
+entry.
 
 `config-staging` owns the editable candidate repository at:
 
@@ -238,8 +254,8 @@ The schema defaults AppVMs to `class = "AppVM"`, `netvm = null`,
 `features`/`services`, `backend.type = "qubes-template"`, and an empty
 generated qrexec policy. `backend.type = "qubes-template-root"` is used for
 TemplateVM Qubes objects, `backend.type = "qubes-standalone"` for traditional
-standalone Qubes objects, and `backend.type = "nix-closure"` for the future
-closure-backed domain path.
+standalone Qubes objects, and `backend.type = "nix-closure"` for the
+Nix-native domain path.
 
 For this first apply proof, the Nix value declares the config AppVMs, the work
 TemplateVM/AppVM pair, plus a small observable Qubes feature on
@@ -293,13 +309,17 @@ sudo nixome-config-apply --apply
 ```
 
 That command performs the same staging-to-validator-to-vault flow, resolves
-template build references, applies the resolved topology with
-`nixome-setup-config --apply`, applies the resolved `nixome.system` dom0 plan,
-then asks `config-vault` to archive a deployment record. For each
+template and Nix-native domain build references, applies the resolved topology
+with `nixome-setup-config --apply`, applies the resolved `nixome.system` dom0
+plan, then asks `config-vault` to archive a deployment record. For each
 `templates.<name>.source.build`, dom0 builds the referenced package from the
 exact validated Git commit, verifies the built output contains `root.img` and
 `template.conf`, rewrites the topology source to that concrete store path, and
-passes the resolved `topology.json` to setup. For
+passes the resolved `topology.json` to setup. For each Nix-native domain
+source reference under `backend.system`, `backend.root`, or `backend.store`,
+dom0 builds the referenced output, verifies the expected artifact shape, writes
+a `nix-domain-materializations.json` record, and rewrites the topology source
+to the concrete built path before setup runs. For
 `dom0.nixos.system.source.build`, dom0 builds the referenced NixOS system
 generation from the same commit, installs it as `/nix/var/nix/profiles/system`,
 and runs its `bin/switch-to-configuration` with the declared `switchAction`.

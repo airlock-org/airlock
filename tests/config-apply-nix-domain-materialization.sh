@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/nixome-env.sh"
-WORK_DIR="${NIXOME_CONFIG_APPLY_UNSUPPORTED_DOMAIN_BACKEND_DIR:-${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}/config-apply-unsupported-domain-backend}"
+WORK_DIR="${NIXOME_CONFIG_APPLY_NIX_DOMAIN_MATERIALIZATION_DIR:-${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}/config-apply-nix-domain-materialization}"
 BIN_DIR="$WORK_DIR/bin"
 CANDIDATE_DIR="$WORK_DIR/candidate"
 LOG_DIR="$WORK_DIR/logs"
@@ -14,20 +14,31 @@ VALIDATED_TAR="$WORK_DIR/config-candidate-validated.tar"
 DEPLOYMENT_TAR_CAPTURE="$WORK_DIR/deployment.tar"
 
 rm -rf "$WORK_DIR"
-mkdir -p "$BIN_DIR" "$CANDIDATE_DIR" "$LOG_DIR" "$SYSTEM_STATE_DIR" "$SYSTEM_ETC_DIR"
+mkdir -p \
+  "$BIN_DIR" \
+  "$CANDIDATE_DIR/system-source" \
+  "$CANDIDATE_DIR/root-source" \
+  "$CANDIDATE_DIR/store-source" \
+  "$LOG_DIR" \
+  "$SYSTEM_STATE_DIR" \
+  "$SYSTEM_ETC_DIR"
 printf 'control_d\n' > "$CAPABILITIES"
 
 cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
 {
-  description = "Unsupported Nixome domain backend fixture";
+  description = "Nixome Nix-native domain materialization fixture";
   outputs = { self }: { };
 }
 EOF
+printf '#!/bin/sh\nexec /init\n' > "$CANDIDATE_DIR/system-source/init"
+chmod 0555 "$CANDIDATE_DIR/system-source/init"
+: > "$CANDIDATE_DIR/root-source/root.img"
+: > "$CANDIDATE_DIR/store-source/store.img"
 
 (
   cd "$CANDIDATE_DIR"
   git init -b main >/dev/null
-  git add flake.nix
+  git add flake.nix system-source root-source store-source
   git \
     -c user.name='Nixome Test' \
     -c user.email='nixome-test@localhost' \
@@ -48,14 +59,24 @@ cat > "$WORK_DIR/topology.json" <<'EOF'
       "template": null,
       "label": "green",
       "netvm": null,
-      "prefs": {},
-      "features": {},
+      "prefs": {
+        "autostart": false,
+        "include_in_backups": true,
+        "kernelopts": "console=hvc0 init=/sbin/init",
+        "memory": 1536,
+        "virt_mode": "pvh"
+      },
+      "features": {
+        "nixome-managed": "1",
+        "nixome-role": "nix-native-work",
+        "qrexec": "1"
+      },
       "services": {},
       "backend": {
         "type": "nix-closure",
         "template": null,
         "system": {
-          "source": "/nix/store/test-system",
+          "source": "system-source",
           "source_ref": null
         },
         "kernel": {
@@ -73,9 +94,15 @@ cat > "$WORK_DIR/topology.json" <<'EOF'
           "source": null,
           "source_ref": null
         },
+        "root": {
+          "mode": "qubes-root-image",
+          "source": "root-source",
+          "source_ref": null,
+          "read_only": false
+        },
         "store": {
           "mode": "closure-image",
-          "source": "/nix/store/test-store.img",
+          "source": "store-source",
           "source_ref": null,
           "mountpoint": "/nix/store",
           "read_only": true
@@ -195,8 +222,54 @@ EOF
 
 cat > "$BIN_DIR/nixome-setup-config" <<'EOF'
 #!/usr/bin/env bash
-printf 'setup-config should not run for unsupported domain backends\n' >&2
-exit 97
+set -euo pipefail
+topology=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --topology)
+      shift
+      topology="$1"
+      ;;
+  esac
+  shift
+done
+[ -n "$topology" ]
+
+jq -e \
+  --arg state "$SYSTEM_STATE_DIR_FIXTURE" \
+  --arg commit "$CANDIDATE_COMMIT_FIXTURE" \
+  '
+    .domains."nix-native-work".backend.type == "nix-closure" and
+    .domains."nix-native-work".backend.system.source_ref == null and
+    .domains."nix-native-work".backend.root.source_ref == null and
+    .domains."nix-native-work".backend.store.source_ref == null and
+    (.domains."nix-native-work".backend.system.source | startswith($state + "/sources/" + $commit + "/nix-domain-nix-native-work-system")) and
+    (.domains."nix-native-work".backend.root.source | startswith($state + "/sources/" + $commit + "/nix-domain-nix-native-work-root")) and
+    (.domains."nix-native-work".backend.store.source | startswith($state + "/sources/" + $commit + "/nix-domain-nix-native-work-store"))
+  ' "$topology" >/dev/null
+
+jq -c -n \
+  --arg schema "nixome.setup-config.v1" \
+  '{
+    schema: $schema,
+    status: "passed",
+    mode: "apply",
+    reason: "fixture setup passed",
+    templates_changed: 0,
+    kernels_changed: 0,
+    domains_changed: 1,
+    prefs_changed: 0,
+    features_changed: 0,
+    services_changed: 0,
+    qrexec_policy_changed: 0,
+    root_images_changed: 1,
+    live_actions: [],
+    restart_actions: [],
+    unsupported_domains: [],
+    unsupported_domains_count: 0,
+    restart_required: false
+  }' > "$NIXOME_LOG_DIR/setup-config.json"
+cat "$NIXOME_LOG_DIR/setup-config.json"
 EOF
 
 cat > "$BIN_DIR/qrexec-client" <<'EOF'
@@ -210,7 +283,7 @@ jq -c -n \
   '{
     schema: $schema,
     status: $status,
-    deployment_status: "failed",
+    deployment_status: "passed",
     candidate_commit: $candidate_commit,
     vault_commit: "fixture-vault"
   }'
@@ -230,9 +303,10 @@ chmod 0755 \
   "$BIN_DIR/qrexec-client" \
   "$BIN_DIR/systemctl"
 
-if PATH="$BIN_DIR:$PATH" \
+PATH="$BIN_DIR:$PATH" \
   CANDIDATE_COMMIT_FIXTURE="$CANDIDATE_COMMIT" \
   DEPLOYMENT_TAR_CAPTURE_FIXTURE="$DEPLOYMENT_TAR_CAPTURE" \
+  SYSTEM_STATE_DIR_FIXTURE="$SYSTEM_STATE_DIR" \
   VALIDATED_TAR_FIXTURE="$VALIDATED_TAR" \
   NIXOME_XEN_CAPABILITIES="$CAPABILITIES" \
   NIXOME_LOG_DIR="$LOG_DIR" \
@@ -240,63 +314,68 @@ if PATH="$BIN_DIR:$PATH" \
   NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
   NIXOME_SYSTEM_ETC_DIR="$SYSTEM_ETC_DIR" \
   bash "$ROOT/scripts/apply-config-candidate.sh" --apply \
-  > "$WORK_DIR/stdout.log" 2> "$WORK_DIR/stderr.log"; then
-  printf 'config apply unexpectedly accepted unsupported domain backend\n' >&2
-  exit 1
-fi
+  > "$WORK_DIR/stdout.log" 2> "$WORK_DIR/stderr.log"
 
 jq -e \
   --arg commit "$CANDIDATE_COMMIT" \
+  --arg state "$SYSTEM_STATE_DIR" \
   '
     .schema == "nixome.config-apply.v1" and
-    .status == "failed" and
+    .status == "passed" and
     .candidate_commit == $commit and
-    .reason == "nix-closure domain materializer is not implemented yet: nix-native-work" and
-    .setup == null and
-    .system_apply_result == null and
+    .reason == "validated config candidate applied" and
+    .setup.status == "passed" and
+    .system_apply_result.status == "passed" and
+    .nix_domain_builds_result.schema == "nixome.nix-domain-builds.v1" and
+    .nix_domain_materializations_result.schema == "nixome.nix-domain-materializations.v1" and
+    .nix_domain_materializations_result.domains[0].domain == "nix-native-work" and
+    (.nix_domain_materializations_result.domains[0].root.source | startswith($state + "/sources/" + $commit + "/nix-domain-nix-native-work-root")) and
     .unsupported_domain_backends_result.schema == "nixome.unsupported-domain-backends.v1" and
-    .unsupported_domain_backends_result.domains[0].domain == "nix-native-work" and
-    .deployment.status == "failed" and
-    .deployment.unsupported_domain_backends.domains[0].backend == "nix-closure" and
+    .unsupported_domain_backends_result.domains == [] and
+    .deployment.status == "passed" and
+    .deployment.nix_domain_materializations.domains[0].domain == "nix-native-work" and
     .deployment_archive.status == "passed"
   ' "$LOG_DIR/config-apply.json" >/dev/null
-
-[ ! -e "$LOG_DIR/setup-config.json" ]
 
 jq -e \
   --arg commit "$CANDIDATE_COMMIT" \
   '
     .schema == "nixome.config-deployment.v1" and
-    .status == "failed" and
+    .status == "passed" and
     .candidate_commit == $commit and
-    .reason == "nix-closure domain materializer is not implemented yet: nix-native-work"
-  ' "$SYSTEM_STATE_DIR/last-deployment.json" >/dev/null
-[ ! -e "$SYSTEM_STATE_DIR/current-deployment.json" ]
+    .nix_domain_builds.schema == "nixome.nix-domain-builds.v1" and
+    .nix_domain_materializations.schema == "nixome.nix-domain-materializations.v1"
+  ' "$SYSTEM_STATE_DIR/current-deployment.json" >/dev/null
 
 tar -tf "$DEPLOYMENT_TAR_CAPTURE" | sort > "$WORK_DIR/deployment-members.txt"
+grep -Fx nix-domain-builds.json "$WORK_DIR/deployment-members.txt" >/dev/null
+grep -Fx nix-domain-materializations.json "$WORK_DIR/deployment-members.txt" >/dev/null
 grep -Fx unsupported-domain-backends.json "$WORK_DIR/deployment-members.txt" >/dev/null
-grep -Fx setup.json "$WORK_DIR/deployment-members.txt" >/dev/null
-grep -Fx template-builds.json "$WORK_DIR/deployment-members.txt" >/dev/null
-grep -Fx system-builds.json "$WORK_DIR/deployment-members.txt" >/dev/null
+grep -Fx logs/nix-domain-builds.log "$WORK_DIR/deployment-members.txt" >/dev/null
 
 mkdir -p "$WORK_DIR/deployment-extract"
-tar -C "$WORK_DIR/deployment-extract" -xf \
-  "$DEPLOYMENT_TAR_CAPTURE" \
-  deployment.json \
-  unsupported-domain-backends.json
+tar -C "$WORK_DIR/deployment-extract" -xf "$DEPLOYMENT_TAR_CAPTURE" \
+  nix-domain-builds.json \
+  nix-domain-materializations.json \
+  unsupported-domain-backends.json \
+  deployment.json
+
+jq -e '.schema == "nixome.nix-domain-builds.v1"' \
+  "$WORK_DIR/deployment-extract/nix-domain-builds.json" >/dev/null
+jq -e '
+  .schema == "nixome.nix-domain-materializations.v1" and
+  .domains[0].domain == "nix-native-work" and
+  .domains[0].root.mode == "qubes-root-image" and
+  .domains[0].store.mode == "closure-image"
+' "$WORK_DIR/deployment-extract/nix-domain-materializations.json" >/dev/null
 jq -e '
   .schema == "nixome.unsupported-domain-backends.v1" and
-  .domains == [
-    {
-      "domain": "nix-native-work",
-      "backend": "nix-closure",
-      "reason": "nix-closure domain materializer is not implemented yet"
-    }
-  ]
+  .domains == []
 ' "$WORK_DIR/deployment-extract/unsupported-domain-backends.json" >/dev/null
 jq -e '
-  .artifacts.unsupported_domain_backends == "unsupported-domain-backends.json" and
-  .unsupported_domain_backends.domains[0].domain == "nix-native-work"
+  .artifacts.nix_domain_builds == "nix-domain-builds.json" and
+  .artifacts.nix_domain_materializations == "nix-domain-materializations.json" and
+  .artifacts.unsupported_domain_backends == "unsupported-domain-backends.json"
 ' "$WORK_DIR/deployment-extract/deployment.json" >/dev/null
 
-printf 'config apply unsupported domain backend test ok\n'
+printf 'config apply Nix-native domain materialization test ok\n'

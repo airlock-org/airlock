@@ -25,6 +25,22 @@ MANAGED_POLICY_PATH="$POLICY_DIR/$MANAGED_POLICY_FILE"
 RENDERED_POLICY="$LOG_DIR/$MANAGED_POLICY_FILE.rendered"
 result_written=0
 
+nixome_store_uses_chroot() {
+  [ "${NIXOME_USE_HOST_NIX_STORE:-0}" != "1" ] &&
+    [ -n "${NIXOME_NIX_ROOT:-}" ] &&
+    [ "$NIXOME_NIX_ROOT" != "/" ]
+}
+
+nixome_physical_store_path() {
+  local path="$1"
+
+  if nixome_store_uses_chroot && [ "${path#/nix/store/}" != "$path" ]; then
+    printf '%s%s\n' "$NIXOME_NIX_ROOT" "$path"
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
 usage() {
   cat >&2 <<'EOF'
 Usage: nixome-setup-config (--plan|--apply) [--topology PATH]
@@ -82,6 +98,7 @@ features_changed=0
 services_changed=0
 qrexec_policy_changed=0
 unsupported_domains_count=0
+root_images_changed=0
 
 json_escape() {
   printf '%s' "$1" | sed \
@@ -220,6 +237,7 @@ write_result() {
     printf ',"features_changed":%s' "$features_changed"
     printf ',"services_changed":%s' "$services_changed"
     printf ',"qrexec_policy_changed":%s' "$qrexec_policy_changed"
+    printf ',"root_images_changed":%s' "$root_images_changed"
     printf ',"live_actions":'
     json_lines_array "$LIVE_ACTIONS_JSONL"
     printf ',"restart_actions":'
@@ -605,36 +623,43 @@ setup_qrexec_policy() {
 }
 
 preflight_domain_backends() {
-  local reason="nix-closure domain materializer is not implemented yet"
   local row
   local domain
   local backend
-  local names
-  local unsupported_refs=()
-  local unsupported_names=()
+  local source_ref_components=()
+  local unresolved=()
 
-  mapfile -t unsupported_refs < <(
+  mapfile -t source_ref_components < <(
     jq -r '
       (.domains // {})
       | to_entries[]
+      | .key as $domain
+      | (.value.backend // {}) as $backend
       | select((.value.backend.type // "qubes-template") == "nix-closure")
-      | [.key, .value.backend.type]
+      | [
+          { domain: $domain, component: "system", ref: ($backend.system.source_ref // null) },
+          { domain: $domain, component: "kernel", ref: ($backend.kernel.source_ref // null) },
+          { domain: $domain, component: "initrd", ref: ($backend.initrd.source_ref // null) },
+          { domain: $domain, component: "modules", ref: ($backend.modules.source_ref // null) },
+          { domain: $domain, component: "root", ref: ($backend.root.source_ref // null) },
+          { domain: $domain, component: "store", ref: ($backend.store.source_ref // null) }
+        ]
+      | .[]
+      | select(.ref != null)
+      | [.domain, .component]
       | @tsv
     ' "$TOPOLOGY"
   )
 
-  for row in "${unsupported_refs[@]}"; do
+  for row in "${source_ref_components[@]}"; do
     [ -n "$row" ] || continue
     IFS=$'\t' read -r domain backend <<< "$row"
-    record_unsupported_domain "$domain" "$backend" "$reason"
-    unsupported_names+=("$domain")
-    printf 'unsupported domain backend: %s backend=%s reason=%s\n' "$domain" "$backend" "$reason"
+    unresolved+=("$domain.$backend")
   done
 
-  if [ "$APPLY" = "1" ] && [ "${#unsupported_names[@]}" -gt 0 ]; then
+  if [ "${#unresolved[@]}" -gt 0 ]; then
     local IFS=,
-    names="${unsupported_names[*]}"
-    fail "$reason: $names"
+    fail "Nix-native domain source reference was not resolved before setup-config: ${unresolved[*]}"
   fi
 }
 
@@ -692,6 +717,199 @@ install_kernel() {
   mv "$tmp" "$target"
 }
 
+resolve_root_image_file() {
+  source="$1"
+  source_physical="$(nixome_physical_store_path "$source")"
+
+  if [ -d "$source_physical" ]; then
+    [ -f "$source_physical/root.img" ] ||
+      fail "Nix-native root image directory is missing root.img: $source/root.img"
+    printf '%s/root.img\n' "$source_physical"
+  else
+    [ -f "$source_physical" ] ||
+      fail "Nix-native root image source is not a file: $source"
+    printf '%s\n' "$source_physical"
+  fi
+}
+
+resolve_store_image_file() {
+  source="$1"
+  source_physical="$(nixome_physical_store_path "$source")"
+
+  if [ -d "$source_physical" ]; then
+    [ -f "$source_physical/store.img" ] ||
+      fail "Nix-native store image directory is missing store.img: $source/store.img"
+    printf '%s/store.img\n' "$source_physical"
+  else
+    [ -f "$source_physical" ] ||
+      fail "Nix-native store image source is not a file: $source"
+    printf '%s\n' "$source_physical"
+  fi
+}
+
+nix_domain_root_current() {
+  domain="$1"
+  root_source="$2"
+
+  [ "$APPLY" = "1" ] || return 1
+  current="$(qvm-features "$domain" nixome-root-source 2>/dev/null || true)"
+  [ "$current" = "$root_source" ]
+}
+
+install_nix_domain_root() {
+  domain="$1"
+  root_source="$2"
+  root_image="$3"
+
+  if nix_domain_root_current "$domain" "$root_source"; then
+    printf 'Nix-native root current: %s source=%s\n' "$domain" "$root_source"
+    return
+  fi
+
+  if [ "$APPLY" = "1" ]; then
+    state="$(domain_state "$domain" || true)"
+    [ "$state" != "Running" ] ||
+      fail "Nix-native domain root image changed but domain is running: $domain"
+  fi
+
+  run_or_plan qvm-volume import "$domain:root" "$root_image"
+  root_images_changed=$((root_images_changed + 1))
+  record_live_action domain-root import "$domain" source "$root_source"
+}
+
+install_domain_kernel_source() {
+  domain="$1"
+  name="$2"
+  source="$3"
+
+  [ -n "$source" ] || return 0
+  if [ -z "$name" ] || [ "$name" = "null" ]; then
+    name="nixome-$domain"
+  fi
+
+  case "$name" in
+    ""|*/*)
+      fail "invalid Nix-native kernel name for $domain: $name"
+      ;;
+  esac
+
+  source_physical="$(nixome_physical_store_path "$source")"
+  [ -d "$source_physical" ] ||
+    fail "Nix-native kernel source directory is missing for $domain: $source"
+  [ -f "$source_physical/vmlinuz" ] ||
+    fail "Nix-native kernel source vmlinuz is missing for $domain: $source/vmlinuz"
+
+  if kernel_is_current "$name" "$source_physical"; then
+    printf 'kernel current: %s\n' "$name"
+    return 0
+  fi
+
+  target="$KERNEL_BASE/$name"
+  if [ -d "$target" ] && [ ! -f "$target/MANAGED_BY_NIXOME" ]; then
+    if kernel_source_matches_target "$source_physical" "$target"; then
+      printf '+ adopt-kernel %q %q\n' "$name" "$source"
+      if [ "$APPLY" = "1" ]; then
+        mark_kernel_managed "$name" "$source_physical"
+      fi
+      kernels_changed=$((kernels_changed + 1))
+      record_live_action kernel adopt "$domain" "$name" "$source"
+      return 0
+    fi
+
+    fail "kernel exists but is not managed by Nixome: $target"
+  fi
+
+  printf '+ install-kernel %q %q\n' "$name" "$source"
+  if [ "$APPLY" = "1" ]; then
+    install_kernel "$name" "$source_physical"
+  fi
+  kernels_changed=$((kernels_changed + 1))
+  record_live_action kernel install "$domain" "$name" "$source"
+}
+
+setup_nix_closure_domain() {
+  domain="$1"
+  class="$(jq_get '.domains[$name].class // "StandaloneVM"' --arg name "$domain")"
+  label="$(jq_get '.domains[$name].label // "green"' --arg name "$domain")"
+  netvm="$(json_value '.domains[$name].netvm' --arg name "$domain")"
+  system_source="$(jq_get '.domains[$name].backend.system.source // ""' --arg name "$domain")"
+  kernel_name="$(jq_get '.domains[$name].backend.kernel.name // ""' --arg name "$domain")"
+  kernel_source="$(jq_get '.domains[$name].backend.kernel.source // ""' --arg name "$domain")"
+  root_source="$(jq_get '.domains[$name].backend.root.source // ""' --arg name "$domain")"
+  store_source="$(jq_get '.domains[$name].backend.store.source // ""' --arg name "$domain")"
+  store_mode="$(jq_get '.domains[$name].backend.store.mode // "closure-image"' --arg name "$domain")"
+  store_mountpoint="$(jq_get '.domains[$name].backend.store.mountpoint // "/nix/store"' --arg name "$domain")"
+  root_image=""
+  store_image=""
+
+  [ "$class" = "StandaloneVM" ] ||
+    fail "nix-closure backend requires StandaloneVM class for $domain"
+  [ -n "$system_source" ] ||
+    fail "Nix-native domain system source is missing: $domain"
+  [ -n "$root_source" ] ||
+    fail "Nix-native domain root image source is missing: $domain"
+  [ -n "$store_source" ] ||
+    fail "Nix-native domain store image source is missing: $domain"
+  [ "$store_mode" = "closure-image" ] ||
+    fail "unsupported Nix-native domain store mode for $domain: $store_mode"
+  [ "$store_mountpoint" = "/nix/store" ] ||
+    fail "unsupported Nix-native domain store mountpoint for $domain: $store_mountpoint"
+
+  root_image="$(resolve_root_image_file "$root_source")"
+  store_image="$(resolve_store_image_file "$store_source")"
+  install_domain_kernel_source "$domain" "$kernel_name" "$kernel_source"
+
+  if [ -z "$kernel_name" ] || [ "$kernel_name" = "null" ]; then
+    kernel_name="nixome-$domain"
+  fi
+
+  if domain_exists "$domain"; then
+    printf 'domain exists: %s\n' "$domain"
+  else
+    run_or_plan qvm-create --class StandaloneVM --label "$label" "$domain"
+    domains_changed=$((domains_changed + 1))
+    record_live_action domain create "$domain" class StandaloneVM
+  fi
+
+  install_nix_domain_root "$domain" "$root_source" "$root_image"
+
+  if [ "$APPLY" = "1" ] || domain_exists "$domain"; then
+    set_pref "$domain" label "$label"
+    set_pref "$domain" kernel "$kernel_name"
+
+    if jq -e --arg name "$domain" '.domains[$name] | has("netvm")' "$TOPOLOGY" >/dev/null; then
+      set_pref "$domain" netvm "$netvm"
+    fi
+
+    set_feature "$domain" nixome-backend nix-closure
+    set_feature "$domain" nixome-system-source "$system_source"
+    set_feature "$domain" nixome-root-source "$root_source"
+    set_feature "$domain" nixome-store-source "$store_source"
+    set_feature "$domain" nixome-store-image "$store_image"
+    set_feature "$domain" nixome-store-mountpoint "$store_mountpoint"
+    set_feature "$domain" nixome-store-read-only "True"
+
+    mapfile -t pref_names < <(domain_pref_names "$domain")
+    for pref in "${pref_names[@]}"; do
+      [ "$pref" != "kernel" ] || continue
+      value="$(json_value '.domains[$name].prefs[$pref]' --arg name "$domain" --arg pref "$pref")"
+      set_pref "$domain" "$pref" "$value"
+    done
+
+    mapfile -t feature_names < <(jq_get '.domains[$name].features | keys[]?' --arg name "$domain")
+    for feature in "${feature_names[@]}"; do
+      value="$(json_value '.domains[$name].features[$feature]' --arg name "$domain" --arg feature "$feature")"
+      set_feature "$domain" "$feature" "$value"
+    done
+
+    mapfile -t service_names < <(jq_get '.domains[$name].services | keys[]?' --arg name "$domain")
+    for service in "${service_names[@]}"; do
+      value="$(jq_get '.domains[$name].services[$service] | if . then "on" else "off" end' --arg name "$domain" --arg service "$service")"
+      set_service "$domain" "$service" "$value"
+    done
+  fi
+}
+
 [ -r "$TOPOLOGY" ] || fail "topology file is not readable: $TOPOLOGY"
 
 for cmd in \
@@ -709,6 +927,7 @@ for cmd in \
   qvm-prefs \
   qvm-service \
   qvm-template-postprocess \
+  qvm-volume \
   qubesd-query \
   python3 \
   rm \
@@ -817,7 +1036,7 @@ mapfile -t domain_names < <(jq_get '.domains | keys[]')
 for domain in "${domain_names[@]}"; do
   backend_type="$(jq_get '.domains[$name].backend.type // "qubes-template"' --arg name "$domain")"
   if [ "$backend_type" = "nix-closure" ]; then
-    printf 'skipping unsupported nix-closure domain backend in plan: %s\n' "$domain"
+    setup_nix_closure_domain "$domain"
     continue
   fi
 

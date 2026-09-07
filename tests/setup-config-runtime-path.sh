@@ -37,6 +37,7 @@ required=(
   qvm-prefs
   qvm-service
   qvm-template-postprocess
+  qvm-volume
   rm
   runuser
   sudo

@@ -54,6 +54,9 @@ jq -c -n \
       archive: "archive.json",
       setup: "setup.json",
       template_builds: "template-builds.json",
+      nix_domain_builds: "nix-domain-builds.json",
+      nix_domain_materializations: "nix-domain-materializations.json",
+      unsupported_domain_backends: "unsupported-domain-backends.json",
       validated_topology: "validated-topology.json",
       validation: "validation.json",
       manifest: "manifest.json"
@@ -88,6 +91,18 @@ jq -c -n \
   --arg schema "nixome.template-builds.v1" \
   '{schema: $schema, builds: []}' \
   > "$DEPLOYMENT_DIR/template-builds.json"
+jq -c -n \
+  --arg schema "nixome.nix-domain-builds.v1" \
+  '{schema: $schema, builds: []}' \
+  > "$DEPLOYMENT_DIR/nix-domain-builds.json"
+jq -c -n \
+  --arg schema "nixome.nix-domain-materializations.v1" \
+  '{schema: $schema, domains: []}' \
+  > "$DEPLOYMENT_DIR/nix-domain-materializations.json"
+jq -c -n \
+  --arg schema "nixome.unsupported-domain-backends.v1" \
+  '{schema: $schema, domains: []}' \
+  > "$DEPLOYMENT_DIR/unsupported-domain-backends.json"
 
 jq -c -n \
   --arg schema "nixome.system.v1" \
@@ -140,6 +155,7 @@ for log in \
   setup.stdout.log \
   setup.stderr.log \
   template-builds.log \
+  nix-domain-builds.log \
   system-builds.log \
   system-apply.log \
   profile-activation.log \
@@ -158,6 +174,9 @@ tar -C "$DEPLOYMENT_DIR" -cf "$DEPLOYMENT_TAR" \
   topology.json \
   validated-topology.json \
   template-builds.json \
+  nix-domain-builds.json \
+  nix-domain-materializations.json \
+  unsupported-domain-backends.json \
   system.json \
   resolved-system.json \
   system-plan.json \
@@ -172,6 +191,7 @@ tar -C "$DEPLOYMENT_DIR" -cf "$DEPLOYMENT_TAR" \
   logs/setup.stdout.log \
   logs/setup.stderr.log \
   logs/template-builds.log \
+  logs/nix-domain-builds.log \
   logs/system-builds.log \
   logs/system-apply.log \
   logs/profile-activation.log \
@@ -205,6 +225,9 @@ jq -e \
   ' "$RESULT_JSON" >/dev/null
 
 [ -f "$VAULT_REPO/deployments/$DEPLOYMENT_ID/systemd-actions.json" ]
+[ -f "$VAULT_REPO/deployments/$DEPLOYMENT_ID/nix-domain-builds.json" ]
+[ -f "$VAULT_REPO/deployments/$DEPLOYMENT_ID/nix-domain-materializations.json" ]
+[ -f "$VAULT_REPO/deployments/$DEPLOYMENT_ID/unsupported-domain-backends.json" ]
 [ -f "$VAULT_REPO/deployments/$DEPLOYMENT_ID/logs/host-system-activation.log" ]
 [ -f "$VAULT_REPO/deployments/$DEPLOYMENT_ID/logs/systemd-actions.log" ]
 grep -qx "$DEPLOYMENT_ID" "$VAULT_REPO/latest-deployment"

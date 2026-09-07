@@ -62,7 +62,7 @@ fi
 } >> "$MUTATION_LOG"
 EOF
 
-for command in qvm-create qvm-features qvm-prefs qvm-service qvm-template-postprocess qubesd-query; do
+for command in qvm-create qvm-features qvm-prefs qvm-service qvm-template-postprocess qvm-volume qubesd-query; do
   cat > "$BIN_DIR/$command" <<'EOF'
 #!/usr/bin/env bash
 printf 'unexpected command execution: %s\n' "$0" >&2

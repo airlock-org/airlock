@@ -523,6 +523,52 @@ let
           inherit (sourceInfo) source source_ref;
         };
 
+  normalizeClosureRoot =
+    domainName: value:
+    let
+      path = "domains.${domainName}.backend.root";
+      root =
+        if value == null then
+          { }
+        else
+          expectOptions path [
+            "mode"
+            "source"
+            "sourceRef"
+            "source_ref"
+            "readOnly"
+            "read_only"
+          ] value;
+      mode = expectEnum "${path}.mode" [ "qubes-root-image" ] (get root "mode" "qubes-root-image");
+      sourceInfo = normalizeSourceOption path root;
+      hasCamelReadOnly = hasAttr "readOnly" root;
+      hasSnakeReadOnly = hasAttr "read_only" root;
+      camelReadOnly = if hasCamelReadOnly then expectBool "${path}.readOnly" root.readOnly else null;
+      snakeReadOnly = if hasSnakeReadOnly then expectBool "${path}.read_only" root.read_only else null;
+      readOnly =
+        if hasCamelReadOnly && hasSnakeReadOnly then
+          if camelReadOnly == snakeReadOnly then
+            camelReadOnly
+          else
+            fail path "readOnly and read_only disagree"
+        else if hasCamelReadOnly then
+          camelReadOnly
+        else if hasSnakeReadOnly then
+          snakeReadOnly
+        else
+          false;
+    in
+    if readOnly then
+      fail path "qubes-root-image materialization imports a writable Qubes root volume"
+    else if !(sourceIsSet sourceInfo) then
+      fail "${path}.source" "must be set for qubes-root-image materialization"
+    else
+      {
+        inherit mode;
+        read_only = readOnly;
+        inherit (sourceInfo) source source_ref;
+      };
+
   normalizeClosureState =
     domainName: value:
     let
@@ -576,6 +622,7 @@ let
           "kernel"
           "initrd"
           "modules"
+          "root"
           "store"
           "state"
         ] value;
@@ -636,6 +683,7 @@ let
             kernel = normalizeClosureBootComponent domainName "kernel" true (get backend "kernel" null);
             initrd = normalizeClosureBootComponent domainName "initrd" false (get backend "initrd" null);
             modules = normalizeClosureBootComponent domainName "modules" false (get backend "modules" null);
+            root = normalizeClosureRoot domainName (get backend "root" null);
             store = normalizeClosureStore domainName (get backend "store" null);
             state = normalizeClosureState domainName (get backend "state" null);
           }

@@ -160,6 +160,34 @@ let
     };
   };
 
+  backendRootType = lib.types.submodule {
+    options = {
+      mode = lib.mkOption {
+        type = lib.types.enum [ "qubes-root-image" ];
+        default = "qubes-root-image";
+        description = "How the current Qubes-compatible materializer receives its root filesystem image.";
+      };
+
+      source = lib.mkOption {
+        type = lib.types.nullOr sourceValueType;
+        default = null;
+        description = "Concrete Qubes root image source or candidate flake build reference.";
+      };
+
+      sourceRef = lib.mkOption {
+        type = lib.types.nullOr sourceRefType;
+        default = null;
+        description = "Candidate flake output attribute that builds this root image.";
+      };
+
+      readOnly = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether the imported Qubes root volume is read-only. Current materialization requires false.";
+      };
+    };
+  };
+
   backendStateType = lib.types.submodule {
     options = {
       persistent = lib.mkOption {
@@ -212,6 +240,12 @@ let
         type = lib.types.nullOr backendBootComponentType;
         default = null;
         description = "Kernel module binding for nix-closure domains.";
+      };
+
+      root = lib.mkOption {
+        type = lib.types.nullOr backendRootType;
+        default = null;
+        description = "Current Qubes StandaloneVM root image materialization for nix-closure domains.";
       };
 
       store = lib.mkOption {

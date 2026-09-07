@@ -64,6 +64,8 @@ cat > "$WORK_DIR/valid/flake.nix" <<'EOF'
             type = "nix-closure";
             system.source = ./system-source;
             kernel.name = "6.12.64-1.fc41";
+            root.sourceRef.build = "packages.x86_64-linux.nix-work-root-image";
+            root.sourceRef.subpath = "root.img";
             store.sourceRef.build = "packages.x86_64-linux.nix-work-store-image";
           };
           label = "blue";
@@ -124,6 +126,14 @@ jq -e '
   .domains."nix-work".backend.kernel.source_ref == null and
   .domains."nix-work".backend.initrd.name == null and
   .domains."nix-work".backend.modules.name == null and
+  .domains."nix-work".backend.root.mode == "qubes-root-image" and
+  .domains."nix-work".backend.root.source == null and
+  .domains."nix-work".backend.root.source_ref == {
+    "type": "flake-output",
+    "attr": "packages.x86_64-linux.nix-work-root-image",
+    "subpath": "root.img"
+  } and
+  .domains."nix-work".backend.root.read_only == false and
   .domains."nix-work".backend.store.mode == "closure-image" and
   .domains."nix-work".backend.store.source == null and
   .domains."nix-work".backend.store.source_ref == {
@@ -248,11 +258,21 @@ expect_failure \
 expect_failure \
   "nix-closure-missing-system" \
   "nixome.topology.domains.bad.backend.system.source: must be set for nix-closure domains" \
-  '{ domains.bad.backend = { type = "nix-closure"; kernel.name = "6.12.64-1.fc41"; store.sourceRef.build = "packages.x86_64-linux.bad-store"; }; }'
+  '{ domains.bad.backend = { type = "nix-closure"; kernel.name = "6.12.64-1.fc41"; root.sourceRef.build = "packages.x86_64-linux.bad-root"; store.sourceRef.build = "packages.x86_64-linux.bad-store"; }; }'
 
 expect_failure \
   "nix-closure-writable-store" \
   "nix-closure store views must be read-only" \
-  '{ domains.bad.backend = { type = "nix-closure"; system.sourceRef.build = "nixosConfigurations.bad.config.system.build.toplevel"; kernel.name = "6.12.64-1.fc41"; store = { sourceRef.build = "packages.x86_64-linux.bad-store"; readOnly = false; }; }; }'
+  '{ domains.bad.backend = { type = "nix-closure"; system.sourceRef.build = "nixosConfigurations.bad.config.system.build.toplevel"; kernel.name = "6.12.64-1.fc41"; root.sourceRef.build = "packages.x86_64-linux.bad-root"; store = { sourceRef.build = "packages.x86_64-linux.bad-store"; readOnly = false; }; }; }'
+
+expect_failure \
+  "nix-closure-missing-root" \
+  "nixome.topology.domains.bad.backend.root.source: must be set for qubes-root-image materialization" \
+  '{ domains.bad.backend = { type = "nix-closure"; system.sourceRef.build = "nixosConfigurations.bad.config.system.build.toplevel"; kernel.name = "6.12.64-1.fc41"; store.sourceRef.build = "packages.x86_64-linux.bad-store"; }; }'
+
+expect_failure \
+  "nix-closure-readonly-root" \
+  "qubes-root-image materialization imports a writable Qubes root volume" \
+  '{ domains.bad.backend = { type = "nix-closure"; system.sourceRef.build = "nixosConfigurations.bad.config.system.build.toplevel"; kernel.name = "6.12.64-1.fc41"; root = { sourceRef.build = "packages.x86_64-linux.bad-root"; readOnly = true; }; store.sourceRef.build = "packages.x86_64-linux.bad-store"; }; }'
 
 printf 'topology schema test ok\n'

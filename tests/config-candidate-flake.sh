@@ -25,6 +25,8 @@ LOCAL_TEMPLATE_DERIVATION="$RESULT_DIR/local-template-derivation.txt"
 CONFIG_VAULT_TEMPLATE_DERIVATION="$RESULT_DIR/config-vault-template-derivation.txt"
 CONFIG_STAGING_TEMPLATE_DERIVATION="$RESULT_DIR/config-staging-template-derivation.txt"
 CONFIG_VALIDATOR_TEMPLATE_DERIVATION="$RESULT_DIR/config-validator-template-derivation.txt"
+NIX_NATIVE_HOSTNAME="$RESULT_DIR/nix-native-hostname.txt"
+NIX_NATIVE_ETC="$RESULT_DIR/nix-native-etc.txt"
 CONFIG_SHARED_GUEST_HOSTNAME="$RESULT_DIR/config-shared-guest-hostname.txt"
 CONFIG_SHARED_GUEST_ETC="$RESULT_DIR/config-shared-guest-etc.txt"
 CONFIG_VAULT_GUEST_ETC="$RESULT_DIR/config-vault-guest-etc.txt"
@@ -332,12 +334,25 @@ cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
         type = "nix-closure";
         system.source = "dom0-profile";
         kernel.name = "6.12.64-1.fc41";
+        root.source = "dom0-profile";
         store.source = "dom0-profile";
       };
       label = "green";
       prefs.memory = 1536;
       features."nixome-role" = "nix-native";
     };
+  };
+
+  nixNative.domains.nix-native-generated = {
+    label = "purple";
+    netvm = null;
+    hostName = "nix-native-generated";
+    packages = with pkgs; [
+      jq
+    ];
+    etc."nixome/nix-native-role".text = "generated\n";
+    prefs.memory = 1280;
+    features."nixome-role" = "nix-native-generated";
   };
 
   templates.definitions.nixome-nixos-dev = {
@@ -553,6 +568,26 @@ nix \
   --offline \
   --no-write-lock-file \
   --raw \
+  "$WORK_DIR#nixosConfigurations.nixome-domain-nix-native-generated.config.networking.hostName" \
+  > "$NIX_NATIVE_HOSTNAME"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixosConfigurations.nixome-domain-nix-native-generated.config.environment.etc.\"nixome/nix-native-role\".text" \
+  > "$NIX_NATIVE_ETC"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
   "$WORK_DIR#nixome.configSystemTemplateConfiguration.config.networking.hostName" \
   > "$CONFIG_SHARED_GUEST_HOSTNAME"
 nix \
@@ -637,6 +672,8 @@ grep -qx dev-configuration "$LOCAL_TEMPLATE_CONFIGURATION"
 [ -s "$CONFIG_VAULT_TEMPLATE_DERIVATION" ]
 [ -s "$CONFIG_STAGING_TEMPLATE_DERIVATION" ]
 [ -s "$CONFIG_VALIDATOR_TEMPLATE_DERIVATION" ]
+grep -qx nix-native-generated "$NIX_NATIVE_HOSTNAME"
+grep -qx generated "$NIX_NATIVE_ETC"
 grep -qx nixome-config-system-custom "$CONFIG_SHARED_GUEST_HOSTNAME"
 grep -qx shared "$CONFIG_SHARED_GUEST_ETC"
 grep -qx vault "$CONFIG_VAULT_GUEST_ETC"
@@ -712,9 +749,26 @@ jq -e '
   .domains."nix-native-work".backend.type == "nix-closure" and
   .domains."nix-native-work".backend.system.source == "dom0-profile" and
   .domains."nix-native-work".backend.kernel.name == "6.12.64-1.fc41" and
+  .domains."nix-native-work".backend.root.source == "dom0-profile" and
+  .domains."nix-native-work".backend.root.mode == "qubes-root-image" and
   .domains."nix-native-work".backend.store.source == "dom0-profile" and
   .domains."nix-native-work".backend.store.mode == "closure-image" and
-  .domains."nix-native-work".backend.store.read_only == true
+  .domains."nix-native-work".backend.store.read_only == true and
+  .domains."nix-native-generated".class == "StandaloneVM" and
+  .domains."nix-native-generated".template == null and
+  .domains."nix-native-generated".label == "purple" and
+  .domains."nix-native-generated".netvm == null and
+  .domains."nix-native-generated".prefs.memory == 1280 and
+  .domains."nix-native-generated".prefs.kernel == "6.12.64-1.fc41" and
+  (.domains."nix-native-generated".prefs.kernelopts | contains("init=/sbin/init")) and
+  .domains."nix-native-generated".features."nixome-backend" == "nix-closure" and
+  .domains."nix-native-generated".features."nixome-role" == "nix-native-generated" and
+  .domains."nix-native-generated".backend.type == "nix-closure" and
+  .domains."nix-native-generated".backend.system.source_ref.attr == "nixosConfigurations.nixome-domain-nix-native-generated.config.system.build.toplevel" and
+  .domains."nix-native-generated".backend.root.source_ref.attr == "packages.x86_64-linux.nixome-domain-nix-native-generated-root-image" and
+  .domains."nix-native-generated".backend.root.source_ref.subpath == "root.img" and
+  .domains."nix-native-generated".backend.store.source_ref.attr == "packages.x86_64-linux.nixome-domain-nix-native-generated-store-image" and
+  .domains."nix-native-generated".backend.store.source_ref.subpath == "store.img"
 ' "$LOCAL_TOPOLOGY_JSON" >/dev/null
 
 jq -e '
