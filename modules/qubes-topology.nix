@@ -12,7 +12,7 @@ let
     lib.types.path
     lib.types.str
   ];
-  templateSourceRefType = lib.types.submodule {
+  sourceRefType = lib.types.submodule {
     options = {
       build = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
@@ -33,6 +33,10 @@ let
       };
     };
   };
+  sourceValueType = lib.types.oneOf [
+    sourcePath
+    sourceRefType
+  ];
   jsonScalar = lib.types.nullOr (
     lib.types.oneOf [
       lib.types.bool
@@ -53,7 +57,7 @@ let
         type = lib.types.nullOr (
           lib.types.oneOf [
             sourcePath
-            templateSourceRefType
+            sourceRefType
           ]
         );
         default = null;
@@ -61,7 +65,7 @@ let
       };
 
       sourceRef = lib.mkOption {
-        type = lib.types.nullOr templateSourceRefType;
+        type = lib.types.nullOr sourceRefType;
         default = null;
         description = "Candidate flake output attribute that builds this template source.";
       };
@@ -84,11 +88,157 @@ let
     };
   };
 
+  backendSystemType = lib.types.submodule {
+    options = {
+      source = lib.mkOption {
+        type = lib.types.nullOr sourceValueType;
+        default = null;
+        description = "Concrete Nix system closure source or candidate flake build reference.";
+      };
+
+      sourceRef = lib.mkOption {
+        type = lib.types.nullOr sourceRefType;
+        default = null;
+        description = "Candidate flake output attribute that builds this Nix system closure.";
+      };
+    };
+  };
+
+  backendBootComponentType = lib.types.submodule {
+    options = {
+      name = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Boot component identity, such as a Qubes VM kernel name.";
+      };
+
+      source = lib.mkOption {
+        type = lib.types.nullOr sourceValueType;
+        default = null;
+        description = "Concrete boot component source or candidate flake build reference.";
+      };
+
+      sourceRef = lib.mkOption {
+        type = lib.types.nullOr sourceRefType;
+        default = null;
+        description = "Candidate flake output attribute that builds this boot component.";
+      };
+    };
+  };
+
+  backendStoreType = lib.types.submodule {
+    options = {
+      mode = lib.mkOption {
+        type = lib.types.enum [ "closure-image" ];
+        default = "closure-image";
+        description = "How the domain receives its read-only Nix store view.";
+      };
+
+      source = lib.mkOption {
+        type = lib.types.nullOr sourceValueType;
+        default = null;
+        description = "Concrete closure image source or candidate flake build reference.";
+      };
+
+      sourceRef = lib.mkOption {
+        type = lib.types.nullOr sourceRefType;
+        default = null;
+        description = "Candidate flake output attribute that builds this closure image.";
+      };
+
+      mountpoint = lib.mkOption {
+        type = lib.types.str;
+        default = "/nix/store";
+        description = "Guest mountpoint for the closure view.";
+      };
+
+      readOnly = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether the closure view is read-only.";
+      };
+    };
+  };
+
+  backendStateType = lib.types.submodule {
+    options = {
+      persistent = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Persistent private state volume identity.";
+      };
+
+      volatile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Volatile state volume identity.";
+      };
+    };
+  };
+
+  domainBackendType = lib.types.submodule {
+    options = {
+      type = lib.mkOption {
+        type = lib.types.nullOr (lib.types.enum topologyLib.domainBackendTypes);
+        default = null;
+        description = "Domain construction mechanism.";
+      };
+
+      template = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "TemplateVM used by qubes-template backends.";
+      };
+
+      system = lib.mkOption {
+        type = lib.types.nullOr backendSystemType;
+        default = null;
+        description = "Nix system closure for nix-closure domains.";
+      };
+
+      kernel = lib.mkOption {
+        type = lib.types.nullOr backendBootComponentType;
+        default = null;
+        description = "Kernel binding for nix-closure domains.";
+      };
+
+      initrd = lib.mkOption {
+        type = lib.types.nullOr backendBootComponentType;
+        default = null;
+        description = "Initrd binding for nix-closure domains.";
+      };
+
+      modules = lib.mkOption {
+        type = lib.types.nullOr backendBootComponentType;
+        default = null;
+        description = "Kernel module binding for nix-closure domains.";
+      };
+
+      store = lib.mkOption {
+        type = lib.types.nullOr backendStoreType;
+        default = null;
+        description = "Read-only Nix store view for nix-closure domains.";
+      };
+
+      state = lib.mkOption {
+        type = lib.types.nullOr backendStateType;
+        default = null;
+        description = "Persistent and volatile state bindings for nix-closure domains.";
+      };
+    };
+  };
+
   domainType = lib.types.submodule {
     options = {
+      backend = lib.mkOption {
+        type = lib.types.nullOr domainBackendType;
+        default = null;
+        description = "Explicit domain construction backend.";
+      };
+
       class = lib.mkOption {
-        type = lib.types.enum topologyLib.domainClasses;
-        default = "AppVM";
+        type = lib.types.nullOr (lib.types.enum topologyLib.domainClasses);
+        default = null;
         description = "Qubes domain class to create when the domain is missing.";
       };
 
@@ -355,7 +505,21 @@ in
   config = lib.mkIf cfg.enable {
     assertions =
       lib.mapAttrsToList (name: domain: {
-        assertion = domain.class != "AppVM" || domain.template != null;
+        assertion =
+          let
+            backendType = if domain.backend == null then null else domain.backend.type;
+            backendTemplate = if domain.backend == null then null else domain.backend.template;
+            resolvedClass =
+              if domain.class != null then
+                domain.class
+              else if backendType == "nix-closure" || backendType == "qubes-standalone" then
+                "StandaloneVM"
+              else if backendType == "qubes-template-root" then
+                "TemplateVM"
+              else
+                "AppVM";
+          in
+          resolvedClass != "AppVM" || domain.template != null || backendTemplate != null;
         message = "nixome.qubes.domains.${name}.template must be set for AppVM domains.";
       }) cfg.domains
       ++ lib.mapAttrsToList (name: template: {

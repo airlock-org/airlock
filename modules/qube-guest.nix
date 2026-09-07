@@ -632,25 +632,57 @@ let
       : > "$log"
       refs="$(
         ${pkgs.jq}/bin/jq -r '
-          .templates
-          | to_entries[]
-          | select(.value.source_ref != null)
+          [
+            (
+              (.templates // {})
+              | to_entries[]
+              | select(.value.source_ref != null)
+              | {
+                  kind: "template",
+                  name: .key,
+                  ref: .value.source_ref
+                }
+            ),
+            (
+              (.domains // {})
+              | to_entries[]
+              | . as $domain
+              | ($domain.value.backend // {}) as $backend
+              | select($backend.type == "nix-closure")
+              | [
+                  { component: "system", ref: ($backend.system.source_ref // null) },
+                  { component: "kernel", ref: ($backend.kernel.source_ref // null) },
+                  { component: "initrd", ref: ($backend.initrd.source_ref // null) },
+                  { component: "modules", ref: ($backend.modules.source_ref // null) },
+                  { component: "store", ref: ($backend.store.source_ref // null) }
+                ]
+              | .[]
+              | select(.ref != null)
+              | {
+                  kind: "nix-domain",
+                  name: ($domain.key + "." + .component),
+                  ref: .ref
+                }
+            )
+          ]
+          | .[]
           | @base64
         ' "$topology_file"
       )"
 
       if [ -z "$refs" ]; then
-        printf 'no template source refs declared\n' >> "$log"
+        printf 'no topology source refs declared\n' >> "$log"
         return 0
       fi
 
       printf '%s\n' "$refs" |
         while IFS= read -r encoded; do
           [ -n "$encoded" ] || continue
-          template_json="$(printf '%s' "$encoded" | ${pkgs.coreutils}/bin/base64 -d)"
-          template="$(printf '%s' "$template_json" | ${pkgs.jq}/bin/jq -r '.key')"
-          attr="$(printf '%s' "$template_json" | ${pkgs.jq}/bin/jq -r '.value.source_ref.attr')"
-          printf 'checking template=%s attr=%s\n' "$template" "$attr" >> "$log"
+          ref_json="$(printf '%s' "$encoded" | ${pkgs.coreutils}/bin/base64 -d)"
+          kind="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.kind')"
+          name="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.name')"
+          attr="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.ref.attr')"
+          printf 'checking %s=%s attr=%s\n' "$kind" "$name" "$attr" >> "$log"
           ${pkgs.nix}/bin/nix \
             --extra-experimental-features nix-command \
             --extra-experimental-features flakes \

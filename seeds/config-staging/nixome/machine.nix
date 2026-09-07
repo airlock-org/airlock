@@ -38,8 +38,38 @@
   # };
   templates.definitions = { };
 
+  # Declare additional domains here. Nixome supports the existing Qubes
+  # TemplateVM/AppVM model and has a schema-level model for future Nix-native
+  # closure-backed domains.
+  #
+  # Traditional Qubes-backed domain:
+  #
+  # domains.work-fedora = {
+  #   backend.type = "qubes-template";
+  #   template = "fedora-44-xfce";
+  #   label = "green";
+  #   netvm = "sys-firewall";
+  # };
+  #
+  # Future Nix-native domain. This validates as topology, but current dom0
+  # setup refuses to apply it until the closure image materializer exists.
+  #
+  # domains.work-nix = {
+  #   backend = {
+  #     type = "nix-closure";
+  #     system.sourceRef.build = "nixosConfigurations.work.config.system.build.toplevel";
+  #     kernel.name = "6.12.64-1.fc41";
+  #     store.sourceRef.build = "packages.x86_64-linux.work-store-image";
+  #   };
+  #   label = "green";
+  #   netvm = null;
+  # };
+  domains = { };
+
   # Add or override raw Qubes topology entries here. These become normalized
   # nixome.topology JSON in config-validator before dom0 applies them.
+  # Prefer top-level domains for normal additions; extraDomains is a low-level
+  # escape hatch that overrides generated domain entries.
   topology = {
     extraTemplates = { };
     extraKernels = { };

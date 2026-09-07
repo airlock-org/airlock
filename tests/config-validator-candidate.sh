@@ -29,12 +29,77 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
 {
   description = "Nixome config validator fixture";
 
-  outputs = { self }: {
+  outputs = { self }: let
+    mkFixturePackage = name: builtins.derivation {
+      inherit name;
+      system = "x86_64-linux";
+      builder = "/bin/sh";
+      args = [
+        "-c"
+        "mkdir -p $out"
+      ];
+    };
+  in {
+    packages.x86_64-linux.nix-work-system = mkFixturePackage "nix-work-system";
+    packages.x86_64-linux.nix-work-store-image = mkFixturePackage "nix-work-store-image";
+
     nixome.topology = {
       schema = "nixome.qubes-topology.v1";
       templates = { };
       kernels = { };
-      domains = { };
+      domains = {
+        nix-native-work = {
+          class = "StandaloneVM";
+          template = null;
+          label = "green";
+          netvm = null;
+          prefs = { };
+          features = { };
+          services = { };
+          backend = {
+            type = "nix-closure";
+            template = null;
+            system = {
+              source = null;
+              source_ref = {
+                type = "flake-output";
+                attr = "packages.x86_64-linux.nix-work-system";
+                subpath = "";
+              };
+            };
+            kernel = {
+              name = "6.12.64-1.fc41";
+              source = null;
+              source_ref = null;
+            };
+            initrd = {
+              name = null;
+              source = null;
+              source_ref = null;
+            };
+            modules = {
+              name = null;
+              source = null;
+              source_ref = null;
+            };
+            store = {
+              mode = "closure-image";
+              source = null;
+              source_ref = {
+                type = "flake-output";
+                attr = "packages.x86_64-linux.nix-work-store-image";
+                subpath = "";
+              };
+              mountpoint = "/nix/store";
+              read_only = true;
+            };
+            state = {
+              persistent = "nix-native-work-private";
+              volatile = null;
+            };
+          };
+        };
+      };
       prefs = { };
       qrexec_policy.rules = [ ];
     };
@@ -138,11 +203,17 @@ tar -C "$WORK_DIR" -xf "$VALIDATED_TAR" validation.json topology.json system.jso
 jq -e '
   .schema == "nixome.config-validation.v1" and
   .status == "passed" and
+  any(.checks[]; .name == "nix-template-source-refs-dry-run" and .status == "passed") and
   any(.checks[]; .name == "nixome-topology-json" and .status == "passed") and
   any(.checks[]; .name == "nixome-system-json" and .status == "passed")
 ' "$WORK_DIR/validation.json" >/dev/null
 
 jq -e '.schema == "nixome.qubes-topology.v1"' "$WORK_DIR/topology.json" >/dev/null
 jq -e '.schema == "nixome.system.v1"' "$WORK_DIR/system.json" >/dev/null
+topology_refs_log="$(jq -r '.checks[] | select(.name == "nix-template-source-refs-dry-run").log' "$WORK_DIR/validation.json")"
+grep -F 'checking nix-domain=nix-native-work.system attr=packages.x86_64-linux.nix-work-system' \
+  "$topology_refs_log" >/dev/null
+grep -F 'checking nix-domain=nix-native-work.store attr=packages.x86_64-linux.nix-work-store-image' \
+  "$topology_refs_log" >/dev/null
 
 printf 'config validator candidate tar ok\n'

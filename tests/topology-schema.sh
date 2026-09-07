@@ -13,7 +13,11 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
-mkdir -p "$WORK_DIR/valid/nixome" "$WORK_DIR/valid/template-source" "$WORK_DIR/valid/kernel-source"
+mkdir -p \
+  "$WORK_DIR/valid/nixome" \
+  "$WORK_DIR/valid/template-source" \
+  "$WORK_DIR/valid/kernel-source" \
+  "$WORK_DIR/valid/system-source"
 cp "$SCHEMA" "$WORK_DIR/valid/nixome/topology.nix"
 
 cat > "$WORK_DIR/valid/flake.nix" <<'EOF'
@@ -47,6 +51,24 @@ cat > "$WORK_DIR/valid/flake.nix" <<'EOF'
           features."nixome-role" = "test";
           services."network-manager" = false;
         };
+        domains."legacy-fedora" = {
+          backend = {
+            type = "qubes-template";
+            template = "nixome-template";
+          };
+          label = "yellow";
+          netvm = null;
+        };
+        domains."nix-work" = {
+          backend = {
+            type = "nix-closure";
+            system.source = ./system-source;
+            kernel.name = "6.12.64-1.fc41";
+            store.sourceRef.build = "packages.x86_64-linux.nix-work-store-image";
+          };
+          label = "blue";
+          prefs.memory = 2048;
+        };
         qrexecPolicy.rules = [
           {
             service = "nixome.PolicyProbe";
@@ -78,11 +100,41 @@ jq -e '
   (.kernels."6.12.64-1.fc41".source | test("/kernel-source$")) and
   .domains."test-qube".class == "AppVM" and
   .domains."test-qube".template == "nixome-template" and
+  .domains."test-qube".backend.type == "qubes-template" and
+  .domains."test-qube".backend.template == "nixome-template" and
   .domains."test-qube".netvm == null and
   .domains."test-qube".prefs.autostart == false and
   .domains."test-qube".prefs.include_in_backups == false and
   .domains."test-qube".prefs.memory == 1024 and
   .domains."test-qube".services."network-manager" == false and
+  .domains."legacy-fedora".class == "AppVM" and
+  .domains."legacy-fedora".template == "nixome-template" and
+  .domains."legacy-fedora".label == "yellow" and
+  .domains."legacy-fedora".backend.type == "qubes-template" and
+  .domains."legacy-fedora".backend.template == "nixome-template" and
+  .domains."nix-work".class == "StandaloneVM" and
+  .domains."nix-work".template == null and
+  .domains."nix-work".label == "blue" and
+  .domains."nix-work".prefs.memory == 2048 and
+  .domains."nix-work".backend.type == "nix-closure" and
+  (.domains."nix-work".backend.system.source | test("/system-source$")) and
+  .domains."nix-work".backend.system.source_ref == null and
+  .domains."nix-work".backend.kernel.name == "6.12.64-1.fc41" and
+  .domains."nix-work".backend.kernel.source == null and
+  .domains."nix-work".backend.kernel.source_ref == null and
+  .domains."nix-work".backend.initrd.name == null and
+  .domains."nix-work".backend.modules.name == null and
+  .domains."nix-work".backend.store.mode == "closure-image" and
+  .domains."nix-work".backend.store.source == null and
+  .domains."nix-work".backend.store.source_ref == {
+    "type": "flake-output",
+    "attr": "packages.x86_64-linux.nix-work-store-image",
+    "subpath": ""
+  } and
+  .domains."nix-work".backend.store.mountpoint == "/nix/store" and
+  .domains."nix-work".backend.store.read_only == true and
+  .domains."nix-work".backend.state.persistent == "nix-work-private" and
+  .domains."nix-work".backend.state.volatile == null and
   .qrexec_policy.rules == [
     {
       "service": "nixome.PolicyProbe",
@@ -187,5 +239,20 @@ expect_failure \
   "qrexec-target-dom0" \
   "topology-managed qrexec policy cannot target dom0" \
   '{ qrexecPolicy.rules = [ { service = "nixome.PolicyProbe"; source = "config-vault"; target = "dom0"; action = "allow"; } ]; }'
+
+expect_failure \
+  "nix-closure-with-template" \
+  "template must not be set for nix-closure domains" \
+  '{ domains.bad = { template = "nixome-template"; backend.type = "nix-closure"; }; }'
+
+expect_failure \
+  "nix-closure-missing-system" \
+  "nixome.topology.domains.bad.backend.system.source: must be set for nix-closure domains" \
+  '{ domains.bad.backend = { type = "nix-closure"; kernel.name = "6.12.64-1.fc41"; store.sourceRef.build = "packages.x86_64-linux.bad-store"; }; }'
+
+expect_failure \
+  "nix-closure-writable-store" \
+  "nix-closure store views must be read-only" \
+  '{ domains.bad.backend = { type = "nix-closure"; system.sourceRef.build = "nixosConfigurations.bad.config.system.build.toplevel"; kernel.name = "6.12.64-1.fc41"; store = { sourceRef.build = "packages.x86_64-linux.bad-store"; readOnly = false; }; }; }'
 
 printf 'topology schema test ok\n'

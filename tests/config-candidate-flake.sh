@@ -175,6 +175,8 @@ jq -e '
   (.domains | type == "object") and
   .domains."config-vault".class == "AppVM" and
   .domains."config-vault".template == "nixome-nixos-config-system" and
+  .domains."config-vault".backend.type == "qubes-template" and
+  .domains."config-vault".backend.template == "nixome-nixos-config-system" and
   .domains."config-vault".label == "black" and
   .domains."config-vault".netvm == null and
   .domains."config-vault".prefs.autostart == false and
@@ -188,6 +190,7 @@ jq -e '
   .domains."config-vault".services."network-manager" == false and
   .domains."config-staging".class == "AppVM" and
   .domains."config-staging".template == "nixome-nixos-config-system" and
+  .domains."config-staging".backend.type == "qubes-template" and
   .domains."config-staging".label == "gray" and
   .domains."config-staging".netvm == null and
   .domains."config-staging".prefs.autostart == false and
@@ -202,6 +205,7 @@ jq -e '
   .domains."config-staging".features."nixome-config-applied-message" == "initial" and
   .domains."config-validator".class == "AppVM" and
   .domains."config-validator".template == "nixome-nixos-config-system" and
+  .domains."config-validator".backend.type == "qubes-template" and
   .domains."config-validator".label == "blue" and
   .domains."config-validator".netvm == null and
   .domains."config-validator".prefs.autostart == false and
@@ -214,6 +218,8 @@ jq -e '
   .domains."config-validator".features."nixome-config-validator" == "1" and
   .domains."config-validator".services == {} and
   .domains."nixome-nixos-work".class == "TemplateVM" and
+  .domains."nixome-nixos-work".backend.type == "qubes-template-root" and
+  .domains."nixome-nixos-work".backend.template == null and
   .domains."nixome-nixos-work".label == "black" and
   .domains."nixome-nixos-work".netvm == null and
   .domains."nixome-nixos-work".prefs.default_user == "user" and
@@ -223,6 +229,8 @@ jq -e '
   .domains."nixome-nixos-work".features."nixome-template-source" == "staged-config" and
   .domains."nixome-work".class == "AppVM" and
   .domains."nixome-work".template == "nixome-nixos-work" and
+  .domains."nixome-work".backend.type == "qubes-template" and
+  .domains."nixome-work".backend.template == "nixome-nixos-work" and
   .domains."nixome-work".label == "green" and
   .domains."nixome-work".netvm == null and
   .domains."nixome-work".prefs.include_in_backups == true and
@@ -308,6 +316,28 @@ cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
     extraPrefs = { };
     extraDomains = { };
     extraQrexecRules = [ ];
+  };
+
+  domains = {
+    legacy-fedora-app = {
+      backend.type = "qubes-template";
+      template = "fedora-44-xfce";
+      label = "red";
+      netvm = null;
+      features."nixome-role" = "legacy-fedora-app";
+    };
+
+    nix-native-work = {
+      backend = {
+        type = "nix-closure";
+        system.source = "dom0-profile";
+        kernel.name = "6.12.64-1.fc41";
+        store.source = "dom0-profile";
+      };
+      label = "green";
+      prefs.memory = 1536;
+      features."nixome-role" = "nix-native";
+    };
   };
 
   templates.definitions.nixome-nixos-dev = {
@@ -669,7 +699,22 @@ jq -e '
   .domains."nixome-dev".prefs.maxmem == 3072 and
   .domains."nixome-dev".features."nixome-role" == "dev" and
   .domains."nixome-dev".features."nixome-template-source" == "local-config" and
-  .domains."nixome-dev".services."network-manager" == false
+  .domains."nixome-dev".services."network-manager" == false and
+  .domains."legacy-fedora-app".class == "AppVM" and
+  .domains."legacy-fedora-app".template == "fedora-44-xfce" and
+  .domains."legacy-fedora-app".backend.type == "qubes-template" and
+  .domains."legacy-fedora-app".backend.template == "fedora-44-xfce" and
+  .domains."legacy-fedora-app".features."nixome-role" == "legacy-fedora-app" and
+  .domains."nix-native-work".class == "StandaloneVM" and
+  .domains."nix-native-work".template == null and
+  .domains."nix-native-work".label == "green" and
+  .domains."nix-native-work".prefs.memory == 1536 and
+  .domains."nix-native-work".backend.type == "nix-closure" and
+  .domains."nix-native-work".backend.system.source == "dom0-profile" and
+  .domains."nix-native-work".backend.kernel.name == "6.12.64-1.fc41" and
+  .domains."nix-native-work".backend.store.source == "dom0-profile" and
+  .domains."nix-native-work".backend.store.mode == "closure-image" and
+  .domains."nix-native-work".backend.store.read_only == true
 ' "$LOCAL_TOPOLOGY_JSON" >/dev/null
 
 jq -e '

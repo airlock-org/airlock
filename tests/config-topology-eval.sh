@@ -108,6 +108,14 @@ jq -e '
 jq -e '
   .schema == "nixome.qubes-topology.v1" and
   .templates."nixome-nixos-config-system".skip_start == true and
+  .domains."config-vault".backend.type == "qubes-template" and
+  .domains."config-vault".backend.template == "nixome-nixos-config-system" and
+  .domains."config-staging".backend.type == "qubes-template" and
+  .domains."config-staging".backend.template == "nixome-nixos-config-system" and
+  .domains."config-validator".backend.type == "qubes-template" and
+  .domains."config-validator".backend.template == "nixome-nixos-config-system" and
+  .domains."nixome-nixos-config-system".backend.type == "qubes-template-root" and
+  .domains."nixome-nixos-config-system".backend.template == null and
   .domains."config-staging".prefs.autostart == false and
   .domains."config-staging".prefs.include_in_backups == true and
   .domains."config-validator".prefs.autostart == false and

@@ -41,12 +41,14 @@
       };
       localConfig = checkMachineKeys "" [
         "configVms"
+        "domains"
         "dom0"
         "system"
         "templates"
         "topology"
       ] (expectMachineAttrs "" rawLocalConfig);
       localTopology = localConfig.topology or { };
+      localDomains = localConfig.domains or { };
       localConfigVms = localConfig.configVms or { };
       configVmRoles = [
         "config-vault"
@@ -115,9 +117,7 @@
           checkedDomains = builtins.mapAttrs (
             role: value: checkConfigDomainOverride "domains.${role}" value
           ) rawDomains;
-          checkedGuests = builtins.mapAttrs (
-            role: value: checkConfigGuest "guests.${role}" value
-          ) rawGuests;
+          checkedGuests = builtins.mapAttrs (role: value: checkConfigGuest "guests.${role}" value) rawGuests;
         in
         checked
         // {
@@ -164,7 +164,13 @@
           ] (expectDom0Attrs "host.apply" value);
           mode = apply.mode or "auto";
         in
-        if !(builtins.elem mode [ "auto" "switch" "boot" ]) then
+        if
+          !(builtins.elem mode [
+            "auto"
+            "switch"
+            "boot"
+          ])
+        then
           throw "nixome.dom0.host.apply.mode: expected one of auto, switch, boot"
         else
           {
@@ -202,10 +208,8 @@
           else
             { }
         );
-      hasNonEmptyAttrs =
-        value: builtins.typeOf value == "set" && builtins.attrNames value != [ ];
-      hasNonEmptyList =
-        value: builtins.typeOf value == "list" && value != [ ];
+      hasNonEmptyAttrs = value: builtins.typeOf value == "set" && builtins.attrNames value != [ ];
+      hasNonEmptyList = value: builtins.typeOf value == "list" && value != [ ];
       localDom0HostApply = checkDom0HostApply (localDom0Host.apply or { });
       localDom0HostHasUnknownLiveSafety =
         hasNonEmptyList (localDom0Host.overlays or [ ])
@@ -271,7 +275,7 @@
         extraTemplates = templateSet.topology.templates // (localTopology.extraTemplates or { });
         extraKernels = localTopology.extraKernels or { };
         extraPrefs = localTopology.extraPrefs or { };
-        extraDomains = templateSet.topology.domains // (localTopology.extraDomains or { });
+        extraDomains = templateSet.topology.domains // localDomains // (localTopology.extraDomains or { });
         extraQrexecRules = localTopology.extraQrexecRules or [ ];
       };
       topology = topologySchema.mkTopology config;

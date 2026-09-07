@@ -7,6 +7,13 @@ let
     "TemplateVM"
   ];
 
+  domainBackendTypes = [
+    "qubes-template"
+    "qubes-template-root"
+    "qubes-standalone"
+    "nix-closure"
+  ];
+
   labels = [
     "red"
     "orange"
@@ -92,8 +99,8 @@ let
         "attr"
         "subpath"
       ] value;
-      hasBuild = hasAttr "build" ref;
-      hasAttrName = hasAttr "attr" ref;
+      hasBuild = hasAttr "build" ref && ref.build != null;
+      hasAttrName = hasAttr "attr" ref && ref.attr != null;
       attr =
         if hasBuild && hasAttrName then
           fail path "build and attr cannot both be set"
@@ -115,7 +122,7 @@ let
         inherit attr subpath;
       };
 
-  normalizeTemplateSource =
+  normalizeSource =
     path: value:
     if value == null then
       {
@@ -132,6 +139,30 @@ let
         source = expectStringOrPath path value;
         source_ref = null;
       };
+
+  sourceIsSet = sourceInfo: sourceInfo.source != null || sourceInfo.source_ref != null;
+
+  normalizeSourceOption =
+    path: attrs:
+    let
+      hasSource = hasAttr "source" attrs && attrs.source != null;
+      hasCamelSourceRef = hasAttr "sourceRef" attrs && attrs.sourceRef != null;
+      hasSnakeSourceRef = hasAttr "source_ref" attrs && attrs.source_ref != null;
+      rawSource =
+        if hasCamelSourceRef && hasSnakeSourceRef then
+          fail path "sourceRef and source_ref cannot both be set"
+        else if hasSource && (hasCamelSourceRef || hasSnakeSourceRef) then
+          fail path "source and sourceRef cannot both be set"
+        else if hasSource then
+          attrs.source
+        else if hasCamelSourceRef then
+          attrs.sourceRef
+        else if hasSnakeSourceRef then
+          attrs.source_ref
+        else
+          null;
+    in
+    normalizeSource "${path}.source" rawSource;
 
   checkKeys =
     path: allowed: attrs:
@@ -354,7 +385,7 @@ let
           template.source_ref
         else
           null;
-      sourceInfo = normalizeTemplateSource "templates.${checkedName}.source" rawSource;
+      sourceInfo = normalizeSource "templates.${checkedName}.source" rawSource;
       hasCamelSkip = hasAttr "skipStart" template;
       hasSnakeSkip = hasAttr "skip_start" template;
       camelSkip =
@@ -395,6 +426,222 @@ let
     else
       { inherit source; };
 
+  normalizeClosureSystem =
+    domainName: value:
+    if value == null then
+      fail "domains.${domainName}.backend.system.source" "must be set for nix-closure domains"
+    else
+      let
+        path = "domains.${domainName}.backend.system";
+        system = expectOptions path [
+          "source"
+          "sourceRef"
+          "source_ref"
+        ] value;
+        sourceInfo = normalizeSourceOption path system;
+      in
+      if !(sourceIsSet sourceInfo) then
+        fail "${path}.source" "must be set for nix-closure domains"
+      else
+        sourceInfo;
+
+  normalizeClosureBootComponent =
+    domainName: component: required: value:
+    let
+      path = "domains.${domainName}.backend.${component}";
+      componentValue =
+        if value == null then
+          { }
+        else
+          expectOptions path [
+            "name"
+            "source"
+            "sourceRef"
+            "source_ref"
+          ] value;
+      sourceInfo = normalizeSourceOption path componentValue;
+      componentName =
+        if hasAttr "name" componentValue && componentValue.name != null then
+          expectLooseName "${component} binding" "${path}.name" componentValue.name
+        else
+          null;
+    in
+    if required && componentName == null && !(sourceIsSet sourceInfo) then
+      fail path "must set name, source, or sourceRef for nix-closure domains"
+    else
+      {
+        name = componentName;
+        inherit (sourceInfo) source source_ref;
+      };
+
+  normalizeClosureStore =
+    domainName: value:
+    if value == null then
+      fail "domains.${domainName}.backend.store.source" "must be set for closure-image stores"
+    else
+      let
+        path = "domains.${domainName}.backend.store";
+        store = expectOptions path [
+          "mode"
+          "source"
+          "sourceRef"
+          "source_ref"
+          "mountpoint"
+          "readOnly"
+          "read_only"
+        ] value;
+        mode = expectEnum "${path}.mode" [ "closure-image" ] (get store "mode" "closure-image");
+        sourceInfo = normalizeSourceOption path store;
+        mountpoint = expectStringOrPath "${path}.mountpoint" (get store "mountpoint" "/nix/store");
+        hasCamelReadOnly = hasAttr "readOnly" store;
+        hasSnakeReadOnly = hasAttr "read_only" store;
+        camelReadOnly = if hasCamelReadOnly then expectBool "${path}.readOnly" store.readOnly else null;
+        snakeReadOnly = if hasSnakeReadOnly then expectBool "${path}.read_only" store.read_only else null;
+        readOnly =
+          if hasCamelReadOnly && hasSnakeReadOnly then
+            if camelReadOnly == snakeReadOnly then
+              camelReadOnly
+            else
+              fail path "readOnly and read_only disagree"
+          else if hasCamelReadOnly then
+            camelReadOnly
+          else if hasSnakeReadOnly then
+            snakeReadOnly
+          else
+            true;
+      in
+      if mountpoint != "/nix/store" then
+        fail "${path}.mountpoint" "currently must be /nix/store"
+      else if readOnly != true then
+        fail path "nix-closure store views must be read-only"
+      else if !(sourceIsSet sourceInfo) then
+        fail "${path}.source" "must be set for closure-image stores"
+      else
+        {
+          inherit mode mountpoint;
+          read_only = readOnly;
+          inherit (sourceInfo) source source_ref;
+        };
+
+  normalizeClosureState =
+    domainName: value:
+    let
+      path = "domains.${domainName}.backend.state";
+      state =
+        if value == null then
+          { }
+        else
+          expectOptions path [
+            "persistent"
+            "volatile"
+          ] value;
+      persistent = expectLooseName "persistent state volume" "${path}.persistent" (
+        get state "persistent" "${domainName}-private"
+      );
+      volatile =
+        if hasAttr "volatile" state && state.volatile != null then
+          expectLooseName "volatile state volume" "${path}.volatile" state.volatile
+        else
+          null;
+    in
+    {
+      inherit persistent volatile;
+    };
+
+  normalizeDomainBackend =
+    domainName: class: domainTemplate: value:
+    if value == null then
+      if class == "AppVM" then
+        {
+          type = "qubes-template";
+          template = domainTemplate;
+        }
+      else if class == "TemplateVM" then
+        {
+          type = "qubes-template-root";
+          template = null;
+        }
+      else
+        {
+          type = "qubes-standalone";
+          template = null;
+        }
+    else
+      let
+        path = "domains.${domainName}.backend";
+        backend = expectOptions path [
+          "type"
+          "template"
+          "system"
+          "kernel"
+          "initrd"
+          "modules"
+          "store"
+          "state"
+        ] value;
+        backendType = expectEnum "${path}.type" domainBackendTypes (get backend "type" null);
+        backendTemplate =
+          if hasAttr "template" backend && backend.template != null then
+            expectQubesName "template" "${path}.template" backend.template
+          else
+            domainTemplate;
+      in
+      if backendType == "qubes-template" then
+        if class != "AppVM" then
+          fail path "qubes-template backend requires class AppVM"
+        else if backendTemplate == null then
+          fail "${path}.template" "must be set for qubes-template domains"
+        else if
+          hasAttr "template" backend
+          && backend.template != null
+          && domainTemplate != null
+          && backendTemplate != domainTemplate
+        then
+          fail path "template and backend.template disagree"
+        else
+          {
+            type = backendType;
+            template = backendTemplate;
+          }
+      else if backendType == "qubes-template-root" then
+        if class != "TemplateVM" then
+          fail path "qubes-template-root backend requires class TemplateVM"
+        else if domainTemplate != null then
+          fail path "template must be null for qubes-template-root domains"
+        else
+          {
+            type = backendType;
+            template = null;
+          }
+      else if backendType == "qubes-standalone" then
+        if class != "StandaloneVM" then
+          fail path "qubes-standalone backend requires class StandaloneVM"
+        else if domainTemplate != null then
+          fail path "template must be null for qubes-standalone domains"
+        else
+          {
+            type = backendType;
+            template = null;
+          }
+      else if backendType == "nix-closure" then
+        if class != "StandaloneVM" then
+          fail path "nix-closure backend requires class StandaloneVM"
+        else if domainTemplate != null then
+          fail path "template must not be set for nix-closure domains"
+        else
+          {
+            type = backendType;
+            template = null;
+            system = normalizeClosureSystem domainName (get backend "system" null);
+            kernel = normalizeClosureBootComponent domainName "kernel" true (get backend "kernel" null);
+            initrd = normalizeClosureBootComponent domainName "initrd" false (get backend "initrd" null);
+            modules = normalizeClosureBootComponent domainName "modules" false (get backend "modules" null);
+            store = normalizeClosureStore domainName (get backend "store" null);
+            state = normalizeClosureState domainName (get backend "state" null);
+          }
+      else
+        fail "${path}.type" "unsupported backend type ${toJSON backendType}";
+
   defaultPrefsForClass =
     class:
     if class == "AppVM" || class == "StandaloneVM" then
@@ -410,6 +657,7 @@ let
     let
       checkedName = expectQubesName "domain" "domains.${name}" name;
       domain = expectOptions "domains.${checkedName}" [
+        "backend"
         "class"
         "template"
         "label"
@@ -418,7 +666,25 @@ let
         "features"
         "services"
       ] value;
-      class = expectEnum "domains.${checkedName}.class" domainClasses (get domain "class" "AppVM");
+      rawBackend = get domain "backend" null;
+      rawBackendType =
+        if rawBackend != null && typeOf rawBackend == "set" && hasAttr "type" rawBackend then
+          rawBackend.type
+        else
+          null;
+      defaultClass =
+        if rawBackendType == "nix-closure" || rawBackendType == "qubes-standalone" then
+          "StandaloneVM"
+        else if rawBackendType == "qubes-template-root" then
+          "TemplateVM"
+        else
+          "AppVM";
+      rawClass = get domain "class" null;
+      class =
+        if rawClass == null then
+          defaultClass
+        else
+          expectEnum "domains.${checkedName}.class" domainClasses rawClass;
       template =
         let
           rawTemplate = get domain "template" null;
@@ -440,22 +706,25 @@ let
         get domain "features" { }
       );
       services = normalizeServiceAttrs "domains.${checkedName}.services" (get domain "services" { });
+      backend = normalizeDomainBackend checkedName class template rawBackend;
+      resolvedTemplate = if backend.type == "qubes-template" then backend.template else template;
     in
-    if class == "AppVM" && template == null then
+    if class == "AppVM" && resolvedTemplate == null then
       fail "domains.${checkedName}.template" "must be set for AppVM domains"
-    else if class == "TemplateVM" && template != null then
+    else if class == "TemplateVM" && resolvedTemplate != null then
       fail "domains.${checkedName}.template" "must be null for TemplateVM domains"
     else
       {
         inherit
           class
-          template
           label
           netvm
           prefs
           features
           services
+          backend
           ;
+        template = resolvedTemplate;
       };
 
   normalizeNamedAttrs =
@@ -502,6 +771,7 @@ in
 {
   inherit
     domainClasses
+    domainBackendTypes
     labels
     mkTopology
     qrexecActions

@@ -67,6 +67,77 @@ The staged config now takes the next step for normal workload templates: it
 defines `nixome-nixos-work` as a NixOS TemplateVM package output and declares
 `nixome-work` as an AppVM based on that template.
 
+## Domain Construction Model
+
+Nixome intentionally supports two domain construction families.
+
+Traditional Qubes domains keep the mature TemplateVM/AppVM model:
+
+```nix
+domains.sys-net = {
+  backend.type = "qubes-template";
+  template = "fedora-44-xfce";
+  label = "red";
+  netvm = null;
+};
+```
+
+These domains are ordinary Qubes domains. Fedora, Debian, and other existing
+Qubes templates should stay on this path unless there is a concrete reason to
+move them. The POC uses this path for the config VMs and the initial
+NixOS-built workload template.
+
+Nix-native domains are represented as a declared system identity plus state and
+runtime policy:
+
+```nix
+domains.work = {
+  backend = {
+    type = "nix-closure";
+    system.sourceRef.build = "nixosConfigurations.work.config.system.build.toplevel";
+    kernel.name = "6.12.64-1.fc41";
+    store = {
+      mode = "closure-image";
+      sourceRef.build = "packages.x86_64-linux.work-store-image";
+    };
+  };
+  label = "green";
+  netvm = null;
+};
+```
+
+The intended long-term invariant is:
+
+```text
+Nix-native domain =
+    Nix system closure
+    + persistent state
+    + volatile state
+    + VM resources
+    + devices
+    + networking
+    + qrexec policy
+```
+
+The closure is the immutable system identity of that domain. The eventual
+storage target is a per-domain read-only `/nix/store` closure image or view,
+with physical sharing below the VM boundary rather than a live shared
+filesystem service. That preserves independent VM runtime behavior while
+allowing common immutable Nix store objects to be deduplicated by the storage
+backend.
+
+This is not the active boot path yet. The schema and validator can describe and
+check `nix-closure` domain references, but `nixome-setup-config --apply`
+currently refuses those domains before mutating Qubes state with:
+
+```text
+nix-closure domain materializer is not implemented yet
+```
+
+That fail-fast behavior keeps the current POC honest: TemplateVM-backed domains
+continue to work, while closure-backed domains cannot be silently created as
+the wrong Qubes object type.
+
 `config-staging` owns the editable candidate repository at:
 
 ```text
@@ -138,10 +209,11 @@ The config-system TemplateVM and VM kernel installation remain in the outer
 bootstrap dom0 image for now. Normal workload templates can now move into the
 staged config path.
 
-The schema currently checks domain classes, labels, Qube/template names,
-template and kernel source fields, template build references, JSON-safe
-prefs/features, boolean services, and constrained Nixome-owned qrexec policy
-rules. Template sources can be concrete directories or references like:
+The schema currently checks domain backend types, domain classes, labels,
+Qube/template names, template and kernel source fields, template and
+Nix-native source references, JSON-safe prefs/features, boolean services, and
+constrained Nixome-owned qrexec policy rules. Template sources can be concrete
+directories or references like:
 
 ```nix
 templates.nixome-nixos-work.source = {
@@ -157,7 +229,11 @@ appends a catch-all deny rule for each managed service.
 
 The schema defaults AppVMs to `class = "AppVM"`, `netvm = null`,
 `prefs.autostart = false`, `prefs.include_in_backups = false`, empty
-`features`/`services`, and an empty generated qrexec policy.
+`features`/`services`, `backend.type = "qubes-template"`, and an empty
+generated qrexec policy. `backend.type = "qubes-template-root"` is used for
+TemplateVM Qubes objects, `backend.type = "qubes-standalone"` for traditional
+standalone Qubes objects, and `backend.type = "nix-closure"` for the future
+closure-backed domain path.
 
 For this first apply proof, the Nix value declares the config AppVMs, the work
 TemplateVM/AppVM pair, plus a small observable Qubes feature on

@@ -13,6 +13,7 @@ RESULT_JSON="$LOG_DIR/setup-config.json"
 COMMAND_LOG="$LOG_DIR/setup-config.commands.log"
 LIVE_ACTIONS_JSONL="$LOG_DIR/setup-config-live-actions.jsonl"
 RESTART_ACTIONS_JSONL="$LOG_DIR/setup-config-restart-actions.jsonl"
+UNSUPPORTED_DOMAINS_JSONL="$LOG_DIR/setup-config-unsupported-domains.jsonl"
 SYSTEM_STATE_DIR="${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
 PERSIST_STATE="${NIXOME_SETUP_CONFIG_PERSIST_STATE:-1}"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
@@ -68,6 +69,7 @@ mkdir -p "$LOG_DIR"
 : > "$COMMAND_LOG"
 : > "$LIVE_ACTIONS_JSONL"
 : > "$RESTART_ACTIONS_JSONL"
+: > "$UNSUPPORTED_DOMAINS_JSONL"
 
 exec >> "$COMMAND_LOG" 2>&1
 trap write_unexpected_failure EXIT
@@ -79,6 +81,7 @@ prefs_changed=0
 features_changed=0
 services_changed=0
 qrexec_policy_changed=0
+unsupported_domains_count=0
 
 json_escape() {
   printf '%s' "$1" | sed \
@@ -146,6 +149,24 @@ record_live_action() {
   record_action "$LIVE_ACTIONS_JSONL" "$@"
 }
 
+record_unsupported_domain() {
+  domain="$1"
+  backend="$2"
+  reason="$3"
+
+  jq -c -n \
+    --arg domain "$domain" \
+    --arg backend "$backend" \
+    --arg reason "$reason" \
+    '{
+      domain: $domain,
+      backend: $backend,
+      reason: $reason
+    }' \
+    >> "$UNSUPPORTED_DOMAINS_JSONL"
+  unsupported_domains_count=$((unsupported_domains_count + 1))
+}
+
 domain_state() {
   qvm-ls --raw-data --fields NAME,STATE --no-spinner 2>/dev/null |
     awk -F'|' -v name="$1" '$1 == name { print $2; found = 1 } END { exit(found ? 0 : 1) }'
@@ -203,6 +224,9 @@ write_result() {
     json_lines_array "$LIVE_ACTIONS_JSONL"
     printf ',"restart_actions":'
     json_lines_array "$RESTART_ACTIONS_JSONL"
+    printf ',"unsupported_domains":'
+    json_lines_array "$UNSUPPORTED_DOMAINS_JSONL"
+    printf ',"unsupported_domains_count":%s' "$unsupported_domains_count"
     printf ',"restart_required":'
     if [ -s "$RESTART_ACTIONS_JSONL" ]; then
       printf true
@@ -213,6 +237,8 @@ write_result() {
     json_string "$LIVE_ACTIONS_JSONL"
     printf ',"restart_actions_log":'
     json_string "$RESTART_ACTIONS_JSONL"
+    printf ',"unsupported_domains_log":'
+    json_string "$UNSUPPORTED_DOMAINS_JSONL"
     printf ',"qrexec_policy_file":'
     json_string "$MANAGED_POLICY_PATH"
     printf ',"qrexec_policy_rendered":'
@@ -578,6 +604,40 @@ setup_qrexec_policy() {
   record_live_action qrexec-policy reload "" "$MANAGED_POLICY_FILE" "$MANAGED_POLICY_PATH"
 }
 
+preflight_domain_backends() {
+  local reason="nix-closure domain materializer is not implemented yet"
+  local row
+  local domain
+  local backend
+  local names
+  local unsupported_refs=()
+  local unsupported_names=()
+
+  mapfile -t unsupported_refs < <(
+    jq -r '
+      (.domains // {})
+      | to_entries[]
+      | select((.value.backend.type // "qubes-template") == "nix-closure")
+      | [.key, .value.backend.type]
+      | @tsv
+    ' "$TOPOLOGY"
+  )
+
+  for row in "${unsupported_refs[@]}"; do
+    [ -n "$row" ] || continue
+    IFS=$'\t' read -r domain backend <<< "$row"
+    record_unsupported_domain "$domain" "$backend" "$reason"
+    unsupported_names+=("$domain")
+    printf 'unsupported domain backend: %s backend=%s reason=%s\n' "$domain" "$backend" "$reason"
+  done
+
+  if [ "$APPLY" = "1" ] && [ "${#unsupported_names[@]}" -gt 0 ]; then
+    local IFS=,
+    names="${unsupported_names[*]}"
+    fail "$reason: $names"
+  fi
+}
+
 kernel_source_matches_target() {
   source="$1"
   target="$2"
@@ -667,6 +727,7 @@ systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qr
 schema="$(jq_get '.schema')"
 [ "$schema" = "nixome.qubes-topology.v1" ] || fail "unsupported topology schema: $schema"
 
+preflight_domain_backends
 setup_qrexec_policy
 
 printf 'setting up global prefs\n'
@@ -754,6 +815,12 @@ done
 printf 'setting up domains\n'
 mapfile -t domain_names < <(jq_get '.domains | keys[]')
 for domain in "${domain_names[@]}"; do
+  backend_type="$(jq_get '.domains[$name].backend.type // "qubes-template"' --arg name "$domain")"
+  if [ "$backend_type" = "nix-closure" ]; then
+    printf 'skipping unsupported nix-closure domain backend in plan: %s\n' "$domain"
+    continue
+  fi
+
   class="$(jq_get '.domains[$name].class // "AppVM"' --arg name "$domain")"
   template="$(jq_get '.domains[$name].template // ""' --arg name "$domain")"
   label="$(jq_get '.domains[$name].label // "red"' --arg name "$domain")"

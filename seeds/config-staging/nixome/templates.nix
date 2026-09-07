@@ -40,11 +40,15 @@ let
     let
       unknown = builtins.filter (name: !(builtins.elem name allowed)) (attrNames attrs);
     in
-    if unknown == [ ] then attrs else fail path "unknown option(s): ${lib.concatStringsSep ", " unknown}";
+    if unknown == [ ] then
+      attrs
+    else
+      fail path "unknown option(s): ${lib.concatStringsSep ", " unknown}";
 
   normalizeDomainOverride =
     path: value:
     checkKeys path [
+      "backend"
       "class"
       "features"
       "label"
@@ -57,8 +61,7 @@ let
   normalizeAppVms =
     templateName: value:
     mapAttrs (
-      appName: appVm:
-      normalizeDomainOverride "definitions.${templateName}.appVms.${appName}" appVm
+      appName: appVm: normalizeDomainOverride "definitions.${templateName}.appVms.${appName}" appVm
     ) (expectAttrs "definitions.${templateName}.appVms" value);
 
   normalizeTemplateDefinition =
@@ -153,59 +156,57 @@ let
     };
   };
 
-  templateDefinitions = mapAttrs normalizeTemplateDefinition (baseTemplateDefinitions // extraTemplateDefinitions);
+  templateDefinitions = mapAttrs normalizeTemplateDefinition (
+    baseTemplateDefinitions // extraTemplateDefinitions
+  );
 
   mkTemplateDomain =
     name: definition: builtTemplate:
-    mergeDomain
-      {
-        class = "TemplateVM";
-        label = "black";
-        netvm = null;
-        prefs = {
-          default_user = "user";
-          kernel = definition.kernel or qubesVmKernelName;
-          kernelopts = builtTemplate.kernelopts;
-          qrexec_timeout = 120;
-          virt_mode = "pvh";
-        };
-        features = {
-          "nixome-managed" = "1";
-          "nixome-role" = definition.role or "template";
-          "nixome-template-source" = definition.sourceLabel or "staged-config";
-          os = "Linux";
-          qrexec = "1";
-        };
-        services = { };
-      }
-      (definition.domain or { });
+    mergeDomain {
+      class = "TemplateVM";
+      label = "black";
+      netvm = null;
+      prefs = {
+        default_user = "user";
+        kernel = definition.kernel or qubesVmKernelName;
+        kernelopts = builtTemplate.kernelopts;
+        qrexec_timeout = 120;
+        virt_mode = "pvh";
+      };
+      features = {
+        "nixome-managed" = "1";
+        "nixome-role" = definition.role or "template";
+        "nixome-template-source" = definition.sourceLabel or "staged-config";
+        os = "Linux";
+        qrexec = "1";
+      };
+      services = { };
+    } (definition.domain or { });
 
   mkAppVmDomain =
     templateName: definition: name: appVm:
-    mergeDomain
-      {
-        template = templateName;
-        label = "green";
-        netvm = null;
-        prefs = {
-          autostart = false;
-          include_in_backups = true;
-          memory = 1024;
-          maxmem = 2048;
-          vcpus = 1;
-        };
-        features = {
-          "nixome-managed" = "1";
-          "nixome-role" = "work";
-          "nixome-template-source" = definition.sourceLabel or "staged-config";
-          os = "Linux";
-          qrexec = "1";
-        };
-        services = {
-          "network-manager" = false;
-        };
-      }
-      appVm;
+    mergeDomain {
+      template = templateName;
+      label = "green";
+      netvm = null;
+      prefs = {
+        autostart = false;
+        include_in_backups = true;
+        memory = 1024;
+        maxmem = 2048;
+        vcpus = 1;
+      };
+      features = {
+        "nixome-managed" = "1";
+        "nixome-role" = "work";
+        "nixome-template-source" = definition.sourceLabel or "staged-config";
+        os = "Linux";
+        qrexec = "1";
+      };
+      services = {
+        "network-manager" = false;
+      };
+    } appVm;
 
   mkEntry =
     name:
@@ -243,10 +244,11 @@ let
           else
             { }
         );
-      modules =
-        [ contentModule ]
-        ++ (if hasAttr "configuration" definition then [ definition.configuration ] else [ ])
-        ++ (definition.modules or [ ]);
+      modules = [
+        contentModule
+      ]
+      ++ (if hasAttr "configuration" definition then [ definition.configuration ] else [ ])
+      ++ (definition.modules or [ ]);
       builtTemplate = templateBuilders.mkNixosQubeTemplate {
         templateName = name;
         imageName = definition.imageName or name;
