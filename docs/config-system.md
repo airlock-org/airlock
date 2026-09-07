@@ -297,7 +297,8 @@ package/version overrides, including Qubes package overrides. `dom0.extraModules
 remains as a compatibility escape hatch, but new config should prefer
 `dom0.host`. `nixome.system` records the apply plan and source references; the
 NixOS modules define the actual host closure that dom0 builds and switches.
-Unknown `dom0` and `dom0.host` option names fail during Nix evaluation.
+Unknown top-level `nixome/machine.nix`, `dom0`, and `dom0.host` option names
+fail during Nix evaluation.
 
 TemplateVM contents are defined in Nix as well. The seeded
 `nixome/templates.nix` turns `templates.definitions` from `nixome/machine.nix`

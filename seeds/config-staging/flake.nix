@@ -11,7 +11,26 @@
       systemSchema = import ./nixome/system-schema.nix;
       configVms = import ./nixome/config-vms.nix;
       systemConfig = import ./nixome/system.nix;
-      localConfig = import ./nixome/machine.nix {
+      expectMachineAttrs =
+        path: value:
+        let
+          prefix = "nixome.machine${if path == "" then "" else ".${path}"}";
+        in
+        if builtins.typeOf value == "set" then
+          value
+        else
+          throw "${prefix}: expected an attribute set, got ${builtins.typeOf value}";
+      checkMachineKeys =
+        path: allowed: attrs:
+        let
+          unknown = builtins.filter (name: !(builtins.elem name allowed)) (builtins.attrNames attrs);
+          prefix = "nixome.machine${if path == "" then "" else ".${path}"}";
+        in
+        if unknown == [ ] then
+          attrs
+        else
+          throw "${prefix}: unknown option(s): ${nixpkgs.lib.concatStringsSep ", " unknown}";
+      rawLocalConfig = import ./nixome/machine.nix {
         inherit
           appliedMessage
           system
@@ -20,6 +39,13 @@
           ;
         pkgs = templateBuilders.pkgs;
       };
+      localConfig = checkMachineKeys "" [
+        "configVms"
+        "dom0"
+        "system"
+        "templates"
+        "topology"
+      ] (expectMachineAttrs "" rawLocalConfig);
       localTopology = localConfig.topology or { };
       localConfigVms = localConfig.configVms or { };
       configVmRoles = [
