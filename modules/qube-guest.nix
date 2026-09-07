@@ -87,6 +87,7 @@ let
   configStagingDom0ProfileActivate = builtins.readFile ../seeds/config-staging/dom0-profile/bin/nixome-dom0-profile-activate;
   configStagingDom0ProfileJson = builtins.readFile ../seeds/config-staging/dom0-profile/share/nixome/profile.json;
   configStagingLocal = builtins.readFile ../seeds/config-staging/nixome/local.nix;
+  configStagingMachine = builtins.readFile ../seeds/config-staging/nixome/machine.nix;
   configStagingSystem = builtins.readFile ../seeds/config-staging/nixome/system.nix;
   configStagingTemplates = builtins.readFile ../seeds/config-staging/nixome/templates.nix;
   configStagingSystemSchema = builtins.readFile ../lib/nixome/system.nix;
@@ -159,6 +160,9 @@ let
         cat > nixome/local.nix <<'EOF'
     ${configStagingLocal}
     EOF
+        cat > nixome/machine.nix <<'EOF'
+    ${configStagingMachine}
+    EOF
         cat > nixome/system.nix <<'EOF'
     ${configStagingSystem}
     EOF
@@ -193,6 +197,7 @@ let
           nixome/config-vms.nix \
           nixome/dom0-host.nix \
           nixome/local.nix \
+          nixome/machine.nix \
           nixome/prebuilt-template-sources.nix \
           nixome/system.nix \
           nixome/system-schema.nix \

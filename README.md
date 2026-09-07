@@ -128,7 +128,7 @@ unchanged. `make vm-config-boot-activate-flow` then boots the same writable VM
 disk a second time and verifies that `/run/current-system` has advanced to the
 staged generation and `nixome-config-status` no longer reports a pending
 reboot.
-Inside `config-staging`, `nixome/local.nix` can add
+Inside `config-staging`, `nixome/machine.nix` can add
 `templates.definitions.<template-name>` entries. Each entry provides NixOS
 modules for a TemplateVM root plus optional Qubes domain/AppVM defaults; the
 candidate flake exposes the resulting template package and topology source
@@ -224,7 +224,7 @@ generated log directory, and removes the test qube on success if it created it.
 - The bootstrap config-system topology currently uses one NixOS guest TemplateVM
   for all three config AppVM roles to keep nested image builds practical; staged
   config can now define additional NixOS TemplateVM contents in
-  `nixome/local.nix` as first-class template definitions.
+  `nixome/machine.nix` as first-class template definitions.
 - `machines/test.nix` is the first concrete NixOS dom0 configuration.
 - `tests/` contains layered feedback scripts.
 - `docs/` records upstream findings and the next test boundary.

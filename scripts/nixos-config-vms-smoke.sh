@@ -543,6 +543,12 @@ fi
 if [ -z "${NIXOME_FLAKE_SEED:-}" ] || [ ! -r "$NIXOME_FLAKE_SEED" ]; then
   fail "missing flake seed helper for smoke update"
 fi
+if [ -z "${NIXOME_LOCAL_SEED:-}" ] || [ ! -r "$NIXOME_LOCAL_SEED" ]; then
+  fail "missing local config compatibility seed helper for smoke update"
+fi
+if [ -z "${NIXOME_MACHINE_SEED:-}" ] || [ ! -r "$NIXOME_MACHINE_SEED" ]; then
+  fail "missing machine config seed helper for smoke update"
+fi
 if [ -z "${NIXOME_SYSTEM_SEED:-}" ] || [ ! -r "$NIXOME_SYSTEM_SEED" ]; then
   fail "missing system seed helper for smoke update"
 fi
@@ -558,6 +564,7 @@ fi
 CONFIG_VMS_SEED_TEXT="$(cat "$NIXOME_CONFIG_VMS_SEED")"
 DOM0_HOST_SEED_TEXT="$(cat "$NIXOME_DOM0_HOST_SEED")"
 FLAKE_SEED_TEXT="$(cat "$NIXOME_FLAKE_SEED")"
+LOCAL_SEED_TEXT="$(cat "$NIXOME_LOCAL_SEED")"
 SYSTEM_SEED_TEXT="$(cat "$NIXOME_SYSTEM_SEED")"
 TEMPLATES_SEED_TEXT="$(cat "$NIXOME_TEMPLATES_SEED")"
 SYSTEM_SCHEMA_SEED_TEXT="$(cat "$NIXOME_SYSTEM_SCHEMA_SEED")"
@@ -659,6 +666,9 @@ cat > nixome/dom0-host.nix <<'DOM0HOSTNIXEOF'
 $DOM0_HOST_SEED_TEXT
 DOM0HOSTNIXEOF
 cat > nixome/local.nix <<'LOCALNIXEOF'
+${LOCAL_SEED_TEXT}
+LOCALNIXEOF
+cat > nixome/machine.nix <<'MACHINENIXEOF'
 {
   appliedMessage,
   pkgs ? null,
@@ -724,7 +734,7 @@ $EXTRA_TEMPLATE_DEFINITIONS_NIX
       } else { };
   };
 }
-LOCALNIXEOF
+MACHINENIXEOF
 cat > nixome/templates.nix <<'TEMPLATESNIXEOF'
 $TEMPLATES_SEED_TEXT
 TEMPLATESNIXEOF
@@ -774,12 +784,13 @@ nix --extra-experimental-features nix-command --extra-experimental-features flak
 grep -F 'appliedMessage = "$APPLY_MESSAGE";' flake.nix
 grep -F 'configVms = import ./nixome/config-vms.nix;' flake.nix
 grep -F 'systemConfig = import ./nixome/system.nix;' flake.nix
+grep -F 'localConfig = import ./nixome/machine.nix' flake.nix
 grep -F 'templateSet = import ./nixome/templates.nix' flake.nix
 grep -F 'nixome-dom0-profile = dom0Profile;' flake.nix
 grep -F 'nixosConfigurations.nixome-dom0 = nixomeDom0System;' flake.nix
-grep -F '"$CREATED_QUBE" = {' nixome/local.nix
+grep -F '"$CREATED_QUBE" = {' nixome/machine.nix
 grep -F 'dom0SystemAttr ? "nixosConfigurations.nixome-dom0.config.system.build.toplevel"' nixome/system.nix
-git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.lock flake.nix nixome/config-vms.nix nixome/dom0-host.nix nixome/local.nix nixome/prebuilt-template-sources.nix nixome/system.nix nixome/system-schema.nix nixome/templates.nix nixome/topology.nix
+git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.lock flake.nix nixome/config-vms.nix nixome/dom0-host.nix nixome/local.nix nixome/machine.nix nixome/prebuilt-template-sources.nix nixome/system.nix nixome/system-schema.nix nixome/templates.nix nixome/topology.nix
 git \
   -c user.name='Nixome Config Smoke' \
   -c user.email='nixome-config-smoke@localhost' \

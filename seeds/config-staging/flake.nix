@@ -11,7 +11,7 @@
       systemSchema = import ./nixome/system-schema.nix;
       configVms = import ./nixome/config-vms.nix;
       systemConfig = import ./nixome/system.nix;
-      localConfig = import ./nixome/local.nix {
+      localConfig = import ./nixome/machine.nix {
         inherit
           appliedMessage
           system

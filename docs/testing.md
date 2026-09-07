@@ -241,8 +241,8 @@ setup, then starts `config-vault`,
 `config-staging`, and `config-validator`, runs `uname -a` through qrexec in all
 three VMs, checks that `/home/user/nixome-config-vault` and
 `/home/user/nixome-config` already exist as clean Git repositories, modifies
-and commits `flake.nix`, `nixome/config-vms.nix`, `nixome/templates.nix`, and
-`nixome/topology.nix` in `config-staging`, has
+and commits the normal `nixome/machine.nix` edit surface plus supporting seed
+files in `config-staging`, has
 `config-validator` run `nix flake check --no-build`, evaluate the
 schema-normalized `.#nixome.topology` and `.#nixome.system`, and dry-run
 declared template/system build references, has dom0 archive that validated
@@ -250,7 +250,7 @@ source plus evaluated artifacts into `config-vault`, and applies the validated
 topology/system plan with `nixome-config-apply --apply`. It then
 checks that the applied topology re-declared `config-vault`, `config-staging`,
 and `config-validator`, checks that the staged dom0 system generation updated
-`/run/current-system`, checks that a staged `local.nix` extra dom0 module wrote
+`/run/current-system`, checks that a staged `machine.nix` extra dom0 module wrote
 an `/etc/nixome` marker and restarted its declared systemd unit, checks that
 the Nix-declared `nixome-work-from-config` AppVM exists, and verifies that
 `uname -a` runs inside it through qrexec. It also checks that `config-vault`

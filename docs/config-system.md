@@ -242,14 +242,14 @@ artifact transport.
 
 The staged dom0 NixOS system is built from the Nixome support modules,
 `./nixome/dom0-host.nix`, and any modules listed in
-`localConfig.dom0.extraModules`. This gives the editable inside config a direct
+`nixome/machine.nix` under `dom0.extraModules`. This gives the editable inside config a direct
 path to normal NixOS host changes such as packages, systemd units, boot options,
 kernel options, and Qubes package overlays without changing the bootstrap
 module layout. `nixome.system` records the apply plan and source references;
 the NixOS modules define the actual host closure that dom0 builds and switches.
 
 TemplateVM contents are defined in Nix as well. The seeded
-`nixome/templates.nix` turns `templates.definitions` from `nixome/local.nix`
+`nixome/templates.nix` turns `templates.definitions` from `nixome/machine.nix`
 into both flake packages and topology entries. A local config can add:
 
 ```nix

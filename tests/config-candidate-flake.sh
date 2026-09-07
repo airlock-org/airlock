@@ -28,6 +28,7 @@ cp "$ROOT/seeds/config-staging/flake.nix" "$WORK_DIR/flake.nix"
 cp "$ROOT/seeds/config-staging/nixome/config-vms.nix" "$WORK_DIR/nixome/config-vms.nix"
 cp "$ROOT/seeds/config-staging/nixome/dom0-host.nix" "$WORK_DIR/nixome/dom0-host.nix"
 cp "$ROOT/seeds/config-staging/nixome/local.nix" "$WORK_DIR/nixome/local.nix"
+cp "$ROOT/seeds/config-staging/nixome/machine.nix" "$WORK_DIR/nixome/machine.nix"
 cp "$ROOT/seeds/config-staging/nixome/prebuilt-template-sources.nix" "$WORK_DIR/nixome/prebuilt-template-sources.nix"
 cp "$ROOT/seeds/config-staging/nixome/system.nix" "$WORK_DIR/nixome/system.nix"
 cp "$ROOT/seeds/config-staging/nixome/templates.nix" "$WORK_DIR/nixome/templates.nix"
@@ -269,7 +270,7 @@ if grep -E 'nixome-nixos-(config-system|work)-root-image|qubes-template-nixome-n
   exit 1
 fi
 
-cat > "$WORK_DIR/nixome/local.nix" <<'EOF'
+cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
 {
   appliedMessage,
   system,
