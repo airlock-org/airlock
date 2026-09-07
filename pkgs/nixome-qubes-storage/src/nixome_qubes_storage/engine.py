@@ -174,6 +174,8 @@ def tree_hash(path):
 
 def chmod_readonly(path):
     path = Path(path)
+    if path.is_symlink():
+        return
     for root, dirs, files in os.walk(path):
         for dirname in dirs:
             full = Path(root) / dirname
@@ -381,7 +383,8 @@ def admit_object(root, logical_path, physical_store_root, txid):
     tmp_hash = tree_hash(tmp)
     if tmp_hash != source_hash:
         fail(f"copied object hash mismatch for {logical_path}")
-    os.chmod(tmp, stat.S_IMODE(tmp.lstat().st_mode) | 0o700)
+    if not tmp.is_symlink():
+        os.chmod(tmp, stat.S_IMODE(tmp.lstat().st_mode) | 0o700)
     try:
         os.replace(tmp, final)
     except FileExistsError:

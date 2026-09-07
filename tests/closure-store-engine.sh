@@ -59,6 +59,8 @@ WORK_SYSTEM_2="44444444444444444444444444444444-work-system-2"
 WORK_UNIQUE_2="55555555555555555555555555555555-work-unique-2"
 DEV_SYSTEM_1="66666666666666666666666666666666-dev-system-1"
 DEV_UNIQUE_1="77777777777777777777777777777777-dev-unique-1"
+SYMLINK_TARGET="88888888888888888888888888888888-symlink-target"
+SYMLINK_SYSTEM="99999999999999999999999999999999-symlink-system"
 
 make_store_object "$COMMON" common
 make_store_object "$WORK_SYSTEM_1" work-system-1
@@ -67,10 +69,13 @@ make_store_object "$WORK_SYSTEM_2" work-system-2
 make_store_object "$WORK_UNIQUE_2" work-unique-2
 make_store_object "$DEV_SYSTEM_1" dev-system-1
 make_store_object "$DEV_UNIQUE_1" dev-unique-1
+make_store_object "$SYMLINK_TARGET" symlink-target
+ln -s "$SYMLINK_TARGET" "$PHYSICAL_STORE/$SYMLINK_SYSTEM"
 
 make_closure work-gen1 "$COMMON" "$WORK_SYSTEM_1" "$WORK_UNIQUE_1"
 make_closure work-gen2 "$COMMON" "$WORK_SYSTEM_2" "$WORK_UNIQUE_2"
 make_closure dev-gen1 "$COMMON" "$DEV_SYSTEM_1" "$DEV_UNIQUE_1"
+make_closure symlink-gen "$SYMLINK_TARGET" "$SYMLINK_SYSTEM"
 
 cat > "$WORK_DIR/bin/nix" <<'EOF'
 #!/usr/bin/env bash
@@ -161,6 +166,27 @@ DEV_GEN1_VIEW="$(jq -r '.store.view_dir' "$RESULT_DIR/dev-gen1.json")"
 [ -e "$DEV_GEN1_VIEW/$COMMON/bin/payload" ]
 [ ! -e "$DEV_GEN1_VIEW/$WORK_UNIQUE_1" ]
 
+run_engine_json symlink-gen admit \
+  --pool-root "$POOL" \
+  --domain symlink-domain \
+  --system "/nix/store/$SYMLINK_SYSTEM" \
+  --closure-source "$WORK_DIR/closures/symlink-gen" \
+  --physical-store-root "$PHYSICAL_STORE" \
+  --root-source root-symlink \
+  --kernel-name kernel-a \
+  --verify-mode tree \
+  --additional-space-mib 1
+
+jq -e '
+  .domain == "symlink-domain" and
+  .generation == 1 and
+  .objects_total == 2 and
+  .objects_admitted == 2
+' "$RESULT_DIR/symlink-gen.json" >/dev/null
+[ -L "$POOL/objects/store/$SYMLINK_SYSTEM" ]
+[ "$(readlink "$POOL/objects/store/$SYMLINK_SYSTEM")" = "$SYMLINK_TARGET" ]
+[ -L "$(jq -r '.store.view_dir' "$RESULT_DIR/symlink-gen.json")/$SYMLINK_SYSTEM" ]
+
 run_engine_json work-gen2 admit \
   --pool-root "$POOL" \
   --domain work \
@@ -247,7 +273,8 @@ jq -e '
   .schema == "nixome.closure-store.status.v1" and
   .domains.work.current == 1 and
   .domains.dev.current == 1 and
-  .object_count == 5
+  .domains."symlink-domain".current == 1 and
+  .object_count == 7
 ' "$RESULT_DIR/status.json" >/dev/null
 
 printf 'closure-store engine test ok\n'
