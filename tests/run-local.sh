@@ -63,6 +63,7 @@ run_logged host-capabilities "$ROOT/tests/host-capabilities.sh" --json "$LOG_DIR
 run_logged setup-config-static "$ROOT/tests/setup-config-static.sh"
 run_logged setup-config-qrexec-policy "$ROOT/tests/setup-config-qrexec-policy.sh"
 run_logged setup-config-idempotent "$ROOT/tests/setup-config-idempotent.sh"
+run_logged setup-config-restart-actions "$ROOT/tests/setup-config-restart-actions.sh"
 run_logged setup-config-empty-global-pref "$ROOT/tests/setup-config-empty-global-pref.sh"
 
 if [ "${NIXOME_RUN_QUBES_SMOKE:-0}" = "1" ]; then

@@ -11,6 +11,8 @@ PLAN=0
 LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
 RESULT_JSON="$LOG_DIR/setup-config.json"
 COMMAND_LOG="$LOG_DIR/setup-config.commands.log"
+LIVE_ACTIONS_JSONL="$LOG_DIR/setup-config-live-actions.jsonl"
+RESTART_ACTIONS_JSONL="$LOG_DIR/setup-config-restart-actions.jsonl"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 KERNEL_BASE="${NIXOME_QUBES_KERNEL_BASE:-/var/lib/qubes/vm-kernels}"
 QUBES_XML="${NIXOME_QUBES_XML:-/var/lib/qubes/qubes.xml}"
@@ -62,6 +64,8 @@ fi
 
 mkdir -p "$LOG_DIR"
 : > "$COMMAND_LOG"
+: > "$LIVE_ACTIONS_JSONL"
+: > "$RESTART_ACTIONS_JSONL"
 
 exec >> "$COMMAND_LOG" 2>&1
 trap write_unexpected_failure EXIT
@@ -85,6 +89,86 @@ json_string() {
   printf '"'
   json_escape "$1"
   printf '"'
+}
+
+json_lines_array() {
+  file="$1"
+  first=1
+
+  printf '['
+  if [ -s "$file" ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      if [ "$first" = "1" ]; then
+        first=0
+      else
+        printf ','
+      fi
+      printf '%s' "$line"
+    done < "$file"
+  fi
+  printf ']'
+}
+
+record_action() {
+  file="$1"
+  type="$2"
+  action="$3"
+  domain="${4:-}"
+  field="${5:-}"
+  value="${6:-}"
+  reason="${7:-}"
+  state="${8:-}"
+
+  jq -c -n \
+    --arg type "$type" \
+    --arg action "$action" \
+    --arg domain "$domain" \
+    --arg field "$field" \
+    --arg value "$value" \
+    --arg reason "$reason" \
+    --arg state "$state" \
+    '{
+      type: $type,
+      action: $action
+    }
+    + (if $domain != "" then {domain: $domain} else {} end)
+    + (if $field != "" then {field: $field} else {} end)
+    + (if $value != "" then {value: $value} else {} end)
+    + (if $reason != "" then {reason: $reason} else {} end)
+    + (if $state != "" then {state: $state} else {} end)' \
+    >> "$file"
+}
+
+record_live_action() {
+  record_action "$LIVE_ACTIONS_JSONL" "$@"
+}
+
+domain_state() {
+  qvm-ls --raw-data --fields NAME,STATE --no-spinner 2>/dev/null |
+    awk -F'|' -v name="$1" '$1 == name { print $2; found = 1 } END { exit(found ? 0 : 1) }'
+}
+
+record_domain_restart_if_running() {
+  domain="$1"
+  type="$2"
+  field="$3"
+  value="$4"
+  state=""
+
+  [ "$APPLY" = "1" ] || return
+  state="$(domain_state "$domain" || true)"
+  [ "$state" = "Running" ] || return
+
+  record_action \
+    "$RESTART_ACTIONS_JSONL" \
+    "$type" \
+    restart \
+    "$domain" \
+    "$field" \
+    "$value" \
+    "domain is running; restart required for this change to fully take effect" \
+    "$state"
 }
 
 write_result() {
@@ -113,6 +197,20 @@ write_result() {
     printf ',"features_changed":%s' "$features_changed"
     printf ',"services_changed":%s' "$services_changed"
     printf ',"qrexec_policy_changed":%s' "$qrexec_policy_changed"
+    printf ',"live_actions":'
+    json_lines_array "$LIVE_ACTIONS_JSONL"
+    printf ',"restart_actions":'
+    json_lines_array "$RESTART_ACTIONS_JSONL"
+    printf ',"restart_required":'
+    if [ -s "$RESTART_ACTIONS_JSONL" ]; then
+      printf true
+    else
+      printf false
+    fi
+    printf ',"live_actions_log":'
+    json_string "$LIVE_ACTIONS_JSONL"
+    printf ',"restart_actions_log":'
+    json_string "$RESTART_ACTIONS_JSONL"
     printf ',"qrexec_policy_file":'
     json_string "$MANAGED_POLICY_PATH"
     printf ',"qrexec_policy_rendered":'
@@ -229,6 +327,8 @@ set_pref() {
 
   run_or_plan qvm-prefs "$domain" "$pref" "$value"
   prefs_changed=$((prefs_changed + 1))
+  record_live_action domain-pref set "$domain" "$pref" "$value"
+  record_domain_restart_if_running "$domain" domain-pref "$pref" "$value"
 }
 
 set_global_pref() {
@@ -251,6 +351,7 @@ set_global_pref() {
 
   run_or_plan qubes-prefs "$pref" "$value"
   prefs_changed=$((prefs_changed + 1))
+  record_live_action global-pref set "" "$pref" "$value"
 }
 
 set_feature() {
@@ -269,6 +370,8 @@ set_feature() {
 
   run_or_plan qvm-features "$domain" "$feature" "$value"
   features_changed=$((features_changed + 1))
+  record_live_action domain-feature set "$domain" "$feature" "$value"
+  record_domain_restart_if_running "$domain" domain-feature "$feature" "$value"
 }
 
 set_service() {
@@ -287,6 +390,8 @@ set_service() {
 
   run_or_plan qvm-service "$domain" "$service" "$value"
   services_changed=$((services_changed + 1))
+  record_live_action domain-service set "$domain" "$service" "$value"
+  record_domain_restart_if_running "$domain" domain-service "$service" "$value"
 }
 
 is_qubes_name() {
@@ -405,6 +510,7 @@ setup_qrexec_policy() {
     reload_qrexec_policy_daemon
   fi
   qrexec_policy_changed=$((qrexec_policy_changed + 1))
+  record_live_action qrexec-policy reload "" "$MANAGED_POLICY_FILE" "$MANAGED_POLICY_PATH"
 }
 
 kernel_source_matches_target() {
@@ -464,6 +570,7 @@ install_kernel() {
 [ -r "$TOPOLOGY" ] || fail "topology file is not readable: $TOPOLOGY"
 
 for cmd in \
+  awk \
   chmod \
   cmp \
   cp \
@@ -532,6 +639,7 @@ for kernel in "${kernel_names[@]}"; do
         mark_kernel_managed "$kernel" "$source"
       fi
       kernels_changed=$((kernels_changed + 1))
+      record_live_action kernel adopt "" "$kernel" "$source"
       continue
     fi
 
@@ -543,6 +651,7 @@ for kernel in "${kernel_names[@]}"; do
     install_kernel "$kernel" "$source"
   fi
   kernels_changed=$((kernels_changed + 1))
+  record_live_action kernel install "" "$kernel" "$source"
 done
 
 printf 'setting up templates\n'
@@ -574,6 +683,7 @@ for template in "${template_names[@]}"; do
 
   run_or_plan "${args[@]}"
   templates_changed=$((templates_changed + 1))
+  record_live_action template import "$template" source "$source"
 done
 
 printf 'setting up domains\n'
@@ -594,6 +704,7 @@ for domain in "${domain_names[@]}"; do
     create_args+=("$domain")
     run_or_plan "${create_args[@]}"
     domains_changed=$((domains_changed + 1))
+    record_live_action domain create "$domain" class "$class"
   fi
 
   if [ "$APPLY" = "1" ] || domain_exists "$domain"; then

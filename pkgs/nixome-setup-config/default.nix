@@ -1,6 +1,7 @@
 {
   coreutils,
   diffutils,
+  gawk,
   gnugrep,
   gnused,
   jq,
@@ -21,6 +22,7 @@ writeShellApplication {
   runtimeInputs = [
     coreutils
     diffutils
+    gawk
     gnugrep
     gnused
     jq

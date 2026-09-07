@@ -19,14 +19,28 @@ fi
 path_value="$(nixome_physical_path_list "$path_value")"
 
 required=(
+  awk
+  chmod
+  cmp
+  cp
   dd
+  grep
+  jq
+  mkdir
   mktemp
-  qvm-appmenus
-  qvm-template-postprocess
+  qubes-prefs
   qubesd-query
   python3
+  qvm-create
+  qvm-features
+  qvm-ls
+  qvm-prefs
+  qvm-service
+  qvm-template-postprocess
+  rm
   runuser
   sudo
+  systemctl
 )
 
 if ! env -i PATH="$path_value" "$BASH" -e -c '
