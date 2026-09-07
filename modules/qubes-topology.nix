@@ -374,6 +374,7 @@ let
   configBootVerify = pkgs.callPackage ../pkgs/nixome-config-boot-verify { };
   configStatus = pkgs.callPackage ../pkgs/nixome-config-status { };
   configVmsSmoke = pkgs.callPackage ../pkgs/nixome-config-vms-smoke { };
+  nixClosureDomainSmoke = pkgs.callPackage ../pkgs/nixome-nix-closure-domain-smoke { };
   qrexecPolicyStaticDir = "/etc/qubes/policy.d";
   qrexecPolicyRuntimeDir = "/var/lib/nixome/qubes-policy.d";
   qrexecManagedPolicyFile = "90-nixome.policy";
@@ -581,6 +582,7 @@ in
       configBootVerify
       configStatus
       configVmsSmoke
+      nixClosureDomainSmoke
       setupConfig
     ];
 

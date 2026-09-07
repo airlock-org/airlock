@@ -22,6 +22,7 @@ BOOTSTRAP_QUBES="${NIXOME_BOOTSTRAP_QUBES:-1}"
 RUN_SETUP_CONFIG="${NIXOME_RUN_SETUP_CONFIG:-0}"
 RUN_CONFIG_VMS_SMOKE="${NIXOME_RUN_CONFIG_VMS_SMOKE:-0}"
 RUN_CONFIG_BOOT_VERIFY="${NIXOME_RUN_CONFIG_BOOT_VERIFY:-0}"
+RUN_NIX_CLOSURE_SMOKE="${NIXOME_RUN_NIX_CLOSURE_SMOKE:-0}"
 RUN_QREXEC_SMOKE="${NIXOME_RUN_QUBES_SMOKE:-1}"
 RUN_GUI_SMOKE="${NIXOME_RUN_GUI_SMOKE:-1}"
 CACHE_QUBES_ASSETS="${NIXOME_CACHE_QUBES_ASSETS:-1}"
@@ -60,6 +61,10 @@ CONFIG_VMS_STAGING_UPDATE_SCRIPT="$LOG_DIR/vm-gui-config-vms-config-staging-upda
 CONFIG_BOOT_VERIFY_JSON="$LOG_DIR/vm-gui-config-boot-verify.json"
 CONFIG_BOOT_VERIFY_STDOUT="$LOG_DIR/vm-gui-config-boot-verify.stdout.log"
 CONFIG_BOOT_VERIFY_STDERR="$LOG_DIR/vm-gui-config-boot-verify.stderr.log"
+NIX_CLOSURE_JSON="$LOG_DIR/vm-gui-nix-closure-domain-smoke.json"
+NIX_CLOSURE_STDOUT="$LOG_DIR/vm-gui-nix-closure-domain-smoke.stdout.log"
+NIX_CLOSURE_STDERR="$LOG_DIR/vm-gui-nix-closure-domain-smoke.stderr.log"
+NIX_CLOSURE_COMMANDS_LOG="$LOG_DIR/vm-gui-nix-closure-domain-smoke.commands.log"
 QREXEC_JSON="$LOG_DIR/vm-gui-qrexec-smoke.json"
 QREXEC_STDERR="$LOG_DIR/vm-gui-qrexec-smoke.stderr.log"
 GUI_JSON="$LOG_DIR/vm-gui-window-smoke.json"
@@ -98,6 +103,10 @@ rm -f \
   "$CONFIG_BOOT_VERIFY_JSON" \
   "$CONFIG_BOOT_VERIFY_STDOUT" \
   "$CONFIG_BOOT_VERIFY_STDERR" \
+  "$NIX_CLOSURE_JSON" \
+  "$NIX_CLOSURE_STDOUT" \
+  "$NIX_CLOSURE_STDERR" \
+  "$NIX_CLOSURE_COMMANDS_LOG" \
   "$QREXEC_JSON" \
   "$QREXEC_STDERR" \
   "$GUI_JSON" \
@@ -332,6 +341,29 @@ config_boot_verify_env_prefix() {
   printf '%s' "$prefix"
 }
 
+nix_closure_env_prefix() {
+  local prefix="env"
+  local name
+
+  for name in \
+    NIXOME_CONFIG_APPLY_NIX_OFFLINE \
+    NIXOME_CONFIG_STAGING_VM \
+    NIXOME_CONFIG_VALIDATOR_VM \
+    NIXOME_CONFIG_VAULT_VM \
+    NIXOME_NIX_CLOSURE_APPLY_MESSAGE \
+    NIXOME_NIX_CLOSURE_DOMAIN \
+    NIXOME_NIX_CLOSURE_GUI_PROBE \
+    NIXOME_NIX_CLOSURE_QREXEC_TIMEOUT_SECONDS \
+    NIXOME_NIX_CLOSURE_WAIT_SECONDS \
+    NIXOME_QUBE_USER; do
+    if [ -n "${!name+x}" ]; then
+      prefix="$prefix $name=$(shell_quote "${!name}")"
+    fi
+  done
+
+  printf '%s' "$prefix"
+}
+
 ssh_command() {
   SSHPASS="$SSH_PASSWORD" "$ROOT/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     ssh \
@@ -387,6 +419,9 @@ collect_diagnostics() {
   remote 'sudo -n cat /var/log/nixome/config-boot-verify.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify.json" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-boot-verify-status.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify-status.json" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-boot-verify-marker.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify-marker.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/nix-closure-domain-smoke.json 2>/dev/null || true' > "$NIX_CLOSURE_JSON" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/nix-closure-domain-smoke.commands.log 2>/dev/null || true' > "$NIX_CLOSURE_COMMANDS_LOG" 2>/dev/null || true
+  remote 'sudo -n sh -c '"'"'for f in /var/log/nixome/nix-closure-domain-*; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-nix-closure-domain-details.log" 2>/dev/null || true
 }
 
 extract_json_result() {
@@ -629,6 +664,27 @@ else
   printf '{"schema":"nixome.config-boot-verify.v1","status":"skipped","reason":"NIXOME_RUN_CONFIG_BOOT_VERIFY=0"}\n' > "$CONFIG_BOOT_VERIFY_JSON"
 fi
 
+if [ "$RUN_NIX_CLOSURE_SMOKE" = "1" ]; then
+  printf 'nix-closure: running standalone closure-backed domain lifecycle test\n'
+  nix_closure_env="$(nix_closure_env_prefix)"
+  if ! remote "sudo -n $nix_closure_env NIXOME_LOG_DIR=/var/log/nixome nixome-nix-closure-domain-smoke" > "$NIX_CLOSURE_STDOUT" 2> "$NIX_CLOSURE_STDERR"; then
+    remote 'sudo -n cat /var/log/nixome/nix-closure-domain-smoke.json 2>/dev/null || true' > "$NIX_CLOSURE_JSON" 2>/dev/null || true
+    collect_diagnostics
+    cat "$NIX_CLOSURE_STDERR" >&2 || true
+    exit 1
+  fi
+  if ! extract_json_result "nixome.nix-closure-domain-smoke.v1" "$NIX_CLOSURE_STDOUT" "$NIX_CLOSURE_JSON"; then
+    remote 'sudo -n cat /var/log/nixome/nix-closure-domain-smoke.json 2>/dev/null || true' > "$NIX_CLOSURE_JSON" 2>/dev/null || true
+    if ! grep -q '"schema":"nixome.nix-closure-domain-smoke.v1"' "$NIX_CLOSURE_JSON"; then
+      collect_diagnostics
+      printf 'nix-closure domain smoke did not emit result JSON; see %s\n' "$NIX_CLOSURE_STDOUT" >&2
+      exit 1
+    fi
+  fi
+else
+  printf '{"schema":"nixome.nix-closure-domain-smoke.v1","status":"skipped","reason":"NIXOME_RUN_NIX_CLOSURE_SMOKE=0"}\n' > "$NIX_CLOSURE_JSON"
+fi
+
 if [ "$RUN_QREXEC_SMOKE" = "1" ]; then
   printf 'qrexec: running uname smoke test\n'
   if ! remote "env NIXOME_LOG_DIR=/tmp/nixome-logs NIXOME_TEST_TEMPLATE=$(shell_quote "$TEMPLATE") NIXOME_TEST_QUBE=$(shell_quote "$QUBE") NIXOME_TEST_CLEANUP=0 nixome-qubes-smoke" > "$QREXEC_JSON" 2> "$QREXEC_STDERR"; then
@@ -662,5 +718,6 @@ printf 'setup-config boot: %s\n' "$SETUP_CONFIG_BOOT_JSON"
 printf 'setup-config: %s\n' "$SETUP_CONFIG_JSON"
 printf 'config-vms: %s\n' "$CONFIG_VMS_JSON"
 printf 'config-boot: %s\n' "$CONFIG_BOOT_VERIFY_JSON"
+printf 'nix-closure: %s\n' "$NIX_CLOSURE_JSON"
 printf 'qrexec: %s\n' "$QREXEC_JSON"
 printf 'gui: %s\n' "$GUI_JSON"

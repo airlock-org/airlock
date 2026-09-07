@@ -2049,6 +2049,13 @@ in
             ;;
         esac
 
+        write_probe="/nix/store/.nixome-runtime-write-probe-$$"
+        if touch "$write_probe" 2>/tmp/nixome-runtime-write-probe.err; then
+          rm -f "$write_probe"
+          echo "/nix/store accepted a write probe" >&2
+          exit 1
+        fi
+
         printf 'system=%s\n' "$system_path"
         printf 'store_device=%s\n' "$store_device"
         printf 'store_options=%s\n' "$mount_options"

@@ -269,6 +269,7 @@
           nixome-config-boot-verify = pkgs.callPackage ./pkgs/nixome-config-boot-verify { };
           nixome-config-status = pkgs.callPackage ./pkgs/nixome-config-status { };
           nixome-config-vms-smoke = pkgs.callPackage ./pkgs/nixome-config-vms-smoke { };
+          nixome-nix-closure-domain-smoke = pkgs.callPackage ./pkgs/nixome-nix-closure-domain-smoke { };
           nixome-qube-bootstrap = pkgs.callPackage ./pkgs/nixome-qube-bootstrap { };
           nixome-qube-gui-smoke = pkgs.callPackage ./pkgs/nixome-qube-gui-smoke { };
           nixome-setup-config = pkgs.callPackage ./pkgs/nixome-setup-config { };
@@ -335,6 +336,7 @@
         config-status-package = self.packages.${system}.nixome-config-status;
         module-contract = mkModuleContractCheck system;
         config-vms-smoke-package = self.packages.${system}.nixome-config-vms-smoke;
+        nix-closure-domain-smoke-package = self.packages.${system}.nixome-nix-closure-domain-smoke;
         qube-bootstrap-package = self.packages.${system}.nixome-qube-bootstrap;
         qube-gui-smoke-package = self.packages.${system}.nixome-qube-gui-smoke;
         setup-config-package = self.packages.${system}.nixome-setup-config;
