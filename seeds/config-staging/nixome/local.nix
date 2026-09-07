@@ -13,5 +13,7 @@
     extraQrexecRules = [ ];
   };
 
+  dom0.extraModules = [ ];
+
   system.args = { };
 }

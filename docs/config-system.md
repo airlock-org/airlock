@@ -199,6 +199,14 @@ path from fetching during validation or apply. A production design should
 replace this with a pure, content-addressed input mirror or a validator-built
 artifact transport.
 
+The staged dom0 NixOS system is built from the Nixome support modules,
+`./nixome/dom0-host.nix`, and any modules listed in
+`localConfig.dom0.extraModules`. This gives the editable inside config a direct
+path to normal NixOS host changes such as packages, systemd units, boot options,
+kernel options, and Qubes package overlays without changing the bootstrap
+module layout. `nixome.system` records the apply plan and source references;
+the NixOS modules define the actual host closure that dom0 builds and switches.
+
 `config-vault` now has two durable artifact classes:
 
 ```text

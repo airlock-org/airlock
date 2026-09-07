@@ -19,6 +19,7 @@
           ;
       };
       localTopology = localConfig.topology or { };
+      localDom0ExtraModules = localConfig.dom0.extraModules or [ ];
       prebuiltTemplateSources = import ./nixome/prebuilt-template-sources.nix;
       nixomeSupport = "__NIXOME_SUPPORT_PATH__";
       nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
@@ -153,7 +154,7 @@
             nixpkgs.overlays = templateBuilders.qubesOverlays;
           }
           ./nixome/dom0-host.nix
-        ];
+        ] ++ localDom0ExtraModules;
       };
       dom0Profile =
         let

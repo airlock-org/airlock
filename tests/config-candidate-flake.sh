@@ -11,6 +11,8 @@ SYSTEM_JSON="$RESULT_DIR/system.json"
 PROFILE_LINK="$RESULT_DIR/dom0-profile"
 PROFILE_JSON="$RESULT_DIR/dom0-profile.json"
 HOST_MESSAGE="$RESULT_DIR/host-message.txt"
+EXTRA_HOST_MESSAGE="$RESULT_DIR/extra-host-message.txt"
+EXTRA_HOST_SERVICE="$RESULT_DIR/extra-host-service.txt"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -245,5 +247,63 @@ jq -e '
   .built_by == "config-staging"
 ' "$PROFILE_JSON" >/dev/null
 grep -qx initial "$HOST_MESSAGE"
+
+cat > "$WORK_DIR/nixome/local.nix" <<'EOF'
+{
+  appliedMessage,
+  system,
+  templateSet,
+  ...
+}:
+{
+  topology = {
+    extraTemplates = { };
+    extraKernels = { };
+    extraPrefs = { };
+    extraDomains = { };
+    extraQrexecRules = [ ];
+  };
+
+  dom0.extraModules = [
+    (
+      { pkgs, ... }:
+      {
+        environment.etc."nixome/local-dom0-extra-module".text = "${appliedMessage}-extra\n";
+        systemd.services.nixome-local-extra-module = {
+          description = "Nixome local extra module fixture";
+          serviceConfig.Type = "oneshot";
+          script = "${pkgs.coreutils}/bin/true";
+        };
+      }
+    )
+  ];
+
+  system.args = { };
+}
+EOF
+
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixosConfigurations.nixome-dom0.config.environment.etc.\"nixome/local-dom0-extra-module\".text" \
+  > "$EXTRA_HOST_MESSAGE"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixosConfigurations.nixome-dom0.config.systemd.services.nixome-local-extra-module.description" \
+  > "$EXTRA_HOST_SERVICE"
+
+grep -qx initial-extra "$EXTRA_HOST_MESSAGE"
+grep -qx "Nixome local extra module fixture" "$EXTRA_HOST_SERVICE"
 
 printf 'config candidate flake eval ok\n'
