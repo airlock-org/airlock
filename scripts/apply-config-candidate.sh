@@ -18,6 +18,8 @@ SYSTEM_BUILD_LOG="$LOG_DIR/config-apply-system-builds.log"
 SYSTEM_APPLY_JSON="$LOG_DIR/config-system-apply.json"
 SYSTEM_APPLY_LOG="$LOG_DIR/config-system-apply.log"
 PROFILE_ACTIVATION_LOG="$LOG_DIR/config-system-profile-activation.log"
+SYSTEMD_ACTIONS_JSON="$LOG_DIR/config-system-systemd-actions.json"
+SYSTEMD_ACTIONS_LOG="$LOG_DIR/config-system-systemd-actions.log"
 TEMPLATE_BUILDS_JSON="$LOG_DIR/config-apply-template-builds.json"
 TEMPLATE_BUILD_LOG="$LOG_DIR/config-apply-template-builds.log"
 DEPLOYMENT_JSON="$LOG_DIR/config-deployment.json"
@@ -129,6 +131,7 @@ write_result() {
   archive_json="$(json_file_or_null "$ARCHIVE_JSON")"
   setup_json="$(json_file_or_null "$SETUP_JSON")"
   system_apply_json="$(json_file_or_null "$SYSTEM_APPLY_JSON")"
+  systemd_actions_json="$(json_file_or_null "$SYSTEMD_ACTIONS_JSON")"
   deployment_json="$(json_file_or_null "$DEPLOYMENT_JSON")"
   deployment_archive_json="$(json_file_or_null "$DEPLOYMENT_ARCHIVE_JSON")"
 
@@ -153,6 +156,8 @@ write_result() {
     --arg system_apply_log "$SYSTEM_APPLY_LOG" \
     --arg profile_activation_log "$PROFILE_ACTIVATION_LOG" \
     --arg host_system_activation_log "$HOST_SYSTEM_ACTIVATION_LOG" \
+    --arg systemd_actions "$SYSTEMD_ACTIONS_JSON" \
+    --arg systemd_actions_log "$SYSTEMD_ACTIONS_LOG" \
     --arg template_builds "$TEMPLATE_BUILDS_JSON" \
     --arg template_build_log "$TEMPLATE_BUILD_LOG" \
     --arg deployment_record "$DEPLOYMENT_JSON" \
@@ -172,6 +177,7 @@ write_result() {
     --argjson system_apply "$system_apply_json" \
     --argjson deployment "$deployment_json" \
     --argjson deployment_archive "$deployment_archive_json" \
+    --argjson systemd_actions_result "$systemd_actions_json" \
     '{
       schema: $schema,
       status: $status,
@@ -193,6 +199,8 @@ write_result() {
       system_apply_log: $system_apply_log,
       profile_activation_log: $profile_activation_log,
       host_system_activation_log: $host_system_activation_log,
+      systemd_actions: $systemd_actions,
+      systemd_actions_log: $systemd_actions_log,
       template_builds: $template_builds,
       template_build_log: $template_build_log,
       deployment_record: $deployment_record,
@@ -210,6 +218,7 @@ write_result() {
       archive: $archive,
       setup: $setup,
       system_apply_result: $system_apply,
+      systemd_actions_result: $systemd_actions_result,
       deployment: $deployment,
       deployment_archive: $deployment_archive
     }' > "$RESULT_JSON"
@@ -336,6 +345,7 @@ build_deployment_tar() {
   archive_json="$(json_file_or_null "$ARCHIVE_JSON")"
   setup_json="$(json_file_or_null "$SETUP_JSON")"
   system_apply_json="$(json_file_or_null "$SYSTEM_APPLY_JSON")"
+  systemd_actions_json="$(json_file_or_null "$SYSTEMD_ACTIONS_JSON")"
 
   jq -c -n \
     --arg schema "nixome.config-deployment.v1" \
@@ -354,6 +364,7 @@ build_deployment_tar() {
     --arg system_plan "system-plan.json" \
     --arg system_apply "system-apply.json" \
     --arg system_builds "system-builds.json" \
+    --arg systemd_actions "systemd-actions.json" \
     --arg apply "apply.json" \
     --arg archive "archive.json" \
     --arg setup "setup.json" \
@@ -364,6 +375,7 @@ build_deployment_tar() {
     --argjson archive_result "$archive_json" \
     --argjson setup_result "$setup_json" \
     --argjson system_apply_result "$system_apply_json" \
+    --argjson systemd_actions_result "$systemd_actions_json" \
     '{
       schema: $schema,
       status: $status,
@@ -382,6 +394,7 @@ build_deployment_tar() {
         system_plan: $system_plan,
         system_apply: $system_apply,
         system_builds: $system_builds,
+        systemd_actions: $systemd_actions,
         apply: $apply,
         archive: $archive,
         setup: $setup,
@@ -392,7 +405,8 @@ build_deployment_tar() {
       },
       archive: $archive_result,
       setup: $setup_result,
-      system_apply: $system_apply_result
+      system_apply: $system_apply_result,
+      systemd_actions: $systemd_actions_result
     }' > "$DEPLOYMENT_JSON"
 
   write_result "$status" "$reason"
@@ -409,6 +423,7 @@ build_deployment_tar() {
   copy_or_empty "$SYSTEM_PLAN_JSON" "$record_dir/system-plan.json"
   copy_or_empty "$SYSTEM_APPLY_JSON" "$record_dir/system-apply.json"
   copy_or_empty "$SYSTEM_BUILDS_JSON" "$record_dir/system-builds.json"
+  copy_or_empty "$SYSTEMD_ACTIONS_JSON" "$record_dir/systemd-actions.json"
   copy_or_empty "$tmpdir/validation.json" "$record_dir/validation.json"
   copy_or_empty "$tmpdir/manifest.json" "$record_dir/manifest.json"
   copy_or_empty "$COMMAND_LOG" "$record_dir/logs/apply.commands.log"
@@ -421,6 +436,7 @@ build_deployment_tar() {
   copy_or_empty "$SYSTEM_APPLY_LOG" "$record_dir/logs/system-apply.log"
   copy_or_empty "$PROFILE_ACTIVATION_LOG" "$record_dir/logs/profile-activation.log"
   copy_or_empty "$HOST_SYSTEM_ACTIVATION_LOG" "$record_dir/logs/host-system-activation.log"
+  copy_or_empty "$SYSTEMD_ACTIONS_LOG" "$record_dir/logs/systemd-actions.log"
   copy_or_empty "$CLONE_LOG" "$record_dir/logs/clone.log"
   copy_or_empty "$CHECKOUT_LOG" "$record_dir/logs/checkout.log"
 
@@ -437,6 +453,7 @@ build_deployment_tar() {
     system-plan.json \
     system-apply.json \
     system-builds.json \
+    systemd-actions.json \
     validation.json \
     manifest.json \
     logs/apply.commands.log \
@@ -449,6 +466,7 @@ build_deployment_tar() {
     logs/system-apply.log \
     logs/profile-activation.log \
     logs/host-system-activation.log \
+    logs/systemd-actions.log \
     logs/clone.log \
     logs/checkout.log
 }
@@ -664,6 +682,125 @@ record_system_build() {
     }]' \
     "$SYSTEM_BUILDS_JSON" > "$tmp"
   mv "$tmp" "$SYSTEM_BUILDS_JSON"
+}
+
+init_systemd_actions_json() {
+  : > "$SYSTEMD_ACTIONS_LOG"
+  jq -c -n \
+    --arg schema "nixome.systemd-actions.v1" \
+    '{schema: $schema, status: "skipped", reason: "no systemd live actions declared", actions: []}' \
+    > "$SYSTEMD_ACTIONS_JSON"
+}
+
+finish_systemd_actions_json() {
+  local status="$1"
+  local reason="$2"
+  local tmp="$SYSTEMD_ACTIONS_JSON.tmp"
+
+  jq -c \
+    --arg status "$status" \
+    --arg reason "$reason" \
+    '.status = $status | .reason = $reason' \
+    "$SYSTEMD_ACTIONS_JSON" > "$tmp"
+  mv "$tmp" "$SYSTEMD_ACTIONS_JSON"
+}
+
+record_systemd_action() {
+  local name="$1"
+  local action="$2"
+  local reason="$3"
+  local status="$4"
+  local log="$5"
+  local tmp="$SYSTEMD_ACTIONS_JSON.tmp"
+
+  jq -c \
+    --arg name "$name" \
+    --arg action "$action" \
+    --arg reason "$reason" \
+    --arg status "$status" \
+    --arg log "$log" \
+    '.actions += [{
+      name: $name,
+      action: $action,
+      reason: $reason,
+      status: $status,
+      log: $log
+    }]' \
+    "$SYSTEMD_ACTIONS_JSON" > "$tmp"
+  mv "$tmp" "$SYSTEMD_ACTIONS_JSON"
+}
+
+apply_systemd_actions() {
+  local system_json="$1"
+  local encoded
+  local service_json
+  local name
+  local action
+  local service_reason
+  local safe_service
+  local action_log
+  local overall_status=skipped
+  local overall_reason="no systemd live actions declared"
+
+  init_systemd_actions_json
+
+  mapfile -t service_actions < <(
+    jq -r '
+      (.dom0.systemd.services // {})
+      | to_entries[]
+      | select(.value.action != "none")
+      | @base64
+    ' "$system_json"
+  )
+
+  if [ "${#service_actions[@]}" -eq 0 ]; then
+    printf 'no systemd live actions declared\n' >> "$SYSTEMD_ACTIONS_LOG"
+    finish_systemd_actions_json "$overall_status" "$overall_reason"
+    return 0
+  fi
+
+  overall_status=passed
+  overall_reason="systemd live actions applied"
+
+  for encoded in "${service_actions[@]}"; do
+    service_json="$(printf '%s' "$encoded" | base64 -d)"
+    name="$(printf '%s' "$service_json" | jq -r '.key')"
+    action="$(printf '%s' "$service_json" | jq -r '.value.action')"
+    service_reason="$(printf '%s' "$service_json" | jq -r '.value.reason')"
+    safe_service="$(safe_log_name "$name")"
+    action_log="$LOG_DIR/config-system-systemd-$safe_service-$action.log"
+
+    case "$action" in
+      restart|reload) ;;
+      *)
+        printf 'unsupported systemd action for %s: %s\n' "$name" "$action" > "$action_log"
+        record_systemd_action "$name" "$action" "$service_reason" failed "$action_log"
+        finish_systemd_actions_json failed "unsupported systemd live action: $action $name"
+        cat "$action_log" >> "$SYSTEMD_ACTIONS_LOG" || true
+        return 1
+        ;;
+    esac
+
+    {
+      printf 'service=%s\n' "$name"
+      printf 'action=%s\n' "$action"
+      printf 'reason=%s\n' "$service_reason"
+      printf '+ systemctl %q %q\n' "$action" "$name"
+    } >> "$SYSTEMD_ACTIONS_LOG"
+
+    if systemctl "$action" "$name" > "$action_log" 2>&1; then
+      record_systemd_action "$name" "$action" "$service_reason" passed "$action_log"
+    else
+      record_systemd_action "$name" "$action" "$service_reason" failed "$action_log"
+      finish_systemd_actions_json failed "systemd live action failed: $action $name"
+      cat "$action_log" >> "$SYSTEMD_ACTIONS_LOG" || true
+      return 1
+    fi
+
+    cat "$action_log" >> "$SYSTEMD_ACTIONS_LOG" || true
+  done
+
+  finish_systemd_actions_json "$overall_status" "$overall_reason"
 }
 
 resolve_candidate_source_path() {
@@ -901,6 +1038,7 @@ apply_system() {
   reason="system plan applied"
   profile_status=skipped
   host_system_status=skipped
+  systemd_status=skipped
   profile_source=""
   profile_source_physical=""
   profile_activation_command=""
@@ -909,6 +1047,7 @@ apply_system() {
   host_system_source_physical=""
   host_system_switch_action=""
   host_current_system=""
+  systemd_apply_rc=0
   reboot_required="$(jq -r '.plan.reboot_required' "$system_json")"
   reboot_reasons="$(jq -c '.plan.reboot_reasons' "$system_json")"
 
@@ -1014,16 +1153,28 @@ apply_system() {
     printf 'dom0 NixOS system generation is not enabled\n' > "$HOST_SYSTEM_ACTIVATION_LOG"
   fi
 
+  if apply_systemd_actions "$system_json"; then
+    systemd_status="$(jq -r '.status' "$SYSTEMD_ACTIONS_JSON")"
+  else
+    systemd_apply_rc="$?"
+    systemd_status="$(jq -r '.status // "failed"' "$SYSTEMD_ACTIONS_JSON" 2>/dev/null || printf 'failed')"
+    status=failed
+    reason="systemd live actions failed"
+  fi
+
   cp "$system_json" "$SYSTEM_ETC_DIR/system.json"
   cp "$SYSTEM_PLAN_JSON" "$SYSTEM_ETC_DIR/system-plan.json"
   cp "$SYSTEM_BUILDS_JSON" "$SYSTEM_STATE_DIR/last-system-builds.json"
+  cp "$SYSTEMD_ACTIONS_JSON" "$SYSTEM_STATE_DIR/last-systemd-actions.json"
 
+  systemd_actions_result="$(json_file_or_null "$SYSTEMD_ACTIONS_JSON")"
   jq -c -n \
     --arg schema "nixome.system-apply.v1" \
     --arg status "$status" \
     --arg reason "$reason" \
     --arg profile_status "$profile_status" \
     --arg host_system_status "$host_system_status" \
+    --arg systemd_status "$systemd_status" \
     --arg profile_source "$profile_source" \
     --arg profile_source_physical "$profile_source_physical" \
     --arg profile "$SYSTEM_PROFILE" \
@@ -1040,14 +1191,18 @@ apply_system() {
     --arg build_log "$SYSTEM_BUILD_LOG" \
     --arg activation_log "$PROFILE_ACTIVATION_LOG" \
     --arg host_system_activation_log "$HOST_SYSTEM_ACTIVATION_LOG" \
+    --arg systemd_actions "$SYSTEMD_ACTIONS_JSON" \
+    --arg systemd_actions_log "$SYSTEMD_ACTIONS_LOG" \
     --argjson reboot_required "$reboot_required" \
     --argjson reboot_reasons "$reboot_reasons" \
+    --argjson systemd_actions_result "$systemd_actions_result" \
     '{
       schema: $schema,
       status: $status,
       reason: $reason,
       profile_status: $profile_status,
       host_system_status: $host_system_status,
+      systemd_status: $systemd_status,
       profile_source: $profile_source,
       profile_source_physical: $profile_source_physical,
       profile: $profile,
@@ -1064,10 +1219,14 @@ apply_system() {
       build_log: $build_log,
       activation_log: $activation_log,
       host_system_activation_log: $host_system_activation_log,
+      systemd_actions: $systemd_actions,
+      systemd_actions_log: $systemd_actions_log,
+      systemd_actions_result: $systemd_actions_result,
       reboot_required: $reboot_required,
       reboot_reasons: $reboot_reasons
     }' > "$SYSTEM_APPLY_JSON"
   cp "$SYSTEM_APPLY_JSON" "$SYSTEM_STATE_DIR/last-apply.json"
+  [ "$systemd_apply_rc" = 0 ]
 }
 
 for cmd in \

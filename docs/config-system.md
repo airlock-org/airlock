@@ -176,13 +176,20 @@ sudo nixome-config-apply --apply
 
 That command performs the same staging-to-validator-to-vault flow, resolves
 template build references, applies the resolved topology with
-`nixome-setup-config --apply`, then asks `config-vault` to archive a deployment
-record. For each `templates.<name>.source.build`, dom0 builds the referenced
-package from the exact validated Git commit, verifies the built output contains
-`root.img` and `template.conf`, rewrites the topology source to that concrete
-store path, and passes the resolved `topology.json` to setup. Dom0 transports
-and applies the artifact, but the candidate validity decision and Nix topology
-evaluation happen in `config-validator`.
+`nixome-setup-config --apply`, applies the resolved `nixome.system` dom0 plan,
+then asks `config-vault` to archive a deployment record. For each
+`templates.<name>.source.build`, dom0 builds the referenced package from the
+exact validated Git commit, verifies the built output contains `root.img` and
+`template.conf`, rewrites the topology source to that concrete store path, and
+passes the resolved `topology.json` to setup. For
+`dom0.nixos.system.source.build`, dom0 builds the referenced NixOS system
+generation from the same commit, installs it as `/nix/var/nix/profiles/system`,
+and runs its `bin/switch-to-configuration` with the declared `switchAction`.
+Declared `dom0.systemd.services.<name>.action = "restart"` or `"reload"`
+entries are executed after the host generation switch and recorded as
+machine-readable JSON. Dom0 transports and applies the artifact, but the
+candidate validity decision plus Nix topology/system evaluation happen in
+`config-validator`.
 
 The current seed uses generated literal `/nix/store` path pins for Nixome,
 `nixpkgs`, and `nixos-qubes` support sources. Candidate Nix commands therefore
@@ -206,8 +213,8 @@ latest-deployment-attempt
 deployment. `deployments/` records what dom0 attempted after setup ran,
 including `deployment.json`, `apply.json`, `archive.json`, `setup.json`,
 `topology.json`, `validated-topology.json`, `template-builds.json`,
-`validation.json`, `manifest.json`, and relevant dom0 logs. Passed deployments
-update both `latest-deployment` and
+`validation.json`, `manifest.json`, `systemd-actions.json`, and relevant dom0
+logs. Passed deployments update both `latest-deployment` and
 `latest-deployment-attempt`; failed setup attempts update only
 `latest-deployment-attempt` when the vault can still be reached.
 
@@ -236,7 +243,9 @@ The setup command currently imports missing templates, creates missing domains,
 and sets global prefs plus simple domain prefs/features/services. It is
 idempotent: if the declared templates, domains, prefs, features, services, and
 managed VM kernel files already match, it reports zero changes. It does not
-delete undeclared domains or perform full restart/reboot classification yet.
+delete undeclared domains. Dom0 host system generation switching and explicit
+dom0 systemd restart/reload actions are handled by `nixome-config-apply`, not
+by the standalone topology setup command.
 
 ## Developer Commands
 

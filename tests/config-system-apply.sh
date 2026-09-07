@@ -88,7 +88,16 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
           packages = [
             { name = "nixome-dom0-profile"; }
           ];
-          systemd.services = { };
+          systemd.services = {
+            "nixome-test-restart.service" = {
+              action = "restart";
+              reason = "restart fixture service";
+            };
+            "nixome-test-reload.service" = {
+              action = "reload";
+              reason = "reload fixture service";
+            };
+          };
           nixos = {
             system = {
               enable = true;
@@ -139,6 +148,18 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
             source = "__HOST_SYSTEM_SOURCE__";
             source_ref = null;
             reason = "dom0 system change requires reboot";
+          }
+          {
+            type = "systemd-service";
+            name = "nixome-test-restart.service";
+            action = "restart";
+            reason = "restart fixture service";
+          }
+          {
+            type = "systemd-service";
+            name = "nixome-test-reload.service";
+            action = "reload";
+            reason = "reload fixture service";
           }
         ];
           reboot_required = false;
@@ -244,9 +265,24 @@ EOF
 
 cat > "$BIN_DIR/systemctl" <<'EOF'
 #!/usr/bin/env bash
-if [ "$1" = "is-active" ]; then
+set -euo pipefail
+
+mkdir -p "$NIXOME_SYSTEM_STATE_DIR"
+
+case "$1" in
+is-active)
   exit 0
-fi
+  ;;
+restart|reload)
+  printf '%s %s\n' "$1" "$2" >> "$NIXOME_SYSTEM_STATE_DIR/systemctl-calls"
+  printf '%s %s ok\n' "$1" "$2"
+  exit 0
+  ;;
+esac
+
+printf 'unexpected systemctl args:' >&2
+printf ' [%s]' "$@" >&2
+printf '\n' >&2
 exit 1
 EOF
 
@@ -281,11 +317,14 @@ jq -e \
     .system_apply_result.status == "passed" and
     .system_apply_result.profile_status == "passed" and
     .system_apply_result.host_system_status == "passed" and
+    .system_apply_result.systemd_status == "passed" and
     .system_apply_result.host_system_source == $expected_host_system_source and
     .system_apply_result.host_system_switch_action == "switch" and
     .system_apply_result.reboot_required == false and
+    .systemd_actions_result.status == "passed" and
     .deployment.status == "passed" and
-    .deployment.system_apply.status == "passed"
+    .deployment.system_apply.status == "passed" and
+    .deployment.systemd_actions.status == "passed"
   ' "$LOG_DIR/config-apply.json" >/dev/null
 
 jq -e '
@@ -301,10 +340,14 @@ jq -e \
   .dom0.nixos.system.enable == true and
   .dom0.nixos.system.source == $expected_host_system_source and
   .dom0.nixos.system.switch_action == "switch" and
+  .dom0.systemd.services."nixome-test-restart.service".action == "restart" and
+  .dom0.systemd.services."nixome-test-reload.service".action == "reload" and
   .plan.reboot_required == false
 ' "$SYSTEM_STATE_DIR/current-system.json" >/dev/null
 
 grep -qx activated "$SYSTEM_STATE_DIR/profile-activated"
+grep -Fx "restart nixome-test-restart.service" "$SYSTEM_STATE_DIR/systemctl-calls" >/dev/null
+grep -Fx "reload nixome-test-reload.service" "$SYSTEM_STATE_DIR/systemctl-calls" >/dev/null
 [ "$(readlink "$SYSTEM_PROFILE")" = "$EXPECTED_PROFILE_SOURCE" ]
 [ -x "$EXPECTED_PROFILE_SOURCE/bin/nixome-dom0-profile-activate" ]
 [ "$(readlink "$HOST_SYSTEM_PROFILE")" = "$EXPECTED_HOST_SYSTEM_SOURCE" ]
@@ -320,6 +363,21 @@ grep -Fx resolved-system.json "$WORK_DIR/deployment-members.txt" >/dev/null
 grep -Fx system-plan.json "$WORK_DIR/deployment-members.txt" >/dev/null
 grep -Fx system-apply.json "$WORK_DIR/deployment-members.txt" >/dev/null
 grep -Fx system-builds.json "$WORK_DIR/deployment-members.txt" >/dev/null
+grep -Fx systemd-actions.json "$WORK_DIR/deployment-members.txt" >/dev/null
 grep -Fx logs/profile-activation.log "$WORK_DIR/deployment-members.txt" >/dev/null
+grep -Fx logs/systemd-actions.log "$WORK_DIR/deployment-members.txt" >/dev/null
+
+mkdir -p "$WORK_DIR/deployment-extract"
+tar -C "$WORK_DIR/deployment-extract" -xf "$DEPLOYMENT_TAR_CAPTURE" deployment.json systemd-actions.json
+jq -e '
+  .schema == "nixome.systemd-actions.v1" and
+  .status == "passed" and
+  any(.actions[]; .name == "nixome-test-restart.service" and .action == "restart" and .status == "passed") and
+  any(.actions[]; .name == "nixome-test-reload.service" and .action == "reload" and .status == "passed")
+' "$WORK_DIR/deployment-extract/systemd-actions.json" >/dev/null
+jq -e '
+  .artifacts.systemd_actions == "systemd-actions.json" and
+  .systemd_actions.status == "passed"
+' "$WORK_DIR/deployment-extract/deployment.json" >/dev/null
 
 printf 'config system apply test ok\n'
