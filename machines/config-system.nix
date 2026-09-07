@@ -2,21 +2,33 @@
   lib,
   nixomeConfigSeedInputs ? null,
   nixomePrebuiltTemplatePackages ? { },
+  nixomePrebuiltTemplateSources ? { },
+  nixomeConfigSystemTemplateImport ? true,
   nixomeQubeKernel ? null,
   nixomeQubeKernelOpts ? null,
   nixomeTemplatePackages ? null,
   ...
 }:
 let
-  haveTemplates = nixomeTemplatePackages != null && nixomeTemplatePackages ? configSystem;
-  haveQubeKernel = nixomeQubeKernel != null && nixomeQubeKernelOpts != null && nixomeQubeKernelOpts ? configSystem;
+  configSystemTemplateSource =
+    if nixomePrebuiltTemplateSources ? configSystem then
+      nixomePrebuiltTemplateSources.configSystem
+    else if nixomePrebuiltTemplateSources ? nixome-nixos-config-system then
+      nixomePrebuiltTemplateSources.nixome-nixos-config-system
+    else if nixomeTemplatePackages != null && nixomeTemplatePackages ? configSystem then
+      "${nixomeTemplatePackages.configSystem}/nixome-nixos-config-system"
+    else
+      null;
+  haveTemplates = !nixomeConfigSystemTemplateImport || configSystemTemplateSource != null;
+  haveQubeKernel =
+    nixomeQubeKernel != null && nixomeQubeKernelOpts != null && nixomeQubeKernelOpts ? configSystem;
   haveConfigSeedInputs = nixomeConfigSeedInputs != null;
 in
 {
   assertions = [
     {
       assertion = haveTemplates;
-      message = "machines/config-system.nix requires nixomeTemplatePackages specialArgs.";
+      message = "machines/config-system.nix requires a config-system template package/source when template import is enabled.";
     }
     {
       assertion = haveQubeKernel;
@@ -57,9 +69,8 @@ in
 
     templates = {
       nixome-nixos-config-system = {
-        import = true;
-        source =
-          if haveTemplates then "${nixomeTemplatePackages.configSystem}/nixome-nixos-config-system" else null;
+        import = nixomeConfigSystemTemplateImport;
+        source = if nixomeConfigSystemTemplateImport then configSystemTemplateSource else null;
         skipStart = true;
       };
     };

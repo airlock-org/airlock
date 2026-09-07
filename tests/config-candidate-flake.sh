@@ -13,6 +13,7 @@ PROFILE_JSON="$RESULT_DIR/dom0-profile.json"
 HOST_MESSAGE="$RESULT_DIR/host-message.txt"
 EXTRA_HOST_MESSAGE="$RESULT_DIR/extra-host-message.txt"
 EXTRA_HOST_SERVICE="$RESULT_DIR/extra-host-service.txt"
+HOST_SYSTEM_DERIVATIONS="$RESULT_DIR/dom0-system-derivations.txt"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -107,6 +108,16 @@ nix \
   --raw \
   "$WORK_DIR#nixosConfigurations.nixome-dom0.config.environment.etc.\"nixome/inside-config-applied-message\".text" \
   > "$HOST_MESSAGE"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  path-info \
+  --impure \
+  --offline \
+  --derivation \
+  --recursive \
+  "$WORK_DIR#nixosConfigurations.nixome-dom0.config.system.build.toplevel" \
+  > "$HOST_SYSTEM_DERIVATIONS"
 nix \
   --extra-experimental-features nix-command \
   --extra-experimental-features flakes \
@@ -247,6 +258,12 @@ jq -e '
   .built_by == "config-staging"
 ' "$PROFILE_JSON" >/dev/null
 grep -qx initial "$HOST_MESSAGE"
+if grep -E 'nixome-nixos-(config-system|work)-root-image|qubes-template-nixome-nixos-(config-system|work)' \
+  "$HOST_SYSTEM_DERIVATIONS" >/dev/null; then
+  printf 'staged dom0 system unexpectedly depends on Qube template image derivations\n' >&2
+  cat "$HOST_SYSTEM_DERIVATIONS" >&2
+  exit 1
+fi
 
 cat > "$WORK_DIR/nixome/local.nix" <<'EOF'
 {

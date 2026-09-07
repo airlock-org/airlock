@@ -133,16 +133,10 @@
             configSystem = templateBuilders.mkQubeKernelOpts configSystemGuest;
           };
           nixomeTemplatePackages = {
-            configSystem = configSystemTemplate;
           };
-          nixomePrebuiltTemplatePackages = {
-            work = templateSet.packages.nixome-nixos-work-template;
-          };
-          nixomePrebuiltTemplateSources = {
-            work = "${templateSet.packages.nixome-nixos-work-template}/nixome-nixos-work";
-            nixome-nixos-work =
-              "${templateSet.packages.nixome-nixos-work-template}/nixome-nixos-work";
-          };
+          nixomePrebuiltTemplatePackages = { };
+          nixomePrebuiltTemplateSources = prebuiltTemplateSources;
+          nixomeConfigSystemTemplateImport = false;
         };
         modules = [
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
@@ -154,7 +148,8 @@
             nixpkgs.overlays = templateBuilders.qubesOverlays;
           }
           ./nixome/dom0-host.nix
-        ] ++ localDom0ExtraModules;
+        ]
+        ++ localDom0ExtraModules;
       };
       dom0Profile =
         let

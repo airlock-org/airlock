@@ -367,6 +367,7 @@
             work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
             nixome-nixos-work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
           };
+          nixomeConfigSystemTemplateImport = true;
           inherit nixomeConfigSeedInputs;
         };
         modules = [
