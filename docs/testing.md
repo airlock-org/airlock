@@ -240,10 +240,12 @@ that validated source plus evaluated artifacts into `config-vault`, and applies
 the validated topology/system plan with `nixome-config-apply --apply`. It then
 checks that the applied topology re-declared `config-vault`, `config-staging`,
 and `config-validator`, checks that the staged dom0 system generation updated
-`/run/current-system`, checks that the Nix-declared `nixome-work-from-config`
-AppVM exists, and verifies that `uname -a` runs inside it through qrexec. It
-also checks that `config-vault` contains a successful deployment record for
-that apply, including the dom0 system apply result, and that the staged config
+`/run/current-system`, checks that a staged `local.nix` extra dom0 module wrote
+an `/etc/nixome` marker and restarted its declared systemd unit, checks that
+the Nix-declared `nixome-work-from-config` AppVM exists, and verifies that
+`uname -a` runs inside it through qrexec. It also checks that `config-vault`
+contains a successful deployment record for that apply, including the dom0
+system apply result and systemd action result, and that the staged config
 generated
 `/var/lib/nixome/qubes-policy.d/90-nixome.policy` with an active `nixome.PolicyProbe`
 rule. The result JSON is written to:

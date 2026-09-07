@@ -32,6 +32,9 @@ DOM0_SYSTEM_PROFILE_JSON_LOG="$LOG_DIR/config-vms-dom0-profile.json"
 DOM0_SYSTEM_APPLY_LOG="$LOG_DIR/config-vms-dom0-system-apply.json"
 DOM0_SYSTEM_PROFILE_LINK_LOG="$LOG_DIR/config-vms-dom0-system-profile-link.log"
 DOM0_HOST_CONFIG_MESSAGE_LOG="$LOG_DIR/config-vms-dom0-host-config-message.log"
+DOM0_EXTRA_MODULE_MESSAGE_LOG="$LOG_DIR/config-vms-dom0-extra-module-message.log"
+DOM0_EXTRA_MODULE_RESTARTED_LOG="$LOG_DIR/config-vms-dom0-extra-module-restarted.log"
+DOM0_SYSTEMD_ACTIONS_LOG="$LOG_DIR/config-vms-dom0-systemd-actions.json"
 DOM0_HOST_SYSTEM_PROFILE_LINK_LOG="$LOG_DIR/config-vms-dom0-host-system-profile-link.log"
 DOM0_CURRENT_SYSTEM_LINK_LOG="$LOG_DIR/config-vms-dom0-current-system-link.log"
 ARCHIVE_LOG="$LOG_DIR/config-vms-archive.log"
@@ -165,6 +168,12 @@ write_result() {
     json_file_string_or_null "$DOM0_SYSTEM_PROFILE_LINK_LOG"
     printf ',"dom0_host_config_message":'
     json_file_string_or_null "$DOM0_HOST_CONFIG_MESSAGE_LOG"
+    printf ',"dom0_extra_module_message":'
+    json_file_string_or_null "$DOM0_EXTRA_MODULE_MESSAGE_LOG"
+    printf ',"dom0_extra_module_restarted":'
+    json_file_string_or_null "$DOM0_EXTRA_MODULE_RESTARTED_LOG"
+    printf ',"dom0_systemd_actions":'
+    json_file_value_or_null "$DOM0_SYSTEMD_ACTIONS_LOG"
     printf ',"dom0_host_system_profile_link":'
     json_file_string_or_null "$DOM0_HOST_SYSTEM_PROFILE_LINK_LOG"
     printf ',"dom0_current_system_link":'
@@ -556,7 +565,30 @@ cat > nixome/local.nix <<'LOCALNIXEOF'
     };
   };
 
-  system.args = { };
+  dom0.extraModules = [
+    (
+      { pkgs, ... }:
+      {
+        environment.etc."nixome/local-dom0-extra-module".text = "$APPLY_MESSAGE-extra\n";
+        systemd.services.nixome-local-extra-module = {
+          description = "Nixome local extra module fixture";
+          serviceConfig.Type = "oneshot";
+          serviceConfig.RemainAfterExit = true;
+          script = ''
+            \${pkgs.coreutils}/bin/install -d -m 0755 /var/lib/nixome/system
+            printf '%s\n' "$APPLY_MESSAGE" > /var/lib/nixome/system/local-extra-module-restarted
+          '';
+        };
+      }
+    )
+  ];
+
+  system.args.extraSystemdServices = {
+    "nixome-local-extra-module" = {
+      action = "restart";
+      reason = "restart local extra module fixture";
+    };
+  };
 }
 LOCALNIXEOF
 cat > nixome/templates.nix <<'TEMPLATESNIXEOF'
@@ -722,6 +754,18 @@ run_or_fail \
   "$DOM0_HOST_CONFIG_MESSAGE_LOG" \
   cat /etc/nixome/inside-config-applied-message
 run_or_fail \
+  "read local dom0 extra module message" \
+  "$DOM0_EXTRA_MODULE_MESSAGE_LOG" \
+  cat /etc/nixome/local-dom0-extra-module
+run_or_fail \
+  "read local dom0 extra module restart marker" \
+  "$DOM0_EXTRA_MODULE_RESTARTED_LOG" \
+  cat /var/lib/nixome/system/local-extra-module-restarted
+run_or_fail \
+  "read systemd live action result" \
+  "$DOM0_SYSTEMD_ACTIONS_LOG" \
+  cat /var/lib/nixome/system/last-systemd-actions.json
+run_or_fail \
   "read host system profile link" \
   "$DOM0_HOST_SYSTEM_PROFILE_LINK_LOG" \
   readlink -f /nix/var/nix/profiles/system
@@ -737,15 +781,18 @@ jq -e --arg apply_message "$APPLY_MESSAGE" '
   (.dom0.nixos.system.source | test("^/nix/store/")) and
   .dom0.nixos.system.source_ref == null and
   .dom0.nixos.system.switch_action == "switch" and
+  .dom0.systemd.services."nixome-local-extra-module".action == "restart" and
   .plan.reboot_required == false and
   any(.plan.live_actions[]; .type == "dom0-profile" and .message == $apply_message) and
-  any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "switch")
+  any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "switch") and
+  any(.plan.live_actions[]; .type == "systemd-service" and .name == "nixome-local-extra-module" and .action == "restart")
 ' "$DOM0_SYSTEM_JSON_LOG" >/dev/null ||
   fail "applied dom0 system JSON did not match expected value"
 
 jq -e --arg apply_message "$APPLY_MESSAGE" '
   any(.live_actions[]; .type == "dom0-profile" and .message == $apply_message) and
   any(.live_actions[]; .type == "dom0-nixos-system" and .action == "switch") and
+  any(.live_actions[]; .type == "systemd-service" and .name == "nixome-local-extra-module" and .action == "restart") and
   .reboot_required == false
 ' "$DOM0_SYSTEM_PLAN_LOG" >/dev/null ||
   fail "applied dom0 system plan did not match expected value"
@@ -762,6 +809,9 @@ jq -e '
   .status == "passed" and
   .profile_status == "passed" and
   .host_system_status == "passed" and
+  .systemd_status == "passed" and
+  .systemd_actions_result.status == "passed" and
+  any(.systemd_actions_result.actions[]; .name == "nixome-local-extra-module" and .action == "restart" and .status == "passed") and
   (.host_system_source | test("^/nix/store/")) and
   .host_system_switch_action == "switch" and
   .reboot_required == false
@@ -770,6 +820,10 @@ jq -e '
 
 grep -qx "$APPLY_MESSAGE" "$DOM0_HOST_CONFIG_MESSAGE_LOG" ||
   fail "inside-config host marker did not match expected value"
+grep -qx "$APPLY_MESSAGE-extra" "$DOM0_EXTRA_MODULE_MESSAGE_LOG" ||
+  fail "inside-config local dom0 extra module marker did not match expected value"
+grep -qx "$APPLY_MESSAGE" "$DOM0_EXTRA_MODULE_RESTARTED_LOG" ||
+  fail "inside-config local dom0 extra module restart marker did not match expected value"
 host_system_source="$(jq -r '.host_system_source' "$DOM0_SYSTEM_APPLY_LOG")"
 grep -qx "$host_system_source" "$DOM0_HOST_SYSTEM_PROFILE_LINK_LOG" ||
   fail "host system profile does not point at applied source"
@@ -830,6 +884,9 @@ run_qrexec_or_fail \
     jq -e '.schema == \"nixome.setup-config.v1\" and
       .status == \"passed\"' \"deployments/\$latest/setup.json\" &&
     jq -e '.schema == \"nixome.qubes-topology.v1\"' \"deployments/\$latest/topology.json\" &&
+    jq -e '.schema == \"nixome.systemd-actions.v1\" and
+      .status == \"passed\"' \"deployments/\$latest/systemd-actions.json\" &&
+    jq -e '.systemd_actions.status == \"passed\"' \"deployments/\$latest/deployment.json\" &&
     find \"deployments/\$latest\" -maxdepth 2 -type f | sort"
 
 jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT" '
@@ -864,10 +921,13 @@ jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT"
   .system_apply_result.status == "passed" and
   .system_apply_result.profile_status == "passed" and
   .system_apply_result.host_system_status == "passed" and
+  .system_apply_result.systemd_status == "passed" and
+  .systemd_actions_result.status == "passed" and
   .system_apply_result.reboot_required == false and
   .deployment.system_apply.schema == "nixome.system-apply.v1" and
   .deployment.system_apply.status == "passed" and
   .deployment.system_apply.host_system_status == "passed" and
+  .deployment.systemd_actions.status == "passed" and
   .setup.status == "passed" and
   .setup.domains_changed >= 1
 ' "$APPLY_JSON" >/dev/null || fail "config apply JSON did not pass"
