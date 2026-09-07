@@ -219,9 +219,10 @@ make vm-config-setup
 ```
 
 This skips the Fedora template bootstrap and old qrexec/window smoke tests,
-then runs `sudo nixome-setup-config --apply` in the nested dom0. Setup
-logs are written under `.nixome-logs/` on the host and `/var/log/nixome/` in
-the nested dom0. Successful setup also persists
+waits for the boot-time `nixome-setup-config.service`, and can re-run
+`sudo nixome-setup-config --apply` explicitly in the nested dom0. Setup logs
+are written under `.nixome-logs/` on the host and `/var/log/nixome/` in the
+nested dom0. Successful setup also persists
 `/var/lib/nixome/system/current-topology.json` and
 `/var/lib/nixome/system/current-setup.json` for later status inspection.
 

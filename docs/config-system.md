@@ -17,6 +17,8 @@ plane in dom0, but moves the desired VM topology into Nix.
   `config-staging`, `nixome.Config.ValidateCandidate` on `config-validator`,
   `nixome.Config.ArchiveCandidate` on `config-vault`, and
   `nixome.Config.ArchiveDeployment` on `config-vault`.
+- a boot-time `nixome-setup-config.service` that ensures this topology exists
+  after the Qubes dom0 control services are up.
 
 That config-access policy is bootstrap policy and remains dom0/NixOS-owned in
 `30-nixome-config.policy`, so staged config changes cannot lock dom0 out of the
@@ -319,6 +321,15 @@ Apply it from dom0 with:
 sudo nixome-setup-config --apply
 ```
 
+The config-system dom0 image also enables `nixome-setup-config.service`.
+That one-shot unit runs at boot after `libvirtd`, `qubes-db-dom0`, `qubesd`,
+and `qubes-qrexec-policy-daemon`, so a fresh image should come up with the
+config TemplateVM imported and `config-vault`, `config-staging`, and
+`config-validator` present without a manual first setup command. The reusable
+module keeps this boot behavior disabled by default; the config-system profile
+opts into it. There is no timer. Existing objects are left in place when they
+already match, so later boots should usually report no changes.
+
 For a non-mutating preview:
 
 ```bash
@@ -422,7 +433,7 @@ from it, starts the AppVM, and checks qrexec.
 ## Validated Boundary
 
 The template artifacts are NixOS root images packaged in the shape expected by
-`qvm-template-postprocess`. The explicit dom0 setup command has imported the
+`qvm-template-postprocess`. The dom0 setup path has imported the
 shared config-system TemplateVM and created the three config AppVMs in the
 nested dom0 test environment.
 Local tests now also prove that a validated topology can contain a staged

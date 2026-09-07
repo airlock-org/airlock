@@ -17,6 +17,13 @@ GUEST_QREXEC_AFTER_JSON="$WORK_DIR/guest-qrexec-after.json"
 GUEST_VALIDATOR_ROLE_JSON="$WORK_DIR/guest-validator-role.json"
 GUEST_VALIDATOR_RPC_MODE_JSON="$WORK_DIR/guest-validator-rpc-mode.json"
 GUEST_DEPLOYMENT_RPC_MODE_JSON="$WORK_DIR/guest-deployment-rpc-mode.json"
+SETUP_CONFIG_WANTED_BY_JSON="$WORK_DIR/setup-config-wanted-by.json"
+SETUP_CONFIG_AFTER_JSON="$WORK_DIR/setup-config-after.json"
+SETUP_CONFIG_WANTS_JSON="$WORK_DIR/setup-config-wants.json"
+SETUP_CONFIG_EXECSTART_JSON="$WORK_DIR/setup-config-execstart.json"
+SETUP_CONFIG_ENV_JSON="$WORK_DIR/setup-config-environment.json"
+SETUP_CONFIG_RESTART_IF_CHANGED_JSON="$WORK_DIR/setup-config-restart-if-changed.json"
+SETUP_CONFIG_STOP_IF_CHANGED_JSON="$WORK_DIR/setup-config-stop-if-changed.json"
 QREXEC_POLICY_PATH_BEFORE_JSON="$WORK_DIR/qrexec-policy-path-before.json"
 QREXEC_POLICY_DAEMON_AFTER_JSON="$WORK_DIR/qrexec-policy-daemon-after.json"
 QREXEC_POLICY_DAEMON_REQUIRES_JSON="$WORK_DIR/qrexec-policy-daemon-requires.json"
@@ -39,6 +46,13 @@ nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.sy
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-validator.config.nixome.qubeGuest.role" > "$GUEST_VALIDATOR_ROLE_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.Config.ValidateCandidate\".mode" > "$GUEST_VALIDATOR_RPC_MODE_JSON"
 nix eval --json "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.Config.ArchiveDeployment\".mode" > "$GUEST_DEPLOYMENT_RPC_MODE_JSON"
+nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.wantedBy" > "$SETUP_CONFIG_WANTED_BY_JSON"
+nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.after" > "$SETUP_CONFIG_AFTER_JSON"
+nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.wants" > "$SETUP_CONFIG_WANTS_JSON"
+nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.serviceConfig.ExecStart" > "$SETUP_CONFIG_EXECSTART_JSON"
+nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.environment" > "$SETUP_CONFIG_ENV_JSON"
+nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.restartIfChanged" > "$SETUP_CONFIG_RESTART_IF_CHANGED_JSON"
+nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.stopIfChanged" > "$SETUP_CONFIG_STOP_IF_CHANGED_JSON"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-qubes-policy-path.before" > "$QREXEC_POLICY_PATH_BEFORE_JSON"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.qubes-qrexec-policy-daemon.after" > "$QREXEC_POLICY_DAEMON_AFTER_JSON"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.qubes-qrexec-policy-daemon.requires" > "$QREXEC_POLICY_DAEMON_REQUIRES_JSON"
@@ -120,6 +134,40 @@ jq -e '
 jq -e '
   . == "0555"
 ' "$GUEST_DEPLOYMENT_RPC_MODE_JSON" >/dev/null
+
+jq -e '
+  index("multi-user.target") != null
+' "$SETUP_CONFIG_WANTED_BY_JSON" >/dev/null
+
+jq -e '
+  index("libvirtd.service") != null and
+  index("qubes-db-dom0.service") != null and
+  index("qubesd.service") != null and
+  index("qubes-qrexec-policy-daemon.service") != null
+' "$SETUP_CONFIG_AFTER_JSON" >/dev/null
+
+jq -e '
+  index("libvirtd.service") != null and
+  index("qubes-db-dom0.service") != null and
+  index("qubesd.service") != null and
+  index("qubes-qrexec-policy-daemon.service") != null
+' "$SETUP_CONFIG_WANTS_JSON" >/dev/null
+
+jq -e '
+  type == "string" and contains("nixome-setup-config") and endswith(" --apply")
+' "$SETUP_CONFIG_EXECSTART_JSON" >/dev/null
+
+jq -e '
+  .NIXOME_LOG_DIR == "/var/log/nixome"
+' "$SETUP_CONFIG_ENV_JSON" >/dev/null
+
+jq -e '
+  . == false
+' "$SETUP_CONFIG_RESTART_IF_CHANGED_JSON" >/dev/null
+
+jq -e '
+  . == false
+' "$SETUP_CONFIG_STOP_IF_CHANGED_JSON" >/dev/null
 
 jq -e '
   index("qubes-qrexec-policy-daemon.service") != null

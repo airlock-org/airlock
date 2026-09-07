@@ -20,6 +20,10 @@ grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION' "$ROOT/scripts/run-nested-gui-
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_REASON' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_RUN_CONFIG_BOOT_VERIFY' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'nixome-config-boot-verify' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_SETUP_CONFIG_BOOT_WAIT_SECONDS' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'wait_for_setup_config_boot_unit' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'systemctl cat nixome-setup-config.service' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'copy_boot_setup_config_result' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'if $DOM0_SYSTEM_SWITCH_ACTION_NIX == "switch" then' \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'EXPECTED_SYSTEMD_ACTIONS_STATUS="skipped"' \

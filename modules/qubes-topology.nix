@@ -287,6 +287,20 @@ in
       description = "Normalized Nixome Qubes topology JSON payload.";
     };
 
+    setupConfigOnBoot = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Run setup-config once during dom0 boot to ensure the declared Qubes topology exists.";
+      };
+
+      logDir = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/log/nixome";
+        description = "Directory where the boot setup-config unit writes JSON results and command logs.";
+      };
+    };
+
     configAccessPolicy = {
       enable = lib.mkOption {
         type = lib.types.bool;
@@ -388,6 +402,31 @@ in
         ""
         "${qrexecBase}/bin/qrexec-policy-daemon --policy-path ${qrexecPolicyRuntimeDir}"
       ];
+    };
+
+    systemd.services.nixome-setup-config = lib.mkIf cfg.setupConfigOnBoot.enable {
+      description = "Set up the declared Nixome Qubes topology";
+      wantedBy = [ "multi-user.target" ];
+      wants = [
+        "libvirtd.service"
+        "qubes-db-dom0.service"
+        "qubesd.service"
+        "qubes-qrexec-policy-daemon.service"
+      ];
+      after = [
+        "libvirtd.service"
+        "qubes-db-dom0.service"
+        "qubesd.service"
+        "qubes-qrexec-policy-daemon.service"
+      ];
+      restartIfChanged = false;
+      stopIfChanged = false;
+      environment.NIXOME_LOG_DIR = cfg.setupConfigOnBoot.logDir;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${setupConfig}/bin/nixome-setup-config --apply";
+      };
     };
   };
 }

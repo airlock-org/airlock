@@ -12,6 +12,7 @@ SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
 SSH_WAIT_SECONDS="${NIXOME_VM_SSH_WAIT_SECONDS:-240}"
 VM_TIMEOUT="${NIXOME_VM_RUN_TIMEOUT:-14400}"
 VM_START_WAIT_SECONDS="${NIXOME_VM_START_WAIT_SECONDS:-$VM_TIMEOUT}"
+SETUP_CONFIG_BOOT_WAIT_SECONDS="${NIXOME_SETUP_CONFIG_BOOT_WAIT_SECONDS:-900}"
 IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-image}"
 DISPLAY_MODE="${NIXOME_VM_DISPLAY:-gtk}"
 KEEP_VM="${NIXOME_KEEP_VM:-0}"
@@ -342,7 +343,7 @@ remote() {
 
 collect_diagnostics() {
   remote 'systemctl --failed --no-legend || true' > "$FAILED_UNITS_LOG" 2>/dev/null || true
-  remote 'journalctl -b --no-pager -n 320 -u qubesd -u qubes-core -u libvirtd -u qubes-db-dom0 -u qubes-qrexec-policy-daemon -u nixome-qubes-store-init || true' > "$JOURNAL_LOG" 2>/dev/null || true
+  remote 'journalctl -b --no-pager -n 320 -u qubesd -u qubes-core -u libvirtd -u qubes-db-dom0 -u qubes-qrexec-policy-daemon -u nixome-qubes-store-init -u nixome-setup-config || true' > "$JOURNAL_LOG" 2>/dev/null || true
   remote 'qvm-ls || true' > "$QVM_LS_LOG" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/qubes-bootstrap.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-bootstrap.commands.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/setup-config.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-setup-config.commands.log" 2>/dev/null || true
@@ -387,6 +388,30 @@ extract_json_result() {
       exit 1
     }
   ' "$input" > "$output"
+}
+
+wait_for_setup_config_boot_unit() {
+  if ! remote 'systemctl cat nixome-setup-config.service >/dev/null 2>&1'; then
+    return 0
+  fi
+
+  printf 'setup-config: waiting for boot setup unit\n'
+  if ! remote "deadline=\$((SECONDS + $SETUP_CONFIG_BOOT_WAIT_SECONDS)); while [ \"\$(systemctl show -p ActiveState --value nixome-setup-config.service 2>/dev/null || printf missing)\" = activating ]; do if [ \"\$SECONDS\" -ge \"\$deadline\" ]; then systemctl --no-pager status nixome-setup-config.service || true; exit 124; fi; sleep 2; done; state=\"\$(systemctl show -p ActiveState --value nixome-setup-config.service 2>/dev/null || printf missing)\"; if [ \"\$state\" = failed ]; then systemctl --no-pager status nixome-setup-config.service || true; exit 1; fi"; then
+    remote 'sudo -n cat /var/log/nixome/setup-config.json 2>/dev/null || true' > "$SETUP_CONFIG_JSON" 2>/dev/null || true
+    collect_diagnostics
+    exit 1
+  fi
+}
+
+copy_boot_setup_config_result() {
+  if remote 'sudo -n test -r /var/log/nixome/setup-config.json' >/dev/null 2>&1; then
+    remote 'sudo -n cat /var/log/nixome/setup-config.json' > "$SETUP_CONFIG_JSON" 2>/dev/null || true
+    if grep -q '"schema":"nixome.setup-config.v1"' "$SETUP_CONFIG_JSON"; then
+      return 0
+    fi
+  fi
+
+  return 1
 }
 
 shutdown_vm_on_success() {
@@ -486,6 +511,8 @@ if ! remote 'systemctl is-active libvirtd qubesd qubes-db-dom0 qubes-qrexec-poli
   exit 1
 fi
 
+wait_for_setup_config_boot_unit
+
 if [ "$BOOTSTRAP_QUBES" = "1" ]; then
   printf 'bootstrap: installing/checking Qubes VM kernel and template\n'
   copy_cached_bootstrap_assets_to_guest
@@ -521,7 +548,9 @@ if [ "$RUN_SETUP_CONFIG" = "1" ]; then
     fi
   fi
 else
-  printf '{"schema":"nixome.setup-config.v1","status":"skipped","reason":"NIXOME_RUN_SETUP_CONFIG=0"}\n' > "$SETUP_CONFIG_JSON"
+  if ! copy_boot_setup_config_result; then
+    printf '{"schema":"nixome.setup-config.v1","status":"skipped","reason":"NIXOME_RUN_SETUP_CONFIG=0"}\n' > "$SETUP_CONFIG_JSON"
+  fi
 fi
 
 if [ "$RUN_CONFIG_VMS_SMOKE" = "1" ]; then
