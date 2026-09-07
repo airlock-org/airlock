@@ -125,7 +125,7 @@ let
   configStagingInit = pkgs.writeShellScriptBin "nixome-config-staging-init" ''
         set -eu
 
-        repo="${cfg.configRepoPath}"
+        repo="''${NIXOME_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
         if [ -d "$repo/.git" ]; then
           printf 'config staging repo already exists: %s\n' "$repo"
           exit 0
@@ -214,8 +214,10 @@ let
   configStagingValidate = pkgs.writeShellScriptBin "nixome-config-staging-validate" ''
     set -eu
 
-    repo="${cfg.configRepoPath}"
+    repo="''${NIXOME_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
     validation_dir="''${NIXOME_CONFIG_VALIDATION_DIR:-${cfg.configValidationPath}}"
+    tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
+    trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
     if [ ! -d "$repo/.git" ]; then
       printf 'missing Git repo at %s; run nixome-config-staging-init first\n' "$repo" >&2
@@ -228,41 +230,30 @@ let
     commit="$(${pkgs.git}/bin/git rev-parse HEAD)"
     result_file="$validation_dir/$commit.json"
     result_tmp="$result_file.tmp"
-    flake_log="$validation_dir/logs/flake-check-$commit.log"
     topology_json="$validation_dir/topology-$commit.json"
-    topology_eval_log="$validation_dir/logs/nix-eval-topology-$commit.log"
-    topology_log="$validation_dir/logs/topology-json-$commit.log"
-    template_refs_log="$validation_dir/logs/template-source-refs-$commit.log"
+    system_json="$validation_dir/system-$commit.json"
+    staged_tar="$tmpdir/config-candidate-staged.tar"
+    validated_tar="$validation_dir/validated-candidate-$commit.tar"
+    validator_stderr="$validation_dir/logs/staging-validator-$commit.stderr.log"
     dirty="$(${pkgs.git}/bin/git status --porcelain)"
 
-    write_validation() {
+    write_dirty_validation() {
       status="$1"
       reason="$2"
-      topology_eval_status="$3"
-      topology_status="$4"
-      template_refs_status="$5"
-      flake_status="$6"
 
       ${pkgs.jq}/bin/jq -c -n \
         --arg schema "nixome.config-validation.v1" \
         --arg status "$status" \
         --arg reason "$reason" \
+        --arg validator_role "config-staging-local" \
         --arg repo "$repo" \
         --arg commit "$commit" \
         --arg dirty "$dirty" \
-        --arg topology_eval_status "$topology_eval_status" \
-        --arg topology_status "$topology_status" \
-        --arg topology_json "$topology_json" \
-        --arg topology_eval_log "$topology_eval_log" \
-        --arg topology_log "$topology_log" \
-        --arg template_refs_status "$template_refs_status" \
-        --arg template_refs_log "$template_refs_log" \
-        --arg flake_status "$flake_status" \
-        --arg flake_log "$flake_log" \
         '{
           schema: $schema,
           status: $status,
           reason: $reason,
+          validator_role: $validator_role,
           repo: $repo,
           commit: $commit,
           checks: [
@@ -273,26 +264,17 @@ let
             },
             {
               name: "nix-eval-nixome-topology",
-              status: $topology_eval_status,
-              attr: "nixome.topology",
-              output: $topology_json,
-              log: $topology_eval_log
+              status: "skipped",
+              attr: "nixome.topology"
             },
             {
-              name: "nixome-topology-json",
-              status: $topology_status,
-              path: $topology_json,
-              log: $topology_log
-            },
-            {
-              name: "nix-template-source-refs-dry-run",
-              status: $template_refs_status,
-              log: $template_refs_log
+              name: "nix-eval-nixome-system",
+              status: "skipped",
+              attr: "nixome.system"
             },
             {
               name: "nix-flake-check-no-build",
-              status: $flake_status,
-              log: $flake_log
+              status: "skipped"
             }
           ]
         }' > "$result_tmp"
@@ -301,137 +283,75 @@ let
     }
 
     if [ -n "$dirty" ]; then
-      write_validation failed "config staging worktree is dirty; commit changes before export" skipped skipped skipped skipped
+      write_dirty_validation failed "config staging worktree is dirty; commit changes before export"
       exit 1
     fi
 
-    mark_failed() {
-      if [ "$status" = passed ]; then
-        reason="$1"
-      fi
-      status=failed
-    }
-
-    topology_eval_status=skipped
-    topology_status=skipped
-    template_refs_status=skipped
-    flake_status=skipped
-    reason="validation passed"
-    status=passed
-
-    check_template_source_refs() {
-      topology_file="$1"
-      log="$2"
-
-      : > "$log"
-      refs="$(
-        ${pkgs.jq}/bin/jq -r '
-          .templates
-          | to_entries[]
-          | select(.value.source_ref != null)
-          | @base64
-        ' "$topology_file"
-      )"
-
-      if [ -z "$refs" ]; then
-        printf 'no template source refs declared\n' >> "$log"
-        return 0
-      fi
-
-      printf '%s\n' "$refs" |
-        while IFS= read -r encoded; do
-          [ -n "$encoded" ] || continue
-          template_json="$(printf '%s' "$encoded" | ${pkgs.coreutils}/bin/base64 -d)"
-          template="$(printf '%s' "$template_json" | ${pkgs.jq}/bin/jq -r '.key')"
-          attr="$(printf '%s' "$template_json" | ${pkgs.jq}/bin/jq -r '.value.source_ref.attr')"
-          printf 'checking template=%s attr=%s\n' "$template" "$attr" >> "$log"
-          ${pkgs.nix}/bin/nix \
-            --extra-experimental-features nix-command \
-            --extra-experimental-features flakes \
-            build \
-            --impure \
-            --offline \
-            --no-write-lock-file \
-            --dry-run \
-            --no-link \
-            --show-trace \
-            ".#$attr" >> "$log" 2>&1
-        done
-    }
-
-    if [ -f flake.nix ]; then
-      if ${pkgs.nix}/bin/nix \
-        --extra-experimental-features nix-command \
-        --extra-experimental-features flakes \
-        flake check \
-        --impure \
-        --offline \
-        --no-write-lock-file \
-        --no-build . > "$flake_log" 2>&1; then
-        flake_status=passed
-      else
-        flake_status=failed
-        mark_failed "nix flake check --no-build failed"
-      fi
-
-      if ${pkgs.nix}/bin/nix \
-        --extra-experimental-features nix-command \
-        --extra-experimental-features flakes \
-        eval \
-        --impure \
-        --offline \
-        --no-write-lock-file \
-        .#nixome.topology --json > "$topology_json" 2> "$topology_eval_log"; then
-        topology_eval_status=passed
-      else
-        topology_eval_status=failed
-        : > "$topology_json"
-        mark_failed "nix eval .#nixome.topology failed"
-      fi
-
-      if [ "$topology_eval_status" = passed ]; then
-        if ${pkgs.jq}/bin/jq -e '
-          .schema == "nixome.qubes-topology.v1" and
-          (.templates | type == "object") and
-          (.kernels | type == "object") and
-          (.prefs | type == "object") and
-          (.domains | type == "object") and
-          (.qrexec_policy | type == "object") and
-          (.qrexec_policy.rules | type == "array")
-        ' "$topology_json" > "$topology_log" 2>&1; then
-          topology_status=passed
-        else
-          topology_status=failed
-          mark_failed "evaluated nixome.topology JSON validation failed"
-        fi
-
-        if check_template_source_refs "$topology_json" "$template_refs_log"; then
-          template_refs_status=passed
-        else
-          template_refs_status=failed
-          mark_failed "template source reference dry-run failed"
-        fi
-      else
-        printf 'skipped because nix eval .#nixome.topology did not pass\n' > "$topology_log"
-        printf 'skipped because nix eval .#nixome.topology did not pass\n' > "$template_refs_log"
-      fi
-    else
-      printf 'no flake.nix present; cannot evaluate nixome.topology\n' > "$flake_log"
-      printf 'no flake.nix present; cannot evaluate nixome.topology\n' > "$topology_eval_log"
-      printf 'skipped because flake.nix is missing\n' > "$topology_log"
-      printf 'skipped because flake.nix is missing\n' > "$template_refs_log"
-      flake_status=failed
-      mark_failed "flake.nix is missing"
+    if ! ${configStagingExportCandidate}/bin/nixome-config-staging-export-candidate > "$staged_tar" 2> "$validator_stderr"; then
+      cat "$validator_stderr" >&2 || true
+      write_dirty_validation failed "config staging export failed"
+      exit 1
     fi
 
-    write_validation "$status" "$reason" "$topology_eval_status" "$topology_status" "$template_refs_status" "$flake_status"
-    [ "$status" = passed ]
+    if ! NIXOME_CONFIG_VALIDATION_DIR="$validation_dir" \
+      ${configValidatorValidateCandidate}/bin/nixome-config-validator-validate-candidate \
+        < "$staged_tar" \
+        > "$validated_tar" \
+        2> "$validator_stderr"; then
+      cat "$validator_stderr" >&2 || true
+      if [ -r "$result_file" ]; then
+        cat "$result_file"
+      fi
+      exit 1
+    fi
+
+    ${pkgs.gnutar}/bin/tar -tf "$validated_tar" |
+      ${pkgs.gawk}/bin/awk '
+        $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" && $0 != "topology.json" && $0 != "system.json" {
+          printf "unexpected validated candidate tar member: %s\n", $0 > "/dev/stderr"
+          exit 1
+        }
+      '
+    ${pkgs.gnutar}/bin/tar -C "$tmpdir" -xf "$validated_tar" validation.json topology.json system.json
+    ${pkgs.coreutils}/bin/cp "$tmpdir/topology.json" "$topology_json"
+    ${pkgs.coreutils}/bin/cp "$tmpdir/system.json" "$system_json"
+
+    ${pkgs.jq}/bin/jq -c \
+      --arg repo "$repo" \
+      --arg topology_json "$topology_json" \
+      --arg system_json "$system_json" \
+      --arg validated_tar "$validated_tar" \
+      --arg validator_stderr "$validator_stderr" \
+      '
+        .repo = $repo
+        | .validated_candidate = $validated_tar
+        | .validator_stderr = $validator_stderr
+        | .checks = (
+            .checks
+            | map(
+                if .name == "nix-eval-nixome-topology" then
+                  .output = $topology_json
+                elif .name == "nixome-topology-json" then
+                  .path = $topology_json
+                elif .name == "nix-eval-nixome-system" then
+                  .output = $system_json
+                elif .name == "nixome-system-json" then
+                  .path = $system_json
+                else
+                  .
+                end
+              )
+          )
+      ' "$tmpdir/validation.json" > "$result_tmp"
+    mv "$result_tmp" "$result_file"
+    cat "$result_file"
+    ${pkgs.jq}/bin/jq -e '.status == "passed"' "$result_file" >/dev/null
   '';
 
   configStagingExportCandidate = pkgs.writeShellScriptBin "nixome-config-staging-export-candidate" ''
     set -eu
 
-    repo="${cfg.configRepoPath}"
+    repo="''${NIXOME_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
@@ -1964,6 +1884,13 @@ in
       source = configCandidateExportService;
       mode = "0555";
     };
+
+    environment.etc."nixome/guest-tools/nixome-config-staging-validate" =
+      lib.mkIf hasConfigStagingRole
+        {
+          source = configStagingValidate;
+          mode = "0555";
+        };
 
     environment.etc."qubes/rpc-config/nixome.Config.CandidateExport" = lib.mkIf hasConfigStagingRole {
       text = "force-user='${cfg.user}'\n";

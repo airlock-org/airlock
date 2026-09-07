@@ -106,12 +106,14 @@ role repositories exist. Standalone setup now also persists the current
 topology and setup result under `/var/lib/nixome/system/` for durable status
 inspection. After setup, `config-staging` exports a committed typed Nix config
 candidate. The validator evaluates normalized `.#nixome.topology` and dry-runs
-any staged template build references. The default seeded candidate uses a
-prebuilt concrete Nix store template source path for `nixome-nixos-work`, so
-dom0 can import that template during apply without rebuilding it in the nested
-VM. dom0 archives the candidate into `config-vault` and applies the resolved
-topology with `nixome-config-apply --apply`. The successful apply is then
-recorded under `deployments/` in `config-vault`. The runtime test proves the
+any staged template build references, and the same validator implementation now
+powers local `nixome-config-staging-validate` feedback inside staging. The
+default seeded candidate uses a prebuilt concrete Nix store template source
+path for `nixome-nixos-work`, so dom0 can import that template during apply
+without rebuilding it in the nested VM. dom0 archives the candidate into
+`config-vault` and applies the resolved topology with
+`nixome-config-apply --apply`. The successful apply is then recorded under
+`deployments/` in `config-vault`. The runtime test proves the
 staged Nix config re-declares the three config AppVMs, defines a staged
 `nixome-nixos-work` TemplateVM artifact, creates a `nixome-work-from-config`
 AppVM from that template, runs `uname -a` inside it through qrexec, and

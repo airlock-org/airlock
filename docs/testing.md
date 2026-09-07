@@ -240,10 +240,11 @@ three VMs, checks that `/home/user/nixome-config-vault` and
 `/home/user/nixome-config` already exist as clean Git repositories, modifies
 and commits `flake.nix`, `nixome/config-vms.nix`, `nixome/templates.nix`, and
 `nixome/topology.nix` in `config-staging`, has
-`config-validator` run `nix flake check --no-build` and evaluate the
-schema-normalized `.#nixome.topology` and `.#nixome.system`, has dom0 archive
-that validated source plus evaluated artifacts into `config-vault`, and applies
-the validated topology/system plan with `nixome-config-apply --apply`. It then
+`config-validator` run `nix flake check --no-build`, evaluate the
+schema-normalized `.#nixome.topology` and `.#nixome.system`, and dry-run
+declared template/system build references, has dom0 archive that validated
+source plus evaluated artifacts into `config-vault`, and applies the validated
+topology/system plan with `nixome-config-apply --apply`. It then
 checks that the applied topology re-declared `config-vault`, `config-staging`,
 and `config-validator`, checks that the staged dom0 system generation updated
 `/run/current-system`, checks that a staged `local.nix` extra dom0 module wrote

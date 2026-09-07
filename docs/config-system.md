@@ -59,6 +59,20 @@ It can initialize that candidate with:
 nixome-config-staging-init
 ```
 
+It can run the same local validation model used by the validator implementation
+with:
+
+```bash
+nixome-config-staging-validate
+```
+
+That command exports the clean committed staging repo to a Git bundle, runs the
+validator checks locally, and writes validation JSON plus evaluated
+`topology-$commit.json`, `system-$commit.json`, and the validated candidate tar
+under `/home/user/nixome-config-validation`. This is developer feedback only:
+dom0 still asks `config-validator` to validate the candidate again before
+archiving or applying it.
+
 The seeded candidate defines `nixome.config` in `flake.nix`, imports the local
 `./nixome/topology.nix` schema helper, `./nixome/config-vms.nix`, and
 `./nixome/templates.nix`, and exposes normalized `nixome.topology` plus a
@@ -141,7 +155,8 @@ after apply.
 
 `config-validator` validates candidates exported from `config-staging`,
 evaluates the schema-normalized `.#nixome.topology` to the `topology.json` apply
-artifact, dry-runs each declared template build reference with `nix build
+artifact, evaluates `.#nixome.system` to the `system.json` host plan artifact,
+dry-runs declared template and system build references with `nix build
 --dry-run`, and writes validation JSON under:
 
 ```text
