@@ -309,7 +309,14 @@ def run_verify(paths, mode):
     if mode not in ("nix-store", "nix-store-trust"):
         fail(f"unsupported verification mode: {mode}")
 
-    command = ["nix", "store", "verify", "--recursive"]
+    command = [
+        "nix",
+        "--extra-experimental-features",
+        "nix-command",
+        "store",
+        "verify",
+        "--recursive",
+    ]
     if mode == "nix-store":
         command.append("--no-trust")
     command.extend(paths)
@@ -689,6 +696,7 @@ def admit_generation(args):
         "manifest": str(manifest_path),
         "system": args.system,
         "closure_hash": closure_id,
+        "verification": verification,
         "store": manifest["store"],
         "objects_total": len(paths),
         "objects_admitted": len(admitted),

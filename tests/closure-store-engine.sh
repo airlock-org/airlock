@@ -72,6 +72,35 @@ make_closure work-gen1 "$COMMON" "$WORK_SYSTEM_1" "$WORK_UNIQUE_1"
 make_closure work-gen2 "$COMMON" "$WORK_SYSTEM_2" "$WORK_UNIQUE_2"
 make_closure dev-gen1 "$COMMON" "$DEV_SYSTEM_1" "$DEV_UNIQUE_1"
 
+cat > "$WORK_DIR/bin/nix" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$NIXOME_FAKE_NIX_LOG"
+EOF
+chmod 0755 "$WORK_DIR/bin/nix"
+
+PATH="$WORK_DIR/bin:$PATH" \
+  NIXOME_FAKE_NIX_LOG="$RESULT_DIR/nix-verify.args" \
+  run_engine_json verify-command admit \
+  --pool-root "$WORK_DIR/verify-pool" \
+  --domain verify-command \
+  --system "/nix/store/$COMMON" \
+  --closure-source "$WORK_DIR/closures/work-gen1" \
+  --physical-store-root "$PHYSICAL_STORE" \
+  --root-source root-verify \
+  --kernel-name kernel-a \
+  --verify-mode nix-store \
+  --additional-space-mib 1
+
+jq -e '
+  .schema == "nixome.closure-store.admission.v1" and
+  .status == "passed" and
+  .verification.mode == "nix-store" and
+  (.verification.command | index("--extra-experimental-features")) != null and
+  (.verification.command | index("nix-command")) != null
+' "$RESULT_DIR/verify-command.json" >/dev/null
+grep -Fx -- '--extra-experimental-features' "$RESULT_DIR/nix-verify.args" >/dev/null
+grep -Fx -- 'nix-command' "$RESULT_DIR/nix-verify.args" >/dev/null
+
 run_engine_json work-gen1 admit \
   --pool-root "$POOL" \
   --domain work \
