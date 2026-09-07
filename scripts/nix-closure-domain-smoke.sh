@@ -450,7 +450,7 @@ run_runtime_service_check() {
     fail "runtime service did not report expected system source"
   grep -Fx "store_device=$store_device" "$RUNTIME_SERVICE_LOG" >/dev/null ||
     fail "runtime service did not report expected store device"
-  grep -E '^store_options=.*(^|,)ro(,|$)' "$RUNTIME_SERVICE_LOG" >/dev/null ||
+  grep -E '^store_options=([^,]+,)*ro(,|$)' "$RUNTIME_SERVICE_LOG" >/dev/null ||
     fail "runtime service did not report read-only store mount"
 }
 

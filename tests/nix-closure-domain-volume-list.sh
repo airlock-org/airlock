@@ -28,3 +28,12 @@ if grep -F 'grep -F "$DOMAIN:store"' "$SCRIPT" >/dev/null; then
 fi
 
 grep -F 'qvm_volume_list_has_volume "$DOMAIN" store' "$SCRIPT" >/dev/null
+
+printf 'store_options=ro,nodev,relatime\n' > "$WORK_DIR/store-options.log"
+grep -E '^store_options=([^,]+,)*ro(,|$)' "$WORK_DIR/store-options.log" >/dev/null
+
+printf 'store_options=nodev,rw,relatime\n' > "$WORK_DIR/store-options-rw.log"
+if grep -E '^store_options=([^,]+,)*ro(,|$)' "$WORK_DIR/store-options-rw.log" >/dev/null; then
+  printf 'read-only mount check matched writable store options\n' >&2
+  exit 1
+fi
