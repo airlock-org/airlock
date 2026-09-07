@@ -227,6 +227,8 @@ To run the current NixOS config-VM boot/qrexec proof:
 
 ```bash
 make vm-config-flow
+make vm-config-boot-flow
+make vm-config-boot-activate-flow
 ```
 
 This starts from a fresh writable VM disk, explicitly runs the dom0 topology
@@ -274,6 +276,23 @@ AppVM, generate Nixome-owned qrexec policy, and record the deployment in
 `make vm-config-smoke` remains as a compatibility alias.
 The config profile sets `default_kernel = ""` so fresh config-only images can
 create TemplateVMs before any Fedora/Qubes VM kernel bootstrap has run.
+
+`make vm-config-boot-flow` uses the same candidate path as
+`make vm-config-flow`, but the staged system asks dom0 to run
+`switch-to-configuration boot` instead of a live switch. That proves dom0 can
+install the next NixOS system generation and report a pending reboot without
+changing `/run/current-system` in the current session.
+
+`make vm-config-boot-activate-flow` is the two-boot version. It first stages
+the boot generation, shuts the nested dom0 down cleanly, starts the same
+writable disk again, and runs `nixome-config-boot-verify`. The verifier checks
+that `/nix/var/nix/profiles/system` and `/run/current-system` both resolve to
+the staged generation and that `nixome-config-status` reports no active pending
+reboot. The combined result is written to:
+
+```text
+/run/media/user/data/nixome/logs/vm-config-boot-activate-flow.json
+```
 
 The VM runner keeps generated writable qcow2 overlays under the generated VM
 directory and named Nix result links under the generated `result-links`

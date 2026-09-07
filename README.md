@@ -89,6 +89,8 @@ make nixos-templates-dry-run
 make vm-gui-config-image-dry-run
 make vm-config-setup
 make vm-config-flow
+make vm-config-boot-flow
+make vm-config-boot-activate-flow
 make vm-config-template-flow
 ```
 
@@ -113,6 +115,13 @@ staged Nix config re-declares the three config AppVMs, defines a staged
 AppVM from that template, runs `uname -a` inside it through qrexec, and
 preserves the deployment record. See
 [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md).
+`make vm-config-boot-flow` runs the same candidate path with
+`dom0.nixos.system.switchAction = "boot"`: dom0 installs the next NixOS system
+generation, reports a pending reboot, and leaves the running generation
+unchanged. `make vm-config-boot-activate-flow` then boots the same writable VM
+disk a second time and verifies that `/run/current-system` has advanced to the
+staged generation and `nixome-config-status` no longer reports a pending
+reboot.
 Inside `config-staging`, `nixome/local.nix` can add
 `templates.definitions.<template-name>` entries. Each entry provides NixOS
 modules for a TemplateVM root plus optional Qubes domain/AppVM defaults; the
@@ -223,6 +232,8 @@ topology imports it by concrete Nix store path, and dom0 creates
 AppVMs from it. Staged config also generates Nixome-owned qrexec policy into
 `/var/lib/nixome/qubes-policy.d/90-nixome.policy`; Qubes' policy daemon is
 pointed at that combined runtime policy directory.
+The two-boot `make vm-config-boot-activate-flow` path proves the staged inside
+config can become the running dom0 NixOS boot generation in the nested VM.
 The heavier `make vm-config-template-flow` path additionally proves a staged
 TemplateVM definition that has no prebuilt source, so dom0 must build and import
 the TemplateVM from the validated candidate before starting its AppVM.

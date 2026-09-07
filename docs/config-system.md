@@ -350,6 +350,8 @@ Run the current NixOS config-VM runtime proof:
 
 ```bash
 make vm-config-flow
+make vm-config-boot-flow
+make vm-config-boot-activate-flow
 make vm-config-template-flow
 ```
 
@@ -374,6 +376,17 @@ The machine-readable result is copied to:
 ```
 
 `make vm-config-smoke` remains as a compatibility alias.
+
+`make vm-config-boot-flow` runs the same validated candidate/apply path with
+`dom0.nixos.system.switchAction = "boot"`. The apply installs the staged system
+as the next dom0 boot generation, records a structured reboot action, and
+leaves `/run/current-system` on the old generation.
+
+`make vm-config-boot-activate-flow` adds the second boot. It preserves the same
+qcow2 overlay after the staged apply, boots it again, and runs
+`nixome-config-boot-verify` in dom0. The verifier checks that the host system
+profile and `/run/current-system` resolve to the staged generation and that the
+active status JSON no longer reports a pending reboot.
 
 `make vm-config-template-flow` enables
 `NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE=1`. In that mode the staged config adds a
@@ -411,6 +424,8 @@ qrexec accepts the repository status check, and proves that a staged Nix config
 can create a new AppVM that boots and serves qrexec. It also records the
 successful apply as a deployment in `config-vault` and proves a staged
 Nixome-owned qrexec policy rule by calling `nixome.PolicyProbe` through
-`qrexec-client`. The next boundary is hardening the model: split role-specific
-guest roots when useful, classify setup changes that require VM restart or dom0
-reboot, and validate the same path on physical Xen-capable hardware.
+`qrexec-client`. The two-boot path now also proves that a staged inside config
+can become the running dom0 NixOS boot generation under nested Xen. The next
+boundary is hardening the model: split role-specific guest roots when useful,
+classify setup changes that require VM restart or dom0 reboot, and validate the
+same path on physical Xen-capable hardware.
