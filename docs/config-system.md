@@ -283,6 +283,9 @@ templates.definitions.nixome-nixos-dev = {
     ripgrep
   ];
   etc."nixome/template-role".text = "dev\n";
+  configuration = {
+    programs.bash.shellAliases.ll = "ls -l";
+  };
   appVms.nixome-dev = {
     label = "blue";
     prefs.memory = 1536;
@@ -291,9 +294,11 @@ templates.definitions.nixome-nixos-dev = {
 };
 ```
 
-Advanced template definitions can still append raw NixOS modules with
-`modules = [ ({ pkgs, ... }: { ... }) ]`, and the high-level fields compile
-into the same module system.
+Template definitions can use `configuration = { ... };` for ordinary NixOS
+module options, or append raw NixOS modules with
+`modules = [ ({ pkgs, ... }: { ... }) ]` when a function module is needed. The
+high-level fields, `configuration`, and raw modules compile into the same NixOS
+module system before the root image is built.
 
 The generated topology then imports the built template through
 `qvm-template-postprocess` if it is missing and creates the declared AppVMs from

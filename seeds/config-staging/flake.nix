@@ -253,6 +253,7 @@
         };
 
         inherit config;
+        templateConfigurations = templateSet.configurations;
         system = machineSystem;
         inherit topology;
       };

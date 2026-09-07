@@ -159,7 +159,10 @@ let
           else
             { }
         );
-      modules = [ contentModule ] ++ (definition.modules or [ ]);
+      modules =
+        [ contentModule ]
+        ++ (if hasAttr "configuration" definition then [ definition.configuration ] else [ ])
+        ++ (definition.modules or [ ]);
       builtTemplate = templateBuilders.mkNixosQubeTemplate {
         templateName = name;
         imageName = definition.imageName or name;
@@ -212,6 +215,13 @@ in
     map (entry: {
       name = entry.packageName;
       value = entry.builtTemplate.package;
+    }) entries
+  );
+
+  configurations = listToAttrs (
+    map (entry: {
+      name = entry.name;
+      value = entry.builtTemplate.configuration;
     }) entries
   );
 

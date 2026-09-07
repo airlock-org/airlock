@@ -578,21 +578,16 @@ if [ "$BUILD_EXTRA_TEMPLATE" = "1" ]; then
     "$EXTRA_TEMPLATE" = {
       role = "dev-template";
       sourceLabel = "runtime-config";
-      modules = [
-        (
-          { pkgs, ... }:
-          {
-            nixome.qubeGuest.role = "base";
-            networking.hostName = "nixome-dev-template";
-            environment.etc."nixome/template-role".text = "dev\n";
-            environment.systemPackages = with pkgs; [
-              git
-              jq
-              ripgrep
-            ];
-          }
-        )
+      hostName = "nixome-dev-template";
+      etc."nixome/template-role".text = "dev\n";
+      packages = with pkgs; [
+        git
+        jq
+        ripgrep
       ];
+      configuration = {
+        environment.etc."nixome/template-configuration".text = "dev-configuration\n";
+      };
       domain.features."nixome-dev-template" = "1";
       appVms."$EXTRA_QUBE" = {
         label = "blue";

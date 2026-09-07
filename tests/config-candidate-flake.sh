@@ -10,6 +10,7 @@ TOPOLOGY_JSON="$RESULT_DIR/topology.json"
 LOCAL_TOPOLOGY_JSON="$RESULT_DIR/local-topology.json"
 SYSTEM_JSON="$RESULT_DIR/system.json"
 LOCAL_SYSTEM_JSON="$RESULT_DIR/local-system.json"
+LOCAL_TEMPLATE_CONFIGURATION="$RESULT_DIR/local-template-configuration.txt"
 PROFILE_LINK="$RESULT_DIR/dom0-profile"
 PROFILE_JSON="$RESULT_DIR/dom0-profile.json"
 HOST_MESSAGE="$RESULT_DIR/host-message.txt"
@@ -299,6 +300,9 @@ cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
       jq
       ripgrep
     ];
+    configuration = {
+      environment.etc."nixome/template-configuration".text = "dev-configuration\n";
+    };
     domain.features."nixome-dev-template" = "1";
     appVms.nixome-dev = {
       label = "blue";
@@ -394,6 +398,16 @@ nix \
 nix \
   --extra-experimental-features nix-command \
   --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --raw \
+  "$WORK_DIR#nixome.templateConfigurations.nixome-nixos-dev.config.environment.etc.\"nixome/template-configuration\".text" \
+  > "$LOCAL_TEMPLATE_CONFIGURATION"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
   path-info \
   --impure \
   --offline \
@@ -405,6 +419,7 @@ grep -qx initial-extra "$EXTRA_HOST_MESSAGE"
 grep -qx "Nixome local extra module fixture" "$EXTRA_HOST_SERVICE"
 grep -qx initial-configuration "$EXTRA_HOST_CONFIGURATION"
 jq -e '. == true' "$EXTRA_HOST_PACKAGE" >/dev/null
+grep -qx dev-configuration "$LOCAL_TEMPLATE_CONFIGURATION"
 [ -s "$LOCAL_TEMPLATE_DERIVATION" ]
 jq -e '
   .schema == "nixome.qubes-topology.v1" and

@@ -28,6 +28,9 @@
   #     ripgrep
   #   ];
   #   etc."nixome/template-role".text = "dev\n";
+  #   configuration = {
+  #     programs.bash.shellAliases.ll = "ls -l";
+  #   };
   #   appVms.nixome-dev = {
   #     label = "blue";
   #     features."nixome-role" = "dev";
