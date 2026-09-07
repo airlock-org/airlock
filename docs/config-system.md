@@ -63,8 +63,8 @@ domains.work = {
       subpath = "root.img";
     };
     store.sourceRef = {
-      build = "packages.x86_64-linux.work-store-image";
-      subpath = "store.img";
+      build = "packages.x86_64-linux.work-store-closure";
+      subpath = "";
     };
   };
   label = "green";
@@ -86,15 +86,54 @@ Nix system closure
 ```
 
 Dom0 resolves build references from the validator-approved candidate, imports
-the small root image into the Qubes `root` volume, creates/imports a separate
-Qubes `store` volume, and sets prefs/features/services/policy. The store volume
+the small root image into the Qubes `root` volume, admits the exact closure into
+the Nixome closure store, creates a separate Qubes `store` volume from the
+selected generation, and sets prefs/features/services/policy. The store volume
 is attached at `/dev/xvde` and mounted read-only at `/nix/store` by the early
 guest bootstrap before the real NixOS init runs. The topology schema currently
 constrains the first extra store volume to `/dev/xvde` because that is the
 validated Qubes/libvirt ordering for this path.
 
-The store image filesystem root is the store contents themselves, so mounting
-it at `/nix/store` exposes normal Nix paths directly.
+The current shared-closure backend keeps immutable store objects once in:
+
+```text
+/var/lib/nixome/closure-store/objects/store
+```
+
+Each domain generation records an exact closure manifest under:
+
+```text
+/var/lib/nixome/closure-store/domains/<domain>/generations/<n>/manifest.json
+```
+
+The Qubes-facing volume is produced by the `nixome-closure` storage pool. Today
+that pool materializes a read-only ext4 view image for the generation so it fits
+Qubes' block-volume contract. The object pool and generation metadata are the
+authoritative state; deeper block-level deduplication between different closure
+images remains future storage-driver work.
+
+## Warm Integration Loop
+
+Use local tests first:
+
+```bash
+make test
+```
+
+For repeated real Qubes/Xen checks against an already-created nested dom0 disk,
+reuse the warm targets:
+
+```bash
+make vm-config-warm-flow
+make vm-nix-closure-warm-flow
+```
+
+The cold targets remain the reproducibility checks:
+
+```bash
+make vm-config-flow
+make vm-nix-closure-flow
+```
 
 ## Config Roles
 

@@ -133,13 +133,15 @@
         ] (expectNixNativeAttrs path value);
       checkedNixNative =
         let
-          checked = checkNixNativeKeys "" [ "domains" ] (expectNixNativeAttrs "" (localConfig.nixNative or { }));
+          checked = checkNixNativeKeys "" [ "domains" ] (
+            expectNixNativeAttrs "" (localConfig.nixNative or { })
+          );
         in
         checked
         // {
-          domains = builtins.mapAttrs (
-            name: value: checkNixNativeDomain "domains.${name}" value
-          ) (checked.domains or { });
+          domains = builtins.mapAttrs (name: value: checkNixNativeDomain "domains.${name}" value) (
+            checked.domains or { }
+          );
         };
       checkConfigRoleAttrs =
         path: attrs:
@@ -458,7 +460,7 @@
               sourceRef = null;
             };
             store = entry.domain.backend.store // {
-              source = "${entry.storeImage}/store.img";
+              source = "${entry.storeArtifact}";
               sourceRef = null;
             };
           };
@@ -479,8 +481,8 @@
               value = allNixNativeDomainEntries.${name}.rootImage;
             }
             {
-              name = allNixNativeDomainEntries.${name}.storeImageName;
-              value = allNixNativeDomainEntries.${name}.storeImage;
+              name = allNixNativeDomainEntries.${name}.storeArtifactName;
+              value = allNixNativeDomainEntries.${name}.storeArtifact;
             }
           ]) (builtins.attrNames allNixNativeDomainEntries)
         )
@@ -503,10 +505,7 @@
             extraTemplates = localTopology.extraTemplates or { };
             extraKernels = localTopology.extraKernels or { };
             extraPrefs = localTopology.extraPrefs or { };
-            extraDomains =
-              nixNativeTopologyDomains
-              // localDomains
-              // (localTopology.extraDomains or { });
+            extraDomains = nixNativeTopologyDomains // localDomains // (localTopology.extraDomains or { });
             extraQrexecRules = localTopology.extraQrexecRules or [ ];
           };
       topology = topologySchema.mkTopology config;

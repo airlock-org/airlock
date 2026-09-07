@@ -203,7 +203,7 @@
               sourceRef = null;
             };
             store = entry.domain.backend.store // {
-              source = "${entry.storeImage}/store.img";
+              source = "${entry.storeArtifact}";
               sourceRef = null;
             };
           };
@@ -303,8 +303,8 @@
                   value = entry.rootImage;
                 }
                 {
-                  name = entry.storeImageName;
-                  value = entry.storeImage;
+                  name = entry.storeArtifactName;
+                  value = entry.storeArtifact;
                 }
               ]
             ) (builtins.attrNames configDomainEntries)
@@ -318,6 +318,7 @@
           nixome-config-status = pkgs.callPackage ./pkgs/nixome-config-status { };
           nixome-config-vms-smoke = pkgs.callPackage ./pkgs/nixome-config-vms-smoke { };
           nixome-nix-closure-domain-smoke = pkgs.callPackage ./pkgs/nixome-nix-closure-domain-smoke { };
+          nixome-qubes-storage = pkgs.python3.pkgs.callPackage ./pkgs/nixome-qubes-storage { };
           nixome-qube-bootstrap = pkgs.callPackage ./pkgs/nixome-qube-bootstrap { };
           nixome-qube-gui-smoke = pkgs.callPackage ./pkgs/nixome-qube-gui-smoke { };
           nixome-setup-config = pkgs.callPackage ./pkgs/nixome-setup-config { };
@@ -345,6 +346,12 @@
               (pkgs.writeText "nixome-store-image-test-root" "nixome-store-image-test\n")
             ];
             additionalSpaceMiB = 16;
+          };
+          nixome-nix-closure-store-manifest-test = templateBuilders.mkNixStoreClosureManifest {
+            name = "nixome-nix-closure-store-manifest-test";
+            rootPaths = [
+              (pkgs.writeText "nixome-store-manifest-test-root" "nixome-store-manifest-test\n")
+            ];
           };
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
           nixome-vm-gui-image = self.nixosConfigurations.vm-gui.config.system.build.image;
@@ -419,9 +426,9 @@
             name = nixomeQubesVmKernelName;
             package = self.packages.x86_64-linux.nixome-qubes-vm-kernel;
           };
-          nixomeConfigDomains = builtins.mapAttrs (
-            _name: entry: materializeNixClosureDomain entry
-          ) (mkConfigDomainEntries "x86_64-linux");
+          nixomeConfigDomains = builtins.mapAttrs (_name: entry: materializeNixClosureDomain entry) (
+            mkConfigDomainEntries "x86_64-linux"
+          );
           inherit nixomeConfigSeedInputs;
         };
         modules = [

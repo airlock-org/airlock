@@ -66,7 +66,7 @@ cat > "$WORK_DIR/valid/flake.nix" <<'EOF'
             kernel.name = "6.12.64-1.fc41";
             root.sourceRef.build = "packages.x86_64-linux.nix-work-root-image";
             root.sourceRef.subpath = "root.img";
-            store.sourceRef.build = "packages.x86_64-linux.nix-work-store-image";
+            store.sourceRef.build = "packages.x86_64-linux.nix-work-store-closure";
           };
           label = "blue";
           prefs.memory = 2048;
@@ -134,11 +134,11 @@ jq -e '
     "subpath": "root.img"
   } and
   .domains."nix-work".backend.root.read_only == false and
-  .domains."nix-work".backend.store.mode == "closure-image" and
+  .domains."nix-work".backend.store.mode == "shared-closure" and
   .domains."nix-work".backend.store.source == null and
   .domains."nix-work".backend.store.source_ref == {
     "type": "flake-output",
-    "attr": "packages.x86_64-linux.nix-work-store-image",
+    "attr": "packages.x86_64-linux.nix-work-store-closure",
     "subpath": ""
   } and
   .domains."nix-work".backend.store.mountpoint == "/nix/store" and

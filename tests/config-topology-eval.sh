@@ -27,9 +27,9 @@ GUEST_DEPLOYMENT_RPC_MODE_JSON="$WORK_DIR/guest-deployment-rpc-mode.json"
 GUEST_VAULT_ROOT_IMAGE_DRV="$WORK_DIR/guest-vault-root-image.drv"
 GUEST_STAGING_ROOT_IMAGE_DRV="$WORK_DIR/guest-staging-root-image.drv"
 GUEST_VALIDATOR_ROOT_IMAGE_DRV="$WORK_DIR/guest-validator-root-image.drv"
-GUEST_VAULT_STORE_IMAGE_DRV="$WORK_DIR/guest-vault-store-image.drv"
-GUEST_STAGING_STORE_IMAGE_DRV="$WORK_DIR/guest-staging-store-image.drv"
-GUEST_VALIDATOR_STORE_IMAGE_DRV="$WORK_DIR/guest-validator-store-image.drv"
+GUEST_VAULT_STORE_CLOSURE_DRV="$WORK_DIR/guest-vault-store-closure.drv"
+GUEST_STAGING_STORE_CLOSURE_DRV="$WORK_DIR/guest-staging-store-closure.drv"
+GUEST_VALIDATOR_STORE_CLOSURE_DRV="$WORK_DIR/guest-validator-store-closure.drv"
 SETUP_CONFIG_WANTED_BY_JSON="$WORK_DIR/setup-config-wanted-by.json"
 SETUP_CONFIG_AFTER_JSON="$WORK_DIR/setup-config-after.json"
 SETUP_CONFIG_WANTS_JSON="$WORK_DIR/setup-config-wants.json"
@@ -77,9 +77,9 @@ nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-vault.config.env
 nix path-info --derivation "$ROOT#nixome-domain-config-vault-root-image" > "$GUEST_VAULT_ROOT_IMAGE_DRV"
 nix path-info --derivation "$ROOT#nixome-domain-config-staging-root-image" > "$GUEST_STAGING_ROOT_IMAGE_DRV"
 nix path-info --derivation "$ROOT#nixome-domain-config-validator-root-image" > "$GUEST_VALIDATOR_ROOT_IMAGE_DRV"
-nix path-info --derivation "$ROOT#nixome-domain-config-vault-store-image" > "$GUEST_VAULT_STORE_IMAGE_DRV"
-nix path-info --derivation "$ROOT#nixome-domain-config-staging-store-image" > "$GUEST_STAGING_STORE_IMAGE_DRV"
-nix path-info --derivation "$ROOT#nixome-domain-config-validator-store-image" > "$GUEST_VALIDATOR_STORE_IMAGE_DRV"
+nix path-info --derivation "$ROOT#nixome-domain-config-vault-store-closure" > "$GUEST_VAULT_STORE_CLOSURE_DRV"
+nix path-info --derivation "$ROOT#nixome-domain-config-staging-store-closure" > "$GUEST_STAGING_STORE_CLOSURE_DRV"
+nix path-info --derivation "$ROOT#nixome-domain-config-validator-store-closure" > "$GUEST_VALIDATOR_STORE_CLOSURE_DRV"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.wantedBy" > "$SETUP_CONFIG_WANTED_BY_JSON"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.after" > "$SETUP_CONFIG_AFTER_JSON"
 nix eval --json "$ROOT#nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.wants" > "$SETUP_CONFIG_WANTS_JSON"
@@ -114,6 +114,7 @@ jq -e '
   ."config-vault".template == null and
   ."config-vault".netvm == null and
   ."config-vault".backend.type == "nix-closure" and
+  ."config-vault".backend.store.mode == "shared-closure" and
   ."config-vault".backend.store.readOnly == true and
   ."config-vault".backend.store.device == "/dev/xvde" and
   ."config-vault".features."nixome-role" == "config-vault" and
@@ -121,6 +122,7 @@ jq -e '
   ."config-staging".template == null and
   ."config-staging".netvm == null and
   ."config-staging".backend.type == "nix-closure" and
+  ."config-staging".backend.store.mode == "shared-closure" and
   ."config-staging".backend.store.readOnly == true and
   ."config-staging".backend.store.device == "/dev/xvde" and
   ."config-staging".features."nixome-role" == "config-staging" and
@@ -129,6 +131,7 @@ jq -e '
   ."config-validator".template == null and
   ."config-validator".netvm == null and
   ."config-validator".backend.type == "nix-closure" and
+  ."config-validator".backend.store.mode == "shared-closure" and
   ."config-validator".backend.store.readOnly == true and
   ."config-validator".backend.store.device == "/dev/xvde" and
   ."config-validator".features."nixome-role" == "config-validator"
@@ -150,8 +153,9 @@ jq -e '
   .domains."config-vault".backend.type == "nix-closure" and
   .domains."config-vault".backend.root.source_ref == null and
   (.domains."config-vault".backend.root.source | test("^/nix/store/.*/root.img$")) and
+  .domains."config-vault".backend.store.mode == "shared-closure" and
   .domains."config-vault".backend.store.source_ref == null and
-  (.domains."config-vault".backend.store.source | test("^/nix/store/.*/store.img$")) and
+  (.domains."config-vault".backend.store.source | test("^/nix/store/[^/]*nixome-domain-config-vault-store-closure-store-closure$")) and
   .domains."config-vault".backend.store.read_only == true and
   .domains."config-staging".backend.type == "nix-closure" and
   .domains."config-staging".template == null and
@@ -213,9 +217,9 @@ jq -e '. == "config-validator"' "$GUEST_VALIDATOR_HOSTNAME_JSON" >/dev/null
 grep -F 'nixome-domain-config-vault-root-image' "$GUEST_VAULT_ROOT_IMAGE_DRV" >/dev/null
 grep -F 'nixome-domain-config-staging-root-image' "$GUEST_STAGING_ROOT_IMAGE_DRV" >/dev/null
 grep -F 'nixome-domain-config-validator-root-image' "$GUEST_VALIDATOR_ROOT_IMAGE_DRV" >/dev/null
-grep -F 'nixome-domain-config-vault-store-image' "$GUEST_VAULT_STORE_IMAGE_DRV" >/dev/null
-grep -F 'nixome-domain-config-staging-store-image' "$GUEST_STAGING_STORE_IMAGE_DRV" >/dev/null
-grep -F 'nixome-domain-config-validator-store-image' "$GUEST_VALIDATOR_STORE_IMAGE_DRV" >/dev/null
+grep -F 'nixome-domain-config-vault-store-closure' "$GUEST_VAULT_STORE_CLOSURE_DRV" >/dev/null
+grep -F 'nixome-domain-config-staging-store-closure' "$GUEST_STAGING_STORE_CLOSURE_DRV" >/dev/null
+grep -F 'nixome-domain-config-validator-store-closure' "$GUEST_VALIDATOR_STORE_CLOSURE_DRV" >/dev/null
 
 jq -e '
   . == "0555"

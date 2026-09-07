@@ -477,7 +477,7 @@ let
   normalizeClosureStore =
     domainName: value:
     if value == null then
-      fail "domains.${domainName}.backend.store.source" "must be set for closure-image stores"
+      fail "domains.${domainName}.backend.store.source" "must be set for nix-closure stores"
     else
       let
         path = "domains.${domainName}.backend.store";
@@ -491,7 +491,10 @@ let
           "readOnly"
           "read_only"
         ] value;
-        mode = expectEnum "${path}.mode" [ "closure-image" ] (get store "mode" "closure-image");
+        mode = expectEnum "${path}.mode" [
+          "closure-image"
+          "shared-closure"
+        ] (get store "mode" "shared-closure");
         sourceInfo = normalizeSourceOption path store;
         mountpoint = expectStringOrPath "${path}.mountpoint" (get store "mountpoint" "/nix/store");
         device = expectStringOrPath "${path}.device" (get store "device" "/dev/xvde");
@@ -519,7 +522,7 @@ let
       else if readOnly != true then
         fail path "nix-closure store views must be read-only"
       else if !(sourceIsSet sourceInfo) then
-        fail "${path}.source" "must be set for closure-image stores"
+        fail "${path}.source" "must be set for nix-closure stores"
       else
         {
           inherit mode mountpoint device;

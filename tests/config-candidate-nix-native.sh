@@ -125,9 +125,9 @@ jq -e '
   .domains."nix-native-generated".backend.root.mode == "qubes-root-image" and
   .domains."nix-native-generated".backend.root.source_ref.attr == "packages.x86_64-linux.nixome-domain-nix-native-generated-root-image" and
   .domains."nix-native-generated".backend.root.source_ref.subpath == "root.img" and
-  .domains."nix-native-generated".backend.store.mode == "closure-image" and
-  .domains."nix-native-generated".backend.store.source_ref.attr == "packages.x86_64-linux.nixome-domain-nix-native-generated-store-image" and
-  .domains."nix-native-generated".backend.store.source_ref.subpath == "store.img" and
+  .domains."nix-native-generated".backend.store.mode == "shared-closure" and
+  .domains."nix-native-generated".backend.store.source_ref.attr == "packages.x86_64-linux.nixome-domain-nix-native-generated-store-closure" and
+  .domains."nix-native-generated".backend.store.source_ref.subpath == "" and
   .domains."nix-native-generated".backend.store.mountpoint == "/nix/store" and
   .domains."nix-native-generated".backend.store.device == "/dev/xvde" and
   .domains."nix-native-generated".backend.store.read_only == true and

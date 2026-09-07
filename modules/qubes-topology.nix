@@ -129,21 +129,24 @@ let
   backendStoreType = lib.types.submodule {
     options = {
       mode = lib.mkOption {
-        type = lib.types.enum [ "closure-image" ];
-        default = "closure-image";
+        type = lib.types.enum [
+          "closure-image"
+          "shared-closure"
+        ];
+        default = "shared-closure";
         description = "How the domain receives its read-only Nix store view.";
       };
 
       source = lib.mkOption {
         type = lib.types.nullOr sourceValueType;
         default = null;
-        description = "Concrete closure image source or candidate flake build reference.";
+        description = "Concrete closure image, closure manifest, or candidate flake build reference.";
       };
 
       sourceRef = lib.mkOption {
         type = lib.types.nullOr sourceRefType;
         default = null;
-        description = "Candidate flake output attribute that builds this closure image.";
+        description = "Candidate flake output attribute that builds this closure artifact.";
       };
 
       mountpoint = lib.mkOption {

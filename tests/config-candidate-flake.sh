@@ -153,10 +153,10 @@ jq -e '
     .domains[$name].backend.root.source == null and
     .domains[$name].backend.root.source_ref.attr == ("packages.x86_64-linux.nixome-domain-" + $name + "-root-image") and
     .domains[$name].backend.root.source_ref.subpath == "root.img" and
-    .domains[$name].backend.store.mode == "closure-image" and
+    .domains[$name].backend.store.mode == "shared-closure" and
     .domains[$name].backend.store.source == null and
-    .domains[$name].backend.store.source_ref.attr == ("packages.x86_64-linux.nixome-domain-" + $name + "-store-image") and
-    .domains[$name].backend.store.source_ref.subpath == "store.img" and
+    .domains[$name].backend.store.source_ref.attr == ("packages.x86_64-linux.nixome-domain-" + $name + "-store-closure") and
+    .domains[$name].backend.store.source_ref.subpath == "" and
     .domains[$name].backend.store.mountpoint == "/nix/store" and
     .domains[$name].backend.store.device == "/dev/xvde" and
     .domains[$name].backend.store.read_only == true and
@@ -426,7 +426,7 @@ nix \
   --impure \
   --offline \
   --derivation \
-  "$WORK_DIR#packages.x86_64-linux.nixome-domain-nix-native-generated-store-image" \
+  "$WORK_DIR#packages.x86_64-linux.nixome-domain-nix-native-generated-store-closure" \
   > "$NIX_NATIVE_STORE_DERIVATION"
 for role in config-vault config-staging config-validator; do
   upper="$(printf '%s' "$role" | tr '[:lower:]-' '[:upper:]_')"
@@ -448,7 +448,7 @@ for role in config-vault config-staging config-validator; do
     --impure \
     --offline \
     --derivation \
-    "$WORK_DIR#packages.x86_64-linux.nixome-domain-$role-store-image" \
+    "$WORK_DIR#packages.x86_64-linux.nixome-domain-$role-store-closure" \
     > "${!store_var}"
 done
 nix \
@@ -567,8 +567,8 @@ jq -e '
   .domains."nix-native-generated".backend.system.source_ref.attr == "nixosConfigurations.nixome-domain-nix-native-generated.config.system.build.toplevel" and
   .domains."nix-native-generated".backend.root.source_ref.attr == "packages.x86_64-linux.nixome-domain-nix-native-generated-root-image" and
   .domains."nix-native-generated".backend.root.source_ref.subpath == "root.img" and
-  .domains."nix-native-generated".backend.store.source_ref.attr == "packages.x86_64-linux.nixome-domain-nix-native-generated-store-image" and
-  .domains."nix-native-generated".backend.store.source_ref.subpath == "store.img" and
+  .domains."nix-native-generated".backend.store.source_ref.attr == "packages.x86_64-linux.nixome-domain-nix-native-generated-store-closure" and
+  .domains."nix-native-generated".backend.store.source_ref.subpath == "" and
   .domains."nix-native-generated".backend.store.device == "/dev/xvde" and
   .domains."nix-native-generated".backend.store.read_only == true and
   (.domains."nix-native-generated".prefs.kernelopts | contains("nixome.system=/nix/store/")) and

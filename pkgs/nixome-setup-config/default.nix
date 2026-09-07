@@ -1,11 +1,14 @@
 {
   coreutils,
   diffutils,
+  e2fsprogs,
   gawk,
   gnugrep,
   gnused,
   jq,
   lib,
+  nix,
+  nixome-qubes-storage ? python3.pkgs.callPackage ../nixome-qubes-storage { },
   python3,
   qubes-desktop-linux-common ? python3.pkgs.qubes-desktop-linux-common,
   qubes-core-admin ? python3.pkgs.qubes-core-admin,
@@ -17,12 +20,16 @@
 }:
 
 let
-  storageHelperPython = python3.withPackages (_: [ qubes-core-admin ]);
+  storageHelperPython = python3.withPackages (_: [
+    qubes-core-admin
+    nixome-qubes-storage
+  ]);
   storageHelper = writeTextFile {
     name = "nixome-nix-domain-storage";
     destination = "/bin/nixome-nix-domain-storage";
     executable = true;
-    text = "#!${storageHelperPython}/bin/python3\n" + builtins.readFile ../../scripts/nix-domain-storage.py;
+    text =
+      "#!${storageHelperPython}/bin/python3\n" + builtins.readFile ../../scripts/nix-domain-storage.py;
   };
 in
 writeShellApplication {
@@ -32,10 +39,13 @@ writeShellApplication {
   runtimeInputs = [
     coreutils
     diffutils
+    e2fsprogs
     gawk
     gnugrep
     gnused
     jq
+    nix
+    nixome-qubes-storage
     python3
     qubes-core-admin
     qubes-desktop-linux-common

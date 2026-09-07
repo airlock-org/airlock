@@ -874,7 +874,8 @@ jq -e \
       .domains[$name].backend.system.source_ref == null and
       (.domains[$name].backend.root.source | test("^/nix/store/.*/root.img$")) and
       .domains[$name].backend.root.source_ref == null and
-      (.domains[$name].backend.store.source | test("^/nix/store/.*/store.img$")) and
+      .domains[$name].backend.store.mode == "shared-closure" and
+      (.domains[$name].backend.store.source | test("^/nix/store/.*/store-closure$")) and
       .domains[$name].backend.store.source_ref == null and
       .domains[$name].backend.store.mountpoint == "/nix/store" and
       .domains[$name].backend.store.device == "/dev/xvde" and

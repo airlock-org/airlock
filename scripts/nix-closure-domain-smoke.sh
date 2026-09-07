@@ -59,6 +59,7 @@ store_source=""
 store_source_physical=""
 store_image=""
 store_image_physical=""
+store_mode=""
 system_source=""
 store_device=""
 reboot_status="not-run"
@@ -126,6 +127,8 @@ write_result() {
     jq -Rn --arg value "$store_image" '$value' | tr -d '\n'
     printf ',"store_image_physical":'
     jq -Rn --arg value "$store_image_physical" '$value' | tr -d '\n'
+    printf ',"store_mode":'
+    jq -Rn --arg value "$store_mode" '$value' | tr -d '\n'
     printf ',"store_device":'
     jq -Rn --arg value "$store_device" '$value' | tr -d '\n'
     printf ',"reboot_status":'
@@ -378,7 +381,13 @@ feature_value() {
 check_source_paths() {
   root_source="$(feature_value nixome-root-source)"
   store_source="$(feature_value nixome-store-source)"
-  store_image="$(feature_value nixome-store-image)"
+  store_mode="$(feature_value nixome-store-mode)"
+  [ -n "$store_mode" ] || store_mode="closure-image"
+  if [ "$store_mode" = "shared-closure" ]; then
+    store_image="$(feature_value nixome-store-view-image)"
+  else
+    store_image="$(feature_value nixome-store-image)"
+  fi
   system_source="$(feature_value nixome-system-source)"
   store_device="$(feature_value nixome-store-device)"
   root_source_physical="$(nixome_physical_store_path "$root_source")"
@@ -391,10 +400,25 @@ check_source_paths() {
   [ -n "$system_source" ] || fail "missing nixome-system-source feature"
   [ -n "$store_device" ] || fail "missing nixome-store-device feature"
   [ -f "$root_source_physical" ] || fail "root image source is missing: $root_source"
-  [ -f "$store_source_physical" ] || fail "store source image is missing: $store_source"
-  [ -f "$store_image_physical" ] || fail "store imported image path is missing: $store_image"
-  [ "$store_source_physical" = "$store_image_physical" ] ||
-    fail "store source and imported image path disagree"
+  case "$store_mode" in
+    closure-image)
+      [ -f "$store_source_physical" ] || fail "store source image is missing: $store_source"
+      [ -f "$store_image_physical" ] || fail "store imported image path is missing: $store_image"
+      [ "$store_source_physical" = "$store_image_physical" ] ||
+        fail "store source and imported image path disagree"
+      ;;
+    shared-closure)
+      [ -d "$store_source_physical" ] || fail "store closure source is missing: $store_source"
+      [ -f "$store_source_physical/store-paths" ] ||
+        fail "store closure source is missing store-paths: $store_source/store-paths"
+      [ -f "$store_source_physical/manifest.json" ] ||
+        fail "store closure source is missing manifest.json: $store_source/manifest.json"
+      [ -f "$store_image_physical" ] || fail "store view image path is missing: $store_image"
+      ;;
+    *)
+      fail "unsupported store mode for $DOMAIN: $store_mode"
+      ;;
+  esac
 }
 
 check_root_image_has_no_store() {
@@ -427,7 +451,9 @@ check_store_image_contains_system() {
     printf 'system_source=%s\n' "$system_source"
     printf 'system_entry=%s\n' "$system_entry"
     printf 'bytes=%s\n' "$(stat -c %s "$store_image_physical")"
-    if [ -f "$(dirname "$store_source_physical")/store-paths" ]; then
+    if [ -f "$store_source_physical/store-paths" ]; then
+      grep -Fx "$system_source" "$store_source_physical/store-paths"
+    elif [ -f "$(dirname "$store_source_physical")/store-paths" ]; then
       grep -Fx "$system_source" "$(dirname "$store_source_physical")/store-paths"
     fi
     debugfs -R "stat /$system_entry/init" "$store_image_physical"

@@ -38,9 +38,13 @@ printf '#!/bin/sh\nexec /init\n' > "$OLD_SYSTEM_SOURCE/init"
 printf '#!/bin/sh\nexec /init\n' > "$NEW_SYSTEM_SOURCE/init"
 chmod 0555 "$OLD_SYSTEM_SOURCE/init" "$NEW_SYSTEM_SOURCE/init"
 printf 'old-root\n' > "$OLD_ROOT_SOURCE/root.img"
-printf 'old-store\n' > "$OLD_STORE_SOURCE/store.img"
+printf '%s\n' "$OLD_SYSTEM_SOURCE" > "$OLD_STORE_SOURCE/store-paths"
+printf '{"schema":"nixome.store-closure-manifest.v1","name":"old-store","read_only":true}\n' \
+  > "$OLD_STORE_SOURCE/manifest.json"
 printf 'new-root\n' > "$NEW_ROOT_SOURCE/root.img"
-printf 'new-store\n' > "$NEW_STORE_SOURCE/store.img"
+printf '%s\n' "$NEW_SYSTEM_SOURCE" > "$NEW_STORE_SOURCE/store-paths"
+printf '{"schema":"nixome.store-closure-manifest.v1","name":"new-store","read_only":true}\n' \
+  > "$NEW_STORE_SOURCE/manifest.json"
 : > "$MUTATION_LOG"
 
 cat > "$POLICY_FILE" <<'EOF'
@@ -100,7 +104,7 @@ cat > "$TOPOLOGY" <<EOF
           "read_only": false
         },
         "store": {
-          "mode": "closure-image",
+          "mode": "shared-closure",
           "source": "$NEW_STORE_SOURCE",
           "source_ref": null,
           "mountpoint": "/nix/store",
@@ -162,7 +166,11 @@ if [ "\$#" -eq 2 ]; then
     config-staging:nixome-system-source) printf '$OLD_SYSTEM_SOURCE\\n' ;;
     config-staging:nixome-root-source) printf '$OLD_ROOT_SOURCE\\n' ;;
     config-staging:nixome-store-source) printf '$OLD_STORE_SOURCE\\n' ;;
-    config-staging:nixome-store-image) printf '$OLD_STORE_SOURCE/store.img\\n' ;;
+    config-staging:nixome-store-image) printf '$OLD_STORE_SOURCE\\n' ;;
+    config-staging:nixome-store-mode) printf 'shared-closure\\n' ;;
+    config-staging:nixome-store-generation) printf '1\\n' ;;
+    config-staging:nixome-store-closure-hash) printf 'old-closure\\n' ;;
+    config-staging:nixome-store-view-image) printf '/var/lib/nixome/closure-store/domains/config-staging/generations/1/store.img\\n' ;;
     config-staging:nixome-store-mountpoint) printf '/nix/store\\n' ;;
     config-staging:nixome-store-device) printf '/dev/xvde\\n' ;;
     config-staging:nixome-store-read-only) printf 'True\\n' ;;

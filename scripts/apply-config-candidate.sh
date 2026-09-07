@@ -963,6 +963,7 @@ validate_nix_domain_source() {
   domain="$2"
   source="$3"
   source_physical="$4"
+  store_mode="${5:-}"
 
   case "$component" in
     system)
@@ -991,13 +992,29 @@ validate_nix_domain_source() {
       fi
       ;;
     store)
-      if [ -d "$source_physical" ]; then
-        [ -f "$source_physical/store.img" ] ||
-          fail "Nix-native domain store image directory is missing store.img for $domain: $source/store.img"
-      else
-        [ -f "$source_physical" ] ||
-          fail "Nix-native domain store image source is not a file for $domain: $source"
-      fi
+      [ -n "$store_mode" ] || store_mode="shared-closure"
+      case "$store_mode" in
+        closure-image)
+          if [ -d "$source_physical" ]; then
+            [ -f "$source_physical/store.img" ] ||
+              fail "Nix-native domain store image directory is missing store.img for $domain: $source/store.img"
+          else
+            [ -f "$source_physical" ] ||
+              fail "Nix-native domain store image source is not a file for $domain: $source"
+          fi
+          ;;
+        shared-closure)
+          [ -d "$source_physical" ] ||
+            fail "Nix-native domain shared closure source is not a directory for $domain: $source"
+          [ -f "$source_physical/store-paths" ] ||
+            fail "Nix-native domain shared closure source is missing store-paths for $domain: $source/store-paths"
+          [ -f "$source_physical/manifest.json" ] ||
+            fail "Nix-native domain shared closure source is missing manifest.json for $domain: $source/manifest.json"
+          ;;
+        *)
+          fail "unsupported Nix-native domain store mode for $domain: $store_mode"
+          ;;
+      esac
       ;;
     *)
       fail "unsupported Nix-native domain component for $domain: $component"
@@ -1037,7 +1054,8 @@ resolve_nix_domain_sources() {
           component: .component,
           path: .path,
           source: (.value.source // null),
-          ref: (.value.source_ref // null)
+          ref: (.value.source_ref // null),
+          mode: (.value.mode // null)
         }
       | @base64
     ' "$resolved"
@@ -1056,6 +1074,7 @@ resolve_nix_domain_sources() {
     safe_component="$(safe_log_name "$component")"
     build_log="$LOG_DIR/config-apply-nix-domain-build-$safe_domain-$safe_component.log"
     build_stdout="$tmpdir/config-apply-nix-domain-build-$safe_domain-$safe_component.stdout"
+    store_mode="$(printf '%s' "$component_json" | jq -r '.mode // ""')"
     output_path=""
     source_path=""
     source_path_physical=""
@@ -1091,7 +1110,7 @@ resolve_nix_domain_sources() {
       source_path_physical="$(nixome_physical_store_path "$source_path")"
       [ -e "$source_path_physical" ] ||
         fail "built Nix-native domain source is missing for $domain.$component: $source_path"
-      validate_nix_domain_source "$component" "$domain" "$source_path" "$source_path_physical"
+      validate_nix_domain_source "$component" "$domain" "$source_path" "$source_path_physical" "$store_mode"
 
       record_nix_domain_build "$domain" "$component" "$attr" "$subpath" passed "$output_path" "$source_path" "$build_log"
       cat "$build_log" >> "$NIX_DOMAIN_BUILD_LOG" || true
@@ -1117,7 +1136,7 @@ resolve_nix_domain_sources() {
           ;;
       esac
 
-      validate_nix_domain_source "$component" "$domain" "$source" "$source_path_physical"
+      validate_nix_domain_source "$component" "$domain" "$source" "$source_path_physical" "$store_mode"
 
       {
         printf 'domain=%s\n' "$domain"

@@ -67,342 +67,343 @@ let
     }:
     "${mkQubeKernelOpts configuration} nixome.system=${configuration.config.system.build.toplevel} nixome.storedev=${storeDevice}";
 
-  mkNixClosureEarlyInit = pkgs.runCommand "nixome-nix-closure-early-init"
-    {
-      nativeBuildInputs = [ pkgs.pkgsStatic.stdenv.cc ];
-      preferLocalBuild = true;
-      allowSubstitutes = false;
-    }
-    ''
-      set -eu
-
-      mkdir -p "$out/sbin"
-      cat > early-init.c <<'EOF'
-      #define _GNU_SOURCE
-      #include <errno.h>
-      #include <fcntl.h>
-      #include <limits.h>
-      #include <stdarg.h>
-      #include <stdio.h>
-      #include <stdlib.h>
-      #include <string.h>
-      #include <sys/mount.h>
-      #include <sys/stat.h>
-      #include <sys/types.h>
-      #include <sys/wait.h>
-      #include <unistd.h>
-
-      static void log_errno(const char *fmt, ...) {
-          va_list ap;
-          va_start(ap, fmt);
-          fputs("nixome-early-init: ", stderr);
-          vfprintf(stderr, fmt, ap);
-          fprintf(stderr, ": %s\n", strerror(errno));
-          va_end(ap);
+  mkNixClosureEarlyInit =
+    pkgs.runCommand "nixome-nix-closure-early-init"
+      {
+        nativeBuildInputs = [ pkgs.pkgsStatic.stdenv.cc ];
+        preferLocalBuild = true;
+        allowSubstitutes = false;
       }
+      ''
+        set -eu
 
-      static void log_msg(const char *fmt, ...) {
-          va_list ap;
-          va_start(ap, fmt);
-          fputs("nixome-early-init: ", stderr);
-          vfprintf(stderr, fmt, ap);
-          fputc('\n', stderr);
-          va_end(ap);
-      }
+        mkdir -p "$out/sbin"
+        cat > early-init.c <<'EOF'
+        #define _GNU_SOURCE
+        #include <errno.h>
+        #include <fcntl.h>
+        #include <limits.h>
+        #include <stdarg.h>
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <string.h>
+        #include <sys/mount.h>
+        #include <sys/stat.h>
+        #include <sys/types.h>
+        #include <sys/wait.h>
+        #include <unistd.h>
 
-      static int mkdir_p(const char *path, mode_t mode) {
-          char tmp[PATH_MAX];
-          char *p;
+        static void log_errno(const char *fmt, ...) {
+            va_list ap;
+            va_start(ap, fmt);
+            fputs("nixome-early-init: ", stderr);
+            vfprintf(stderr, fmt, ap);
+            fprintf(stderr, ": %s\n", strerror(errno));
+            va_end(ap);
+        }
 
-          if (strlen(path) >= sizeof(tmp)) {
-              errno = ENAMETOOLONG;
-              return -1;
-          }
+        static void log_msg(const char *fmt, ...) {
+            va_list ap;
+            va_start(ap, fmt);
+            fputs("nixome-early-init: ", stderr);
+            vfprintf(stderr, fmt, ap);
+            fputc('\n', stderr);
+            va_end(ap);
+        }
 
-          strcpy(tmp, path);
-          for (p = tmp + 1; *p; p++) {
-              if (*p != '/') {
-                  continue;
-              }
-              *p = '\0';
-              if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
-                  return -1;
-              }
-              *p = '/';
-          }
+        static int mkdir_p(const char *path, mode_t mode) {
+            char tmp[PATH_MAX];
+            char *p;
 
-          if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
-              return -1;
-          }
-          return 0;
-      }
+            if (strlen(path) >= sizeof(tmp)) {
+                errno = ENAMETOOLONG;
+                return -1;
+            }
 
-      static void mount_basic(const char *source, const char *target, const char *type,
-                              unsigned long flags, const char *data) {
-          if (mkdir_p(target, 0755) != 0) {
-              log_errno("cannot create %s", target);
-              return;
-          }
-          if (mount(source, target, type, flags, data) != 0 && errno != EBUSY) {
-              log_errno("cannot mount %s on %s", type, target);
-          }
-      }
+            strcpy(tmp, path);
+            for (p = tmp + 1; *p; p++) {
+                if (*p != '/') {
+                    continue;
+                }
+                *p = '\0';
+                if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
+                    return -1;
+                }
+                *p = '/';
+            }
 
-      static int read_cmdline_option(const char *key, char *buf, size_t buflen) {
-          int fd;
-          ssize_t nread;
-          char cmdline[8192];
-          char *saveptr = NULL;
-          char *token;
-          size_t keylen = strlen(key);
+            if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
+                return -1;
+            }
+            return 0;
+        }
 
-          fd = open("/proc/cmdline", O_RDONLY | O_CLOEXEC);
-          if (fd < 0) {
-              log_errno("cannot open /proc/cmdline");
-              return 0;
-          }
-          nread = read(fd, cmdline, sizeof(cmdline) - 1);
-          close(fd);
-          if (nread <= 0) {
-              return 0;
-          }
-          cmdline[nread] = '\0';
+        static void mount_basic(const char *source, const char *target, const char *type,
+                                unsigned long flags, const char *data) {
+            if (mkdir_p(target, 0755) != 0) {
+                log_errno("cannot create %s", target);
+                return;
+            }
+            if (mount(source, target, type, flags, data) != 0 && errno != EBUSY) {
+                log_errno("cannot mount %s on %s", type, target);
+            }
+        }
 
-          for (token = strtok_r(cmdline, " \t\r\n", &saveptr);
-               token != NULL;
-               token = strtok_r(NULL, " \t\r\n", &saveptr)) {
-              if (strncmp(token, key, keylen) != 0 || token[keylen] != '=') {
-                  continue;
-              }
-              snprintf(buf, buflen, "%s", token + keylen + 1);
-              return buf[0] != '\0';
-          }
+        static int read_cmdline_option(const char *key, char *buf, size_t buflen) {
+            int fd;
+            ssize_t nread;
+            char cmdline[8192];
+            char *saveptr = NULL;
+            char *token;
+            size_t keylen = strlen(key);
 
-          return 0;
-      }
+            fd = open("/proc/cmdline", O_RDONLY | O_CLOEXEC);
+            if (fd < 0) {
+                log_errno("cannot open /proc/cmdline");
+                return 0;
+            }
+            nread = read(fd, cmdline, sizeof(cmdline) - 1);
+            close(fd);
+            if (nread <= 0) {
+                return 0;
+            }
+            cmdline[nread] = '\0';
 
-      static int system_init_present(const char *system_path) {
-          char init_path[PATH_MAX];
-          if (snprintf(init_path, sizeof(init_path), "%s/init", system_path) >= (int)sizeof(init_path)) {
-              errno = ENAMETOOLONG;
-              return 0;
-          }
-          return access(init_path, X_OK) == 0;
-      }
+            for (token = strtok_r(cmdline, " \t\r\n", &saveptr);
+                 token != NULL;
+                 token = strtok_r(NULL, " \t\r\n", &saveptr)) {
+                if (strncmp(token, key, keylen) != 0 || token[keylen] != '=') {
+                    continue;
+                }
+                snprintf(buf, buflen, "%s", token + keylen + 1);
+                return buf[0] != '\0';
+            }
 
-      static int path_is_mountpoint(const char *path) {
-          FILE *mountinfo;
-          char line[8192];
+            return 0;
+        }
 
-          mountinfo = fopen("/proc/self/mountinfo", "r");
-          if (mountinfo == NULL) {
-              log_errno("cannot read /proc/self/mountinfo");
-              return 0;
-          }
+        static int system_init_present(const char *system_path) {
+            char init_path[PATH_MAX];
+            if (snprintf(init_path, sizeof(init_path), "%s/init", system_path) >= (int)sizeof(init_path)) {
+                errno = ENAMETOOLONG;
+                return 0;
+            }
+            return access(init_path, X_OK) == 0;
+        }
 
-          while (fgets(line, sizeof(line), mountinfo) != NULL) {
-              char *saveptr = NULL;
-              char *field;
-              int field_index = 0;
+        static int path_is_mountpoint(const char *path) {
+            FILE *mountinfo;
+            char line[8192];
 
-              for (field = strtok_r(line, " ", &saveptr);
-                   field != NULL;
-                   field = strtok_r(NULL, " ", &saveptr)) {
-                  field_index++;
-                  if (field_index == 5) {
-                      if (strcmp(field, path) == 0) {
-                          fclose(mountinfo);
-                          return 1;
-                      }
-                      break;
-                  }
-              }
-          }
+            mountinfo = fopen("/proc/self/mountinfo", "r");
+            if (mountinfo == NULL) {
+                log_errno("cannot read /proc/self/mountinfo");
+                return 0;
+            }
 
-          fclose(mountinfo);
-          return 0;
-      }
+            while (fgets(line, sizeof(line), mountinfo) != NULL) {
+                char *saveptr = NULL;
+                char *field;
+                int field_index = 0;
 
-      static int try_store_device(const char *device, const char *system_path, int noisy) {
-          if (access(device, R_OK) != 0) {
-              return 0;
-          }
+                for (field = strtok_r(line, " ", &saveptr);
+                     field != NULL;
+                     field = strtok_r(NULL, " ", &saveptr)) {
+                    field_index++;
+                    if (field_index == 5) {
+                        if (strcmp(field, path) == 0) {
+                            fclose(mountinfo);
+                            return 1;
+                        }
+                        break;
+                    }
+                }
+            }
 
-          if (mount(device, "/nix/store", "ext4", MS_RDONLY | MS_NODEV, "ro") != 0) {
-              if (noisy) {
-                  log_errno("cannot mount candidate store device %s", device);
-              }
-              return 0;
-          }
+            fclose(mountinfo);
+            return 0;
+        }
 
-          if (system_init_present(system_path)) {
-              log_msg("mounted read-only Nix store from %s", device);
-              return 1;
-          }
+        static int try_store_device(const char *device, const char *system_path, int noisy) {
+            if (access(device, R_OK) != 0) {
+                return 0;
+            }
 
-          if (noisy) {
-              log_msg("mounted %s, but %s/init is not present", device, system_path);
-          }
-          if (umount2("/nix/store", 0) != 0 && noisy) {
-              log_errno("cannot unmount rejected store device %s", device);
-          }
-          return 0;
-      }
+            if (mount(device, "/nix/store", "ext4", MS_RDONLY | MS_NODEV, "ro") != 0) {
+                if (noisy) {
+                    log_errno("cannot mount candidate store device %s", device);
+                }
+                return 0;
+            }
 
-      static int mount_store(const char *system_path) {
-          char explicit_device[PATH_MAX] = "";
-          const char *fallback_devices[] = {
-              "/dev/xvde", "/dev/xvdf", "/dev/xvdg", "/dev/xvdh",
-              "/dev/xvdi", "/dev/xvdj", "/dev/xvdk", "/dev/xvdl",
-              "/dev/vde", "/dev/vdf", "/dev/vdg", "/dev/vdh",
-              "/dev/sde", "/dev/sdf", "/dev/sdg", "/dev/sdh",
-              NULL
-          };
-          int attempt;
+            if (system_init_present(system_path)) {
+                log_msg("mounted read-only Nix store from %s", device);
+                return 1;
+            }
 
-          if (mkdir_p("/nix/store", 0555) != 0) {
-              log_errno("cannot create /nix/store mountpoint");
-              return 0;
-          }
+            if (noisy) {
+                log_msg("mounted %s, but %s/init is not present", device, system_path);
+            }
+            if (umount2("/nix/store", 0) != 0 && noisy) {
+                log_errno("cannot unmount rejected store device %s", device);
+            }
+            return 0;
+        }
 
-          if (path_is_mountpoint("/nix/store") && system_init_present(system_path)) {
-              log_msg("using pre-mounted /nix/store containing %s/init", system_path);
-              return 1;
-          }
+        static int mount_store(const char *system_path) {
+            char explicit_device[PATH_MAX] = "";
+            const char *fallback_devices[] = {
+                "/dev/xvde", "/dev/xvdf", "/dev/xvdg", "/dev/xvdh",
+                "/dev/xvdi", "/dev/xvdj", "/dev/xvdk", "/dev/xvdl",
+                "/dev/vde", "/dev/vdf", "/dev/vdg", "/dev/vdh",
+                "/dev/sde", "/dev/sdf", "/dev/sdg", "/dev/sdh",
+                NULL
+            };
+            int attempt;
 
-          read_cmdline_option("nixome.storedev", explicit_device, sizeof(explicit_device));
+            if (mkdir_p("/nix/store", 0555) != 0) {
+                log_errno("cannot create /nix/store mountpoint");
+                return 0;
+            }
 
-          for (attempt = 0; attempt < 30; attempt++) {
-              int i;
+            if (path_is_mountpoint("/nix/store") && system_init_present(system_path)) {
+                log_msg("using pre-mounted /nix/store containing %s/init", system_path);
+                return 1;
+            }
 
-              if (explicit_device[0] != '\0' &&
-                  try_store_device(explicit_device, system_path, attempt == 29)) {
-                  return 1;
-              }
+            read_cmdline_option("nixome.storedev", explicit_device, sizeof(explicit_device));
 
-              for (i = 0; fallback_devices[i] != NULL; i++) {
-                  if (explicit_device[0] != '\0' &&
-                      strcmp(explicit_device, fallback_devices[i]) == 0) {
-                      continue;
-                  }
-                  if (try_store_device(fallback_devices[i], system_path, 0)) {
-                      return 1;
-                  }
-              }
+            for (attempt = 0; attempt < 30; attempt++) {
+                int i;
 
-              sleep(1);
-          }
+                if (explicit_device[0] != '\0' &&
+                    try_store_device(explicit_device, system_path, attempt == 29)) {
+                    return 1;
+                }
 
-          log_msg("could not mount a Nix store containing %s/init", system_path);
-          return 0;
-      }
+                for (i = 0; fallback_devices[i] != NULL; i++) {
+                    if (explicit_device[0] != '\0' &&
+                        strcmp(explicit_device, fallback_devices[i]) == 0) {
+                        continue;
+                    }
+                    if (try_store_device(fallback_devices[i], system_path, 0)) {
+                        return 1;
+                    }
+                }
 
-      static int run_activate(const char *system_path) {
-          char activate_path[PATH_MAX];
-          char *const activate_argv[] = { activate_path, NULL };
-          pid_t pid;
-          int status;
+                sleep(1);
+            }
 
-          if (snprintf(activate_path, sizeof(activate_path), "%s/activate", system_path) >= (int)sizeof(activate_path)) {
-              errno = ENAMETOOLONG;
-              log_errno("activation path is too long");
-              return -1;
-          }
+            log_msg("could not mount a Nix store containing %s/init", system_path);
+            return 0;
+        }
 
-          pid = fork();
-          if (pid < 0) {
-              log_errno("cannot fork activation");
-              return -1;
-          }
-          if (pid == 0) {
-              execv(activate_path, activate_argv);
-              log_errno("cannot exec %s", activate_path);
-              _exit(127);
-          }
+        static int run_activate(const char *system_path) {
+            char activate_path[PATH_MAX];
+            char *const activate_argv[] = { activate_path, NULL };
+            pid_t pid;
+            int status;
 
-          if (waitpid(pid, &status, 0) < 0) {
-              log_errno("cannot wait for activation");
-              return -1;
-          }
-          if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-              log_msg("activation failed with status %d", status);
-              return -1;
-          }
+            if (snprintf(activate_path, sizeof(activate_path), "%s/activate", system_path) >= (int)sizeof(activate_path)) {
+                errno = ENAMETOOLONG;
+                log_errno("activation path is too long");
+                return -1;
+            }
 
-          return 0;
-      }
+            pid = fork();
+            if (pid < 0) {
+                log_errno("cannot fork activation");
+                return -1;
+            }
+            if (pid == 0) {
+                execv(activate_path, activate_argv);
+                log_errno("cannot exec %s", activate_path);
+                _exit(127);
+            }
 
-      static void exec_real_init(const char *system_path, int argc, char **argv) {
-          char init_path[PATH_MAX];
-          char **init_argv;
-          int i;
+            if (waitpid(pid, &status, 0) < 0) {
+                log_errno("cannot wait for activation");
+                return -1;
+            }
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                log_msg("activation failed with status %d", status);
+                return -1;
+            }
 
-          if (snprintf(init_path, sizeof(init_path), "%s/init", system_path) >= (int)sizeof(init_path)) {
-              errno = ENAMETOOLONG;
-              log_errno("init path is too long");
-              exit(1);
-          }
+            return 0;
+        }
 
-          init_argv = calloc((size_t)argc + 1, sizeof(char *));
-          if (init_argv == NULL) {
-              log_errno("cannot allocate init argv");
-              exit(1);
-          }
+        static void exec_real_init(const char *system_path, int argc, char **argv) {
+            char init_path[PATH_MAX];
+            char **init_argv;
+            int i;
 
-          init_argv[0] = init_path;
-          for (i = 1; i < argc; i++) {
-              init_argv[i] = argv[i];
-          }
-          init_argv[argc] = NULL;
+            if (snprintf(init_path, sizeof(init_path), "%s/init", system_path) >= (int)sizeof(init_path)) {
+                errno = ENAMETOOLONG;
+                log_errno("init path is too long");
+                exit(1);
+            }
 
-          execv(init_path, init_argv);
-          log_errno("cannot exec %s", init_path);
-          exit(127);
-      }
+            init_argv = calloc((size_t)argc + 1, sizeof(char *));
+            if (init_argv == NULL) {
+                log_errno("cannot allocate init argv");
+                exit(1);
+            }
 
-      int main(int argc, char **argv) {
-          char system_path[PATH_MAX] = "";
+            init_argv[0] = init_path;
+            for (i = 1; i < argc; i++) {
+                init_argv[i] = argv[i];
+            }
+            init_argv[argc] = NULL;
 
-          mount_basic("proc", "/proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL);
-          mount_basic("sysfs", "/sys", "sysfs", MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL);
-          mount_basic("devtmpfs", "/dev", "devtmpfs", MS_NOSUID, "mode=0755");
-          mount_basic("tmpfs", "/run", "tmpfs", MS_NOSUID | MS_NODEV, "mode=0755");
+            execv(init_path, init_argv);
+            log_errno("cannot exec %s", init_path);
+            exit(127);
+        }
 
-          mkdir_p("/etc", 0755);
-          mkdir_p("/nix/var/nix/profiles", 0755);
-          mkdir_p("/run/qubes", 0755);
-          mkdir_p("/var/log/qubes", 0755);
-          if (symlink("/run", "/var/run") != 0 && errno != EEXIST) {
-              log_errno("cannot initialize /var/run");
-              return 1;
-          }
-          mkdir_p("/rw", 0755);
-          mkdir_p("/home", 0755);
-          mkdir_p("/usr/local", 0755);
+        int main(int argc, char **argv) {
+            char system_path[PATH_MAX] = "";
 
-          if (!read_cmdline_option("nixome.system", system_path, sizeof(system_path))) {
-              log_msg("missing required kernel option nixome.system=/nix/store/...");
-              return 1;
-          }
-          if (strncmp(system_path, "/nix/store/", 11) != 0) {
-              log_msg("nixome.system must point into /nix/store: %s", system_path);
-              return 1;
-          }
+            mount_basic("proc", "/proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL);
+            mount_basic("sysfs", "/sys", "sysfs", MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL);
+            mount_basic("devtmpfs", "/dev", "devtmpfs", MS_NOSUID, "mode=0755");
+            mount_basic("tmpfs", "/run", "tmpfs", MS_NOSUID | MS_NODEV, "mode=0755");
 
-          if (!mount_store(system_path)) {
-              return 1;
-          }
-          if (run_activate(system_path) != 0) {
-              return 1;
-          }
+            mkdir_p("/etc", 0755);
+            mkdir_p("/nix/var/nix/profiles", 0755);
+            mkdir_p("/run/qubes", 0755);
+            mkdir_p("/var/log/qubes", 0755);
+            if (symlink("/run", "/var/run") != 0 && errno != EEXIST) {
+                log_errno("cannot initialize /var/run");
+                return 1;
+            }
+            mkdir_p("/rw", 0755);
+            mkdir_p("/home", 0755);
+            mkdir_p("/usr/local", 0755);
 
-          exec_real_init(system_path, argc, argv);
-      }
-      EOF
+            if (!read_cmdline_option("nixome.system", system_path, sizeof(system_path))) {
+                log_msg("missing required kernel option nixome.system=/nix/store/...");
+                return 1;
+            }
+            if (strncmp(system_path, "/nix/store/", 11) != 0) {
+                log_msg("nixome.system must point into /nix/store: %s", system_path);
+                return 1;
+            }
 
-      "$CC" -Os -static -Wall -Wextra -o "$out/sbin/init" early-init.c
-      chmod 0555 "$out/sbin/init"
-    '';
+            if (!mount_store(system_path)) {
+                return 1;
+            }
+            if (run_activate(system_path) != 0) {
+                return 1;
+            }
+
+            exec_real_init(system_path, argc, argv);
+        }
+        EOF
+
+        "$CC" -Os -static -Wall -Wextra -o "$out/sbin/init" early-init.c
+        chmod 0555 "$out/sbin/init"
+      '';
 
   mkNixClosureRootImage =
     {
@@ -536,6 +537,53 @@ let
         EOF
       '';
 
+  mkNixStoreClosureManifest =
+    {
+      name,
+      rootPaths,
+      device ? "/dev/xvde",
+      mountpoint ? "/nix/store",
+    }:
+    let
+      closure = pkgs.closureInfo {
+        inherit rootPaths;
+      };
+      rootPathsJson = builtins.toJSON (builtins.map toString rootPaths);
+    in
+    pkgs.runCommand "${name}-store-closure"
+      {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.jq
+        ];
+        preferLocalBuild = true;
+        allowSubstitutes = false;
+      }
+      ''
+        set -eu
+
+        mkdir -p "$out"
+        cp ${closure}/store-paths "$out/store-paths"
+
+        object_count="$(wc -l < "$out/store-paths" | tr -d ' ')"
+        jq -n \
+          --arg name "${name}" \
+          --arg device "${device}" \
+          --arg mountpoint "${mountpoint}" \
+          --argjson root_paths '${rootPathsJson}' \
+          --argjson object_count "$object_count" \
+          '{
+            schema: "nixome.store-closure-manifest.v1",
+            name: $name,
+            root_paths: $root_paths,
+            store_paths_file: "store-paths",
+            object_count: $object_count,
+            mountpoint: $mountpoint,
+            device: $device,
+            read_only: true
+          }' > "$out/manifest.json"
+      '';
+
   mkNixNativeDomain =
     {
       name,
@@ -548,7 +596,10 @@ let
       additionalStoreSpaceMiB ? 256,
       configurationName ? "nixome-domain-${builtins.replaceStrings [ "." ] [ "-" ] name}",
       rootImageName ? "${configurationName}-root-image",
-      storeImageName ? "${configurationName}-store-image",
+      storeMode ? "shared-closure",
+      storeArtifactName ? "${configurationName}-${
+        if storeMode == "closure-image" then "store-image" else "store-closure"
+      }",
       kernelName ? "6.12.64-1.fc41",
       label ? "green",
       netvm ? null,
@@ -566,7 +617,8 @@ let
             nixomeConfigSeedInputs
             nixomePrebuiltTemplateSources
             ;
-        } // extraSpecialArgs;
+        }
+        // extraSpecialArgs;
         modules = [
           "${nixpkgs}/nixos/modules/profiles/minimal.nix"
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
@@ -593,16 +645,34 @@ let
           (builtins.fromJSON (lib.removeSuffix "G" additionalRootSpace)) * 1024
         else
           throw "mkNixNativeDomain.additionalRootSpace must be an integer MiB value or a string ending in M/G";
+      _storeModeCheck =
+        if
+          builtins.elem storeMode [
+            "closure-image"
+            "shared-closure"
+          ]
+        then
+          null
+        else
+          throw "mkNixNativeDomain.storeMode must be closure-image or shared-closure";
       rootImage = mkNixClosureRootImage {
         imageName = rootImageName;
         rootImageSizeMiB = rootImageSizeMiBEffective;
       };
-      storeImage = mkNixStoreClosureImage {
-        name = storeImageName;
-        rootPaths = [ configuration.config.system.build.toplevel ];
-        additionalSpaceMiB = additionalStoreSpaceMiB;
-        device = storeDevice;
-      };
+      storeArtifact =
+        if _storeModeCheck == null && storeMode == "closure-image" then
+          mkNixStoreClosureImage {
+            name = storeArtifactName;
+            rootPaths = [ configuration.config.system.build.toplevel ];
+            additionalSpaceMiB = additionalStoreSpaceMiB;
+            device = storeDevice;
+          }
+        else
+          mkNixStoreClosureManifest {
+            name = storeArtifactName;
+            rootPaths = [ configuration.config.system.build.toplevel ];
+            device = storeDevice;
+          };
       defaultPrefs = {
         autostart = false;
         default_user = "user";
@@ -640,10 +710,10 @@ let
             };
           };
           store = {
-            mode = "closure-image";
+            mode = storeMode;
             sourceRef = {
-              build = "packages.${system}.${storeImageName}";
-              subpath = "store.img";
+              build = "packages.${system}.${storeArtifactName}";
+              subpath = if storeMode == "closure-image" then "store.img" else "";
             };
             mountpoint = "/nix/store";
             device = storeDevice;
@@ -658,9 +728,11 @@ let
         domain
         rootImage
         rootImageName
-        storeImage
-        storeImageName
+        storeArtifact
+        storeArtifactName
         ;
+      storeImage = storeArtifact;
+      storeImageName = storeArtifactName;
       kernelopts = mkNixClosureKernelOpts configuration { inherit storeDevice; };
       configurationName = configurationName;
     };
@@ -671,6 +743,7 @@ in
     mkNixClosureKernelOpts
     mkNixClosureRootImage
     mkNixStoreClosureImage
+    mkNixStoreClosureManifest
     mkQubeKernelOpts
     pkgs
     qubesOverlays

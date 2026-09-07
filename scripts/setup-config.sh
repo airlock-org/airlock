@@ -784,19 +784,36 @@ resolve_root_image_file() {
   fi
 }
 
-resolve_store_image_file() {
+resolve_store_artifact() {
   source="$1"
+  mode="$2"
   source_physical="$(nixome_physical_store_path "$source")"
 
-  if [ -d "$source_physical" ]; then
-    [ -f "$source_physical/store.img" ] ||
-      fail "Nix-native store image directory is missing store.img: $source/store.img"
-    printf '%s/store.img\n' "$source_physical"
-  else
-    [ -f "$source_physical" ] ||
-      fail "Nix-native store image source is not a file: $source"
-    printf '%s\n' "$source_physical"
-  fi
+  case "$mode" in
+    closure-image)
+      if [ -d "$source_physical" ]; then
+        [ -f "$source_physical/store.img" ] ||
+          fail "Nix-native store image directory is missing store.img: $source/store.img"
+        printf '%s/store.img\n' "$source_physical"
+      else
+        [ -f "$source_physical" ] ||
+          fail "Nix-native store image source is not a file: $source"
+        printf '%s\n' "$source_physical"
+      fi
+      ;;
+    shared-closure)
+      [ -d "$source_physical" ] ||
+        fail "Nix-native shared closure source is not a directory: $source"
+      [ -f "$source_physical/store-paths" ] ||
+        fail "Nix-native shared closure source is missing store-paths: $source/store-paths"
+      [ -f "$source_physical/manifest.json" ] ||
+        fail "Nix-native shared closure source is missing manifest.json: $source/manifest.json"
+      printf '%s\n' "$source_physical"
+      ;;
+    *)
+      fail "unsupported Nix-native domain store mode: $mode"
+      ;;
+  esac
 }
 
 nix_domain_root_current() {
@@ -811,10 +828,13 @@ nix_domain_root_current() {
 nix_domain_store_current() {
   domain="$1"
   store_source="$2"
+  store_mode="$3"
 
   [ "$APPLY" = "1" ] || return 1
   current="$(qvm-features "$domain" nixome-store-source 2>/dev/null || true)"
-  [ "$current" = "$store_source" ]
+  current_mode="$(qvm-features "$domain" nixome-store-mode 2>/dev/null || true)"
+  [ -n "$current_mode" ] || current_mode="closure-image"
+  [ "$current" = "$store_source" ] && [ "$current_mode" = "$store_mode" ]
 }
 
 nix_domain_system_current() {
@@ -832,6 +852,10 @@ is_nix_closure_boot_feature() {
     nixome-root-source|\
     nixome-store-source|\
     nixome-store-image|\
+    nixome-store-mode|\
+    nixome-store-generation|\
+    nixome-store-closure-hash|\
+    nixome-store-view-image|\
     nixome-store-mountpoint|\
     nixome-store-device|\
     nixome-store-read-only)
@@ -924,14 +948,23 @@ ensure_nix_closure_kernelopts() {
 install_nix_domain_store() {
   domain="$1"
   store_source="$2"
-  store_image="$3"
+  store_artifact="$3"
+  store_mode="$4"
+  system_source="$5"
+  root_source="$6"
+  kernel_name="$7"
+  store_device="$8"
+  store_mountpoint="$9"
   helper_output=""
   nix_domain_store_deferred=0
+  nix_domain_store_generation=""
+  nix_domain_store_closure_hash=""
+  nix_domain_store_view_image=""
 
-  if [ "$APPLY" = "1" ] && nix_domain_store_current "$domain" "$store_source"; then
+  if [ "$APPLY" = "1" ] && nix_domain_store_current "$domain" "$store_source" "$store_mode"; then
     printf 'Nix-native store source current: %s source=%s\n' "$domain" "$store_source"
   elif domain_is_running "$domain"; then
-    printf 'Nix-native store image update deferred for running domain: %s source=%s\n' \
+    printf 'Nix-native store update deferred for running domain: %s source=%s\n' \
       "$domain" "$store_source"
     nix_domain_store_deferred=1
     record_running_domain_storage_change "$domain" domain-store source "$store_source"
@@ -939,18 +972,30 @@ install_nix_domain_store() {
   fi
 
   printf '+'
-  printf ' %q' "$NIX_DOMAIN_STORAGE_HELPER" ensure-store "$domain" "$store_image" "$store_source"
+  printf ' %q' "$NIX_DOMAIN_STORAGE_HELPER" ensure-store "$domain" "$store_artifact" "$store_source" \
+    --mode "$store_mode" \
+    --system "$system_source" \
+    --root "$root_source" \
+    --kernel "$kernel_name" \
+    --device "$store_device" \
+    --mountpoint "$store_mountpoint"
   printf '\n'
 
   if [ "$APPLY" = "1" ]; then
     set +e
-    helper_output="$("$NIX_DOMAIN_STORAGE_HELPER" ensure-store "$domain" "$store_image" "$store_source")"
+    helper_output="$("$NIX_DOMAIN_STORAGE_HELPER" ensure-store "$domain" "$store_artifact" "$store_source" \
+      --mode "$store_mode" \
+      --system "$system_source" \
+      --root "$root_source" \
+      --kernel "$kernel_name" \
+      --device "$store_device" \
+      --mountpoint "$store_mountpoint")"
     rc="$?"
     set -e
     printf '%s\n' "$helper_output"
     if [ "$rc" != "0" ]; then
-      printf 'command failed with exit %s: %q ensure-store %q %q %q\n' \
-        "$rc" "$NIX_DOMAIN_STORAGE_HELPER" "$domain" "$store_image" "$store_source"
+      printf 'command failed with exit %s: %q ensure-store %q %q %q --mode %q\n' \
+        "$rc" "$NIX_DOMAIN_STORAGE_HELPER" "$domain" "$store_artifact" "$store_source" "$store_mode"
       return "$rc"
     fi
 
@@ -964,6 +1009,15 @@ install_nix_domain_store() {
       record_live_action domain-store import "$domain" source "$store_source"
     fi
 
+    if printf '%s\n' "$helper_output" | jq -e '.view_created == true' >/dev/null; then
+      store_images_changed=$((store_images_changed + 1))
+      record_live_action domain-store-view materialize "$domain" source "$store_source"
+    fi
+
+    nix_domain_store_generation="$(printf '%s\n' "$helper_output" | jq -r '.generation // ""')"
+    nix_domain_store_closure_hash="$(printf '%s\n' "$helper_output" | jq -r '.closure_hash // ""')"
+    nix_domain_store_view_image="$(printf '%s\n' "$helper_output" | jq -r '.view_image // .image // ""')"
+
     if printf '%s\n' "$helper_output" | jq -e '.qubesd_restarted == true' >/dev/null; then
       qubesd_restarts=$((qubesd_restarts + 1))
       record_live_action systemd restart "" service qubesd.service
@@ -974,7 +1028,11 @@ install_nix_domain_store() {
     store_volumes_changed=$((store_volumes_changed + 1))
     store_images_changed=$((store_images_changed + 1))
     record_live_action domain-store-volume create "$domain" volume store
-    record_live_action domain-store import "$domain" source "$store_source"
+    if [ "$store_mode" = "closure-image" ]; then
+      record_live_action domain-store import "$domain" source "$store_source"
+    else
+      record_live_action domain-store-view materialize "$domain" source "$store_source"
+    fi
   fi
 }
 
@@ -1038,11 +1096,11 @@ setup_nix_closure_domain() {
   kernel_source="$(jq_get '.domains[$name].backend.kernel.source // ""' --arg name "$domain")"
   root_source="$(jq_get '.domains[$name].backend.root.source // ""' --arg name "$domain")"
   store_source="$(jq_get '.domains[$name].backend.store.source // ""' --arg name "$domain")"
-  store_mode="$(jq_get '.domains[$name].backend.store.mode // "closure-image"' --arg name "$domain")"
+  store_mode="$(jq_get '.domains[$name].backend.store.mode // "shared-closure"' --arg name "$domain")"
   store_mountpoint="$(jq_get '.domains[$name].backend.store.mountpoint // "/nix/store"' --arg name "$domain")"
   store_device="$(jq_get '.domains[$name].backend.store.device // "/dev/xvde"' --arg name "$domain")"
   root_image=""
-  store_image=""
+  store_artifact=""
   nix_domain_root_deferred=0
   nix_domain_store_deferred=0
   nix_domain_storage_deferred=0
@@ -1054,8 +1112,8 @@ setup_nix_closure_domain() {
   [ -n "$root_source" ] ||
     fail "Nix-native domain root image source is missing: $domain"
   [ -n "$store_source" ] ||
-    fail "Nix-native domain store image source is missing: $domain"
-  [ "$store_mode" = "closure-image" ] ||
+    fail "Nix-native domain store source is missing: $domain"
+  [ "$store_mode" = "closure-image" ] || [ "$store_mode" = "shared-closure" ] ||
     fail "unsupported Nix-native domain store mode for $domain: $store_mode"
   [ "$store_mountpoint" = "/nix/store" ] ||
     fail "unsupported Nix-native domain store mountpoint for $domain: $store_mountpoint"
@@ -1063,7 +1121,7 @@ setup_nix_closure_domain() {
     fail "unsupported Nix-native domain store device for $domain: $store_device"
 
   root_image="$(resolve_root_image_file "$root_source")"
-  store_image="$(resolve_store_image_file "$store_source")"
+  store_artifact="$(resolve_store_artifact "$store_source" "$store_mode")"
   install_domain_kernel_source "$domain" "$kernel_name" "$kernel_source"
 
   if [ -z "$kernel_name" ] || [ "$kernel_name" = "null" ]; then
@@ -1082,7 +1140,16 @@ setup_nix_closure_domain() {
   fi
 
   install_nix_domain_root "$domain" "$root_source" "$root_image"
-  install_nix_domain_store "$domain" "$store_source" "$store_image"
+  install_nix_domain_store \
+    "$domain" \
+    "$store_source" \
+    "$store_artifact" \
+    "$store_mode" \
+    "$system_source" \
+    "$root_source" \
+    "$kernel_name" \
+    "$store_device" \
+    "$store_mountpoint"
   if [ "$nix_domain_root_deferred" = "1" ] || [ "$nix_domain_store_deferred" = "1" ]; then
     nix_domain_storage_deferred=1
   fi
@@ -1109,7 +1176,17 @@ setup_nix_closure_domain() {
       set_feature "$domain" nixome-system-source "$system_source"
       set_feature "$domain" nixome-root-source "$root_source"
       set_feature "$domain" nixome-store-source "$store_source"
-      set_feature "$domain" nixome-store-image "$store_image"
+      set_feature "$domain" nixome-store-image "$store_artifact"
+      set_feature "$domain" nixome-store-mode "$store_mode"
+      if [ -n "$nix_domain_store_generation" ]; then
+        set_feature "$domain" nixome-store-generation "$nix_domain_store_generation"
+      fi
+      if [ -n "$nix_domain_store_closure_hash" ]; then
+        set_feature "$domain" nixome-store-closure-hash "$nix_domain_store_closure_hash"
+      fi
+      if [ -n "$nix_domain_store_view_image" ]; then
+        set_feature "$domain" nixome-store-view-image "$nix_domain_store_view_image"
+      fi
       set_feature "$domain" nixome-store-mountpoint "$store_mountpoint"
       set_feature "$domain" nixome-store-device "$store_device"
       set_feature "$domain" nixome-store-read-only "True"

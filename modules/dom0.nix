@@ -8,6 +8,7 @@ let
   cfg = config.nixome.dom0;
   qubeBootstrap = pkgs.callPackage ../pkgs/nixome-qube-bootstrap { };
   qubeGuiSmoke = pkgs.callPackage ../pkgs/nixome-qube-gui-smoke { };
+  qubesStorage = pkgs.python3.pkgs.callPackage ../pkgs/nixome-qubes-storage { };
   observeDom0 = pkgs.callPackage ../pkgs/nixome-observe { };
   qubesSmoke = pkgs.callPackage ../pkgs/nixome-qubes-smoke { };
   xorgQubesShmoverride = pkgs.writeShellScript "X-qubes-shmoverride" ''
@@ -120,8 +121,9 @@ in
     # Qubes GUI needs shmoverride preloaded in the Xorg server. The NixOS
     # display-manager module sets xserverBin at normal priority, so this must
     # be stronger than a default while GUI support is enabled.
-    services.xserver.displayManager.xserverBin =
-      lib.mkIf cfg.gui.enable (lib.mkOverride 50 xorgQubesShmoverride);
+    services.xserver.displayManager.xserverBin = lib.mkIf cfg.gui.enable (
+      lib.mkOverride 50 xorgQubesShmoverride
+    );
 
     virtualisation.qubes = {
       dom0.enable = true;
@@ -166,16 +168,24 @@ in
     systemd.services.qubesd = {
       after = [ "nixome-qubes-store-init.service" ];
       requires = [ "nixome-qubes-store-init.service" ];
+      environment.PYTHONPATH = lib.mkBefore "${qubesStorage}/${pkgs.python3.sitePackages}";
     };
 
-    environment.systemPackages =
-      lib.optionals cfg.observability.enable [
-        observeDom0
-      ]
-      ++ lib.optionals cfg.testingTools.enable [
-        qubeBootstrap
-        qubeGuiSmoke
-        qubesSmoke
-      ];
+    systemd.tmpfiles.rules = [
+      "d /var/lib/nixome 0700 root root - -"
+      "d /var/lib/nixome/closure-store 0700 root root - -"
+    ];
+
+    environment.systemPackages = [
+      qubesStorage
+    ]
+    ++ lib.optionals cfg.observability.enable [
+      observeDom0
+    ]
+    ++ lib.optionals cfg.testingTools.enable [
+      qubeBootstrap
+      qubeGuiSmoke
+      qubesSmoke
+    ];
   };
 }

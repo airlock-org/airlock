@@ -134,7 +134,10 @@ run_logged config-status-package nix build "$ROOT#packages.x86_64-linux.nixome-c
 run_logged config-vms-smoke-package nix build "$ROOT#packages.x86_64-linux.nixome-config-vms-smoke" --print-build-logs --show-trace
 run_logged observe-package nix build "$ROOT#packages.x86_64-linux.nixome-observe-dom0" --print-build-logs --show-trace
 run_logged setup-config-package nix build "$ROOT#packages.x86_64-linux.nixome-setup-config" --print-build-logs --show-trace
+run_logged qubes-storage-package nix build "$ROOT#packages.x86_64-linux.nixome-qubes-storage" --print-build-logs --show-trace
+run_logged closure-store-engine "$ROOT/tests/closure-store-engine.sh"
 run_logged nix-domain-storage-helper "$ROOT/tests/nix-domain-storage-helper.sh"
+run_logged nix-domain-storage-helper-shared "$ROOT/tests/nix-domain-storage-helper-shared.sh"
 run_logged nix-closure-domain-volume-list "$ROOT/tests/nix-closure-domain-volume-list.sh"
 run_logged nix-closure-root-image "$ROOT/tests/nix-closure-root-image.sh"
 run_logged nix-closure-store-image "$ROOT/tests/nix-closure-store-image.sh"
