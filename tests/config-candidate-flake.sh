@@ -34,6 +34,7 @@ CONFIG_VALIDATOR_GUEST_HOSTNAME="$RESULT_DIR/config-validator-guest-hostname.txt
 CONFIG_VALIDATOR_GUEST_SERVICE="$RESULT_DIR/config-validator-guest-service.txt"
 INVALID_TEMPLATE_LOG="$RESULT_DIR/invalid-template.log"
 INVALID_CONFIG_VMS_LOG="$RESULT_DIR/invalid-config-vms.log"
+INVALID_DOM0_HOST_LOG="$RESULT_DIR/invalid-dom0-host.log"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -726,5 +727,26 @@ if nix \
 fi
 grep -Fq 'nixome.configVms.guests: unknown role(s): config-stagin' \
   "$INVALID_CONFIG_VMS_LOG"
+
+cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
+{ ... }:
+{
+  dom0.host.pakages = [ ];
+}
+EOF
+
+if nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json "$WORK_DIR#nixosConfigurations.nixome-dom0.config.environment.systemPackages" > /dev/null 2> "$INVALID_DOM0_HOST_LOG"; then
+  printf 'invalid dom0.host definition unexpectedly evaluated\n' >&2
+  exit 1
+fi
+grep -Fq 'nixome.dom0.host: unknown option(s): pakages' \
+  "$INVALID_DOM0_HOST_LOG"
 
 printf 'config candidate flake eval ok\n'

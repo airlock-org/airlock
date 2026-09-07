@@ -99,8 +99,40 @@
           guests = checkedGuests;
           sharedGuest = checkConfigGuest "sharedGuest" (checked.sharedGuest or { });
         };
-      localDom0 = localConfig.dom0 or { };
-      localDom0Host = localDom0.host or { };
+      expectDom0Attrs =
+        path: value:
+        let
+          prefix = "nixome.dom0${if path == "" then "" else ".${path}"}";
+        in
+        if builtins.typeOf value == "set" then
+          value
+        else
+          throw "${prefix}: expected an attribute set, got ${builtins.typeOf value}";
+      checkDom0Keys =
+        path: allowed: attrs:
+        let
+          unknown = builtins.filter (name: !(builtins.elem name allowed)) (builtins.attrNames attrs);
+          prefix = "nixome.dom0${if path == "" then "" else ".${path}"}";
+        in
+        if unknown == [ ] then
+          attrs
+        else
+          throw "${prefix}: unknown option(s): ${nixpkgs.lib.concatStringsSep ", " unknown}";
+      checkDom0Host =
+        value:
+        checkDom0Keys "host" [
+          "configuration"
+          "etc"
+          "modules"
+          "overlays"
+          "packages"
+          "systemd"
+        ] (expectDom0Attrs "host" value);
+      localDom0 = checkDom0Keys "" [
+        "extraModules"
+        "host"
+      ] (expectDom0Attrs "" (localConfig.dom0 or { }));
+      localDom0Host = checkDom0Host (localDom0.host or { });
       localDom0HostModule =
         { ... }:
         {
