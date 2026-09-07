@@ -5,8 +5,28 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/nixome-env.sh"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 STATUS=0
+RESULTS_JSONL="$LOG_DIR/test-results.jsonl"
+SUMMARY_JSON="$LOG_DIR/test-summary.json"
+TOTAL=0
+PASSED=0
+FAILED=0
+SKIPPED=0
 
 mkdir -p "$LOG_DIR"
+: > "$RESULTS_JSONL"
+
+json_escape() {
+  printf '%s' "$1" | sed \
+    -e 's/\\/\\\\/g' \
+    -e 's/"/\\"/g' \
+    -e ':a;N;$!ba;s/\n/\\n/g'
+}
+
+json_string() {
+  printf '"'
+  json_escape "$1"
+  printf '"'
+}
 
 remember_failure() {
   rc="$1"
@@ -16,22 +36,93 @@ remember_failure() {
   fi
 }
 
+record_result() {
+  name="$1"
+  status="$2"
+  rc="$3"
+  log="$4"
+
+  {
+    printf '{"name":'
+    json_string "$name"
+    printf ',"status":'
+    json_string "$status"
+    printf ',"exit_code":%s,"log":' "$rc"
+    json_string "$log"
+    printf '}\n'
+  } >> "$RESULTS_JSONL"
+}
+
 run_logged() {
   name="$1"
   shift
 
   log="$LOG_DIR/$name.log"
+  TOTAL=$((TOTAL + 1))
   printf '==> %s\n' "$name"
 
   if "$@" > "$log" 2>&1; then
     printf 'ok: %s\n' "$name"
+    PASSED=$((PASSED + 1))
+    record_result "$name" passed 0 "$log"
   else
     rc="$?"
     remember_failure "$rc"
+    FAILED=$((FAILED + 1))
     printf 'failed: %s (exit %s)\n' "$name" "$rc" >&2
     printf 'log: %s\n' "$log" >&2
     tail -n 80 "$log" >&2
+    record_result "$name" failed "$rc" "$log"
   fi
+}
+
+record_skipped() {
+  name="$1"
+  reason="$2"
+  log="$3"
+
+  TOTAL=$((TOTAL + 1))
+  SKIPPED=$((SKIPPED + 1))
+  {
+    printf '{"name":'
+    json_string "$name"
+    printf ',"status":"skipped","exit_code":0,"reason":'
+    json_string "$reason"
+    printf ',"log":'
+    json_string "$log"
+    printf '}\n'
+  } >> "$RESULTS_JSONL"
+}
+
+write_summary() {
+  status="passed"
+  [ "$FAILED" -eq 0 ] || status="failed"
+
+  {
+    printf '{"schema":"nixome.local-test-summary.v1"'
+    printf ',"status":'
+    json_string "$status"
+    printf ',"total":%s' "$TOTAL"
+    printf ',"passed":%s' "$PASSED"
+    printf ',"failed":%s' "$FAILED"
+    printf ',"skipped":%s' "$SKIPPED"
+    printf ',"log_dir":'
+    json_string "$LOG_DIR"
+    printf ',"results_jsonl":'
+    json_string "$RESULTS_JSONL"
+    printf ',"results":['
+    first=1
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      if [ "$first" = "1" ]; then
+        first=0
+      else
+        printf ','
+      fi
+      printf '%s' "$line"
+    done < "$RESULTS_JSONL"
+    printf ']}\n'
+  } > "$SUMMARY_JSON"
 }
 
 run_logged flake-check-no-build nix flake check "$ROOT" --no-build --show-trace
@@ -71,9 +162,13 @@ run_logged setup-config-empty-global-pref "$ROOT/tests/setup-config-empty-global
 if [ "${NIXOME_RUN_QUBES_SMOKE:-0}" = "1" ]; then
   run_logged qubes-smoke "$ROOT/tests/qubes-smoke.sh"
 else
-  printf '{"schema":"nixome.qubes-smoke.v1","status":"skipped","reason":"set NIXOME_RUN_QUBES_SMOKE=1 on a Xen dom0 target"}\n' > "$LOG_DIR/qubes-smoke.json"
+  skip_reason="set NIXOME_RUN_QUBES_SMOKE=1 on a Xen dom0 target"
+  printf '{"schema":"nixome.qubes-smoke.v1","status":"skipped","reason":"%s"}\n' "$skip_reason" > "$LOG_DIR/qubes-smoke.json"
   printf 'skipped: qubes-smoke (set NIXOME_RUN_QUBES_SMOKE=1 on a Xen dom0 target)\n'
+  record_skipped qubes-smoke "$skip_reason" "$LOG_DIR/qubes-smoke.json"
 fi
 
+write_summary
 printf 'logs: %s\n' "$LOG_DIR"
+printf 'summary: %s\n' "$SUMMARY_JSON"
 exit "$STATUS"
