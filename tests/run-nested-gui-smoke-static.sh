@@ -52,6 +52,8 @@ grep -F 'NIXOME_SYNC_DOM0_TOOLS' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/n
 grep -F 'NIXOME_VM_SKIP_BASE_BUILD' "$ROOT/scripts/run-nested-vm.sh" >/dev/null
 grep -F 'using existing Nixome VM base image result link' "$ROOT/scripts/run-nested-vm.sh" >/dev/null
 grep -F 'sync-nested-dom0-tools.sh' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'prepare_warm_sync_boot_unit' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'warm tool sync uses explicit setup-config' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'vm-gui-sync-dom0-tools.json' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null

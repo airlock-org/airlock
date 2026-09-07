@@ -420,6 +420,22 @@ sync_dom0_tools() {
   NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"
 }
 
+prepare_warm_sync_boot_unit() {
+  case "$SYNC_DOM0_TOOLS" in
+    1|true|yes)
+      ;;
+    *)
+      wait_for_setup_config_boot_unit
+      return 0
+      ;;
+  esac
+
+  copy_boot_setup_config_artifacts || true
+  remote 'sudo -n systemctl stop nixome-setup-config.service >/dev/null 2>&1 || true; sudo -n systemctl reset-failed nixome-setup-config.service >/dev/null 2>&1 || true'
+  printf '{"schema":"nixome.setup-config.v1","status":"skipped","reason":"warm tool sync uses explicit setup-config"}\n' > "$SETUP_CONFIG_BOOT_JSON"
+  printf '# warm tool sync uses explicit setup-config\n' > "$SETUP_CONFIG_BOOT_COMMANDS_LOG"
+}
+
 collect_diagnostics() {
   remote 'systemctl --failed --no-legend || true' > "$FAILED_UNITS_LOG" 2>/dev/null || true
   remote 'journalctl -b --no-pager -n 320 -u qubesd -u qubes-core -u libvirtd -u qubes-db-dom0 -u qubes-qrexec-policy-daemon -u nixome-qubes-store-init -u nixome-setup-config || true' > "$JOURNAL_LOG" 2>/dev/null || true
@@ -621,7 +637,7 @@ if ! remote 'systemctl is-active libvirtd qubesd qubes-db-dom0 qubes-qrexec-poli
   exit 1
 fi
 
-wait_for_setup_config_boot_unit
+prepare_warm_sync_boot_unit
 sync_dom0_tools
 
 if [ "$BOOTSTRAP_QUBES" = "1" ]; then
