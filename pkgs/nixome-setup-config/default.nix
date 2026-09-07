@@ -2,11 +2,13 @@
   coreutils,
   diffutils,
   e2fsprogs,
+  erofs-utils,
   gawk,
   gnugrep,
   gnused,
   jq,
   lib,
+  lvm2,
   nix,
   nixome-qubes-storage ? python3.pkgs.callPackage ../nixome-qubes-storage { },
   python3,
@@ -40,10 +42,12 @@ writeShellApplication {
     coreutils
     diffutils
     e2fsprogs
+    erofs-utils
     gawk
     gnugrep
     gnused
     jq
+    lvm2
     nix
     nixome-qubes-storage
     python3

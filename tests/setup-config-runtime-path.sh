@@ -27,7 +27,10 @@ required=(
   grep
   jq
   mkdir
+  mkfs.erofs
   mktemp
+  dmsetup
+  losetup
   qubes-prefs
   qubesd-query
   python3
