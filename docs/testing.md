@@ -273,10 +273,11 @@ AppVM, generate Nixome-owned qrexec policy, and record the deployment in
 The config profile sets `default_kernel = ""` so fresh config-only images can
 create TemplateVMs before any Fedora/Qubes VM kernel bootstrap has run.
 
-The VM runner keeps generated writable qcow2 overlays and physical Nix build
-out-links under the generated VM directory. Nixome build outputs themselves
-live in the generated Nix root. They are safe to regenerate. Old repo-local
-experimental VM work directories match `.nixome-vm-*`. The host-side Qubes
+The VM runner keeps generated writable qcow2 overlays under the generated VM
+directory and named Nix result links under the generated `result-links`
+directory. Nixome build outputs themselves live in the generated Nix root.
+They are safe to regenerate. Old repo-local experimental VM work directories
+match `.nixome-vm-*`. The host-side Qubes
 RPM/template download cache lives under the generated cache directory and
 should normally be kept.
 

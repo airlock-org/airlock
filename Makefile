@@ -36,19 +36,20 @@ else
 endif
 
 build: ensure-generated-dirs
-	$(NIXOME_NIX) build .#nixosConfigurations.test.config.system.build.toplevel --print-build-logs --show-trace
+	$(NIXOME_NIX) build .#nixosConfigurations.test.config.system.build.toplevel --out-link "$(NIXOME_RESULT_LINK_DIR)/test-system" --print-build-logs --show-trace
 
 test: ensure-generated-dirs
 	./tests/run-local.sh
 
 nixos-templates: ensure-generated-dirs gc-auto
-	$(NIXOME_NIX) build .#nixome-nixos-config-system-template .#nixome-nixos-work-template --print-build-logs --show-trace
+	$(NIXOME_NIX) build .#nixome-nixos-config-system-template --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-nixos-config-system-template" --print-build-logs --show-trace
+	$(NIXOME_NIX) build .#nixome-nixos-work-template --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-nixos-work-template" --print-build-logs --show-trace
 
 nixos-templates-dry-run: ensure-generated-dirs
 	$(NIXOME_NIX) build .#nixome-nixos-config-system-template .#nixome-nixos-work-template --dry-run --show-trace
 
 vm-image: ensure-generated-dirs gc-auto
-	$(NIXOME_NIX) build .#nixome-vm-image --print-build-logs --show-trace
+	$(NIXOME_NIX) build .#nixome-vm-image --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-vm-image" --print-build-logs --show-trace
 
 vm-image-dry-run: ensure-generated-dirs
 	$(NIXOME_NIX) build .#nixome-vm-image --dry-run --show-trace
@@ -60,7 +61,7 @@ vm-ssh: ensure-generated-dirs
 	./scripts/ssh-nested-vm.sh
 
 vm-gui-image: ensure-generated-dirs gc-auto
-	$(NIXOME_NIX) build .#nixome-vm-gui-image --print-build-logs --show-trace
+	$(NIXOME_NIX) build .#nixome-vm-gui-image --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-vm-gui-image" --print-build-logs --show-trace
 
 vm-gui-image-dry-run: ensure-generated-dirs
 	$(NIXOME_NIX) build .#nixome-vm-gui-image --dry-run --show-trace
@@ -69,7 +70,7 @@ vm-gui-run: ensure-generated-dirs gc-auto
 	NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-image NIXOME_VM_DISPLAY=gtk ./scripts/run-nested-vm.sh
 
 vm-gui-config-image: ensure-generated-dirs gc-auto
-	$(NIXOME_NIX) build .#nixome-vm-gui-config-image --print-build-logs --show-trace
+	$(NIXOME_NIX) build .#nixome-vm-gui-config-image --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-vm-gui-config-image" --print-build-logs --show-trace
 
 vm-gui-config-image-dry-run: ensure-generated-dirs
 	$(NIXOME_NIX) build .#nixome-vm-gui-config-image --dry-run --show-trace
