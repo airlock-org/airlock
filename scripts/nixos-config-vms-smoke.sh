@@ -430,39 +430,42 @@ restart_vm() {
 assert_runtime_nix_store() {
   vm="$1"
   output="$2"
+  script="$LOG_DIR/config-vms-$vm-store-check.sh"
 
-  run_qrexec_or_fail "$vm" "runtime /nix/store check in $vm" "$output" '
-    set -eu
+  cat > "$script" <<'EOF'
+set -eu
 
-    mount_line="$(
-      while IFS=" " read -r source mountpoint _fstype options _rest; do
-        if [ "$mountpoint" = "/nix/store" ]; then
-          printf "%s %s\n" "$source" "$options"
-          exit 0
-        fi
-      done < /proc/mounts
-      exit 1
-    )"
-    printf "%s\n" "$mount_line"
-
-    case "$mount_line" in
-      /dev/xvde\ *ro,*|/dev/xvde\ *,ro,*|/dev/xvde\ *,ro|/dev/xvde\ ro,*|/dev/xvde\ ro)
-        ;;
-      *)
-        printf "unexpected /nix/store mount: %s\n" "$mount_line" >&2
-        exit 1
-        ;;
-    esac
-
-    if touch /nix/store/.nixome-write-test 2>/dev/null; then
-      rm -f /nix/store/.nixome-write-test 2>/dev/null || true
-      printf "/nix/store accepted a write\n" >&2
-      exit 1
+mount_line="$(
+  while IFS=" " read -r source mountpoint _fstype options _rest; do
+    if [ "$mountpoint" = "/nix/store" ]; then
+      printf "%s %s\n" "$source" "$options"
+      exit 0
     fi
+  done < /proc/mounts
+  exit 1
+)"
+printf "%s\n" "$mount_line"
 
-    test -e /run/current-system
-    readlink /run/current-system
-  '
+case "$mount_line" in
+  /dev/xvde\ *ro,*|/dev/xvde\ *,ro,*|/dev/xvde\ *,ro|/dev/xvde\ ro,*|/dev/xvde\ ro)
+    ;;
+  *)
+    printf "unexpected /nix/store mount: %s\n" "$mount_line" >&2
+    exit 1
+    ;;
+esac
+
+if touch /nix/store/.nixome-write-test 2>/dev/null; then
+  rm -f /nix/store/.nixome-write-test 2>/dev/null || true
+  printf "/nix/store accepted a write\n" >&2
+  exit 1
+fi
+
+test -e /run/current-system
+readlink /run/current-system
+EOF
+
+  run_qrexec_script_or_fail "$vm" "runtime /nix/store check in $vm" "$output" "$script"
 }
 
 check_persistent_home() {
