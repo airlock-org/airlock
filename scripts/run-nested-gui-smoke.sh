@@ -264,6 +264,25 @@ remote_env_prefix() {
   printf '%s' "$prefix"
 }
 
+config_vms_env_prefix() {
+  local prefix="env"
+  local name
+
+  for name in \
+    NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE \
+    NIXOME_CONFIG_EXTRA_TEMPLATE \
+    NIXOME_CONFIG_EXTRA_QUBE \
+    NIXOME_CONFIG_STAGING_VM \
+    NIXOME_CONFIG_VALIDATOR_VM \
+    NIXOME_CONFIG_VAULT_VM; do
+    if [ -n "${!name+x}" ]; then
+      prefix="$prefix $name=$(shell_quote "${!name}")"
+    fi
+  done
+
+  printf '%s' "$prefix"
+}
+
 ssh_command() {
   SSHPASS="$SSH_PASSWORD" nix shell nixpkgs#sshpass -c sshpass -e \
     ssh \
@@ -432,7 +451,8 @@ fi
 
 if [ "$RUN_CONFIG_VMS_SMOKE" = "1" ]; then
   printf 'config-vms: booting declared NixOS config VMs and archiving a validated config candidate\n'
-  if ! remote "sudo -n env NIXOME_LOG_DIR=/var/log/nixome nixome-config-vms-smoke" > "$CONFIG_VMS_STDOUT" 2> "$CONFIG_VMS_STDERR"; then
+  config_vms_env="$(config_vms_env_prefix)"
+  if ! remote "sudo -n $config_vms_env NIXOME_LOG_DIR=/var/log/nixome nixome-config-vms-smoke" > "$CONFIG_VMS_STDOUT" 2> "$CONFIG_VMS_STDERR"; then
     remote 'sudo -n cat /var/log/nixome/config-vms-smoke.json 2>/dev/null || true' > "$CONFIG_VMS_JSON" 2>/dev/null || true
     collect_diagnostics
     cat "$CONFIG_VMS_STDERR" >&2 || true
