@@ -216,6 +216,34 @@ record_domain_restart_if_running() {
     "$state"
 }
 
+domain_is_running() {
+  local domain="$1"
+  local state=""
+
+  [ "$APPLY" = "1" ] || return 1
+  state="$(domain_state "$domain" || true)"
+  [ "$state" = "Running" ]
+}
+
+record_running_domain_storage_change() {
+  local domain="$1"
+  local type="$2"
+  local field="$3"
+  local value="$4"
+  local state=""
+
+  state="$(domain_state "$domain" || true)"
+  record_action \
+    "$RESTART_ACTIONS_JSONL" \
+    "$type" \
+    restart \
+    "$domain" \
+    "$field" \
+    "$value" \
+    "domain is running; stop it and re-run setup-config for this storage change to take effect" \
+    "$state"
+}
+
 write_result() {
   status="$1"
   reason="$2"
@@ -789,20 +817,49 @@ nix_domain_store_current() {
   [ "$current" = "$store_source" ]
 }
 
+nix_domain_system_current() {
+  domain="$1"
+  system_source="$2"
+
+  [ "$APPLY" = "1" ] || return 1
+  current="$(qvm-features "$domain" nixome-system-source 2>/dev/null || true)"
+  [ "$current" = "$system_source" ]
+}
+
+is_nix_closure_boot_feature() {
+  case "$1" in
+    nixome-system-source|\
+    nixome-root-source|\
+    nixome-store-source|\
+    nixome-store-image|\
+    nixome-store-mountpoint|\
+    nixome-store-device|\
+    nixome-store-read-only)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 install_nix_domain_root() {
   domain="$1"
   root_source="$2"
   root_image="$3"
+  nix_domain_root_deferred=0
 
   if nix_domain_root_current "$domain" "$root_source"; then
     printf 'Nix-native root current: %s source=%s\n' "$domain" "$root_source"
     return
   fi
 
-  if [ "$APPLY" = "1" ]; then
-    state="$(domain_state "$domain" || true)"
-    [ "$state" != "Running" ] ||
-      fail "Nix-native domain root image changed but domain is running: $domain"
+  if domain_is_running "$domain"; then
+    printf 'Nix-native root image update deferred for running domain: %s source=%s\n' \
+      "$domain" "$root_source"
+    nix_domain_root_deferred=1
+    record_running_domain_storage_change "$domain" domain-root source "$root_source"
+    return
   fi
 
   run_or_plan qvm-volume import "$domain:root" "$root_image"
@@ -869,9 +926,16 @@ install_nix_domain_store() {
   store_source="$2"
   store_image="$3"
   helper_output=""
+  nix_domain_store_deferred=0
 
   if [ "$APPLY" = "1" ] && nix_domain_store_current "$domain" "$store_source"; then
     printf 'Nix-native store source current: %s source=%s\n' "$domain" "$store_source"
+  elif domain_is_running "$domain"; then
+    printf 'Nix-native store image update deferred for running domain: %s source=%s\n' \
+      "$domain" "$store_source"
+    nix_domain_store_deferred=1
+    record_running_domain_storage_change "$domain" domain-store source "$store_source"
+    return
   fi
 
   printf '+'
@@ -979,6 +1043,9 @@ setup_nix_closure_domain() {
   store_device="$(jq_get '.domains[$name].backend.store.device // "/dev/xvde"' --arg name "$domain")"
   root_image=""
   store_image=""
+  nix_domain_root_deferred=0
+  nix_domain_store_deferred=0
+  nix_domain_storage_deferred=0
 
   [ "$class" = "StandaloneVM" ] ||
     fail "nix-closure backend requires StandaloneVM class for $domain"
@@ -1016,24 +1083,37 @@ setup_nix_closure_domain() {
 
   install_nix_domain_root "$domain" "$root_source" "$root_image"
   install_nix_domain_store "$domain" "$store_source" "$store_image"
+  if [ "$nix_domain_root_deferred" = "1" ] || [ "$nix_domain_store_deferred" = "1" ]; then
+    nix_domain_storage_deferred=1
+  fi
 
   if [ "$APPLY" = "1" ] || domain_exists "$domain"; then
     set_pref "$domain" label "$label"
-    set_pref "$domain" kernel "$kernel_name"
-    ensure_nix_closure_kernelopts "$domain" "$system_source" "$store_device"
+    if [ "$nix_domain_storage_deferred" = "1" ]; then
+      printf 'Nix-native boot identity update deferred for running domain: %s system=%s\n' \
+        "$domain" "$system_source"
+      if ! nix_domain_system_current "$domain" "$system_source"; then
+        record_running_domain_storage_change "$domain" domain-system source "$system_source"
+      fi
+    else
+      set_pref "$domain" kernel "$kernel_name"
+      ensure_nix_closure_kernelopts "$domain" "$system_source" "$store_device"
+    fi
 
     if jq -e --arg name "$domain" '.domains[$name] | has("netvm")' "$TOPOLOGY" >/dev/null; then
       set_pref "$domain" netvm "$netvm"
     fi
 
     set_feature "$domain" nixome-backend nix-closure
-    set_feature "$domain" nixome-system-source "$system_source"
-    set_feature "$domain" nixome-root-source "$root_source"
-    set_feature "$domain" nixome-store-source "$store_source"
-    set_feature "$domain" nixome-store-image "$store_image"
-    set_feature "$domain" nixome-store-mountpoint "$store_mountpoint"
-    set_feature "$domain" nixome-store-device "$store_device"
-    set_feature "$domain" nixome-store-read-only "True"
+    if [ "$nix_domain_storage_deferred" != "1" ]; then
+      set_feature "$domain" nixome-system-source "$system_source"
+      set_feature "$domain" nixome-root-source "$root_source"
+      set_feature "$domain" nixome-store-source "$store_source"
+      set_feature "$domain" nixome-store-image "$store_image"
+      set_feature "$domain" nixome-store-mountpoint "$store_mountpoint"
+      set_feature "$domain" nixome-store-device "$store_device"
+      set_feature "$domain" nixome-store-read-only "True"
+    fi
 
     mapfile -t pref_names < <(domain_pref_names "$domain")
     for pref in "${pref_names[@]}"; do
@@ -1045,6 +1125,11 @@ setup_nix_closure_domain() {
 
     mapfile -t feature_names < <(jq_get '.domains[$name].features | keys[]?' --arg name "$domain")
     for feature in "${feature_names[@]}"; do
+      if [ "$nix_domain_storage_deferred" = "1" ] && is_nix_closure_boot_feature "$feature"; then
+        printf 'Nix-native boot feature update deferred for running domain: %s %s\n' \
+          "$domain" "$feature"
+        continue
+      fi
       value="$(json_value '.domains[$name].features[$feature]' --arg name "$domain" --arg feature "$feature")"
       set_feature "$domain" "$feature" "$value"
     done

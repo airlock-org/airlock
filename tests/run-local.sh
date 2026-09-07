@@ -160,6 +160,7 @@ run_logged run-nested-gui-smoke-static "$ROOT/tests/run-nested-gui-smoke-static.
 run_logged host-capabilities "$ROOT/tests/host-capabilities.sh" --json "$LOG_DIR/host-capabilities.json"
 run_logged setup-config-static "$ROOT/tests/setup-config-static.sh"
 run_logged setup-config-nix-native "$ROOT/tests/setup-config-nix-native.sh"
+run_logged setup-config-nix-native-running-storage "$ROOT/tests/setup-config-nix-native-running-storage.sh"
 run_logged setup-config-qrexec-policy "$ROOT/tests/setup-config-qrexec-policy.sh"
 run_logged setup-config-idempotent "$ROOT/tests/setup-config-idempotent.sh"
 run_logged setup-config-restart-actions "$ROOT/tests/setup-config-restart-actions.sh"
