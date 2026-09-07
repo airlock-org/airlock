@@ -32,9 +32,15 @@ grep -F 'if $DOM0_SYSTEM_SWITCH_ACTION_NIX == "switch" then' \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'EXPECTED_SYSTEMD_ACTIONS_STATUS="skipped"' \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
+grep -F "grep -F 'rawLocalConfig = import ./nixome/machine.nix {' flake.nix" \
+  "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
+grep -F "grep -F 'templateSet = import ./nixome/templates.nix {' flake.nix" \
+  "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 ! grep -F 'cat >> "$STAGING_UPDATE_SCRIPT"' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN=1' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'CONFIG_VMS_STAGING_UPDATE_LOG' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'config-vms-config-staging-update.sh' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'sudo -n $config_vms_env NIXOME_LOG_DIR=/var/log/nixome nixome-config-vms-smoke' \
   "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F '"$ROOT/scripts/nixome-nix.sh" shell nixpkgs#sshpass' \

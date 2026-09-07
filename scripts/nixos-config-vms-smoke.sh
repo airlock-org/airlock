@@ -783,8 +783,8 @@ nix --extra-experimental-features nix-command --extra-experimental-features flak
 grep -F 'appliedMessage = "$APPLY_MESSAGE";' flake.nix
 grep -F 'configVms = import ./nixome/config-vms.nix;' flake.nix
 grep -F 'systemConfig = import ./nixome/system.nix;' flake.nix
-grep -F 'localConfig = import ./nixome/machine.nix' flake.nix
-grep -F 'templateSet = import ./nixome/templates.nix' flake.nix
+grep -F 'rawLocalConfig = import ./nixome/machine.nix {' flake.nix
+grep -F 'templateSet = import ./nixome/templates.nix {' flake.nix
 grep -F 'nixome-dom0-profile = dom0Profile;' flake.nix
 grep -F 'nixosConfigurations.nixome-dom0 = nixomeDom0System;' flake.nix
 grep -F '"$CREATED_QUBE" = {' nixome/machine.nix

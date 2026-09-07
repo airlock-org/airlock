@@ -54,6 +54,9 @@ SETUP_CONFIG_STDERR="$LOG_DIR/vm-gui-setup-config.stderr.log"
 CONFIG_VMS_JSON="$LOG_DIR/vm-gui-config-vms-smoke.json"
 CONFIG_VMS_STDOUT="$LOG_DIR/vm-gui-config-vms-smoke.stdout.log"
 CONFIG_VMS_STDERR="$LOG_DIR/vm-gui-config-vms-smoke.stderr.log"
+CONFIG_VMS_COMMANDS_LOG="$LOG_DIR/vm-gui-config-vms-smoke.commands.log"
+CONFIG_VMS_STAGING_UPDATE_LOG="$LOG_DIR/vm-gui-config-vms-config-staging-update.log"
+CONFIG_VMS_STAGING_UPDATE_SCRIPT="$LOG_DIR/vm-gui-config-vms-config-staging-update.sh"
 CONFIG_BOOT_VERIFY_JSON="$LOG_DIR/vm-gui-config-boot-verify.json"
 CONFIG_BOOT_VERIFY_STDOUT="$LOG_DIR/vm-gui-config-boot-verify.stdout.log"
 CONFIG_BOOT_VERIFY_STDERR="$LOG_DIR/vm-gui-config-boot-verify.stderr.log"
@@ -89,6 +92,9 @@ rm -f \
   "$CONFIG_VMS_JSON" \
   "$CONFIG_VMS_STDOUT" \
   "$CONFIG_VMS_STDERR" \
+  "$CONFIG_VMS_COMMANDS_LOG" \
+  "$CONFIG_VMS_STAGING_UPDATE_LOG" \
+  "$CONFIG_VMS_STAGING_UPDATE_SCRIPT" \
   "$CONFIG_BOOT_VERIFY_JSON" \
   "$CONFIG_BOOT_VERIFY_STDOUT" \
   "$CONFIG_BOOT_VERIFY_STDERR" \
@@ -355,7 +361,9 @@ collect_diagnostics() {
   [ -s "$SETUP_CONFIG_BOOT_COMMANDS_LOG" ] ||
     remote 'sudo -n cat /var/log/nixome/setup-config.commands.log 2>/dev/null || true' > "$SETUP_CONFIG_BOOT_COMMANDS_LOG" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/setup-config.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-setup-config.commands.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-smoke.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-smoke.commands.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-vms-smoke.commands.log 2>/dev/null || true' > "$CONFIG_VMS_COMMANDS_LOG" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-vms-config-staging-update.log 2>/dev/null || true' > "$CONFIG_VMS_STAGING_UPDATE_LOG" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-vms-config-staging-update.sh 2>/dev/null || true' > "$CONFIG_VMS_STAGING_UPDATE_SCRIPT" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-archive.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.json" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-archive.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.commands.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-apply.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply.json" 2>/dev/null || true
