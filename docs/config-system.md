@@ -197,10 +197,12 @@ dom0 can report the current config-system state as JSON with:
 nixome-config-status
 ```
 
-That command reads the declared topology, latest setup/apply artifacts,
+That command reads the active topology, latest setup/apply artifacts,
 `/var/lib/nixome/system` state, current system profile links, Qubes runtime
 domain list when `qvm-ls` is available, and the Nixome-managed qrexec policy
-file.
+file. It prefers `/var/lib/nixome/system/current-topology.json`, which
+`nixome-config-apply` updates after successful topology setup, and falls back to
+the bootstrap topology at `/etc/nixome/qubes-topology.json`.
 
 The current seed uses generated literal `/nix/store` path pins for Nixome,
 `nixpkgs`, and `nixos-qubes` support sources. Candidate Nix commands therefore

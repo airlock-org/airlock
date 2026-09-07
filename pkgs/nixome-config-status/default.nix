@@ -3,7 +3,6 @@
   gawk,
   jq,
   lib,
-  python3,
   writeShellApplication,
 }:
 
@@ -14,7 +13,6 @@ writeShellApplication {
     coreutils
     gawk
     jq
-    python3.pkgs.qubes-core-admin-client
   ];
 
   text = builtins.readFile ../../scripts/config-status.sh;

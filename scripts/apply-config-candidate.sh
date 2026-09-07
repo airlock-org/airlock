@@ -1112,6 +1112,14 @@ finish_system_apply_failed() {
   write_system_apply_json
 }
 
+persist_current_topology() {
+  mkdir -p "$SYSTEM_STATE_DIR" "$SYSTEM_ETC_DIR"
+  cp "$APPLY_TOPOLOGY_JSON" "$SYSTEM_STATE_DIR/current-topology.json"
+  cp "$VALIDATED_TOPOLOGY_JSON" "$SYSTEM_STATE_DIR/current-validated-topology.json"
+  cp "$SETUP_JSON" "$SYSTEM_STATE_DIR/current-setup.json"
+  cp "$APPLY_TOPOLOGY_JSON" "$SYSTEM_ETC_DIR/qubes-topology.json"
+}
+
 apply_system() {
   system_json="$1"
   status=passed
@@ -1378,6 +1386,7 @@ if [ "$setup_rc" != 0 ] || [ "$setup_status" != passed ]; then
   printf 'config apply failed: setup-config failed\n' >&2
   exit 1
 fi
+persist_current_topology
 
 if apply_system "$APPLY_SYSTEM_JSON"; then
   system_apply_rc=0

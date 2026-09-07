@@ -178,9 +178,11 @@ generated log directory, and removes the test qube on success if it created it.
   VM lifecycle, qrexec, and GUI feedback loop.
 - `nixome-config-apply` is the first explicit dom0 command for applying a
   validator-approved config candidate and archiving a deployment record.
-- `nixome-config-status` reports the declared topology, Qubes runtime domains,
+- `nixome-config-status` reports the active topology, Qubes runtime domains,
   current config apply artifacts, host generation links, and Nixome qrexec
-  policy state as JSON.
+  policy state as JSON. It prefers the last successfully set up topology from
+  `/var/lib/nixome/system/current-topology.json`, falling back to the bootstrap
+  image topology.
 - `modules/qube-guest.nix`, `pkgs/nixome-qubes-template`, and
   `modules/qubes-topology.nix` are the first pieces for NixOS-backed Qubes
   templates and declarative topology setup.

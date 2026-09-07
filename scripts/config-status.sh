@@ -2,10 +2,12 @@
 set -euo pipefail
 
 LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
-TOPOLOGY_JSON="${NIXOME_CONFIG_STATUS_TOPOLOGY_JSON:-/etc/nixome/qubes-topology.json}"
+SYSTEM_STATE_DIR="${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
+BOOT_TOPOLOGY_JSON="${NIXOME_CONFIG_STATUS_BOOT_TOPOLOGY_JSON:-/etc/nixome/qubes-topology.json}"
+CURRENT_TOPOLOGY_JSON="${NIXOME_CONFIG_STATUS_CURRENT_TOPOLOGY_JSON:-$SYSTEM_STATE_DIR/current-topology.json}"
+TOPOLOGY_OVERRIDE="${NIXOME_CONFIG_STATUS_TOPOLOGY_JSON:-}"
 SETUP_JSON="${NIXOME_CONFIG_STATUS_SETUP_JSON:-$LOG_DIR/setup-config.json}"
 APPLY_JSON="${NIXOME_CONFIG_STATUS_APPLY_JSON:-$LOG_DIR/config-apply.json}"
-SYSTEM_STATE_DIR="${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
 QREXEC_POLICY_DIR="${NIXOME_QUBES_POLICY_DIR:-/var/lib/nixome/qubes-policy.d}"
 QREXEC_MANAGED_POLICY="${NIXOME_QUBES_MANAGED_POLICY_FILE:-90-nixome.policy}"
 QREXEC_POLICY_FILE="$QREXEC_POLICY_DIR/$QREXEC_MANAGED_POLICY"
@@ -81,7 +83,21 @@ qvm_domains_json() {
   ' "$raw"
 }
 
-topology_json="$(json_file_or_null "$TOPOLOGY_JSON")"
+boot_topology_json="$(json_file_or_null "$BOOT_TOPOLOGY_JSON")"
+current_topology_json="$(json_file_or_null "$CURRENT_TOPOLOGY_JSON")"
+if [ -n "$TOPOLOGY_OVERRIDE" ]; then
+  TOPOLOGY_JSON="$TOPOLOGY_OVERRIDE"
+  topology_source="override"
+  topology_json="$(json_file_or_null "$TOPOLOGY_JSON")"
+elif [ "$current_topology_json" != null ]; then
+  TOPOLOGY_JSON="$CURRENT_TOPOLOGY_JSON"
+  topology_source="current"
+  topology_json="$current_topology_json"
+else
+  TOPOLOGY_JSON="$BOOT_TOPOLOGY_JSON"
+  topology_source="boot"
+  topology_json="$boot_topology_json"
+fi
 setup_json="$(json_file_or_null "$SETUP_JSON")"
 apply_json="$(json_file_or_null "$APPLY_JSON")"
 current_system_json="$(json_file_or_null "$SYSTEM_STATE_DIR/current-system.json")"
@@ -100,6 +116,9 @@ fi
 
 jq -n \
   --arg topology_path "$TOPOLOGY_JSON" \
+  --arg topology_source "$topology_source" \
+  --arg boot_topology_path "$BOOT_TOPOLOGY_JSON" \
+  --arg current_topology_path "$CURRENT_TOPOLOGY_JSON" \
   --arg setup_path "$SETUP_JSON" \
   --arg apply_path "$APPLY_JSON" \
   --arg system_state_dir "$SYSTEM_STATE_DIR" \
@@ -112,6 +131,8 @@ jq -n \
   --arg run_current_system "/run/current-system" \
   --arg run_current_system_target "$(readlink_or_empty /run/current-system)" \
   --argjson topology "$topology_json" \
+  --argjson boot_topology "$boot_topology_json" \
+  --argjson current_topology "$current_topology_json" \
   --argjson setup "$setup_json" \
   --argjson apply "$apply_json" \
   --argjson current_system "$current_system_json" \
@@ -137,13 +158,18 @@ jq -n \
       status: status,
       paths: {
         topology: $topology_path,
+        boot_topology: $boot_topology_path,
+        current_topology: $current_topology_path,
         setup: $setup_path,
         apply: $apply_path,
         system_state_dir: $system_state_dir,
         qrexec_policy_file: $qrexec_policy_file
       },
       topology: {
+        source: $topology_source,
         present: ($topology != null),
+        boot_present: ($boot_topology != null),
+        current_present: ($current_topology != null),
         domain_names: (($topology.domains // {}) | keys_or_empty),
         template_names: (($topology.templates // {}) | keys_or_empty),
         kernel_names: (($topology.kernels // {}) | keys_or_empty),

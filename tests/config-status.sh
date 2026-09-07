@@ -10,7 +10,9 @@ LOG_DIR="$WORK_DIR/logs"
 STATE_DIR="$WORK_DIR/state"
 POLICY_DIR="$WORK_DIR/policy.d"
 TOPOLOGY_JSON="$WORK_DIR/topology.json"
+CURRENT_TOPOLOGY_JSON="$STATE_DIR/current-topology.json"
 RESULT_JSON="$WORK_DIR/status.json"
+CURRENT_RESULT_JSON="$WORK_DIR/status-current.json"
 
 rm -rf "$WORK_DIR"
 mkdir -p "$BIN_DIR" "$LOG_DIR" "$STATE_DIR" "$POLICY_DIR"
@@ -31,6 +33,45 @@ cat > "$TOPOLOGY_JSON" <<'EOF'
       "template": "nixome-nixos-config-system"
     },
     "nixome-work": {
+      "class": "AppVM",
+      "template": "nixome-nixos-work"
+    }
+  },
+  "prefs": {},
+  "qrexec_policy": {
+    "rules": [
+      {
+        "service": "nixome.PolicyProbe",
+        "argument": "*",
+        "source": "dom0",
+        "target": "config-vault",
+        "action": "allow"
+      }
+    ]
+  }
+}
+EOF
+
+cat > "$CURRENT_TOPOLOGY_JSON" <<'EOF'
+{
+  "schema": "nixome.qubes-topology.v1",
+  "templates": {
+    "nixome-nixos-work": {
+      "import": true,
+      "source": "/nix/store/example-template/nixome-nixos-work"
+    }
+  },
+  "kernels": {},
+  "domains": {
+    "config-vault": {
+      "class": "AppVM",
+      "template": "nixome-nixos-config-system"
+    },
+    "nixome-work": {
+      "class": "AppVM",
+      "template": "nixome-nixos-work"
+    },
+    "nixome-work-from-current": {
       "class": "AppVM",
       "template": "nixome-nixos-work"
     }
@@ -127,5 +168,24 @@ jq -e '
   .system.current_plan.reboot_required == false and
   .system.last_apply.host_system_status == "passed"
 ' "$RESULT_JSON" >/dev/null
+
+env \
+  PATH="$BIN_DIR:$PATH" \
+  NIXOME_QVM_LS_BIN="$BIN_DIR/qvm-ls" \
+  NIXOME_CONFIG_STATUS_BOOT_TOPOLOGY_JSON="$TOPOLOGY_JSON" \
+  NIXOME_LOG_DIR="$LOG_DIR" \
+  NIXOME_SYSTEM_STATE_DIR="$STATE_DIR" \
+  NIXOME_QUBES_POLICY_DIR="$POLICY_DIR" \
+  "$wrapper" > "$CURRENT_RESULT_JSON"
+
+jq -e '
+  .schema == "nixome.config-status.v1" and
+  .topology.source == "current" and
+  .paths.topology == .paths.current_topology and
+  .topology.boot_present == true and
+  .topology.current_present == true and
+  (.topology.domain_names | index("nixome-work-from-current")) and
+  (.qvm.managed_domains | length) == 2
+' "$CURRENT_RESULT_JSON" >/dev/null
 
 printf 'config status test ok\n'
