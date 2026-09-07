@@ -294,7 +294,10 @@ the boot generation, shuts the nested dom0 down cleanly, starts the same
 writable disk again, and runs `nixome-config-boot-verify`. The verifier checks
 that `/nix/var/nix/profiles/system` and `/run/current-system` both resolve to
 the staged generation and that `nixome-config-status` reports no active pending
-reboot. The combined result is written to:
+reboot. The first boot must also report
+`config_status.host_generation.active = false` with a staged source, and the
+second boot must report `status_json.host_generation.active = true`. The
+combined result is written to:
 
 ```text
 /run/media/user/data/nixome/logs/vm-config-boot-activate-flow.json

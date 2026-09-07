@@ -83,12 +83,16 @@ expected_host_system_source="$(jq -r '.dom0_system_apply.host_system_source // "
   fail "stage run did not report host system source"
 
 jq -e '
+  . as $result |
   .schema == "nixome.config-vms-smoke.v1" and
   .status == "passed" and
   .dom0_system_apply.status == "passed" and
   .dom0_system_apply.host_system_switch_action == "boot" and
   .dom0_system_apply.reboot_required == true and
-  .config_status.pending_reboot.required == true
+  .config_status.pending_reboot.required == true and
+  .config_status.host_generation.active == false and
+  .config_status.host_generation.staged_source == $result.dom0_system_apply.host_system_source and
+  .config_status.host_generation.pending_reboot.required == true
 ' "$STAGE_JSON" >/dev/null ||
   fail "stage run did not leave a pending boot generation" "$expected_host_system_source"
 
@@ -120,7 +124,10 @@ jq -e \
     .expected_host_system_source == $expected and
     .host_system_profile_resolved_target == $expected and
     .run_current_system_resolved_target == $expected and
-    .pending_reboot.required == false
+    .pending_reboot.required == false and
+    .status_json.host_generation.active == true and
+    .status_json.host_generation.current_source == $expected and
+    .status_json.host_generation.pending_reboot.required == false
   ' "$VERIFY_JSON" >/dev/null ||
   fail "verify run did not boot into staged dom0 generation" "$expected_host_system_source"
 
