@@ -11,10 +11,10 @@ rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 
 nix build --no-link \
-  "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.PolicyProbe\".source" \
+  "$ROOT#nixosConfigurations.nixome-domain-config-vault.config.environment.etc.\"qubes-rpc/nixome.PolicyProbe\".source" \
   >/dev/null
 nix eval --raw \
-  "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.PolicyProbe\".source" \
+  "$ROOT#nixosConfigurations.nixome-domain-config-vault.config.environment.etc.\"qubes-rpc/nixome.PolicyProbe\".source" \
   > "$SERVICE_PATH_FILE"
 SERVICE="$(cat "$SERVICE_PATH_FILE")"
 

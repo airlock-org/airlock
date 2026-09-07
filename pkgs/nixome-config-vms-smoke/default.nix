@@ -27,9 +27,6 @@ let
   systemSeed = builtins.toFile "nixome-system.nix" (
     builtins.readFile ../../seeds/config-staging/nixome/system.nix
   );
-  templatesSeed = builtins.toFile "nixome-templates.nix" (
-    builtins.readFile ../../seeds/config-staging/nixome/templates.nix
-  );
   systemSchemaSeed = builtins.toFile "nixome-system-schema.nix" (
     builtins.readFile ../../lib/nixome/system.nix
   );
@@ -39,6 +36,7 @@ let
 in
 writeShellApplication {
   name = "nixome-config-vms-smoke";
+  excludeShellChecks = [ "SC2016" ];
 
   runtimeInputs = [
     coreutils
@@ -55,7 +53,6 @@ writeShellApplication {
     export NIXOME_LOCAL_SEED=${lib.escapeShellArg localSeed}
     export NIXOME_MACHINE_SEED=${lib.escapeShellArg machineSeed}
     export NIXOME_SYSTEM_SEED=${lib.escapeShellArg systemSeed}
-    export NIXOME_TEMPLATES_SEED=${lib.escapeShellArg templatesSeed}
     export NIXOME_SYSTEM_SCHEMA_SEED=${lib.escapeShellArg systemSchemaSeed}
     export NIXOME_TOPOLOGY_SCHEMA_SEED=${lib.escapeShellArg topologySchemaSeed}
   ''

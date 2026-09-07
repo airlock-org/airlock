@@ -34,8 +34,6 @@
         inherit
           appliedMessage
           system
-          templateBuilders
-          templateSet
           ;
         pkgs = templateBuilders.pkgs;
       };
@@ -45,7 +43,6 @@
         "dom0"
         "nixNative"
         "system"
-        "templates"
         "topology"
       ] (expectMachineAttrs "" rawLocalConfig);
       localTopology = localConfig.topology or { };
@@ -83,7 +80,6 @@
           "netvm"
           "prefs"
           "services"
-          "template"
         ] (expectConfigAttrs path value);
       checkConfigGuest =
         path: value:
@@ -159,8 +155,6 @@
           checked = checkConfigKeys "" [
             "domains"
             "guests"
-            "sharedGuest"
-            "templateMode"
           ] (expectConfigAttrs "" localConfigVms);
           rawDomains = checkConfigRoleAttrs "domains" (checked.domains or { });
           rawGuests = checkConfigRoleAttrs "guests" (checked.guests or { });
@@ -173,7 +167,6 @@
         // {
           domains = checkedDomains;
           guests = checkedGuests;
-          sharedGuest = checkConfigGuest "sharedGuest" (checked.sharedGuest or { });
         };
       expectDom0Attrs =
         path: value:
@@ -304,15 +297,16 @@
           nixpkgsLibvirt105Source
           ;
       };
-      templateSet = import ./nixome/templates.nix {
-        extraTemplateDefinitions = localConfig.templates.definitions or { };
-        inherit
-          prebuiltTemplateSources
-          system
-          templateBuilders
-          ;
-      };
-      nixNativeDomainEntries = builtins.mapAttrs (
+      mergeDomainAttrs =
+        base: override:
+        base
+        // override
+        // {
+          prefs = (base.prefs or { }) // (override.prefs or { });
+          features = (base.features or { }) // (override.features or { });
+          services = (base.services or { }) // (override.services or { });
+        };
+      mkNixNativeEntry =
         name: definition:
         templateBuilders.mkNixNativeDomain {
           inherit name;
@@ -329,49 +323,192 @@
           prefs = definition.prefs or { };
           features = definition.features or { };
           services = definition.services or { };
-        }
-      ) checkedNixNative.domains;
-      nixNativeTopologyDomains = builtins.mapAttrs (_name: entry: entry.domain) nixNativeDomainEntries;
+        };
+      userNixNativeDomainEntries = builtins.mapAttrs mkNixNativeEntry checkedNixNative.domains;
+      configRoleDefaults = {
+        config-vault = {
+          guestHostName = "config-vault";
+          label = "black";
+          netvm = null;
+          rootImageSizeMiB = 128;
+          additionalStoreSpaceMiB = 512;
+          prefs = {
+            autostart = false;
+            include_in_backups = true;
+            memory = 1024;
+            maxmem = 2048;
+            vcpus = 1;
+          };
+          features = {
+            "nixome-managed" = "1";
+            "nixome-role" = "config-vault";
+            "nixome-config-authority" = "1";
+          };
+          services = {
+            "network-manager" = false;
+          };
+        };
+        config-staging = {
+          guestHostName = "config-staging";
+          label = "gray";
+          netvm = null;
+          rootImageSizeMiB = 128;
+          additionalStoreSpaceMiB = 1024;
+          prefs = {
+            autostart = false;
+            include_in_backups = true;
+            memory = 2048;
+            maxmem = 4096;
+            vcpus = 2;
+          };
+          features = {
+            "nixome-managed" = "1";
+            "nixome-role" = "config-staging";
+            "nixome-config-staging" = "1";
+            "nixome-config-applied-message" = appliedMessage;
+          };
+          services = {
+            "network-manager" = false;
+          };
+        };
+        config-validator = {
+          guestHostName = "config-validator";
+          label = "blue";
+          netvm = null;
+          rootImageSizeMiB = 128;
+          additionalStoreSpaceMiB = 1024;
+          prefs = {
+            autostart = false;
+            include_in_backups = true;
+            memory = 2048;
+            maxmem = 4096;
+            vcpus = 2;
+          };
+          features = {
+            "nixome-managed" = "1";
+            "nixome-role" = "config-validator";
+            "nixome-config-validator" = "1";
+          };
+          services = {
+            "network-manager" = false;
+          };
+        };
+      };
+      mkConfigRoleEntry =
+        role:
+        let
+          defaults = configRoleDefaults.${role};
+          guestDefinition = checkedConfigVms.guests.${role} or { };
+          runtime = mergeDomainAttrs {
+            inherit (defaults)
+              features
+              label
+              netvm
+              prefs
+              services
+              ;
+          } (checkedConfigVms.domains.${role} or { });
+        in
+        templateBuilders.mkNixNativeDomain {
+          name = role;
+          guestRole = role;
+          inherit
+            nixomeConfigSeedInputs
+            ;
+          nixomePrebuiltTemplateSources = prebuiltTemplateSources;
+          modules = [
+            (mkGuestContentModule defaults.guestHostName guestDefinition)
+          ]
+          ++ guestExtraModules guestDefinition;
+          additionalStoreSpaceMiB = defaults.additionalStoreSpaceMiB;
+          rootImageSizeMiB = defaults.rootImageSizeMiB;
+          kernelName = nixomeQubeKernelName;
+          label = runtime.label;
+          netvm = runtime.netvm;
+          prefs = runtime.prefs;
+          features = runtime.features;
+          services = runtime.services;
+        };
+      configRoleNameConflicts = builtins.filter (
+        role:
+        builtins.hasAttr role checkedNixNative.domains
+        || builtins.hasAttr role localDomains
+        || builtins.hasAttr role (localTopology.extraDomains or { })
+      ) configVmRoles;
+      configDomainEntries = builtins.listToAttrs (
+        map (role: {
+          name = role;
+          value = mkConfigRoleEntry role;
+        }) configVmRoles
+      );
+      materializeNixClosureDomain =
+        entry:
+        entry.domain
+        // {
+          prefs = entry.domain.prefs // {
+            kernelopts = entry.kernelopts;
+          };
+          backend = entry.domain.backend // {
+            system = entry.domain.backend.system // {
+              source = "${entry.configuration.config.system.build.toplevel}";
+              sourceRef = null;
+            };
+            root = entry.domain.backend.root // {
+              source = "${entry.rootImage}/root.img";
+              sourceRef = null;
+            };
+            store = entry.domain.backend.store // {
+              source = "${entry.storeImage}/store.img";
+              sourceRef = null;
+            };
+          };
+        };
+      configNixTopologyDomains = builtins.mapAttrs (_name: entry: entry.domain) configDomainEntries;
+      materializedConfigDomains = builtins.mapAttrs (
+        _name: entry: materializeNixClosureDomain entry
+      ) configDomainEntries;
+      allNixNativeDomainEntries = configDomainEntries // userNixNativeDomainEntries;
+      nixNativeTopologyDomains = builtins.mapAttrs (
+        _name: entry: entry.domain
+      ) userNixNativeDomainEntries;
       nixNativePackages = builtins.listToAttrs (
         nixpkgs.lib.concatLists (
           map (name: [
             {
-              name = nixNativeDomainEntries.${name}.rootImageName;
-              value = nixNativeDomainEntries.${name}.rootImage;
+              name = allNixNativeDomainEntries.${name}.rootImageName;
+              value = allNixNativeDomainEntries.${name}.rootImage;
             }
             {
-              name = nixNativeDomainEntries.${name}.storeImageName;
-              value = nixNativeDomainEntries.${name}.storeImage;
+              name = allNixNativeDomainEntries.${name}.storeImageName;
+              value = allNixNativeDomainEntries.${name}.storeImage;
             }
-          ]) (builtins.attrNames nixNativeDomainEntries)
+          ]) (builtins.attrNames allNixNativeDomainEntries)
         )
       );
       nixNativeConfigurations = builtins.listToAttrs (
         map (name: {
-          name = nixNativeDomainEntries.${name}.configurationName;
-          value = nixNativeDomainEntries.${name}.configuration;
-        }) (builtins.attrNames nixNativeDomainEntries)
+          name = allNixNativeDomainEntries.${name}.configurationName;
+          value = allNixNativeDomainEntries.${name}.configuration;
+        }) (builtins.attrNames allNixNativeDomainEntries)
       );
 
       appliedMessage = "initial";
-      config = configVms {
-        inherit appliedMessage system;
-        configVms = checkedConfigVms;
-        configRoleKernelOpts = {
-          config-vault = templateBuilders.mkQubeKernelOpts configVaultGuest;
-          config-staging = templateBuilders.mkQubeKernelOpts configStagingGuest;
-          config-validator = templateBuilders.mkQubeKernelOpts configValidatorGuest;
-        };
-        extraTemplates = templateSet.topology.templates // (localTopology.extraTemplates or { });
-        extraKernels = localTopology.extraKernels or { };
-        extraPrefs = localTopology.extraPrefs or { };
-        extraDomains =
-          templateSet.topology.domains
-          // nixNativeTopologyDomains
-          // localDomains
-          // (localTopology.extraDomains or { });
-        extraQrexecRules = localTopology.extraQrexecRules or [ ];
-      };
+      config =
+        if configRoleNameConflicts != [ ] then
+          throw "config roles are built-in nix-closure domains and cannot be redeclared elsewhere: ${nixpkgs.lib.concatStringsSep ", " configRoleNameConflicts}"
+        else
+          configVms {
+            inherit system;
+            configDomains = configNixTopologyDomains;
+            extraTemplates = localTopology.extraTemplates or { };
+            extraKernels = localTopology.extraKernels or { };
+            extraPrefs = localTopology.extraPrefs or { };
+            extraDomains =
+              nixNativeTopologyDomains
+              // localDomains
+              // (localTopology.extraDomains or { });
+            extraQrexecRules = localTopology.extraQrexecRules or [ ];
+          };
       topology = topologySchema.mkTopology config;
       machineSystemConfig = systemConfig (
         automaticSystemArgs
@@ -438,103 +575,6 @@
         definition:
         (if definition ? configuration then [ definition.configuration ] else [ ])
         ++ (definition.modules or [ ]);
-      mkConfigGuest =
-        role: defaultHostName:
-        let
-          definition = (checkedConfigVms.guests or { }).${role} or { };
-        in
-        nixpkgs.lib.nixosSystem {
-          inherit system;
-          specialArgs = {
-            inherit
-              nixomeConfigSeedInputs
-              ;
-            nixomePrebuiltTemplateSources = prebuiltTemplateSources;
-          };
-          modules = [
-            "${nixpkgs}/nixos/modules/profiles/minimal.nix"
-            "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
-            "${nixomeSupport}/modules/qube-guest.nix"
-            {
-              nixpkgs.overlays = templateBuilders.qubesOverlays;
-              nixpkgs.config.allowUnfreePredicate = allowUnfreePredicate;
-              nixome.qubeGuest.enable = true;
-              nixome.qubeGuest.role = role;
-              documentation.enable = nixpkgs.lib.mkDefault false;
-              programs.command-not-found.enable = nixpkgs.lib.mkDefault false;
-              system.nixos.versionSuffix = nixpkgs.lib.mkForce "";
-            }
-            (mkGuestContentModule defaultHostName definition)
-          ]
-          ++ guestExtraModules definition;
-        };
-      configSystemGuest =
-        let
-          definition = checkedConfigVms.sharedGuest or { };
-        in
-        nixpkgs.lib.nixosSystem {
-          inherit system;
-          specialArgs = {
-            inherit
-              nixomeConfigSeedInputs
-              ;
-            nixomePrebuiltTemplateSources = prebuiltTemplateSources;
-            nixomePrebuiltTemplatePackages = {
-              work = templateSet.packages.nixome-nixos-work-template;
-            };
-          };
-          modules = [
-            "${nixpkgs}/nixos/modules/profiles/minimal.nix"
-            "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
-            "${nixomeSupport}/modules/qube-guest.nix"
-            {
-              nixpkgs.overlays = templateBuilders.qubesOverlays;
-              nixpkgs.config.allowUnfreePredicate = allowUnfreePredicate;
-              nixome.qubeGuest.enable = true;
-              nixome.qubeGuest.role = "config-system";
-              documentation.enable = nixpkgs.lib.mkDefault false;
-              programs.command-not-found.enable = nixpkgs.lib.mkDefault false;
-              system.nixos.versionSuffix = nixpkgs.lib.mkForce "";
-            }
-            (mkGuestContentModule "nixome-config-system-template" definition)
-          ]
-          ++ guestExtraModules definition;
-        };
-      configVaultGuest = mkConfigGuest "config-vault" "nixome-config-vault-template";
-      configStagingGuest = mkConfigGuest "config-staging" "nixome-config-staging-template";
-      configValidatorGuest = mkConfigGuest "config-validator" "nixome-config-validator-template";
-      configSystemRootImage = templateBuilders.mkQubeRootImage {
-        configuration = configSystemGuest;
-        imageName = "nixome-nixos-config-system";
-      };
-      configVaultRootImage = templateBuilders.mkQubeRootImage {
-        configuration = configVaultGuest;
-        imageName = "nixome-nixos-config-vault";
-      };
-      configStagingRootImage = templateBuilders.mkQubeRootImage {
-        configuration = configStagingGuest;
-        imageName = "nixome-nixos-config-staging";
-      };
-      configValidatorRootImage = templateBuilders.mkQubeRootImage {
-        configuration = configValidatorGuest;
-        imageName = "nixome-nixos-config-validator";
-      };
-      configSystemTemplate = templateBuilders.mkQubesTemplatePackage {
-        templateName = "nixome-nixos-config-system";
-        rootImageFile = "${configSystemRootImage}/root.img";
-      };
-      configVaultTemplate = templateBuilders.mkQubesTemplatePackage {
-        templateName = "nixome-nixos-config-vault";
-        rootImageFile = "${configVaultRootImage}/root.img";
-      };
-      configStagingTemplate = templateBuilders.mkQubesTemplatePackage {
-        templateName = "nixome-nixos-config-staging";
-        rootImageFile = "${configStagingRootImage}/root.img";
-      };
-      configValidatorTemplate = templateBuilders.mkQubesTemplatePackage {
-        templateName = "nixome-nixos-config-validator";
-        rootImageFile = "${configValidatorRootImage}/root.img";
-      };
       nixomeDom0System = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
@@ -546,14 +586,8 @@
             name = nixomeQubeKernelName;
             package = nixomeQubeKernel;
           };
-          nixomeQubeKernelOpts = {
-            configSystem = templateBuilders.mkQubeKernelOpts configSystemGuest;
-          };
-          nixomeTemplatePackages = {
-          };
-          nixomePrebuiltTemplatePackages = { };
+          nixomeConfigDomains = materializedConfigDomains;
           nixomePrebuiltTemplateSources = prebuiltTemplateSources;
-          nixomeConfigSystemTemplateImport = false;
         };
         modules = [
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
@@ -615,11 +649,8 @@
           '';
     in
     {
-      packages.${system} = templateSet.packages // nixNativePackages // {
+      packages.${system} = nixNativePackages // {
         nixome-dom0-profile = dom0Profile;
-        nixome-nixos-config-vault-template = configVaultTemplate;
-        nixome-nixos-config-staging-template = configStagingTemplate;
-        nixome-nixos-config-validator-template = configValidatorTemplate;
       };
 
       checks.${system} = {
@@ -650,13 +681,11 @@
         };
 
         inherit config;
-        configRoleTemplateConfigurations = {
-          config-vault = configVaultGuest;
-          config-staging = configStagingGuest;
-          config-validator = configValidatorGuest;
+        configRoleConfigurations = {
+          config-vault = configDomainEntries.config-vault.configuration;
+          config-staging = configDomainEntries.config-staging.configuration;
+          config-validator = configDomainEntries.config-validator.configuration;
         };
-        configSystemTemplateConfiguration = configSystemGuest;
-        templateConfigurations = templateSet.configurations;
         nixNativeConfigurations = nixNativeConfigurations;
         system = machineSystem;
         inherit topology;

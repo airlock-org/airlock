@@ -34,17 +34,7 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
       schema = "nixome.qubes-topology.v1";
       templates = { };
       kernels = { };
-      domains = {
-        "config-vault" = {
-          class = "AppVM";
-          template = "nixome-nixos-config-system";
-          label = "black";
-          netvm = null;
-          prefs = { };
-          features = { };
-          services = { };
-        };
-      };
+      domains = { };
       prefs = { };
       qrexec_policy.rules = [ ];
     };
@@ -121,7 +111,7 @@ validator_package="$(
   nix build \
     --no-link \
     --print-out-paths \
-    "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"nixome/guest-tools/nixome-config-staging-validate\".source"
+    "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.environment.etc.\"nixome/guest-tools/nixome-config-staging-validate\".source"
 )"
 validator_tool="$validator_package/bin/nixome-config-staging-validate"
 
@@ -153,7 +143,7 @@ jq -e \
 
 jq -e '.schema == "nixome.config-validation.v1" and .status == "passed"' \
   "$VALIDATION_DIR/$commit.json" >/dev/null
-jq -e '.schema == "nixome.qubes-topology.v1" and .domains."config-vault".template == "nixome-nixos-config-system"' \
+jq -e '.schema == "nixome.qubes-topology.v1" and .domains == {}' \
   "$VALIDATION_DIR/topology-$commit.json" >/dev/null
 jq -e '.schema == "nixome.system.v1" and .dom0.profile.message == "staging-validate-test"' \
   "$VALIDATION_DIR/system-$commit.json" >/dev/null

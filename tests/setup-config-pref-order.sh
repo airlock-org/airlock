@@ -28,7 +28,7 @@ cat > "$TOPOLOGY" <<'EOF'
   "domains": {
     "config-staging": {
       "class": "AppVM",
-      "template": "nixome-nixos-config-system",
+      "template": "fedora-44-xfce",
       "label": "gray",
       "netvm": null,
       "prefs": {

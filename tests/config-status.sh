@@ -28,21 +28,19 @@ mkdir -p "$BIN_DIR" "$LOG_DIR" "$STATE_DIR" "$POLICY_DIR" "$PROFILE_DIR" "$STORE
 cat > "$TOPOLOGY_JSON" <<'EOF'
 {
   "schema": "nixome.qubes-topology.v1",
-  "templates": {
-    "nixome-nixos-work": {
-      "import": true,
-      "source": "/nix/store/example-template/nixome-nixos-work"
-    }
-  },
+  "templates": {},
   "kernels": {},
   "domains": {
     "config-vault": {
-      "class": "AppVM",
-      "template": "nixome-nixos-config-system"
+      "class": "StandaloneVM",
+      "template": null,
+      "backend": {
+        "type": "nix-closure"
+      }
     },
-    "nixome-work": {
+    "work-fedora": {
       "class": "AppVM",
-      "template": "nixome-nixos-work"
+      "template": "fedora-44-xfce"
     }
   },
   "prefs": {},
@@ -63,25 +61,23 @@ EOF
 cat > "$CURRENT_TOPOLOGY_JSON" <<'EOF'
 {
   "schema": "nixome.qubes-topology.v1",
-  "templates": {
-    "nixome-nixos-work": {
-      "import": true,
-      "source": "/nix/store/example-template/nixome-nixos-work"
-    }
-  },
+  "templates": {},
   "kernels": {},
   "domains": {
     "config-vault": {
-      "class": "AppVM",
-      "template": "nixome-nixos-config-system"
+      "class": "StandaloneVM",
+      "template": null,
+      "backend": {
+        "type": "nix-closure"
+      }
     },
-    "nixome-work": {
+    "work-fedora": {
       "class": "AppVM",
-      "template": "nixome-nixos-work"
+      "template": "fedora-44-xfce"
     },
-    "nixome-work-from-current": {
+    "work-fedora-from-current": {
       "class": "AppVM",
-      "template": "nixome-nixos-work"
+      "template": "fedora-44-xfce"
     }
   },
   "prefs": {},
@@ -186,8 +182,8 @@ set -euo pipefail
 case "$*" in
   "--raw-data --fields NAME,CLASS,STATE,TEMPLATE,LABEL --no-spinner")
     cat <<'QVM'
-config-vault|AppVM|Running|nixome-nixos-config-system|black
-nixome-work|AppVM|Halted|nixome-nixos-work|green
+config-vault|StandaloneVM|Running||black
+work-fedora|AppVM|Halted|fedora-44-xfce|green
 other|AppVM|Halted|fedora-43-xfce|red
 QVM
     ;;
@@ -217,10 +213,10 @@ env \
 jq -e '
   .schema == "nixome.config-status.v1" and
   .status == "applied" and
-  .topology.present == true and
-  (.topology.domain_names | index("config-vault")) and
-  (.topology.template_names | index("nixome-nixos-work")) and
-  .topology.qrexec_policy_rule_count == 1 and
+	  .topology.present == true and
+	  (.topology.domain_names | index("config-vault")) and
+	  .topology.template_names == [] and
+	  .topology.qrexec_policy_rule_count == 1 and
   .qvm.available == true and
   .qvm.status == "ok" and
   (.qvm.domains | length) == 3 and
@@ -288,7 +284,7 @@ jq -e '
   .paths.topology == .paths.current_topology and
   .topology.boot_present == true and
   .topology.current_present == true and
-  (.topology.domain_names | index("nixome-work-from-current")) and
+  (.topology.domain_names | index("work-fedora-from-current")) and
   (.qvm.managed_domains | length) == 2
 ' "$CURRENT_RESULT_JSON" >/dev/null
 

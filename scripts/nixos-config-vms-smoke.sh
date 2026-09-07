@@ -9,17 +9,26 @@ STAGING_UNAME_LOG="$LOG_DIR/config-vms-config-staging-uname.log"
 VAULT_UNAME_LOG="$LOG_DIR/config-vms-config-vault-uname.log"
 VALIDATOR_UNAME_LOG="$LOG_DIR/config-vms-config-validator-uname.log"
 CREATED_QUBE_UNAME_LOG="$LOG_DIR/config-vms-created-qube-uname.log"
-EXTRA_QUBE_UNAME_LOG="$LOG_DIR/config-vms-extra-qube-uname.log"
 STAGING_USER_LOG="$LOG_DIR/config-vms-config-staging-user.log"
 VAULT_USER_LOG="$LOG_DIR/config-vms-config-vault-user.log"
 VALIDATOR_USER_LOG="$LOG_DIR/config-vms-config-validator-user.log"
 CREATED_QUBE_USER_LOG="$LOG_DIR/config-vms-created-qube-user.log"
-EXTRA_QUBE_USER_LOG="$LOG_DIR/config-vms-extra-qube-user.log"
-STAGING_TEMPLATE_LOG="$LOG_DIR/config-vms-config-staging-template.log"
-VAULT_TEMPLATE_LOG="$LOG_DIR/config-vms-config-vault-template.log"
-VALIDATOR_TEMPLATE_LOG="$LOG_DIR/config-vms-config-validator-template.log"
-CREATED_QUBE_TEMPLATE_LOG="$LOG_DIR/config-vms-created-qube-template.log"
-EXTRA_QUBE_TEMPLATE_LOG="$LOG_DIR/config-vms-extra-qube-template.log"
+STAGING_BACKEND_LOG="$LOG_DIR/config-vms-config-staging-backend.log"
+VAULT_BACKEND_LOG="$LOG_DIR/config-vms-config-vault-backend.log"
+VALIDATOR_BACKEND_LOG="$LOG_DIR/config-vms-config-validator-backend.log"
+CREATED_QUBE_BACKEND_LOG="$LOG_DIR/config-vms-created-qube-backend.log"
+STAGING_STORE_VOLUME_LOG="$LOG_DIR/config-vms-config-staging-store-volume.log"
+VAULT_STORE_VOLUME_LOG="$LOG_DIR/config-vms-config-vault-store-volume.log"
+VALIDATOR_STORE_VOLUME_LOG="$LOG_DIR/config-vms-config-validator-store-volume.log"
+CREATED_QUBE_STORE_VOLUME_LOG="$LOG_DIR/config-vms-created-qube-store-volume.log"
+STAGING_STORE_MOUNT_LOG="$LOG_DIR/config-vms-config-staging-store-mount.log"
+VAULT_STORE_MOUNT_LOG="$LOG_DIR/config-vms-config-vault-store-mount.log"
+VALIDATOR_STORE_MOUNT_LOG="$LOG_DIR/config-vms-config-validator-store-mount.log"
+CREATED_QUBE_STORE_MOUNT_LOG="$LOG_DIR/config-vms-created-qube-store-mount.log"
+STAGING_PERSISTENCE_LOG="$LOG_DIR/config-vms-config-staging-persistence.log"
+VAULT_PERSISTENCE_LOG="$LOG_DIR/config-vms-config-vault-persistence.log"
+VALIDATOR_PERSISTENCE_LOG="$LOG_DIR/config-vms-config-validator-persistence.log"
+CREATED_QUBE_PERSISTENCE_LOG="$LOG_DIR/config-vms-created-qube-persistence.log"
 STAGING_APPMENUS_LOG="$LOG_DIR/config-vms-config-staging-appmenus.log"
 VAULT_APPMENUS_LOG="$LOG_DIR/config-vms-config-vault-appmenus.log"
 VALIDATOR_APPMENUS_LOG="$LOG_DIR/config-vms-config-validator-appmenus.log"
@@ -51,7 +60,6 @@ QREXEC_POLICY_FILE_LOG="$LOG_DIR/config-vms-qrexec-policy.log"
 QREXEC_POLICY_PROBE_LOG="$LOG_DIR/config-vms-qrexec-policy-probe.log"
 APPLIED_FEATURE_LOG="$LOG_DIR/config-vms-applied-feature.log"
 CREATED_QUBE_FEATURE_LOG="$LOG_DIR/config-vms-created-qube-feature.log"
-EXTRA_QUBE_FEATURE_LOG="$LOG_DIR/config-vms-extra-qube-feature.log"
 VAULT_ARCHIVE_TREE_LOG="$LOG_DIR/config-vms-config-vault-archive-tree.log"
 VAULT_DEPLOYMENT_TREE_LOG="$LOG_DIR/config-vms-config-vault-deployment-tree.log"
 JOURNAL_LOG="$LOG_DIR/config-vms-journal.log"
@@ -65,9 +73,6 @@ QUBE_USER="${NIXOME_QUBE_USER:-user}"
 DOM0_USER="${NIXOME_DOM0_USER:-${SUDO_USER:-nixome}}"
 APPLY_MESSAGE="${NIXOME_CONFIG_APPLY_MESSAGE:-smoke-applied-$(date -u +%Y%m%dT%H%M%SZ)}"
 CREATED_QUBE="${NIXOME_CONFIG_CREATED_QUBE:-nixome-work-from-config}"
-BUILD_EXTRA_TEMPLATE="${NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE:-0}"
-EXTRA_TEMPLATE="${NIXOME_CONFIG_EXTRA_TEMPLATE:-nixome-nixos-dev}"
-EXTRA_QUBE="${NIXOME_CONFIG_EXTRA_QUBE:-nixome-dev-from-config}"
 DOM0_SYSTEM_SWITCH_ACTION="${NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION:-switch}"
 case "$DOM0_SYSTEM_SWITCH_ACTION" in
   switch)
@@ -87,7 +92,6 @@ STAGING_CONSOLE_LOG="$LOG_DIR/config-vms-$STAGING-console.log"
 VAULT_CONSOLE_LOG="$LOG_DIR/config-vms-$VAULT-console.log"
 VALIDATOR_CONSOLE_LOG="$LOG_DIR/config-vms-$VALIDATOR-console.log"
 CREATED_QUBE_CONSOLE_LOG="$LOG_DIR/config-vms-$CREATED_QUBE-console.log"
-EXTRA_QUBE_CONSOLE_LOG="$LOG_DIR/config-vms-$EXTRA_QUBE-console.log"
 result_written=0
 
 mkdir -p "$LOG_DIR"
@@ -155,32 +159,42 @@ write_result() {
     json_file_string_or_null "$VALIDATOR_USER_LOG"
     printf ',"created_qube_user":'
     json_file_string_or_null "$CREATED_QUBE_USER_LOG"
-    printf ',"staging_template":'
-    json_file_string_or_null "$STAGING_TEMPLATE_LOG"
-    printf ',"vault_template":'
-    json_file_string_or_null "$VAULT_TEMPLATE_LOG"
-    printf ',"validator_template":'
-    json_file_string_or_null "$VALIDATOR_TEMPLATE_LOG"
-    printf ',"created_qube_template":'
-    json_file_string_or_null "$CREATED_QUBE_TEMPLATE_LOG"
-    printf ',"build_extra_template":'
-    json_string "$BUILD_EXTRA_TEMPLATE"
-    printf ',"extra_template":'
-    json_string "$EXTRA_TEMPLATE"
-    printf ',"extra_qube":'
-    json_string "$EXTRA_QUBE"
+    printf ',"staging_backend":'
+    json_file_string_or_null "$STAGING_BACKEND_LOG"
+    printf ',"vault_backend":'
+    json_file_string_or_null "$VAULT_BACKEND_LOG"
+    printf ',"validator_backend":'
+    json_file_string_or_null "$VALIDATOR_BACKEND_LOG"
+    printf ',"created_qube_backend":'
+    json_file_string_or_null "$CREATED_QUBE_BACKEND_LOG"
+    printf ',"staging_store_volume":'
+    json_file_string_or_null "$STAGING_STORE_VOLUME_LOG"
+    printf ',"vault_store_volume":'
+    json_file_string_or_null "$VAULT_STORE_VOLUME_LOG"
+    printf ',"validator_store_volume":'
+    json_file_string_or_null "$VALIDATOR_STORE_VOLUME_LOG"
+    printf ',"created_qube_store_volume":'
+    json_file_string_or_null "$CREATED_QUBE_STORE_VOLUME_LOG"
+    printf ',"staging_store_mount":'
+    json_file_string_or_null "$STAGING_STORE_MOUNT_LOG"
+    printf ',"vault_store_mount":'
+    json_file_string_or_null "$VAULT_STORE_MOUNT_LOG"
+    printf ',"validator_store_mount":'
+    json_file_string_or_null "$VALIDATOR_STORE_MOUNT_LOG"
+    printf ',"created_qube_store_mount":'
+    json_file_string_or_null "$CREATED_QUBE_STORE_MOUNT_LOG"
+    printf ',"staging_persistence":'
+    json_file_string_or_null "$STAGING_PERSISTENCE_LOG"
+    printf ',"vault_persistence":'
+    json_file_string_or_null "$VAULT_PERSISTENCE_LOG"
+    printf ',"validator_persistence":'
+    json_file_string_or_null "$VALIDATOR_PERSISTENCE_LOG"
+    printf ',"created_qube_persistence":'
+    json_file_string_or_null "$CREATED_QUBE_PERSISTENCE_LOG"
     printf ',"dom0_system_switch_action":'
     json_string "$DOM0_SYSTEM_SWITCH_ACTION"
     printf ',"dom0_system_reason":'
     json_string "$DOM0_SYSTEM_REASON"
-    printf ',"extra_qube_uname":'
-    json_file_string_or_null "$EXTRA_QUBE_UNAME_LOG"
-    printf ',"extra_qube_user":'
-    json_file_string_or_null "$EXTRA_QUBE_USER_LOG"
-    printf ',"extra_qube_template":'
-    json_file_string_or_null "$EXTRA_QUBE_TEMPLATE_LOG"
-    printf ',"extra_qube_feature":'
-    json_file_string_or_null "$EXTRA_QUBE_FEATURE_LOG"
     printf ',"staging_appmenus_log":'
     json_file_string_or_null "$STAGING_APPMENUS_LOG"
     printf ',"vault_appmenus_log":'
@@ -265,8 +279,6 @@ write_result() {
     json_string "$VALIDATOR_CONSOLE_LOG"
     printf ',"created_qube_console_log":'
     json_string "$CREATED_QUBE_CONSOLE_LOG"
-    printf ',"extra_qube_console_log":'
-    json_string "$EXTRA_QUBE_CONSOLE_LOG"
     printf '}\n'
   } > "$RESULT_JSON"
   result_written=1
@@ -299,9 +311,6 @@ collect_diagnostics() {
   qvm-ls > "$QVM_LS_LOG" 2>&1 || true
   {
     diagnostic_vms=("$VAULT" "$STAGING" "$VALIDATOR" "$CREATED_QUBE")
-    if [ "$BUILD_EXTRA_TEMPLATE" = "1" ]; then
-      diagnostic_vms+=("$EXTRA_QUBE")
-    fi
     for vm in "${diagnostic_vms[@]}"; do
       printf '== %s qvm-prefs ==\n' "$vm"
       if qvm-check "$vm" >/dev/null 2>&1; then
@@ -331,11 +340,6 @@ collect_diagnostics() {
   tail -n 500 \
     "/var/log/xen/console/guest-$CREATED_QUBE.log" \
     > "$CREATED_QUBE_CONSOLE_LOG" 2>&1 || true
-  if [ "$BUILD_EXTRA_TEMPLATE" = "1" ]; then
-    tail -n 500 \
-      "/var/log/xen/console/guest-$EXTRA_QUBE.log" \
-      > "$EXTRA_QUBE_CONSOLE_LOG" 2>&1 || true
-  fi
 }
 
 run_or_fail() {
@@ -412,7 +416,111 @@ start_vm() {
   run_or_fail "qvm-start $vm" "$LOG_DIR/config-vms-$vm-start.log" qvm-start "$vm"
 }
 
+restart_vm() {
+  vm="$1"
+
+  if qvm-check --running "$vm" >/dev/null 2>&1; then
+    run_or_fail "qvm-shutdown $vm" "$LOG_DIR/config-vms-$vm-shutdown.log" \
+      qvm-shutdown --wait "$vm"
+  fi
+
+  start_vm "$vm"
+}
+
+assert_runtime_nix_store() {
+  vm="$1"
+  output="$2"
+
+  run_qrexec_or_fail "$vm" "runtime /nix/store check in $vm" "$output" '
+    set -eu
+
+    mount_line="$(
+      while IFS=" " read -r source mountpoint _fstype options _rest; do
+        if [ "$mountpoint" = "/nix/store" ]; then
+          printf "%s %s\n" "$source" "$options"
+          exit 0
+        fi
+      done < /proc/mounts
+      exit 1
+    )"
+    printf "%s\n" "$mount_line"
+
+    case "$mount_line" in
+      /dev/xvde\ *ro,*|/dev/xvde\ *,ro,*|/dev/xvde\ *,ro|/dev/xvde\ ro,*|/dev/xvde\ ro)
+        ;;
+      *)
+        printf "unexpected /nix/store mount: %s\n" "$mount_line" >&2
+        exit 1
+        ;;
+    esac
+
+    if touch /nix/store/.nixome-write-test 2>/dev/null; then
+      rm -f /nix/store/.nixome-write-test 2>/dev/null || true
+      printf "/nix/store accepted a write\n" >&2
+      exit 1
+    fi
+
+    test -e /run/current-system
+    readlink /run/current-system
+  '
+}
+
+check_persistent_home() {
+  vm="$1"
+  output="$2"
+  marker="/home/$QUBE_USER/.nixome-persistence-$vm"
+
+  run_qrexec_or_fail "$vm" "write persistent marker in $vm" \
+    "$LOG_DIR/config-vms-$vm-persistence-write.log" \
+    "printf '%s\n' '$APPLY_MESSAGE' > '$marker' && sync"
+  restart_vm "$vm"
+  assert_runtime_nix_store "$vm" "$LOG_DIR/config-vms-$vm-store-mount-after-restart.log"
+  run_qrexec_or_fail "$vm" "read persistent marker in $vm" "$output" \
+    "cat '$marker'"
+  grep -qx "$APPLY_MESSAGE" "$output" ||
+    fail "$vm persistent home state did not survive restart"
+}
+
+assert_nix_closure_domain() {
+  vm="$1"
+  backend_log="$2"
+  store_volume_log="$3"
+
+  run_or_fail "read nix-closure backend state for $vm" "$backend_log" bash -c '
+    set -euo pipefail
+    vm="$1"
+    printf "class="
+    qvm-ls --raw-data --fields NAME,CLASS --no-spinner |
+      awk -F"|" -v name="$vm" "\$1 == name { print \$2; found = 1 } END { exit(found ? 0 : 1) }"
+    printf "backend="
+    qvm-features "$vm" nixome-backend
+    printf "store_device="
+    qvm-features "$vm" nixome-store-device
+    printf "store_read_only="
+    qvm-features "$vm" nixome-store-read-only
+    printf "netvm="
+    qvm-prefs "$vm" netvm
+  ' bash "$vm"
+
+  grep -qx 'class=StandaloneVM' "$backend_log" ||
+    fail "$vm is not a StandaloneVM"
+  grep -qx 'backend=nix-closure' "$backend_log" ||
+    fail "$vm is not using the nix-closure backend"
+  grep -qx 'store_device=/dev/xvde' "$backend_log" ||
+    fail "$vm does not declare /dev/xvde as its Nix store device"
+  grep -qx 'store_read_only=True' "$backend_log" ||
+    fail "$vm does not declare a read-only Nix store"
+  grep -Eq '^netvm=(|none|None)$' "$backend_log" ||
+    fail "$vm unexpectedly has a NetVM"
+
+  run_or_fail "read store volume for $vm" "$store_volume_log" qvm-volume info "$vm:store"
+  grep -Eq '(^|[[:space:]])rw[[:space:]]+False($|[[:space:]])' "$store_volume_log" ||
+    fail "$vm store volume is not read-only"
+}
+
 for cmd in \
+  awk \
+  bash \
   grep \
   jq \
   journalctl \
@@ -425,9 +533,12 @@ for cmd in \
   qvm-check \
   qvm-features \
   qvm-ls \
+  qvm-prefs \
   qvm-run \
   qvm-start \
+  qvm-shutdown \
   qvm-sync-appmenus \
+  qvm-volume \
   runuser \
   systemctl \
   tail \
@@ -453,28 +564,6 @@ case "$CREATED_QUBE" in
     ;;
 esac
 
-case "$BUILD_EXTRA_TEMPLATE" in
-  0|1) ;;
-  *) fail "NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE must be 0 or 1" ;;
-esac
-
-if [ "$DOM0_SYSTEM_SWITCH_ACTION" = "boot" ] && [ "$BUILD_EXTRA_TEMPLATE" = "1" ]; then
-  fail "NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE=1 is currently only supported with dom0 system switch mode"
-fi
-
-if [ "$BUILD_EXTRA_TEMPLATE" = "1" ]; then
-  case "$EXTRA_TEMPLATE" in
-    ""|*[!A-Za-z0-9_.-]*)
-      fail "invalid configured extra template name: $EXTRA_TEMPLATE"
-      ;;
-  esac
-  case "$EXTRA_QUBE" in
-    ""|*[!A-Za-z0-9_.-]*)
-      fail "invalid configured extra qube name: $EXTRA_QUBE"
-      ;;
-  esac
-fi
-
 case "$APPLY_MESSAGE" in
   ""|*[!A-Za-z0-9_.:-]*)
     fail "invalid configured apply message: $APPLY_MESSAGE"
@@ -485,22 +574,13 @@ qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
 qvm-check "$STAGING" >/dev/null 2>&1 || fail "missing config staging VM: $STAGING"
 qvm-check "$VALIDATOR" >/dev/null 2>&1 || fail "missing config validator VM: $VALIDATOR"
 
-run_or_fail "read template for $VAULT" "$VAULT_TEMPLATE_LOG" qvm-prefs "$VAULT" template
-run_or_fail "read template for $STAGING" "$STAGING_TEMPLATE_LOG" qvm-prefs "$STAGING" template
-run_or_fail "read template for $VALIDATOR" "$VALIDATOR_TEMPLATE_LOG" qvm-prefs "$VALIDATOR" template
-VAULT_TEMPLATE="$(tr -d '\n' < "$VAULT_TEMPLATE_LOG")"
-STAGING_TEMPLATE="$(tr -d '\n' < "$STAGING_TEMPLATE_LOG")"
-VALIDATOR_TEMPLATE="$(tr -d '\n' < "$VALIDATOR_TEMPLATE_LOG")"
-[ -n "$VAULT_TEMPLATE" ] || fail "missing template preference for $VAULT"
-[ -n "$STAGING_TEMPLATE" ] || fail "missing template preference for $STAGING"
-[ -n "$VALIDATOR_TEMPLATE" ] || fail "missing template preference for $VALIDATOR"
+assert_nix_closure_domain "$VAULT" "$VAULT_BACKEND_LOG" "$VAULT_STORE_VOLUME_LOG"
+assert_nix_closure_domain "$STAGING" "$STAGING_BACKEND_LOG" "$STAGING_STORE_VOLUME_LOG"
+assert_nix_closure_domain "$VALIDATOR" "$VALIDATOR_BACKEND_LOG" "$VALIDATOR_STORE_VOLUME_LOG"
 
 start_vm "$VAULT"
 start_vm "$STAGING"
 start_vm "$VALIDATOR"
-start_vm "$VAULT_TEMPLATE"
-start_vm "$STAGING_TEMPLATE"
-start_vm "$VALIDATOR_TEMPLATE"
 
 run_qrexec_or_fail "$VAULT" "qrexec uname in $VAULT" "$VAULT_UNAME_LOG" "uname -a"
 run_qrexec_or_fail "$STAGING" "qrexec uname in $STAGING" "$STAGING_UNAME_LOG" "uname -a"
@@ -508,6 +588,9 @@ run_qrexec_or_fail "$VALIDATOR" "qrexec uname in $VALIDATOR" "$VALIDATOR_UNAME_L
 run_qrexec_or_fail "$VAULT" "qrexec user in $VAULT" "$VAULT_USER_LOG" "id -un"
 run_qrexec_or_fail "$STAGING" "qrexec user in $STAGING" "$STAGING_USER_LOG" "id -un"
 run_qrexec_or_fail "$VALIDATOR" "qrexec user in $VALIDATOR" "$VALIDATOR_USER_LOG" "id -un"
+assert_runtime_nix_store "$VAULT" "$VAULT_STORE_MOUNT_LOG"
+assert_runtime_nix_store "$STAGING" "$STAGING_STORE_MOUNT_LOG"
+assert_runtime_nix_store "$VALIDATOR" "$VALIDATOR_STORE_MOUNT_LOG"
 
 grep -q 'Linux' "$VAULT_UNAME_LOG" || fail "vault uname output did not contain Linux"
 grep -q 'Linux' "$STAGING_UNAME_LOG" || fail "staging uname output did not contain Linux"
@@ -516,9 +599,13 @@ grep -qx "$QUBE_USER" "$VAULT_USER_LOG" || fail "vault qrexec user was not $QUBE
 grep -qx "$QUBE_USER" "$STAGING_USER_LOG" || fail "staging qrexec user was not $QUBE_USER"
 grep -qx "$QUBE_USER" "$VALIDATOR_USER_LOG" || fail "validator qrexec user was not $QUBE_USER"
 
-run_appmenus_sync_or_fail "$VAULT_TEMPLATE" "$VAULT_APPMENUS_LOG"
-run_appmenus_sync_or_fail "$STAGING_TEMPLATE" "$STAGING_APPMENUS_LOG"
-run_appmenus_sync_or_fail "$VALIDATOR_TEMPLATE" "$VALIDATOR_APPMENUS_LOG"
+run_appmenus_sync_or_fail "$VAULT" "$VAULT_APPMENUS_LOG"
+run_appmenus_sync_or_fail "$STAGING" "$STAGING_APPMENUS_LOG"
+run_appmenus_sync_or_fail "$VALIDATOR" "$VALIDATOR_APPMENUS_LOG"
+
+check_persistent_home "$VAULT" "$VAULT_PERSISTENCE_LOG"
+check_persistent_home "$STAGING" "$STAGING_PERSISTENCE_LOG"
+check_persistent_home "$VALIDATOR" "$VALIDATOR_PERSISTENCE_LOG"
 
 run_qrexec_or_fail "$VAULT" "config vault repo status" "$VAULT_REPO_STATUS_LOG" \
   "cd /home/$QUBE_USER/nixome-config-vault && git status --short --branch"
@@ -555,9 +642,6 @@ fi
 if [ -z "${NIXOME_SYSTEM_SEED:-}" ] || [ ! -r "$NIXOME_SYSTEM_SEED" ]; then
   fail "missing system seed helper for smoke update"
 fi
-if [ -z "${NIXOME_TEMPLATES_SEED:-}" ] || [ ! -r "$NIXOME_TEMPLATES_SEED" ]; then
-  fail "missing template seed helper for smoke update"
-fi
 if [ -z "${NIXOME_SYSTEM_SCHEMA_SEED:-}" ] || [ ! -r "$NIXOME_SYSTEM_SCHEMA_SEED" ]; then
   fail "missing system schema seed helper for smoke update"
 fi
@@ -569,46 +653,8 @@ DOM0_HOST_SEED_TEXT="$(cat "$NIXOME_DOM0_HOST_SEED")"
 FLAKE_SEED_TEXT="$(cat "$NIXOME_FLAKE_SEED")"
 LOCAL_SEED_TEXT="$(cat "$NIXOME_LOCAL_SEED")"
 SYSTEM_SEED_TEXT="$(cat "$NIXOME_SYSTEM_SEED")"
-TEMPLATES_SEED_TEXT="$(cat "$NIXOME_TEMPLATES_SEED")"
 SYSTEM_SCHEMA_SEED_TEXT="$(cat "$NIXOME_SYSTEM_SCHEMA_SEED")"
 TOPOLOGY_SCHEMA_SEED_TEXT="$(cat "$NIXOME_TOPOLOGY_SCHEMA_SEED")"
-EXTRA_TEMPLATE_DEFINITIONS_NIX=""
-if [ "$BUILD_EXTRA_TEMPLATE" = "1" ]; then
-  EXTRA_TEMPLATE_DEFINITIONS_NIX="$(cat <<EOF
-    "$EXTRA_TEMPLATE" = {
-      role = "dev-template";
-      sourceLabel = "runtime-config";
-      hostName = "nixome-dev-template";
-      etc."nixome/template-role".text = "dev\n";
-      packages = with pkgs; [
-        git
-        jq
-        ripgrep
-      ];
-      configuration = {
-        environment.etc."nixome/template-configuration".text = "dev-configuration\n";
-      };
-      domain.features."nixome-dev-template" = "1";
-      appVms."$EXTRA_QUBE" = {
-        label = "blue";
-        prefs = {
-          memory = 1536;
-          maxmem = 3072;
-          vcpus = 1;
-        };
-        features = {
-          "nixome-role" = "dev";
-          "nixome-created-from-template-definition" = "1";
-          "nixome-created-from-config-message" = "$APPLY_MESSAGE";
-        };
-        services = {
-          "network-manager" = false;
-        };
-      };
-    };
-EOF
-)"
-fi
 
 cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
@@ -671,34 +717,31 @@ cat > nixome/machine.nix <<'MACHINENIXEOF'
   appliedMessage,
   pkgs ? null,
   system,
-  templateBuilders ? null,
-  templateSet,
   ...
 }:
 {
-  templates.definitions = {
-$EXTRA_TEMPLATE_DEFINITIONS_NIX
-  };
-
-  topology.extraDomains = {
-    "$CREATED_QUBE" = {
-      template = "nixome-nixos-work";
-      label = "green";
-      prefs = {
-        memory = 1024;
-        maxmem = 2048;
-        vcpus = 1;
-      };
-      features = {
-        "nixome-created-from-config" = "1";
-        "nixome-created-from-config-message" = "$APPLY_MESSAGE";
-        "nixome-role" = "created-from-config";
-        os = "Linux";
-        qrexec = "1";
-      };
-      services = {
-        "network-manager" = false;
-      };
+  nixNative.domains."$CREATED_QUBE" = {
+    label = "green";
+    netvm = null;
+    rootImageSizeMiB = 128;
+    additionalStoreSpaceMiB = 128;
+    prefs = {
+      memory = 1024;
+      maxmem = 2048;
+      qrexec_timeout = 180;
+      vcpus = 1;
+    };
+    features = {
+      "nixome-created-from-config" = "1";
+      "nixome-created-from-config-message" = "$APPLY_MESSAGE";
+      "nixome-role" = "created-from-config";
+    };
+    services = {
+      "network-manager" = false;
+    };
+    configuration = {
+      environment.etc."nixome/domain-role".text = "created-from-config\n";
+      environment.etc."nixome/applied-message".text = "$APPLY_MESSAGE\n";
     };
   };
 
@@ -734,9 +777,6 @@ $EXTRA_TEMPLATE_DEFINITIONS_NIX
   };
 }
 MACHINENIXEOF
-cat > nixome/templates.nix <<'TEMPLATESNIXEOF'
-$TEMPLATES_SEED_TEXT
-TEMPLATESNIXEOF
 cat > nixome/topology.nix <<'TOPOLOGYNIXEOF'
 $TOPOLOGY_SCHEMA_SEED_TEXT
 TOPOLOGYNIXEOF
@@ -784,12 +824,11 @@ grep -F 'appliedMessage = "$APPLY_MESSAGE";' flake.nix
 grep -F 'configVms = import ./nixome/config-vms.nix;' flake.nix
 grep -F 'systemConfig = import ./nixome/system.nix;' flake.nix
 grep -F 'rawLocalConfig = import ./nixome/machine.nix {' flake.nix
-grep -F 'templateSet = import ./nixome/templates.nix {' flake.nix
 grep -F 'nixome-dom0-profile = dom0Profile;' flake.nix
 grep -F 'nixosConfigurations.nixome-dom0 = nixomeDom0System;' flake.nix
-grep -F '"$CREATED_QUBE" = {' nixome/machine.nix
+grep -F 'nixNative.domains."$CREATED_QUBE" = {' nixome/machine.nix
 grep -F 'dom0SystemAttr ? "nixosConfigurations.nixome-dom0.config.system.build.toplevel"' nixome/system.nix
-git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.lock flake.nix nixome/config-vms.nix nixome/dom0-host.nix nixome/local.nix nixome/machine.nix nixome/prebuilt-template-sources.nix nixome/system.nix nixome/system-schema.nix nixome/templates.nix nixome/topology.nix
+git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.lock flake.nix nixome/config-vms.nix nixome/dom0-host.nix nixome/local.nix nixome/machine.nix nixome/prebuilt-template-sources.nix nixome/system.nix nixome/system-schema.nix nixome/topology.nix
 git \
   -c user.name='Nixome Config Smoke' \
   -c user.email='nixome-config-smoke@localhost' \
@@ -822,65 +861,49 @@ jq -e \
   --arg apply_message "$APPLY_MESSAGE" \
   --arg created "$CREATED_QUBE" \
   '
+    def closure_domain($name):
+      .domains[$name].class == "StandaloneVM" and
+      .domains[$name].template == null and
+      .domains[$name].backend.type == "nix-closure" and
+      .domains[$name].backend.template == null and
+      (.domains[$name].backend.system.source | test("^/nix/store/")) and
+      .domains[$name].backend.system.source_ref == null and
+      (.domains[$name].backend.root.source | test("^/nix/store/.*/root.img$")) and
+      .domains[$name].backend.root.source_ref == null and
+      (.domains[$name].backend.store.source | test("^/nix/store/.*/store.img$")) and
+      .domains[$name].backend.store.source_ref == null and
+      .domains[$name].backend.store.mountpoint == "/nix/store" and
+      .domains[$name].backend.store.device == "/dev/xvde" and
+      .domains[$name].backend.store.read_only == true;
+
     .schema == "nixome.qubes-topology.v1" and
     .prefs.default_kernel == "" and
-    .templates."nixome-nixos-work".import == true and
-    (.templates."nixome-nixos-work".source | test("^/nix/store/")) and
-    .templates."nixome-nixos-work".source_ref == null and
+    .templates == {} and
     .kernels == {} and
-    .domains[$vault].class == "AppVM" and
-    .domains[$vault].template == "nixome-nixos-config-system" and
+    closure_domain($vault) and
     .domains[$vault].label == "black" and
     .domains[$vault].netvm == null and
     .domains[$vault].prefs.include_in_backups == true and
     .domains[$vault].features."nixome-config-authority" == "1" and
     .domains[$vault].features."nixome-role" == "config-vault" and
     .domains[$vault].services."network-manager" == false and
-    .domains[$staging].class == "AppVM" and
-    .domains[$staging].template == "nixome-nixos-config-system" and
+    closure_domain($staging) and
     .domains[$staging].label == "gray" and
     .domains[$staging].netvm == null and
     .domains[$staging].prefs.include_in_backups == true and
     .domains[$staging].features."nixome-config-staging" == "1" and
     .domains[$staging].features."nixome-config-applied-message" == $apply_message and
-    .domains[$validator].class == "AppVM" and
-    .domains[$validator].template == "nixome-nixos-config-system" and
+    closure_domain($validator) and
     .domains[$validator].label == "blue" and
     .domains[$validator].netvm == null and
     .domains[$validator].prefs.include_in_backups == true and
     .domains[$validator].features."nixome-config-validator" == "1" and
     .domains[$validator].features."nixome-role" == "config-validator" and
-    .domains."nixome-nixos-work".class == "TemplateVM" and
-    .domains."nixome-nixos-work".features."nixome-template-source" == "staged-config" and
-    .domains."nixome-work".template == "nixome-nixos-work" and
-    .domains[$created].template == "nixome-nixos-work"
+    closure_domain($created) and
+    .domains[$created].features."nixome-created-from-config" == "1" and
+    .domains[$created].features."nixome-created-from-config-message" == $apply_message
   ' "$APPLIED_TOPOLOGY_LOG" >/dev/null ||
   fail "applied topology does not define self-hosted config VMs"
-
-if [ "$BUILD_EXTRA_TEMPLATE" = "1" ]; then
-  jq -e \
-    --arg template "$EXTRA_TEMPLATE" \
-    --arg qube "$EXTRA_QUBE" \
-    --arg apply_message "$APPLY_MESSAGE" \
-    '
-      .templates[$template].import == true and
-      (.templates[$template].source | test("^/nix/store/")) and
-      .templates[$template].source_ref == null and
-      .domains[$template].class == "TemplateVM" and
-      .domains[$template].features."nixome-role" == "dev-template" and
-      .domains[$template].features."nixome-template-source" == "runtime-config" and
-      .domains[$template].features."nixome-dev-template" == "1" and
-      .domains[$qube].class == "AppVM" and
-      .domains[$qube].template == $template and
-      .domains[$qube].label == "blue" and
-      .domains[$qube].prefs.memory == 1536 and
-      .domains[$qube].prefs.maxmem == 3072 and
-      .domains[$qube].features."nixome-role" == "dev" and
-      .domains[$qube].features."nixome-created-from-template-definition" == "1" and
-      .domains[$qube].features."nixome-created-from-config-message" == $apply_message
-    ' "$APPLIED_TOPOLOGY_LOG" >/dev/null ||
-    fail "applied topology does not define the runtime-built template VM"
-fi
 
 run_or_fail \
   "read generated Nixome qrexec policy" \
@@ -1118,33 +1141,13 @@ jq -e \
   ' "$CONFIG_STATUS_LOG" >/dev/null ||
   fail "config status JSON did not match applied state"
 
-if [ "$BUILD_EXTRA_TEMPLATE" = "1" ]; then
-  jq -e \
-    --arg template "$EXTRA_TEMPLATE" \
-    --arg qube "$EXTRA_QUBE" \
-    '
-      .schema == "nixome.config-status.v1" and
-      (.topology.template_names | index($template)) and
-      (.topology.domain_names | index($template)) and
-      (.topology.domain_names | index($qube)) and
-      any(.qvm.managed_domains[]; .name == $template) and
-      any(.qvm.managed_domains[]; .name == $qube)
-    ' "$CONFIG_STATUS_LOG" >/dev/null ||
-    fail "config status JSON did not include runtime-built template state"
-fi
-
 qvm-features "$STAGING" nixome-config-applied-message > "$APPLIED_FEATURE_LOG" 2>&1 ||
   fail "applied config feature is missing"
 grep -qx "$APPLY_MESSAGE" "$APPLIED_FEATURE_LOG" ||
   fail "applied config feature did not match expected value"
 
 qvm-check "$CREATED_QUBE" >/dev/null 2>&1 || fail "config-created qube is missing: $CREATED_QUBE"
-run_or_fail \
-  "read template for $CREATED_QUBE" \
-  "$CREATED_QUBE_TEMPLATE_LOG" \
-  qvm-prefs "$CREATED_QUBE" template
-grep -qx "nixome-nixos-work" "$CREATED_QUBE_TEMPLATE_LOG" ||
-  fail "config-created qube template did not match expected value"
+assert_nix_closure_domain "$CREATED_QUBE" "$CREATED_QUBE_BACKEND_LOG" "$CREATED_QUBE_STORE_VOLUME_LOG"
 qvm-features \
   "$CREATED_QUBE" \
   nixome-created-from-config-message \
@@ -1160,35 +1163,10 @@ run_qrexec_or_fail \
   "$CREATED_QUBE_UNAME_LOG" \
   "uname -a"
 run_qrexec_or_fail "$CREATED_QUBE" "qrexec user in $CREATED_QUBE" "$CREATED_QUBE_USER_LOG" "id -un"
+assert_runtime_nix_store "$CREATED_QUBE" "$CREATED_QUBE_STORE_MOUNT_LOG"
 grep -q 'Linux' "$CREATED_QUBE_UNAME_LOG" || fail "created qube uname output did not contain Linux"
 grep -qx "$QUBE_USER" "$CREATED_QUBE_USER_LOG" || fail "created qube qrexec user was not $QUBE_USER"
-
-if [ "$BUILD_EXTRA_TEMPLATE" = "1" ]; then
-  qvm-check "$EXTRA_QUBE" >/dev/null 2>&1 || fail "extra config-created qube is missing: $EXTRA_QUBE"
-  run_or_fail \
-    "read template for $EXTRA_QUBE" \
-    "$EXTRA_QUBE_TEMPLATE_LOG" \
-    qvm-prefs "$EXTRA_QUBE" template
-  grep -qx "$EXTRA_TEMPLATE" "$EXTRA_QUBE_TEMPLATE_LOG" ||
-    fail "extra config-created qube template did not match expected value"
-  qvm-features \
-    "$EXTRA_QUBE" \
-    nixome-created-from-config-message \
-    > "$EXTRA_QUBE_FEATURE_LOG" 2>&1 ||
-    fail "extra config-created qube feature is missing"
-  grep -qx "$APPLY_MESSAGE" "$EXTRA_QUBE_FEATURE_LOG" ||
-    fail "extra config-created qube feature did not match expected value"
-
-  start_vm "$EXTRA_QUBE"
-  run_qrexec_or_fail \
-    "$EXTRA_QUBE" \
-    "qrexec uname in $EXTRA_QUBE" \
-    "$EXTRA_QUBE_UNAME_LOG" \
-    "uname -a"
-  run_qrexec_or_fail "$EXTRA_QUBE" "qrexec user in $EXTRA_QUBE" "$EXTRA_QUBE_USER_LOG" "id -un"
-  grep -q 'Linux' "$EXTRA_QUBE_UNAME_LOG" || fail "extra qube uname output did not contain Linux"
-  grep -qx "$QUBE_USER" "$EXTRA_QUBE_USER_LOG" || fail "extra qube qrexec user was not $QUBE_USER"
-fi
+check_persistent_home "$CREATED_QUBE" "$CREATED_QUBE_PERSISTENCE_LOG"
 
 run_qrexec_or_fail \
   "$VAULT" \
@@ -1287,5 +1265,5 @@ jq -e \
 ' "$APPLY_JSON" >/dev/null || fail "config apply JSON did not pass"
 
 collect_diagnostics
-write_result passed "staged Nix created a new qrexec-capable AppVM"
+write_result passed "staged Nix created a new qrexec-capable nix-closure VM"
 cat "$RESULT_JSON"

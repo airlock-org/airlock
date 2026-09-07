@@ -56,108 +56,158 @@
 
       nixomeQubesVmKernelName = "6.12.64-1.fc41";
 
-      mkQubeKernelOpts =
-        configuration:
-        let
-          cfg = configuration.config;
-          kernelParams = builtins.filter (param: !(lib.hasPrefix "root=" param)) cfg.boot.kernelParams;
-        in
-        lib.concatStringsSep " " (
-          kernelParams
-          ++ [
-            "init=/sbin/init"
-          ]
-        );
-
-      mkQubeRootImage =
-        system:
-        {
-          configuration,
-          imageName,
-        }:
-        let
-          pkgs = pkgsFor system;
-          bootAnchors = pkgs.runCommand "${imageName}-qubes-boot-anchors" { } ''
-            mkdir -p "$out/sbin" "$out/lib/modules"
-            cat > "$out/sbin/init" <<'EOF'
-            #!${pkgs.runtimeShell}
-            set -eu
-
-            export PATH=${lib.makeBinPath [ pkgs.coreutils ]}
-
-            mkdir -p /etc /run/qubes /var/log/qubes
-            if [ -L /var/run ] || [ ! -e /var/run ]; then
-              mkdir -p /var
-              ln -sfn /run /var/run
-            elif [ -d /var/run ]; then
-              mkdir -p /var/run/qubes
-            else
-              echo "cannot initialize /var/run for Qubes guest runtime" >&2
-              exit 1
-            fi
-
-            ${configuration.config.system.build.toplevel}/activate
-            exec ${configuration.config.system.build.toplevel}/init "$@"
-            EOF
-            chmod 0555 "$out/sbin/init"
-          '';
-        in
-        import "${nixpkgs}/nixos/lib/make-disk-image.nix" {
-          inherit lib pkgs;
-          config = configuration.config;
-          name = "${imageName}-root-image";
-          baseName = "root";
-          format = "raw";
-          partitionTableType = "none";
-          installBootLoader = false;
-          copyChannel = false;
-          diskSize = "auto";
-          additionalSpace = "1024M";
-          contents = [
-            {
-              source = "${bootAnchors}/sbin/init";
-              target = "/sbin/init";
-            }
-            {
-              source = "${bootAnchors}/lib";
-              target = "/lib";
-            }
-          ];
-        };
-
-      mkQubesTemplatePackage =
-        system:
-        {
-          templateName,
-          rootImageFile,
-        }:
-        let
-          pkgs = pkgsFor system;
-        in
-        pkgs.callPackage ./pkgs/nixome-qubes-template {
-          inherit templateName rootImageFile;
-        };
-
-      mkStagedTemplateSet =
-        system:
-        let
-          templateBuilders = import ./lib/nixome/qube-template.nix {
-            inherit nixpkgs system;
-            nixpkgsLibvirt105Source = "${nixpkgs-libvirt_10_5}";
-            nixomeSupport = "${self}";
-            nixosQubesSource = "${nixos-qubes}";
-          };
-        in
-        import ./seeds/config-staging/nixome/templates.nix {
-          inherit system templateBuilders;
-        };
-
       nixomeConfigSeedInputs = {
         nixpkgs = "${nixpkgs}";
         nixpkgsLibvirt105 = "${nixpkgs-libvirt_10_5}";
         nixosQubes = "${nixos-qubes}";
         nixomeSupport = "${self}";
       };
+
+      mkNixomeQubeBuilders =
+        system:
+        import ./lib/nixome/qube-template.nix {
+          inherit nixpkgs system;
+          nixpkgsLibvirt105Source = "${nixpkgs-libvirt_10_5}";
+          nixomeSupport = "${self}";
+          nixosQubesSource = "${nixos-qubes}";
+        };
+
+      configVmRoles = [
+        "config-vault"
+        "config-staging"
+        "config-validator"
+      ];
+
+      configRoleDefaults = {
+        config-vault = {
+          guestHostName = "config-vault";
+          label = "black";
+          rootImageSizeMiB = 128;
+          additionalStoreSpaceMiB = 512;
+          prefs = {
+            autostart = false;
+            include_in_backups = true;
+            memory = 1024;
+            maxmem = 2048;
+            vcpus = 1;
+          };
+          features = {
+            "nixome-managed" = "1";
+            "nixome-role" = "config-vault";
+            "nixome-config-authority" = "1";
+          };
+          services = {
+            "network-manager" = false;
+          };
+        };
+        config-staging = {
+          guestHostName = "config-staging";
+          label = "gray";
+          rootImageSizeMiB = 128;
+          additionalStoreSpaceMiB = 1024;
+          prefs = {
+            autostart = false;
+            include_in_backups = true;
+            memory = 2048;
+            maxmem = 4096;
+            vcpus = 2;
+          };
+          features = {
+            "nixome-managed" = "1";
+            "nixome-role" = "config-staging";
+            "nixome-config-staging" = "1";
+            "nixome-config-applied-message" = "initial";
+          };
+          services = {
+            "network-manager" = false;
+          };
+        };
+        config-validator = {
+          guestHostName = "config-validator";
+          label = "blue";
+          rootImageSizeMiB = 128;
+          additionalStoreSpaceMiB = 1024;
+          prefs = {
+            autostart = false;
+            include_in_backups = true;
+            memory = 2048;
+            maxmem = 4096;
+            vcpus = 2;
+          };
+          features = {
+            "nixome-managed" = "1";
+            "nixome-role" = "config-validator";
+            "nixome-config-validator" = "1";
+          };
+          services = {
+            "network-manager" = false;
+          };
+        };
+      };
+
+      mkConfigDomainEntries =
+        system:
+        let
+          qubeBuilders = mkNixomeQubeBuilders system;
+          mkGuestModule =
+            role:
+            let
+              defaults = configRoleDefaults.${role};
+            in
+            { ... }:
+            {
+              networking.hostName = defaults.guestHostName;
+            };
+          mkEntry =
+            role:
+            let
+              defaults = configRoleDefaults.${role};
+            in
+            qubeBuilders.mkNixNativeDomain {
+              name = role;
+              guestRole = role;
+              inherit nixomeConfigSeedInputs;
+              nixomePrebuiltTemplateSources = { };
+              modules = [ (mkGuestModule role) ];
+              additionalStoreSpaceMiB = defaults.additionalStoreSpaceMiB;
+              rootImageSizeMiB = defaults.rootImageSizeMiB;
+              kernelName = nixomeQubesVmKernelName;
+              label = defaults.label;
+              netvm = null;
+              prefs = defaults.prefs;
+              features = defaults.features;
+              services = defaults.services;
+            };
+        in
+        lib.listToAttrs (
+          builtins.map (role: {
+            name = role;
+            value = mkEntry role;
+          }) configVmRoles
+        );
+
+      materializeNixClosureDomain =
+        entry:
+        entry.domain
+        // {
+          prefs = entry.domain.prefs // {
+            kernelopts = entry.kernelopts;
+          };
+          backend = entry.domain.backend // {
+            system = entry.domain.backend.system // {
+              source = "${entry.configuration.config.system.build.toplevel}";
+              sourceRef = null;
+            };
+            root = entry.domain.backend.root // {
+              source = "${entry.rootImage}/root.img";
+              sourceRef = null;
+            };
+            store = entry.domain.backend.store // {
+              source = "${entry.storeImage}/store.img";
+              sourceRef = null;
+            };
+          };
+        };
 
       mkModuleContractCheck =
         system:
@@ -239,31 +289,29 @@
         system:
         let
           pkgs = pkgsFor system;
-          templateBuilders = import ./lib/nixome/qube-template.nix {
-            inherit nixpkgs system;
-            nixpkgsLibvirt105Source = "${nixpkgs-libvirt_10_5}";
-            nixomeSupport = "${self}";
-            nixosQubesSource = "${nixos-qubes}";
-          };
-          stagedTemplateSet = mkStagedTemplateSet system;
-          configSystemRootImage = mkQubeRootImage system {
-            configuration = self.nixosConfigurations.qube-template-config-system;
-            imageName = "nixome-nixos-config-system";
-          };
-          configVaultRootImage = mkQubeRootImage system {
-            configuration = self.nixosConfigurations.qube-template-config-vault;
-            imageName = "nixome-nixos-config-vault";
-          };
-          configStagingRootImage = mkQubeRootImage system {
-            configuration = self.nixosConfigurations.qube-template-config-staging;
-            imageName = "nixome-nixos-config-staging";
-          };
-          configValidatorRootImage = mkQubeRootImage system {
-            configuration = self.nixosConfigurations.qube-template-config-validator;
-            imageName = "nixome-nixos-config-validator";
-          };
+          templateBuilders = mkNixomeQubeBuilders system;
+          configDomainEntries = mkConfigDomainEntries system;
+          configDomainPackages = lib.listToAttrs (
+            lib.concatMap (
+              name:
+              let
+                entry = configDomainEntries.${name};
+              in
+              [
+                {
+                  name = entry.rootImageName;
+                  value = entry.rootImage;
+                }
+                {
+                  name = entry.storeImageName;
+                  value = entry.storeImage;
+                }
+              ]
+            ) (builtins.attrNames configDomainEntries)
+          );
         in
-        {
+        configDomainPackages
+        // {
           nixome-config-apply = pkgs.callPackage ./pkgs/nixome-config-apply { };
           nixome-config-archive-candidate = pkgs.callPackage ./pkgs/nixome-config-archive { };
           nixome-config-boot-verify = pkgs.callPackage ./pkgs/nixome-config-boot-verify { };
@@ -298,27 +346,6 @@
             ];
             additionalSpaceMiB = 16;
           };
-          nixome-nixos-config-system-root-image = configSystemRootImage;
-          nixome-nixos-config-system-template = mkQubesTemplatePackage system {
-            templateName = "nixome-nixos-config-system";
-            rootImageFile = "${configSystemRootImage}/root.img";
-          };
-          nixome-nixos-config-vault-root-image = configVaultRootImage;
-          nixome-nixos-config-vault-template = mkQubesTemplatePackage system {
-            templateName = "nixome-nixos-config-vault";
-            rootImageFile = "${configVaultRootImage}/root.img";
-          };
-          nixome-nixos-config-staging-root-image = configStagingRootImage;
-          nixome-nixos-config-staging-template = mkQubesTemplatePackage system {
-            templateName = "nixome-nixos-config-staging";
-            rootImageFile = "${configStagingRootImage}/root.img";
-          };
-          nixome-nixos-config-validator-root-image = configValidatorRootImage;
-          nixome-nixos-config-validator-template = mkQubesTemplatePackage system {
-            templateName = "nixome-nixos-config-validator";
-            rootImageFile = "${configValidatorRootImage}/root.img";
-          };
-          nixome-nixos-work-template = stagedTemplateSet.packages.nixome-nixos-work-template;
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
           nixome-vm-gui-image = self.nixosConfigurations.vm-gui.config.system.build.image;
           nixome-vm-gui-config-image = self.nixosConfigurations.vm-gui-config.config.system.build.image;
@@ -392,20 +419,9 @@
             name = nixomeQubesVmKernelName;
             package = self.packages.x86_64-linux.nixome-qubes-vm-kernel;
           };
-          nixomeQubeKernelOpts = {
-            configSystem = mkQubeKernelOpts self.nixosConfigurations.qube-template-config-system;
-          };
-          nixomeTemplatePackages = {
-            configSystem = self.packages.x86_64-linux.nixome-nixos-config-system-template;
-          };
-          nixomePrebuiltTemplatePackages = {
-            work = self.packages.x86_64-linux.nixome-nixos-work-template;
-          };
-          nixomePrebuiltTemplateSources = {
-            work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
-            nixome-nixos-work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
-          };
-          nixomeConfigSystemTemplateImport = true;
+          nixomeConfigDomains = builtins.mapAttrs (
+            _name: entry: materializeNixClosureDomain entry
+          ) (mkConfigDomainEntries "x86_64-linux");
           inherit nixomeConfigSeedInputs;
         };
         modules = [
@@ -415,102 +431,11 @@
         ];
       };
 
-      nixosConfigurations.qube-template-config-system = lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = {
-          nixomePrebuiltTemplatePackages = {
-            work = self.packages.x86_64-linux.nixome-nixos-work-template;
-          };
-          nixomePrebuiltTemplateSources = {
-            work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
-            nixome-nixos-work = "${self.packages.x86_64-linux.nixome-nixos-work-template}/nixome-nixos-work";
-          };
-          inherit nixomeConfigSeedInputs;
-        };
-        modules = [
-          nixos-qubes.nixosModules.qubes
-          (
-            { lib, ... }:
-            {
-              nixpkgs.config.allowUnfreePredicate =
-                pkg:
-                builtins.elem (pkg.pname or (lib.getName pkg)) [
-                  "qubes-artwork"
-                  "qubes-vmm-stubdom-linux"
-                ];
-            }
-          )
-          ./machines/qube-template-config-system.nix
-        ];
-      };
-
-      nixosConfigurations.qube-template-config-vault = lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = {
-          inherit nixomeConfigSeedInputs;
-          nixomePrebuiltTemplateSources = { };
-        };
-        modules = [
-          nixos-qubes.nixosModules.qubes
-          (
-            { lib, ... }:
-            {
-              nixpkgs.config.allowUnfreePredicate =
-                pkg:
-                builtins.elem (pkg.pname or (lib.getName pkg)) [
-                  "qubes-artwork"
-                  "qubes-vmm-stubdom-linux"
-                ];
-            }
-          )
-          ./machines/qube-template-config-vault.nix
-        ];
-      };
-
-      nixosConfigurations.qube-template-config-staging = lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = {
-          inherit nixomeConfigSeedInputs;
-          nixomePrebuiltTemplateSources = { };
-        };
-        modules = [
-          nixos-qubes.nixosModules.qubes
-          (
-            { lib, ... }:
-            {
-              nixpkgs.config.allowUnfreePredicate =
-                pkg:
-                builtins.elem (pkg.pname or (lib.getName pkg)) [
-                  "qubes-artwork"
-                  "qubes-vmm-stubdom-linux"
-                ];
-            }
-          )
-          ./machines/qube-template-config-staging.nix
-        ];
-      };
-
-      nixosConfigurations.qube-template-config-validator = lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = {
-          inherit nixomeConfigSeedInputs;
-          nixomePrebuiltTemplateSources = { };
-        };
-        modules = [
-          nixos-qubes.nixosModules.qubes
-          (
-            { lib, ... }:
-            {
-              nixpkgs.config.allowUnfreePredicate =
-                pkg:
-                builtins.elem (pkg.pname or (lib.getName pkg)) [
-                  "qubes-artwork"
-                  "qubes-vmm-stubdom-linux"
-                ];
-            }
-          )
-          ./machines/qube-template-config-validator.nix
-        ];
-      };
+      nixosConfigurations.nixome-domain-config-vault =
+        (mkConfigDomainEntries "x86_64-linux").config-vault.configuration;
+      nixosConfigurations.nixome-domain-config-staging =
+        (mkConfigDomainEntries "x86_64-linux").config-staging.configuration;
+      nixosConfigurations.nixome-domain-config-validator =
+        (mkConfigDomainEntries "x86_64-linux").config-validator.configuration;
     };
 }

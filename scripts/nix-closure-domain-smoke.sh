@@ -697,11 +697,9 @@ cat > nixome/machine.nix <<'MACHINENIX'
   pkgs ? null,
   system,
   templateBuilders ? null,
-  templateSet,
   ...
 }:
 {
-  templates.definitions = { };
   domains = { };
 
   nixNative.domains."$DOMAIN" = {
@@ -745,8 +743,6 @@ cat > nixome/machine.nix <<'MACHINENIX'
   };
 
   configVms = {
-    templateMode = "shared";
-    sharedGuest = { };
     guests = {
       config-vault = { };
       config-staging = { };

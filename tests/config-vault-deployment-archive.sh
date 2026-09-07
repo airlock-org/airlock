@@ -204,7 +204,7 @@ archive_cmd="$(
   nix build \
     --no-link \
     --print-out-paths \
-    "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.Config.ArchiveDeployment\".source"
+    "$ROOT#nixosConfigurations.nixome-domain-config-vault.config.environment.etc.\"qubes-rpc/nixome.Config.ArchiveDeployment\".source"
 )"
 
 NIXOME_CONFIG_ARCHIVE_PATH="$VAULT_REPO" \

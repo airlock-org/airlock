@@ -67,64 +67,6 @@ let
     }:
     "${mkQubeKernelOpts configuration} nixome.system=${configuration.config.system.build.toplevel} nixome.storedev=${storeDevice}";
 
-  mkQubeRootImage =
-    {
-      configuration,
-      imageName,
-      additionalSpace ? "1024M",
-    }:
-    let
-      bootAnchors = pkgs.runCommand "${imageName}-qubes-boot-anchors" { } ''
-        mkdir -p "$out/sbin" "$out/lib/modules"
-        cat > "$out/sbin/init" <<'EOF'
-        #!${pkgs.runtimeShell}
-        set -eu
-
-        export PATH=${lib.makeBinPath [ pkgs.coreutils ]}
-
-        mkdir -p /etc /run/qubes /var/log/qubes
-        if [ -L /var/run ] || [ ! -e /var/run ]; then
-          mkdir -p /var
-          ln -sfn /run /var/run
-        elif [ -d /var/run ]; then
-          mkdir -p /var/run/qubes
-        else
-          echo "cannot initialize /var/run for Qubes guest runtime" >&2
-          exit 1
-        fi
-
-        ${configuration.config.system.build.toplevel}/activate
-        exec ${configuration.config.system.build.toplevel}/init "$@"
-        EOF
-        chmod 0555 "$out/sbin/init"
-      '';
-    in
-    import "${nixpkgs}/nixos/lib/make-disk-image.nix" {
-      inherit
-        additionalSpace
-        lib
-        pkgs
-        ;
-      config = configuration.config;
-      name = "${imageName}-root-image";
-      baseName = "root";
-      format = "raw";
-      partitionTableType = "none";
-      installBootLoader = false;
-      copyChannel = false;
-      diskSize = "auto";
-      contents = [
-        {
-          source = "${bootAnchors}/sbin/init";
-          target = "/sbin/init";
-        }
-        {
-          source = "${bootAnchors}/lib";
-          target = "/lib";
-        }
-      ];
-    };
-
   mkNixClosureEarlyInit = pkgs.runCommand "nixome-nix-closure-early-init"
     {
       nativeBuildInputs = [ pkgs.pkgsStatic.stdenv.cc ];
@@ -520,87 +462,6 @@ let
         EOF
       '';
 
-  mkQubesTemplatePackage =
-    {
-      templateName,
-      rootImageFile,
-      templateConf ? {
-        qrexec = "1";
-        virt-mode = "pvh";
-      },
-      vmAppmenus ? [ ],
-      templateAppmenus ? [ ],
-      netvmAppmenus ? [ ],
-    }:
-    pkgs.callPackage "${nixomeSupport}/pkgs/nixome-qubes-template" {
-      inherit
-        netvmAppmenus
-        rootImageFile
-        templateAppmenus
-        templateConf
-        templateName
-        vmAppmenus
-        ;
-    };
-
-  mkNixosQubeTemplate =
-    {
-      templateName,
-      imageName ? templateName,
-      modules,
-      additionalSpace ? "1024M",
-      templateConf ? {
-        qrexec = "1";
-        virt-mode = "pvh";
-      },
-      vmAppmenus ? [ ],
-      templateAppmenus ? [ ],
-      netvmAppmenus ? [ ],
-    }:
-    let
-      configuration = lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          nixomeConfigSeedInputs = null;
-          nixomePrebuiltTemplateSources = { };
-        };
-        modules = [
-          "${nixpkgs}/nixos/modules/profiles/minimal.nix"
-          "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
-          "${nixomeSupport}/modules/qube-guest.nix"
-          {
-            nixpkgs.pkgs = pkgs;
-            nixome.qubeGuest.enable = true;
-            documentation.enable = lib.mkDefault false;
-            programs.command-not-found.enable = lib.mkDefault false;
-            system.nixos.versionSuffix = lib.mkForce "";
-          }
-        ]
-        ++ modules;
-      };
-      rootImage = mkQubeRootImage {
-        inherit additionalSpace configuration imageName;
-      };
-      package = mkQubesTemplatePackage {
-        inherit
-          netvmAppmenus
-          templateAppmenus
-          templateConf
-          templateName
-          vmAppmenus
-          ;
-        rootImageFile = "${rootImage}/root.img";
-      };
-    in
-    {
-      inherit
-        configuration
-        package
-        rootImage
-        ;
-      kernelopts = mkQubeKernelOpts configuration;
-    };
-
   mkNixStoreClosureImage =
     {
       name,
@@ -676,6 +537,10 @@ let
     {
       name,
       modules,
+      guestRole ? "base",
+      nixomeConfigSeedInputs ? null,
+      nixomePrebuiltTemplateSources ? { },
+      extraSpecialArgs ? { },
       additionalRootSpace ? null,
       additionalStoreSpaceMiB ? 256,
       configurationName ? "nixome-domain-${builtins.replaceStrings [ "." ] [ "-" ] name}",
@@ -694,9 +559,11 @@ let
       configuration = lib.nixosSystem {
         inherit system;
         specialArgs = {
-          nixomeConfigSeedInputs = null;
-          nixomePrebuiltTemplateSources = { };
-        };
+          inherit
+            nixomeConfigSeedInputs
+            nixomePrebuiltTemplateSources
+            ;
+        } // extraSpecialArgs;
         modules = [
           "${nixpkgs}/nixos/modules/profiles/minimal.nix"
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
@@ -704,7 +571,7 @@ let
           {
             nixpkgs.pkgs = pkgs;
             nixome.qubeGuest.enable = true;
-            nixome.qubeGuest.role = "base";
+            nixome.qubeGuest.role = guestRole;
             documentation.enable = lib.mkDefault false;
             programs.command-not-found.enable = lib.mkDefault false;
             system.nixos.versionSuffix = lib.mkForce "";
@@ -801,10 +668,7 @@ in
     mkNixClosureKernelOpts
     mkNixClosureRootImage
     mkNixStoreClosureImage
-    mkNixosQubeTemplate
     mkQubeKernelOpts
-    mkQubeRootImage
-    mkQubesTemplatePackage
     pkgs
     qubesOverlays
     ;

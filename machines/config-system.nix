@@ -1,38 +1,32 @@
 {
   lib,
+  nixomeConfigDomains ? { },
   nixomeConfigSeedInputs ? null,
-  nixomePrebuiltTemplatePackages ? { },
-  nixomePrebuiltTemplateSources ? { },
-  nixomeConfigSystemTemplateImport ? true,
   nixomeQubeKernel ? null,
-  nixomeQubeKernelOpts ? null,
-  nixomeTemplatePackages ? null,
   ...
 }:
 let
-  configSystemTemplateSource =
-    if nixomePrebuiltTemplateSources ? configSystem then
-      nixomePrebuiltTemplateSources.configSystem
-    else if nixomePrebuiltTemplateSources ? nixome-nixos-config-system then
-      nixomePrebuiltTemplateSources.nixome-nixos-config-system
-    else if nixomeTemplatePackages != null && nixomeTemplatePackages ? configSystem then
-      "${nixomeTemplatePackages.configSystem}/nixome-nixos-config-system"
-    else
-      null;
-  haveTemplates = !nixomeConfigSystemTemplateImport || configSystemTemplateSource != null;
-  haveQubeKernel =
-    nixomeQubeKernel != null && nixomeQubeKernelOpts != null && nixomeQubeKernelOpts ? configSystem;
+  configRoles = [
+    "config-vault"
+    "config-staging"
+    "config-validator"
+  ];
+  missingConfigDomains = builtins.filter (
+    role: !(builtins.hasAttr role nixomeConfigDomains)
+  ) configRoles;
+  haveConfigDomains = missingConfigDomains == [ ];
+  haveQubeKernel = nixomeQubeKernel != null;
   haveConfigSeedInputs = nixomeConfigSeedInputs != null;
 in
 {
   assertions = [
     {
-      assertion = haveTemplates;
-      message = "machines/config-system.nix requires a config-system template package/source when template import is enabled.";
+      assertion = haveConfigDomains;
+      message = "machines/config-system.nix requires generated nix-closure config domains: ${builtins.concatStringsSep ", " missingConfigDomains}";
     }
     {
       assertion = haveQubeKernel;
-      message = "machines/config-system.nix requires nixomeQubeKernel and nixomeQubeKernelOpts specialArgs.";
+      message = "machines/config-system.nix requires nixomeQubeKernel specialArg.";
     }
     {
       assertion = haveConfigSeedInputs;
@@ -54,27 +48,17 @@ in
       if haveConfigSeedInputs then nixomeConfigSeedInputs.nixomeSupport else null;
   };
 
-  environment.systemPackages = lib.attrValues nixomePrebuiltTemplatePackages;
-
   nixome.qubes = {
     enable = true;
     setupConfigOnBoot.enable = true;
 
     prefs = {
       # Fresh Nixome dom0 images do not have a Fedora/Qubes VM kernel
-      # installed. TemplateVM creation still needs this global property to be
-      # defined, even when the imported template later chooses another boot
-      # path.
+      # installed. Nix-native domains set their own kernel explicitly.
       default_kernel = "";
     };
 
-    templates = {
-      nixome-nixos-config-system = {
-        import = nixomeConfigSystemTemplateImport;
-        source = if nixomeConfigSystemTemplateImport then configSystemTemplateSource else null;
-        skipStart = true;
-      };
-    };
+    templates = { };
 
     kernels = {
       ${if haveQubeKernel then nixomeQubeKernel.name else "missing-qubes-vm-kernel"} = {
@@ -82,87 +66,7 @@ in
       };
     };
 
-    domains = {
-      nixome-nixos-config-system = {
-        class = "TemplateVM";
-        label = "black";
-        netvm = null;
-        prefs = {
-          default_user = "user";
-          kernel = if haveQubeKernel then nixomeQubeKernel.name else "";
-          kernelopts = if haveQubeKernel then nixomeQubeKernelOpts.configSystem else "";
-          qrexec_timeout = 120;
-          virt_mode = "pvh";
-        };
-        features = {
-          "nixome-managed" = "1";
-          "nixome-role" = "config-system-template";
-          os = "Linux";
-          qrexec = "1";
-        };
-      };
-
-      config-vault = {
-        class = "AppVM";
-        template = "nixome-nixos-config-system";
-        label = "black";
-        netvm = null;
-        prefs = {
-          autostart = false;
-          include_in_backups = true;
-          memory = 1024;
-          maxmem = 2048;
-          vcpus = 1;
-        };
-        features = {
-          "nixome-managed" = "1";
-          "nixome-role" = "config-vault";
-          "nixome-config-authority" = "1";
-        };
-        services = {
-          "network-manager" = false;
-        };
-      };
-
-      config-staging = {
-        class = "AppVM";
-        template = "nixome-nixos-config-system";
-        label = "gray";
-        netvm = null;
-        prefs = {
-          autostart = false;
-          include_in_backups = true;
-          memory = 2048;
-          maxmem = 4096;
-          vcpus = 2;
-        };
-        features = {
-          "nixome-managed" = "1";
-          "nixome-role" = "config-staging";
-          "nixome-config-staging" = "1";
-          "nixome-config-applied-message" = "initial";
-        };
-      };
-
-      config-validator = {
-        class = "AppVM";
-        template = "nixome-nixos-config-system";
-        label = "blue";
-        netvm = null;
-        prefs = {
-          autostart = false;
-          include_in_backups = true;
-          memory = 2048;
-          maxmem = 4096;
-          vcpus = 2;
-        };
-        features = {
-          "nixome-managed" = "1";
-          "nixome-role" = "config-validator";
-          "nixome-config-validator" = "1";
-        };
-      };
-    };
+    domains = nixomeConfigDomains;
 
     configAccessPolicy = {
       enable = true;
@@ -176,8 +80,8 @@ in
     };
   };
 
-  # This profile carries Nix-built template artifacts and may switch a staged
-  # dom0 system generation at runtime. Keep the qcow2 capacity large; it is
-  # sparse on the host but gives the nested dom0 store enough room to grow.
+  # This profile may switch a staged dom0 system generation at runtime. Keep the
+  # qcow2 capacity large; it is sparse on the host but gives nested dom0 enough
+  # room for closure-backed domain artifacts.
   virtualisation.diskSize = lib.mkDefault 131072;
 }

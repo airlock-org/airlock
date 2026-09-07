@@ -182,7 +182,7 @@ validator_cmd="$(
   nix build \
     --no-link \
     --print-out-paths \
-    "$ROOT#nixosConfigurations.qube-template-config-system.config.environment.etc.\"qubes-rpc/nixome.Config.ValidateCandidate\".source"
+    "$ROOT#nixosConfigurations.nixome-domain-config-validator.config.environment.etc.\"qubes-rpc/nixome.Config.ValidateCandidate\".source"
 )"
 
 NIXOME_CONFIG_VALIDATION_DIR="$VALIDATION_DIR" \

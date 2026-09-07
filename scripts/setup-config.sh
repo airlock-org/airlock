@@ -352,6 +352,11 @@ domain_exists() {
     grep -Fx "$1" >/dev/null 2>&1
 }
 
+domain_class() {
+  qvm-ls --raw-data --fields NAME,CLASS --no-spinner 2>/dev/null |
+    awk -F'|' -v name="$1" '$1 == name { print $2; found = 1 } END { exit(found ? 0 : 1) }'
+}
+
 template_exists() {
   domain_exists "$1"
 }
@@ -999,6 +1004,9 @@ setup_nix_closure_domain() {
   fi
 
   if domain_exists "$domain"; then
+    current_class="$(domain_class "$domain" || true)"
+    [ "$current_class" = "StandaloneVM" ] ||
+      fail "nix-closure domain exists with class $current_class, expected StandaloneVM: $domain"
     printf 'domain exists: %s\n' "$domain"
   else
     run_or_plan qvm-create --class StandaloneVM --label "$label" "$domain"
@@ -1051,6 +1059,14 @@ setup_nix_closure_domain() {
 
 [ -r "$TOPOLOGY" ] || fail "topology file is not readable: $TOPOLOGY"
 
+topology_has_nix_closure_domains() {
+  jq -e '
+    (.domains // {})
+    | to_entries
+    | any((.value.backend.type // "qubes-template") == "nix-closure")
+  ' "$TOPOLOGY" >/dev/null
+}
+
 for cmd in \
   awk \
   chmod \
@@ -1067,13 +1083,16 @@ for cmd in \
   qvm-service \
   qvm-template-postprocess \
   qvm-volume \
-  "$NIX_DOMAIN_STORAGE_HELPER" \
   qubesd-query \
   python3 \
   rm \
   systemctl; do
   require_command "$cmd"
 done
+
+if topology_has_nix_closure_domains; then
+  require_command "$NIX_DOMAIN_STORAGE_HELPER"
+fi
 
 if ! [ -r "$XEN_CAPABILITIES" ] || ! grep -qw control_d "$XEN_CAPABILITIES"; then
   fail "host is not a Xen control domain"

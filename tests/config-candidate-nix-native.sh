@@ -22,7 +22,6 @@ cp "$ROOT/seeds/config-staging/nixome/dom0-host.nix" "$WORK_DIR/nixome/dom0-host
 cp "$ROOT/seeds/config-staging/nixome/local.nix" "$WORK_DIR/nixome/local.nix"
 cp "$ROOT/seeds/config-staging/nixome/prebuilt-template-sources.nix" "$WORK_DIR/nixome/prebuilt-template-sources.nix"
 cp "$ROOT/seeds/config-staging/nixome/system.nix" "$WORK_DIR/nixome/system.nix"
-cp "$ROOT/seeds/config-staging/nixome/templates.nix" "$WORK_DIR/nixome/templates.nix"
 cp "$ROOT/lib/nixome/system.nix" "$WORK_DIR/nixome/system-schema.nix"
 cp "$ROOT/lib/nixome/topology.nix" "$WORK_DIR/nixome/topology.nix"
 

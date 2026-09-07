@@ -89,7 +89,6 @@ let
   configStagingLocal = builtins.readFile ../seeds/config-staging/nixome/local.nix;
   configStagingMachine = builtins.readFile ../seeds/config-staging/nixome/machine.nix;
   configStagingSystem = builtins.readFile ../seeds/config-staging/nixome/system.nix;
-  configStagingTemplates = builtins.readFile ../seeds/config-staging/nixome/templates.nix;
   configStagingSystemSchema = builtins.readFile ../lib/nixome/system.nix;
   configStagingTopologySchema = builtins.readFile ../lib/nixome/topology.nix;
   configStagingPrebuiltTemplateSources = lib.generators.toPretty { } nixomePrebuiltTemplateSources;
@@ -166,9 +165,6 @@ let
         cat > nixome/system.nix <<'EOF'
     ${configStagingSystem}
     EOF
-        cat > nixome/templates.nix <<'EOF'
-    ${configStagingTemplates}
-    EOF
         cat > nixome/prebuilt-template-sources.nix <<'EOF'
     ${configStagingPrebuiltTemplateSources}
     EOF
@@ -201,7 +197,6 @@ let
           nixome/prebuilt-template-sources.nix \
           nixome/system.nix \
           nixome/system-schema.nix \
-          nixome/templates.nix \
           nixome/topology.nix
         ${pkgs.nix}/bin/nix \
           --extra-experimental-features nix-command \

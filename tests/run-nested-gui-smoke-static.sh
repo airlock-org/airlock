@@ -8,9 +8,9 @@ bash -n "$ROOT/scripts/run-config-boot-activation-flow.sh"
 bash -n "$ROOT/scripts/nixos-config-vms-smoke.sh"
 bash -n "$ROOT/scripts/config-boot-verify.sh"
 
-grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/Makefile" >/dev/null
-grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
-grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
+! grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/Makefile" >/dev/null
+! grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+! grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'vm-config-boot-flow' "$ROOT/Makefile" >/dev/null
 grep -F 'vm-config-boot-activate-flow' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot' "$ROOT/Makefile" >/dev/null
@@ -34,7 +34,8 @@ grep -F 'EXPECTED_SYSTEMD_ACTIONS_STATUS="skipped"' \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F "grep -F 'rawLocalConfig = import ./nixome/machine.nix {' flake.nix" \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
-grep -F "grep -F 'templateSet = import ./nixome/templates.nix {' flake.nix" \
+grep -F "grep -F 'nixNative.domains." "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
+grep -F 'assert_nix_closure_domain "$VAULT"' \
   "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 ! grep -F 'cat >> "$STAGING_UPDATE_SCRIPT"' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN=1' "$ROOT/Makefile" >/dev/null
