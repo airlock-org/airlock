@@ -97,7 +97,7 @@ let
   configVaultInit = pkgs.writeShellScriptBin "nixome-config-vault-init" ''
         set -eu
 
-        repo="${cfg.configArchivePath}"
+        repo="''${NIXOME_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
         if [ -d "$repo/.git" ]; then
           printf 'config archive already exists: %s\n' "$repo"
           exit 0
@@ -1017,7 +1017,7 @@ let
   configVaultArchiveCandidate = pkgs.writeShellScriptBin "nixome-config-vault-archive-candidate" ''
     set -eu
 
-    repo="${cfg.configArchivePath}"
+    repo="''${NIXOME_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
@@ -1173,7 +1173,7 @@ let
   configVaultArchiveDeployment = pkgs.writeShellScriptBin "nixome-config-vault-archive-deployment" ''
     set -eu
 
-    repo="${cfg.configArchivePath}"
+    repo="''${NIXOME_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
@@ -1193,6 +1193,7 @@ let
         $0 != "system-plan.json" &&
         $0 != "system-apply.json" &&
         $0 != "system-builds.json" &&
+        $0 != "systemd-actions.json" &&
         $0 != "validation.json" &&
         $0 != "manifest.json" &&
         $0 != "logs/apply.commands.log" &&
@@ -1204,6 +1205,8 @@ let
         $0 != "logs/system-builds.log" &&
         $0 != "logs/system-apply.log" &&
         $0 != "logs/profile-activation.log" &&
+        $0 != "logs/host-system-activation.log" &&
+        $0 != "logs/systemd-actions.log" &&
         $0 != "logs/clone.log" &&
         $0 != "logs/checkout.log" {
           printf "unexpected deployment tar member: %s\n", $0 > "/dev/stderr"
@@ -1225,6 +1228,7 @@ let
       system-plan.json \
       system-apply.json \
       system-builds.json \
+      systemd-actions.json \
       validation.json \
       manifest.json; do
       [ -f "$tmpdir/$required" ] || {
@@ -1251,6 +1255,7 @@ let
     system_apply_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/system-apply.json")"
     system_apply_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/system-apply.json")"
     system_builds_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/system-builds.json")"
+    systemd_actions_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/systemd-actions.json")"
     validation_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validation.json")"
     validation_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
     validation_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
@@ -1324,6 +1329,10 @@ let
       printf 'unsupported system builds schema: %s\n' "$system_builds_schema" >&2
       exit 1
     }
+    [ "$systemd_actions_schema" = "nixome.systemd-actions.v1" ] || {
+      printf 'unsupported systemd actions schema: %s\n' "$systemd_actions_schema" >&2
+      exit 1
+    }
     [ "$validation_schema" = "nixome.config-validation.v1" ] || {
       printf 'unsupported validation schema: %s\n' "$validation_schema" >&2
       exit 1
@@ -1380,6 +1389,7 @@ let
       system-plan.json \
       system-apply.json \
       system-builds.json \
+      systemd-actions.json \
       validation.json \
       manifest.json; do
       ${pkgs.coreutils}/bin/cp "$tmpdir/$file" "$deployment_dir/$file"
@@ -1394,6 +1404,8 @@ let
       system-builds.log \
       system-apply.log \
       profile-activation.log \
+      host-system-activation.log \
+      systemd-actions.log \
       clone.log \
       checkout.log; do
       ${pkgs.coreutils}/bin/cp "$tmpdir/logs/$log" "$deployment_dir/logs/$log"
@@ -1655,9 +1667,10 @@ in
       source = nixomeConfigSeedInputs.nixpkgs;
     };
     environment.etc."nixome/config-seed-inputs/nixpkgs-libvirt_10_5" =
-      lib.mkIf (haveConfigSeedInputs && nixomeConfigSeedInputs ? nixpkgsLibvirt105) {
-        source = nixomeConfigSeedInputs.nixpkgsLibvirt105;
-      };
+      lib.mkIf (haveConfigSeedInputs && nixomeConfigSeedInputs ? nixpkgsLibvirt105)
+        {
+          source = nixomeConfigSeedInputs.nixpkgsLibvirt105;
+        };
     environment.etc."nixome/config-seed-inputs/nixos-qubes" = lib.mkIf haveConfigSeedInputs {
       source = nixomeConfigSeedInputs.nixosQubes;
     };
