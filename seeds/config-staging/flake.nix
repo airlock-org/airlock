@@ -15,8 +15,10 @@
         inherit
           appliedMessage
           system
+          templateBuilders
           templateSet
           ;
+        pkgs = templateBuilders.pkgs;
       };
       localTopology = localConfig.topology or { };
       localDom0ExtraModules = localConfig.dom0.extraModules or [ ];
@@ -33,6 +35,7 @@
           ;
       };
       templateSet = import ./nixome/templates.nix {
+        extraTemplateDefinitions = localConfig.templates.definitions or { };
         inherit
           prebuiltTemplateSources
           system

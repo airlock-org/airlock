@@ -7,6 +7,7 @@ LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 RESULT_DIR="$LOG_DIR/config-candidate-flake"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nixome-config-candidate-flake.XXXXXX")"
 TOPOLOGY_JSON="$RESULT_DIR/topology.json"
+LOCAL_TOPOLOGY_JSON="$RESULT_DIR/local-topology.json"
 SYSTEM_JSON="$RESULT_DIR/system.json"
 PROFILE_LINK="$RESULT_DIR/dom0-profile"
 PROFILE_JSON="$RESULT_DIR/dom0-profile.json"
@@ -14,6 +15,7 @@ HOST_MESSAGE="$RESULT_DIR/host-message.txt"
 EXTRA_HOST_MESSAGE="$RESULT_DIR/extra-host-message.txt"
 EXTRA_HOST_SERVICE="$RESULT_DIR/extra-host-service.txt"
 HOST_SYSTEM_DERIVATIONS="$RESULT_DIR/dom0-system-derivations.txt"
+LOCAL_TEMPLATE_DERIVATION="$RESULT_DIR/local-template-derivation.txt"
 
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -282,6 +284,37 @@ cat > "$WORK_DIR/nixome/local.nix" <<'EOF'
     extraQrexecRules = [ ];
   };
 
+  templates.definitions.nixome-nixos-dev = {
+    role = "dev-template";
+    sourceLabel = "local-config";
+    modules = [
+      (
+        { pkgs, ... }:
+        {
+          nixome.qubeGuest.role = "base";
+          networking.hostName = "nixome-dev-template";
+          environment.etc."nixome/template-role".text = "dev\n";
+          environment.systemPackages = with pkgs; [
+            git
+            jq
+            ripgrep
+          ];
+        }
+      )
+    ];
+    domain.features."nixome-dev-template" = "1";
+    appVms.nixome-dev = {
+      label = "blue";
+      prefs = {
+        memory = 1536;
+        maxmem = 3072;
+      };
+      features = {
+        "nixome-role" = "dev";
+      };
+    };
+  };
+
   dom0.extraModules = [
     (
       { pkgs, ... }:
@@ -320,8 +353,51 @@ nix \
   --raw \
   "$WORK_DIR#nixosConfigurations.nixome-dom0.config.systemd.services.nixome-local-extra-module.description" \
   > "$EXTRA_HOST_SERVICE"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json "$WORK_DIR#nixome.topology" > "$LOCAL_TOPOLOGY_JSON"
+nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  path-info \
+  --impure \
+  --offline \
+  --derivation \
+  "$WORK_DIR#packages.x86_64-linux.nixome-nixos-dev-template" \
+  > "$LOCAL_TEMPLATE_DERIVATION"
 
 grep -qx initial-extra "$EXTRA_HOST_MESSAGE"
 grep -qx "Nixome local extra module fixture" "$EXTRA_HOST_SERVICE"
+[ -s "$LOCAL_TEMPLATE_DERIVATION" ]
+jq -e '
+  .schema == "nixome.qubes-topology.v1" and
+  .templates."nixome-nixos-dev".import == true and
+  .templates."nixome-nixos-dev".source == null and
+  .templates."nixome-nixos-dev".source_ref == {
+    "type": "flake-output",
+    "attr": "packages.x86_64-linux.nixome-nixos-dev-template",
+    "subpath": "nixome-nixos-dev"
+  } and
+  .domains."nixome-nixos-dev".class == "TemplateVM" and
+  .domains."nixome-nixos-dev".label == "black" and
+  .domains."nixome-nixos-dev".netvm == null and
+  .domains."nixome-nixos-dev".prefs.default_user == "user" and
+  .domains."nixome-nixos-dev".features."nixome-role" == "dev-template" and
+  .domains."nixome-nixos-dev".features."nixome-template-source" == "local-config" and
+  .domains."nixome-nixos-dev".features."nixome-dev-template" == "1" and
+  .domains."nixome-dev".class == "AppVM" and
+  .domains."nixome-dev".template == "nixome-nixos-dev" and
+  .domains."nixome-dev".label == "blue" and
+  .domains."nixome-dev".prefs.memory == 1536 and
+  .domains."nixome-dev".prefs.maxmem == 3072 and
+  .domains."nixome-dev".features."nixome-role" == "dev" and
+  .domains."nixome-dev".features."nixome-template-source" == "local-config" and
+  .domains."nixome-dev".services."network-manager" == false
+' "$LOCAL_TOPOLOGY_JSON" >/dev/null
 
 printf 'config candidate flake eval ok\n'

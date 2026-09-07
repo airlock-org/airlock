@@ -227,6 +227,37 @@ path to normal NixOS host changes such as packages, systemd units, boot options,
 kernel options, and Qubes package overlays without changing the bootstrap
 module layout. `nixome.system` records the apply plan and source references;
 the NixOS modules define the actual host closure that dom0 builds and switches.
+
+TemplateVM contents are defined in Nix as well. The seeded
+`nixome/templates.nix` turns `templates.definitions` from `nixome/local.nix`
+into both flake packages and topology entries. A local config can add:
+
+```nix
+templates.definitions.nixome-nixos-dev = {
+  role = "dev-template";
+  modules = [
+    ({ pkgs, ... }: {
+      networking.hostName = "nixome-dev-template";
+      environment.systemPackages = with pkgs; [
+        git
+        jq
+        ripgrep
+      ];
+    })
+  ];
+  appVms.nixome-dev = {
+    label = "blue";
+    prefs.memory = 1536;
+    features."nixome-role" = "dev";
+  };
+};
+```
+
+The generated topology then imports the built template through
+`qvm-template-postprocess` if it is missing and creates the declared AppVMs from
+that TemplateVM. This keeps Qubes' VM lifecycle and qrexec model intact while
+moving guest root contents into the inside Nix config.
+
 The plan separates `live_actions` from `reboot_actions`: a normal
 `dom0.nixos.system.switchAction = "switch"` is treated as live, while
 `switchAction = "boot"` installs the next boot generation and records a pending
