@@ -230,6 +230,9 @@ The plan separates `live_actions` from `reboot_actions`: a normal
 `switchAction = "boot"` installs the next boot generation and records a pending
 reboot. Kernel, Xen, bootloader, and Qubes package-set requests are also
 reported as structured reboot actions with `reboot_required = true`.
+Consumers of `nixome.system.v1` require both the structured action arrays and
+the summary boolean/reason fields, so older candidates fail validation before
+dom0 applies them.
 
 `config-vault` now has two durable artifact classes:
 

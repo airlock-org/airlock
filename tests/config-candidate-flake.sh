@@ -248,6 +248,7 @@ jq -e '
   .dom0.nixos.qubes.enable == false and
   any(.plan.live_actions[]; .type == "dom0-profile" and .message == "initial") and
   any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "switch" and .source_ref.attr == "nixosConfigurations.nixome-dom0.config.system.build.toplevel") and
+  .plan.reboot_actions == [] and
   .plan.reboot_required == false and
   .plan.reboot_reasons == []
 ' "$SYSTEM_JSON" >/dev/null

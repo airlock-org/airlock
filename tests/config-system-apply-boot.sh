@@ -200,10 +200,13 @@ jq -e \
     .system_apply_result.host_system_switch_action == "boot" and
     .system_apply_result.host_current_system == "" and
     .system_apply_result.reboot_required == true and
+    (.system_apply_result.reboot_actions | length) == 1 and
+    .system_apply_result.reboot_actions[0].type == "dom0-nixos-system" and
     .system_apply_result.reboot_reasons == ["install next dom0 boot generation"] and
     .deployment.status == "passed" and
     .deployment.system_apply.status == "passed" and
-    .deployment.system_apply.reboot_required == true
+    .deployment.system_apply.reboot_required == true and
+    (.deployment.system_apply.reboot_actions | length) == 1
   ' "$LOG_DIR/config-apply.json" >/dev/null
 
 jq -e '
@@ -216,7 +219,8 @@ jq -e '
 jq -e '
   .schema == "nixome.config-deployment.v1" and
   .status == "passed" and
-  .system_apply.reboot_required == true
+  .system_apply.reboot_required == true and
+  (.system_apply.reboot_actions | length) == 1
 ' "$SYSTEM_STATE_DIR/current-deployment.json" >/dev/null
 grep -qx boot "$SYSTEM_STATE_DIR/current-host-system-switch-action"
 grep -qx boot "$SYSTEM_STATE_DIR/host-switch-action"

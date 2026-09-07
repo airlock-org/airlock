@@ -105,7 +105,7 @@ jq -c -n \
         qubes: {enable: false, reason: "", source: null, source_ref: null}
       }
     },
-    plan: {live_actions: [], reboot_required: false, reboot_reasons: []}
+    plan: {live_actions: [], reboot_actions: [], reboot_required: false, reboot_reasons: []}
   }' > "$DEPLOYMENT_DIR/system.json"
 cp "$DEPLOYMENT_DIR/system.json" "$DEPLOYMENT_DIR/resolved-system.json"
 jq -c '.plan' "$DEPLOYMENT_DIR/system.json" > "$DEPLOYMENT_DIR/system-plan.json"

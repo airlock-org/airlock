@@ -172,6 +172,7 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
             reason = "reload fixture service";
           }
         ];
+          reboot_actions = [ ];
           reboot_required = false;
           reboot_reasons = [ ];
         };
@@ -330,6 +331,7 @@ jq -e \
     .system_apply_result.systemd_status == "passed" and
     .system_apply_result.host_system_source == $expected_host_system_source and
     .system_apply_result.host_system_switch_action == "switch" and
+    .system_apply_result.reboot_actions == [] and
     .system_apply_result.reboot_required == false and
     .systemd_actions_result.status == "passed" and
     .deployment.status == "passed" and
@@ -381,6 +383,7 @@ jq -e \
   .dom0.nixos.system.switch_action == "switch" and
   .dom0.systemd.services."nixome-test-restart.service".action == "restart" and
   .dom0.systemd.services."nixome-test-reload.service".action == "reload" and
+  .plan.reboot_actions == [] and
   .plan.reboot_required == false
 ' "$SYSTEM_STATE_DIR/current-system.json" >/dev/null
 jq -e '

@@ -109,7 +109,7 @@ cat > "$STATE_DIR/current-system.json" <<'EOF'
 EOF
 
 cat > "$STATE_DIR/current-plan.json" <<'EOF'
-{"live_actions":[],"reboot_required":false,"reboot_reasons":[]}
+{"live_actions":[],"reboot_actions":[],"reboot_required":false,"reboot_reasons":[]}
 EOF
 
 cat > "$STATE_DIR/last-apply.json" <<'EOF'
@@ -199,6 +199,7 @@ jq -e '
   .deployment.current_apply.status == "passed" and
   .deployment.last_apply_result.status == "failed" and
   .system.current_system.dom0.profile.message == "from-test" and
+  .system.current_plan.reboot_actions == [] and
   .system.current_plan.reboot_required == false and
   .system.last_apply.host_system_status == "passed" and
   .system.profile_target == $profile_target and

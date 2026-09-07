@@ -276,6 +276,7 @@ verify_candidate() {
     (.dom0 | type == "object") and
     (.plan | type == "object") and
     (.plan.live_actions | type == "array") and
+    (.plan.reboot_actions | type == "array") and
     (.plan.reboot_required | type == "boolean") and
     (.plan.reboot_reasons | type == "array")
   ' "$SYSTEM_JSON" >/dev/null || fail "evaluated candidate system JSON is invalid"

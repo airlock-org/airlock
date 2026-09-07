@@ -1071,6 +1071,7 @@ write_system_apply_json() {
     --arg host_system_activation_log "$HOST_SYSTEM_ACTIVATION_LOG" \
     --arg systemd_actions "$SYSTEMD_ACTIONS_JSON" \
     --arg systemd_actions_log "$SYSTEMD_ACTIONS_LOG" \
+    --argjson reboot_actions "$reboot_actions" \
     --argjson reboot_required "$reboot_required" \
     --argjson reboot_reasons "$reboot_reasons" \
     --argjson systemd_actions_result "$systemd_actions_result" \
@@ -1100,6 +1101,7 @@ write_system_apply_json() {
       systemd_actions: $systemd_actions,
       systemd_actions_log: $systemd_actions_log,
       systemd_actions_result: $systemd_actions_result,
+      reboot_actions: $reboot_actions,
       reboot_required: $reboot_required,
       reboot_reasons: $reboot_reasons
     }' > "$SYSTEM_APPLY_JSON"
@@ -1153,6 +1155,7 @@ apply_system() {
   host_system_switch_action=""
   host_current_system=""
   systemd_apply_rc=0
+  reboot_actions="$(jq -c '.plan.reboot_actions' "$system_json")"
   reboot_required="$(jq -r '.plan.reboot_required' "$system_json")"
   reboot_reasons="$(jq -c '.plan.reboot_reasons' "$system_json")"
 
@@ -1377,11 +1380,12 @@ jq -e '
 ' "$topology" >/dev/null || fail "validated candidate topology JSON is invalid"
 jq -e '
   .schema == "nixome.system.v1" and
-  (.dom0 | type == "object") and
-  (.plan | type == "object") and
-  (.plan.live_actions | type == "array") and
-  (.plan.reboot_required | type == "boolean") and
-  (.plan.reboot_reasons | type == "array")
+    (.dom0 | type == "object") and
+    (.plan | type == "object") and
+    (.plan.live_actions | type == "array") and
+    (.plan.reboot_actions | type == "array") and
+    (.plan.reboot_required | type == "boolean") and
+    (.plan.reboot_reasons | type == "array")
 ' "$system_json" >/dev/null || fail "validated candidate system JSON is invalid"
 resolve_template_sources "$topology" "$worktree" "$APPLY_TOPOLOGY_JSON"
 resolve_system_sources "$system_json" "$worktree" "$APPLY_SYSTEM_JSON"

@@ -786,6 +786,7 @@ jq -e --arg apply_message "$APPLY_MESSAGE" '
   .dom0.nixos.system.source_ref == null and
   .dom0.nixos.system.switch_action == "switch" and
   .dom0.systemd.services."nixome-local-extra-module".action == "restart" and
+  .plan.reboot_actions == [] and
   .plan.reboot_required == false and
   any(.plan.live_actions[]; .type == "dom0-profile" and .message == $apply_message) and
   any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == "switch") and
@@ -797,6 +798,7 @@ jq -e --arg apply_message "$APPLY_MESSAGE" '
   any(.live_actions[]; .type == "dom0-profile" and .message == $apply_message) and
   any(.live_actions[]; .type == "dom0-nixos-system" and .action == "switch") and
   any(.live_actions[]; .type == "systemd-service" and .name == "nixome-local-extra-module" and .action == "restart") and
+  .reboot_actions == [] and
   .reboot_required == false
 ' "$DOM0_SYSTEM_PLAN_LOG" >/dev/null ||
   fail "applied dom0 system plan did not match expected value"
@@ -962,6 +964,7 @@ jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT"
   .system_apply_result.host_system_status == "passed" and
   .system_apply_result.systemd_status == "passed" and
   .systemd_actions_result.status == "passed" and
+  .system_apply_result.reboot_actions == [] and
   .system_apply_result.reboot_required == false and
   .deployment.system_apply.schema == "nixome.system-apply.v1" and
   .deployment.system_apply.status == "passed" and

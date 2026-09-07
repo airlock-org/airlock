@@ -86,6 +86,7 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
       };
       plan = {
         live_actions = [ ];
+        reboot_actions = [ ];
         reboot_required = false;
         reboot_reasons = [ ];
       };
