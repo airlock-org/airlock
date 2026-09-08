@@ -16,11 +16,18 @@ class VmFlow:
 
 
 VM_FLOWS = (
+    VmFlow("vm-prebuild-shared", "vm-prebuild-shared", (pytest.mark.prebuild,)),
     VmFlow("vm-config-flow", "vm-config-flow"),
     VmFlow("vm-nix-closure-flow", "vm-nix-closure-flow"),
     VmFlow("vm-config-boot-flow", "vm-config-boot-flow"),
     VmFlow("vm-config-boot-activate-flow", "vm-config-boot-activate-flow"),
     VmFlow("vm-gui-smoke", "vm-gui-smoke", (pytest.mark.qubes,)),
+    VmFlow("vm-warm-start", "vm-warm-start", (pytest.mark.warm,)),
+    VmFlow("vm-warm-sync", "vm-warm-sync", (pytest.mark.warm,)),
+    VmFlow("vm-warm-apply", "vm-warm-apply", (pytest.mark.warm,)),
+    VmFlow("vm-warm-test-config", "vm-warm-test-config", (pytest.mark.warm,)),
+    VmFlow("vm-config-warm-flow", "vm-config-warm-flow", (pytest.mark.warm,)),
+    VmFlow("vm-nix-closure-warm-flow", "vm-nix-closure-warm-flow", (pytest.mark.warm,)),
 )
 
 

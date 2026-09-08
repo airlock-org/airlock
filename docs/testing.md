@@ -84,14 +84,27 @@ not included in the default local layer:
 
 ```bash
 make test-vm
+make test-vm TESTS=vm-prebuild-shared
 make test-vm TESTS=vm-nix-closure-flow
 make test-vm TESTS="vm-config-flow vm-nix-closure-flow"
 ```
 
-`make test-vm` sets `NIXOME_RUN_VM_TESTS=1` and runs the VM flows serially.
-Direct pytest runs without that flag collect the VM tests but skip them. Runtime
-reports use the same `test-runtimes-latest.*` and `test-runtimes-history.jsonl`
-files as the local layer.
+`make test-vm` sets `NIXOME_RUN_VM_TESTS=1` and runs the cold VM flows
+serially. Its default set includes `vm-prebuild-shared`, which builds common
+Nix artifacts before booting nested dom0 so the runtime report separates shared
+build/cache preparation from VM execution.
+
+Warm VM iteration flows are measured separately:
+
+```bash
+make test-vm-warm
+make test-vm-warm TESTS=vm-warm-start
+make test-vm-warm TESTS="vm-warm-start vm-warm-sync vm-warm-test-config"
+```
+
+Direct pytest runs without `NIXOME_RUN_VM_TESTS=1` collect the VM tests but skip
+them. Runtime reports use the same `test-runtimes-latest.*` and
+`test-runtimes-history.jsonl` files as the local layer.
 
 ## Build Layer
 

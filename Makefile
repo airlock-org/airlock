@@ -26,6 +26,15 @@ endif
 
 NIXOME_NIX ?= ./scripts/nixome-nix.sh
 
+VM_PREBUILD_ATTRS := \
+	packages.x86_64-linux.nixome-setup-config \
+	packages.x86_64-linux.nixome-config-seed-inputs-import \
+	packages.x86_64-linux.nixome-config-vms-smoke \
+	packages.x86_64-linux.nixome-nix-closure-domain-smoke \
+	packages.x86_64-linux.nixome-qubes-storage \
+	packages.x86_64-linux.nixome-qubes-vm-kernel \
+	nixome-vm-gui-config-image
+
 PYTHON_FILES := \
 	pkgs/nixome-qubes-storage/src/nixome_qubes_storage/__init__.py \
 	pkgs/nixome-qubes-storage/src/nixome_qubes_storage/cli.py \
@@ -46,7 +55,7 @@ PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 VM_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm.py::test_vm_flow[$(test)]')
 
-.PHONY: ensure-generated-dirs build test test-parallel test-serial test-vm test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test test-parallel test-serial test-vm test-vm-warm test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -70,7 +79,11 @@ test-serial: test
 
 test-vm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
-	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m vm) $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
+	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm") $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
+
+test-vm-warm: ensure-generated-dirs
+	@mkdir -p "$(PYTEST_LOG_DIR)"
+	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and warm") $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
 
 test-list: ensure-generated-dirs
 	uv run pytest tests --collect-only -q
@@ -98,6 +111,9 @@ py-complexity-check:
 
 install-git-hooks:
 	install -m 0755 scripts/git-hooks/pre-commit .git/hooks/pre-commit
+
+vm-prebuild-shared: ensure-generated-dirs gc-auto
+	$(NIXOME_NIX) build $(foreach attr,$(VM_PREBUILD_ATTRS),.#$(attr)) --no-link --print-build-logs --show-trace
 
 vm-image: ensure-generated-dirs gc-auto
 	$(NIXOME_NIX) build .#nixome-vm-image --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-vm-image" --print-build-logs --show-trace
