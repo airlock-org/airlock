@@ -380,6 +380,53 @@ run_or_fail() {
   fi
 }
 
+run_json_or_fail() {
+  description="$1"
+  output="$2"
+  shift 2
+  stdout="$output.stdout"
+  stderr="$output.stderr"
+
+  printf '+'
+  printf ' %q' "$@"
+  printf '\n'
+
+  if ! "$@" > "$stdout" 2> "$stderr"; then
+    cat "$stderr" >&2 || true
+    cat "$stdout" >&2 || true
+    fail "$description failed"
+  fi
+
+  if ! python3 - "$stdout" "$output" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1])
+target = Path(sys.argv[2])
+text = source.read_text()
+decoder = json.JSONDecoder()
+
+for index, char in enumerate(text):
+    if char != "{":
+        continue
+    try:
+        payload, _ = decoder.raw_decode(text[index:])
+    except json.JSONDecodeError:
+        continue
+    if isinstance(payload, dict):
+        target.write_text(json.dumps(payload, sort_keys=True) + "\n")
+        raise SystemExit(0)
+
+raise SystemExit("command did not emit a JSON object")
+PY
+  then
+    cat "$stderr" >&2 || true
+    cat "$stdout" >&2 || true
+    fail "$description did not produce valid JSON"
+  fi
+}
+
 run_qrexec_script_or_fail() {
   vm="$1"
   description="$2"
@@ -1771,7 +1818,7 @@ jq -e --arg domain "$DOMAIN" --argjson generation "$new_generation" '
   fail "closure-store GC did not protect the running second generation"
 
 shutdown_vm "$DOMAIN" "$LOG_DIR/nix-closure-domain-rollback-pre-shutdown.log"
-run_or_fail "switch primary domain back to retained generation" "$ROLLBACK_SWITCH_LOG" \
+run_json_or_fail "switch primary domain back to retained generation" "$ROLLBACK_SWITCH_LOG" \
   nixome-nix-domain-storage switch-store "$DOMAIN" "$initial_generation"
 set_domain_generation_identity_from_switch "$ROLLBACK_SWITCH_LOG"
 run_or_fail "mark second generation collectible after rollback" "$RETENTION_LOG" \
