@@ -488,16 +488,28 @@ extract_json_result() {
   local input="$2"
   local output="$3"
 
-  awk -v schema="$schema" '
-    index($0, "\"schema\":\"" schema "\"") { line = $0 }
-    END {
-      if (line != "") {
-        print line
-        exit 0
-      }
-      exit 1
-    }
-  ' "$input" > "$output"
+  python3 - "$schema" "$input" "$output" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+schema, input_path, output_path = sys.argv[1:]
+text = Path(input_path).read_text(encoding="utf-8", errors="replace")
+decoder = json.JSONDecoder()
+
+for index, character in enumerate(text):
+    if character != "{":
+        continue
+    try:
+        payload, _end = decoder.raw_decode(text[index:])
+    except json.JSONDecodeError:
+        continue
+    if isinstance(payload, dict) and payload.get("schema") == schema:
+        Path(output_path).write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        raise SystemExit(0)
+
+raise SystemExit(1)
+PY
 }
 
 wait_for_setup_config_boot_unit() {
