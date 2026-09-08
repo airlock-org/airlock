@@ -159,12 +159,14 @@ class ClosureVolume(qubes.storage.Volume):
         if self.view_kind == "erofs-blob-map":
             self.path = self.attach_blob_view()
         await self.verify()
+        self.mark_running()
         return self
 
     async def stop(self):
         if self.view_kind == "erofs-blob-map":
             self.detach_blob_view()
             self.path = None
+        self.clear_running()
         return self
 
     async def verify_definition(self):
@@ -222,6 +224,26 @@ class ClosureVolume(qubes.storage.Volume):
             from nixome_qubes_storage import engine
 
             engine.detach_blob_view(self.pool.root_dir, self.domain_name, self.generation)
+        except Exception as exc:
+            raise qubes.exc.StoragePoolException(str(exc)) from exc
+
+    def mark_running(self):
+        if not self.domain_name or self.generation is None:
+            return
+        try:
+            from nixome_qubes_storage import engine
+
+            engine.mark_running_ref(self.pool.root_dir, self.domain_name, self.generation, self.name)
+        except Exception as exc:
+            raise qubes.exc.StoragePoolException(str(exc)) from exc
+
+    def clear_running(self):
+        if not self.domain_name or self.generation is None:
+            return
+        try:
+            from nixome_qubes_storage import engine
+
+            engine.clear_running_ref(self.pool.root_dir, self.domain_name, self.generation, self.name)
         except Exception as exc:
             raise qubes.exc.StoragePoolException(str(exc)) from exc
 

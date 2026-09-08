@@ -136,6 +136,8 @@ run_logged observe-package nix build "$ROOT#packages.x86_64-linux.nixome-observe
 run_logged setup-config-package nix build "$ROOT#packages.x86_64-linux.nixome-setup-config" --print-build-logs --show-trace
 run_logged qubes-storage-package nix build "$ROOT#packages.x86_64-linux.nixome-qubes-storage" --print-build-logs --show-trace
 run_logged closure-store-engine "$ROOT/tests/closure-store-engine.sh"
+run_logged closure-store-failure-recovery "$ROOT/tests/closure-store-failure-recovery.sh"
+run_logged closure-store-linux-storage "$ROOT/tests/closure-store-linux-storage.sh"
 run_logged closure-volume-filtered-device "$ROOT/tests/closure-volume-filtered-device.sh"
 run_logged nix-domain-storage-helper "$ROOT/tests/nix-domain-storage-helper.sh"
 run_logged nix-domain-storage-helper-shared "$ROOT/tests/nix-domain-storage-helper-shared.sh"

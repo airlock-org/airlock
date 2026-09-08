@@ -321,6 +321,26 @@ WORK_GEN2_BLOB_MAP="$(jq -r '.canonical_blob_map' "$RESULT_DIR/work-gen2.json")"
 COMMON_WORK_GEN2_OFFSET="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .central_offset' "$WORK_GEN2_BLOB_MAP")"
 [ "$COMMON_WORK_OFFSET" = "$COMMON_WORK_GEN2_OFFSET" ]
 
+run_engine_json mark-running-work-gen2-store mark-running \
+  --pool-root "$POOL" \
+  --domain work \
+  --generation 2 \
+  --volume store
+
+run_engine_json mark-running-work-gen2-store-data mark-running \
+  --pool-root "$POOL" \
+  --domain work \
+  --generation 2 \
+  --volume store-data
+
+jq -e '
+  .schema == "nixome.closure-store.running-ref.v1" and
+  .status == "running" and
+  .domain == "work" and
+  .generation == 2 and
+  .volume == "store"
+' "$RESULT_DIR/mark-running-work-gen2-store.json" >/dev/null
+
 run_engine_json rollback-work rollback \
   --pool-root "$POOL" \
   --domain work \
@@ -332,6 +352,39 @@ jq -e '
   .previous_generation == 2 and
   .current_generation == 1
 ' "$RESULT_DIR/rollback-work.json" >/dev/null
+
+run_engine_json gc-running gc \
+  --pool-root "$POOL" \
+  --keep-generations 0
+
+jq -e '
+  any(.running_generations[]; .domain == "work" and .generation == 2) and
+  any(.retained_generations[]; .domain == "work" and .generation == 2) and
+  all(.removed_generations[]; .domain != "work" or .generation != 2) and
+  (.removed_object_blobs | index("'"$WORK_UNIQUE_2"'")) == null and
+  .object_blob_append_only == true
+' "$RESULT_DIR/gc-running.json" >/dev/null
+
+run_engine_json clear-running-work-gen2-store clear-running \
+  --pool-root "$POOL" \
+  --domain work \
+  --generation 2 \
+  --volume store
+
+run_engine_json clear-running-work-gen2-store-data clear-running \
+  --pool-root "$POOL" \
+  --domain work \
+  --generation 2 \
+  --volume store-data
+
+jq -e '
+  .schema == "nixome.closure-store.running-ref.v1" and
+  .status == "cleared" and
+  .domain == "work" and
+  .generation == 2 and
+  .volume == "store-data" and
+  .removed == true
+' "$RESULT_DIR/clear-running-work-gen2-store-data.json" >/dev/null
 
 run_engine_json gc gc \
   --pool-root "$POOL" \
@@ -388,6 +441,7 @@ jq -e '
   .domains.work.current == 1 and
   .domains.dev.current == 1 and
   .domains."symlink-domain".current == 1 and
+  (.running | length) == 0 and
   .object_count == 7 and
   .object_blob_count == 7 and
   .chunk_count == 0 and

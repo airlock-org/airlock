@@ -9,6 +9,7 @@ import stat
 import subprocess
 import time
 import uuid
+from contextlib import suppress
 from pathlib import Path
 
 
@@ -22,6 +23,7 @@ SCHEMA_RECOVERY = "nixome.closure-store.recovery.v1"
 SCHEMA_STATUS = "nixome.closure-store.status.v1"
 SCHEMA_BLOB_MAP = "nixome.closure-store.blob-map.v1"
 SCHEMA_OBJECT_BLOB = "nixome.closure-store.object-tar-fragment.v1"
+SCHEMA_RUNNING_REF = "nixome.closure-store.running-ref.v1"
 
 VIEW_BACKEND_EXT4_IMAGE = "ext4-image"
 VIEW_BACKEND_EROFS_BLOBMAP = "erofs-blobmap"
@@ -47,6 +49,11 @@ def utc_now():
 
 def fail(message):
     raise EngineError(message)
+
+
+def maybe_failpoint(name):
+    if os.environ.get("NIXOME_CLOSURE_STORE_FAILPOINT") == name:
+        fail(f"simulated failure at {name}")
 
 
 def parse_bool(value):
@@ -299,6 +306,7 @@ def ensure_pool(root):
         "images/by-closure",
         "views/by-closure",
         "runtime",
+        "running",
         "transactions",
         "tmp",
     ]:
@@ -395,6 +403,7 @@ def run_verify(paths, mode):
     if mode not in ("nix-store", "nix-store-trust"):
         fail(f"unsupported verification mode: {mode}")
 
+    maybe_failpoint("verification-before-command")
     command = [
         "nix",
         "--extra-experimental-features",
@@ -420,6 +429,7 @@ def run_verify(paths, mode):
             "nix store verification failed with exit "
             f"{result.returncode}: {result.stderr.strip() or result.stdout.strip()}"
         )
+    maybe_failpoint("verification-after-command")
     return {
         "mode": mode,
         "status": "passed",
@@ -637,6 +647,7 @@ def admit_object_tar_fragment(root, logical_path, source, source_hash, txid):
             return dict(current, admitted=False)
         with blob.open("r+b") as backing:
             extent = append_file_to_open_blob(backing, tmp, blob, txid)
+        maybe_failpoint("object-after-append")
         payload = {
             "schema": SCHEMA_OBJECT_BLOB,
             "path": logical_path,
@@ -651,6 +662,7 @@ def admit_object_tar_fragment(root, logical_path, source, source_hash, txid):
             "transaction": txid,
         }
         atomic_json(meta, payload)
+        maybe_failpoint("object-after-metadata")
         fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
     remove_path(tmp)
     payload["admitted"] = True
@@ -1020,6 +1032,21 @@ def read_object_refs(path):
     ]
 
 
+def add_manifest_store_liveness(root, manifest, live_objects, live_images, live_views, live_chunks):
+    store = manifest.get("store", {})
+    for path in store.get("paths", []):
+        live_objects.add(store_entry(path))
+    if store.get("view_backend", VIEW_BACKEND_EXT4_IMAGE) == VIEW_BACKEND_EXT4_IMAGE:
+        image = store.get("canonical_image")
+        if image:
+            live_images.add(image)
+    view_root = canonical_view_root(store)
+    if view_root:
+        live_views.add(view_root)
+    for chunk in read_chunk_refs(store.get("canonical_chunk_refs") or store.get("chunk_refs")):
+        live_chunks.add(chunk)
+
+
 def canonical_view_root(store):
     for key in ("canonical_metadata_image", "canonical_blob_map", "canonical_object_refs", "canonical_chunk_refs"):
         value = store.get(key)
@@ -1190,13 +1217,15 @@ def create_dm_view_for_blob_map(root, name, blob_map):
     if not os.path.exists(central_blob):
         fail(f"central blob is missing: {central_blob}")
     loop = ensure_loop_for_blob(central_blob)
+    dmsetup = require_tool("dmsetup", "NIXOME_DMSETUP")
     if not dm_exists(name):
         table = dm_table_for_extents(blob_map, loop)
-        dmsetup = require_tool("dmsetup", "NIXOME_DMSETUP")
         table_path = Path(root) / "runtime" / f"{name}.table"
         atomic_write(table_path, table, mode=0o400)
+        maybe_failpoint("mapper-before-create")
         run_checked([dmsetup, "-r", "create", name], input_text=table)
-        run_checked([dmsetup, "mknodes", name])
+        maybe_failpoint("mapper-after-create")
+    run_checked([dmsetup, "mknodes", name])
     return {
         "loop": loop,
         "dm_name": name,
@@ -1230,6 +1259,8 @@ def attach_blob_view(root, domain, generation):
     domain = safe_domain_name(domain)
     generation = int(generation)
     manifest = read_json(generation_manifest_path(root, domain, generation))
+    if not generation_is_committed(root, manifest):
+        fail(f"generation is not committed for {domain}: {generation}")
     store = manifest.get("store", {})
     if store.get("view_backend") not in EROFS_FILTERED_BLOB_BACKENDS:
         fail(f"generation is not an EROFS filtered-blob view: {domain} generation {generation}")
@@ -1267,6 +1298,8 @@ def detach_blob_view(root, domain, generation):
     domain = safe_domain_name(domain)
     generation = int(generation)
     manifest = read_json(generation_manifest_path(root, domain, generation))
+    if not generation_is_committed(root, manifest):
+        fail(f"generation is not committed for {domain}: {generation}")
     store = manifest.get("store", {})
     name = blob_dm_name(domain, generation, store.get("closure_hash", ""))
     removed = detach_dm_view(name, deferred=True)
@@ -1517,10 +1550,12 @@ def materialize_erofs_objectmap_view(root, generation_dir, paths, closure_id, tx
 
         tmp_metadata = view_root / f".store.erofs.tmp-{uuid.uuid4().hex}"
         create_erofs_tar_index_image(root, blob_map_payload, tmp_metadata, closure_id, txid)
+        maybe_failpoint("view-after-metadata-build")
         os.replace(tmp_metadata, metadata_image)
         os.chmod(metadata_image, 0o444)
         write_blob_map(blob_map, blob_map_payload)
         write_object_refs(object_refs, object_entries)
+        maybe_failpoint("view-after-metadata-publish")
         atomic_json(
             view_manifest,
             {
@@ -1626,6 +1661,35 @@ def generation_manifest_path(root, domain, generation):
     return Path(root) / "domains" / domain / "generations" / str(generation) / "manifest.json"
 
 
+def transaction_path(root, txid):
+    return Path(root) / "transactions" / f"{txid}.json"
+
+
+def transaction_status(root, txid):
+    if not txid:
+        return None
+    path = transaction_path(root, txid)
+    if not path.exists():
+        return None
+    try:
+        return read_json(path).get("status")
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def generation_is_committed(root, manifest):
+    if manifest.get("schema") != SCHEMA_GENERATION or manifest.get("status") != "committed":
+        return False
+    txid = manifest.get("transaction")
+    if not txid:
+        return True
+    return transaction_status(root, txid) == "committed"
+
+
+def running_ref_path(root, domain, generation, volume):
+    return Path(root) / "running" / domain / str(generation) / f"{volume}.json"
+
+
 def current_generation(root, domain):
     link = Path(root) / "domains" / domain / "current"
     if not link.is_symlink():
@@ -1638,12 +1702,106 @@ def current_generation(root, domain):
 def switch_current(root, domain, generation):
     domain_dir = Path(root) / "domains" / domain
     target = domain_dir / "generations" / str(generation)
-    if not (target / "manifest.json").exists():
+    manifest_path = target / "manifest.json"
+    if not manifest_path.exists():
         fail(f"generation does not exist for {domain}: {generation}")
+    manifest = read_json(manifest_path)
+    if not generation_is_committed(root, manifest):
+        fail(f"generation is not committed for {domain}: {generation}")
     tmp = domain_dir / f".current.tmp-{uuid.uuid4().hex}"
     os.symlink(os.path.relpath(target, domain_dir), tmp)
+    maybe_failpoint("switch-before-current-replace")
     os.replace(tmp, domain_dir / "current")
     fsync_dir(domain_dir)
+    maybe_failpoint("switch-after-current-replace")
+
+
+def mark_running_ref(root, domain, generation, volume):
+    root = ensure_pool(root)
+    domain = safe_domain_name(domain)
+    generation = int(generation)
+    if not volume or "/" in volume or volume in (".", ".."):
+        fail(f"invalid running volume name: {volume!r}")
+    manifest_path = generation_manifest_path(root, domain, generation)
+    manifest = read_json(manifest_path)
+    if not generation_is_committed(root, manifest):
+        fail(f"generation is not committed for {domain}: {generation}")
+    store = manifest.get("store", {})
+    path = running_ref_path(root, domain, generation, volume)
+    atomic_json(
+        path,
+        {
+            "schema": SCHEMA_RUNNING_REF,
+            "status": "running",
+            "domain": domain,
+            "generation": generation,
+            "volume": volume,
+            "manifest": str(manifest_path),
+            "closure_hash": store.get("closure_hash", ""),
+            "started_at": utc_now(),
+        },
+    )
+    return {
+        "schema": SCHEMA_RUNNING_REF,
+        "status": "running",
+        "pool_root": str(root),
+        "domain": domain,
+        "generation": generation,
+        "volume": volume,
+        "manifest": str(manifest_path),
+    }
+
+
+def clear_running_ref(root, domain, generation, volume):
+    root = ensure_pool(root)
+    domain = safe_domain_name(domain)
+    generation = int(generation)
+    path = running_ref_path(root, domain, generation, volume)
+    removed = False
+    if path.exists() or path.is_symlink():
+        remove_path(path)
+        removed = True
+        gen_dir = path.parent
+        domain_dir = gen_dir.parent
+        with suppress(OSError):
+            gen_dir.rmdir()
+        with suppress(OSError):
+            domain_dir.rmdir()
+    return {
+        "schema": SCHEMA_RUNNING_REF,
+        "status": "cleared",
+        "pool_root": str(root),
+        "domain": domain,
+        "generation": generation,
+        "volume": volume,
+        "removed": removed,
+    }
+
+
+def mark_running(args):
+    return mark_running_ref(args.pool_root, args.domain, args.generation, args.volume)
+
+
+def clear_running(args):
+    return clear_running_ref(args.pool_root, args.domain, args.generation, args.volume)
+
+
+def iter_running_generation_refs(root):
+    running_dir = Path(root) / "running"
+    if not running_dir.exists():
+        return
+    for ref_path in sorted(running_dir.glob("*/*/*.json")):
+        try:
+            ref = read_json(ref_path)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if ref.get("schema") != SCHEMA_RUNNING_REF or ref.get("status") != "running":
+            continue
+        domain = ref.get("domain")
+        generation = ref.get("generation")
+        if not domain or generation is None:
+            continue
+        yield safe_domain_name(domain), int(generation), ref_path, ref
 
 
 def admit_generation(args):
@@ -1670,6 +1828,7 @@ def admit_generation(args):
             "created_at": utc_now(),
         },
     )
+    maybe_failpoint("admit-after-tx-create")
 
     paths = read_store_paths(args.closure_source, args.system)
     paths = sorted(set(paths))
@@ -1703,7 +1862,7 @@ def admit_generation(args):
     manifest_path = generation_dir / "manifest.json"
     manifest = {
         "schema": SCHEMA_GENERATION,
-        "status": "committed",
+        "status": "prepared",
         "domain": domain,
         "generation": generation,
         "previous_generation": previous,
@@ -1756,7 +1915,9 @@ def admit_generation(args):
             "retain": parse_bool(args.retain),
         },
     }
+    maybe_failpoint("generation-before-manifest")
     atomic_json(manifest_path, manifest)
+    maybe_failpoint("generation-after-manifest")
     atomic_json(
         tx_path,
         {
@@ -1770,6 +1931,10 @@ def admit_generation(args):
             "manifest": str(manifest_path),
         },
     )
+    maybe_failpoint("generation-after-tx-commit")
+    manifest["status"] = "committed"
+    atomic_json(manifest_path, manifest)
+    maybe_failpoint("generation-after-manifest-commit")
     if parse_bool(args.activate):
         switch_current(root, domain, generation)
 
@@ -1829,7 +1994,7 @@ def switch(args):
     domain = safe_domain_name(args.domain)
     generation = int(args.generation)
     manifest = read_json(generation_manifest_path(root, domain, generation))
-    if manifest.get("schema") != SCHEMA_GENERATION or manifest.get("status") != "committed":
+    if not generation_is_committed(root, manifest):
         fail(f"generation is not committed for {domain}: {generation}")
     previous = current_generation(root, domain)
     switch_current(root, domain, generation)
@@ -1873,21 +2038,31 @@ def iter_committed_generations(root):
             manifest_path = generation_dir / "manifest.json"
             if manifest_path.exists():
                 manifest = read_json(manifest_path)
-                if manifest.get("schema") == SCHEMA_GENERATION and manifest.get("status") == "committed":
+                if generation_is_committed(root, manifest):
                     yield domain_dir.name, int(generation_dir.name), manifest_path, manifest
 
 
 def recover(args):
     root = ensure_pool(args.pool_root)
-    recovered = []
+    aborted = []
+    finalized = []
+    removed_incomplete_generations = []
     for tx in sorted((root / "transactions").glob("*.json")):
         data = read_json(tx)
         if data.get("status") == "committed":
+            manifest_path = data.get("manifest")
+            if manifest_path and Path(manifest_path).exists():
+                manifest = read_json(manifest_path)
+                if manifest.get("schema") == SCHEMA_GENERATION and manifest.get("status") == "prepared":
+                    manifest["status"] = "committed"
+                    manifest["recovered_at"] = utc_now()
+                    atomic_json(manifest_path, manifest)
+                    finalized.append(str(manifest_path))
             continue
         data["status"] = "aborted"
         data["aborted_at"] = utc_now()
         atomic_json(tx, data)
-        recovered.append(str(tx))
+        aborted.append(str(tx))
     for tmp in sorted((root / "tmp").iterdir()):
         if tmp.is_dir():
             remove_path(tmp)
@@ -1901,11 +2076,28 @@ def recover(args):
                 remove_path(stale_link)
             else:
                 remove_path(stale_link)
+        generations_dir = domain_dir / "generations"
+        if not generations_dir.is_dir():
+            continue
+        for generation_dir in sorted(generations_dir.iterdir()):
+            if not generation_dir.is_dir():
+                continue
+            manifest_path = generation_dir / "manifest.json"
+            if not manifest_path.exists():
+                remove_path(generation_dir)
+                removed_incomplete_generations.append(str(generation_dir))
+                continue
+            manifest = read_json(manifest_path)
+            if not generation_is_committed(root, manifest):
+                remove_path(generation_dir)
+                removed_incomplete_generations.append(str(generation_dir))
     return {
         "schema": SCHEMA_RECOVERY,
         "status": "passed",
         "pool_root": str(root),
-        "aborted_transactions": recovered,
+        "aborted_transactions": aborted,
+        "finalized_generations": finalized,
+        "removed_incomplete_generations": removed_incomplete_generations,
     }
 
 
@@ -1915,8 +2107,71 @@ def gc(args):
     live_images = set()
     live_views = set()
     live_chunks = set()
+    active_transaction_ids = set()
+    active_transaction_objects = set()
+    active_transaction_chunks = set()
+    in_progress_generations = []
+    running_generations = set()
+    stale_running_refs = []
     retained_generations = set()
     removed_generations = []
+    transaction_states = {}
+
+    for tx in sorted((root / "transactions").glob("*.json")):
+        data = read_json(tx)
+        txid = data.get("id") or tx.stem
+        transaction_states[txid] = data.get("status")
+        if data.get("status") not in ("committed", "aborted"):
+            active_transaction_ids.add(txid)
+
+    for manifest_path in sorted((root / "domains").glob("*/generations/*/manifest.json")):
+        try:
+            manifest = read_json(manifest_path)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if manifest.get("schema") != SCHEMA_GENERATION or generation_is_committed(root, manifest):
+            continue
+        txid = manifest.get("transaction")
+        tx_status = transaction_states.get(txid) or transaction_status(root, txid)
+        if not txid or tx_status in (None, "aborted"):
+            continue
+        active_transaction_ids.add(txid)
+        domain = manifest.get("domain", manifest_path.parents[2].name)
+        generation = int(manifest.get("generation", manifest_path.parent.name))
+        in_progress_generations.append(
+            {
+                "domain": domain,
+                "generation": generation,
+                "transaction": txid,
+                "transaction_status": tx_status,
+                "manifest": str(manifest_path),
+            }
+        )
+        add_manifest_store_liveness(root, manifest, live_objects, live_images, live_views, live_chunks)
+
+    if active_transaction_ids:
+        for meta in sorted((root / "objects/blob-metadata").glob("*.json")):
+            if meta.name == ".tar-eof.json":
+                continue
+            payload = read_json(meta)
+            if payload.get("transaction") in active_transaction_ids:
+                active_transaction_objects.add(payload.get("entry") or meta.name[: -len(".json")])
+        for meta in sorted((root / "chunks/metadata").glob("*.json")):
+            payload = read_json(meta)
+            if payload.get("transaction") in active_transaction_ids:
+                active_transaction_chunks.add(payload.get("hash") or meta.stem)
+
+    live_objects.update(active_transaction_objects)
+    live_chunks.update(active_transaction_chunks)
+
+    for domain, generation, ref_path, _ref in iter_running_generation_refs(root):
+        manifest_path = generation_manifest_path(root, domain, generation)
+        if manifest_path.exists():
+            manifest = read_json(manifest_path)
+            if generation_is_committed(root, manifest):
+                running_generations.add((domain, generation))
+                continue
+        stale_running_refs.append(str(ref_path))
 
     by_domain = {}
     for domain, generation, manifest_path, manifest in iter_committed_generations(root):
@@ -1929,22 +2184,14 @@ def gc(args):
         if current is not None:
             keep.add(current)
         for gen, manifest_path, manifest in generations:
-            if gen in keep or manifest.get("retention", {}).get("retain", False):
+            if gen in keep or (domain, gen) in running_generations or manifest.get("retention", {}).get("retain", False):
                 retained_generations.add((domain, gen))
-                for path in manifest["store"]["paths"]:
-                    live_objects.add(store_entry(path))
-                store = manifest["store"]
-                if store.get("view_backend", VIEW_BACKEND_EXT4_IMAGE) == VIEW_BACKEND_EXT4_IMAGE:
-                    live_images.add(store["canonical_image"])
-                view_root = canonical_view_root(store)
-                if view_root:
-                    live_views.add(view_root)
-                for chunk in read_chunk_refs(store.get("canonical_chunk_refs") or store.get("chunk_refs")):
-                    live_chunks.add(chunk)
+                add_manifest_store_liveness(root, manifest, live_objects, live_images, live_views, live_chunks)
             else:
                 generation_dir = manifest_path.parent
                 remove_path(generation_dir)
                 removed_generations.append({"domain": domain, "generation": gen})
+                maybe_failpoint("gc-after-generation-remove")
 
     removed_objects = []
     for obj in sorted((root / "objects/store").iterdir()):
@@ -1973,6 +2220,7 @@ def gc(args):
         if entry not in live_objects:
             meta.unlink()
             removed_object_blobs.append(entry)
+            maybe_failpoint("gc-after-object-metadata-remove")
 
     removed_images = []
     for image_dir in sorted((root / "images/by-closure").iterdir()):
@@ -2002,6 +2250,15 @@ def gc(args):
             {"domain": domain, "generation": generation}
             for domain, generation in sorted(retained_generations)
         ],
+        "running_generations": [
+            {"domain": domain, "generation": generation}
+            for domain, generation in sorted(running_generations)
+        ],
+        "stale_running_refs": stale_running_refs,
+        "in_progress_generations": in_progress_generations,
+        "active_transaction_ids": sorted(active_transaction_ids),
+        "active_transaction_objects": sorted(active_transaction_objects),
+        "active_transaction_chunks": sorted(active_transaction_chunks),
         "removed_generations": removed_generations,
         "removed_objects": removed_objects,
         "removed_object_metadata": removed_object_metadata,
@@ -2035,6 +2292,16 @@ def status(args):
                 "chunk_count": manifest["store"].get("chunk_count", 0),
             }
         )
+    running = [
+        {
+            "domain": domain,
+            "generation": generation,
+            "volume": ref.get("volume"),
+            "manifest": ref.get("manifest"),
+            "closure_hash": ref.get("closure_hash", ""),
+        }
+        for domain, generation, _ref_path, ref in iter_running_generation_refs(root)
+    ]
     object_count = len(
         [
             path
@@ -2064,6 +2331,7 @@ def status(args):
         "chunk_blob": str(chunk_blob),
         "chunk_blob_size": os.path.getsize(chunk_blob) if chunk_blob.exists() else 0,
         "domains": domains,
+        "running": running,
     }
 
 
@@ -2150,6 +2418,20 @@ def build_parser():
     detach_parser.add_argument("--domain", required=True)
     detach_parser.add_argument("--generation", required=True)
     detach_parser.set_defaults(func=lambda args: detach_blob_view(args.pool_root, args.domain, args.generation))
+
+    mark_running_parser = sub.add_parser("mark-running")
+    add_common(mark_running_parser)
+    mark_running_parser.add_argument("--domain", required=True)
+    mark_running_parser.add_argument("--generation", required=True)
+    mark_running_parser.add_argument("--volume", required=True)
+    mark_running_parser.set_defaults(func=mark_running)
+
+    clear_running_parser = sub.add_parser("clear-running")
+    add_common(clear_running_parser)
+    clear_running_parser.add_argument("--domain", required=True)
+    clear_running_parser.add_argument("--generation", required=True)
+    clear_running_parser.add_argument("--volume", required=True)
+    clear_running_parser.set_defaults(func=clear_running)
 
     return parser
 
