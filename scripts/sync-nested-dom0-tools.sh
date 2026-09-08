@@ -95,6 +95,7 @@ storage_site="$storage_out/${storage_site_physical#"$storage_physical"/}"
 dmsetup_out="$(find_output_with_bin dmsetup)"
 losetup_out="$(find_output_with_bin losetup)"
 erofs_out="$(find_output_with_bin mkfs.erofs)"
+domain_storage_out="$(find_output_with_bin nixome-nix-domain-storage)"
 dmsetup_bin="$dmsetup_out/bin"
 losetup_bin="$losetup_out/bin"
 erofs_bin="$erofs_out/bin"
@@ -136,7 +137,7 @@ ssh_base "sudo -n mkdir -p $(shell_quote "$REMOTE_BIN_DIR") /run/systemd/system/
 ssh_base "sudo -n ln -sfn $(shell_quote "$setup_config_out/bin/nixome-setup-config") $(shell_quote "$REMOTE_BIN_DIR/nixome-setup-config")"
 ssh_base "sudo -n ln -sfn $(shell_quote "$nix_closure_out/bin/nixome-nix-closure-domain-smoke") $(shell_quote "$REMOTE_BIN_DIR/nixome-nix-closure-domain-smoke")"
 ssh_base "sudo -n ln -sfn $(shell_quote "$storage_out/bin/nixome-closure-store") $(shell_quote "$REMOTE_BIN_DIR/nixome-closure-store")"
-ssh_base "sudo -n ln -sfn $(shell_quote "$setup_config_out/bin/nixome-nix-domain-storage") $(shell_quote "$REMOTE_BIN_DIR/nixome-nix-domain-storage")"
+ssh_base "sudo -n ln -sfn $(shell_quote "$domain_storage_out/bin/nixome-nix-domain-storage") $(shell_quote "$REMOTE_BIN_DIR/nixome-nix-domain-storage")"
 scp_base "$dropin" "$SSH_USER@127.0.0.1:/tmp/nixome-warm-tools-qubesd.conf"
 ssh_base "sudo -n unlink $(shell_quote "$REMOTE_OLD_DROPIN") 2>/dev/null || true; sudo -n mv /tmp/nixome-warm-tools-qubesd.conf $(shell_quote "$REMOTE_DROPIN") && sudo -n systemctl daemon-reload"
 
@@ -161,6 +162,7 @@ jq -n \
   --arg setup_config "$setup_config_out" \
   --arg nix_closure_smoke "$nix_closure_out" \
   --arg storage "$storage_out" \
+  --arg domain_storage "$domain_storage_out" \
   --arg storage_site "$storage_site" \
   --arg remote_bin_dir "$REMOTE_BIN_DIR" \
   --arg qubesd_pythonpath "$qubesd_pythonpath" \
@@ -174,6 +176,7 @@ jq -n \
     setup_config: $setup_config,
     nix_closure_smoke: $nix_closure_smoke,
     storage: $storage,
+    domain_storage: $domain_storage,
     storage_site: $storage_site,
     remote_bin_dir: $remote_bin_dir,
     qubesd: {
