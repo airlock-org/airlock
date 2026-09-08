@@ -18,6 +18,7 @@ SCHEMA_ADMISSION = "nixome.closure-store.admission.v1"
 SCHEMA_GENERATION = "nixome.closure-store.generation.v1"
 SCHEMA_SWITCH = "nixome.closure-store.switch.v1"
 SCHEMA_ROLLBACK = "nixome.closure-store.rollback.v1"
+SCHEMA_RETENTION = "nixome.closure-store.retention.v1"
 SCHEMA_GC = "nixome.closure-store.gc.v1"
 SCHEMA_RECOVERY = "nixome.closure-store.recovery.v1"
 SCHEMA_STATUS = "nixome.closure-store.status.v1"
@@ -1989,6 +1990,32 @@ def rollback(args):
     return result
 
 
+def set_retention(args):
+    root = ensure_pool(args.pool_root)
+    domain = safe_domain_name(args.domain)
+    generation = int(args.generation)
+    manifest_path = generation_manifest_path(root, domain, generation)
+    manifest = read_json(manifest_path)
+    if not generation_is_committed(root, manifest):
+        fail(f"generation is not committed for {domain}: {generation}")
+    retain = parse_bool(args.retain)
+    retention = manifest.setdefault("retention", {})
+    previous = bool(retention.get("retain", False))
+    retention["retain"] = retain
+    retention["updated_at"] = utc_now()
+    atomic_json(manifest_path, manifest)
+    return {
+        "schema": SCHEMA_RETENTION,
+        "status": "passed",
+        "pool_root": str(root),
+        "domain": domain,
+        "generation": generation,
+        "previous_retain": previous,
+        "retain": retain,
+        "manifest": str(manifest_path),
+    }
+
+
 def switch(args):
     root = ensure_pool(args.pool_root)
     domain = safe_domain_name(args.domain)
@@ -2391,6 +2418,13 @@ def build_parser():
     rollback_parser.add_argument("--domain", required=True)
     rollback_parser.add_argument("--generation", required=True)
     rollback_parser.set_defaults(func=rollback)
+
+    retention_parser = sub.add_parser("set-retention")
+    add_common(retention_parser)
+    retention_parser.add_argument("--domain", required=True)
+    retention_parser.add_argument("--generation", required=True)
+    retention_parser.add_argument("--retain", required=True, choices=["true", "false"])
+    retention_parser.set_defaults(func=set_retention)
 
     switch_parser = sub.add_parser("switch")
     add_common(switch_parser)

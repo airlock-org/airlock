@@ -386,6 +386,30 @@ jq -e '
   .removed == true
 ' "$RESULT_DIR/clear-running-work-gen2-store-data.json" >/dev/null
 
+run_engine_json retain-work-gen2 set-retention \
+  --pool-root "$POOL" \
+  --domain work \
+  --generation 2 \
+  --retain true
+jq -e '
+  .schema == "nixome.closure-store.retention.v1" and
+  .status == "passed" and
+  .previous_retain == false and
+  .retain == true
+' "$RESULT_DIR/retain-work-gen2.json" >/dev/null
+
+run_engine_json unretain-work-gen2 set-retention \
+  --pool-root "$POOL" \
+  --domain work \
+  --generation 2 \
+  --retain false
+jq -e '
+  .schema == "nixome.closure-store.retention.v1" and
+  .status == "passed" and
+  .previous_retain == true and
+  .retain == false
+' "$RESULT_DIR/unretain-work-gen2.json" >/dev/null
+
 run_engine_json gc gc \
   --pool-root "$POOL" \
   --keep-generations 0

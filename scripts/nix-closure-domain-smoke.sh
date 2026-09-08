@@ -58,6 +58,13 @@ GEN2_SHARING_PROOF_LOG="$LOG_DIR/nix-closure-domain-sharing-proof-gen2.json"
 PRE_APPLY_SHUTDOWN_LOG="$LOG_DIR/nix-closure-domain-pre-apply-shutdown.log"
 DIRECT_TOPOLOGY_LOG="$LOG_DIR/nix-closure-domain-direct-topology.json"
 DIRECT_GEN2_TOPOLOGY_LOG="$LOG_DIR/nix-closure-domain-direct-topology-gen2.json"
+RUNNING_STATUS_LOG="$LOG_DIR/nix-closure-domain-running-status.json"
+GC_RUNNING_LOG="$LOG_DIR/nix-closure-domain-gc-running.json"
+ROLLBACK_SWITCH_LOG="$LOG_DIR/nix-closure-domain-rollback-switch.json"
+ROLLBACK_IDENTITY_LOG="$LOG_DIR/nix-closure-domain-rollback-identity.log"
+ROLLBACK_GUEST_PROBE_LOG="$LOG_DIR/nix-closure-domain-guest-probe-after-rollback.log"
+RETENTION_LOG="$LOG_DIR/nix-closure-domain-set-retention-gen2.json"
+GC_AFTER_ROLLBACK_LOG="$LOG_DIR/nix-closure-domain-gc-after-rollback.json"
 
 DOMAIN="${NIXOME_NIX_CLOSURE_DOMAIN:-nixome-closure-smoke}"
 PEER_DOMAIN="${NIXOME_NIX_CLOSURE_PEER_DOMAIN:-${DOMAIN}-peer}"
@@ -236,6 +243,20 @@ write_result() {
     jq -Rn --arg value "$SHARING_PROOF_LOG" '$value' | tr -d '\n'
     printf ',"gen2_sharing_proof":'
     jq -Rn --arg value "$GEN2_SHARING_PROOF_LOG" '$value' | tr -d '\n'
+    printf ',"running_status":'
+    jq -Rn --arg value "$RUNNING_STATUS_LOG" '$value' | tr -d '\n'
+    printf ',"gc_running":'
+    jq -Rn --arg value "$GC_RUNNING_LOG" '$value' | tr -d '\n'
+    printf ',"rollback_switch":'
+    jq -Rn --arg value "$ROLLBACK_SWITCH_LOG" '$value' | tr -d '\n'
+    printf ',"rollback_identity":'
+    jq -Rn --arg value "$ROLLBACK_IDENTITY_LOG" '$value' | tr -d '\n'
+    printf ',"guest_probe_after_rollback":'
+    jq -Rn --arg value "$ROLLBACK_GUEST_PROBE_LOG" '$value' | tr -d '\n'
+    printf ',"retention":'
+    jq -Rn --arg value "$RETENTION_LOG" '$value' | tr -d '\n'
+    printf ',"gc_after_rollback":'
+    jq -Rn --arg value "$GC_AFTER_ROLLBACK_LOG" '$value' | tr -d '\n'
     printf ',"guest_probe_after_reboot":'
     jq -Rn --arg value "$GUEST_PROBE_AFTER_REBOOT_LOG" '$value' | tr -d '\n'
     printf ',"guest_probe_after_restart":'
@@ -265,6 +286,14 @@ write_result() {
     json_file_value_or_null "$GEN2_APPLY_RESULT_JSON"
     printf ',"gen2_sharing_proof":'
     json_file_value_or_null "$GEN2_SHARING_PROOF_LOG"
+    printf ',"running_status":'
+    json_file_value_or_null "$RUNNING_STATUS_LOG"
+    printf ',"gc_running":'
+    json_file_value_or_null "$GC_RUNNING_LOG"
+    printf ',"rollback_switch":'
+    json_file_value_or_null "$ROLLBACK_SWITCH_LOG"
+    printf ',"gc_after_rollback":'
+    json_file_value_or_null "$GC_AFTER_ROLLBACK_LOG"
     printf ',"runtime_service_output":'
     json_file_string_or_null "$RUNTIME_SERVICE_LOG"
     printf ',"guest_probe_output":'
@@ -580,6 +609,78 @@ sharing_json_value() {
   file="$1"
   key="$2"
   jq -r "$key" "$file"
+}
+
+set_domain_generation_identity_from_switch() {
+  switch_json="$1"
+  selected_system="$(jq -r '.system' "$switch_json")"
+  selected_root="$(jq -r '.root_source // ""' "$switch_json")"
+  selected_kernel="$(jq -r '.kernel_name // ""' "$switch_json")"
+  selected_generation="$(jq -r '.generation' "$switch_json")"
+  selected_source="$(jq -r '.source // ""' "$switch_json")"
+  selected_closure_hash="$(jq -r '.closure_hash' "$switch_json")"
+  selected_view_image="$(jq -r '.view_image // .metadata_image // ""' "$switch_json")"
+  selected_backend="$(jq -r '.view_backend // "ext4-image"' "$switch_json")"
+  selected_filesystem="$(jq -r '.filesystem // "ext4"' "$switch_json")"
+  selected_blob_map="$(jq -r '.blob_map // ""' "$switch_json")"
+  selected_blob_volume="$(jq -r '.blob_volume // ""' "$switch_json")"
+  selected_blob_device="$(jq -r '.blob_device // ""' "$switch_json")"
+  [ "$selected_blob_device" != "null" ] || selected_blob_device=""
+  [ -n "$selected_blob_device" ] || selected_blob_device="/dev/xvdf"
+
+  {
+    printf 'selected_system=%s\n' "$selected_system"
+    printf 'selected_root=%s\n' "$selected_root"
+    printf 'selected_kernel=%s\n' "$selected_kernel"
+    printf 'selected_generation=%s\n' "$selected_generation"
+    printf 'selected_source=%s\n' "$selected_source"
+    printf 'selected_view_image=%s\n' "$selected_view_image"
+
+    if [ -n "$selected_root" ] && [ "$selected_root" != "null" ]; then
+      selected_root_physical="$(nixome_physical_store_path "$selected_root")"
+      if [ -d "$selected_root_physical" ]; then
+        selected_root_image="$selected_root_physical/root.img"
+      else
+        selected_root_image="$selected_root_physical"
+      fi
+      [ -f "$selected_root_image" ] ||
+        fail "rollback root image is missing: $selected_root"
+      printf '+ qvm-volume import %q %q\n' "$DOMAIN:root" "$selected_root_image"
+      qvm-volume import "$DOMAIN:root" "$selected_root_image"
+    fi
+
+    if [ -n "$selected_kernel" ] && [ "$selected_kernel" != "null" ]; then
+      printf '+ qvm-prefs %q kernel %q\n' "$DOMAIN" "$selected_kernel"
+      qvm-prefs "$DOMAIN" kernel "$selected_kernel"
+    fi
+
+    selected_kernelopts="console=hvc0 init=/sbin/init nixome.system=$selected_system nixome.storedev=/dev/xvde nixome.storefmt=$selected_filesystem"
+    if [ "$selected_filesystem" = "erofs" ]; then
+      selected_kernelopts="$selected_kernelopts nixome.storeblobdev=$selected_blob_device"
+    fi
+    printf '+ qvm-prefs %q kernelopts %q\n' "$DOMAIN" "$selected_kernelopts"
+    qvm-prefs "$DOMAIN" kernelopts "$selected_kernelopts"
+
+    qvm-features "$DOMAIN" nixome-system-source "$selected_system"
+    qvm-features "$DOMAIN" nixome-root-source "$selected_root"
+    qvm-features "$DOMAIN" nixome-store-source "$selected_source"
+    qvm-features "$DOMAIN" nixome-store-image "$selected_source"
+    qvm-features "$DOMAIN" nixome-store-mode shared-closure
+    qvm-features "$DOMAIN" nixome-store-view-backend "$selected_backend"
+    qvm-features "$DOMAIN" nixome-store-filesystem "$selected_filesystem"
+    qvm-features "$DOMAIN" nixome-store-generation "$selected_generation"
+    qvm-features "$DOMAIN" nixome-store-closure-hash "$selected_closure_hash"
+    qvm-features "$DOMAIN" nixome-store-view-image "$selected_view_image"
+    qvm-features "$DOMAIN" nixome-store-mountpoint /nix/store
+    qvm-features "$DOMAIN" nixome-store-device /dev/xvde
+    qvm-features "$DOMAIN" nixome-store-read-only True
+    if [ "$selected_filesystem" = "erofs" ]; then
+      qvm-features "$DOMAIN" nixome-store-blob-device "$selected_blob_device"
+      qvm-features "$DOMAIN" nixome-store-blob-volume "$selected_blob_volume"
+      qvm-features "$DOMAIN" nixome-store-blob-map "$selected_blob_map"
+    fi
+  } > "$ROLLBACK_IDENTITY_LOG" 2>&1 ||
+    fail "apply selected generation identity after rollback failed"
 }
 
 run_visibility_probe() {
@@ -1650,6 +1751,55 @@ run_runtime_service_check_for \
   "$peer_store_blob_device" \
   "$PEER_RUNTIME_SERVICE_LOG" \
   "$PEER_RUNTIME_SERVICE_ERR"
+
+run_or_fail "read closure-store status while second generation is running" "$RUNNING_STATUS_LOG" \
+  nixome-closure-store status
+jq -e --arg domain "$DOMAIN" --argjson generation "$new_generation" '
+  any(.running[]; .domain == $domain and .generation == $generation and .volume == "store") and
+  any(.running[]; .domain == $domain and .generation == $generation and .volume == "store-data")
+' "$RUNNING_STATUS_LOG" >/dev/null ||
+  fail "closure-store running refs do not include second generation"
+
+run_or_fail "run closure-store GC while second generation is running" "$GC_RUNNING_LOG" \
+  nixome-closure-store gc --keep-generations 0
+jq -e --arg domain "$DOMAIN" --argjson generation "$new_generation" '
+  any(.running_generations[]; .domain == $domain and .generation == $generation) and
+  any(.retained_generations[]; .domain == $domain and .generation == $generation) and
+  all(.removed_generations[]; .domain != $domain or .generation != $generation) and
+  (.stale_running_refs | length) == 0
+' "$GC_RUNNING_LOG" >/dev/null ||
+  fail "closure-store GC did not protect the running second generation"
+
+shutdown_vm "$DOMAIN" "$LOG_DIR/nix-closure-domain-rollback-pre-shutdown.log"
+run_or_fail "switch primary domain back to retained generation" "$ROLLBACK_SWITCH_LOG" \
+  nixome-nix-domain-storage switch-store "$DOMAIN" "$initial_generation"
+set_domain_generation_identity_from_switch "$ROLLBACK_SWITCH_LOG"
+run_or_fail "mark second generation collectible after rollback" "$RETENTION_LOG" \
+  nixome-closure-store set-retention \
+    --domain "$DOMAIN" \
+    --generation "$new_generation" \
+    --retain false
+run_or_fail "run closure-store GC after rollback" "$GC_AFTER_ROLLBACK_LOG" \
+  nixome-closure-store gc --keep-generations 0
+jq -e --arg domain "$DOMAIN" --argjson generation "$new_generation" --arg shared "$shared_object" '
+  any(.removed_generations[]; .domain == $domain and .generation == $generation) and
+  (.removed_object_blobs | index($shared)) == null
+' "$GC_AFTER_ROLLBACK_LOG" >/dev/null ||
+  fail "closure-store GC did not remove the unreferenced second generation while preserving shared objects"
+
+check_source_paths
+[ "$(store_generation_for "$DOMAIN")" = "$initial_generation" ] ||
+  fail "primary domain did not select the initial generation after rollback"
+start_vm "$DOMAIN"
+wait_for_qrexec "$DOMAIN" "$DOMAIN after rollback" "$LOG_DIR/nix-closure-domain-qrexec-after-rollback.log"
+check_libvirt_filtered_devices "$DOMAIN" "$LIBVIRT_XML_LOG"
+run_runtime_service_check
+write_guest_probe_script
+run_guest_probe "$ROLLBACK_GUEST_PROBE_LOG"
+if [ "$APPLY_MODE" = "config-flow" ]; then
+  grep -Fx "applied_message=$APPLY_MESSAGE" "$ROLLBACK_GUEST_PROBE_LOG" >/dev/null ||
+    fail "guest did not boot the rolled-back generation"
+fi
 
 case "$RUN_REBOOT_PROBE" in
   1|true|yes)
