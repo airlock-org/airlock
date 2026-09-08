@@ -30,6 +30,7 @@ PYTHON_FILES := \
 	pkgs/nixome-qubes-storage/src/nixome_qubes_storage/__init__.py \
 	pkgs/nixome-qubes-storage/src/nixome_qubes_storage/cli.py \
 	pkgs/nixome-qubes-storage/src/nixome_qubes_storage/engine.py \
+	pkgs/nixome-qubes-storage/src/nixome_qubes_storage/_engine/*.py \
 	pkgs/nixome-qubes-storage/src/nixome_qubes_storage/qubes.py \
 	scripts/nix-domain-storage.py
 

@@ -1,30 +1,47 @@
-import argparse
-import fcntl
-import hashlib
-import json
 import os
-import re
-import shutil
-import stat
-import subprocess
-import time
 import uuid
-from contextlib import suppress
-from pathlib import Path
 
 
-from .core import SCHEMA_ADMISSION, SCHEMA_GENERATION, SCHEMA_RETENTION, SCHEMA_ROLLBACK, SCHEMA_SWITCH, VIEW_BACKEND_EROFS_OBJECTMAP, atomic_json, closure_hash, fail, maybe_failpoint, next_generation, parse_bool, read_json, read_store_paths, run_verify, safe_domain_name, utc_now
+from .core import (
+    SCHEMA_ADMISSION,
+    SCHEMA_GENERATION,
+    SCHEMA_RETENTION,
+    SCHEMA_ROLLBACK,
+    SCHEMA_SWITCH,
+    VIEW_BACKEND_EROFS_OBJECTMAP,
+    atomic_json,
+    closure_hash,
+    fail,
+    maybe_failpoint,
+    next_generation,
+    parse_bool,
+    read_json,
+    read_store_paths,
+    run_verify,
+    safe_domain_name,
+    utc_now,
+)
 from .objects import admit_object
 from .pool import ensure_pool
 from .segments import configured_segment_target_bytes
-from .state import clear_running_ref, current_generation, generation_is_committed, generation_manifest_path, mark_running_ref, switch_current
+from .state import (
+    clear_running_ref,
+    current_generation,
+    generation_is_committed,
+    generation_manifest_path,
+    mark_running_ref,
+    switch_current,
+)
 from .views import materialize_view
+
 
 def mark_running(args):
     return mark_running_ref(args.pool_root, args.domain, args.generation, args.volume)
 
+
 def clear_running(args):
     return clear_running_ref(args.pool_root, args.domain, args.generation, args.volume)
+
 
 def admit_generation(args):
     root = ensure_pool(args.pool_root)
@@ -203,10 +220,12 @@ def admit_generation(args):
         "read_only": True,
     }
 
+
 def rollback(args):
     result = switch(args)
     result["schema"] = SCHEMA_ROLLBACK
     return result
+
 
 def set_retention(args):
     root = ensure_pool(args.pool_root)
@@ -232,6 +251,7 @@ def set_retention(args):
         "retain": retain,
         "manifest": str(manifest_path),
     }
+
 
 def switch(args):
     root = ensure_pool(args.pool_root)

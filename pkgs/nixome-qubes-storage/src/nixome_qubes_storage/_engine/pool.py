@@ -1,20 +1,15 @@
-import argparse
-import fcntl
-import hashlib
-import json
-import os
-import re
-import shutil
-import stat
-import subprocess
-import time
-import uuid
-from contextlib import suppress
 from pathlib import Path
 
 
-from .core import DEFAULT_SEGMENT_TARGET_BYTES, SCHEMA_POOL, atomic_json, read_json, utc_now
+from .core import (
+    DEFAULT_SEGMENT_TARGET_BYTES,
+    SCHEMA_POOL,
+    atomic_json,
+    read_json,
+    utc_now,
+)
 from .objects import migrate_legacy_blob_maps, migrate_single_blob_to_segments
+
 
 def ensure_pool(root):
     root = Path(root)

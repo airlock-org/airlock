@@ -1,24 +1,73 @@
-import argparse
 import fcntl
 import hashlib
 import json
 import os
-import re
-import shutil
-import stat
-import subprocess
-import time
 import uuid
 from contextlib import suppress
 from pathlib import Path
 
 
-from .core import DEFAULT_SEGMENT_TARGET_BYTES, EngineError, SCHEMA_COMPACTION, SCHEMA_GC, SCHEMA_GENERATION, SCHEMA_RECOVERY, SCHEMA_STATUS, VIEW_BACKEND_EROFS_OBJECTMAP, add_manifest_store_liveness, atomic_json, closure_store_fsync_enabled, dm_exists, fail, maybe_failpoint, parse_bool, read_json, remove_path, utc_now
+from .core import (
+    DEFAULT_SEGMENT_TARGET_BYTES,
+    EngineError,
+    SCHEMA_COMPACTION,
+    SCHEMA_GC,
+    SCHEMA_GENERATION,
+    SCHEMA_RECOVERY,
+    SCHEMA_STATUS,
+    VIEW_BACKEND_EROFS_OBJECTMAP,
+    add_manifest_store_liveness,
+    atomic_json,
+    closure_store_fsync_enabled,
+    dm_exists,
+    fail,
+    maybe_failpoint,
+    parse_bool,
+    read_json,
+    remove_path,
+    utc_now,
+)
 from .objects import append_file_to_segment
 from .pool import ensure_pool
-from .segments import configured_segment_target_bytes, current_location_from_meta, current_open_segment_locked, current_segment_ref_path, location_key, normalize_location, object_blob_meta_path, object_blob_meta_paths, object_extent_from_meta, object_meta_path, parse_positive_int, read_segment_meta, seal_segment_locked, segment_blob_path, segment_ids, segment_lock_path, segment_meta_path, segments_dir, tar_eof_meta_path, top_level_location_fields, validate_segment_id, verify_segment_region
-from .state import current_generation, generation_is_committed, generation_manifest_path, iter_running_generation_refs, transaction_path, transaction_status
-from .views import blob_map_physical_references, iter_runtime_view_refs, merge_segment_reference_details, runtime_segment_references
+from .segments import (
+    configured_segment_target_bytes,
+    current_location_from_meta,
+    current_open_segment_locked,
+    current_segment_ref_path,
+    location_key,
+    normalize_location,
+    object_blob_meta_path,
+    object_blob_meta_paths,
+    object_extent_from_meta,
+    object_meta_path,
+    parse_positive_int,
+    read_segment_meta,
+    seal_segment_locked,
+    segment_blob_path,
+    segment_ids,
+    segment_lock_path,
+    segment_meta_path,
+    segments_dir,
+    tar_eof_meta_path,
+    top_level_location_fields,
+    validate_segment_id,
+    verify_segment_region,
+)
+from .state import (
+    current_generation,
+    generation_is_committed,
+    generation_manifest_path,
+    iter_running_generation_refs,
+    transaction_path,
+    transaction_status,
+)
+from .views import (
+    blob_map_physical_references,
+    iter_runtime_view_refs,
+    merge_segment_reference_details,
+    runtime_segment_references,
+)
+
 
 def iter_committed_generations(root):
     domains_dir = Path(root) / "domains"
@@ -37,6 +86,7 @@ def iter_committed_generations(root):
                         generation_dir.name
                     ), manifest_path, manifest
 
+
 def live_segment_references(root, live_objects, live_views):
     references = {}
     for meta_path in object_blob_meta_paths(root):
@@ -54,6 +104,7 @@ def live_segment_references(root, live_objects, live_views):
         references.setdefault(extent["segment_id"], set()).add(".tar-eof")
     return references
 
+
 def add_running_segment_references(root, reference_details):
     for domain, generation, _ref_path, ref in iter_running_generation_refs(root):
         source = f"running:{domain}:{generation}:{ref.get('volume', '')}"
@@ -70,6 +121,7 @@ def add_running_segment_references(root, reference_details):
                 }
             )
 
+
 def add_live_view_segment_references(live_views, reference_details):
     for view in sorted(live_views):
         blob_map = Path(view) / "store.blob-map.json"
@@ -80,6 +132,7 @@ def add_live_view_segment_references(live_views, reference_details):
                 reference_details,
                 blob_map_physical_references(read_json(blob_map), f"view:{view}"),
             )
+
 
 def physical_segment_reference_details(root, live_objects, live_views):
     details = {}
@@ -102,6 +155,7 @@ def physical_segment_reference_details(root, live_objects, live_views):
     runtime_refs, _stale = runtime_segment_references(root)
     merge_segment_reference_details(details, runtime_refs)
     return details
+
 
 def collect_segments(root):
     result = []
@@ -128,6 +182,7 @@ def collect_segments(root):
             }
         )
     return result
+
 
 def gc_segments(root, live_segment_refs, reference_details=None):
     reference_details = reference_details or {
@@ -177,6 +232,7 @@ def gc_segments(root, live_segment_refs, reference_details=None):
         ):
             blocked.append(segment_id)
     return removed, retained, partial, blocked
+
 
 def compute_liveness(root, keep_generations):
     live_objects = set()
@@ -268,6 +324,7 @@ def compute_liveness(root, keep_generations):
         "stale_running_refs": stale_running_refs,
     }
 
+
 def current_live_locations(root, live_objects, live_views):
     locations = {}
     for meta_path in object_blob_meta_paths(root):
@@ -292,6 +349,7 @@ def current_live_locations(root, live_objects, live_views):
             "extent": extent,
         }
     return locations
+
 
 def segment_utilization(root, live_locations, reference_details):
     by_segment = {segment["id"]: dict(segment) for segment in collect_segments(root)}
@@ -321,6 +379,7 @@ def segment_utilization(root, live_locations, reference_details):
         segment["current_live_entries"] = sorted(segment["current_live_entries"])
     return [by_segment[key] for key in sorted(by_segment, key=lambda value: int(value))]
 
+
 def compact_candidates(segments, threshold_percent, max_segments):
     current = None
     candidates = []
@@ -345,6 +404,7 @@ def compact_candidates(segments, threshold_percent, max_segments):
         )
     )
     return candidates[:max_segments]
+
 
 def copy_location_to_tmp(root, entry, location, txid):
     root = Path(root)
@@ -375,6 +435,7 @@ def copy_location_to_tmp(root, entry, location, txid):
     os.chmod(tmp, 0o400)
     return tmp
 
+
 def existing_valid_alternate_location(root, payload, excluded_segments, label):
     for raw_location in payload.get("locations", []):
         location = normalize_location(raw_location, label)
@@ -393,6 +454,7 @@ def existing_valid_alternate_location(root, payload, excluded_segments, label):
             )
             return location
     return None
+
 
 def publish_blob_location(root, entry, new_location, txid, reason):
     root = Path(root)
@@ -456,6 +518,7 @@ def publish_blob_location(root, entry, new_location, txid, reason):
             atomic_json(object_meta, object_payload)
     return True
 
+
 def refresh_blob_map_locations(root, blob_map_path):
     root = Path(root)
     blob_map_path = Path(blob_map_path)
@@ -518,6 +581,7 @@ def refresh_blob_map_locations(root, blob_map_path):
         atomic_json(blob_map_path, payload, mode=0o444)
     return changed
 
+
 def refresh_all_blob_maps(root):
     refreshed = []
     for blob_map in sorted(
@@ -533,6 +597,7 @@ def refresh_all_blob_maps(root):
         if refresh_blob_map_locations(root, blob_map):
             refreshed.append(str(blob_map))
     return refreshed
+
 
 def retire_unreferenced_segments(root, live_objects, live_views):
     live_segment_refs = live_segment_references(root, live_objects, live_views)
@@ -550,6 +615,7 @@ def retire_unreferenced_segments(root, live_objects, live_views):
         "blocked_segments": blocked,
         "bytes_reclaimed": sum(before.get(segment_id, 0) for segment_id in removed),
     }
+
 
 def compact(args):
     root = ensure_pool(args.pool_root)
@@ -758,6 +824,7 @@ def compact(args):
         "segment_compaction": "copy-and-switch",
     }
 
+
 def recover(args):
     root = ensure_pool(args.pool_root)
     aborted = []
@@ -856,6 +923,7 @@ def recover(args):
         "sealed_aborted_segments": sealed_aborted_segments,
         "refreshed_blob_maps": refreshed_blob_maps,
     }
+
 
 def gc(args):
     root = ensure_pool(args.pool_root)
@@ -1019,6 +1087,7 @@ def gc(args):
         "segment_store_append_only": True,
         "segment_compaction": "available",
     }
+
 
 def status(args):
     root = ensure_pool(args.pool_root)

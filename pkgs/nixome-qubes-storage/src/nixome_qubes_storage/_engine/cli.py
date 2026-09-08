@@ -1,22 +1,25 @@
 import argparse
-import fcntl
-import hashlib
-import json
 import os
-import re
-import shutil
-import stat
-import subprocess
-import time
-import uuid
-from contextlib import suppress
-from pathlib import Path
 
 
-from .core import DEFAULT_COMPACTION_MAX_SEGMENTS, DEFAULT_COMPACTION_THRESHOLD_PERCENT, DEFAULT_VIEW_BACKEND, VIEW_BACKEND_EROFS_OBJECTMAP, default_physical_store_root
-from .generations import admit_generation, clear_running, mark_running, rollback, set_retention, switch
+from .core import (
+    DEFAULT_COMPACTION_MAX_SEGMENTS,
+    DEFAULT_COMPACTION_THRESHOLD_PERCENT,
+    DEFAULT_VIEW_BACKEND,
+    VIEW_BACKEND_EROFS_OBJECTMAP,
+    default_physical_store_root,
+)
+from .generations import (
+    admit_generation,
+    clear_running,
+    mark_running,
+    rollback,
+    set_retention,
+    switch,
+)
 from .maintenance import compact, gc, recover, status
 from .views import attach_blob_view, detach_blob_view
+
 
 def add_common(parser):
     parser.add_argument(
@@ -25,6 +28,7 @@ def add_common(parser):
             "NIXOME_CLOSURE_STORE_ROOT", "/var/lib/nixome/closure-store"
         ),
     )
+
 
 def build_parser():
     parser = argparse.ArgumentParser(prog="nixome-closure-store")
@@ -170,6 +174,7 @@ def build_parser():
     clear_running_parser.set_defaults(func=clear_running)
 
     return parser
+
 
 def run(argv=None):
     parser = build_parser()

@@ -1,20 +1,24 @@
-import argparse
-import fcntl
-import hashlib
 import json
 import os
-import re
-import shutil
-import stat
-import subprocess
-import time
 import uuid
 from contextlib import suppress
 from pathlib import Path
 
 
-from .core import SCHEMA_GENERATION, SCHEMA_RUNNING_REF, atomic_json, fail, fsync_dir, maybe_failpoint, read_json, remove_path, safe_domain_name, utc_now
+from .core import (
+    SCHEMA_GENERATION,
+    SCHEMA_RUNNING_REF,
+    atomic_json,
+    fail,
+    fsync_dir,
+    maybe_failpoint,
+    read_json,
+    remove_path,
+    safe_domain_name,
+    utc_now,
+)
 from .pool import ensure_pool
+
 
 def generation_manifest_path(root, domain, generation):
     return (
@@ -26,8 +30,10 @@ def generation_manifest_path(root, domain, generation):
         / "manifest.json"
     )
 
+
 def transaction_path(root, txid):
     return Path(root) / "transactions" / f"{txid}.json"
+
 
 def transaction_status(root, txid):
     if not txid:
@@ -40,6 +46,7 @@ def transaction_status(root, txid):
     except (OSError, json.JSONDecodeError):
         return None
 
+
 def generation_is_committed(root, manifest):
     if (
         manifest.get("schema") != SCHEMA_GENERATION
@@ -51,8 +58,10 @@ def generation_is_committed(root, manifest):
         return True
     return transaction_status(root, txid) == "committed"
 
+
 def running_ref_path(root, domain, generation, volume):
     return Path(root) / "running" / domain / str(generation) / f"{volume}.json"
+
 
 def current_generation(root, domain):
     link = Path(root) / "domains" / domain / "current"
@@ -61,6 +70,7 @@ def current_generation(root, domain):
     target = os.readlink(link)
     name = Path(target).name
     return int(name) if name.isdigit() else None
+
 
 def switch_current(root, domain, generation):
     domain_dir = Path(root) / "domains" / domain
@@ -77,6 +87,7 @@ def switch_current(root, domain, generation):
     os.replace(tmp, domain_dir / "current")
     fsync_dir(domain_dir)
     maybe_failpoint("switch-after-current-replace")
+
 
 def mark_running_ref(root, domain, generation, volume):
     root = ensure_pool(root)
@@ -128,6 +139,7 @@ def mark_running_ref(root, domain, generation, volume):
         "manifest": str(manifest_path),
     }
 
+
 def clear_running_ref(root, domain, generation, volume):
     root = ensure_pool(root)
     domain = safe_domain_name(domain)
@@ -152,6 +164,7 @@ def clear_running_ref(root, domain, generation, volume):
         "volume": volume,
         "removed": removed,
     }
+
 
 def iter_running_generation_refs(root):
     running_dir = Path(root) / "running"

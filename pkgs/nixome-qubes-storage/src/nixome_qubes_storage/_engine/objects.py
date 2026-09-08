@@ -1,20 +1,53 @@
-import argparse
 import fcntl
-import hashlib
-import json
 import os
-import re
-import shutil
-import stat
-import subprocess
-import time
-import uuid
 from contextlib import suppress
 from pathlib import Path
 
 
-from .core import DEFAULT_SEGMENT_TARGET_BYTES, OBJECT_BLOB_ALIGNMENT, SCHEMA_OBJECT_BLOB, SCHEMA_SEGMENT, TAR_BLOCK_SIZE, TAR_EOF_SIZE, align_up, atomic_json, closure_store_fsync_enabled, fail, fsync_dir, hash_file, maybe_failpoint, physical_store_path, read_json, remove_path, require_tool, run_checked, store_entry, tree_hash, utc_now
-from .segments import create_segment_locked, current_open_segment_locked, file_size, legacy_object_blob_path, object_blob_meta_path, object_extent_from_meta, object_meta_path, read_segment_meta, seal_segment_locked, segment_blob_path, segment_file_size, segment_id_from_number, segment_lock_path, segment_meta_path, segments_dir, tar_eof_meta_path, validate_segment_id, write_segment_meta
+from .core import (
+    DEFAULT_SEGMENT_TARGET_BYTES,
+    OBJECT_BLOB_ALIGNMENT,
+    SCHEMA_OBJECT_BLOB,
+    SCHEMA_SEGMENT,
+    TAR_BLOCK_SIZE,
+    TAR_EOF_SIZE,
+    align_up,
+    atomic_json,
+    closure_store_fsync_enabled,
+    fail,
+    fsync_dir,
+    hash_file,
+    maybe_failpoint,
+    physical_store_path,
+    read_json,
+    remove_path,
+    require_tool,
+    run_checked,
+    store_entry,
+    tree_hash,
+    utc_now,
+)
+from .segments import (
+    create_segment_locked,
+    current_open_segment_locked,
+    file_size,
+    legacy_object_blob_path,
+    object_blob_meta_path,
+    object_extent_from_meta,
+    object_meta_path,
+    read_segment_meta,
+    seal_segment_locked,
+    segment_blob_path,
+    segment_file_size,
+    segment_id_from_number,
+    segment_lock_path,
+    segment_meta_path,
+    segments_dir,
+    tar_eof_meta_path,
+    validate_segment_id,
+    write_segment_meta,
+)
+
 
 def migrate_single_blob_to_segments(root):
     root = Path(root)
@@ -127,6 +160,7 @@ def migrate_single_blob_to_segments(root):
         fsync_dir(segment_directory)
         fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
+
 def migrate_legacy_blob_map(root, path, segment_id):
     root = Path(root)
     path = Path(path)
@@ -176,6 +210,7 @@ def migrate_legacy_blob_map(root, path, segment_id):
     atomic_json(path, payload, mode=0o444)
     return True
 
+
 def migrate_legacy_blob_maps(root):
     root = Path(root)
     first_segment = segment_blob_path(root, "000001")
@@ -187,6 +222,7 @@ def migrate_legacy_blob_maps(root):
         (root / "domains").glob("*/generations/*/store.blob-map.json")
     ):
         migrate_legacy_blob_map(root, blob_map, "000001")
+
 
 def create_tar_fragment(source, entry, target):
     source = Path(source)
@@ -231,6 +267,7 @@ def create_tar_fragment(source, entry, target):
     os.replace(full_tar, target)
     os.chmod(target, 0o400)
 
+
 def append_file_to_open_segment_blob(backing, source, segment_id, txid):
     source = Path(source)
     digest = hash_file(source)
@@ -257,6 +294,7 @@ def append_file_to_open_segment_blob(backing, source, segment_id, txid):
         "sha256": digest,
         "transaction": txid,
     }
+
 
 def append_file_to_segment(root, source, entry, txid, target_bytes):
     root = Path(root)
@@ -316,6 +354,7 @@ def append_file_to_segment(root, source, entry, txid, target_bytes):
         fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
     return result
 
+
 def ensure_tar_eof_extent(root, txid, target_bytes):
     root = Path(root)
     meta_path = tar_eof_meta_path(root)
@@ -341,6 +380,7 @@ def ensure_tar_eof_extent(root, txid, target_bytes):
     }
     atomic_json(meta_path, payload)
     return payload
+
 
 def admit_object_tar_fragment(
     root, logical_path, source, source_hash, txid, target_bytes
@@ -417,6 +457,7 @@ def admit_object_tar_fragment(
     remove_path(tmp)
     payload["admitted"] = True
     return payload
+
 
 def admit_object(root, logical_path, physical_store_root, txid, target_bytes):
     entry = store_entry(logical_path)

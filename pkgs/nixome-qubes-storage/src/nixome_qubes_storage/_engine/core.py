@@ -1,5 +1,3 @@
-import argparse
-import fcntl
 import hashlib
 import json
 import os
@@ -9,9 +7,7 @@ import stat
 import subprocess
 import time
 import uuid
-from contextlib import suppress
 from pathlib import Path
-
 
 SCHEMA_POOL = "nixome.closure-store.v1"
 SCHEMA_ADMISSION = "nixome.closure-store.admission.v1"
@@ -37,18 +33,23 @@ DEFAULT_COMPACTION_MAX_SEGMENTS = 1
 TAR_BLOCK_SIZE = 512
 TAR_EOF_SIZE = 1024
 
+
 class EngineError(RuntimeError):
     pass
+
 
 def utc_now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
+
 def fail(message):
     raise EngineError(message)
+
 
 def maybe_failpoint(name):
     if os.environ.get("NIXOME_CLOSURE_STORE_FAILPOINT") == name:
         fail(f"simulated failure at {name}")
+
 
 def parse_bool(value):
     if isinstance(value, bool):
@@ -59,12 +60,14 @@ def parse_bool(value):
         return False
     fail(f"invalid boolean value: {value!r}")
 
+
 def fsync_dir(path):
     fd = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
         os.fsync(fd)
     finally:
         os.close(fd)
+
 
 def atomic_write(path, data, mode=0o644):
     path = Path(path)
@@ -78,17 +81,21 @@ def atomic_write(path, data, mode=0o644):
     os.replace(tmp, path)
     fsync_dir(path.parent)
 
+
 def atomic_json(path, payload, mode=0o644):
     atomic_write(path, json.dumps(payload, indent=2, sort_keys=True) + "\n", mode)
+
 
 def read_json(path):
     with Path(path).open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
+
 def safe_domain_name(name):
     if not name or "/" in name or name in (".", ".."):
         fail(f"invalid domain name: {name!r}")
     return name
+
 
 def store_entry(path):
     prefix = "/nix/store/"
@@ -99,8 +106,10 @@ def store_entry(path):
         fail(f"not a store path root: {path}")
     return entry
 
+
 def logical_store_root():
     return "/nix/store"
+
 
 def default_physical_store_root():
     nix_root = os.environ.get("NIXOME_NIX_ROOT")
@@ -108,9 +117,11 @@ def default_physical_store_root():
         return str(Path(nix_root) / "nix/store")
     return "/nix/store"
 
+
 def physical_store_path(logical_path, physical_store_root):
     entry = store_entry(logical_path)
     return Path(physical_store_root) / entry
+
 
 def read_store_paths(source, system=None):
     source_path = Path(source)
@@ -140,12 +151,14 @@ def read_store_paths(source, system=None):
         return [system]
     fail(f"closure source does not contain store-paths: {source}")
 
+
 def hash_file(path):
     digest = hashlib.sha256()
     with Path(path).open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
 
 def tree_hash(path):
     path = Path(path)
@@ -177,6 +190,7 @@ def tree_hash(path):
             fail(f"unsupported store object file type: {child}")
     return digest.hexdigest()
 
+
 def chmod_readonly(path):
     path = Path(path)
     if path.is_symlink():
@@ -192,6 +206,7 @@ def chmod_readonly(path):
                 os.chmod(full, stat.S_IMODE(full.lstat().st_mode) & ~0o222)
     if not path.is_symlink():
         os.chmod(path, stat.S_IMODE(path.lstat().st_mode) & ~0o222)
+
 
 def chmod_owner_writable(path):
     path = Path(path)
@@ -212,6 +227,7 @@ def chmod_owner_writable(path):
                 if not full.is_symlink():
                     os.chmod(full, stat.S_IMODE(full.lstat().st_mode) | 0o200)
 
+
 def remove_path(path):
     path = Path(path)
     if not path.exists() and not path.is_symlink():
@@ -223,6 +239,7 @@ def remove_path(path):
         chmod_owner_writable(path)
         path.unlink()
 
+
 def require_tool(name, envvar=None):
     override = os.environ.get(envvar) if envvar else None
     if override:
@@ -233,6 +250,7 @@ def require_tool(name, envvar=None):
     if found:
         return found
     fail(f"required executable is missing from PATH: {name}")
+
 
 def run_checked(command, *, input_text=None):
     run_kwargs = {}
@@ -257,8 +275,10 @@ def run_checked(command, *, input_text=None):
         )
     return result
 
+
 def align_up(value, alignment):
     return ((value + alignment - 1) // alignment) * alignment
+
 
 def run_verify(paths, mode):
     if mode == "none":
@@ -312,6 +332,7 @@ def run_verify(paths, mode):
         "env_store": env.get("NIX_CONFIG", ""),
     }
 
+
 def closure_hash(paths, system, root_source, kernel_name):
     digest = hashlib.sha256()
     for value in [
@@ -327,6 +348,7 @@ def closure_hash(paths, system, root_source, kernel_name):
         digest.update(b"\0")
     return digest.hexdigest()
 
+
 def next_generation(domain_dir):
     generations = domain_dir / "generations"
     generations.mkdir(parents=True, exist_ok=True)
@@ -336,17 +358,22 @@ def next_generation(domain_dir):
             numbers.append(int(child.name))
     return max(numbers, default=0) + 1
 
+
 def hash_bytes(data):
     return hashlib.sha256(data).hexdigest()
+
 
 def closure_store_fsync_enabled():
     return parse_bool(os.environ.get("NIXOME_CLOSURE_STORE_FSYNC", "1"))
 
+
 def write_blob_map(path, payload):
     atomic_json(path, payload, mode=0o444)
 
+
 def write_object_refs(path, refs):
     atomic_write(path, "".join(f"{ref}\n" for ref in refs), mode=0o444)
+
 
 def read_object_refs(path):
     if not path:
@@ -357,6 +384,7 @@ def read_object_refs(path):
         if line.strip()
     ]
 
+
 def add_manifest_store_liveness(root, manifest, live_objects, live_views):
     store = manifest.get("store", {})
     for path in store.get("paths", []):
@@ -364,6 +392,7 @@ def add_manifest_store_liveness(root, manifest, live_objects, live_views):
     view_root = canonical_view_root(store)
     if view_root:
         live_views.add(view_root)
+
 
 def canonical_view_root(store):
     for key in (
@@ -376,16 +405,20 @@ def canonical_view_root(store):
             return str(Path(value).parent)
     return None
 
+
 def safe_dm_component(value):
     cleaned = re.sub(r"[^A-Za-z0-9_.+-]", "-", value)
     return cleaned[:48] if cleaned else "domain"
+
 
 def blob_dm_name(domain, generation, closure_hash):
     short_hash = closure_hash[:16] if closure_hash else "unknown"
     return f"nixome-{safe_dm_component(domain)}-{generation}-{short_hash}"
 
+
 def dm_path(name):
     return f"/dev/mapper/{name}"
+
 
 def dm_exists(name):
     dmsetup = require_tool("dmsetup", "NIXOME_DMSETUP")

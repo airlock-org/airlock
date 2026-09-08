@@ -1,40 +1,52 @@
-import argparse
-import fcntl
 import hashlib
-import json
 import os
 import re
-import shutil
-import stat
-import subprocess
-import time
-import uuid
-from contextlib import suppress
 from pathlib import Path
 
 
-from .core import DEFAULT_SEGMENT_TARGET_BYTES, SCHEMA_SEGMENT, TAR_BLOCK_SIZE, atomic_json, atomic_write, closure_store_fsync_enabled, fail, fsync_dir, maybe_failpoint, read_json, remove_path, utc_now
+from .core import (
+    DEFAULT_SEGMENT_TARGET_BYTES,
+    SCHEMA_SEGMENT,
+    TAR_BLOCK_SIZE,
+    atomic_json,
+    atomic_write,
+    closure_store_fsync_enabled,
+    fail,
+    fsync_dir,
+    maybe_failpoint,
+    read_json,
+    remove_path,
+    utc_now,
+)
+
 
 def object_meta_path(root, entry):
     return Path(root) / "objects/metadata" / f"{entry}.json"
 
+
 def object_blob_meta_path(root, entry):
     return Path(root) / "objects/blob-metadata" / f"{entry}.json"
+
 
 def tar_eof_meta_path(root):
     return Path(root) / "objects/blob-metadata" / ".tar-eof.json"
 
+
 def legacy_object_blob_path(root):
     return Path(root) / "objects" / "data.blob"
+
 
 def segments_dir(root):
     return Path(root) / "objects/segments"
 
+
 def segment_lock_path(root):
     return Path(root) / "objects/segments.lock"
 
+
 def current_segment_ref_path(root):
     return Path(root) / "objects/current-segment"
+
 
 def parse_positive_int(value, label):
     try:
@@ -44,6 +56,7 @@ def parse_positive_int(value, label):
     if parsed <= 0:
         fail(f"{label} must be positive: {value!r}")
     return parsed
+
 
 def configured_segment_target_bytes(value=None):
     if value is None or value == "":
@@ -55,8 +68,10 @@ def configured_segment_target_bytes(value=None):
         fail(f"segment target bytes must be at least {TAR_BLOCK_SIZE}")
     return parsed
 
+
 def segment_id_from_number(number):
     return f"{int(number):06d}"
+
 
 def validate_segment_id(segment_id):
     segment_id = str(segment_id)
@@ -64,11 +79,14 @@ def validate_segment_id(segment_id):
         fail(f"invalid segment id: {segment_id!r}")
     return segment_id
 
+
 def segment_blob_path(root, segment_id):
     return segments_dir(root) / f"{validate_segment_id(segment_id)}.blob"
 
+
 def segment_meta_path(root, segment_id):
     return segments_dir(root) / f"{validate_segment_id(segment_id)}.json"
+
 
 def segment_ids(root):
     ids = set()
@@ -82,11 +100,13 @@ def segment_ids(root):
             ids.add(child.stem)
     return sorted(ids, key=lambda value: int(value))
 
+
 def next_segment_id(root):
     ids = segment_ids(root)
     if not ids:
         return segment_id_from_number(1)
     return segment_id_from_number(max(int(segment_id) for segment_id in ids) + 1)
+
 
 def read_segment_meta(root, segment_id):
     path = segment_meta_path(root, segment_id)
@@ -94,15 +114,18 @@ def read_segment_meta(root, segment_id):
         fail(f"segment metadata is missing: {segment_id}")
     return read_json(path)
 
+
 def write_segment_meta(root, segment_id, payload):
     mode = (
         0o444 if payload.get("sealed") or payload.get("status") == "sealed" else 0o600
     )
     atomic_json(segment_meta_path(root, segment_id), payload, mode=mode)
 
+
 def segment_file_size(root, segment_id):
     path = segment_blob_path(root, segment_id)
     return os.path.getsize(path) if path.exists() else 0
+
 
 def current_open_segment_locked(root):
     ref = current_segment_ref_path(root)
@@ -122,6 +145,7 @@ def current_open_segment_locked(root):
         remove_path(ref)
         return None
     return segment_id, meta
+
 
 def create_segment_locked(
     root, target_bytes, txid, *, oversized=False, make_current=True
@@ -161,6 +185,7 @@ def create_segment_locked(
         atomic_write(current_segment_ref_path(root), f"{segment_id}\n", mode=0o644)
     return segment_id, payload
 
+
 def seal_segment_locked(root, segment_id, txid, reason):
     segment_id = validate_segment_id(segment_id)
     meta = read_segment_meta(root, segment_id)
@@ -189,6 +214,7 @@ def seal_segment_locked(root, segment_id, txid, reason):
     maybe_failpoint("segment-after-seal")
     return meta
 
+
 def verify_segment_region(root, segment_id, offset, size, digest, label):
     blob_path = segment_blob_path(root, segment_id)
     with blob_path.open("rb") as handle:
@@ -203,6 +229,7 @@ def verify_segment_region(root, segment_id, offset, size, digest, label):
             current.update(data)
     if current.hexdigest() != digest:
         fail(f"{label} hash mismatch at offset {offset}")
+
 
 def object_extent_from_meta(root, meta, label):
     location = current_location_from_meta(meta, label)
@@ -219,6 +246,7 @@ def object_extent_from_meta(root, meta, label):
         "sha256": digest,
     }
 
+
 def current_location_from_meta(meta, label):
     for location in meta.get("locations", []):
         if location.get("status") == "current":
@@ -226,6 +254,7 @@ def current_location_from_meta(meta, label):
     if "segment_id" not in meta or "segment_offset" not in meta:
         fail(f"{label} uses obsolete single-blob metadata")
     return normalize_location(meta, label)
+
 
 def normalize_location(location, label):
     missing = [
@@ -246,6 +275,7 @@ def normalize_location(location, label):
         "retired_at": location.get("retired_at"),
     }
 
+
 def location_from_extent(extent, *, status="current", txid=None):
     payload = {
         "segment_id": validate_segment_id(extent["segment_id"]),
@@ -258,6 +288,7 @@ def location_from_extent(extent, *, status="current", txid=None):
         payload["transaction"] = txid
     return payload
 
+
 def top_level_location_fields(root, location):
     return {
         "segment_id": validate_segment_id(location["segment_id"]),
@@ -266,6 +297,7 @@ def top_level_location_fields(root, location):
         "size": int(location["size"]),
         "sha256": location["sha256"],
     }
+
 
 def location_key(location):
     location = normalize_location(location, "object")
@@ -276,16 +308,19 @@ def location_key(location):
         location["sha256"],
     )
 
+
 def object_blob_meta_paths(root):
     for meta in sorted((Path(root) / "objects/blob-metadata").glob("*.json")):
         if meta.name == ".tar-eof.json":
             continue
         yield meta
 
+
 def all_object_blob_meta_paths(root, include_tar_eof=False):
     yield from object_blob_meta_paths(root)
     if include_tar_eof and tar_eof_meta_path(root).exists():
         yield tar_eof_meta_path(root)
+
 
 def file_size(path):
     return Path(path).stat().st_size

@@ -1,23 +1,45 @@
-import argparse
-import fcntl
-import hashlib
 import json
 import os
-import re
-import shutil
-import stat
 import subprocess
-import time
 import uuid
 from contextlib import suppress
 from pathlib import Path
 
 
-from .core import EngineError, SCHEMA_BLOB_MAP, SCHEMA_RUNTIME_VIEW_REF, TAR_BLOCK_SIZE, VIEW_BACKEND_EROFS_OBJECTMAP, atomic_json, atomic_write, blob_dm_name, dm_exists, dm_path, fail, fsync_dir, maybe_failpoint, read_json, remove_path, require_tool, run_checked, safe_domain_name, store_entry, utc_now, write_blob_map, write_object_refs
+from .core import (
+    EngineError,
+    SCHEMA_BLOB_MAP,
+    SCHEMA_RUNTIME_VIEW_REF,
+    TAR_BLOCK_SIZE,
+    VIEW_BACKEND_EROFS_OBJECTMAP,
+    atomic_json,
+    atomic_write,
+    blob_dm_name,
+    dm_exists,
+    dm_path,
+    fail,
+    fsync_dir,
+    maybe_failpoint,
+    read_json,
+    remove_path,
+    require_tool,
+    run_checked,
+    safe_domain_name,
+    store_entry,
+    utc_now,
+    write_blob_map,
+    write_object_refs,
+)
 from .objects import ensure_tar_eof_extent
 from .pool import ensure_pool
-from .segments import object_blob_meta_path, object_extent_from_meta, read_segment_meta, validate_segment_id
+from .segments import (
+    object_blob_meta_path,
+    object_extent_from_meta,
+    read_segment_meta,
+    validate_segment_id,
+)
 from .state import generation_is_committed, generation_manifest_path
+
 
 def segment_path_map_from_blob_map(blob_map):
     paths = {}
@@ -33,6 +55,7 @@ def segment_path_map_from_blob_map(blob_map):
     if not paths and blob_map.get("logical_size", 0):
         fail("blob map does not define any segment backings")
     return paths
+
 
 def blob_map_physical_references(blob_map, source):
     references = {}
@@ -51,15 +74,18 @@ def blob_map_physical_references(blob_map, source):
         )
     return references
 
+
 def merge_segment_reference_details(target, source):
     for segment_id, refs in source.items():
         target.setdefault(validate_segment_id(segment_id), []).extend(refs)
+
 
 def segment_reference_entries(reference_details):
     return {
         segment_id: {ref.get("entry", "<unknown>") for ref in refs}
         for segment_id, refs in reference_details.items()
     }
+
 
 def reconstruct_blob_view(blob_map, output_path):
     output_path = Path(output_path)
@@ -86,6 +112,7 @@ def reconstruct_blob_view(blob_map, output_path):
         for handle in handles.values():
             handle.close()
     os.chmod(output_path, 0o400)
+
 
 def create_erofs_tar_index_image(root, blob_map, metadata_path, closure_id, txid):
     mkfs_erofs = require_tool("mkfs.erofs", "NIXOME_MKFS_EROFS")
@@ -132,6 +159,7 @@ def create_erofs_tar_index_image(root, blob_map, metadata_path, closure_id, txid
 
     os.chmod(metadata_path, 0o444)
 
+
 def ensure_loop_for_blob(blob_path):
     losetup = require_tool("losetup", "NIXOME_LOSETUP")
     blob_path = os.path.abspath(blob_path)
@@ -154,6 +182,7 @@ def ensure_loop_for_blob(blob_path):
     if not loop:
         fail(f"losetup did not report a loop device for {blob_path}")
     return loop
+
 
 def dm_table_for_extents(blob_map, backing_devices):
     lines = []
@@ -180,6 +209,7 @@ def dm_table_for_extents(blob_map, backing_devices):
     if expected_logical != logical_size:
         fail(f"blob map size mismatch: {expected_logical} != {logical_size}")
     return "\n".join(lines) + "\n"
+
 
 def create_dm_view_for_blob_map(root, name, blob_map):
     segment_paths = segment_path_map_from_blob_map(blob_map)
@@ -210,8 +240,10 @@ def create_dm_view_for_blob_map(root, name, blob_map):
         "device": dm_path(name),
     }
 
+
 def runtime_view_ref_path(root, name):
     return Path(root) / "runtime" / f"{name}.json"
+
 
 def write_runtime_view_ref(
     root, name, domain, generation, blob_map_path, blob_map, status
@@ -242,12 +274,14 @@ def write_runtime_view_ref(
     )
     return path
 
+
 def remove_runtime_view_ref(root, name):
     path = runtime_view_ref_path(root, name)
     if path.exists() or path.is_symlink():
         remove_path(path)
         return True
     return False
+
 
 def iter_runtime_view_refs(root):
     runtime_dir = Path(root) / "runtime"
@@ -261,6 +295,7 @@ def iter_runtime_view_refs(root):
         if ref.get("schema") != SCHEMA_RUNTIME_VIEW_REF:
             continue
         yield ref_path, ref
+
 
 def runtime_segment_references(root):
     references = {}
@@ -289,6 +324,7 @@ def runtime_segment_references(root):
             )
     return references, stale
 
+
 def detach_dm_view(name, deferred=False):
     if not dm_exists(name):
         return False
@@ -308,6 +344,7 @@ def detach_dm_view(name, deferred=False):
     if result.returncode != 0:
         fail(f"cannot remove device-mapper view {name}: {result.stderr.strip()}")
     return True
+
 
 def attach_blob_view(root, domain, generation):
     root = ensure_pool(root)
@@ -353,6 +390,7 @@ def attach_blob_view(root, domain, generation):
         "read_only": True,
     }
 
+
 def detach_blob_view(root, domain, generation):
     root = ensure_pool(root)
     domain = safe_domain_name(domain)
@@ -392,6 +430,7 @@ def detach_blob_view(root, domain, generation):
         "removed": removed,
         "runtime_ref_removed": runtime_ref_removed,
     }
+
 
 def materialize_erofs_objectmap_view(
     root, generation_dir, paths, closure_id, txid, target_bytes
@@ -579,6 +618,7 @@ def materialize_erofs_objectmap_view(
         },
         "image_contains_materialized_store_copy": False,
     }
+
 
 def materialize_view(
     root,
