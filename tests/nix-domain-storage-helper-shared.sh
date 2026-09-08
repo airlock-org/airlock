@@ -28,6 +28,9 @@ STATE_JSON="$WORK_DIR/fake-qubes-state.json"
 SYSTEMCTL_LOG="$RESULT_DIR/systemctl.log"
 OUTPUT_JSON="$RESULT_DIR/helper-output.json"
 OUTPUT_2_JSON="$RESULT_DIR/helper-output-2.json"
+OUTPUT_GEN2_JSON="$RESULT_DIR/helper-output-gen2.json"
+SWITCH_BACK_JSON="$RESULT_DIR/helper-switch-back.json"
+SWITCH_RUNNING_ERR="$RESULT_DIR/helper-switch-running.err"
 export PYTHONDONTWRITEBYTECODE=1
 
 if ! command -v mkfs.erofs >/dev/null 2>&1; then
@@ -44,8 +47,10 @@ fi
 COMMON="11111111111111111111111111111111-common"
 SYSTEM="22222222222222222222222222222222-system"
 UNIQUE="33333333333333333333333333333333-unique"
+SYSTEM_2="44444444444444444444444444444444-system-2"
+UNIQUE_2="55555555555555555555555555555555-unique-2"
 
-for entry in "$COMMON" "$SYSTEM" "$UNIQUE"; do
+for entry in "$COMMON" "$SYSTEM" "$UNIQUE" "$SYSTEM_2" "$UNIQUE_2"; do
   mkdir -p "$WORK_DIR/nix-root/nix/store/$entry/bin"
   python3 - "$WORK_DIR/nix-root/nix/store/$entry/bin/payload" "$entry" <<'PY'
 import sys
@@ -63,6 +68,15 @@ done
 } > "$WORK_DIR/closure/store-paths"
 printf '{"schema":"nixome.store-closure-manifest.v1","name":"helper-shared","read_only":true}\n' \
   > "$WORK_DIR/closure/manifest.json"
+
+mkdir -p "$WORK_DIR/closure-gen2"
+{
+  printf '/nix/store/%s\n' "$COMMON"
+  printf '/nix/store/%s\n' "$SYSTEM_2"
+  printf '/nix/store/%s\n' "$UNIQUE_2"
+} > "$WORK_DIR/closure-gen2/store-paths"
+printf '{"schema":"nixome.store-closure-manifest.v1","name":"helper-shared-gen2","read_only":true}\n' \
+  > "$WORK_DIR/closure-gen2/manifest.json"
 
 cat > "$WORK_DIR/fake/qubes/exc.py" <<'PY'
 class StoragePoolException(Exception):
@@ -199,7 +213,7 @@ class VM:
                 self.storage.init_volume(name, config.copy())
 
     def is_running(self):
-        return False
+        return os.environ.get("NIXOME_FAKE_QUBES_RUNNING", "0") in ("1", "true", "yes")
 
 
 class Qubes:
@@ -400,7 +414,94 @@ jq -e '
   .generation == "1"
 ' "$OUTPUT_2_JSON" >/dev/null
 
+PATH="$WORK_DIR/bin:$PATH" \
+  PYTHONPATH="$WORK_DIR/fake:$ROOT/pkgs/nixome-qubes-storage/src" \
+  NIXOME_NIX_ROOT="$WORK_DIR/nix-root" \
+  NIXOME_CLOSURE_STORE_VERIFY=tree \
+  NIXOME_FAKE_QUBES_DOMAIN=nix-native-work \
+  NIXOME_FAKE_QUBES_SAVE_JSON="$SAVE_JSON" \
+  NIXOME_FAKE_QUBES_STATE_JSON="$STATE_JSON" \
+  NIXOME_FAKE_SYSTEMCTL_LOG="$SYSTEMCTL_LOG" \
+  python3 "$ROOT/scripts/nix-domain-storage.py" \
+    ensure-store nix-native-work "$WORK_DIR/closure-gen2" /nix/store/example-source-2 \
+    --mode shared-closure \
+    --system "/nix/store/$SYSTEM_2" \
+    --root /nix/store/example-root \
+    --kernel kernel-b \
+    --pool-root "$POOL" \
+    --additional-space-mib 1 \
+    > "$OUTPUT_GEN2_JSON"
+
+jq -e '
+  .mode == "shared-closure" and
+  .generation == 2 and
+  .objects_total == 3 and
+  .objects_admitted == 2 and
+  .objects_reused == 1 and
+  .view_backend == "erofs-objectmap"
+' "$OUTPUT_GEN2_JSON" >/dev/null
+
+set +e
+PATH="$WORK_DIR/bin:$PATH" \
+  PYTHONPATH="$WORK_DIR/fake:$ROOT/pkgs/nixome-qubes-storage/src" \
+  NIXOME_NIX_ROOT="$WORK_DIR/nix-root" \
+  NIXOME_CLOSURE_STORE_VERIFY=tree \
+  NIXOME_FAKE_QUBES_DOMAIN=nix-native-work \
+  NIXOME_FAKE_QUBES_SAVE_JSON="$SAVE_JSON" \
+  NIXOME_FAKE_QUBES_STATE_JSON="$STATE_JSON" \
+  NIXOME_FAKE_SYSTEMCTL_LOG="$SYSTEMCTL_LOG" \
+  NIXOME_FAKE_QUBES_RUNNING=1 \
+  python3 "$ROOT/scripts/nix-domain-storage.py" \
+    switch-store nix-native-work 1 \
+    --pool-root "$POOL" \
+    > "$RESULT_DIR/helper-switch-running.json" 2> "$SWITCH_RUNNING_ERR"
+switch_running_rc="$?"
+set -e
+[ "$switch_running_rc" != "0" ]
+grep -F 'shared store generation switch requested but domain is running' "$SWITCH_RUNNING_ERR" >/dev/null
+
+PATH="$WORK_DIR/bin:$PATH" \
+  PYTHONPATH="$WORK_DIR/fake:$ROOT/pkgs/nixome-qubes-storage/src" \
+  NIXOME_NIX_ROOT="$WORK_DIR/nix-root" \
+  NIXOME_CLOSURE_STORE_VERIFY=tree \
+  NIXOME_FAKE_QUBES_DOMAIN=nix-native-work \
+  NIXOME_FAKE_QUBES_SAVE_JSON="$SAVE_JSON" \
+  NIXOME_FAKE_QUBES_STATE_JSON="$STATE_JSON" \
+  NIXOME_FAKE_SYSTEMCTL_LOG="$SYSTEMCTL_LOG" \
+  python3 "$ROOT/scripts/nix-domain-storage.py" \
+    switch-store nix-native-work 1 \
+    --pool-root "$POOL" \
+    > "$SWITCH_BACK_JSON"
+
+jq -e '
+  .mode == "shared-closure" and
+  .generation == 1 and
+  .engine_current_generation == 1 and
+  .volume_created == false and
+  .metadata_changed == true and
+  .qubesd_restarted == true and
+  .system == "/nix/store/'"$SYSTEM"'" and
+  .kernel_name == "kernel-a"
+' "$SWITCH_BACK_JSON" >/dev/null
+
+jq -e '
+  .domains."nix-native-work".volume_config.store.generation == "1" and
+  .domains."nix-native-work".volume_config.store.view_path == "'"$VIEW_IMAGE"'" and
+  .domains."nix-native-work".volume_config."store-data".generation == "1" and
+  .domains."nix-native-work".volume_config."store-data".blob_map_path == "'"$BLOB_MAP"'"
+' "$STATE_JSON" >/dev/null
+
+PYTHONPATH="$ROOT/pkgs/nixome-qubes-storage/src" \
+  python3 -m nixome_qubes_storage.cli status --pool-root "$POOL" > "$RESULT_DIR/engine-status-after-switch.json"
+jq -e '.domains."nix-native-work".current == 1' "$RESULT_DIR/engine-status-after-switch.json" >/dev/null
+
 cat > "$RESULT_DIR/expected-systemctl.log" <<'EOF'
+systemctl is-active --quiet qubesd.service
+systemctl stop qubesd.service
+systemctl start qubesd.service
+systemctl is-active --quiet qubesd.service
+systemctl stop qubesd.service
+systemctl start qubesd.service
 systemctl is-active --quiet qubesd.service
 systemctl stop qubesd.service
 systemctl start qubesd.service

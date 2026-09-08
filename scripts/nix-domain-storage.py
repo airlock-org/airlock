@@ -369,6 +369,57 @@ def run_engine(argv):
         fail(str(exc))
 
 
+def load_generation_admission(pool_root, domain, generation):
+    try:
+        from nixome_qubes_storage import engine
+    except Exception as exc:
+        fail(f"cannot import Nixome closure-store engine: {exc}")
+
+    root = engine.ensure_pool(pool_root)
+    domain = engine.safe_domain_name(domain)
+    manifest_path = engine.generation_manifest_path(root, domain, generation)
+    if not os.path.exists(manifest_path):
+        fail(f"generation does not exist for {domain}: {generation}")
+    manifest = engine.read_json(manifest_path)
+    if not engine.generation_is_committed(root, manifest):
+        fail(f"generation is not committed for {domain}: {generation}")
+    store = manifest.get("store", {})
+    view_image = store.get("metadata_image") or store.get("image")
+    canonical_view_image = store.get("canonical_metadata_image") or store.get("canonical_image") or view_image
+    if not view_image:
+        fail(f"generation is missing store metadata image for {domain}: {generation}")
+
+    return {
+        "generation": manifest["generation"],
+        "previous_generation": manifest.get("previous_generation"),
+        "closure_hash": store["closure_hash"],
+        "manifest": str(manifest_path),
+        "system": manifest["system"],
+        "root_source": manifest.get("root", {}).get("source", ""),
+        "kernel_name": manifest.get("kernel", {}).get("name", ""),
+        "source": store.get("source", ""),
+        "view_created": False,
+        "view_image": view_image,
+        "canonical_view_image": canonical_view_image,
+        "metadata_image": view_image,
+        "canonical_metadata_image": canonical_view_image,
+        "blob_map": store.get("blob_map"),
+        "canonical_blob_map": store.get("canonical_blob_map"),
+        "blob_device": store.get("blob_device"),
+        "blob_volume": store.get("blob_volume"),
+        "blob_logical_size": store.get("blob_logical_size"),
+        "filesystem": store.get("filesystem", "ext4"),
+        "view_backend": store.get("view_backend", "ext4-image"),
+        "view_size": os.path.getsize(view_image),
+        "objects_total": store.get("object_count", len(store.get("paths", []))),
+        "objects_admitted": 0,
+        "objects_reused": store.get("object_count", len(store.get("paths", []))),
+        "chunks_total": store.get("chunk_count", 0),
+        "chunks_admitted": 0,
+        "chunks_reused": store.get("chunk_count", 0),
+    }
+
+
 async def ensure_pool(app, pool_name, pool_root):
     if hasattr(app, "pools") and pool_name in app.pools:
         return app.pools[pool_name], False
@@ -542,7 +593,7 @@ async def ensure_shared_store_loaded(qubes, args, admission):
         "domain": args.domain,
         "volume": "store",
         "mode": "shared-closure",
-        "source": args.source,
+        "source": getattr(args, "source", admission.get("source", "")),
         "read_only": True,
         "volume_created": volume_created,
         "volumes_created": volumes_created,
@@ -556,6 +607,9 @@ async def ensure_shared_store_loaded(qubes, args, admission):
         "pool_root": args.pool_root,
         "generation": admission["generation"],
         "previous_generation": admission["previous_generation"],
+        "system": admission.get("system"),
+        "root_source": admission.get("root_source"),
+        "kernel_name": admission.get("kernel_name"),
         "closure_hash": admission["closure_hash"],
         "manifest": admission["manifest"],
         "view_image": admission["view_image"],
@@ -705,6 +759,23 @@ async def ensure_shared_store(args):
     return await with_qubesd_restart(True, operation)
 
 
+async def switch_shared_store(args):
+    qubes = load_qubes()
+    admission = load_generation_admission(args.pool_root, args.domain, args.generation)
+    args.view_backend = admission.get("view_backend", "ext4-image")
+
+    app, vm = load_domain(qubes, args.domain)
+    if vm.is_running():
+        app.close()
+        fail(f"shared store generation switch requested but domain is running: {args.domain}")
+    app.close()
+
+    return await with_qubesd_restart(
+        True,
+        lambda: ensure_shared_store_loaded(qubes, args, admission),
+    )
+
+
 async def ensure_store(args):
     if args.mode == "closure-image":
         return await ensure_legacy_store(args)
@@ -750,6 +821,16 @@ def build_parser():
         default=int(os.environ.get("NIXOME_CLOSURE_STORE_CHUNK_SIZE", str(64 * 1024))),
     )
     ensure.set_defaults(func=ensure_store)
+
+    switch = sub.add_parser("switch-store")
+    switch.add_argument("domain")
+    switch.add_argument("generation")
+    switch.add_argument("--device", default="/dev/xvde")
+    switch.add_argument("--blob-device", default="/dev/xvdf")
+    switch.add_argument("--mountpoint", default="/nix/store")
+    switch.add_argument("--pool-name", default=os.environ.get("NIXOME_CLOSURE_STORE_POOL", "nixome-closure"))
+    switch.add_argument("--pool-root", default=os.environ.get("NIXOME_CLOSURE_STORE_ROOT", "/var/lib/nixome/closure-store"))
+    switch.set_defaults(func=switch_shared_store)
 
     return parser
 
