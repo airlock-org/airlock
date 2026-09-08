@@ -23,6 +23,7 @@ writeShellApplication {
     gnugrep
     gnused
     jq
+    python3
     python3.pkgs.qubes-core-admin-client
     python3.pkgs.qubes-core-qrexec.dom0
     systemd
