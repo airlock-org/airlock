@@ -21,6 +21,8 @@ ROOT_IMAGE_CHECK_LOG="$LOG_DIR/nix-closure-domain-root-image-check.log"
 STORE_IMAGE_CHECK_LOG="$LOG_DIR/nix-closure-domain-store-image-check.log"
 RUNTIME_SERVICE_LOG="$LOG_DIR/nix-closure-domain-runtime-service.log"
 RUNTIME_SERVICE_ERR="$LOG_DIR/nix-closure-domain-runtime-service.err.log"
+PEER_RUNTIME_SERVICE_LOG="$LOG_DIR/nix-closure-domain-peer-runtime-service.log"
+PEER_RUNTIME_SERVICE_ERR="$LOG_DIR/nix-closure-domain-peer-runtime-service.err.log"
 GUEST_PROBE_SCRIPT="$LOG_DIR/nix-closure-domain-guest-probe.sh"
 GUEST_PROBE_LOG="$LOG_DIR/nix-closure-domain-guest-probe.log"
 GUEST_PROBE_AFTER_REBOOT_LOG="$LOG_DIR/nix-closure-domain-guest-probe-after-reboot.log"
@@ -39,17 +41,35 @@ BUILDS_LOG="$LOG_DIR/nix-closure-domain-builds.json"
 SETUP_LOG="$LOG_DIR/nix-closure-domain-setup.json"
 POLICY_LOG="$LOG_DIR/nix-closure-domain-policy.log"
 QUBES_XML_LOG="$LOG_DIR/nix-closure-domain-qubes.xml"
+PEER_QVM_FEATURES_LOG="$LOG_DIR/nix-closure-domain-peer-qvm-features.log"
+PEER_STORE_VOLUME_LOG="$LOG_DIR/nix-closure-domain-peer-store-volume.log"
+PEER_STORE_DATA_VOLUME_LOG="$LOG_DIR/nix-closure-domain-peer-store-data-volume.log"
+PEER_GUEST_PROBE_LOG="$LOG_DIR/nix-closure-domain-peer-guest-probe.log"
+PEER_VISIBILITY_LOG="$LOG_DIR/nix-closure-domain-peer-visibility.log"
+DOMAIN_VISIBILITY_LOG="$LOG_DIR/nix-closure-domain-visibility.log"
+LIBVIRT_XML_LOG="$LOG_DIR/nix-closure-domain-libvirt.xml"
+PEER_LIBVIRT_XML_LOG="$LOG_DIR/nix-closure-domain-peer-libvirt.xml"
+SHARING_PROOF_LOG="$LOG_DIR/nix-closure-domain-sharing-proof.json"
+GEN2_STAGING_UPDATE_SCRIPT="$LOG_DIR/nix-closure-domain-staging-update-gen2.sh"
+GEN2_STAGING_UPDATE_LOG="$LOG_DIR/nix-closure-domain-staging-update-gen2.log"
+GEN2_APPLY_LOG="$LOG_DIR/nix-closure-domain-apply-gen2.log"
+GEN2_APPLY_RESULT_JSON="$LOG_DIR/nix-closure-domain-config-apply-gen2.json"
+GEN2_SHARING_PROOF_LOG="$LOG_DIR/nix-closure-domain-sharing-proof-gen2.json"
+PRE_APPLY_SHUTDOWN_LOG="$LOG_DIR/nix-closure-domain-pre-apply-shutdown.log"
 
 DOMAIN="${NIXOME_NIX_CLOSURE_DOMAIN:-nixome-closure-smoke}"
+PEER_DOMAIN="${NIXOME_NIX_CLOSURE_PEER_DOMAIN:-${DOMAIN}-peer}"
 STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
 VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
 VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
 QUBE_USER="${NIXOME_QUBE_USER:-user}"
 APPLY_MESSAGE="${NIXOME_NIX_CLOSURE_APPLY_MESSAGE:-nix-closure-smoke-$(date -u +%Y%m%dT%H%M%SZ)}"
+APPLY_MESSAGE_GEN2="${NIXOME_NIX_CLOSURE_APPLY_MESSAGE_GEN2:-$APPLY_MESSAGE-gen2}"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 WAIT_SECONDS="${NIXOME_NIX_CLOSURE_WAIT_SECONDS:-240}"
 QREXEC_TIMEOUT_SECONDS="${NIXOME_NIX_CLOSURE_QREXEC_TIMEOUT_SECONDS:-45}"
 RUN_GUI_PROBE="${NIXOME_NIX_CLOSURE_GUI_PROBE:-0}"
+RUN_REBOOT_PROBE="${NIXOME_NIX_CLOSURE_REBOOT_PROBE:-0}"
 CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-0}"
 
 result_written=0
@@ -62,6 +82,11 @@ store_image_physical=""
 store_mode=""
 system_source=""
 store_device=""
+store_view_backend=""
+store_filesystem=""
+store_blob_device=""
+store_blob_map=""
+store_blob_map_physical=""
 reboot_status="not-run"
 shutdown_start_status="not-run"
 gui_status="skipped"
@@ -105,6 +130,8 @@ write_result() {
     jq -Rn --arg value "$reason" '$value' | tr -d '\n'
     printf ',"domain":'
     jq -Rn --arg value "$DOMAIN" '$value' | tr -d '\n'
+    printf ',"peer_domain":'
+    jq -Rn --arg value "$PEER_DOMAIN" '$value' | tr -d '\n'
     printf ',"staging":'
     jq -Rn --arg value "$STAGING" '$value' | tr -d '\n'
     printf ',"validator":'
@@ -113,6 +140,8 @@ write_result() {
     jq -Rn --arg value "$VAULT" '$value' | tr -d '\n'
     printf ',"apply_message":'
     jq -Rn --arg value "$APPLY_MESSAGE" '$value' | tr -d '\n'
+    printf ',"apply_message_gen2":'
+    jq -Rn --arg value "$APPLY_MESSAGE_GEN2" '$value' | tr -d '\n'
     printf ',"system_source":'
     jq -Rn --arg value "$system_source" '$value' | tr -d '\n'
     printf ',"root_source":'
@@ -146,6 +175,12 @@ write_result() {
     jq -Rn --arg value "$APPLY_LOG" '$value' | tr -d '\n'
     printf ',"apply_result":'
     jq -Rn --arg value "$APPLY_RESULT_JSON" '$value' | tr -d '\n'
+    printf ',"gen2_staging_update":'
+    jq -Rn --arg value "$GEN2_STAGING_UPDATE_LOG" '$value' | tr -d '\n'
+    printf ',"gen2_apply":'
+    jq -Rn --arg value "$GEN2_APPLY_LOG" '$value' | tr -d '\n'
+    printf ',"gen2_apply_result":'
+    jq -Rn --arg value "$GEN2_APPLY_RESULT_JSON" '$value' | tr -d '\n'
     printf ',"qvm_ls":'
     jq -Rn --arg value "$QVM_LS_LOG" '$value' | tr -d '\n'
     printf ',"qvm_prefs":'
@@ -158,6 +193,8 @@ write_result() {
     jq -Rn --arg value "$ROOT_VOLUME_LOG" '$value' | tr -d '\n'
     printf ',"store_volume":'
     jq -Rn --arg value "$STORE_VOLUME_LOG" '$value' | tr -d '\n'
+    printf ',"peer_store_volume":'
+    jq -Rn --arg value "$PEER_STORE_VOLUME_LOG" '$value' | tr -d '\n'
     printf ',"kernelopts":'
     jq -Rn --arg value "$KERNEL_OPTS_LOG" '$value' | tr -d '\n'
     printf ',"root_image_check":'
@@ -166,8 +203,20 @@ write_result() {
     jq -Rn --arg value "$STORE_IMAGE_CHECK_LOG" '$value' | tr -d '\n'
     printf ',"runtime_service":'
     jq -Rn --arg value "$RUNTIME_SERVICE_LOG" '$value' | tr -d '\n'
+    printf ',"peer_runtime_service":'
+    jq -Rn --arg value "$PEER_RUNTIME_SERVICE_LOG" '$value' | tr -d '\n'
     printf ',"guest_probe":'
     jq -Rn --arg value "$GUEST_PROBE_LOG" '$value' | tr -d '\n'
+    printf ',"peer_guest_probe":'
+    jq -Rn --arg value "$PEER_GUEST_PROBE_LOG" '$value' | tr -d '\n'
+    printf ',"visibility":'
+    jq -Rn --arg value "$DOMAIN_VISIBILITY_LOG" '$value' | tr -d '\n'
+    printf ',"peer_visibility":'
+    jq -Rn --arg value "$PEER_VISIBILITY_LOG" '$value' | tr -d '\n'
+    printf ',"sharing_proof":'
+    jq -Rn --arg value "$SHARING_PROOF_LOG" '$value' | tr -d '\n'
+    printf ',"gen2_sharing_proof":'
+    jq -Rn --arg value "$GEN2_SHARING_PROOF_LOG" '$value' | tr -d '\n'
     printf ',"guest_probe_after_reboot":'
     jq -Rn --arg value "$GUEST_PROBE_AFTER_REBOOT_LOG" '$value' | tr -d '\n'
     printf ',"guest_probe_after_restart":'
@@ -178,6 +227,10 @@ write_result() {
     jq -Rn --arg value "$CONSOLE_LOG" '$value' | tr -d '\n'
     printf ',"journal":'
     jq -Rn --arg value "$JOURNAL_LOG" '$value' | tr -d '\n'
+    printf ',"libvirt_xml":'
+    jq -Rn --arg value "$LIBVIRT_XML_LOG" '$value' | tr -d '\n'
+    printf ',"peer_libvirt_xml":'
+    jq -Rn --arg value "$PEER_LIBVIRT_XML_LOG" '$value' | tr -d '\n'
     printf '}'
     printf ',"apply_result":'
     json_file_value_or_null "$APPLY_RESULT_JSON"
@@ -187,6 +240,12 @@ write_result() {
     json_file_value_or_null "$BUILDS_LOG"
     printf ',"nix_domain_materializations":'
     json_file_value_or_null "$MATERIALIZATIONS_LOG"
+    printf ',"sharing_proof":'
+    json_file_value_or_null "$SHARING_PROOF_LOG"
+    printf ',"gen2_apply_result":'
+    json_file_value_or_null "$GEN2_APPLY_RESULT_JSON"
+    printf ',"gen2_sharing_proof":'
+    json_file_value_or_null "$GEN2_SHARING_PROOF_LOG"
     printf ',"runtime_service_output":'
     json_file_string_or_null "$RUNTIME_SERVICE_LOG"
     printf ',"guest_probe_output":'
@@ -209,6 +268,11 @@ collect_diagnostics() {
     qvm-volume info "$DOMAIN:volatile" > "$VOLATILE_VOLUME_LOG" 2>&1 || true
     qvm-volume info "$DOMAIN:store" > "$STORE_VOLUME_LOG" 2>&1 || true
     qvm-prefs "$DOMAIN" kernelopts > "$KERNEL_OPTS_LOG" 2>&1 || true
+  fi
+  if qvm-check "$PEER_DOMAIN" >/dev/null 2>&1; then
+    qvm-features "$PEER_DOMAIN" > "$PEER_QVM_FEATURES_LOG" 2>&1 || true
+    qvm-volume info "$PEER_DOMAIN:store" > "$PEER_STORE_VOLUME_LOG" 2>&1 || true
+    qvm-volume info "$PEER_DOMAIN:store-data" > "$PEER_STORE_DATA_VOLUME_LOG" 2>&1 || true
   fi
   tail -n 1000 "/var/log/xen/console/guest-$DOMAIN.log" > "$CONSOLE_LOG" 2>&1 || true
   journalctl -b --no-pager -n 320 \
@@ -378,6 +442,185 @@ feature_value() {
   qvm-features "$DOMAIN" "$1" 2>/dev/null | tr -d '\n'
 }
 
+feature_value_for() {
+  vm="$1"
+  feature="$2"
+  qvm-features "$vm" "$feature" 2>/dev/null | tr -d '\n'
+}
+
+store_blob_map_physical_for() {
+  vm="$1"
+  blob_map="$(feature_value_for "$vm" nixome-store-blob-map)"
+  [ -n "$blob_map" ] || fail "missing nixome-store-blob-map feature for $vm"
+  nixome_physical_store_path "$blob_map"
+}
+
+store_view_backend_for() {
+  vm="$1"
+  backend="$(feature_value_for "$vm" nixome-store-view-backend)"
+  [ -n "$backend" ] || fail "missing nixome-store-view-backend feature for $vm"
+  printf '%s\n' "$backend"
+}
+
+store_generation_for() {
+  vm="$1"
+  generation="$(feature_value_for "$vm" nixome-store-generation)"
+  [ -n "$generation" ] || fail "missing nixome-store-generation feature for $vm"
+  printf '%s\n' "$generation"
+}
+
+write_sharing_proof() {
+  label="$1"
+  left_vm="$2"
+  right_vm="$3"
+  left_map="$4"
+  right_map="$5"
+  output="$6"
+  python3 - "$label" "$left_vm" "$right_vm" "$left_map" "$right_map" "$output" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+label, left_vm, right_vm, left_path, right_path, output_path = sys.argv[1:]
+
+def load(path):
+    data = json.loads(Path(path).read_text())
+    if data.get("view_backend") != "erofs-objectmap":
+        raise SystemExit(f"{path} is not an erofs-objectmap view")
+    if data.get("external_data_format") != "posix-tar-index":
+        raise SystemExit(f"{path} is not a tar-index EROFS external-data view")
+    extents_by_object = {}
+    for extent in data.get("extents", []):
+        obj = extent.get("object")
+        if obj == ".tar-eof":
+            continue
+        if obj:
+            extents_by_object.setdefault(obj, []).append(extent)
+    if not extents_by_object:
+        raise SystemExit(f"{path} has no object extents")
+    return data, extents_by_object
+
+left, left_extents = load(left_path)
+right, right_extents = load(right_path)
+if os.path.realpath(left["central_blob"]) != os.path.realpath(right["central_blob"]):
+    raise SystemExit("closure views do not use the same canonical object blob")
+
+common = sorted(set(left_extents) & set(right_extents))
+if not common:
+    raise SystemExit("closure views do not share any canonical objects")
+
+selected = None
+for obj in common:
+    a = left_extents[obj]
+    b = right_extents[obj]
+    if len(a) == len(b) and all(
+        int(x["central_offset"]) == int(y["central_offset"])
+        and int(x["length"]) == int(y["length"])
+        and x.get("object_sha256") == y.get("object_sha256")
+        for x, y in zip(a, b)
+    ):
+        selected = obj
+        break
+if selected is None:
+    raise SystemExit("common objects do not retain stable canonical extents")
+
+left_unique = sorted(set(left_extents) - set(right_extents))
+right_unique = sorted(set(right_extents) - set(left_extents))
+if not left_unique or not right_unique:
+    raise SystemExit("expected each closure to contain at least one unique object")
+
+payload = {
+    "schema": "nixome.nix-closure-domain-sharing-proof.v1",
+    "status": "passed",
+    "label": label,
+    "left_domain": left_vm,
+    "right_domain": right_vm,
+    "left_blob_map": left_path,
+    "right_blob_map": right_path,
+    "central_blob": left["central_blob"],
+    "central_blob_physical_size": os.path.getsize(left["central_blob"]),
+    "common_object_count": len(common),
+    "left_unique_object_count": len(left_unique),
+    "right_unique_object_count": len(right_unique),
+    "shared_object": selected,
+    "shared_extents": left_extents[selected],
+    "left_unique_object": left_unique[0],
+    "right_unique_object": right_unique[0],
+    "left_logical_size": int(left["logical_size"]),
+    "right_logical_size": int(right["logical_size"]),
+    "same_canonical_offset_and_hash": True,
+}
+Path(output_path).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+PY
+}
+
+sharing_json_value() {
+  file="$1"
+  key="$2"
+  jq -r "$key" "$file"
+}
+
+run_visibility_probe() {
+  vm="$1"
+  own_object="$2"
+  other_object="$3"
+  shared_object="$4"
+  output="$5"
+  script="$LOG_DIR/nix-closure-domain-$vm-visibility.sh"
+
+  case "$own_object$other_object$shared_object" in
+    *[!A-Za-z0-9+._?=-]*)
+      fail "unsafe Nix store object name in visibility probe"
+      ;;
+  esac
+
+  cat > "$script" <<EOF
+set -eu
+own_object='$own_object'
+other_object='$other_object'
+shared_object='$shared_object'
+[ -e "/nix/store/\$shared_object" ]
+[ -e "/nix/store/\$own_object" ]
+if [ -e "/nix/store/\$other_object" ]; then
+  echo "unexpected object visible: /nix/store/\$other_object" >&2
+  exit 1
+fi
+findmnt -rn -T /nix/store -o OPTIONS | grep -E '(^|,)ro(,|$)'
+printf 'visibility_probe=passed\n'
+EOF
+
+  run_qrexec_script_or_fail "$vm" "closure visibility probe in $vm" "$output" "$script"
+  grep -Fx "visibility_probe=passed" "$output" >/dev/null ||
+    fail "closure visibility probe did not complete for $vm"
+}
+
+check_libvirt_filtered_devices() {
+  vm="$1"
+  output="$2"
+  xml_tmp="$output.tmp"
+
+  if virsh -c xen:/// dumpxml "$vm" > "$output" 2>&1; then
+    :
+  elif virsh -c xen:/// dumpxml "domain-$vm" > "$output" 2>&1; then
+    :
+  else
+    cat "$output" >&2 || true
+    fail "read libvirt XML for $vm failed"
+  fi
+  cp "$output" "$xml_tmp"
+  grep -E "<target dev=['\"]xvde['\"]" "$xml_tmp" >/dev/null ||
+    fail "libvirt XML for $vm does not attach store metadata at xvde"
+  grep -E "<target dev=['\"]xvdf['\"]" "$xml_tmp" >/dev/null ||
+    fail "libvirt XML for $vm does not attach store data at xvdf"
+  grep -F "/dev/mapper/nixome-" "$xml_tmp" >/dev/null ||
+    fail "libvirt XML for $vm does not use a filtered /dev/mapper/nixome-* backing device"
+  if grep -F "/var/lib/nixome/closure-store/objects/data.blob" "$xml_tmp" >/dev/null; then
+    fail "libvirt XML for $vm exposes the global canonical object blob"
+  fi
+  rm -f "$xml_tmp"
+}
+
 check_source_paths() {
   root_source="$(feature_value nixome-root-source)"
   store_source="$(feature_value nixome-store-source)"
@@ -452,28 +695,6 @@ check_root_image_has_no_store() {
     fail "root image contains unexpected /nix/store entries: $entries"
 }
 
-reconstruct_blob_view() {
-  map="$1"
-  output="$2"
-  python3 - "$map" "$output" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-blob_map = json.loads(Path(sys.argv[1]).read_text())
-output = Path(sys.argv[2])
-with Path(blob_map["central_blob"]).open("rb") as source, output.open("wb") as target:
-    for extent in blob_map["extents"]:
-        source.seek(int(extent["central_offset"]))
-        data = source.read(int(extent["length"]))
-        if len(data) != int(extent["length"]):
-            raise SystemExit("central blob extent is truncated")
-        target.seek(int(extent["logical_offset"]))
-        target.write(data)
-    target.truncate(int(blob_map["logical_size"]))
-PY
-}
-
 check_store_image_contains_system() {
   system_entry="${system_source#/nix/store/}"
   [ "$system_entry" != "$system_source" ] ||
@@ -493,13 +714,35 @@ check_store_image_contains_system() {
       grep -Fx "$system_source" "$(dirname "$store_source_physical")/store-paths"
     fi
     if [ "$store_view_backend" = "erofs-blobmap" ] || [ "$store_view_backend" = "erofs-objectmap" ]; then
-      logical_blob="$LOG_DIR/nix-closure-domain-store.blob"
+      generation="$(store_generation_for "$DOMAIN")"
+      attach_json="$LOG_DIR/nix-closure-domain-store-attach.json"
       extract_dir="$LOG_DIR/nix-closure-domain-store-extract"
       chmod -R u+w "$extract_dir" 2>/dev/null || true
       rm -rf "$extract_dir"
       mkdir -p "$extract_dir"
-      reconstruct_blob_view "$store_blob_map_physical" "$logical_blob"
-      fsck.erofs --device="$logical_blob" --extract="$extract_dir" "$store_image_physical"
+      nixome-closure-store attach-blob-view \
+        --domain "$DOMAIN" \
+        --generation "$generation" \
+        > "$attach_json"
+      filtered_device="$(jq -r '.device' "$attach_json")"
+      case "$filtered_device" in
+        /dev/mapper/nixome-*) ;;
+        *) echo "unexpected filtered device: $filtered_device" >&2; exit 1 ;;
+      esac
+      if [ "$(readlink -f "$filtered_device")" = "$(readlink -f "$(jq -r '.central_blob' "$attach_json")")" ]; then
+        echo "filtered device resolves to the global backing blob" >&2
+        exit 1
+      fi
+      set +e
+      fsck.erofs --device="$filtered_device" --extract="$extract_dir" "$store_image_physical"
+      fsck_rc="$?"
+      nixome-closure-store detach-blob-view \
+        --domain "$DOMAIN" \
+        --generation "$generation"
+      detach_rc="$?"
+      set -e
+      [ "$fsck_rc" = "0" ]
+      [ "$detach_rc" = "0" ]
       [ -x "$extract_dir/$system_entry/init" ]
     else
       debugfs -R "stat /$system_entry/init" "$store_image_physical"
@@ -508,29 +751,47 @@ check_store_image_contains_system() {
     fail "store image does not contain declared system init"
 }
 
-run_runtime_service_check() {
-  qrexec_args=(qrexec-client -d "$DOMAIN" -T -w 120 "DEFAULT:QUBESRPC nixome.NixStoreRuntimeCheck+ dom0")
+run_runtime_service_check_for() {
+  vm="$1"
+  expected_system="$2"
+  expected_store_device="$3"
+  expected_store_filesystem="$4"
+  expected_store_blob_device="$5"
+  output="$6"
+  error_output="$7"
+  qrexec_args=(qrexec-client -d "$vm" -T -w 120 "DEFAULT:QUBESRPC nixome.NixStoreRuntimeCheck+ dom0")
   printf '+'
   printf ' %q' "${qrexec_args[@]}"
   printf '\n'
 
-  if ! "${qrexec_args[@]}" > "$RUNTIME_SERVICE_LOG" 2> "$RUNTIME_SERVICE_ERR"; then
-    cat "$RUNTIME_SERVICE_ERR" >&2 || true
-    fail "nixome.NixStoreRuntimeCheck qrexec service failed"
+  if ! "${qrexec_args[@]}" > "$output" 2> "$error_output"; then
+    cat "$error_output" >&2 || true
+    fail "nixome.NixStoreRuntimeCheck qrexec service failed for $vm"
   fi
 
-  grep -Fx "system=$system_source" "$RUNTIME_SERVICE_LOG" >/dev/null ||
-    fail "runtime service did not report expected system source"
-  grep -Fx "store_device=$store_device" "$RUNTIME_SERVICE_LOG" >/dev/null ||
-    fail "runtime service did not report expected store device"
-  grep -Fx "store_format=$store_filesystem" "$RUNTIME_SERVICE_LOG" >/dev/null ||
-    fail "runtime service did not report expected store filesystem"
-  if [ "$store_filesystem" = "erofs" ]; then
-    grep -Fx "store_blob_device=$store_blob_device" "$RUNTIME_SERVICE_LOG" >/dev/null ||
-      fail "runtime service did not report expected store blob device"
+  grep -Fx "system=$expected_system" "$output" >/dev/null ||
+    fail "runtime service did not report expected system source for $vm"
+  grep -Fx "store_device=$expected_store_device" "$output" >/dev/null ||
+    fail "runtime service did not report expected store device for $vm"
+  grep -Fx "store_format=$expected_store_filesystem" "$output" >/dev/null ||
+    fail "runtime service did not report expected store filesystem for $vm"
+  if [ "$expected_store_filesystem" = "erofs" ]; then
+    grep -Fx "store_blob_device=$expected_store_blob_device" "$output" >/dev/null ||
+      fail "runtime service did not report expected store blob device for $vm"
   fi
-  grep -E '^store_options=([^,]+,)*ro(,|$)' "$RUNTIME_SERVICE_LOG" >/dev/null ||
-    fail "runtime service did not report read-only store mount"
+  grep -E '^store_options=([^,]+,)*ro(,|$)' "$output" >/dev/null ||
+    fail "runtime service did not report read-only store mount for $vm"
+}
+
+run_runtime_service_check() {
+  run_runtime_service_check_for \
+    "$DOMAIN" \
+    "$system_source" \
+    "$store_device" \
+    "$store_filesystem" \
+    "$store_blob_device" \
+    "$RUNTIME_SERVICE_LOG" \
+    "$RUNTIME_SERVICE_ERR"
 }
 
 write_guest_probe_script() {
@@ -587,6 +848,9 @@ printf 'applied_message=%s\n' "$(cat /etc/nixome/applied-message)"
 if [ "$store_format" = "erofs" ]; then
   [ -n "$store_blob_device" ]
   [ -b "$store_blob_device" ]
+  blob_block="${store_blob_device#/dev/}"
+  [ -r "/sys/class/block/$blob_block/ro" ]
+  [ "$(cat "/sys/class/block/$blob_block/ro")" = "1" ]
 fi
 case ",$mount_options," in
   *,ro,*) ;;
@@ -731,6 +995,7 @@ for cmd in \
   grep \
   jq \
   journalctl \
+  nixome-closure-store \
   nixome-config-apply \
   qrexec-client \
   qvm-check \
@@ -747,7 +1012,8 @@ for cmd in \
   systemctl \
   tail \
   timeout \
-  tr; do
+  tr \
+  virsh; do
   require_command "$cmd"
 done
 
@@ -756,6 +1022,13 @@ case "$DOMAIN" in
     fail "invalid Nix closure test domain name: $DOMAIN"
     ;;
 esac
+case "$PEER_DOMAIN" in
+  ""|*[!A-Za-z0-9_.-]*)
+    fail "invalid peer Nix closure test domain name: $PEER_DOMAIN"
+    ;;
+esac
+[ "$PEER_DOMAIN" != "$DOMAIN" ] ||
+  fail "peer Nix closure test domain must differ from primary domain"
 
 if ! [ -r "$XEN_CAPABILITIES" ] || ! grep -qw control_d "$XEN_CAPABILITIES"; then
   fail "host is not a Xen control domain"
@@ -784,6 +1057,11 @@ run_qrexec_script_or_fail "$VALIDATOR" "initialize $VALIDATOR config tools" "$LO
   printf 'set -eu\nnixome-config-validator-init\n'
 )
 
+{
+  shutdown_vm "$DOMAIN" "$LOG_DIR/nix-closure-domain-primary-pre-apply-shutdown.log"
+  shutdown_vm "$PEER_DOMAIN" "$LOG_DIR/nix-closure-domain-peer-pre-apply-shutdown.log"
+} > "$PRE_APPLY_SHUTDOWN_LOG" 2>&1 || true
+
 cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
 cd /home/$QUBE_USER/nixome-config
@@ -795,10 +1073,8 @@ cat > nixome/machine.nix <<'MACHINENIX'
   templateBuilders ? null,
   ...
 }:
-{
-  domains = { };
-
-  nixNative.domains."$DOMAIN" = {
+let
+  mkClosureDomain = role: message: {
     label = "green";
     netvm = null;
     rootImageSizeMiB = 128;
@@ -810,16 +1086,24 @@ cat > nixome/machine.nix <<'MACHINENIX'
       vcpus = 1;
     };
     features = {
-      "nixome-role" = "nix-closure-smoke";
+      "nixome-role" = role;
       "nixome-test" = "nix-closure-domain";
     };
     services = {
       "network-manager" = false;
     };
     configuration = {
-      environment.etc."nixome/domain-role".text = "nix-closure-smoke\\n";
-      environment.etc."nixome/applied-message".text = "$APPLY_MESSAGE\\n";
+      environment.etc."nixome/domain-role".text = "\${role}\\n";
+      environment.etc."nixome/applied-message".text = "\${message}\\n";
     };
+  };
+in
+{
+  domains = { };
+
+  nixNative.domains = {
+    "$DOMAIN" = mkClosureDomain "nix-closure-smoke" "$APPLY_MESSAGE";
+    "$PEER_DOMAIN" = mkClosureDomain "nix-closure-peer" "$APPLY_MESSAGE";
   };
 
   topology = {
@@ -833,6 +1117,13 @@ cat > nixome/machine.nix <<'MACHINENIX'
         argument = "*";
         source = "dom0";
         target = "$DOMAIN";
+        action = "allow";
+      }
+      {
+        service = "nixome.NixStoreRuntimeCheck";
+        argument = "*";
+        source = "dom0";
+        target = "$PEER_DOMAIN";
         action = "allow";
       }
     ];
@@ -884,28 +1175,40 @@ run_or_fail "apply nix-closure domain config through $VALIDATOR" "$APPLY_LOG" \
 
 collect_diagnostics
 
-jq -e --arg domain "$DOMAIN" '
+jq -e --arg domain "$DOMAIN" --arg peer "$PEER_DOMAIN" '
   .schema == "nixome.config-apply.v1" and
   .status == "passed" and
   .setup.status == "passed" and
-  any(.nix_domain_materializations_result.domains[]; .domain == $domain)
+  any(.nix_domain_materializations_result.domains[]; .domain == $domain) and
+  any(.nix_domain_materializations_result.domains[]; .domain == $peer)
 ' "$APPLY_RESULT_JSON" >/dev/null ||
-  fail "config apply result did not contain a successful nix-closure materialization"
+  fail "config apply result did not contain successful nix-closure materializations"
 
 qvm-check "$DOMAIN" >/dev/null 2>&1 || fail "Qubes did not create domain: $DOMAIN"
 qvm-ls --raw-data --fields NAME,CLASS | grep -Fx "$DOMAIN|StandaloneVM" >/dev/null ||
   fail "domain is not a StandaloneVM"
+qvm-check "$PEER_DOMAIN" >/dev/null 2>&1 || fail "Qubes did not create domain: $PEER_DOMAIN"
+qvm-ls --raw-data --fields NAME,CLASS | grep -Fx "$PEER_DOMAIN|StandaloneVM" >/dev/null ||
+  fail "peer domain is not a StandaloneVM"
 qvm-volume info "$DOMAIN:store" >/dev/null 2>&1 ||
   fail "Qubes store volume was not created"
 qvm_volume_list_has_volume "$DOMAIN" store ||
   fail "Qubes volume list does not include the store volume"
+qvm-volume info "$PEER_DOMAIN:store" >/dev/null 2>&1 ||
+  fail "Qubes peer store volume was not created"
+qvm_volume_list_has_volume "$PEER_DOMAIN" store ||
+  fail "Qubes volume list does not include the peer store volume"
 
 grep -F "nixome.NixStoreRuntimeCheck * dom0 $DOMAIN allow" "$POLICY_LOG" >/dev/null ||
   fail "generated qrexec policy does not allow nixome.NixStoreRuntimeCheck"
+grep -F "nixome.NixStoreRuntimeCheck * dom0 $PEER_DOMAIN allow" "$POLICY_LOG" >/dev/null ||
+  fail "generated qrexec policy does not allow nixome.NixStoreRuntimeCheck for peer"
 grep -Fx "nixome.NixStoreRuntimeCheck * @anyvm @anyvm deny" "$POLICY_LOG" >/dev/null ||
   fail "generated qrexec policy does not deny nixome.NixStoreRuntimeCheck catch-all"
 
 check_source_paths
+[ "$store_view_backend" = "erofs-objectmap" ] ||
+  fail "primary domain is not using erofs-objectmap: $store_view_backend"
 qvm-prefs "$DOMAIN" kernelopts > "$KERNEL_OPTS_LOG" 2>&1
 [ "$(extract_kernelopt init)" = "/sbin/init" ] ||
   fail "kernelopts do not route boot through /sbin/init"
@@ -924,19 +1227,154 @@ if [ "$store_filesystem" = "erofs" ]; then
     fail "Qubes volume list does not include the store-data volume"
 fi
 
+peer_store_view_backend="$(store_view_backend_for "$PEER_DOMAIN")"
+[ "$peer_store_view_backend" = "erofs-objectmap" ] ||
+  fail "peer domain is not using erofs-objectmap: $peer_store_view_backend"
+peer_store_blob_map_physical="$(store_blob_map_physical_for "$PEER_DOMAIN")"
+[ -f "$peer_store_blob_map_physical" ] ||
+  fail "peer store blob map path is missing"
+qvm-volume info "$PEER_DOMAIN:store-data" >/dev/null 2>&1 ||
+  fail "Qubes peer store-data volume was not created"
+qvm_volume_list_has_volume "$PEER_DOMAIN" store-data ||
+  fail "Qubes volume list does not include the peer store-data volume"
+write_sharing_proof \
+  initial \
+  "$DOMAIN" \
+  "$PEER_DOMAIN" \
+  "$store_blob_map_physical" \
+  "$peer_store_blob_map_physical" \
+  "$SHARING_PROOF_LOG"
+
 check_root_image_has_no_store
 check_store_image_contains_system
 
 write_guest_probe_script
 start_vm "$DOMAIN"
+start_vm "$PEER_DOMAIN"
 wait_for_qrexec "$DOMAIN" "$DOMAIN" "$LOG_DIR/nix-closure-domain-qrexec.log"
+wait_for_qrexec "$PEER_DOMAIN" "$PEER_DOMAIN" "$LOG_DIR/nix-closure-domain-peer-qrexec.log"
+check_libvirt_filtered_devices "$DOMAIN" "$LIBVIRT_XML_LOG"
+check_libvirt_filtered_devices "$PEER_DOMAIN" "$PEER_LIBVIRT_XML_LOG"
+run_runtime_service_check
+peer_system_source="$(feature_value_for "$PEER_DOMAIN" nixome-system-source)"
+peer_store_device="$(feature_value_for "$PEER_DOMAIN" nixome-store-device)"
+peer_store_filesystem="$(feature_value_for "$PEER_DOMAIN" nixome-store-filesystem)"
+peer_store_blob_device="$(feature_value_for "$PEER_DOMAIN" nixome-store-blob-device)"
+run_runtime_service_check_for \
+  "$PEER_DOMAIN" \
+  "$peer_system_source" \
+  "$peer_store_device" \
+  "$peer_store_filesystem" \
+  "$peer_store_blob_device" \
+  "$PEER_RUNTIME_SERVICE_LOG" \
+  "$PEER_RUNTIME_SERVICE_ERR"
+run_guest_probe "$GUEST_PROBE_LOG"
+shared_object="$(sharing_json_value "$SHARING_PROOF_LOG" '.shared_object')"
+domain_unique_object="$(sharing_json_value "$SHARING_PROOF_LOG" '.left_unique_object')"
+peer_unique_object="$(sharing_json_value "$SHARING_PROOF_LOG" '.right_unique_object')"
+run_visibility_probe "$DOMAIN" "$domain_unique_object" "$peer_unique_object" "$shared_object" "$DOMAIN_VISIBILITY_LOG"
+run_visibility_probe "$PEER_DOMAIN" "$peer_unique_object" "$domain_unique_object" "$shared_object" "$PEER_VISIBILITY_LOG"
+run_persistence_probe
+
+initial_generation="$(store_generation_for "$DOMAIN")"
+pre_gen2_blob_size="$(stat -c %s "$(sharing_json_value "$SHARING_PROOF_LOG" '.central_blob')")"
+shutdown_vm "$DOMAIN" "$LOG_DIR/nix-closure-domain-gen2-pre-shutdown.log"
+
+cat > "$GEN2_STAGING_UPDATE_SCRIPT" <<EOF
+set -eu
+cd /home/$QUBE_USER/nixome-config
+sed -i \
+  's|"$DOMAIN" = mkClosureDomain "nix-closure-smoke" "$APPLY_MESSAGE";|"$DOMAIN" = mkClosureDomain "nix-closure-smoke" "$APPLY_MESSAGE_GEN2";|' \
+  nixome/machine.nix
+grep -F '"$DOMAIN" = mkClosureDomain "nix-closure-smoke" "$APPLY_MESSAGE_GEN2";' nixome/machine.nix
+git add nixome/machine.nix
+git -c user.name='Nixome Closure Smoke' -c user.email='nixome-closure-smoke@localhost' \
+  commit -m 'update nix closure smoke domain generation'
+git status --short --branch
+EOF
+
+run_qrexec_script_or_fail \
+  "$STAGING" \
+  "stage second nix-closure domain generation in $STAGING" \
+  "$GEN2_STAGING_UPDATE_LOG" \
+  "$GEN2_STAGING_UPDATE_SCRIPT"
+
+run_or_fail "apply second nix-closure domain generation through $VALIDATOR" "$GEN2_APPLY_LOG" \
+  env \
+    NIXOME_LOG_DIR="$LOG_DIR" \
+    NIXOME_CONFIG_STAGING_VM="$STAGING" \
+    NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+    NIXOME_CONFIG_VAULT_VM="$VAULT" \
+    NIXOME_CONFIG_APPLY_NIX_OFFLINE="$CONFIG_APPLY_NIX_OFFLINE" \
+  nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+cp "$LOG_DIR/config-apply.json" "$GEN2_APPLY_RESULT_JSON" 2>/dev/null || true
+
+check_source_paths
+new_generation="$(store_generation_for "$DOMAIN")"
+[ "$new_generation" != "$initial_generation" ] ||
+  fail "second generation did not switch the primary domain"
+new_store_blob_map_physical="$store_blob_map_physical"
+write_sharing_proof \
+  gen2 \
+  "$DOMAIN" \
+  "$PEER_DOMAIN" \
+  "$new_store_blob_map_physical" \
+  "$peer_store_blob_map_physical" \
+  "$GEN2_SHARING_PROOF_LOG"
+post_gen2_blob_size="$(stat -c %s "$(sharing_json_value "$GEN2_SHARING_PROOF_LOG" '.central_blob')")"
+gen2_bytes_added="$((post_gen2_blob_size - pre_gen2_blob_size))"
+gen2_logical_size="$(sharing_json_value "$GEN2_SHARING_PROOF_LOG" '.left_logical_size')"
+[ "$gen2_bytes_added" -lt "$gen2_logical_size" ] ||
+  fail "second generation rewrote too much canonical object data"
+gen2_tmp="$GEN2_SHARING_PROOF_LOG.tmp"
+jq \
+  --argjson initial_generation "$initial_generation" \
+  --argjson new_generation "$new_generation" \
+  --argjson central_blob_size_before "$pre_gen2_blob_size" \
+  --argjson central_blob_size_after "$post_gen2_blob_size" \
+  --argjson physical_bytes_added "$gen2_bytes_added" \
+  '. + {
+    initial_generation: $initial_generation,
+    new_generation: $new_generation,
+    central_blob_size_before: $central_blob_size_before,
+    central_blob_size_after: $central_blob_size_after,
+    physical_bytes_added_for_new_generation: $physical_bytes_added,
+    existing_object_reuse_verified: ($physical_bytes_added < .left_logical_size)
+  }' \
+  "$GEN2_SHARING_PROOF_LOG" > "$gen2_tmp"
+mv "$gen2_tmp" "$GEN2_SHARING_PROOF_LOG"
+
+start_vm "$DOMAIN"
+wait_for_qrexec "$DOMAIN" "$DOMAIN after second generation" "$LOG_DIR/nix-closure-domain-qrexec-gen2.log"
+check_libvirt_filtered_devices "$DOMAIN" "$LIBVIRT_XML_LOG"
 run_runtime_service_check
 run_guest_probe "$GUEST_PROBE_LOG"
-run_persistence_probe
-run_reboot_cycle
+grep -Fx "applied_message=$APPLY_MESSAGE_GEN2" "$GUEST_PROBE_LOG" >/dev/null ||
+  fail "guest did not boot the second generation"
+wait_for_qrexec "$PEER_DOMAIN" "$PEER_DOMAIN after primary generation switch" "$LOG_DIR/nix-closure-domain-peer-qrexec-after-gen2.log"
+run_runtime_service_check_for \
+  "$PEER_DOMAIN" \
+  "$peer_system_source" \
+  "$peer_store_device" \
+  "$peer_store_filesystem" \
+  "$peer_store_blob_device" \
+  "$PEER_RUNTIME_SERVICE_LOG" \
+  "$PEER_RUNTIME_SERVICE_ERR"
+
+case "$RUN_REBOOT_PROBE" in
+  1|true|yes)
+    run_reboot_cycle
+    ;;
+  0|false|no)
+    reboot_status="skipped"
+    ;;
+  *)
+    fail "unsupported NIXOME_NIX_CLOSURE_REBOOT_PROBE value: $RUN_REBOOT_PROBE"
+    ;;
+esac
 run_shutdown_start_cycle
 run_optional_gui_probe
 
 collect_diagnostics
-write_result passed "nix-closure domain booted from a separate read-only Nix store volume"
+write_result passed "nix-closure domains booted from object-stable shared read-only Nix store views"
 cat "$RESULT_JSON" >&3
