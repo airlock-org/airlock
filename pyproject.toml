@@ -29,6 +29,7 @@ markers = [
     "qubes: checks that require Qubes/Xen runtime support",
     "prebuild: shared build/cache preparation for later VM flows",
     "slow: checks that can take noticeably longer than ordinary unit tests",
+    "serial_vm: VM flow that should not be included in multi-lane VM runs",
     "vm: nested VM integration flows",
     "warm: warm nested VM iteration flows",
     "xdist_group: pytest-xdist worker group",

@@ -48,6 +48,7 @@ PYTHON_FILES := \
 
 PYTEST_LOG_DIR = $${NIXOME_LOG_DIR:-.nixome-logs}
 TEST_JOBS ?= 4
+TEST_VM_JOBS ?= 2
 PYTEST_WORKERS = $(if $(TEST_JOBS),-n $(TEST_JOBS),)
 PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
 PYTEST_REPORT_ARGS = --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
@@ -55,7 +56,7 @@ PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 VM_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm.py::test_vm_flow[$(test)]')
 
-.PHONY: ensure-generated-dirs build test test-parallel test-serial test-vm test-vm-warm test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test test-parallel test-serial test-vm test-vm-parallel test-vm-warm test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -80,6 +81,10 @@ test-serial: test
 test-vm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
 	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm") $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
+
+test-vm-parallel: ensure-generated-dirs
+	@mkdir -p "$(PYTEST_LOG_DIR)"
+	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)" uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm and not serial_vm") -n $(TEST_VM_JOBS) --dist load --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json" $(PYTEST_ARGS)
 
 test-vm-warm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
@@ -194,7 +199,11 @@ disk-usage:
 	./scripts/clean-generated.sh disk-usage
 
 gc-auto: ensure-generated-dirs
-	./scripts/gc-nixome-store.sh auto
+	@if [ "$${NIXOME_SKIP_GC_AUTO:-0}" = "1" ]; then \
+		printf 'gc-auto skipped: NIXOME_SKIP_GC_AUTO=1\n'; \
+	else \
+		./scripts/gc-nixome-store.sh auto; \
+	fi
 
 gc-roots: ensure-generated-dirs
 	./scripts/gc-nixome-store.sh roots
