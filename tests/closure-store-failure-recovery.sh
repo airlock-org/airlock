@@ -35,16 +35,20 @@ if ! command -v mkfs.erofs >/dev/null 2>&1 || ! command -v fsck.erofs >/dev/null
 fi
 
 make_store_object() {
-  entry="$1"
-  content="$2"
+  local entry="$1"
+  local content="$2"
+  local size="${3:-}"
   mkdir -p "$WORK_DIR/physical-store/$entry/bin"
   printf '%s\n' "$content" > "$WORK_DIR/physical-store/$entry/bin/payload"
+  if [ -n "$size" ]; then
+    truncate -s "$size" "$WORK_DIR/physical-store/$entry/bin/payload"
+  fi
   chmod 0555 "$WORK_DIR/physical-store/$entry" "$WORK_DIR/physical-store/$entry/bin"
   chmod 0444 "$WORK_DIR/physical-store/$entry/bin/payload"
 }
 
 make_closure() {
-  name="$1"
+  local name="$1"
   shift
   mkdir -p "$WORK_DIR/closures/$name"
   {
@@ -57,14 +61,15 @@ make_closure() {
 }
 
 run_engine_json() {
-  name="$1"
+  local name="$1"
   shift
   "${ENGINE[@]}" "$@" > "$RESULT_DIR/$name.json"
 }
 
 run_engine_failpoint() {
-  name="$1"
-  failpoint="$2"
+  local name="$1"
+  local failpoint="$2"
+  local rc
   shift 2
   set +e
   NIXOME_CLOSURE_STORE_FAILPOINT="$failpoint" "${ENGINE[@]}" "$@" \
@@ -75,15 +80,73 @@ run_engine_failpoint() {
   grep -F "simulated failure at $failpoint" "$RESULT_DIR/$name.err" >/dev/null
 }
 
+object_segment() {
+  jq -r '.segment_id' "$1/objects/blob-metadata/$2.json"
+}
+
+object_current_location_count() {
+  jq -r '(.locations // []) | map(select(.status == "current")) | length' "$1/objects/blob-metadata/$2.json"
+}
+
 assert_no_committed_domain() {
-  pool="$1"
-  domain="$2"
-  name="$3"
+  local pool="$1"
+  local domain="$2"
+  local name="$3"
 
   run_engine_json "$name" status --pool-root "$pool"
   jq -e --arg domain "$domain" '
     (.domains[$domain] // null) == null
   ' "$RESULT_DIR/$name.json" >/dev/null
+}
+
+prepare_compaction_pool() {
+  local name="$1"
+  local pool="$2"
+  local domain="${3:-compact}"
+
+  run_engine_json "$name-gen1" admit \
+    --pool-root "$pool" \
+    --domain "$domain" \
+    --system "/nix/store/$COMPACT_LIVE" \
+    --closure-source "$WORK_DIR/closures/compact-gen1" \
+    --physical-store-root "$PHYSICAL_STORE" \
+    --verify-mode tree \
+    --segment-target-bytes 65536 \
+    --retain false
+  object_segment "$pool" "$COMPACT_LIVE" > "$pool/.compact-source-segment"
+  run_engine_json "$name-gen2" admit \
+    --pool-root "$pool" \
+    --domain "$domain" \
+    --system "/nix/store/$COMPACT_LIVE" \
+    --closure-source "$WORK_DIR/closures/compact-gen2" \
+    --physical-store-root "$PHYSICAL_STORE" \
+    --verify-mode tree \
+    --segment-target-bytes 65536 \
+    --retain false
+  run_engine_json "$name-gc-before-compact" gc \
+    --pool-root "$pool" \
+    --keep-generations 0
+}
+
+assert_compaction_pool_valid() {
+  local name="$1"
+  local pool="$2"
+  local domain="${3:-compact}"
+
+  run_engine_json "$name-status" status --pool-root "$pool"
+  jq -e --arg domain "$domain" '
+    .domains[$domain].current == 2 and
+    (.domains[$domain].generations | length) >= 1 and
+    .segment_compaction == "available"
+  ' "$RESULT_DIR/$name-status.json" >/dev/null
+  [ "$(object_current_location_count "$pool" "$COMPACT_LIVE")" = "1" ]
+  run_engine_json "$name-dry-run" compact \
+    --pool-root "$pool" \
+    --dry-run true \
+    --threshold-percent 90 \
+    --max-segments 1 \
+    --keep-generations 0 \
+    --segment-target-bytes 65536
 }
 
 PHYSICAL_STORE="$WORK_DIR/physical-store"
@@ -95,10 +158,16 @@ FOUR="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-four"
 FIVE="ffffffffffffffffffffffffffffffff-five"
 SIX="11111111111111111111111111111111-six"
 SEVEN="22222222222222222222222222222222-seven"
+COMPACT_DEAD="33333333333333333333333333333333-compact-dead"
+COMPACT_LIVE="44444444444444444444444444444444-compact-live"
+COMPACT_FILL="55555555555555555555555555555555-compact-fill"
 
 for entry in "$COMMON" "$ONE" "$TWO" "$THREE" "$FOUR" "$FIVE" "$SIX" "$SEVEN"; do
   make_store_object "$entry" "$entry"
 done
+make_store_object "$COMPACT_DEAD" "$COMPACT_DEAD" 36000
+make_store_object "$COMPACT_LIVE" "$COMPACT_LIVE" 1024
+make_store_object "$COMPACT_FILL" "$COMPACT_FILL" 36000
 
 make_closure one "$ONE"
 make_closure two "$TWO"
@@ -107,6 +176,8 @@ make_closure four "$FOUR"
 make_closure five "$FIVE"
 make_closure six "$COMMON" "$SIX"
 make_closure seven "$COMMON" "$SEVEN"
+make_closure compact-gen1 "$COMPACT_DEAD" "$COMPACT_LIVE" "$COMPACT_FILL"
+make_closure compact-gen2 "$COMPACT_LIVE"
 
 cat > "$WORK_DIR/bin/nix" <<'EOF'
 #!/usr/bin/env bash
@@ -300,5 +371,102 @@ jq -e '
   .domains."gc-domain".current == 1 and
   (.domains."gc-domain".generations | length) == 1
 ' "$RESULT_DIR/status-gc.json" >/dev/null
+
+for failpoint in \
+  compact-after-tx-create \
+  compact-after-object-copy \
+  compact-before-location-publish \
+  compact-after-location-publish \
+  compact-before-replacement-seal \
+  compact-after-view-refresh \
+  compact-after-tx-commit \
+  compact-after-retirement
+do
+  pool="$WORK_DIR/$failpoint-pool"
+  prepare_compaction_pool "$failpoint" "$pool" "compact-$failpoint"
+  run_engine_failpoint "$failpoint" "$failpoint" compact \
+    --pool-root "$pool" \
+    --dry-run false \
+    --threshold-percent 90 \
+    --max-segments 1 \
+    --keep-generations 0 \
+    --segment-target-bytes 65536
+  run_engine_json "$failpoint-recover" recover --pool-root "$pool"
+  assert_compaction_pool_valid "$failpoint-after-recover" "$pool" "compact-$failpoint"
+  run_engine_json "$failpoint-rerun" compact \
+    --pool-root "$pool" \
+    --dry-run false \
+    --threshold-percent 90 \
+    --max-segments 1 \
+    --keep-generations 0 \
+    --segment-target-bytes 65536
+  assert_compaction_pool_valid "$failpoint-after-rerun" "$pool" "compact-$failpoint"
+done
+
+ACTIVE_COMPACT_POOL="$WORK_DIR/compact-active-view-pool"
+prepare_compaction_pool active-compact "$ACTIVE_COMPACT_POOL" compact-active
+ACTIVE_SOURCE_SEGMENT="$(cat "$ACTIVE_COMPACT_POOL/.compact-source-segment")"
+run_engine_json active-compact-mark-running mark-running \
+  --pool-root "$ACTIVE_COMPACT_POOL" \
+  --domain compact-active \
+  --generation 2 \
+  --volume store-data
+run_engine_failpoint active-compact-after-location-publish compact-after-location-publish compact \
+  --pool-root "$ACTIVE_COMPACT_POOL" \
+  --dry-run false \
+  --threshold-percent 90 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 65536
+run_engine_json active-compact-recover recover --pool-root "$ACTIVE_COMPACT_POOL"
+jq -e '
+  (.refreshed_blob_maps | length) >= 1
+' "$RESULT_DIR/active-compact-recover.json" >/dev/null
+[ -e "$ACTIVE_COMPACT_POOL/objects/segments/$ACTIVE_SOURCE_SEGMENT.blob" ]
+run_engine_json active-compact-gc-blocked gc \
+  --pool-root "$ACTIVE_COMPACT_POOL" \
+  --keep-generations 0
+jq -e --arg segment "$ACTIVE_SOURCE_SEGMENT" '
+  (.blocked_segments | index($segment)) != null and
+  (.removed_segments | index($segment)) == null
+' "$RESULT_DIR/active-compact-gc-blocked.json" >/dev/null
+run_engine_json active-compact-clear-running clear-running \
+  --pool-root "$ACTIVE_COMPACT_POOL" \
+  --domain compact-active \
+  --generation 2 \
+  --volume store-data
+run_engine_json active-compact-retire compact \
+  --pool-root "$ACTIVE_COMPACT_POOL" \
+  --dry-run false \
+  --threshold-percent 90 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 65536
+jq -e --arg segment "$ACTIVE_SOURCE_SEGMENT" '
+  (.segments_retired | index($segment)) != null
+' "$RESULT_DIR/active-compact-retire.json" >/dev/null
+[ ! -e "$ACTIVE_COMPACT_POOL/objects/segments/$ACTIVE_SOURCE_SEGMENT.blob" ]
+
+for failpoint in gc-before-segment-delete gc-after-segment-delete; do
+  pool="$WORK_DIR/compact-$failpoint-pool"
+  prepare_compaction_pool "compact-$failpoint" "$pool" "compact-$failpoint"
+  run_engine_failpoint "compact-$failpoint" "$failpoint" compact \
+    --pool-root "$pool" \
+    --dry-run false \
+    --threshold-percent 90 \
+    --max-segments 1 \
+    --keep-generations 0 \
+    --segment-target-bytes 65536
+  run_engine_json "compact-$failpoint-recover" recover --pool-root "$pool"
+  assert_compaction_pool_valid "compact-$failpoint-after-recover" "$pool" "compact-$failpoint"
+  run_engine_json "compact-$failpoint-rerun" compact \
+    --pool-root "$pool" \
+    --dry-run false \
+    --threshold-percent 90 \
+    --max-segments 1 \
+    --keep-generations 0 \
+    --segment-target-bytes 65536
+  assert_compaction_pool_valid "compact-$failpoint-after-rerun" "$pool" "compact-$failpoint"
+done
 
 printf 'closure-store failure recovery test ok\n'

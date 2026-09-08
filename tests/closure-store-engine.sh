@@ -148,6 +148,9 @@ SMALL_A="dddddddddddddddddddddddddddddddd-small-a"
 SMALL_B="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-small-b"
 SMALL_C="ffffffffffffffffffffffffffffffff-small-c"
 OVERSIZED="12121212121212121212121212121212-oversized"
+COMPACT_DEAD="13131313131313131313131313131313-compact-dead"
+COMPACT_LIVE="14141414141414141414141414141414-compact-live"
+COMPACT_FILL="15151515151515151515151515151515-compact-fill"
 
 make_store_object "$COMMON" common 1024
 make_store_object "$WORK_SYSTEM_1" work-system-1 12000
@@ -164,6 +167,9 @@ make_store_object "$SMALL_A" small-a 1024
 make_store_object "$SMALL_B" small-b 1024
 make_store_object "$SMALL_C" small-c 1024
 make_store_object "$OVERSIZED" oversized 64000
+make_store_object "$COMPACT_DEAD" compact-dead 36000
+make_store_object "$COMPACT_LIVE" compact-live 1024
+make_store_object "$COMPACT_FILL" compact-fill 36000
 ln -s "$SYMLINK_TARGET" "$PHYSICAL_STORE/$SYMLINK_SYSTEM"
 
 make_closure work-gen1 "$COMMON" "$WORK_SYSTEM_1" "$WORK_UNIQUE_1"
@@ -174,6 +180,8 @@ make_closure fit "$SMALL_A" "$SMALL_B" "$SMALL_C"
 make_closure rollover "$BIG_A" "$BIG_B"
 make_closure oversized "$OVERSIZED"
 make_closure multi-segment "$COMMON" "$BIG_A" "$BIG_B" "$BIG_C"
+make_closure compact-gen1 "$COMPACT_DEAD" "$COMPACT_LIVE" "$COMPACT_FILL"
+make_closure compact-gen2 "$COMPACT_LIVE"
 
 cat > "$WORK_DIR/bin/nix" <<'EOF'
 #!/usr/bin/env bash
@@ -395,7 +403,8 @@ jq -e '
   any(.retained_generations[]; .domain == "work" and .generation == 2) and
   all(.removed_generations[]; .domain != "work" or .generation != 2) and
   (.removed_object_blobs | index("'"$WORK_UNIQUE_2"'")) == null and
-  .segment_store_append_only == true
+  .segment_store_append_only == true and
+  .segment_compaction == "available"
 ' "$RESULT_DIR/gc-running.json" >/dev/null
 
 run_engine_json clear-running-work-gen2-store clear-running \
@@ -433,7 +442,7 @@ jq -e '
   (.removed_object_blobs | index("'"$WORK_UNIQUE_1"'")) == null and
   (.removed_object_blobs | index("'"$DEV_UNIQUE_1"'")) == null and
   (.removed_views | length) >= 1 and
-  .segment_compaction == "not implemented"
+  .segment_compaction == "available"
 ' "$RESULT_DIR/gc.json" >/dev/null
 
 DEAD_SEG_POOL="$WORK_DIR/dead-segment-pool"
@@ -458,6 +467,157 @@ jq -e --arg segment "$PARTIAL_SEGMENT" '
   (.partially_live_segments | index($segment)) != null
 ' "$RESULT_DIR/gc-partial-segment.json" >/dev/null
 [ -e "$PARTIAL_SEG_POOL/objects/segments/$PARTIAL_SEGMENT.blob" ]
+
+COMPACT_POOL="$WORK_DIR/compact-pool"
+admit compact-gen1 "$COMPACT_POOL" compact "$COMPACT_LIVE" compact-gen1 65536 --retain false
+COMPACT_SOURCE_SEGMENT="$(object_segment "$COMPACT_POOL" "$COMPACT_LIVE")"
+COMPACT_SOURCE_OFFSET="$(jq -r '.segment_offset' "$COMPACT_POOL/objects/blob-metadata/$COMPACT_LIVE.json")"
+admit compact-gen2 "$COMPACT_POOL" compact "$COMPACT_LIVE" compact-gen2 65536 --retain false
+run_engine_json gc-compact-before gc --pool-root "$COMPACT_POOL" --keep-generations 0
+jq -e --arg segment "$COMPACT_SOURCE_SEGMENT" '
+  (.partially_live_segments | index($segment)) != null
+' "$RESULT_DIR/gc-compact-before.json" >/dev/null
+[ -e "$COMPACT_POOL/objects/segments/$COMPACT_SOURCE_SEGMENT.blob" ]
+
+run_engine_json compact-dry-run compact \
+  --pool-root "$COMPACT_POOL" \
+  --dry-run true \
+  --threshold-percent 90 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 65536
+jq -e --arg segment "$COMPACT_SOURCE_SEGMENT" '
+  .schema == "nixome.closure-store.compaction.v1" and
+  .dry_run == true and
+  .objects_to_move >= 1 and
+  any(.candidate_segments[]; .id == $segment) and
+  any(.segments[]; .id == $segment and .dead_bytes > 0 and .utilization_percent < 90)
+' "$RESULT_DIR/compact-dry-run.json" >/dev/null
+
+run_engine_json compact-mark-running mark-running \
+  --pool-root "$COMPACT_POOL" \
+  --domain compact \
+  --generation 2 \
+  --volume store-data
+jq -e --arg segment "$COMPACT_SOURCE_SEGMENT" '
+  any(.physical_references[]; .segment_id == $segment)
+' "$COMPACT_POOL/running/compact/2/store-data.json" >/dev/null
+
+run_engine_json compact compact \
+  --pool-root "$COMPACT_POOL" \
+  --dry-run false \
+  --threshold-percent 90 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 65536
+COMPACT_NEW_SEGMENT="$(object_segment "$COMPACT_POOL" "$COMPACT_LIVE")"
+COMPACT_NEW_OFFSET="$(jq -r '.segment_offset' "$COMPACT_POOL/objects/blob-metadata/$COMPACT_LIVE.json")"
+[ "$COMPACT_NEW_SEGMENT" != "$COMPACT_SOURCE_SEGMENT" ]
+jq -e --arg old "$COMPACT_SOURCE_SEGMENT" --arg new "$COMPACT_NEW_SEGMENT" --argjson old_offset "$COMPACT_SOURCE_OFFSET" --argjson new_offset "$COMPACT_NEW_OFFSET" '
+  .schema == "nixome.closure-store.compaction.v1" and
+  .dry_run == false and
+  .bytes_copied > 0 and
+  .objects_moved[0].old_segment_id == $old and
+  .objects_moved[0].old_segment_offset == $old_offset and
+  .objects_moved[0].new_segment_id == $new and
+  .objects_moved[0].new_segment_offset == $new_offset and
+  (.segments_blocked_from_deletion | index($old)) != null and
+  .write_amplification > 0
+' "$RESULT_DIR/compact.json" >/dev/null
+jq -e --arg object "$COMPACT_LIVE" --arg segment "$COMPACT_NEW_SEGMENT" '
+  any(.extents[]; .object == $object and .segment_id == $segment)
+' "$COMPACT_POOL/views/by-closure/$(jq -r '.closure_hash' "$RESULT_DIR/compact-gen2.json")/store.blob-map.json" >/dev/null
+[ -e "$COMPACT_POOL/objects/segments/$COMPACT_SOURCE_SEGMENT.blob" ]
+jq -e '
+  (.locations | map(select(.status == "current")) | length) == 1 and
+  (.locations | map(select(.status == "retired")) | length) >= 1
+' "$COMPACT_POOL/objects/blob-metadata/$COMPACT_LIVE.json" >/dev/null
+
+run_engine_json compact-second-pass compact \
+  --pool-root "$COMPACT_POOL" \
+  --dry-run false \
+  --threshold-percent 90 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 65536
+jq -e '
+  (.objects_moved | length) == 1 and
+  .objects_moved[0].entry == ".tar-eof" and
+  .bytes_copied > 0
+' "$RESULT_DIR/compact-second-pass.json" >/dev/null
+
+run_engine_json compact-idempotent compact \
+  --pool-root "$COMPACT_POOL" \
+  --dry-run false \
+  --threshold-percent 90 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 65536
+jq -e '.objects_moved == []' "$RESULT_DIR/compact-idempotent.json" >/dev/null
+
+run_engine_json compact-clear-running clear-running \
+  --pool-root "$COMPACT_POOL" \
+  --domain compact \
+  --generation 2 \
+  --volume store-data
+run_engine_json compact-retire-old compact \
+  --pool-root "$COMPACT_POOL" \
+  --dry-run false \
+  --threshold-percent 90 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 65536
+jq -e --arg old "$COMPACT_SOURCE_SEGMENT" '
+  (.segments_retired | index($old)) != null
+' "$RESULT_DIR/compact-retire-old.json" >/dev/null
+[ ! -e "$COMPACT_POOL/objects/segments/$COMPACT_SOURCE_SEGMENT.blob" ]
+
+BOUNCE_POOL="$WORK_DIR/bounce-pool"
+make_closure bounce-gen1 "$COMPACT_LIVE" "$COMPACT_FILL"
+make_closure bounce-gen2 "$COMPACT_LIVE"
+make_closure bounce-seal "$COMPACT_DEAD"
+admit bounce-gen1 "$BOUNCE_POOL" bounce "$COMPACT_LIVE" bounce-gen1 65536 --retain false
+BOUNCE_SOURCE_SEGMENT="$(object_segment "$BOUNCE_POOL" "$COMPACT_LIVE")"
+admit bounce-gen2 "$BOUNCE_POOL" bounce "$COMPACT_LIVE" bounce-gen2 65536 --retain false
+admit bounce-seal "$BOUNCE_POOL" bounce-seal "$COMPACT_DEAD" bounce-seal 65536 --retain false
+run_engine_json gc-bounce-before gc --pool-root "$BOUNCE_POOL" --keep-generations 0
+run_engine_json bounce-mark-running mark-running \
+  --pool-root "$BOUNCE_POOL" \
+  --domain bounce \
+  --generation 2 \
+  --volume store-data
+run_engine_json bounce-compact compact \
+  --pool-root "$BOUNCE_POOL" \
+  --dry-run false \
+  --threshold-percent 90 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 65536
+BOUNCE_FIRST_RELOCATION="$(object_segment "$BOUNCE_POOL" "$COMPACT_LIVE")"
+[ "$BOUNCE_FIRST_RELOCATION" != "$BOUNCE_SOURCE_SEGMENT" ]
+run_engine_json bounce-no-retired-reuse compact \
+  --pool-root "$BOUNCE_POOL" \
+  --dry-run false \
+  --threshold-percent 100 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 65536
+BOUNCE_SECOND_RELOCATION="$(object_segment "$BOUNCE_POOL" "$COMPACT_LIVE")"
+[ "$BOUNCE_SECOND_RELOCATION" != "$BOUNCE_SOURCE_SEGMENT" ]
+jq -e --arg old "$BOUNCE_SOURCE_SEGMENT" '
+  all(.objects_reused[]?; .segment_id != $old)
+' "$RESULT_DIR/bounce-no-retired-reuse.json" >/dev/null
+
+OVERSIZED_COMPACT_POOL="$WORK_DIR/oversized-compact-pool"
+admit oversized-compact "$OVERSIZED_COMPACT_POOL" oversized-compact "$OVERSIZED" oversized 4096
+run_engine_json compact-oversized-dry-run compact \
+  --pool-root "$OVERSIZED_COMPACT_POOL" \
+  --dry-run true \
+  --threshold-percent 100 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 4096
+jq -e '.candidate_segments == []' "$RESULT_DIR/compact-oversized-dry-run.json" >/dev/null
 
 ALT_STORE="$WORK_DIR/alternate-store"
 mkdir -p "$ALT_STORE/$COMMON/bin"

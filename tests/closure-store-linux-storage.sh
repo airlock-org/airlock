@@ -73,12 +73,21 @@ done
 make_store_object() {
   entry="$1"
   content="$2"
+  size="${3:-}"
   mkdir -p "$PHYSICAL_STORE/$entry/bin"
-  python3 - "$PHYSICAL_STORE/$entry/bin/payload" "$content" <<'PY'
+  python3 - "$PHYSICAL_STORE/$entry/bin/payload" "$content" "$size" <<'PY'
 import sys
 from pathlib import Path
 
-Path(sys.argv[1]).write_bytes((sys.argv[2] + "\n").encode() * 4096)
+path = Path(sys.argv[1])
+content = (sys.argv[2] + "\n").encode()
+size = sys.argv[3]
+if size:
+    path.write_bytes(content)
+    with path.open("r+b") as handle:
+        handle.truncate(int(size))
+else:
+    path.write_bytes(content * 4096)
 PY
   chmod 0555 "$PHYSICAL_STORE/$entry" "$PHYSICAL_STORE/$entry/bin"
   chmod 0444 "$PHYSICAL_STORE/$entry/bin/payload"
@@ -106,11 +115,19 @@ run_engine_json() {
 COMMON="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-common"
 A_UNIQUE="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-a-unique"
 B_UNIQUE="cccccccccccccccccccccccccccccccc-b-unique"
+COMPACT_DEAD="dddddddddddddddddddddddddddddddd-compact-dead"
+COMPACT_LIVE="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-compact-live"
+COMPACT_FILL="ffffffffffffffffffffffffffffffff-compact-fill"
 make_store_object "$COMMON" common
 make_store_object "$A_UNIQUE" a-unique
 make_store_object "$B_UNIQUE" b-unique
+make_store_object "$COMPACT_DEAD" compact-dead 36000
+make_store_object "$COMPACT_LIVE" compact-live 1024
+make_store_object "$COMPACT_FILL" compact-fill 36000
 make_closure a "$COMMON" "$A_UNIQUE"
 make_closure b "$COMMON" "$B_UNIQUE"
+make_closure compact-gen1 "$COMPACT_DEAD" "$COMPACT_LIVE" "$COMPACT_FILL"
+make_closure compact-gen2 "$COMPACT_LIVE"
 
 run_engine_json admit-a admit \
   --pool-root "$POOL" \
@@ -240,6 +257,81 @@ run_engine_json clear-running-a-store clear-running \
   --generation 1 \
   --volume store
 
+run_engine_json compact-gen1 admit \
+  --pool-root "$POOL" \
+  --domain compact \
+  --system "/nix/store/$COMPACT_LIVE" \
+  --closure-source "$WORK_DIR/closures/compact-gen1" \
+  --physical-store-root "$PHYSICAL_STORE" \
+  --verify-mode tree \
+  --segment-target-bytes 65536 \
+  --retain false
+COMPACT_SOURCE_SEGMENT="$(jq -r '.segment_id' "$POOL/objects/blob-metadata/$COMPACT_LIVE.json")"
+run_engine_json compact-gen2 admit \
+  --pool-root "$POOL" \
+  --domain compact \
+  --system "/nix/store/$COMPACT_LIVE" \
+  --closure-source "$WORK_DIR/closures/compact-gen2" \
+  --physical-store-root "$PHYSICAL_STORE" \
+  --verify-mode tree \
+  --segment-target-bytes 65536 \
+  --retain false
+run_engine_json attach-compact-gen2 attach-blob-view \
+  --pool-root "$POOL" \
+  --domain compact \
+  --generation 2
+COMPACT_META="$(jq -r '.metadata_image' "$RESULT_DIR/compact-gen2.json")"
+COMPACT_DEVICE="$(jq -r '.device' "$RESULT_DIR/attach-compact-gen2.json")"
+
+cat >> "$WORK_DIR/cleanup.sh" <<EOF
+PYTHONPATH='$PYTHONPATH' python3 -m nixome_qubes_storage.cli detach-blob-view --pool-root '$POOL' --domain compact --generation 2 >/dev/null 2>&1
+EOF
+
+run_engine_json compact-before gc \
+  --pool-root "$POOL" \
+  --keep-generations 0
+run_engine_json compact compact \
+  --pool-root "$POOL" \
+  --dry-run false \
+  --threshold-percent 90 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 65536
+COMPACT_NEW_SEGMENT="$(jq -r '.segment_id' "$POOL/objects/blob-metadata/$COMPACT_LIVE.json")"
+[ "$COMPACT_NEW_SEGMENT" != "$COMPACT_SOURCE_SEGMENT" ]
+jq -e --arg old "$COMPACT_SOURCE_SEGMENT" '
+  (.segments_blocked_from_deletion | index($old)) != null and
+  (.segments_retired | index($old)) == null and
+  (.objects_moved | length) >= 1
+' "$RESULT_DIR/compact.json" >/dev/null
+
+unshare --mount --propagation private bash -eu <<EOF
+mount -t erofs -o ro,loop,device=$COMPACT_DEVICE '$COMPACT_META' '$WORK_DIR/mounts/a'
+findmnt -rn -T '$WORK_DIR/mounts/a' -o OPTIONS | grep -E '(^|,)ro(,|$)' >/dev/null
+test -f '$WORK_DIR/mounts/a/$COMPACT_LIVE/bin/payload'
+test ! -e '$WORK_DIR/mounts/a/$COMPACT_DEAD'
+test ! -e '$WORK_DIR/mounts/a/$COMPACT_FILL'
+if touch '$WORK_DIR/mounts/a/.write-probe' 2>/dev/null; then
+  exit 44
+fi
+umount '$WORK_DIR/mounts/a'
+EOF
+
+run_engine_json detach-compact-gen2 detach-blob-view \
+  --pool-root "$POOL" \
+  --domain compact \
+  --generation 2
+run_engine_json compact-retire compact \
+  --pool-root "$POOL" \
+  --dry-run false \
+  --threshold-percent 90 \
+  --max-segments 1 \
+  --keep-generations 0 \
+  --segment-target-bytes 65536
+jq -e --arg old "$COMPACT_SOURCE_SEGMENT" '
+  (.segments_retired | index($old)) != null
+' "$RESULT_DIR/compact-retire.json" >/dev/null
+
 jq -n \
   --arg schema "nixome.closure-store-linux-storage.v1" \
   --arg status passed \
@@ -247,6 +339,8 @@ jq -n \
   --arg b_device "$B_DEVICE" \
   --arg common_segment "$COMMON_A_SEGMENT" \
   --argjson common_offset "$COMMON_A_OFFSET" \
+  --arg compact_old_segment "$COMPACT_SOURCE_SEGMENT" \
+  --arg compact_new_segment "$COMPACT_NEW_SEGMENT" \
   --arg common_object "$COMMON" \
   '{
     schema: $schema,
@@ -256,6 +350,12 @@ jq -n \
     backing_storage_exposed: false,
     read_only_mounts: true,
     closure_filtering: true,
+    compaction: {
+      old_segment: $compact_old_segment,
+      new_segment: $compact_new_segment,
+      old_segment_blocked_while_mapper_active: true,
+      old_segment_retired_after_detach: true
+    },
     shared_object: {
       object: $common_object,
       segment_id: $common_segment,

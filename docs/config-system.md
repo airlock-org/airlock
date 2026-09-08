@@ -110,10 +110,11 @@ POSIX tar fragments in:
 Segments are append-only while open and immutable once sealed. The default
 target segment size is 2 GiB. A store object is never split across segments; if
 one object is larger than the target, it receives a dedicated oversized sealed
-segment. Object metadata records the stable store identity plus `segment_id`,
-`segment_offset`, `length`, and hash. Closure and generation identity remains
-based on store paths, so future compaction can move an object by atomically
-updating canonical object metadata and rebuilding affected views.
+segment. Object metadata records the stable store identity plus one current
+location and any retired verified locations. Closure and generation identity
+remains based on store paths, so compaction can move live objects by publishing
+new current locations and refreshing affected closure views without changing the
+semantic generation.
 
 Each exact closure gets:
 
@@ -136,6 +137,28 @@ it never receives segment files, the canonical object pool, or an unfiltered
 global store mount.
 Root inside the guest can read only the bytes referenced by the declared
 closure view.
+
+Physical cleanup is split into two operations. Logical GC removes unreachable
+generations, views, and object metadata. Segment compaction then considers sealed
+non-oversized segments whose current live-byte utilization is below the
+configured threshold. A compaction run never edits a sealed segment in place:
+it copies each still-live object from the selected old segment into a new
+segment, verifies the copied bytes by hash, atomically publishes the new object
+location, refreshes closure blob maps, and then retires old segments only when no
+running-generation or runtime device-mapper view still references the old
+physical extents.
+
+Use:
+
+```bash
+nixome-closure-store compact --dry-run true
+nixome-closure-store compact --dry-run false
+```
+
+The default policy compacts at most one low-utilization segment per run with a
+50 percent live-byte threshold. The command reports candidate segments, live and
+dead bytes, bytes copied, bytes reclaimed, moved objects, retired segments,
+segments blocked by active views, and write amplification.
 
 To reconstruct or back up the closure store, retain:
 
@@ -360,9 +383,8 @@ The default `shared-closure` path physically shares canonical Nix store object
 fragments across unrelated NixOS domains and generations, while preserving
 independent read-only closure views. Remaining storage work is narrower:
 
-- compacting poorly utilized sealed segments after GC; today stale object
-  metadata is removed and fully dead sealed segments can be deleted, but mixed
-  live/dead segments are retained.
+- running more Qubes/Xen lifecycle coverage for segment compaction under active
+  VMs.
 - reducing object admission overhead if tar fragment creation becomes a
   bottleneck for large store paths.
 - running repeated warm and final cold Qubes/Xen lifecycle tests for the EROFS

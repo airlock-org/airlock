@@ -30,6 +30,7 @@ OUTPUT_JSON="$RESULT_DIR/helper-output.json"
 OUTPUT_2_JSON="$RESULT_DIR/helper-output-2.json"
 OUTPUT_GEN2_JSON="$RESULT_DIR/helper-output-gen2.json"
 SWITCH_BACK_JSON="$RESULT_DIR/helper-switch-back.json"
+STALE_REPAIR_JSON="$RESULT_DIR/helper-stale-repair.json"
 SWITCH_RUNNING_ERR="$RESULT_DIR/helper-switch-running.err"
 export PYTHONDONTWRITEBYTECODE=1
 
@@ -484,11 +485,69 @@ jq -e '
   .domains."nix-native-work".volume_config."store-data".blob_map_path == "'"$BLOB_MAP"'"
 ' "$STATE_JSON" >/dev/null
 
+tmp_state="$WORK_DIR/stale-volume-state.json"
+jq \
+  --arg source /nix/store/example-source-2 \
+  --arg generation "$(jq -r '.generation' "$OUTPUT_GEN2_JSON")" \
+  --arg closure_hash "$(jq -r '.closure_hash' "$OUTPUT_GEN2_JSON")" \
+  --arg view_image "$(jq -r '.view_image' "$OUTPUT_GEN2_JSON")" \
+  --arg blob_map "$(jq -r '.blob_map' "$OUTPUT_GEN2_JSON")" \
+  '.domains."nix-native-work".features = {
+    "nixome-store-source": $source,
+    "nixome-store-mode": "shared-closure",
+    "nixome-store-view-backend": "erofs-objectmap",
+    "nixome-store-generation": $generation,
+    "nixome-store-closure-hash": $closure_hash,
+    "nixome-store-view-image": $view_image,
+    "nixome-store-blob-map": $blob_map
+  }' "$STATE_JSON" > "$tmp_state"
+mv "$tmp_state" "$STATE_JSON"
+
+PATH="$WORK_DIR/bin:$PATH" \
+  PYTHONPATH="$WORK_DIR/fake:$ROOT/pkgs/nixome-qubes-storage/src" \
+  NIXOME_NIX_ROOT="$WORK_DIR/nix-root" \
+  NIXOME_CLOSURE_STORE_VERIFY=tree \
+  NIXOME_FAKE_QUBES_DOMAIN=nix-native-work \
+  NIXOME_FAKE_QUBES_SAVE_JSON="$SAVE_JSON" \
+  NIXOME_FAKE_QUBES_STATE_JSON="$STATE_JSON" \
+  NIXOME_FAKE_SYSTEMCTL_LOG="$SYSTEMCTL_LOG" \
+  python3 "$ROOT/scripts/nix-domain-storage.py" \
+    ensure-store nix-native-work "$WORK_DIR/closure-gen2" /nix/store/example-source-2 \
+    --mode shared-closure \
+    --system "/nix/store/$SYSTEM_2" \
+    --root /nix/store/example-root \
+    --kernel kernel-b \
+    --pool-root "$POOL" \
+    > "$STALE_REPAIR_JSON"
+
+jq -e '
+  .mode == "shared-closure" and
+  .generation == 2 and
+  .engine_current_generation == 2 and
+  .volume_created == false and
+  .view_created == false and
+  .metadata_changed == true and
+  .qubesd_restarted == true and
+  .objects_admitted == 0 and
+  .objects_reused == 3
+' "$STALE_REPAIR_JSON" >/dev/null
+
+jq -e '
+  .domains."nix-native-work".volume_config.store.generation == "2" and
+  .domains."nix-native-work".volume_config.store.view_path == "'"$(jq -r '.view_image' "$OUTPUT_GEN2_JSON")"'" and
+  .domains."nix-native-work".volume_config."store-data".generation == "2" and
+  .domains."nix-native-work".volume_config."store-data".blob_map_path == "'"$(jq -r '.blob_map' "$OUTPUT_GEN2_JSON")"'"
+' "$STATE_JSON" >/dev/null
+
 PYTHONPATH="$ROOT/pkgs/nixome-qubes-storage/src" \
   python3 -m nixome_qubes_storage.cli status --pool-root "$POOL" > "$RESULT_DIR/engine-status-after-switch.json"
-jq -e '.domains."nix-native-work".current == 1' "$RESULT_DIR/engine-status-after-switch.json" >/dev/null
+jq -e '.domains."nix-native-work".current == 2 and (.domains."nix-native-work".generations | length) == 2' \
+  "$RESULT_DIR/engine-status-after-switch.json" >/dev/null
 
 cat > "$RESULT_DIR/expected-systemctl.log" <<'EOF'
+systemctl is-active --quiet qubesd.service
+systemctl stop qubesd.service
+systemctl start qubesd.service
 systemctl is-active --quiet qubesd.service
 systemctl stop qubesd.service
 systemctl start qubesd.service

@@ -66,15 +66,20 @@ def shared_volume_needs_mutation(vm, source, view_backend):
     existing_source = vm.features.get("nixome-store-source", None)
     existing_mode = vm.features.get("nixome-store-mode", None)
     existing_view_backend = vm.features.get("nixome-store-view-backend", None)
+    existing_generation = vm.features.get("nixome-store-generation", "")
+    existing_closure_hash = vm.features.get("nixome-store-closure-hash", "")
+    existing_view_image = vm.features.get("nixome-store-view-image", "")
+    existing_blob_map = vm.features.get("nixome-store-blob-map", "")
+
+    if existing_source != source or existing_mode != "shared-closure" or existing_view_backend != view_backend:
+        return True
+    if not existing_generation:
+        return True
     if "store" not in vm.volumes:
         return True
     store_volume = vm.volumes["store"]
-    if existing_view_backend != view_backend:
-        return True
     base_needs_mutation = (
-        existing_source != source
-        or existing_mode != "shared-closure"
-        or bool(store_volume.rw)
+        bool(store_volume.rw)
         or bool(store_volume.snap_on_start)
         or not bool(store_volume.save_on_stop)
         or getattr(store_volume, "source", None) is not None
@@ -82,13 +87,73 @@ def shared_volume_needs_mutation(vm, source, view_backend):
     if "store-data" not in vm.volumes:
         return True
     blob_volume = vm.volumes["store-data"]
+
+    store_config = vm.volume_config.get("store", {})
+    blob_config = vm.volume_config.get("store-data", {})
+    store_generation = getattr(store_volume, "generation", None) or store_config.get("generation", "")
+    blob_generation = getattr(blob_volume, "generation", None) or blob_config.get("generation", "")
+    store_hash = getattr(store_volume, "closure_hash", None) or store_config.get("closure_hash", "")
+    blob_hash = getattr(blob_volume, "closure_hash", None) or blob_config.get("closure_hash", "")
+    store_path = getattr(store_volume, "path", None) or store_config.get("view_path", "")
+    blob_map = getattr(blob_volume, "blob_map_path", None) or blob_config.get("blob_map_path", "")
+
+    def same_path(left, right):
+        if not left or not right:
+            return str(left or "") == str(right or "")
+        return os.path.abspath(str(left)) == os.path.abspath(str(right))
+
     return (
         base_needs_mutation
         or bool(blob_volume.rw)
         or bool(blob_volume.snap_on_start)
         or not bool(blob_volume.save_on_stop)
         or getattr(blob_volume, "source", None) is not None
+        or str(store_generation) != str(existing_generation)
+        or str(blob_generation) != str(existing_generation)
+        or (existing_closure_hash and store_hash != existing_closure_hash)
+        or (existing_closure_hash and blob_hash != existing_closure_hash)
+        or (existing_view_image and not same_path(store_path, existing_view_image))
+        or (existing_blob_map and not same_path(blob_map, existing_blob_map))
     )
+
+
+def feature_admission_for_current_store(args, vm):
+    generation = vm.features.get("nixome-store-generation", "")
+    if not generation:
+        return None
+
+    admission = load_generation_admission(args.pool_root, args.domain, generation)
+    expected_source = vm.features.get("nixome-store-source", "")
+    expected_hash = vm.features.get("nixome-store-closure-hash", "")
+    expected_view = vm.features.get("nixome-store-view-image", "")
+    expected_blob_map = vm.features.get("nixome-store-blob-map", "")
+
+    admission_sources = {
+        source
+        for source in [admission.get("source", ""), admission.get("approval_source", "")]
+        if source
+    }
+    if expected_source and expected_source not in admission_sources:
+        fail(
+            "Nix-native store feature/source mismatch for "
+            f"{args.domain}: generation {generation} has {sorted(admission_sources)} != {expected_source}"
+        )
+    if expected_hash and admission.get("closure_hash") != expected_hash:
+        fail(
+            "Nix-native store feature/hash mismatch for "
+            f"{args.domain}: generation {generation} has {admission.get('closure_hash')} != {expected_hash}"
+        )
+    if expected_view and os.path.abspath(admission.get("metadata_image") or admission["view_image"]) != os.path.abspath(expected_view):
+        fail(
+            "Nix-native store feature/view mismatch for "
+            f"{args.domain}: generation {generation} has {admission.get('metadata_image') or admission['view_image']} != {expected_view}"
+        )
+    if expected_blob_map and admission.get("blob_map") and os.path.abspath(admission["blob_map"]) != os.path.abspath(expected_blob_map):
+        fail(
+            "Nix-native store feature/blob-map mismatch for "
+            f"{args.domain}: generation {generation} has {admission['blob_map']} != {expected_blob_map}"
+        )
+    return admission
 
 
 def validate_vm(vm, domain):
@@ -262,6 +327,7 @@ def load_generation_admission(pool_root, domain, generation):
         "root_source": manifest.get("root", {}).get("source", ""),
         "kernel_name": manifest.get("kernel", {}).get("name", ""),
         "source": store.get("source", ""),
+        "approval_source": manifest.get("approval", {}).get("source", ""),
         "view_created": False,
         "view_image": view_image,
         "canonical_view_image": canonical_view_image,
@@ -409,18 +475,6 @@ async def ensure_shared_store_loaded(qubes, args, admission):
     if metadata_changed:
         app.save(lock=False)
 
-    switch_result = run_engine(
-        [
-            "switch",
-            "--pool-root",
-            args.pool_root,
-            "--domain",
-            args.domain,
-            "--generation",
-            str(admission["generation"]),
-        ]
-    )
-
     verify_app, verify_vm = load_domain(qubes, args.domain)
     validate_shared_store_volume(
         verify_vm,
@@ -442,6 +496,18 @@ async def ensure_shared_store_loaded(qubes, args, admission):
     )
     verify_app.close()
     app.close()
+
+    switch_result = run_engine(
+        [
+            "switch",
+            "--pool-root",
+            args.pool_root,
+            "--domain",
+            args.domain,
+            "--generation",
+            str(admission["generation"]),
+        ]
+    )
 
     return {
         "schema": "nixome.nix-domain-storage.v1",
@@ -512,6 +578,12 @@ async def ensure_shared_store(args):
 
     app, vm = load_domain(qubes, args.domain)
     needs_mutation = shared_volume_needs_mutation(vm, args.source, args.view_backend)
+    source_current = (
+        vm.features.get("nixome-store-source", None) == args.source
+        and vm.features.get("nixome-store-mode", None) == "shared-closure"
+        and vm.features.get("nixome-store-view-backend", None) == args.view_backend
+    )
+    current_admission = feature_admission_for_current_store(args, vm) if source_current else None
     vm_running = vm.is_running()
     generation = vm.features.get("nixome-store-generation", "")
     closure_hash = vm.features.get("nixome-store-closure-hash", "")
@@ -553,6 +625,9 @@ async def ensure_shared_store(args):
         fail(f"shared store source changed but domain is running: {args.domain}")
 
     def operation():
+        if current_admission is not None:
+            return ensure_shared_store_loaded(qubes, args, current_admission)
+
         admission = run_engine(
             [
                 "admit",
