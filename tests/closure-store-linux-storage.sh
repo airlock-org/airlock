@@ -118,7 +118,8 @@ run_engine_json admit-a admit \
   --system "/nix/store/$A_UNIQUE" \
   --closure-source "$WORK_DIR/closures/a" \
   --physical-store-root "$PHYSICAL_STORE" \
-  --verify-mode tree
+  --verify-mode tree \
+  --segment-target-bytes 16384
 
 run_engine_json admit-b admit \
   --pool-root "$POOL" \
@@ -126,7 +127,8 @@ run_engine_json admit-b admit \
   --system "/nix/store/$B_UNIQUE" \
   --closure-source "$WORK_DIR/closures/b" \
   --physical-store-root "$PHYSICAL_STORE" \
-  --verify-mode tree
+  --verify-mode tree \
+  --segment-target-bytes 16384
 
 run_engine_json mapper-before-create-failed attach-blob-view \
   --pool-root "$POOL" \
@@ -173,7 +175,7 @@ A_META="$(jq -r '.metadata_image' "$RESULT_DIR/admit-a.json")"
 B_META="$(jq -r '.metadata_image' "$RESULT_DIR/admit-b.json")"
 A_DEVICE="$(jq -r '.device' "$RESULT_DIR/attach-a.json")"
 B_DEVICE="$(jq -r '.device' "$RESULT_DIR/attach-b.json")"
-CENTRAL_BLOB="$(jq -r '.central_blob' "$RESULT_DIR/attach-a.json")"
+mapfile -t BACKING_PATHS < <(jq -r '.backing_paths[]' "$RESULT_DIR/attach-a.json" "$RESULT_DIR/attach-b.json" | sort -u)
 
 cat > "$WORK_DIR/cleanup.sh" <<EOF
 #!/usr/bin/env bash
@@ -185,13 +187,18 @@ chmod 0755 "$WORK_DIR/cleanup.sh"
 
 case "$A_DEVICE" in /dev/mapper/nixome-*) ;; *) printf 'unexpected A mapper: %s\n' "$A_DEVICE" >&2; exit 1 ;; esac
 case "$B_DEVICE" in /dev/mapper/nixome-*) ;; *) printf 'unexpected B mapper: %s\n' "$B_DEVICE" >&2; exit 1 ;; esac
-[ "$(readlink -f "$A_DEVICE")" != "$(readlink -f "$CENTRAL_BLOB")" ]
-[ "$(readlink -f "$B_DEVICE")" != "$(readlink -f "$CENTRAL_BLOB")" ]
+for backing in "${BACKING_PATHS[@]}"; do
+  [ "$(readlink -f "$A_DEVICE")" != "$(readlink -f "$backing")" ]
+  [ "$(readlink -f "$B_DEVICE")" != "$(readlink -f "$backing")" ]
+done
 
 A_MAP="$(jq -r '.blob_map' "$RESULT_DIR/attach-a.json")"
 B_MAP="$(jq -r '.blob_map' "$RESULT_DIR/attach-b.json")"
-COMMON_A_OFFSET="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .central_offset' "$A_MAP")"
-COMMON_B_OFFSET="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .central_offset' "$B_MAP")"
+COMMON_A_SEGMENT="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .segment_id' "$A_MAP")"
+COMMON_B_SEGMENT="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .segment_id' "$B_MAP")"
+COMMON_A_OFFSET="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .segment_offset' "$A_MAP")"
+COMMON_B_OFFSET="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .segment_offset' "$B_MAP")"
+[ "$COMMON_A_SEGMENT" = "$COMMON_B_SEGMENT" ]
 [ "$COMMON_A_OFFSET" = "$COMMON_B_OFFSET" ]
 jq -e --arg object "$B_UNIQUE" 'all(.objects[]; . != $object)' "$A_MAP" >/dev/null
 jq -e --arg object "$A_UNIQUE" 'all(.objects[]; . != $object)' "$B_MAP" >/dev/null
@@ -236,23 +243,23 @@ run_engine_json clear-running-a-store clear-running \
 jq -n \
   --arg schema "nixome.closure-store-linux-storage.v1" \
   --arg status passed \
-  --arg central_blob "$CENTRAL_BLOB" \
   --arg a_device "$A_DEVICE" \
   --arg b_device "$B_DEVICE" \
+  --arg common_segment "$COMMON_A_SEGMENT" \
   --argjson common_offset "$COMMON_A_OFFSET" \
   --arg common_object "$COMMON" \
   '{
     schema: $schema,
     status: $status,
-    central_blob: $central_blob,
     a_device: $a_device,
     b_device: $b_device,
-    global_blob_exposed: false,
+    backing_storage_exposed: false,
     read_only_mounts: true,
     closure_filtering: true,
     shared_object: {
       object: $common_object,
-      central_offset: $common_offset,
+      segment_id: $common_segment,
+      segment_offset: $common_offset,
       same_offset_in_both_views: true
     }
   }' > "$RESULT_DIR/result.json"

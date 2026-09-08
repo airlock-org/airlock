@@ -13,7 +13,7 @@ cleanup() {
 trap cleanup EXIT
 
 rm -rf "$RESULT_DIR"
-mkdir -p "$RESULT_DIR" "$WORK_DIR/pool/chunks"
+mkdir -p "$RESULT_DIR" "$WORK_DIR/pool/objects/segments"
 
 PYTHONPATH="$ROOT/pkgs/nixome-qubes-storage/src" \
 PYTHONDONTWRITEBYTECODE=1 \
@@ -98,15 +98,15 @@ from nixome_qubes_storage import engine
 from nixome_qubes_storage.qubes import ClosurePool
 
 pool_root = work_dir / "pool"
-central_blob = pool_root / "chunks" / "data.blob"
-central_blob.write_bytes(b"central")
+segment_blob = pool_root / "objects" / "segments" / "000001.blob"
+segment_blob.write_bytes(b"segment")
 blob_map = pool_root / "domains" / "config-vault" / "generations" / "1" / "store.blob-map.json"
 blob_map.parent.mkdir(parents=True, exist_ok=True)
 blob_map.write_text(
     json.dumps(
         {
             "schema": "nixome.closure-store.blob-map.v1",
-            "central_blob": str(central_blob),
+            "segments": [{"id": "000001", "blob": str(segment_blob), "size": segment_blob.stat().st_size}],
             "logical_size": 512,
             "extents": [],
         }
@@ -149,14 +149,14 @@ def filtered_attach(root_dir, domain, generation):
     calls.append({"root_dir": root_dir, "domain": domain, "generation": generation})
     return {
         "device": "/dev/mapper/nixome-config-vault-1-abc",
-        "central_blob": str(central_blob),
+        "backing_paths": [str(segment_blob)],
     }
 
 
 engine.attach_blob_view = filtered_attach
 device = volume.block_device()
 assert device.path == "/dev/mapper/nixome-config-vault-1-abc", device.path
-assert os.path.realpath(device.path) != os.path.realpath(central_blob)
+assert os.path.realpath(device.path) != os.path.realpath(segment_blob)
 assert calls == [{"root_dir": str(pool_root), "domain": "config-vault", "generation": "1"}], calls
 assert "view_path" not in volume.config, volume.config
 
@@ -171,8 +171,8 @@ assert calls == [
 
 def unsafe_attach(_root_dir, _domain, _generation):
     return {
-        "device": str(central_blob),
-        "central_blob": str(central_blob),
+        "device": str(segment_blob),
+        "backing_paths": [str(segment_blob)],
     }
 
 
@@ -181,9 +181,9 @@ volume.path = None
 try:
     volume.block_device()
 except StoragePoolException as exc:
-    assert "global Nixome backing blob" in str(exc), str(exc)
+    assert "global Nixome backing storage" in str(exc), str(exc)
 else:
-    raise AssertionError("global backing blob was exposed to the guest")
+    raise AssertionError("global backing storage was exposed to the guest")
 finally:
     engine.attach_blob_view = original_attach
 
@@ -193,8 +193,8 @@ result_path.write_text(
             "schema": "nixome.closure-volume-filtered-device.v1",
             "status": "passed",
             "guest_device": device.path,
-            "central_blob": str(central_blob),
-            "central_blob_exposed": False,
+            "backing_paths": [str(segment_blob)],
+            "backing_storage_exposed": False,
         },
         sort_keys=True,
     )
@@ -207,7 +207,7 @@ jq -e '
   .schema == "nixome.closure-volume-filtered-device.v1" and
   .status == "passed" and
   .guest_device == "/dev/mapper/nixome-config-vault-1-abc" and
-  .central_blob_exposed == false
+  .backing_storage_exposed == false
 ' "$RESULT_DIR/result.json" >/dev/null
 
 printf 'closure volume filtered device test ok\n'

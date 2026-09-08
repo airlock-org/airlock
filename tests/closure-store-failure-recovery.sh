@@ -136,9 +136,35 @@ run_engine_failpoint object-after-append object-after-append admit \
   --physical-store-root "$PHYSICAL_STORE" \
   --verify-mode tree
 [ ! -e "$APPEND_POOL/objects/blob-metadata/$ONE.json" ]
-[ -s "$APPEND_POOL/objects/data.blob" ]
+find "$APPEND_POOL/objects/segments" -name '*.blob' -size +0c -print -quit | grep -q .
 run_engine_json recover-append recover --pool-root "$APPEND_POOL"
 assert_no_committed_domain "$APPEND_POOL" append append-status
+
+SEGMENT_CREATE_POOL="$WORK_DIR/segment-create-pool"
+run_engine_failpoint segment-after-create segment-after-create admit \
+  --pool-root "$SEGMENT_CREATE_POOL" \
+  --domain segment-create \
+  --system "/nix/store/$ONE" \
+  --closure-source "$WORK_DIR/closures/one" \
+  --physical-store-root "$PHYSICAL_STORE" \
+  --verify-mode tree \
+  --segment-target-bytes 4096
+[ ! -e "$SEGMENT_CREATE_POOL/objects/blob-metadata/$ONE.json" ]
+run_engine_json recover-segment-create recover --pool-root "$SEGMENT_CREATE_POOL"
+assert_no_committed_domain "$SEGMENT_CREATE_POOL" segment-create segment-create-status
+
+SEGMENT_SEAL_POOL="$WORK_DIR/segment-seal-pool"
+run_engine_failpoint segment-before-seal segment-before-seal admit \
+  --pool-root "$SEGMENT_SEAL_POOL" \
+  --domain segment-seal \
+  --system "/nix/store/$ONE" \
+  --closure-source "$WORK_DIR/closures/one" \
+  --physical-store-root "$PHYSICAL_STORE" \
+  --verify-mode tree \
+  --segment-target-bytes 4096
+[ ! -e "$SEGMENT_SEAL_POOL/objects/blob-metadata/$ONE.json" ]
+run_engine_json recover-segment-seal recover --pool-root "$SEGMENT_SEAL_POOL"
+assert_no_committed_domain "$SEGMENT_SEAL_POOL" segment-seal segment-seal-status
 
 METADATA_POOL="$WORK_DIR/metadata-pool"
 run_engine_failpoint object-after-metadata object-after-metadata admit \

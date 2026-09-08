@@ -100,9 +100,20 @@ for each admitted Nix store object. Object data is stored as deterministic
 POSIX tar fragments in:
 
 ```text
-/var/lib/nixome/closure-store/objects/data.blob
+/var/lib/nixome/closure-store/objects/segments/000001.blob
+/var/lib/nixome/closure-store/objects/segments/000001.json
+/var/lib/nixome/closure-store/objects/segments/000002.blob
+/var/lib/nixome/closure-store/objects/segments/000002.json
 /var/lib/nixome/closure-store/objects/blob-metadata/<store-entry>.json
 ```
+
+Segments are append-only while open and immutable once sealed. The default
+target segment size is 2 GiB. A store object is never split across segments; if
+one object is larger than the target, it receives a dedicated oversized sealed
+segment. Object metadata records the stable store identity plus `segment_id`,
+`segment_offset`, `length`, and hash. Closure and generation identity remains
+based on store paths, so future compaction can move an object by atomically
+updating canonical object metadata and rebuilding affected views.
 
 Each exact closure gets:
 
@@ -114,16 +125,32 @@ Each exact closure gets:
 
 `store.erofs` is a small EROFS tar-index metadata image containing only the
 declared closure namespace. `store.blob-map.json` maps that closure's logical
-external-data stream to canonical object extents in `objects/data.blob`. If two
-closures include the same Nix store path, their blob maps point at the same
-canonical object offset and hash.
+external-data stream to canonical object extents in one or more sealed segment
+blobs. If two closures include the same Nix store path, their blob maps point at
+the same segment id, segment-local offset, length, and hash.
 
 At VM start, the Qubes `nixome-closure` storage pool asks the storage engine to
 create a read-only device-mapper view from the closure blob map. The guest
 receives only that filtered `/dev/mapper/nixome-*` block device as `store-data`;
-it never receives the global object blob or an unfiltered global store mount.
+it never receives segment files, the canonical object pool, or an unfiltered
+global store mount.
 Root inside the guest can read only the bytes referenced by the declared
 closure view.
+
+To reconstruct or back up the closure store, retain:
+
+```text
+/var/lib/nixome/closure-store/MANIFEST.json
+/var/lib/nixome/closure-store/objects/segments/
+/var/lib/nixome/closure-store/objects/blob-metadata/
+/var/lib/nixome/closure-store/objects/metadata/
+/var/lib/nixome/closure-store/views/by-closure/
+/var/lib/nixome/closure-store/domains/
+/var/lib/nixome/closure-store/running/
+```
+
+Sealed segment blobs are immutable and backup-friendly. Incremental backups only
+need new sealed segments plus updated metadata/manifests after new admissions.
 
 Each domain generation records an exact closure manifest under:
 
@@ -333,8 +360,9 @@ The default `shared-closure` path physically shares canonical Nix store object
 fragments across unrelated NixOS domains and generations, while preserving
 independent read-only closure views. Remaining storage work is narrower:
 
-- compacting `objects/data.blob` after GC; today stale object metadata is
-  removed, but the central object blob file is append-only.
+- compacting poorly utilized sealed segments after GC; today stale object
+  metadata is removed and fully dead sealed segments can be deleted, but mixed
+  live/dead segments are retained.
 - reducing object admission overhead if tar fragment creation becomes a
   bottleneck for large store paths.
 - running repeated warm and final cold Qubes/Xen lifecycle tests for the EROFS

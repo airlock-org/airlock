@@ -600,8 +600,8 @@ def load(path):
 
 left, left_extents = load(left_path)
 right, right_extents = load(right_path)
-if os.path.realpath(left["central_blob"]) != os.path.realpath(right["central_blob"]):
-    raise SystemExit("closure views do not use the same canonical object blob")
+if "central_blob" in left or "central_blob" in right:
+    raise SystemExit("closure views use obsolete single-blob metadata")
 
 common = sorted(set(left_extents) & set(right_extents))
 if not common:
@@ -612,7 +612,8 @@ for obj in common:
     a = left_extents[obj]
     b = right_extents[obj]
     if len(a) == len(b) and all(
-        int(x["central_offset"]) == int(y["central_offset"])
+        x.get("segment_id") == y.get("segment_id")
+        and int(x["segment_offset"]) == int(y["segment_offset"])
         and int(x["length"]) == int(y["length"])
         and x.get("object_sha256") == y.get("object_sha256")
         for x, y in zip(a, b)
@@ -635,8 +636,13 @@ payload = {
     "right_domain": right_vm,
     "left_blob_map": left_path,
     "right_blob_map": right_path,
-    "central_blob": left["central_blob"],
-    "central_blob_physical_size": os.path.getsize(left["central_blob"]),
+    "left_segments": left.get("segments", []),
+    "right_segments": right.get("segments", []),
+    "unique_segment_count": len({item["blob"] for item in left.get("segments", []) + right.get("segments", [])}),
+    "segment_physical_size_total": sum(
+        os.path.getsize(path)
+        for path in {item["blob"] for item in left.get("segments", []) + right.get("segments", [])}
+    ),
     "common_object_count": len(common),
     "left_unique_object_count": len(left_unique),
     "right_unique_object_count": len(right_unique),
@@ -646,7 +652,7 @@ payload = {
     "right_unique_object": right_unique[0],
     "left_logical_size": int(left["logical_size"]),
     "right_logical_size": int(right["logical_size"]),
-    "same_canonical_offset_and_hash": True,
+    "same_canonical_segment_offset_and_hash": True,
 }
 Path(output_path).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 PY
@@ -656,6 +662,10 @@ sharing_json_value() {
   file="$1"
   key="$2"
   jq -r "$key" "$file"
+}
+
+closure_segment_bytes_total() {
+  nixome-closure-store status | jq -r '.segment_bytes_total'
 }
 
 set_domain_generation_identity_from_switch() {
@@ -783,8 +793,8 @@ check_libvirt_filtered_devices() {
     fail "libvirt XML for $vm does not attach store data at xvdf"
   grep -F "/dev/mapper/nixome-" "$xml_tmp" >/dev/null ||
     fail "libvirt XML for $vm does not use a filtered /dev/mapper/nixome-* backing device"
-  if grep -F "/var/lib/nixome/closure-store/objects/data.blob" "$xml_tmp" >/dev/null; then
-    fail "libvirt XML for $vm exposes the global canonical object blob"
+  if grep -F "/var/lib/nixome/closure-store/objects/segments/" "$xml_tmp" >/dev/null; then
+    fail "libvirt XML for $vm exposes canonical segment backing storage"
   fi
   rm -f "$xml_tmp"
 }
@@ -1085,10 +1095,13 @@ check_store_view_contains_system() {
       /dev/mapper/nixome-*) ;;
       *) echo "unexpected filtered device: $filtered_device" >&2; exit 1 ;;
     esac
-    if [ "$(readlink -f "$filtered_device")" = "$(readlink -f "$(jq -r '.central_blob' "$attach_json")")" ]; then
-      echo "filtered device resolves to the global backing blob" >&2
-      exit 1
-    fi
+    while IFS= read -r backing_path; do
+      [ -n "$backing_path" ] || continue
+      if [ "$(readlink -f "$filtered_device")" = "$(readlink -f "$backing_path")" ]; then
+        echo "filtered device resolves to canonical segment backing storage" >&2
+        exit 1
+      fi
+    done < <(jq -r '.backing_paths[]?' "$attach_json")
     set +e
     fsck.erofs --device="$filtered_device" --extract="$extract_dir" "$store_view_image_physical"
     fsck_rc="$?"
@@ -1675,7 +1688,7 @@ run_visibility_probe "$PEER_DOMAIN" "$peer_unique_object" "$domain_unique_object
 run_persistence_probe
 
 initial_generation="$(store_generation_for "$DOMAIN")"
-pre_gen2_blob_size="$(stat -c %s "$(sharing_json_value "$SHARING_PROOF_LOG" '.central_blob')")"
+pre_gen2_segment_bytes="$(closure_segment_bytes_total)"
 shutdown_vm "$DOMAIN" "$LOG_DIR/nix-closure-domain-gen2-pre-shutdown.log"
 
 case "$APPLY_MODE" in
@@ -1735,8 +1748,8 @@ write_sharing_proof \
   "$new_store_blob_map_physical" \
   "$peer_store_blob_map_physical" \
   "$GEN2_SHARING_PROOF_LOG"
-post_gen2_blob_size="$(stat -c %s "$(sharing_json_value "$GEN2_SHARING_PROOF_LOG" '.central_blob')")"
-gen2_bytes_added="$((post_gen2_blob_size - pre_gen2_blob_size))"
+post_gen2_segment_bytes="$(closure_segment_bytes_total)"
+gen2_bytes_added="$((post_gen2_segment_bytes - pre_gen2_segment_bytes))"
 gen2_logical_size="$(sharing_json_value "$GEN2_SHARING_PROOF_LOG" '.left_logical_size')"
 [ "$gen2_bytes_added" -lt "$gen2_logical_size" ] ||
   fail "second generation rewrote too much canonical object data"
@@ -1744,14 +1757,14 @@ gen2_tmp="$GEN2_SHARING_PROOF_LOG.tmp"
 jq \
   --argjson initial_generation "$initial_generation" \
   --argjson new_generation "$new_generation" \
-  --argjson central_blob_size_before "$pre_gen2_blob_size" \
-  --argjson central_blob_size_after "$post_gen2_blob_size" \
+  --argjson segment_bytes_before "$pre_gen2_segment_bytes" \
+  --argjson segment_bytes_after "$post_gen2_segment_bytes" \
   --argjson physical_bytes_added "$gen2_bytes_added" \
   '. + {
     initial_generation: $initial_generation,
     new_generation: $new_generation,
-    central_blob_size_before: $central_blob_size_before,
-    central_blob_size_after: $central_blob_size_after,
+    segment_bytes_before: $segment_bytes_before,
+    segment_bytes_after: $segment_bytes_after,
     physical_bytes_added_for_new_generation: $physical_bytes_added,
     existing_object_reuse_verified: ($physical_bytes_added < .left_logical_size)
   }' \
