@@ -136,7 +136,7 @@ ssh_base "sudo -n mkdir -p $(shell_quote "$REMOTE_BIN_DIR") /run/systemd/system/
 ssh_base "sudo -n ln -sfn $(shell_quote "$setup_config_out/bin/nixome-setup-config") $(shell_quote "$REMOTE_BIN_DIR/nixome-setup-config")"
 ssh_base "sudo -n ln -sfn $(shell_quote "$nix_closure_out/bin/nixome-nix-closure-domain-smoke") $(shell_quote "$REMOTE_BIN_DIR/nixome-nix-closure-domain-smoke")"
 ssh_base "sudo -n ln -sfn $(shell_quote "$storage_out/bin/nixome-closure-store") $(shell_quote "$REMOTE_BIN_DIR/nixome-closure-store")"
-ssh_base "sudo -n ln -sfn $(shell_quote "$storage_out/bin/nixome-nix-domain-storage") $(shell_quote "$REMOTE_BIN_DIR/nixome-nix-domain-storage")"
+ssh_base "sudo -n ln -sfn $(shell_quote "$setup_config_out/bin/nixome-nix-domain-storage") $(shell_quote "$REMOTE_BIN_DIR/nixome-nix-domain-storage")"
 scp_base "$dropin" "$SSH_USER@127.0.0.1:/tmp/nixome-warm-tools-qubesd.conf"
 ssh_base "sudo -n unlink $(shell_quote "$REMOTE_OLD_DROPIN") 2>/dev/null || true; sudo -n mv /tmp/nixome-warm-tools-qubesd.conf $(shell_quote "$REMOTE_DROPIN") && sudo -n systemctl daemon-reload"
 
