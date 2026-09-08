@@ -77,6 +77,22 @@ Show the slowest tests from the latest run:
 column -t -s $'\t' "${NIXOME_LOG_DIR:-.nixome-logs}/test-runtimes-latest.tsv"
 ```
 
+## VM Test Layer
+
+Cold nested VM flows are available through pytest for runtime tracking, but are
+not included in the default local layer:
+
+```bash
+make test-vm
+make test-vm TESTS=vm-nix-closure-flow
+make test-vm TESTS="vm-config-flow vm-nix-closure-flow"
+```
+
+`make test-vm` sets `NIXOME_RUN_VM_TESTS=1` and runs the VM flows serially.
+Direct pytest runs without that flag collect the VM tests but skip them. Runtime
+reports use the same `test-runtimes-latest.*` and `test-runtimes-history.jsonl`
+files as the local layer.
+
 ## Build Layer
 
 ```bash
