@@ -34,6 +34,9 @@ def _load_nixome_env(repo_root: Path) -> None:
     if os.environ.get("NIXOME_PYTEST_ENV_LOADED") == "1":
         return
 
+    # Load the same guarded environment that Make/script entry points use.
+    # This should point Nix at the shared Nixome store, not the host /nix/store,
+    # unless the caller explicitly set NIXOME_USE_HOST_NIX_STORE=1.
     result = subprocess.run(
         [
             "bash",
@@ -117,6 +120,8 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         return
 
     if os.environ.get("NIXOME_PYTEST_WARM_STORE", "1") == "1":
+        # Warm common immutable inputs once in the shared Nixome store. Per-test
+        # mutable artifacts still live under each test's own NIXOME_LOG_DIR.
         _run_setup_command(
             log_dir,
             "warm-erofs-utils",

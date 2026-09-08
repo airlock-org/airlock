@@ -289,6 +289,8 @@ def test_local_check(
     ):
         pytest.skip("set NIXOME_RUN_QUBES_SMOKE=1 on a Xen dom0 target")
 
+    # Each test gets its own mutable artifact directory, while Nix itself keeps
+    # using the shared store configured by scripts/lib/nixome-env.sh.
     test_log_dir = nixome_log_dir / local_check.name
     test_log_dir.mkdir(parents=True, exist_ok=True)
     command = format_command(local_check.command, repo_root, test_log_dir)

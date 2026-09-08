@@ -21,6 +21,12 @@ Runs fast local checks:
 The local layer should pass on ordinary NixOS development hosts. It does not
 prove that Xen boots or that Qubes services run.
 
+By default, local tests and Nix builds use the shared Nixome store under
+`${NIXOME_DATA_ROOT:-/run/media/user/data/nixome}/nix-root`, not the host
+`/nix/store`. That shared store is expected and acts as the test/build cache.
+Only set `NIXOME_USE_HOST_NIX_STORE=1` when you intentionally want test Nix
+commands to use your host store.
+
 List the local tests without running them:
 
 ```bash

@@ -34,6 +34,10 @@ if [ -n "$NIXOME_DEFAULT_DATA_ROOT" ]; then
     "$TMPDIR" \
     "$XDG_CACHE_HOME"
 
+  # Default Nixome builds and tests must use the data-root-backed Nix store,
+  # not the host /nix/store. The shared Nixome store is intentional: it keeps
+  # repeated local tests from rebuilding the same closures. Use the host store
+  # only with the explicit NIXOME_USE_HOST_NIX_STORE=1 override.
   if [ "${NIXOME_USE_HOST_NIX_STORE:-0}" != "1" ] && [ "${NIXOME_NIX_CONFIGURED:-0}" != "1" ]; then
     if [ -n "${NIX_CONFIG:-}" ]; then
       export NIX_CONFIG="${NIX_CONFIG}"$'\n'"store = $NIXOME_NIX_STORE"
