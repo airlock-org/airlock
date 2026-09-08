@@ -5,6 +5,7 @@
   erofs-utils,
   gawk,
   gnugrep,
+  gnutar,
   gnused,
   jq,
   lib,
@@ -45,6 +46,7 @@ writeShellApplication {
     erofs-utils
     gawk
     gnugrep
+    gnutar
     gnused
     jq
     lvm2
