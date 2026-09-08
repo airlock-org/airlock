@@ -28,6 +28,7 @@ markers = [
     "nix: checks that evaluate or build Nix artifacts",
     "qubes: checks that require Qubes/Xen runtime support",
     "slow: checks that can take noticeably longer than ordinary unit tests",
+    "xdist_group: pytest-xdist worker group",
 ]
 
 [tool.black]

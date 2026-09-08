@@ -33,12 +33,13 @@ Run selected tests by exact name:
 make test TESTS="host-capabilities topology-schema"
 ```
 
-Run the local layer in parallel:
+`make test` runs parallel-safe local tests with 4 pytest-xdist workers by
+default. Tune or disable that worker count with:
 
 ```bash
-make test-parallel
 make test TEST_JOBS=4
 make test TEST_JOBS=auto
+make test-serial
 ```
 
 Pass normal pytest arguments through `PYTEST_ARGS`:

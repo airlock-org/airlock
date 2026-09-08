@@ -240,7 +240,7 @@ LOCAL_CHECKS = (
     LocalCheck(
         "qubes-smoke",
         ("{root}/tests/qubes-smoke.sh",),
-        (pytest.mark.qubes, pytest.mark.slow),
+        (pytest.mark.qubes, pytest.mark.slow, pytest.mark.xdist_group("qubes")),
     ),
 )
 
