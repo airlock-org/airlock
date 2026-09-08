@@ -112,7 +112,7 @@ cat > "$TOPOLOGY" <<EOF
           "mode": "shared-closure",
           "source": "$STORE_SOURCE",
           "source_ref": null,
-          "view_backend": "erofs-blobmap",
+          "view_backend": "erofs-objectmap",
           "blob_device": "/dev/xvdf",
           "chunk_size": 65536,
           "mountpoint": "/nix/store",
@@ -193,7 +193,7 @@ cat > "$BIN_DIR/nixome-nix-domain-storage" <<'EOF'
 #!/usr/bin/env bash
 printf 'nixome-nix-domain-storage %s\n' "$*" >> "$MUTATION_LOG"
 cat <<JSON
-{"schema":"nixome.nix-domain-storage.v1","domain":"$2","volume":"store","mode":"shared-closure","source":"$4","read_only":true,"volume_created":true,"volumes_created":["store","store-data"],"image_imported":false,"view_created":true,"metadata_changed":true,"qubesd_restart_required":false,"qubesd_restarted":true,"generation":1,"closure_hash":"fixture","filesystem":"erofs","view_backend":"erofs-blobmap","view_image":"/var/lib/nixome/closure-store/domains/$2/generations/1/store.erofs","metadata_image":"/var/lib/nixome/closure-store/domains/$2/generations/1/store.erofs","blob_map":"/var/lib/nixome/closure-store/domains/$2/generations/1/store.blob-map.json","blob_volume":"store-data","blob_device":"/dev/xvdf","blob_logical_size":65536}
+{"schema":"nixome.nix-domain-storage.v1","domain":"$2","volume":"store","mode":"shared-closure","source":"$4","read_only":true,"volume_created":true,"volumes_created":["store","store-data"],"image_imported":false,"view_created":true,"metadata_changed":true,"qubesd_restart_required":false,"qubesd_restarted":true,"generation":1,"closure_hash":"fixture","filesystem":"erofs","view_backend":"erofs-objectmap","view_image":"/var/lib/nixome/closure-store/domains/$2/generations/1/store.erofs","metadata_image":"/var/lib/nixome/closure-store/domains/$2/generations/1/store.erofs","blob_map":"/var/lib/nixome/closure-store/domains/$2/generations/1/store.blob-map.json","blob_volume":"store-data","blob_device":"/dev/xvdf","blob_logical_size":65536}
 JSON
 EOF
 
@@ -225,7 +225,7 @@ grep -F '+ qvm-create --class AppVM --label red --template fedora-44-xfce legacy
   "$PLAN_LOG_DIR/setup-config.commands.log" >/dev/null
 grep -F "+ qvm-volume import nix-native-work:root $ROOT_IMAGE" \
   "$PLAN_LOG_DIR/setup-config.commands.log" >/dev/null
-grep -F "+ nixome-nix-domain-storage ensure-store nix-native-work $STORE_SOURCE $STORE_SOURCE --mode shared-closure --system $SYSTEM_SOURCE --root $ROOT_SOURCE --kernel 6.12.64-1.fc41 --device /dev/xvde --blob-device /dev/xvdf --mountpoint /nix/store --view-backend erofs-blobmap --chunk-size 65536" \
+grep -F "+ nixome-nix-domain-storage ensure-store nix-native-work $STORE_SOURCE $STORE_SOURCE --mode shared-closure --system $SYSTEM_SOURCE --root $ROOT_SOURCE --kernel 6.12.64-1.fc41 --device /dev/xvde --blob-device /dev/xvdf --mountpoint /nix/store --view-backend erofs-objectmap --chunk-size 65536" \
   "$PLAN_LOG_DIR/setup-config.commands.log" >/dev/null
 [ "$(grep -c '^+ nixome-nix-domain-storage ensure-store ' "$PLAN_LOG_DIR/setup-config.commands.log")" = "1" ]
 
@@ -265,7 +265,7 @@ grep -Fx "qvm-features nix-native-work nixome-root-source $ROOT_SOURCE" "$MUTATI
 grep -Fx "qvm-features nix-native-work nixome-store-source $STORE_SOURCE" "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-features nix-native-work nixome-store-image $STORE_SOURCE" "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-features nix-native-work nixome-store-mode shared-closure" "$MUTATION_LOG" >/dev/null
-grep -Fx "qvm-features nix-native-work nixome-store-view-backend erofs-blobmap" "$MUTATION_LOG" >/dev/null
+grep -Fx "qvm-features nix-native-work nixome-store-view-backend erofs-objectmap" "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-features nix-native-work nixome-store-filesystem erofs" "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-features nix-native-work nixome-store-generation 1" "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-features nix-native-work nixome-store-closure-hash fixture" "$MUTATION_LOG" >/dev/null
@@ -274,7 +274,7 @@ grep -Fx "qvm-features nix-native-work nixome-store-blob-map /var/lib/nixome/clo
 grep -Fx "qvm-features nix-native-work nixome-store-blob-volume store-data" "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-features nix-native-work nixome-store-device /dev/xvde" "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-features nix-native-work nixome-store-blob-device /dev/xvdf" "$MUTATION_LOG" >/dev/null
-grep -Fx "nixome-nix-domain-storage ensure-store nix-native-work $STORE_SOURCE $STORE_SOURCE --mode shared-closure --system $SYSTEM_SOURCE --root $ROOT_SOURCE --kernel 6.12.64-1.fc41 --device /dev/xvde --blob-device /dev/xvdf --mountpoint /nix/store --view-backend erofs-blobmap --chunk-size 65536" "$MUTATION_LOG" >/dev/null
+grep -Fx "nixome-nix-domain-storage ensure-store nix-native-work $STORE_SOURCE $STORE_SOURCE --mode shared-closure --system $SYSTEM_SOURCE --root $ROOT_SOURCE --kernel 6.12.64-1.fc41 --device /dev/xvde --blob-device /dev/xvdf --mountpoint /nix/store --view-backend erofs-objectmap --chunk-size 65536" "$MUTATION_LOG" >/dev/null
 [ "$(grep -c '^nixome-nix-domain-storage ensure-store ' "$MUTATION_LOG")" = "1" ]
 
 printf 'setup-config nix-native materialization test ok\n'

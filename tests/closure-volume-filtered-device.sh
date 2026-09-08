@@ -181,9 +181,9 @@ volume.path = None
 try:
     volume.block_device()
 except StoragePoolException as exc:
-    assert "global Nixome chunk blob" in str(exc), str(exc)
+    assert "global Nixome backing blob" in str(exc), str(exc)
 else:
-    raise AssertionError("global chunk blob was exposed to the guest")
+    raise AssertionError("global backing blob was exposed to the guest")
 finally:
     engine.attach_blob_view = original_attach
 

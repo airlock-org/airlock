@@ -210,7 +210,7 @@ class ClosureVolume(qubes.storage.Volume):
             raise qubes.exc.StoragePoolException(f"nixome blob-map attach did not return a device for {self.vid}")
         central_blob = result.get("central_blob")
         if central_blob and os.path.realpath(device) == os.path.realpath(central_blob):
-            raise qubes.exc.StoragePoolException("refusing to expose the global Nixome chunk blob to a guest")
+            raise qubes.exc.StoragePoolException("refusing to expose the global Nixome backing blob to a guest")
         if not device.startswith("/dev/mapper/"):
             raise qubes.exc.StoragePoolException(f"nixome blob-map attach returned an unfiltered device: {device}")
         return device

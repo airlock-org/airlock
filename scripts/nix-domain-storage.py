@@ -22,6 +22,10 @@ def pool_name(pool):
     return getattr(pool, "name", str(pool))
 
 
+def uses_filtered_blob_backend(view_backend):
+    return view_backend in ("erofs-blobmap", "erofs-objectmap")
+
+
 def load_qubes():
     try:
         import qubes
@@ -104,7 +108,7 @@ def shared_volume_needs_mutation(vm, source, view_backend):
         or not bool(store_volume.save_on_stop)
         or getattr(store_volume, "source", None) is not None
     )
-    if view_backend != "erofs-blobmap":
+    if not uses_filtered_blob_backend(view_backend):
         return base_needs_mutation or "store-data" in vm.volumes
     if "store-data" not in vm.volumes:
         return True
@@ -176,7 +180,7 @@ def validate_shared_store_volume(vm, domain, expected):
             "shared store volume size mismatch for "
             f"{domain}: {store_volume.size} != {os.stat(expected['view_image']).st_size}"
         )
-    if expected.get("view_backend") == "erofs-blobmap":
+    if uses_filtered_blob_backend(expected.get("view_backend")):
         if "store-data" not in vm.volumes:
             fail(f"shared store blob volume was not persisted for domain: {domain}")
         blob_volume = vm.volumes["store-data"]
@@ -237,7 +241,7 @@ def validate_shared_store_frontends(vm, domain, store_device, store_blob_device,
     volume_names = list(vm.volumes.keys())
     frontends = qubes_boot_frontends(volume_names)
     expected = {"store": frontend_name(store_device)}
-    if view_backend == "erofs-blobmap":
+    if uses_filtered_blob_backend(view_backend):
         expected["store-data"] = frontend_name(store_blob_device)
 
     for volume_name, target in expected.items():
@@ -402,7 +406,7 @@ def shared_volume_configs(pool_name, domain, admission):
         "manifest_path": admission["manifest"],
     }
     configs = {"store": store}
-    if admission.get("view_backend") == "erofs-blobmap":
+    if uses_filtered_blob_backend(admission.get("view_backend")):
         configs["store-data"] = {
             "name": "store-data",
             "pool": pool_name,
@@ -737,8 +741,8 @@ def build_parser():
     ensure.add_argument("--additional-space-mib", type=int, default=256)
     ensure.add_argument(
         "--view-backend",
-        choices=["ext4-image", "erofs-blobmap"],
-        default=os.environ.get("NIXOME_CLOSURE_STORE_VIEW_BACKEND", "erofs-blobmap"),
+        choices=["ext4-image", "erofs-blobmap", "erofs-objectmap"],
+        default=os.environ.get("NIXOME_CLOSURE_STORE_VIEW_BACKEND", "erofs-objectmap"),
     )
     ensure.add_argument(
         "--chunk-size",

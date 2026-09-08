@@ -1055,7 +1055,7 @@ install_nix_domain_store() {
       restart_qubesd_after_storage_change
     fi
   else
-    if [ "$store_view_backend" = "erofs-blobmap" ]; then
+    if [ "$store_view_backend" = "erofs-blobmap" ] || [ "$store_view_backend" = "erofs-objectmap" ]; then
       store_volumes_changed=$((store_volumes_changed + 2))
       record_live_action domain-store-volume create "$domain" volume store
       record_live_action domain-store-volume create "$domain" volume store-data
@@ -1136,7 +1136,7 @@ setup_nix_closure_domain() {
   store_mountpoint="$(jq_get '.domains[$name].backend.store.mountpoint // "/nix/store"' --arg name "$domain")"
   store_device="$(jq_get '.domains[$name].backend.store.device // "/dev/xvde"' --arg name "$domain")"
   store_blob_device="$(jq_get '.domains[$name].backend.store.blob_device // .domains[$name].backend.store.blobDevice // "/dev/xvdf"' --arg name "$domain")"
-  store_view_backend="$(jq_get '.domains[$name].backend.store.view_backend // .domains[$name].backend.store.viewBackend // "erofs-blobmap"' --arg name "$domain")"
+  store_view_backend="$(jq_get '.domains[$name].backend.store.view_backend // .domains[$name].backend.store.viewBackend // "erofs-objectmap"' --arg name "$domain")"
   store_chunk_size="$(jq_get '.domains[$name].backend.store.chunk_size // .domains[$name].backend.store.chunkSize // 65536' --arg name "$domain")"
   store_filesystem="ext4"
   root_image=""
@@ -1155,12 +1155,12 @@ setup_nix_closure_domain() {
     fail "Nix-native domain store source is missing: $domain"
   [ "$store_mode" = "closure-image" ] || [ "$store_mode" = "shared-closure" ] ||
     fail "unsupported Nix-native domain store mode for $domain: $store_mode"
-  [ "$store_view_backend" = "ext4-image" ] || [ "$store_view_backend" = "erofs-blobmap" ] ||
+  [ "$store_view_backend" = "ext4-image" ] || [ "$store_view_backend" = "erofs-blobmap" ] || [ "$store_view_backend" = "erofs-objectmap" ] ||
     fail "unsupported Nix-native domain store view backend for $domain: $store_view_backend"
   if [ "$store_mode" = "closure-image" ] && [ "$store_view_backend" != "ext4-image" ]; then
     fail "closure-image store mode requires ext4-image view backend for $domain"
   fi
-  if [ "$store_view_backend" = "erofs-blobmap" ]; then
+  if [ "$store_view_backend" = "erofs-blobmap" ] || [ "$store_view_backend" = "erofs-objectmap" ]; then
     store_filesystem="erofs"
   fi
   [ "$store_mountpoint" = "/nix/store" ] ||

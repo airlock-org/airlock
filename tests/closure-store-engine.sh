@@ -171,12 +171,14 @@ jq -e '
   .store.blob_device == "/dev/xvdf" and
   .store.mountpoint == "/nix/store" and
   .store.filesystem == "erofs" and
-  .store.view_backend == "erofs-blobmap" and
+  .store.view_backend == "erofs-objectmap" and
   .store.image_contains_materialized_store_copy == false and
   .filesystem == "erofs" and
-  .view_backend == "erofs-blobmap" and
-  .chunks_total > 0 and
-  .chunks_admitted > 0
+  .view_backend == "erofs-objectmap" and
+  .chunks_total == 0 and
+  .chunks_admitted == 0 and
+  .object_data_bytes > 0 and
+  .object_extent_count == 4
 ' "$RESULT_DIR/work-gen1.json" >/dev/null
 
 WORK_GEN1_VIEW="$(jq -r '.store.view_dir' "$RESULT_DIR/work-gen1.json")"
@@ -188,11 +190,14 @@ WORK_GEN1_LOGICAL_BLOB_SIZE="$(jq -r '.blob_logical_size' "$RESULT_DIR/work-gen1
 [ -f "$WORK_GEN1_BLOB_MAP" ]
 [ ! -w "$WORK_GEN1_IMAGE" ]
 [ ! -e "$(dirname "$WORK_GEN1_IMAGE")/store.img" ]
-[ "$(jq -r '.central_blob' "$WORK_GEN1_BLOB_MAP")" = "$POOL/chunks/data.blob" ]
-
-pool_inode="$(stat -c '%d:%i' "$POOL/objects/store/$COMMON/bin/payload")"
-view_inode="$(stat -c '%d:%i' "$WORK_GEN1_VIEW/$COMMON/bin/payload")"
-[ "$pool_inode" = "$view_inode" ]
+[ "$(jq -r '.central_blob' "$WORK_GEN1_BLOB_MAP")" = "$POOL/objects/data.blob" ]
+[ ! -e "$POOL/objects/store/$COMMON" ]
+jq -e --arg object "$COMMON" '
+  .view_backend == "erofs-objectmap" and
+  .external_data_format == "posix-tar-index" and
+  (.objects | index($object)) != null and
+  any(.extents[]; .object == $object and .central_offset == 0 and .length > 0)
+' "$WORK_GEN1_BLOB_MAP" >/dev/null
 
 WORK_GEN1_LOGICAL_BLOB="$RESULT_DIR/work-gen1.blob"
 WORK_GEN1_EXTRACT="$RESULT_DIR/work-gen1-extract"
@@ -205,7 +210,7 @@ fsck.erofs --device="$WORK_GEN1_LOGICAL_BLOB" --extract="$WORK_GEN1_EXTRACT" "$W
 [ -f "$WORK_GEN1_EXTRACT/$WORK_UNIQUE_1/bin/payload" ]
 [ ! -e "$WORK_GEN1_EXTRACT/$DEV_UNIQUE_1" ]
 
-BLOB_AFTER_WORK_GEN1="$(stat -c %s "$POOL/chunks/data.blob")"
+OBJECT_BLOB_AFTER_WORK_GEN1="$(stat -c %s "$POOL/objects/data.blob")"
 
 run_engine_json dev-gen1 admit \
   --pool-root "$POOL" \
@@ -224,13 +229,12 @@ jq -e '
   .objects_total == 3 and
   .objects_admitted == 2 and
   .objects_reused == 1 and
-  .chunks_total > 0 and
-  .chunks_reused > 0
+  .chunks_total == 0 and
+  .chunks_reused == 0 and
+  .object_data_bytes > 0
 ' "$RESULT_DIR/dev-gen1.json" >/dev/null
 
 DEV_GEN1_VIEW="$(jq -r '.store.view_dir' "$RESULT_DIR/dev-gen1.json")"
-[ -e "$DEV_GEN1_VIEW/$COMMON/bin/payload" ]
-[ ! -e "$DEV_GEN1_VIEW/$WORK_UNIQUE_1" ]
 DEV_GEN1_IMAGE="$(jq -r '.canonical_metadata_image' "$RESULT_DIR/dev-gen1.json")"
 DEV_GEN1_BLOB_MAP="$(jq -r '.canonical_blob_map' "$RESULT_DIR/dev-gen1.json")"
 DEV_GEN1_LOGICAL_BLOB="$RESULT_DIR/dev-gen1.blob"
@@ -243,10 +247,18 @@ fsck.erofs --device="$DEV_GEN1_LOGICAL_BLOB" --extract="$DEV_GEN1_EXTRACT" "$DEV
 [ -f "$DEV_GEN1_EXTRACT/$DEV_SYSTEM_1/bin/payload" ]
 [ -f "$DEV_GEN1_EXTRACT/$DEV_UNIQUE_1/bin/payload" ]
 [ ! -e "$DEV_GEN1_EXTRACT/$WORK_UNIQUE_1" ]
-BLOB_AFTER_DEV_GEN1="$(stat -c %s "$POOL/chunks/data.blob")"
+OBJECT_BLOB_AFTER_DEV_GEN1="$(stat -c %s "$POOL/objects/data.blob")"
 DEV_LOGICAL_BLOB_SIZE="$(jq -r '.blob_logical_size' "$RESULT_DIR/dev-gen1.json")"
-DEV_PHYSICAL_BYTES_ADDED="$((BLOB_AFTER_DEV_GEN1 - BLOB_AFTER_WORK_GEN1))"
+DEV_PHYSICAL_BYTES_ADDED="$((OBJECT_BLOB_AFTER_DEV_GEN1 - OBJECT_BLOB_AFTER_WORK_GEN1))"
 [ "$DEV_PHYSICAL_BYTES_ADDED" -lt "$DEV_LOGICAL_BLOB_SIZE" ]
+COMMON_WORK_OFFSET="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .central_offset' "$WORK_GEN1_BLOB_MAP")"
+COMMON_DEV_OFFSET="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .central_offset' "$DEV_GEN1_BLOB_MAP")"
+COMMON_WORK_SHA="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .object_sha256' "$WORK_GEN1_BLOB_MAP")"
+COMMON_DEV_SHA="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .object_sha256' "$DEV_GEN1_BLOB_MAP")"
+[ "$COMMON_WORK_OFFSET" = "$COMMON_DEV_OFFSET" ]
+[ "$COMMON_WORK_SHA" = "$COMMON_DEV_SHA" ]
+jq -e --arg object "$WORK_UNIQUE_1" 'all(.extents[]; .object != $object)' "$DEV_GEN1_BLOB_MAP" >/dev/null
+jq -e --arg object "$DEV_UNIQUE_1" 'all(.extents[]; .object != $object)' "$WORK_GEN1_BLOB_MAP" >/dev/null
 
 run_engine_json symlink-gen admit \
   --pool-root "$POOL" \
@@ -265,10 +277,17 @@ jq -e '
   .objects_total == 2 and
   .objects_admitted == 2
 ' "$RESULT_DIR/symlink-gen.json" >/dev/null
-[ -L "$POOL/objects/store/$SYMLINK_SYSTEM" ]
-[ "$(readlink "$POOL/objects/store/$SYMLINK_SYSTEM")" = "$SYMLINK_TARGET" ]
-[ -L "$(jq -r '.store.view_dir' "$RESULT_DIR/symlink-gen.json")/$SYMLINK_SYSTEM" ]
-BLOB_AFTER_SYMLINK_GEN="$(stat -c %s "$POOL/chunks/data.blob")"
+SYMLINK_GEN_IMAGE="$(jq -r '.canonical_metadata_image' "$RESULT_DIR/symlink-gen.json")"
+SYMLINK_GEN_BLOB_MAP="$(jq -r '.canonical_blob_map' "$RESULT_DIR/symlink-gen.json")"
+SYMLINK_GEN_LOGICAL_BLOB="$RESULT_DIR/symlink-gen.blob"
+SYMLINK_GEN_EXTRACT="$RESULT_DIR/symlink-gen-extract"
+mkdir -p "$SYMLINK_GEN_EXTRACT"
+reconstruct_blob_view "$SYMLINK_GEN_BLOB_MAP" "$SYMLINK_GEN_LOGICAL_BLOB"
+fsck.erofs --device="$SYMLINK_GEN_LOGICAL_BLOB" --extract="$SYMLINK_GEN_EXTRACT" "$SYMLINK_GEN_IMAGE" \
+  > "$RESULT_DIR/symlink-gen-fsck.log"
+[ -L "$SYMLINK_GEN_EXTRACT/$SYMLINK_SYSTEM" ]
+[ "$(readlink "$SYMLINK_GEN_EXTRACT/$SYMLINK_SYSTEM")" = "$SYMLINK_TARGET" ]
+OBJECT_BLOB_AFTER_SYMLINK_GEN="$(stat -c %s "$POOL/objects/data.blob")"
 
 run_engine_json work-gen2 admit \
   --pool-root "$POOL" \
@@ -282,9 +301,9 @@ run_engine_json work-gen2 admit \
   --additional-space-mib 1 \
   --retain false
 
-BLOB_AFTER_WORK_GEN2="$(stat -c %s "$POOL/chunks/data.blob")"
+OBJECT_BLOB_AFTER_WORK_GEN2="$(stat -c %s "$POOL/objects/data.blob")"
 WORK_GEN2_LOGICAL_BLOB_SIZE="$(jq -r '.blob_logical_size' "$RESULT_DIR/work-gen2.json")"
-WORK_GEN2_PHYSICAL_BYTES_ADDED="$((BLOB_AFTER_WORK_GEN2 - BLOB_AFTER_SYMLINK_GEN))"
+WORK_GEN2_PHYSICAL_BYTES_ADDED="$((OBJECT_BLOB_AFTER_WORK_GEN2 - OBJECT_BLOB_AFTER_SYMLINK_GEN))"
 
 jq -e '
   .domain == "work" and
@@ -294,9 +313,13 @@ jq -e '
   .objects_total == 3 and
   .objects_admitted == 2 and
   .objects_reused == 1 and
-  .chunks_reused > 0
+  .chunks_reused == 0 and
+  .object_data_bytes > 0
 ' "$RESULT_DIR/work-gen2.json" >/dev/null
 [ "$WORK_GEN2_PHYSICAL_BYTES_ADDED" -lt "$WORK_GEN2_LOGICAL_BLOB_SIZE" ]
+WORK_GEN2_BLOB_MAP="$(jq -r '.canonical_blob_map' "$RESULT_DIR/work-gen2.json")"
+COMMON_WORK_GEN2_OFFSET="$(jq -r --arg object "$COMMON" '.extents[] | select(.object == $object) | .central_offset' "$WORK_GEN2_BLOB_MAP")"
+[ "$COMMON_WORK_OFFSET" = "$COMMON_WORK_GEN2_OFFSET" ]
 
 run_engine_json rollback-work rollback \
   --pool-root "$POOL" \
@@ -316,12 +339,12 @@ run_engine_json gc gc \
 
 jq -e '
   any(.removed_generations[]; .domain == "work" and .generation == 2) and
-  (.removed_objects | index("'"$WORK_UNIQUE_2"'")) != null and
-  (.removed_objects | index("'"$COMMON"'")) == null and
-  (.removed_objects | index("'"$WORK_UNIQUE_1"'")) == null and
-  (.removed_objects | index("'"$DEV_UNIQUE_1"'")) == null and
+  (.removed_object_blobs | index("'"$WORK_UNIQUE_2"'")) != null and
+  (.removed_object_blobs | index("'"$COMMON"'")) == null and
+  (.removed_object_blobs | index("'"$WORK_UNIQUE_1"'")) == null and
+  (.removed_object_blobs | index("'"$DEV_UNIQUE_1"'")) == null and
   (.removed_views | length) >= 1 and
-  .chunk_blob_append_only == true
+  .object_blob_append_only == true
 ' "$RESULT_DIR/gc.json" >/dev/null
 
 ALT_STORE="$WORK_DIR/alternate-store"
@@ -366,44 +389,52 @@ jq -e '
   .domains.dev.current == 1 and
   .domains."symlink-domain".current == 1 and
   .object_count == 7 and
-  .chunk_count > 0 and
-  .chunk_blob_size > 0
+  .object_blob_count == 7 and
+  .chunk_count == 0 and
+  .object_blob_size > 0
 ' "$RESULT_DIR/status.json" >/dev/null
 
 jq -n \
   --arg schema "nixome.closure-store.physical-sharing.v1" \
   --arg status "passed" \
-  --arg central_blob "$POOL/chunks/data.blob" \
+  --arg central_blob "$POOL/objects/data.blob" \
+  --arg common_object "$COMMON" \
+  --argjson common_offset "$COMMON_WORK_OFFSET" \
+  --arg common_sha "$COMMON_WORK_SHA" \
+  --argjson object_blob_size "$(stat -c %s "$POOL/objects/data.blob")" \
   --argjson work_gen1_logical_blob_size "$WORK_GEN1_LOGICAL_BLOB_SIZE" \
-  --argjson work_gen1_chunks_admitted "$(jq -r '.chunks_admitted' "$RESULT_DIR/work-gen1.json")" \
+  --argjson work_gen1_object_data_bytes "$(jq -r '.object_data_bytes' "$RESULT_DIR/work-gen1.json")" \
   --argjson dev_gen1_logical_blob_size "$DEV_LOGICAL_BLOB_SIZE" \
   --argjson dev_gen1_physical_bytes_added "$DEV_PHYSICAL_BYTES_ADDED" \
-  --argjson dev_gen1_chunks_admitted "$(jq -r '.chunks_admitted' "$RESULT_DIR/dev-gen1.json")" \
-  --argjson dev_gen1_chunks_reused "$(jq -r '.chunks_reused' "$RESULT_DIR/dev-gen1.json")" \
+  --argjson dev_gen1_object_data_bytes "$(jq -r '.object_data_bytes' "$RESULT_DIR/dev-gen1.json")" \
   --argjson work_gen2_logical_blob_size "$WORK_GEN2_LOGICAL_BLOB_SIZE" \
   --argjson work_gen2_physical_bytes_added "$WORK_GEN2_PHYSICAL_BYTES_ADDED" \
-  --argjson work_gen2_chunks_admitted "$(jq -r '.chunks_admitted' "$RESULT_DIR/work-gen2.json")" \
-  --argjson work_gen2_chunks_reused "$(jq -r '.chunks_reused' "$RESULT_DIR/work-gen2.json")" \
+  --argjson work_gen2_object_data_bytes "$(jq -r '.object_data_bytes' "$RESULT_DIR/work-gen2.json")" \
   '{
     schema: $schema,
     status: $status,
     central_blob: $central_blob,
+    object_blob_size: $object_blob_size,
+    shared_object: {
+      object: $common_object,
+      central_offset: $common_offset,
+      sha256: $common_sha,
+      same_extent_in_work_dev_and_work_gen2: true
+    },
     work_gen1: {
       logical_blob_size: $work_gen1_logical_blob_size,
-      chunks_admitted: $work_gen1_chunks_admitted
+      object_data_bytes: $work_gen1_object_data_bytes
     },
     dev_gen1: {
       logical_blob_size: $dev_gen1_logical_blob_size,
       physical_bytes_added: $dev_gen1_physical_bytes_added,
-      chunks_admitted: $dev_gen1_chunks_admitted,
-      chunks_reused: $dev_gen1_chunks_reused,
+      object_data_bytes: $dev_gen1_object_data_bytes,
       sharing_verified: ($dev_gen1_physical_bytes_added < $dev_gen1_logical_blob_size)
     },
     work_gen2: {
       logical_blob_size: $work_gen2_logical_blob_size,
       physical_bytes_added: $work_gen2_physical_bytes_added,
-      chunks_admitted: $work_gen2_chunks_admitted,
-      chunks_reused: $work_gen2_chunks_reused,
+      object_data_bytes: $work_gen2_object_data_bytes,
       sharing_verified: ($work_gen2_physical_bytes_added < $work_gen2_logical_blob_size)
     }
   }' > "$RESULT_DIR/physical-sharing.json"

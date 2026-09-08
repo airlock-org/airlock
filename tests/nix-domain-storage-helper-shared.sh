@@ -318,12 +318,12 @@ jq -e '
   .qubesd_restarted == true and
   .generation == 1 and
   .filesystem == "erofs" and
-  .view_backend == "erofs-blobmap" and
+  .view_backend == "erofs-objectmap" and
   .objects_total == 3 and
   .objects_admitted == 3 and
   .objects_reused == 0 and
-  .chunks_total > 0 and
-  .chunks_admitted > 0
+  .chunks_total == 0 and
+  .chunks_admitted == 0
 ' "$OUTPUT_JSON" >/dev/null
 
 VIEW_IMAGE="$(jq -r '.metadata_image' "$OUTPUT_JSON")"
@@ -396,7 +396,7 @@ jq -e '
   .view_created == false and
   .metadata_changed == false and
   .qubesd_restarted == false and
-  .view_backend == "erofs-blobmap" and
+  .view_backend == "erofs-objectmap" and
   .generation == "1"
 ' "$OUTPUT_2_JSON" >/dev/null
 

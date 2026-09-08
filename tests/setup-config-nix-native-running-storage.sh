@@ -107,7 +107,7 @@ cat > "$TOPOLOGY" <<EOF
           "mode": "shared-closure",
           "source": "$NEW_STORE_SOURCE",
           "source_ref": null,
-          "view_backend": "erofs-blobmap",
+          "view_backend": "erofs-objectmap",
           "mountpoint": "/nix/store",
           "blob_device": "/dev/xvdf",
           "chunk_size": 65536,
@@ -171,7 +171,7 @@ if [ "\$#" -eq 2 ]; then
     config-staging:nixome-store-source) printf '$OLD_STORE_SOURCE\\n' ;;
     config-staging:nixome-store-image) printf '$OLD_STORE_SOURCE\\n' ;;
     config-staging:nixome-store-mode) printf 'shared-closure\\n' ;;
-    config-staging:nixome-store-view-backend) printf 'erofs-blobmap\\n' ;;
+    config-staging:nixome-store-view-backend) printf 'erofs-objectmap\\n' ;;
     config-staging:nixome-store-generation) printf '1\\n' ;;
     config-staging:nixome-store-closure-hash) printf 'old-closure\\n' ;;
     config-staging:nixome-store-view-image) printf '/var/lib/nixome/closure-store/domains/config-staging/generations/1/store.erofs\\n' ;;

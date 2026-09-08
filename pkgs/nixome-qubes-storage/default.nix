@@ -2,6 +2,7 @@
   buildPythonPackage,
   e2fsprogs,
   erofs-utils,
+  gnutar,
   lib,
   lvm2,
   makeWrapper,
@@ -26,6 +27,7 @@ buildPythonPackage {
       --prefix PATH : ${lib.makeBinPath [
         e2fsprogs
         erofs-utils
+        gnutar
         lvm2
         util-linux
       ]}

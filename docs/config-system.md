@@ -95,10 +95,13 @@ is attached at `/dev/xvde`. The filtered blob-data volume is attached at
 NixOS init runs. The topology schema currently constrains those devices because
 that is the validated Qubes/libvirt ordering for this path.
 
-The current shared-closure backend keeps immutable store objects once in:
+The default shared-closure backend keeps one canonical physical representation
+for each admitted Nix store object. Object data is stored as deterministic
+POSIX tar fragments in:
 
 ```text
-/var/lib/nixome/closure-store/objects/store
+/var/lib/nixome/closure-store/objects/data.blob
+/var/lib/nixome/closure-store/objects/blob-metadata/<store-entry>.json
 ```
 
 The default runtime view no longer creates a full per-closure ext4 `store.img`.
@@ -107,22 +110,19 @@ Instead, each exact closure gets:
 ```text
 /var/lib/nixome/closure-store/views/by-closure/<closure>/store.erofs
 /var/lib/nixome/closure-store/views/by-closure/<closure>/store.blob-map.json
-/var/lib/nixome/closure-store/views/by-closure/<closure>/chunk-refs
+/var/lib/nixome/closure-store/views/by-closure/<closure>/object-refs
 ```
 
-`store.erofs` is a small EROFS metadata image containing only the declared
-closure namespace. `store.blob-map.json` maps that closure's logical blob
-offsets to immutable chunks in:
-
-```text
-/var/lib/nixome/closure-store/chunks/data.blob
-/var/lib/nixome/closure-store/chunks/metadata/<sha256>.json
-```
+`store.erofs` is a small EROFS tar-index metadata image containing only the
+declared closure namespace. `store.blob-map.json` maps that closure's logical
+external-data stream to canonical object extents in `objects/data.blob`. If two
+closures include the same Nix store path, their blob maps point at the same
+canonical object offset and hash.
 
 At VM start, the Qubes `nixome-closure` storage pool asks the storage engine to
 create a read-only device-mapper view from the closure blob map. The guest
 receives only that filtered `/dev/mapper/nixome-*` block device as `store-data`;
-it never receives the global chunk blob or an unfiltered global store mount.
+it never receives the global object blob or an unfiltered global store mount.
 Root inside the guest can read only the bytes referenced by the declared
 closure view.
 
@@ -330,15 +330,13 @@ normally no-ops. There is no timer.
 
 ## Remaining Architecture Work
 
-The default `shared-closure` path physically shares identical EROFS blob chunks
-across unrelated NixOS domains and generations, while preserving independent
-read-only closure views. Remaining storage work is narrower:
+The default `shared-closure` path physically shares canonical Nix store object
+fragments across unrelated NixOS domains and generations, while preserving
+independent read-only closure views. Remaining storage work is narrower:
 
-- compacting `chunks/data.blob` after GC; today stale chunk metadata is removed,
-  but the central blob file is append-only.
-- replacing the temporary EROFS blob produced during admission with a direct
-  chunk/index writer if this becomes a bottleneck.
+- compacting `objects/data.blob` after GC; today stale object metadata is
+  removed, but the central object blob file is append-only.
+- reducing object admission overhead if tar fragment creation becomes a
+  bottleneck for large store paths.
 - running repeated warm and final cold Qubes/Xen lifecycle tests for the EROFS
-  external-blob mount path.
-- eventually moving from chunk-level sharing to a stronger object/extent backend
-  if measurements show chunk packing is not good enough.
+  external-data mount path.

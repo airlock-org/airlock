@@ -171,8 +171,9 @@ let
         type = lib.types.enum [
           "ext4-image"
           "erofs-blobmap"
+          "erofs-objectmap"
         ];
-        default = "erofs-blobmap";
+        default = "erofs-objectmap";
         description = "Runtime representation for shared-closure store views.";
       };
 

@@ -421,9 +421,9 @@ check_source_paths() {
       [ -f "$store_source_physical/manifest.json" ] ||
         fail "store closure source is missing manifest.json: $store_source/manifest.json"
       [ -f "$store_image_physical" ] || fail "store view image path is missing: $store_image"
-      if [ "$store_view_backend" = "erofs-blobmap" ]; then
+      if [ "$store_view_backend" = "erofs-blobmap" ] || [ "$store_view_backend" = "erofs-objectmap" ]; then
         [ "$store_filesystem" = "erofs" ] ||
-          fail "shared closure erofs-blobmap did not report erofs filesystem"
+          fail "shared closure EROFS filtered-blob backend did not report erofs filesystem"
         [ -n "$store_blob_device" ] || fail "missing nixome-store-blob-device feature"
         [ -n "$store_blob_map" ] || fail "missing nixome-store-blob-map feature"
         [ -f "$store_blob_map_physical" ] || fail "store blob map path is missing: $store_blob_map"
@@ -492,7 +492,7 @@ check_store_image_contains_system() {
     elif [ -f "$(dirname "$store_source_physical")/store-paths" ]; then
       grep -Fx "$system_source" "$(dirname "$store_source_physical")/store-paths"
     fi
-    if [ "$store_view_backend" = "erofs-blobmap" ]; then
+    if [ "$store_view_backend" = "erofs-blobmap" ] || [ "$store_view_backend" = "erofs-objectmap" ]; then
       logical_blob="$LOG_DIR/nix-closure-domain-store.blob"
       extract_dir="$LOG_DIR/nix-closure-domain-store-extract"
       chmod -R u+w "$extract_dir" 2>/dev/null || true

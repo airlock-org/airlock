@@ -517,7 +517,8 @@ let
         viewBackend = expectEnum "${path}.viewBackend" [
           "ext4-image"
           "erofs-blobmap"
-        ] (get store "viewBackend" (get store "view_backend" "erofs-blobmap"));
+          "erofs-objectmap"
+        ] (get store "viewBackend" (get store "view_backend" "erofs-objectmap"));
         chunkSize = expectInt "${path}.chunkSize" (get store "chunkSize" (get store "chunk_size" 65536));
         hasCamelReadOnly = hasAttr "readOnly" store;
         hasSnakeReadOnly = hasAttr "read_only" store;
@@ -540,9 +541,15 @@ let
         fail "${path}.mountpoint" "currently must be /nix/store"
       else if device != "/dev/xvde" then
         fail "${path}.device" "currently must be /dev/xvde"
-      else if viewBackend == "erofs-blobmap" && blobDevice != "/dev/xvdf" then
-        fail "${path}.blobDevice" "currently must be /dev/xvdf for erofs-blobmap stores"
-      else if viewBackend == "erofs-blobmap" && chunkSize <= 0 then
+      else if builtins.elem viewBackend [
+        "erofs-blobmap"
+        "erofs-objectmap"
+      ] && blobDevice != "/dev/xvdf" then
+        fail "${path}.blobDevice" "currently must be /dev/xvdf for EROFS filtered-blob stores"
+      else if builtins.elem viewBackend [
+        "erofs-blobmap"
+        "erofs-objectmap"
+      ] && chunkSize <= 0 then
         fail "${path}.chunkSize" "must be positive"
       else if mode == "closure-image" && viewBackend != "ext4-image" then
         fail "${path}.viewBackend" "closure-image stores must use ext4-image"

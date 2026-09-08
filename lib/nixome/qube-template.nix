@@ -726,7 +726,7 @@ let
       configurationName ? "nixome-domain-${builtins.replaceStrings [ "." ] [ "-" ] name}",
       rootImageName ? "${configurationName}-root-image",
       storeMode ? "shared-closure",
-      storeViewBackend ? if storeMode == "closure-image" then "ext4-image" else "erofs-blobmap",
+      storeViewBackend ? if storeMode == "closure-image" then "ext4-image" else "erofs-objectmap",
       storeChunkSize ? 65536,
       storeArtifactName ? "${configurationName}-${
         if storeMode == "closure-image" then "store-image" else "store-closure"
@@ -792,18 +792,33 @@ let
           builtins.elem storeViewBackend [
             "ext4-image"
             "erofs-blobmap"
+            "erofs-objectmap"
           ]
         then
           null
         else
-          throw "mkNixNativeDomain.storeViewBackend must be ext4-image or erofs-blobmap";
+          throw "mkNixNativeDomain.storeViewBackend must be ext4-image, erofs-blobmap, or erofs-objectmap";
       _storeModeBackendCheck =
         if storeMode == "closure-image" && storeViewBackend != "ext4-image" then
           throw "mkNixNativeDomain closure-image storeMode must use ext4-image storeViewBackend"
         else
           null;
-      storeFormat = if storeViewBackend == "erofs-blobmap" then "erofs" else "ext4";
-      storeBlobDeviceOpt = if storeViewBackend == "erofs-blobmap" then storeBlobDevice else null;
+      storeFormat =
+        if builtins.elem storeViewBackend [
+          "erofs-blobmap"
+          "erofs-objectmap"
+        ] then
+          "erofs"
+        else
+          "ext4";
+      storeBlobDeviceOpt =
+        if builtins.elem storeViewBackend [
+          "erofs-blobmap"
+          "erofs-objectmap"
+        ] then
+          storeBlobDevice
+        else
+          null;
       rootImage = mkNixClosureRootImage {
         imageName = rootImageName;
         rootImageSizeMiB = rootImageSizeMiBEffective;
