@@ -11,9 +11,22 @@ package = false
 [dependency-groups]
 dev = [
     "black>=25.1.0",
+    "pytest>=8.3.0",
+    "pytest-json-report>=1.5.0",
+    "pytest-timeout>=2.3.0",
     "radon>=6.0.1",
     "ruff>=0.13.0",
     "xenon>=0.9.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 1800
+markers = [
+    "local: local checks that should pass on ordinary NixOS development hosts",
+    "nix: checks that evaluate or build Nix artifacts",
+    "qubes: checks that require Qubes/Xen runtime support",
+    "slow: checks that can take noticeably longer than ordinary unit tests",
 ]
 
 [tool.black]

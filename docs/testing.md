@@ -21,6 +21,37 @@ Runs fast local checks:
 The local layer should pass on ordinary NixOS development hosts. It does not
 prove that Xen boots or that Qubes services run.
 
+List the local tests without running them:
+
+```bash
+make test-list
+```
+
+Run selected tests by exact name:
+
+```bash
+make test TESTS="host-capabilities topology-schema"
+```
+
+Pass normal pytest arguments through `PYTEST_ARGS`:
+
+```bash
+make test PYTEST_ARGS="-m nix"
+make test PYTEST_ARGS="-k topology"
+```
+
+The runner prints the slowest tests with `--durations=20` and writes pytest
+reports under the log directory:
+
+- `pytest-report.json`
+- `pytest-junit.xml`
+
+Show the slowest tests from the latest run:
+
+```bash
+jq -r '.tests[] | "\((.setup.duration + .call.duration + .teardown.duration))s\t\(.outcome)\t\(.nodeid)"' "${NIXOME_LOG_DIR:-.nixome-logs}/pytest-report.json" | sort -nr
+```
+
 ## Build Layer
 
 ```bash
