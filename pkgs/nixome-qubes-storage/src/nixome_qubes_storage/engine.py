@@ -607,6 +607,10 @@ def verify_blob_chunk(blob_path, offset, size, digest):
         fail(f"central chunk blob hash mismatch at offset {offset}")
 
 
+def closure_store_fsync_enabled():
+    return parse_bool(os.environ.get("NIXOME_CLOSURE_STORE_FSYNC", "1"))
+
+
 def merge_blob_extents(extents):
     merged = []
     for extent in extents:
@@ -696,7 +700,8 @@ def admit_blob_chunks(root, temp_blob, chunk_size, txid):
 
             if pending_metadata:
                 backing.flush()
-                os.fsync(backing.fileno())
+                if closure_store_fsync_enabled():
+                    os.fsync(backing.fileno())
 
         for metadata in pending_metadata:
             atomic_json(metadata["path"], metadata["payload"])
