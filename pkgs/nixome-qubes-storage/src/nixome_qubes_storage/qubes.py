@@ -102,7 +102,13 @@ class ClosureVolume(qubes.storage.Volume):
         self.generation = None if generation is None else str(generation)
         self.closure_hash = closure_hash
         self.view_kind = view_kind
-        self.path = os.path.abspath(view_path) if view_path else None
+        if self.view_kind == "erofs-blob-map":
+            # Blob-map devices are runtime-only /dev/mapper views. Persisting
+            # them in qubes.xml makes the next start fail after stop removed
+            # the mapper node.
+            self.path = None
+        else:
+            self.path = os.path.abspath(view_path) if view_path else None
         self.blob_map_path = os.path.abspath(blob_map_path) if blob_map_path else None
         self.blob_logical_size = None if blob_logical_size is None else int(blob_logical_size)
         self.manifest_path = os.path.abspath(manifest_path) if manifest_path else None
@@ -117,7 +123,7 @@ class ClosureVolume(qubes.storage.Volume):
         if self.closure_hash is not None:
             result["closure_hash"] = self.closure_hash
         result["view_kind"] = self.view_kind
-        if self.path is not None:
+        if self.path is not None and self.view_kind != "erofs-blob-map":
             result["view_path"] = self.path
         if self.blob_map_path is not None:
             result["blob_map_path"] = self.blob_map_path
@@ -158,6 +164,7 @@ class ClosureVolume(qubes.storage.Volume):
     async def stop(self):
         if self.view_kind == "erofs-blob-map":
             self.detach_blob_view()
+            self.path = None
         return self
 
     async def verify_definition(self):
@@ -183,8 +190,8 @@ class ClosureVolume(qubes.storage.Volume):
     async def verify(self):
         await self.verify_definition()
         if self.view_kind == "erofs-blob-map":
-            if not self.path:
-                return True
+            if not self.path or not os.path.exists(self.path):
+                self.path = self.attach_blob_view()
             if not os.path.exists(self.path):
                 raise qubes.exc.StoragePoolException(f"missing nixome blob-map block device: {self.path}")
         return True
@@ -225,7 +232,7 @@ class ClosureVolume(qubes.storage.Volume):
         return False
 
     def block_device(self):
-        if self.view_kind == "erofs-blob-map" and not self.path:
+        if self.view_kind == "erofs-blob-map" and (not self.path or not os.path.exists(self.path)):
             self.path = self.attach_blob_view()
         return super().block_device()
 

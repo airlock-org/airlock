@@ -134,6 +134,7 @@ volume = pool.init_volume(
         "generation": "1",
         "closure_hash": "abc",
         "view_kind": "erofs-blob-map",
+        "view_path": "/dev/mapper/stale-nixome-config-vault-1-abc",
         "blob_map_path": str(blob_map),
         "blob_logical_size": 512,
         "manifest_path": str(manifest),
@@ -156,7 +157,16 @@ engine.attach_blob_view = filtered_attach
 device = volume.block_device()
 assert device.path == "/dev/mapper/nixome-config-vault-1-abc", device.path
 assert os.path.realpath(device.path) != os.path.realpath(central_blob)
-assert calls == [{"root_dir": str(pool_root), "domain": "config-vault", "generation": "1"}]
+assert calls == [{"root_dir": str(pool_root), "domain": "config-vault", "generation": "1"}], calls
+assert "view_path" not in volume.config, volume.config
+
+volume.path = "/dev/mapper/stale-nixome-config-vault-1-abc"
+device = volume.block_device()
+assert device.path == "/dev/mapper/nixome-config-vault-1-abc", device.path
+assert calls == [
+    {"root_dir": str(pool_root), "domain": "config-vault", "generation": "1"},
+    {"root_dir": str(pool_root), "domain": "config-vault", "generation": "1"},
+], calls
 
 
 def unsafe_attach(_root_dir, _domain, _generation):
