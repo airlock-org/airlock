@@ -54,6 +54,9 @@ reports under the log directory:
 
 - `pytest-report.json`
 - `pytest-junit.xml`
+- `test-runtimes-latest.json`
+- `test-runtimes-latest.tsv`
+- `test-runtimes-history.jsonl`
 
 Each shell check receives its own `NIXOME_LOG_DIR` subdirectory below the report
 directory so parallel workers do not overwrite same-named artifacts.
@@ -65,7 +68,7 @@ warms the common `nixpkgs#erofs-utils` dependency in the shared Nix store. Set
 Show the slowest tests from the latest run:
 
 ```bash
-jq -r '.tests[] | "\((.setup.duration + .call.duration + .teardown.duration))s\t\(.outcome)\t\(.nodeid)"' "${NIXOME_LOG_DIR:-.nixome-logs}/pytest-report.json" | sort -nr
+column -t -s $'\t' "${NIXOME_LOG_DIR:-.nixome-logs}/test-runtimes-latest.tsv"
 ```
 
 ## Build Layer

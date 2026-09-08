@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,8 @@ ENV_KEYS = {
     "TMPDIR",
     "XDG_CACHE_HOME",
 }
+SESSION_START_KEY = "nixome_session_start"
+RUNTIME_REPORTS: dict[str, dict[str, object]] = {}
 
 
 def _repo_root() -> Path:
@@ -83,14 +86,21 @@ def _run_setup_command(log_dir: Path, name: str, command: list[str]) -> None:
         pytest.exit(f"global test setup command failed; log: {log_path}", 1)
 
 
+def _log_dir(repo_root: Path) -> Path:
+    return Path(os.environ.get("NIXOME_LOG_DIR", repo_root / ".nixome-logs"))
+
+
 def pytest_sessionstart(session: pytest.Session) -> None:
+    RUNTIME_REPORTS.clear()
     if hasattr(session.config, "workerinput"):
         return
 
     repo_root = _repo_root()
     _load_nixome_env(repo_root)
 
-    log_dir = Path(os.environ.get("NIXOME_LOG_DIR", repo_root / ".nixome-logs"))
+    session.config.stash[SESSION_START_KEY] = time.time()
+
+    log_dir = _log_dir(repo_root)
     log_dir.mkdir(parents=True, exist_ok=True)
     env_report = {
         key: os.environ[key]
@@ -116,6 +126,90 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
 def pytest_configure(config: pytest.Config) -> None:
     _load_nixome_env(_repo_root())
+    if not hasattr(config, "workerinput"):
+        config.stash.setdefault(SESSION_START_KEY, time.time())
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    if report.when not in {"setup", "call", "teardown"}:
+        return
+
+    entry = RUNTIME_REPORTS.setdefault(
+        report.nodeid,
+        {
+            "nodeid": report.nodeid,
+            "outcome": "passed",
+            "setup_seconds": 0.0,
+            "call_seconds": 0.0,
+            "teardown_seconds": 0.0,
+        },
+    )
+    entry[f"{report.when}_seconds"] = report.duration
+    if report.failed:
+        entry["outcome"] = "failed"
+    elif report.skipped and entry["outcome"] == "passed":
+        entry["outcome"] = "skipped"
+
+
+def pytest_testnodedown(node, error) -> None:
+    worker_reports = node.workeroutput.get("nixome_runtime_reports", {})
+    RUNTIME_REPORTS.update(worker_reports)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    if hasattr(session.config, "workerinput"):
+        session.config.workeroutput["nixome_runtime_reports"] = RUNTIME_REPORTS
+        return
+    if session.config.option.collectonly:
+        return
+
+    repo_root = _repo_root()
+    log_dir = _log_dir(repo_root)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    started_at = session.config.stash.get(SESSION_START_KEY, time.time())
+    finished_at = time.time()
+    tests = []
+    for report in RUNTIME_REPORTS.values():
+        total_seconds = (
+            report["setup_seconds"]
+            + report["call_seconds"]
+            + report["teardown_seconds"]
+        )
+        tests.append({**report, "total_seconds": total_seconds})
+    tests.sort(key=lambda item: item["total_seconds"], reverse=True)
+
+    latest = {
+        "schema": "nixome.pytest-runtimes.v1",
+        "exitstatus": exitstatus,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "duration_seconds": finished_at - started_at,
+        "test_count": len(tests),
+        "tests": tests,
+    }
+    (log_dir / "test-runtimes-latest.json").write_text(
+        json.dumps(latest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    with (log_dir / "test-runtimes-latest.tsv").open("w", encoding="utf-8") as handle:
+        handle.write("seconds\toutcome\tnodeid\n")
+        for test in tests:
+            handle.write(
+                f"{test['total_seconds']:.6f}\t{test['outcome']}\t{test['nodeid']}\n"
+            )
+
+    history_entry = {
+        "schema": "nixome.pytest-runtime-history.v1",
+        "finished_at": finished_at,
+        "exitstatus": exitstatus,
+        "duration_seconds": latest["duration_seconds"],
+        "test_count": len(tests),
+        "tests": tests,
+    }
+    with (log_dir / "test-runtimes-history.jsonl").open(
+        "a", encoding="utf-8"
+    ) as handle:
+        handle.write(json.dumps(history_entry, sort_keys=True) + "\n")
 
 
 @pytest.fixture
