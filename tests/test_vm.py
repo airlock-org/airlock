@@ -48,6 +48,14 @@ VM_FLOWS = (
     VmFlow("vm-nix-closure-warm-flow", "vm-nix-closure-warm-flow", (pytest.mark.warm,)),
 )
 
+BASELINE_BACKED_PARALLEL_FLOWS = frozenset(
+    {
+        "vm-config-flow",
+        "vm-config-boot-flow",
+        "vm-nix-closure-flow",
+    }
+)
+
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if "vm_flow" not in metafunc.fixturenames:
@@ -104,6 +112,17 @@ def seed_lane_image_result_link(
         lane_image_link.unlink()
     lane_image_link.symlink_to(shared_image_output)
     return lane_image_link
+
+
+def required_file_from_env(name: str, purpose: str) -> Path:
+    value = os.environ.get(name)
+    if not value:
+        pytest.fail(f"{name} must be set for {purpose}")
+
+    path = Path(value)
+    if not path.is_file():
+        pytest.fail(f"{name} for {purpose} is missing or not a file: {path}")
+    return path
 
 
 def write_log(path: Path, result: subprocess.CompletedProcess[str]) -> None:
@@ -171,6 +190,22 @@ def test_vm_flow(
                 Path(shared_image_link_value),
             )
             env["NIXOME_VM_SKIP_BASE_BUILD"] = "1"
+        if vm_flow.name in BASELINE_BACKED_PARALLEL_FLOWS:
+            # Each test lane gets its own writable qcow2 overlay, but the
+            # overlay is backed by the read-only prepared baseline. The baseline
+            # already ran the common boot/service/setup-config prefix, so these
+            # flow targets skip that setup pass and start from the cloned state.
+            baseline_disk = required_file_from_env(
+                "NIXOME_VM_PARALLEL_BASELINE_DISK",
+                "baseline-backed parallel VM tests",
+            )
+            baseline_ovmf_vars = required_file_from_env(
+                "NIXOME_VM_PARALLEL_BASELINE_OVMF_VARS",
+                "baseline-backed parallel VM tests",
+            )
+            env["NIXOME_VM_BACKING_IMAGE"] = str(baseline_disk)
+            env["NIXOME_VM_OVMF_VARS_TEMPLATE"] = str(baseline_ovmf_vars)
+            env["VM_FLOW_RUN_SETUP_CONFIG"] = "0"
         env["NIXOME_VM_LANE"] = str(lane)
         env["NIXOME_VM_DIR"] = str(vm_dir)
         env["NIXOME_RESULT_LINK_DIR"] = str(result_link_dir)
@@ -186,6 +221,9 @@ def test_vm_flow(
                 "NIXOME_VM_PARALLEL_IMAGE_ATTR": shared_image_attr,
                 "NIXOME_VM_PARALLEL_IMAGE_LINK": shared_image_link_value,
                 "NIXOME_VM_SKIP_BASE_BUILD": env.get("NIXOME_VM_SKIP_BASE_BUILD", "0"),
+                "NIXOME_VM_BACKING_IMAGE": env.get("NIXOME_VM_BACKING_IMAGE"),
+                "NIXOME_VM_OVMF_VARS_TEMPLATE": env.get("NIXOME_VM_OVMF_VARS_TEMPLATE"),
+                "VM_FLOW_RUN_SETUP_CONFIG": env.get("VM_FLOW_RUN_SETUP_CONFIG"),
             }
         )
         if lane_image_link is not None:

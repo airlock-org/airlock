@@ -27,6 +27,13 @@ endif
 NIXOME_NIX ?= ./scripts/nixome-nix.sh
 VM_PARALLEL_IMAGE_ATTR ?= nixome-vm-gui-config-image
 VM_PARALLEL_IMAGE_LINK ?= $(NIXOME_RESULT_LINK_DIR)/$(VM_PARALLEL_IMAGE_ATTR)-parallel-shared-result
+VM_PARALLEL_BASELINE_ROOT ?= $(or $(NIXOME_DATA_ROOT),$(CURDIR)/.nixome)/vm-baselines
+VM_PARALLEL_BASELINE_DIR ?= $(VM_PARALLEL_BASELINE_ROOT)/$(VM_PARALLEL_IMAGE_ATTR)-setup
+VM_PARALLEL_BASELINE_DISK ?= $(VM_PARALLEL_BASELINE_DIR)/$(VM_PARALLEL_IMAGE_ATTR).qcow2
+VM_PARALLEL_BASELINE_OVMF_VARS ?= $(VM_PARALLEL_BASELINE_DIR)/$(VM_PARALLEL_IMAGE_ATTR)-OVMF_VARS.fd
+VM_PARALLEL_BASELINE_LOG_DIR ?= $(or $(NIXOME_LOG_DIR),$(CURDIR)/.nixome-logs)/vm-baseline
+VM_PARALLEL_BASELINE_SSH_PORT ?= 2299
+VM_FLOW_RUN_SETUP_CONFIG ?= 1
 
 VM_PREBUILD_ATTRS := \
 	packages.x86_64-linux.nixome-setup-config \
@@ -59,7 +66,7 @@ PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 VM_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm.py::test_vm_flow[$(test)]')
 
-.PHONY: ensure-generated-dirs build test test-parallel test-serial test-vm test-vm-parallel test-vm-warm test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test test-parallel test-serial test-vm test-vm-parallel test-vm-warm test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -85,9 +92,9 @@ test-vm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
 	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm") $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
 
-test-vm-parallel: vm-parallel-prebuild-image
+test-vm-parallel: vm-parallel-prebuild-baseline
 	@mkdir -p "$(PYTEST_LOG_DIR)"
-	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)" NIXOME_VM_PARALLEL_IMAGE_ATTR="$(VM_PARALLEL_IMAGE_ATTR)" NIXOME_VM_PARALLEL_IMAGE_LINK="$(VM_PARALLEL_IMAGE_LINK)" uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm and not serial_vm") -n $(TEST_VM_JOBS) --dist load $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
+	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)" NIXOME_VM_PARALLEL_IMAGE_ATTR="$(VM_PARALLEL_IMAGE_ATTR)" NIXOME_VM_PARALLEL_IMAGE_LINK="$(VM_PARALLEL_IMAGE_LINK)" NIXOME_VM_PARALLEL_BASELINE_DISK="$(VM_PARALLEL_BASELINE_DISK)" NIXOME_VM_PARALLEL_BASELINE_OVMF_VARS="$(VM_PARALLEL_BASELINE_OVMF_VARS)" uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm and not serial_vm") -n $(TEST_VM_JOBS) --dist load $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
 
 test-vm-warm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
@@ -126,6 +133,10 @@ vm-prebuild-shared: ensure-generated-dirs gc-auto
 vm-parallel-prebuild-image: ensure-generated-dirs gc-auto
 	@mkdir -p "$(PYTEST_LOG_DIR)"
 	./scripts/resolve-vm-image-result.sh "$(VM_PARALLEL_IMAGE_ATTR)" "$(VM_PARALLEL_IMAGE_LINK)" > "$(PYTEST_LOG_DIR)/vm-parallel-shared-image-path.txt"
+
+vm-parallel-prebuild-baseline: vm-parallel-prebuild-image
+	@mkdir -p "$(PYTEST_LOG_DIR)" "$(VM_PARALLEL_BASELINE_LOG_DIR)"
+	NIXOME_VM_IMAGE_ATTR="$(VM_PARALLEL_IMAGE_ATTR)" NIXOME_VM_SHARED_IMAGE_LINK="$(VM_PARALLEL_IMAGE_LINK)" NIXOME_VM_BASELINE_DIR="$(VM_PARALLEL_BASELINE_DIR)" NIXOME_VM_BASELINE_DISK="$(VM_PARALLEL_BASELINE_DISK)" NIXOME_VM_BASELINE_OVMF_VARS="$(VM_PARALLEL_BASELINE_OVMF_VARS)" NIXOME_VM_BASELINE_LOG_DIR="$(VM_PARALLEL_BASELINE_LOG_DIR)" NIXOME_VM_BASELINE_SSH_PORT="$(VM_PARALLEL_BASELINE_SSH_PORT)" ./scripts/prepare-vm-baseline.sh
 
 vm-image: ensure-generated-dirs gc-auto
 	$(NIXOME_NIX) build .#nixome-vm-image --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-vm-image" --print-build-logs --show-trace
@@ -183,13 +194,13 @@ vm-config-setup: ensure-generated-dirs gc-auto
 	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
 
 vm-config-flow: ensure-generated-dirs gc-auto
-	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
+	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=$(VM_FLOW_RUN_SETUP_CONFIG) NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
 
 vm-config-warm-flow: ensure-generated-dirs gc-auto
 	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
 
 vm-config-boot-flow: ensure-generated-dirs gc-auto
-	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
+	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=$(VM_FLOW_RUN_SETUP_CONFIG) NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
 
 vm-config-boot-activate-flow: ensure-generated-dirs gc-auto
 	./scripts/run-config-boot-activation-flow.sh
@@ -197,7 +208,7 @@ vm-config-boot-activate-flow: ensure-generated-dirs gc-auto
 vm-config-smoke: vm-config-flow
 
 vm-nix-closure-flow: ensure-generated-dirs gc-auto
-	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
+	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=$(VM_FLOW_RUN_SETUP_CONFIG) NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
 
 vm-nix-closure-warm-flow: ensure-generated-dirs gc-auto
 	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_KEEP_VM=1 NIXOME_SYNC_DOM0_TOOLS=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh

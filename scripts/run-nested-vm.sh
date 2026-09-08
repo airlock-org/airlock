@@ -16,6 +16,8 @@ VGA="${NIXOME_VM_VGA:-std}"
 BACKUP_RETENTION="${NIXOME_VM_BACKUP_RETENTION:-1}"
 FRESH="${NIXOME_VM_FRESH:-0}"
 SKIP_BASE_BUILD="${NIXOME_VM_SKIP_BASE_BUILD:-0}"
+BACKING_IMAGE="${NIXOME_VM_BACKING_IMAGE:-}"
+OVMF_VARS_TEMPLATE="${NIXOME_VM_OVMF_VARS_TEMPLATE:-}"
 OUT_LINK="$VM_DIR/${IMAGE_ATTR}-result"
 SERIAL_LOG="$VM_DIR/serial.log"
 MONITOR_SOCKET="$VM_DIR/${IMAGE_ATTR}.monitor"
@@ -95,6 +97,16 @@ fi
 
 base_image_relative="${base_images[0]#"$base_image_out_physical"/}"
 BASE_IMAGE="$base_image_out/$base_image_relative"
+NIX_BASE_IMAGE="$BASE_IMAGE"
+
+if [ -n "$BACKING_IMAGE" ]; then
+  if [ ! -f "$BACKING_IMAGE" ]; then
+    printf 'error: NIXOME_VM_BACKING_IMAGE is not a file: %s\n' "$BACKING_IMAGE" >&2
+    exit 1
+  fi
+  BASE_IMAGE="$BACKING_IMAGE"
+fi
+
 RUN_DISK="$VM_DIR/${IMAGE_ATTR}.qcow2"
 OVMF_VARS="$VM_DIR/${IMAGE_ATTR}-OVMF_VARS.fd"
 RUN_DISK_BACKUP_TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -184,7 +196,15 @@ if [ ! -e "$RUN_DISK" ]; then
 fi
 
 if [ ! -e "$OVMF_VARS" ]; then
-  cp "$(nixome_physical_store_path "$ovmf_out")/FV/OVMF_VARS.fd" "$OVMF_VARS"
+  if [ -n "$OVMF_VARS_TEMPLATE" ]; then
+    if [ ! -f "$OVMF_VARS_TEMPLATE" ]; then
+      printf 'error: NIXOME_VM_OVMF_VARS_TEMPLATE is not a file: %s\n' "$OVMF_VARS_TEMPLATE" >&2
+      exit 1
+    fi
+    cp "$OVMF_VARS_TEMPLATE" "$OVMF_VARS"
+  else
+    cp "$(nixome_physical_store_path "$ovmf_out")/FV/OVMF_VARS.fd" "$OVMF_VARS"
+  fi
   chmod u+w "$OVMF_VARS"
 fi
 
@@ -210,7 +230,8 @@ esac
 cat <<EOF
 starting VM
   image attr: .#$IMAGE_ATTR
-  base: $BASE_IMAGE ($BASE_FORMAT)
+  nix base: $NIX_BASE_IMAGE
+  backing: $BASE_IMAGE ($BASE_FORMAT)
   disk: $RUN_DISK
   display: $DISPLAY_MODE
   vga: $VGA

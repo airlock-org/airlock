@@ -43,6 +43,7 @@ CACHE_DIR="${NIXOME_QUBES_CACHE_DIR:-$ROOT/.nixome-cache/rpms}"
 GUEST_CACHE_DIR="/var/cache/nixome/qubes-rpms"
 SHUTDOWN_VM_ON_SUCCESS="${NIXOME_SHUTDOWN_VM_ON_SUCCESS:-0}"
 SHUTDOWN_WAIT_SECONDS="${NIXOME_VM_SHUTDOWN_WAIT_SECONDS:-180}"
+REQUIRE_CLEAN_SHUTDOWN="${NIXOME_REQUIRE_CLEAN_SHUTDOWN:-0}"
 
 TEMPLATE="${NIXOME_QUBES_TEMPLATE:-fedora-43-xfce}"
 TEMPLATE_URL="${NIXOME_QUBES_TEMPLATE_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/templates-itl/rpm/qubes-template-fedora-43-xfce-4.3.0-202601041226.noarch.rpm}"
@@ -678,6 +679,16 @@ shutdown_vm_on_success() {
   done
 
   printf 'warning: VM did not shut down within %s seconds; cleanup will terminate it\n' "$SHUTDOWN_WAIT_SECONDS" >&2
+  case "$REQUIRE_CLEAN_SHUTDOWN" in
+    1|true|yes)
+      return 1
+      ;;
+    0|false|no)
+      ;;
+    *)
+      printf 'warning: ignoring unsupported NIXOME_REQUIRE_CLEAN_SHUTDOWN value: %s\n' "$REQUIRE_CLEAN_SHUTDOWN" >&2
+      ;;
+  esac
 }
 
 prepare_cached_bootstrap_assets
