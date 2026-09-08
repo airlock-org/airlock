@@ -58,6 +58,10 @@ reports under the log directory:
 Each shell check receives its own `NIXOME_LOG_DIR` subdirectory below the report
 directory so parallel workers do not overwrite same-named artifacts.
 
+Before tests run, pytest initializes the shared Nixome environment once and
+warms the common `nixpkgs#erofs-utils` dependency in the shared Nix store. Set
+`NIXOME_PYTEST_WARM_STORE=0` to skip that warm-up for narrow runs.
+
 Show the slowest tests from the latest run:
 
 ```bash
