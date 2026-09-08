@@ -70,6 +70,8 @@ WAIT_SECONDS="${NIXOME_NIX_CLOSURE_WAIT_SECONDS:-240}"
 QREXEC_TIMEOUT_SECONDS="${NIXOME_NIX_CLOSURE_QREXEC_TIMEOUT_SECONDS:-45}"
 RUN_GUI_PROBE="${NIXOME_NIX_CLOSURE_GUI_PROBE:-0}"
 RUN_REBOOT_PROBE="${NIXOME_NIX_CLOSURE_REBOOT_PROBE:-0}"
+CONFIG_VM_TEST_MEMORY="${NIXOME_NIX_CLOSURE_CONFIG_VM_MEMORY:-512}"
+CONFIG_VM_TEST_MAXMEM="${NIXOME_NIX_CLOSURE_CONFIG_VM_MAXMEM:-512}"
 CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-0}"
 
 result_written=0
@@ -621,6 +623,16 @@ check_libvirt_filtered_devices() {
   rm -f "$xml_tmp"
 }
 
+set_test_vm_memory() {
+  vm="$1"
+
+  shutdown_vm "$vm" "$LOG_DIR/nix-closure-domain-$vm-memory-shutdown.log"
+  run_or_fail "set $vm test memory" "$LOG_DIR/nix-closure-domain-$vm-memory.log" \
+    qvm-prefs "$vm" memory "$CONFIG_VM_TEST_MEMORY"
+  run_or_fail "set $vm test maxmem" "$LOG_DIR/nix-closure-domain-$vm-maxmem.log" \
+    qvm-prefs "$vm" maxmem "$CONFIG_VM_TEST_MAXMEM"
+}
+
 check_source_paths() {
   root_source="$(feature_value nixome-root-source)"
   store_source="$(feature_value nixome-store-source)"
@@ -1042,6 +1054,10 @@ systemctl is-active --quiet qubes-qrexec-policy-daemon.service ||
 qvm-check "$STAGING" >/dev/null 2>&1 || fail "missing config staging VM: $STAGING"
 qvm-check "$VALIDATOR" >/dev/null 2>&1 || fail "missing config validator VM: $VALIDATOR"
 qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
+
+set_test_vm_memory "$STAGING"
+set_test_vm_memory "$VALIDATOR"
+set_test_vm_memory "$VAULT"
 
 start_vm "$STAGING"
 start_vm "$VALIDATOR"
