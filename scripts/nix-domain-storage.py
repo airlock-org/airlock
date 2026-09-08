@@ -71,7 +71,11 @@ def shared_volume_needs_mutation(vm, source, view_backend):
     existing_view_image = vm.features.get("nixome-store-view-image", "")
     existing_blob_map = vm.features.get("nixome-store-blob-map", "")
 
-    if existing_source != source or existing_mode != "shared-closure" or existing_view_backend != view_backend:
+    if (
+        existing_source != source
+        or existing_mode != "shared-closure"
+        or existing_view_backend != view_backend
+    ):
         return True
     if not existing_generation:
         return True
@@ -90,12 +94,24 @@ def shared_volume_needs_mutation(vm, source, view_backend):
 
     store_config = vm.volume_config.get("store", {})
     blob_config = vm.volume_config.get("store-data", {})
-    store_generation = getattr(store_volume, "generation", None) or store_config.get("generation", "")
-    blob_generation = getattr(blob_volume, "generation", None) or blob_config.get("generation", "")
-    store_hash = getattr(store_volume, "closure_hash", None) or store_config.get("closure_hash", "")
-    blob_hash = getattr(blob_volume, "closure_hash", None) or blob_config.get("closure_hash", "")
-    store_path = getattr(store_volume, "path", None) or store_config.get("view_path", "")
-    blob_map = getattr(blob_volume, "blob_map_path", None) or blob_config.get("blob_map_path", "")
+    store_generation = getattr(store_volume, "generation", None) or store_config.get(
+        "generation", ""
+    )
+    blob_generation = getattr(blob_volume, "generation", None) or blob_config.get(
+        "generation", ""
+    )
+    store_hash = getattr(store_volume, "closure_hash", None) or store_config.get(
+        "closure_hash", ""
+    )
+    blob_hash = getattr(blob_volume, "closure_hash", None) or blob_config.get(
+        "closure_hash", ""
+    )
+    store_path = getattr(store_volume, "path", None) or store_config.get(
+        "view_path", ""
+    )
+    blob_map = getattr(blob_volume, "blob_map_path", None) or blob_config.get(
+        "blob_map_path", ""
+    )
 
     def same_path(left, right):
         if not left or not right:
@@ -130,7 +146,10 @@ def feature_admission_for_current_store(args, vm):
 
     admission_sources = {
         source
-        for source in [admission.get("source", ""), admission.get("approval_source", "")]
+        for source in [
+            admission.get("source", ""),
+            admission.get("approval_source", ""),
+        ]
         if source
     }
     if expected_source and expected_source not in admission_sources:
@@ -143,12 +162,18 @@ def feature_admission_for_current_store(args, vm):
             "Nix-native store feature/hash mismatch for "
             f"{args.domain}: generation {generation} has {admission.get('closure_hash')} != {expected_hash}"
         )
-    if expected_view and os.path.abspath(admission.get("metadata_image") or admission["view_image"]) != os.path.abspath(expected_view):
+    if expected_view and os.path.abspath(
+        admission.get("metadata_image") or admission["view_image"]
+    ) != os.path.abspath(expected_view):
         fail(
             "Nix-native store feature/view mismatch for "
             f"{args.domain}: generation {generation} has {admission.get('metadata_image') or admission['view_image']} != {expected_view}"
         )
-    if expected_blob_map and admission.get("blob_map") and os.path.abspath(admission["blob_map"]) != os.path.abspath(expected_blob_map):
+    if (
+        expected_blob_map
+        and admission.get("blob_map")
+        and os.path.abspath(admission["blob_map"]) != os.path.abspath(expected_blob_map)
+    ):
         fail(
             "Nix-native store feature/blob-map mismatch for "
             f"{args.domain}: generation {generation} has {admission['blob_map']} != {expected_blob_map}"
@@ -184,7 +209,9 @@ def validate_shared_store_volume(vm, domain, expected):
             f"{domain}: {pool_name(store_volume.pool)} != {expected['pool_name']}"
         )
     actual_path = getattr(store_volume, "path", None)
-    if actual_path is not None and os.path.abspath(actual_path) != os.path.abspath(expected["view_image"]):
+    if actual_path is not None and os.path.abspath(actual_path) != os.path.abspath(
+        expected["view_image"]
+    ):
         fail(
             "shared store volume path mismatch for "
             f"{domain}: {actual_path} != {expected['view_image']}"
@@ -211,7 +238,9 @@ def validate_shared_store_volume(vm, domain, expected):
             f"{domain}: {pool_name(blob_volume.pool)} != {expected['pool_name']}"
         )
     blob_map_path = getattr(blob_volume, "blob_map_path", None)
-    if blob_map_path is not None and os.path.abspath(blob_map_path) != os.path.abspath(expected["blob_map"]):
+    if blob_map_path is not None and os.path.abspath(blob_map_path) != os.path.abspath(
+        expected["blob_map"]
+    ):
         fail(
             "shared store blob map mismatch for "
             f"{domain}: {blob_map_path} != {expected['blob_map']}"
@@ -244,13 +273,17 @@ def qubes_boot_frontends(volume_names):
             result[name] = fixed[name]
             continue
         if extra_index >= len(extra_letters):
-            fail("too many non-standard boot volumes for deterministic frontend assignment")
+            fail(
+                "too many non-standard boot volumes for deterministic frontend assignment"
+            )
         result[name] = f"xvd{extra_letters[extra_index]}"
         extra_index += 1
     return result
 
 
-def validate_shared_store_frontends(vm, domain, store_device, store_blob_device, view_backend):
+def validate_shared_store_frontends(
+    vm, domain, store_device, store_blob_device, view_backend
+):
     volume_names = list(vm.volumes.keys())
     frontends = qubes_boot_frontends(volume_names)
     if view_backend != "erofs-objectmap":
@@ -314,7 +347,11 @@ def load_generation_admission(pool_root, domain, generation):
         fail(f"generation is not committed for {domain}: {generation}")
     store = manifest.get("store", {})
     view_image = store.get("metadata_image") or store.get("image")
-    canonical_view_image = store.get("canonical_metadata_image") or store.get("canonical_image") or view_image
+    canonical_view_image = (
+        store.get("canonical_metadata_image")
+        or store.get("canonical_image")
+        or view_image
+    )
     if not view_image:
         fail(f"generation is missing store metadata image for {domain}: {generation}")
 
@@ -417,12 +454,30 @@ async def ensure_shared_store_loaded(qubes, args, admission):
     desired = shared_volume_configs(args.pool_name, args.domain, admission)
     existing = vm.volume_config.get("store", {})
     current_volume = vm.volumes.get("store")
-    current_path = getattr(current_volume, "path", None) if current_volume is not None else None
-    current_generation = getattr(current_volume, "generation", None) if current_volume is not None else None
-    current_hash = getattr(current_volume, "closure_hash", None) if current_volume is not None else None
+    current_path = (
+        getattr(current_volume, "path", None) if current_volume is not None else None
+    )
+    current_generation = (
+        getattr(current_volume, "generation", None)
+        if current_volume is not None
+        else None
+    )
+    current_hash = (
+        getattr(current_volume, "closure_hash", None)
+        if current_volume is not None
+        else None
+    )
     current_blob_volume = vm.volumes.get("store-data")
-    current_blob_generation = getattr(current_blob_volume, "generation", None) if current_blob_volume is not None else None
-    current_blob_hash = getattr(current_blob_volume, "closure_hash", None) if current_blob_volume is not None else None
+    current_blob_generation = (
+        getattr(current_blob_volume, "generation", None)
+        if current_blob_volume is not None
+        else None
+    )
+    current_blob_hash = (
+        getattr(current_blob_volume, "closure_hash", None)
+        if current_blob_volume is not None
+        else None
+    )
 
     needs_volume = (
         current_volume is None
@@ -440,17 +495,21 @@ async def ensure_shared_store_loaded(qubes, args, admission):
         needs_volume
         or current_blob_volume is None
         or existing_blob.get("pool") != args.pool_name
-        or str(existing_blob.get("generation", "")) != str(desired["store-data"]["generation"])
+        or str(existing_blob.get("generation", ""))
+        != str(desired["store-data"]["generation"])
         or existing_blob.get("closure_hash") != desired["store-data"]["closure_hash"]
         or existing_blob.get("blob_map_path") != desired["store-data"]["blob_map_path"]
-        or str(current_blob_generation or "") != str(desired["store-data"]["generation"])
+        or str(current_blob_generation or "")
+        != str(desired["store-data"]["generation"])
         or current_blob_hash != desired["store-data"]["closure_hash"]
         or bool(getattr(current_blob_volume, "rw", False))
     )
 
     if needs_volume:
         if vm.is_running():
-            fail(f"shared store generation changed but domain is running: {args.domain}")
+            fail(
+                f"shared store generation changed but domain is running: {args.domain}"
+            )
         vm.volume_config["store"] = desired["store"].copy()
         store_volume = vm.storage.init_volume("store", desired["store"].copy())
         await maybe_await(store_volume.create())
@@ -583,7 +642,9 @@ async def ensure_shared_store(args):
         and vm.features.get("nixome-store-mode", None) == "shared-closure"
         and vm.features.get("nixome-store-view-backend", None) == args.view_backend
     )
-    current_admission = feature_admission_for_current_store(args, vm) if source_current else None
+    current_admission = (
+        feature_admission_for_current_store(args, vm) if source_current else None
+    )
     vm_running = vm.is_running()
     generation = vm.features.get("nixome-store-generation", "")
     closure_hash = vm.features.get("nixome-store-closure-hash", "")
@@ -595,7 +656,9 @@ async def ensure_shared_store(args):
     store_pool = pool_name(vm.volumes["store"].pool) if "store" in vm.volumes else ""
 
     if not needs_mutation:
-        validate_shared_store_frontends(vm, args.domain, args.device, args.blob_device, view_backend)
+        validate_shared_store_frontends(
+            vm, args.domain, args.device, args.blob_device, view_backend
+        )
         app.close()
         return {
             "schema": "nixome.nix-domain-storage.v1",
@@ -672,7 +735,9 @@ async def switch_shared_store(args):
     app, vm = load_domain(qubes, args.domain)
     if vm.is_running():
         app.close()
-        fail(f"shared store generation switch requested but domain is running: {args.domain}")
+        fail(
+            f"shared store generation switch requested but domain is running: {args.domain}"
+        )
     app.close()
 
     return await with_qubesd_restart(
@@ -711,9 +776,20 @@ def build_parser():
     ensure.add_argument("--device", default="/dev/xvde")
     ensure.add_argument("--blob-device", default="/dev/xvdf")
     ensure.add_argument("--mountpoint", default="/nix/store")
-    ensure.add_argument("--pool-name", default=os.environ.get("NIXOME_CLOSURE_STORE_POOL", "nixome-closure"))
-    ensure.add_argument("--pool-root", default=os.environ.get("NIXOME_CLOSURE_STORE_ROOT", "/var/lib/nixome/closure-store"))
-    ensure.add_argument("--verify-mode", default=os.environ.get("NIXOME_CLOSURE_STORE_VERIFY", "nix-store"))
+    ensure.add_argument(
+        "--pool-name",
+        default=os.environ.get("NIXOME_CLOSURE_STORE_POOL", "nixome-closure"),
+    )
+    ensure.add_argument(
+        "--pool-root",
+        default=os.environ.get(
+            "NIXOME_CLOSURE_STORE_ROOT", "/var/lib/nixome/closure-store"
+        ),
+    )
+    ensure.add_argument(
+        "--verify-mode",
+        default=os.environ.get("NIXOME_CLOSURE_STORE_VERIFY", "nix-store"),
+    )
     ensure.add_argument(
         "--view-backend",
         choices=["erofs-objectmap"],
@@ -727,8 +803,16 @@ def build_parser():
     switch.add_argument("--device", default="/dev/xvde")
     switch.add_argument("--blob-device", default="/dev/xvdf")
     switch.add_argument("--mountpoint", default="/nix/store")
-    switch.add_argument("--pool-name", default=os.environ.get("NIXOME_CLOSURE_STORE_POOL", "nixome-closure"))
-    switch.add_argument("--pool-root", default=os.environ.get("NIXOME_CLOSURE_STORE_ROOT", "/var/lib/nixome/closure-store"))
+    switch.add_argument(
+        "--pool-name",
+        default=os.environ.get("NIXOME_CLOSURE_STORE_POOL", "nixome-closure"),
+    )
+    switch.add_argument(
+        "--pool-root",
+        default=os.environ.get(
+            "NIXOME_CLOSURE_STORE_ROOT", "/var/lib/nixome/closure-store"
+        ),
+    )
     switch.set_defaults(func=switch_shared_store)
 
     return parser

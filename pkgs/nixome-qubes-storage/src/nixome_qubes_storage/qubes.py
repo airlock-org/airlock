@@ -8,7 +8,14 @@ import qubes.storage
 class ClosurePool(qubes.storage.Pool):
     driver = "nixome-closure"
 
-    def __init__(self, *, name, root_dir="/var/lib/nixome/closure-store", revisions_to_keep=0, ephemeral_volatile=False):
+    def __init__(
+        self,
+        *,
+        name,
+        root_dir="/var/lib/nixome/closure-store",
+        revisions_to_keep=0,
+        ephemeral_volatile=False,
+    ):
         super().__init__(
             name=name,
             revisions_to_keep=revisions_to_keep,
@@ -38,15 +45,23 @@ class ClosurePool(qubes.storage.Pool):
         if volume_config.get("rw", False):
             raise qubes.exc.StoragePoolException("nixome-closure volumes are read-only")
         if volume_config.get("snap_on_start", False):
-            raise qubes.exc.StoragePoolException("nixome-closure volumes do not use Qubes snapshots")
+            raise qubes.exc.StoragePoolException(
+                "nixome-closure volumes do not use Qubes snapshots"
+            )
         if volume_config.get("source") is not None:
-            raise qubes.exc.StoragePoolException("nixome-closure volumes do not use source volumes")
+            raise qubes.exc.StoragePoolException(
+                "nixome-closure volumes do not use source volumes"
+            )
         if "vid" not in volume_config:
             generation = volume_config.get("generation")
             if generation is None:
-                raise qubes.exc.StoragePoolException("nixome-closure volume requires generation")
+                raise qubes.exc.StoragePoolException(
+                    "nixome-closure volume requires generation"
+                )
             volume_name = volume_config.get("name", "store")
-            volume_config["vid"] = f"domains/{vm.name}/generations/{generation}/{volume_name}"
+            volume_config["vid"] = (
+                f"domains/{vm.name}/generations/{generation}/{volume_name}"
+            )
         volume_config["pool"] = self
         volume = ClosureVolume(**volume_config)
         self._volumes[volume.vid] = volume
@@ -110,7 +125,9 @@ class ClosureVolume(qubes.storage.Volume):
         else:
             self.path = os.path.abspath(view_path) if view_path else None
         self.blob_map_path = os.path.abspath(blob_map_path) if blob_map_path else None
-        self.blob_logical_size = None if blob_logical_size is None else int(blob_logical_size)
+        self.blob_logical_size = (
+            None if blob_logical_size is None else int(blob_logical_size)
+        )
         self.manifest_path = os.path.abspath(manifest_path) if manifest_path else None
 
     @property
@@ -172,21 +189,35 @@ class ClosureVolume(qubes.storage.Volume):
     async def verify_definition(self):
         if self.view_kind == "erofs-blob-map":
             if not self.blob_map_path:
-                raise qubes.exc.StoragePoolException(f"missing blob_map_path for {self.vid}")
+                raise qubes.exc.StoragePoolException(
+                    f"missing blob_map_path for {self.vid}"
+                )
             if not os.path.exists(self.blob_map_path):
-                raise qubes.exc.StoragePoolException(f"missing nixome closure blob map: {self.blob_map_path}")
+                raise qubes.exc.StoragePoolException(
+                    f"missing nixome closure blob map: {self.blob_map_path}"
+                )
             if self.blob_logical_size is None:
-                raise qubes.exc.StoragePoolException(f"missing blob_logical_size for {self.vid}")
+                raise qubes.exc.StoragePoolException(
+                    f"missing blob_logical_size for {self.vid}"
+                )
         else:
             if not self.path:
-                raise qubes.exc.StoragePoolException(f"missing view_path for {self.vid}")
+                raise qubes.exc.StoragePoolException(
+                    f"missing view_path for {self.vid}"
+                )
             if not os.path.exists(self.path):
-                raise qubes.exc.StoragePoolException(f"missing nixome closure view image: {self.path}")
+                raise qubes.exc.StoragePoolException(
+                    f"missing nixome closure view image: {self.path}"
+                )
             mode = os.stat(self.path).st_mode
             if mode & 0o222:
-                raise qubes.exc.StoragePoolException(f"nixome closure view image is writable: {self.path}")
+                raise qubes.exc.StoragePoolException(
+                    f"nixome closure view image is writable: {self.path}"
+                )
         if self.manifest_path and not os.path.exists(self.manifest_path):
-            raise qubes.exc.StoragePoolException(f"missing nixome generation manifest: {self.manifest_path}")
+            raise qubes.exc.StoragePoolException(
+                f"missing nixome generation manifest: {self.manifest_path}"
+            )
         return True
 
     async def verify(self):
@@ -195,26 +226,38 @@ class ClosureVolume(qubes.storage.Volume):
             if not self.path or not os.path.exists(self.path):
                 self.path = self.attach_blob_view()
             if not os.path.exists(self.path):
-                raise qubes.exc.StoragePoolException(f"missing nixome blob-map block device: {self.path}")
+                raise qubes.exc.StoragePoolException(
+                    f"missing nixome blob-map block device: {self.path}"
+                )
         return True
 
     def attach_blob_view(self):
         if not self.domain_name or self.generation is None:
-            raise qubes.exc.StoragePoolException(f"missing domain/generation for {self.vid}")
+            raise qubes.exc.StoragePoolException(
+                f"missing domain/generation for {self.vid}"
+            )
         try:
             from nixome_qubes_storage import engine
 
-            result = engine.attach_blob_view(self.pool.root_dir, self.domain_name, self.generation)
+            result = engine.attach_blob_view(
+                self.pool.root_dir, self.domain_name, self.generation
+            )
         except Exception as exc:
             raise qubes.exc.StoragePoolException(str(exc)) from exc
         device = result.get("device")
         if not device:
-            raise qubes.exc.StoragePoolException(f"nixome blob-map attach did not return a device for {self.vid}")
+            raise qubes.exc.StoragePoolException(
+                f"nixome blob-map attach did not return a device for {self.vid}"
+            )
         for backing_path in result.get("backing_paths", []):
             if os.path.realpath(device) == os.path.realpath(backing_path):
-                raise qubes.exc.StoragePoolException("refusing to expose global Nixome backing storage to a guest")
+                raise qubes.exc.StoragePoolException(
+                    "refusing to expose global Nixome backing storage to a guest"
+                )
         if not device.startswith("/dev/mapper/"):
-            raise qubes.exc.StoragePoolException(f"nixome blob-map attach returned an unfiltered device: {device}")
+            raise qubes.exc.StoragePoolException(
+                f"nixome blob-map attach returned an unfiltered device: {device}"
+            )
         return device
 
     def detach_blob_view(self):
@@ -223,7 +266,9 @@ class ClosureVolume(qubes.storage.Volume):
         try:
             from nixome_qubes_storage import engine
 
-            engine.detach_blob_view(self.pool.root_dir, self.domain_name, self.generation)
+            engine.detach_blob_view(
+                self.pool.root_dir, self.domain_name, self.generation
+            )
         except Exception as exc:
             raise qubes.exc.StoragePoolException(str(exc)) from exc
 
@@ -233,7 +278,9 @@ class ClosureVolume(qubes.storage.Volume):
         try:
             from nixome_qubes_storage import engine
 
-            engine.mark_running_ref(self.pool.root_dir, self.domain_name, self.generation, self.name)
+            engine.mark_running_ref(
+                self.pool.root_dir, self.domain_name, self.generation, self.name
+            )
         except Exception as exc:
             raise qubes.exc.StoragePoolException(str(exc)) from exc
 
@@ -243,7 +290,9 @@ class ClosureVolume(qubes.storage.Volume):
         try:
             from nixome_qubes_storage import engine
 
-            engine.clear_running_ref(self.pool.root_dir, self.domain_name, self.generation, self.name)
+            engine.clear_running_ref(
+                self.pool.root_dir, self.domain_name, self.generation, self.name
+            )
         except Exception as exc:
             raise qubes.exc.StoragePoolException(str(exc)) from exc
 
@@ -254,7 +303,9 @@ class ClosureVolume(qubes.storage.Volume):
         return False
 
     def block_device(self):
-        if self.view_kind == "erofs-blob-map" and (not self.path or not os.path.exists(self.path)):
+        if self.view_kind == "erofs-blob-map" and (
+            not self.path or not os.path.exists(self.path)
+        ):
             self.path = self.attach_blob_view()
         return super().block_device()
 

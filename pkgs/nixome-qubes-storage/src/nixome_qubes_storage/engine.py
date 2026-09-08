@@ -12,7 +12,6 @@ import uuid
 from contextlib import suppress
 from pathlib import Path
 
-
 SCHEMA_POOL = "nixome.closure-store.v1"
 SCHEMA_ADMISSION = "nixome.closure-store.admission.v1"
 SCHEMA_GENERATION = "nixome.closure-store.generation.v1"
@@ -280,7 +279,10 @@ def ensure_pool(root):
     else:
         manifest = read_json(pool_manifest)
         object_store = manifest.setdefault("object_store", {})
-        if object_store.get("data") == "objects/data.blob" or "segments" not in object_store:
+        if (
+            object_store.get("data") == "objects/data.blob"
+            or "segments" not in object_store
+        ):
             object_store.pop("data", None)
             object_store["segments"] = "objects/segments"
             object_store["segment_target_bytes"] = object_store.get(
@@ -481,7 +483,9 @@ def read_segment_meta(root, segment_id):
 
 
 def write_segment_meta(root, segment_id, payload):
-    mode = 0o444 if payload.get("sealed") or payload.get("status") == "sealed" else 0o600
+    mode = (
+        0o444 if payload.get("sealed") or payload.get("status") == "sealed" else 0o600
+    )
     atomic_json(segment_meta_path(root, segment_id), payload, mode=mode)
 
 
@@ -510,7 +514,9 @@ def current_open_segment_locked(root):
     return segment_id, meta
 
 
-def create_segment_locked(root, target_bytes, txid, *, oversized=False, make_current=True):
+def create_segment_locked(
+    root, target_bytes, txid, *, oversized=False, make_current=True
+):
     root = Path(root)
     segment_id = next_segment_id(root)
     blob_path = segment_blob_path(root, segment_id)
@@ -702,8 +708,13 @@ def migrate_single_blob_to_segments(root):
         legacy_realpath = os.path.realpath(legacy_blob)
         for meta_path in sorted((root / "objects/blob-metadata").glob("*.json")):
             payload = read_json(meta_path)
-            if payload.get("central_blob") and os.path.realpath(payload["central_blob"]) != legacy_realpath:
-                fail(f"legacy object metadata points outside the legacy object blob: {meta_path}")
+            if (
+                payload.get("central_blob")
+                and os.path.realpath(payload["central_blob"]) != legacy_realpath
+            ):
+                fail(
+                    f"legacy object metadata points outside the legacy object blob: {meta_path}"
+                )
         segment_id = segment_id_from_number(1)
         new_blob = segment_blob_path(root, segment_id)
         os.replace(legacy_blob, new_blob)
@@ -731,7 +742,8 @@ def migrate_single_blob_to_segments(root):
             if meta_path.name != ".tar-eof.json":
                 objects.append(
                     {
-                        "entry": payload.get("entry") or meta_path.name[: -len(".json")],
+                        "entry": payload.get("entry")
+                        or meta_path.name[: -len(".json")],
                         "offset": int(payload["segment_offset"]),
                         "size": int(payload["size"]),
                         "sha256": payload["sha256"],
@@ -770,7 +782,9 @@ def migrate_single_blob_to_segments(root):
                 "created_at": utc_now(),
                 "sealed_at": utc_now(),
                 "seal_reason": "legacy-single-blob-migration",
-                "target_bytes": max(DEFAULT_SEGMENT_TARGET_BYTES, os.path.getsize(new_blob)),
+                "target_bytes": max(
+                    DEFAULT_SEGMENT_TARGET_BYTES, os.path.getsize(new_blob)
+                ),
                 "used_bytes": os.path.getsize(new_blob),
                 "object_count": len(objects),
                 "objects": objects,
@@ -793,7 +807,9 @@ def migrate_legacy_blob_map(root, path, segment_id):
     if not path.exists() or path.is_symlink():
         return False
     payload = read_json(path)
-    if "central_blob" not in payload and all("segment_id" in extent for extent in payload.get("extents", [])):
+    if "central_blob" not in payload and all(
+        "segment_id" in extent for extent in payload.get("extents", [])
+    ):
         return False
     segment_id = validate_segment_id(segment_id)
     segment_blob = str(segment_blob_path(root, segment_id))
@@ -801,7 +817,9 @@ def migrate_legacy_blob_map(root, path, segment_id):
         segment_id: {
             "id": segment_id,
             "blob": segment_blob,
-            "size": os.path.getsize(segment_blob) if os.path.exists(segment_blob) else 0,
+            "size": (
+                os.path.getsize(segment_blob) if os.path.exists(segment_blob) else 0
+            ),
             "status": "sealed",
         }
     }
@@ -816,12 +834,18 @@ def migrate_legacy_blob_map(root, path, segment_id):
             {
                 "id": extent["segment_id"],
                 "blob": extent["segment_blob"],
-                "size": os.path.getsize(extent["segment_blob"]) if os.path.exists(extent["segment_blob"]) else 0,
+                "size": (
+                    os.path.getsize(extent["segment_blob"])
+                    if os.path.exists(extent["segment_blob"])
+                    else 0
+                ),
                 "status": "sealed",
             },
         )
     payload.pop("central_blob", None)
-    payload["segments"] = [segments[key] for key in sorted(segments, key=lambda value: int(value))]
+    payload["segments"] = [
+        segments[key] for key in sorted(segments, key=lambda value: int(value))
+    ]
     payload["segment_count"] = len(payload["segments"])
     atomic_json(path, payload, mode=0o444)
     return True
@@ -834,7 +858,9 @@ def migrate_legacy_blob_maps(root):
         return
     for blob_map in sorted((root / "views/by-closure").glob("*/store.blob-map.json")):
         migrate_legacy_blob_map(root, blob_map, "000001")
-    for blob_map in sorted((root / "domains").glob("*/generations/*/store.blob-map.json")):
+    for blob_map in sorted(
+        (root / "domains").glob("*/generations/*/store.blob-map.json")
+    ):
         migrate_legacy_blob_map(root, blob_map, "000001")
 
 
@@ -925,7 +951,9 @@ def append_file_to_segment(root, source, entry, txid, target_bytes):
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         oversized = size > target_bytes
         if oversized:
-            segment_id, meta = create_segment_locked(root, target_bytes, txid, oversized=True, make_current=False)
+            segment_id, meta = create_segment_locked(
+                root, target_bytes, txid, oversized=True, make_current=False
+            )
         else:
             current = current_open_segment_locked(root)
             if current is None:
@@ -974,7 +1002,6 @@ def append_file_to_segment(root, source, entry, txid, target_bytes):
 def ensure_tar_eof_extent(root, txid, target_bytes):
     root = Path(root)
     meta_path = tar_eof_meta_path(root)
-    digest = hash_bytes(b"\0" * TAR_EOF_SIZE)
     if meta_path.exists():
         meta = read_json(meta_path)
         object_extent_from_meta(root, meta, "canonical tar EOF")
@@ -999,7 +1026,9 @@ def ensure_tar_eof_extent(root, txid, target_bytes):
     return payload
 
 
-def admit_object_tar_fragment(root, logical_path, source, source_hash, txid, target_bytes):
+def admit_object_tar_fragment(
+    root, logical_path, source, source_hash, txid, target_bytes
+):
     root = Path(root)
     entry = store_entry(logical_path)
     meta = object_blob_meta_path(root, entry)
@@ -1086,7 +1115,9 @@ def admit_object(root, logical_path, physical_store_root, txid, target_bytes):
     if existing_meta and existing_meta.get("tree_hash") != source_hash:
         fail(f"existing object hash mismatch for {logical_path}")
 
-    tar_fragment = admit_object_tar_fragment(root, logical_path, source, source_hash, txid, target_bytes)
+    tar_fragment = admit_object_tar_fragment(
+        root, logical_path, source, source_hash, txid, target_bytes
+    )
     admitted = not existing_meta or tar_fragment.get("admitted", False)
     payload = {
         "schema": "nixome.closure-store.object.v2",
@@ -1192,7 +1223,11 @@ def add_manifest_store_liveness(root, manifest, live_objects, live_views):
 
 
 def canonical_view_root(store):
-    for key in ("canonical_metadata_image", "canonical_blob_map", "canonical_object_refs"):
+    for key in (
+        "canonical_metadata_image",
+        "canonical_blob_map",
+        "canonical_object_refs",
+    ):
         value = store.get(key)
         if value:
             return str(Path(value).parent)
@@ -1240,10 +1275,7 @@ def merge_segment_reference_details(target, source):
 
 def segment_reference_entries(reference_details):
     return {
-        segment_id: {
-            ref.get("entry", "<unknown>")
-            for ref in refs
-        }
+        segment_id: {ref.get("entry", "<unknown>") for ref in refs}
         for segment_id, refs in reference_details.items()
     }
 
@@ -1379,14 +1411,18 @@ def dm_table_for_extents(blob_map, backing_devices):
         segment_offset = int(extent["segment_offset"])
         length = int(extent["length"])
         if logical != expected_logical:
-            fail(f"non-contiguous blob map at logical offset {logical}, expected {expected_logical}")
+            fail(
+                f"non-contiguous blob map at logical offset {logical}, expected {expected_logical}"
+            )
         if logical % 512 != 0 or segment_offset % 512 != 0 or length % 512 != 0:
             fail("blob map extent is not 512-byte aligned")
         segment_id = validate_segment_id(extent["segment_id"])
         backing_device = backing_devices.get(segment_id)
         if not backing_device:
             fail(f"missing backing device for segment {segment_id}")
-        lines.append(f"{logical // 512} {length // 512} linear {backing_device} {segment_offset // 512}")
+        lines.append(
+            f"{logical // 512} {length // 512} linear {backing_device} {segment_offset // 512}"
+        )
         expected_logical += length
     logical_size = int(blob_map["logical_size"])
     if expected_logical != logical_size:
@@ -1398,7 +1434,9 @@ def create_dm_view_for_blob_map(root, name, blob_map):
     segment_paths = segment_path_map_from_blob_map(blob_map)
     backing_devices = {}
     segment_results = []
-    for segment_id, path in sorted(segment_paths.items(), key=lambda item: int(item[0])):
+    for segment_id, path in sorted(
+        segment_paths.items(), key=lambda item: int(item[0])
+    ):
         if not os.path.exists(path):
             fail(f"segment blob is missing: {path}")
         loop = ensure_loop_for_blob(path)
@@ -1426,7 +1464,9 @@ def runtime_view_ref_path(root, name):
     return Path(root) / "runtime" / f"{name}.json"
 
 
-def write_runtime_view_ref(root, name, domain, generation, blob_map_path, blob_map, status):
+def write_runtime_view_ref(
+    root, name, domain, generation, blob_map_path, blob_map, status
+):
     root = Path(root)
     path = runtime_view_ref_path(root, name)
     atomic_json(
@@ -1443,7 +1483,9 @@ def write_runtime_view_ref(root, name, domain, generation, blob_map_path, blob_m
             "segments": blob_map.get("segments", []),
             "physical_references": [
                 ref
-                for refs in blob_map_physical_references(blob_map, f"runtime:{name}").values()
+                for refs in blob_map_physical_references(
+                    blob_map, f"runtime:{name}"
+                ).values()
                 for ref in refs
             ],
             "updated_at": utc_now(),
@@ -1502,7 +1544,6 @@ def runtime_segment_references(root):
     return references, stale
 
 
-
 def detach_dm_view(name, deferred=False):
     if not dm_exists(name):
         return False
@@ -1533,7 +1574,9 @@ def attach_blob_view(root, domain, generation):
         fail(f"generation is not committed for {domain}: {generation}")
     store = manifest.get("store", {})
     if store.get("view_backend") != VIEW_BACKEND_EROFS_OBJECTMAP:
-        fail(f"generation is not an erofs-objectmap view: {domain} generation {generation}")
+        fail(
+            f"generation is not an erofs-objectmap view: {domain} generation {generation}"
+        )
 
     blob_map_path = store.get("canonical_blob_map") or store.get("blob_map")
     if not blob_map_path:
@@ -1542,9 +1585,13 @@ def attach_blob_view(root, domain, generation):
 
     name = blob_dm_name(domain, generation, store.get("closure_hash", ""))
     path = dm_path(name)
-    write_runtime_view_ref(root, name, domain, generation, blob_map_path, blob_map, "preparing")
+    write_runtime_view_ref(
+        root, name, domain, generation, blob_map_path, blob_map, "preparing"
+    )
     dm_view = create_dm_view_for_blob_map(root, name, blob_map)
-    write_runtime_view_ref(root, name, domain, generation, blob_map_path, blob_map, "active")
+    write_runtime_view_ref(
+        root, name, domain, generation, blob_map_path, blob_map, "active"
+    )
 
     return {
         "schema": "nixome.closure-store.attach.v1",
@@ -1578,7 +1625,15 @@ def detach_blob_view(root, domain, generation):
         if dm_exists(name):
             blob_map_path = store.get("canonical_blob_map") or store.get("blob_map")
             if blob_map_path and Path(blob_map_path).exists():
-                write_runtime_view_ref(root, name, domain, generation, blob_map_path, read_json(blob_map_path), "retiring")
+                write_runtime_view_ref(
+                    root,
+                    name,
+                    domain,
+                    generation,
+                    blob_map_path,
+                    read_json(blob_map_path),
+                    "retiring",
+                )
         else:
             runtime_ref_removed = remove_runtime_view_ref(root, name)
     else:
@@ -1596,7 +1651,9 @@ def detach_blob_view(root, domain, generation):
     }
 
 
-def materialize_erofs_objectmap_view(root, generation_dir, paths, closure_id, txid, target_bytes):
+def materialize_erofs_objectmap_view(
+    root, generation_dir, paths, closure_id, txid, target_bytes
+):
     root = Path(root)
     view_root = root / "views/by-closure" / closure_id
     metadata_image = view_root / "store.erofs"
@@ -1613,9 +1670,17 @@ def materialize_erofs_objectmap_view(root, generation_dir, paths, closure_id, tx
             reusable_blob_map = (
                 "segments" in existing_blob_map
                 and "central_blob" not in existing_blob_map
-                and all("segment_id" in extent for extent in existing_blob_map.get("extents", []))
+                and all(
+                    "segment_id" in extent
+                    for extent in existing_blob_map.get("extents", [])
+                )
             )
-    if not metadata_image.exists() or not blob_map.exists() or not object_refs.exists() or not reusable_blob_map:
+    if (
+        not metadata_image.exists()
+        or not blob_map.exists()
+        or not object_refs.exists()
+        or not reusable_blob_map
+    ):
         extents = []
         segments = {}
         object_entries = []
@@ -1625,13 +1690,17 @@ def materialize_erofs_objectmap_view(root, generation_dir, paths, closure_id, tx
             entry = store_entry(logical_path)
             meta_path = object_blob_meta_path(root, entry)
             if not meta_path.exists():
-                fail(f"canonical object data is missing while creating view: {logical_path}")
+                fail(
+                    f"canonical object data is missing while creating view: {logical_path}"
+                )
             meta = read_json(meta_path)
             extent = object_extent_from_meta(root, meta, f"canonical object {entry}")
             size = int(extent["size"])
             offset = int(extent["segment_offset"])
             if size % TAR_BLOCK_SIZE != 0 or offset % TAR_BLOCK_SIZE != 0:
-                fail(f"canonical object extent is not tar-block aligned: {logical_path}")
+                fail(
+                    f"canonical object extent is not tar-block aligned: {logical_path}"
+                )
             segment_id = extent["segment_id"]
             segments[segment_id] = {
                 "id": segment_id,
@@ -1683,7 +1752,9 @@ def materialize_erofs_objectmap_view(root, generation_dir, paths, closure_id, tx
             "view_backend": VIEW_BACKEND_EROFS_OBJECTMAP,
             "external_data_format": "posix-tar-index",
             "metadata_image": str(metadata_image),
-            "segments": [segments[key] for key in sorted(segments, key=lambda value: int(value))],
+            "segments": [
+                segments[key] for key in sorted(segments, key=lambda value: int(value))
+            ],
             "segment_count": len(segments),
             "logical_size": logical_offset,
             "object_count": len(object_entries),
@@ -1693,7 +1764,9 @@ def materialize_erofs_objectmap_view(root, generation_dir, paths, closure_id, tx
         }
 
         tmp_metadata = view_root / f".store.erofs.tmp-{uuid.uuid4().hex}"
-        create_erofs_tar_index_image(root, blob_map_payload, tmp_metadata, closure_id, txid)
+        create_erofs_tar_index_image(
+            root, blob_map_payload, tmp_metadata, closure_id, txid
+        )
         maybe_failpoint("view-after-metadata-build")
         os.replace(tmp_metadata, metadata_image)
         os.chmod(metadata_image, 0o444)
@@ -1778,12 +1851,21 @@ def materialize_view(
 ):
     generation_dir = Path(root) / "domains" / domain / "generations" / str(generation)
     if view_backend == VIEW_BACKEND_EROFS_OBJECTMAP:
-        return materialize_erofs_objectmap_view(root, generation_dir, paths, closure_id, txid, target_bytes)
+        return materialize_erofs_objectmap_view(
+            root, generation_dir, paths, closure_id, txid, target_bytes
+        )
     fail(f"unsupported closure view backend: {view_backend}")
 
 
 def generation_manifest_path(root, domain, generation):
-    return Path(root) / "domains" / domain / "generations" / str(generation) / "manifest.json"
+    return (
+        Path(root)
+        / "domains"
+        / domain
+        / "generations"
+        / str(generation)
+        / "manifest.json"
+    )
 
 
 def transaction_path(root, txid):
@@ -1803,7 +1885,10 @@ def transaction_status(root, txid):
 
 
 def generation_is_committed(root, manifest):
-    if manifest.get("schema") != SCHEMA_GENERATION or manifest.get("status") != "committed":
+    if (
+        manifest.get("schema") != SCHEMA_GENERATION
+        or manifest.get("status") != "committed"
+    ):
         return False
     txid = manifest.get("transaction")
     if not txid:
@@ -1979,7 +2064,9 @@ def admit_generation(args):
     admitted = []
     reused = []
     for logical_path in paths:
-        result = admit_object(root, logical_path, args.physical_store_root, txid, target_bytes)
+        result = admit_object(
+            root, logical_path, args.physical_store_root, txid, target_bytes
+        )
         if result["admitted"]:
             admitted.append(result)
         else:
@@ -2043,7 +2130,9 @@ def admit_generation(args):
             "object_extent_count": view.get("object_extent_count", 0),
             "segment_count": view.get("segment_count", 0),
             "segments": view.get("segments", []),
-            "image_contains_materialized_store_copy": view["image_contains_materialized_store_copy"],
+            "image_contains_materialized_store_copy": view[
+                "image_contains_materialized_store_copy"
+            ],
             "segment_target_bytes": target_bytes,
         },
         "verification": verification,
@@ -2171,7 +2260,9 @@ def switch(args):
         "store": manifest["store"],
         "view_image": manifest["store"]["image"],
         "canonical_view_image": manifest["store"]["canonical_image"],
-        "metadata_image": manifest["store"].get("metadata_image", manifest["store"]["image"]),
+        "metadata_image": manifest["store"].get(
+            "metadata_image", manifest["store"]["image"]
+        ),
         "canonical_metadata_image": manifest["store"].get(
             "canonical_metadata_image", manifest["store"]["canonical_image"]
         ),
@@ -2184,7 +2275,9 @@ def switch(args):
         "segment_count": manifest["store"].get("segment_count", 0),
         "segments": manifest["store"].get("segments", []),
         "filesystem": manifest["store"].get("filesystem", "erofs"),
-        "view_backend": manifest["store"].get("view_backend", VIEW_BACKEND_EROFS_OBJECTMAP),
+        "view_backend": manifest["store"].get(
+            "view_backend", VIEW_BACKEND_EROFS_OBJECTMAP
+        ),
         "read_only": True,
     }
 
@@ -2202,7 +2295,9 @@ def iter_committed_generations(root):
             if manifest_path.exists():
                 manifest = read_json(manifest_path)
                 if generation_is_committed(root, manifest):
-                    yield domain_dir.name, int(generation_dir.name), manifest_path, manifest
+                    yield domain_dir.name, int(
+                        generation_dir.name
+                    ), manifest_path, manifest
 
 
 def live_segment_references(root, live_objects, live_views):
@@ -2254,7 +2349,9 @@ def add_live_view_segment_references(live_views, reference_details):
 
 def physical_segment_reference_details(root, live_objects, live_views):
     details = {}
-    for segment_id, entries in live_segment_references(root, live_objects, live_views).items():
+    for segment_id, entries in live_segment_references(
+        root, live_objects, live_views
+    ).items():
         for entry in entries:
             details.setdefault(segment_id, []).append(
                 {
@@ -2284,10 +2381,15 @@ def collect_segments(root):
                 "id": segment_id,
                 "blob": str(blob_path),
                 "metadata": str(meta_path),
-                "status": meta.get("status", "missing-metadata" if not meta_path.exists() else "unknown"),
+                "status": meta.get(
+                    "status",
+                    "missing-metadata" if not meta_path.exists() else "unknown",
+                ),
                 "sealed": bool(meta.get("sealed", False)),
                 "oversized": bool(meta.get("oversized", False)),
-                "target_bytes": int(meta.get("target_bytes", DEFAULT_SEGMENT_TARGET_BYTES)),
+                "target_bytes": int(
+                    meta.get("target_bytes", DEFAULT_SEGMENT_TARGET_BYTES)
+                ),
                 "used_bytes": os.path.getsize(blob_path) if blob_path.exists() else 0,
                 "object_count": int(meta.get("object_count", 0)),
             }
@@ -2297,7 +2399,9 @@ def collect_segments(root):
 
 def gc_segments(root, live_segment_refs, reference_details=None):
     reference_details = reference_details or {
-        segment_id: [{"entry": entry, "source": "canonical-current"} for entry in entries]
+        segment_id: [
+            {"entry": entry, "source": "canonical-current"} for entry in entries
+        ]
         for segment_id, entries in live_segment_refs.items()
     }
     current = None
@@ -2360,12 +2464,16 @@ def compute_liveness(root, keep_generations):
         if data.get("status") not in ("committed", "aborted"):
             active_transaction_ids.add(txid)
 
-    for manifest_path in sorted((Path(root) / "domains").glob("*/generations/*/manifest.json")):
+    for manifest_path in sorted(
+        (Path(root) / "domains").glob("*/generations/*/manifest.json")
+    ):
         try:
             manifest = read_json(manifest_path)
         except (OSError, json.JSONDecodeError):
             continue
-        if manifest.get("schema") != SCHEMA_GENERATION or generation_is_committed(root, manifest):
+        if manifest.get("schema") != SCHEMA_GENERATION or generation_is_committed(
+            root, manifest
+        ):
             continue
         txid = manifest.get("transaction")
         tx_status = transaction_states.get(txid) or transaction_status(root, txid)
@@ -2405,7 +2513,11 @@ def compute_liveness(root, keep_generations):
         if current is not None:
             keep.add(current)
         for gen, _manifest_path, manifest in generations:
-            if gen in keep or (domain, gen) in running_generations or manifest.get("retention", {}).get("retain", False):
+            if (
+                gen in keep
+                or (domain, gen) in running_generations
+                or manifest.get("retention", {}).get("retain", False)
+            ):
                 retained_generations.add((domain, gen))
                 add_manifest_store_liveness(root, manifest, live_objects, live_views)
 
@@ -2457,8 +2569,12 @@ def segment_utilization(root, live_locations, reference_details):
     for segment in by_segment.values():
         segment["current_live_bytes"] = 0
         segment["current_live_entries"] = []
-        segment["physical_reference_count"] = len(reference_details.get(segment["id"], []))
-        segment["blocked_by_physical_refs"] = bool(reference_details.get(segment["id"], []))
+        segment["physical_reference_count"] = len(
+            reference_details.get(segment["id"], [])
+        )
+        segment["blocked_by_physical_refs"] = bool(
+            reference_details.get(segment["id"], [])
+        )
     for entry, info in live_locations.items():
         extent = info["extent"]
         segment = by_segment.get(extent["segment_id"])
@@ -2470,7 +2586,9 @@ def segment_utilization(root, live_locations, reference_details):
         used = int(segment.get("used_bytes", 0))
         live = int(segment.get("current_live_bytes", 0))
         segment["dead_bytes"] = max(used - live, 0)
-        segment["utilization_percent"] = 100.0 if used == 0 else round((live * 100.0) / used, 2)
+        segment["utilization_percent"] = (
+            100.0 if used == 0 else round((live * 100.0) / used, 2)
+        )
         segment["current_live_entries"] = sorted(segment["current_live_entries"])
     return [by_segment[key] for key in sorted(by_segment, key=lambda value: int(value))]
 
@@ -2492,7 +2610,12 @@ def compact_candidates(segments, threshold_percent, max_segments):
         if float(segment.get("utilization_percent", 100.0)) > threshold_percent:
             continue
         candidates.append(segment)
-    candidates.sort(key=lambda item: (float(item.get("utilization_percent", 100.0)), int(item["id"])))
+    candidates.sort(
+        key=lambda item: (
+            float(item.get("utilization_percent", 100.0)),
+            int(item["id"]),
+        )
+    )
     return candidates[:max_segments]
 
 
@@ -2504,7 +2627,10 @@ def copy_location_to_tmp(root, entry, location, txid):
     segment_id = validate_segment_id(location["segment_id"])
     remaining = int(location["size"])
     digest = hashlib.sha256()
-    with segment_blob_path(root, segment_id).open("rb") as source, tmp.open("xb") as target:
+    with (
+        segment_blob_path(root, segment_id).open("rb") as source,
+        tmp.open("xb") as target,
+    ):
         source.seek(int(location["segment_offset"]))
         while remaining:
             data = source.read(min(1024 * 1024, remaining))
@@ -2545,10 +2671,17 @@ def existing_valid_alternate_location(root, payload, excluded_segments, label):
 
 def publish_blob_location(root, entry, new_location, txid, reason):
     root = Path(root)
-    meta_path = tar_eof_meta_path(root) if entry == ".tar-eof" else object_blob_meta_path(root, entry)
+    meta_path = (
+        tar_eof_meta_path(root)
+        if entry == ".tar-eof"
+        else object_blob_meta_path(root, entry)
+    )
     payload = read_json(meta_path)
     old_current = current_location_from_meta(payload, f"canonical object {entry}")
-    new_location = normalize_location(dict(new_location, status="current", transaction=txid), f"canonical object {entry}")
+    new_location = normalize_location(
+        dict(new_location, status="current", transaction=txid),
+        f"canonical object {entry}",
+    )
     if location_key(old_current) == location_key(new_location):
         return False
 
@@ -2571,9 +2704,11 @@ def publish_blob_location(root, entry, new_location, txid, reason):
         locations.append(new_location)
     else:
         locations = [
-            dict(location, status="current", transaction=txid, reason=reason)
-            if location_key(location) == location_key(new_location)
-            else location
+            (
+                dict(location, status="current", transaction=txid, reason=reason)
+                if location_key(location) == location_key(new_location)
+                else location
+            )
             for location in locations
         ]
 
@@ -2620,11 +2755,17 @@ def refresh_blob_map_locations(root, blob_map_path):
             meta_path = object_blob_meta_path(root, entry)
             if not meta_path.exists():
                 continue
-            current = object_extent_from_meta(root, read_json(meta_path), f"canonical object {entry}")
+            current = object_extent_from_meta(
+                root, read_json(meta_path), f"canonical object {entry}"
+            )
         if int(extent["length"]) != int(current["size"]):
-            fail(f"cannot refresh blob map {blob_map_path}: object size changed for {entry}")
+            fail(
+                f"cannot refresh blob map {blob_map_path}: object size changed for {entry}"
+            )
         if extent.get("object_sha256") != current["sha256"]:
-            fail(f"cannot refresh blob map {blob_map_path}: object hash changed for {entry}")
+            fail(
+                f"cannot refresh blob map {blob_map_path}: object hash changed for {entry}"
+            )
         for key in ["segment_id", "segment_blob", "segment_offset"]:
             if extent.get(key) != current[key]:
                 changed = True
@@ -2635,10 +2776,16 @@ def refresh_blob_map_locations(root, blob_map_path):
             "id": current["segment_id"],
             "blob": current["segment_blob"],
             "size": os.path.getsize(current["segment_blob"]),
-            "status": read_segment_meta(root, current["segment_id"]).get("status", "unknown"),
+            "status": read_segment_meta(root, current["segment_id"]).get(
+                "status", "unknown"
+            ),
         }
-    new_segments = [segments[key] for key in sorted(segments, key=lambda value: int(value))]
-    if payload.get("segments") != new_segments or payload.get("segment_count") != len(new_segments):
+    new_segments = [
+        segments[key] for key in sorted(segments, key=lambda value: int(value))
+    ]
+    if payload.get("segments") != new_segments or payload.get("segment_count") != len(
+        new_segments
+    ):
         changed = True
     payload["segments"] = new_segments
     payload["segment_count"] = len(new_segments)
@@ -2650,10 +2797,14 @@ def refresh_blob_map_locations(root, blob_map_path):
 
 def refresh_all_blob_maps(root):
     refreshed = []
-    for blob_map in sorted((Path(root) / "views/by-closure").glob("*/store.blob-map.json")):
+    for blob_map in sorted(
+        (Path(root) / "views/by-closure").glob("*/store.blob-map.json")
+    ):
         if refresh_blob_map_locations(root, blob_map):
             refreshed.append(str(blob_map))
-    for blob_map in sorted((Path(root) / "domains").glob("*/generations/*/store.blob-map.json")):
+    for blob_map in sorted(
+        (Path(root) / "domains").glob("*/generations/*/store.blob-map.json")
+    ):
         if blob_map.is_symlink():
             continue
         if refresh_blob_map_locations(root, blob_map):
@@ -2664,8 +2815,12 @@ def refresh_all_blob_maps(root):
 def retire_unreferenced_segments(root, live_objects, live_views):
     live_segment_refs = live_segment_references(root, live_objects, live_views)
     physical_refs = physical_segment_reference_details(root, live_objects, live_views)
-    before = {segment["id"]: int(segment["used_bytes"]) for segment in collect_segments(root)}
-    removed, retained, partial, blocked = gc_segments(root, live_segment_refs, physical_refs)
+    before = {
+        segment["id"]: int(segment["used_bytes"]) for segment in collect_segments(root)
+    }
+    removed, retained, partial, blocked = gc_segments(
+        root, live_segment_refs, physical_refs
+    )
     return {
         "removed_segments": removed,
         "retained_segments": retained,
@@ -2677,7 +2832,9 @@ def retire_unreferenced_segments(root, live_objects, live_views):
 
 def compact(args):
     root = ensure_pool(args.pool_root)
-    threshold = parse_positive_int(args.threshold_percent, "compaction threshold percent")
+    threshold = parse_positive_int(
+        args.threshold_percent, "compaction threshold percent"
+    )
     if threshold > 100:
         fail("compaction threshold percent must be <= 100")
     max_segments = parse_positive_int(args.max_segments, "compaction max segments")
@@ -2686,8 +2843,12 @@ def compact(args):
     keep_generations = int(args.keep_generations)
 
     liveness = compute_liveness(root, keep_generations)
-    live_locations = current_live_locations(root, liveness["live_objects"], liveness["live_views"])
-    physical_refs = physical_segment_reference_details(root, liveness["live_objects"], liveness["live_views"])
+    live_locations = current_live_locations(
+        root, liveness["live_objects"], liveness["live_views"]
+    )
+    physical_refs = physical_segment_reference_details(
+        root, liveness["live_objects"], liveness["live_views"]
+    )
     segments = segment_utilization(root, live_locations, physical_refs)
     candidates = compact_candidates(segments, threshold, max_segments)
     zero_ref_retire = [
@@ -2711,9 +2872,15 @@ def compact(args):
             "segments": segments,
             "candidate_segments": candidates,
             "directly_reclaimable_segments": zero_ref_retire,
-            "objects_to_move": sum(len(segment.get("current_live_entries", [])) for segment in candidates),
-            "bytes_to_copy": sum(int(segment.get("current_live_bytes", 0)) for segment in candidates),
-            "bytes_reclaimable_now": sum(int(segment.get("used_bytes", 0)) for segment in zero_ref_retire),
+            "objects_to_move": sum(
+                len(segment.get("current_live_entries", [])) for segment in candidates
+            ),
+            "bytes_to_copy": sum(
+                int(segment.get("current_live_bytes", 0)) for segment in candidates
+            ),
+            "bytes_reclaimable_now": sum(
+                int(segment.get("used_bytes", 0)) for segment in zero_ref_retire
+            ),
         }
 
     txid = uuid.uuid4().hex
@@ -2737,7 +2904,9 @@ def compact(args):
         if current is not None:
             current_segment_id, current_meta = current
             if int(current_meta.get("object_count", 0)) > 0:
-                seal_segment_locked(root, current_segment_id, txid, "pre-compaction-open-segment")
+                seal_segment_locked(
+                    root, current_segment_id, txid, "pre-compaction-open-segment"
+                )
         fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
     moved = []
@@ -2753,17 +2922,29 @@ def compact(args):
             old_extent = info["extent"]
             if old_extent["segment_id"] != segment["id"]:
                 continue
-            alternate = existing_valid_alternate_location(root, info["payload"], excluded_segments, f"canonical object {entry}")
+            alternate = existing_valid_alternate_location(
+                root, info["payload"], excluded_segments, f"canonical object {entry}"
+            )
             if alternate:
                 maybe_failpoint("compact-before-location-publish")
-                if publish_blob_location(root, entry, alternate, txid, "compact-reuse-existing-location"):
-                    reused.append({"entry": entry, "segment_id": alternate["segment_id"], "segment_offset": alternate["segment_offset"]})
+                if publish_blob_location(
+                    root, entry, alternate, txid, "compact-reuse-existing-location"
+                ):
+                    reused.append(
+                        {
+                            "entry": entry,
+                            "segment_id": alternate["segment_id"],
+                            "segment_offset": alternate["segment_offset"],
+                        }
+                    )
                 maybe_failpoint("compact-after-location-publish")
                 continue
             tmp = copy_location_to_tmp(root, entry, old_extent, txid)
             maybe_failpoint("compact-after-object-copy")
             try:
-                new_extent = append_file_to_segment(root, tmp, entry, txid, target_bytes)
+                new_extent = append_file_to_segment(
+                    root, tmp, entry, txid, target_bytes
+                )
                 verify_segment_region(
                     root,
                     new_extent["segment_id"],
@@ -2826,7 +3007,15 @@ def compact(args):
     )
     maybe_failpoint("compact-after-retirement")
 
-    write_amplification = 0.0 if bytes_copied == 0 else round(bytes_copied / max(sum(int(segment.get("dead_bytes", 0)) for segment in candidates), 1), 4)
+    write_amplification = (
+        0.0
+        if bytes_copied == 0
+        else round(
+            bytes_copied
+            / max(sum(int(segment.get("dead_bytes", 0)) for segment in candidates), 1),
+            4,
+        )
+    )
     return {
         "schema": SCHEMA_COMPACTION,
         "status": "passed",
@@ -2863,7 +3052,10 @@ def recover(args):
             manifest_path = data.get("manifest")
             if manifest_path and Path(manifest_path).exists():
                 manifest = read_json(manifest_path)
-                if manifest.get("schema") == SCHEMA_GENERATION and manifest.get("status") == "prepared":
+                if (
+                    manifest.get("schema") == SCHEMA_GENERATION
+                    and manifest.get("status") == "prepared"
+                ):
                     manifest["status"] = "committed"
                     manifest["recovered_at"] = utc_now()
                     atomic_json(manifest_path, manifest)
@@ -2901,7 +3093,12 @@ def recover(args):
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             meta = read_segment_meta(root, segment["id"])
             if not meta.get("sealed"):
-                seal_segment_locked(root, segment["id"], meta.get("created_by_transaction"), "recovery-after-aborted-transaction")
+                seal_segment_locked(
+                    root,
+                    segment["id"],
+                    meta.get("created_by_transaction"),
+                    "recovery-after-aborted-transaction",
+                )
                 sealed_aborted_segments.append(segment["id"])
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
     for domain_dir in sorted((root / "domains").iterdir()):
@@ -2961,12 +3158,16 @@ def gc(args):
         if data.get("status") not in ("committed", "aborted"):
             active_transaction_ids.add(txid)
 
-    for manifest_path in sorted((root / "domains").glob("*/generations/*/manifest.json")):
+    for manifest_path in sorted(
+        (root / "domains").glob("*/generations/*/manifest.json")
+    ):
         try:
             manifest = read_json(manifest_path)
         except (OSError, json.JSONDecodeError):
             continue
-        if manifest.get("schema") != SCHEMA_GENERATION or generation_is_committed(root, manifest):
+        if manifest.get("schema") != SCHEMA_GENERATION or generation_is_committed(
+            root, manifest
+        ):
             continue
         txid = manifest.get("transaction")
         tx_status = transaction_states.get(txid) or transaction_status(root, txid)
@@ -2992,7 +3193,9 @@ def gc(args):
                 continue
             payload = read_json(meta)
             if payload.get("transaction") in active_transaction_ids:
-                active_transaction_objects.add(payload.get("entry") or meta.name[: -len(".json")])
+                active_transaction_objects.add(
+                    payload.get("entry") or meta.name[: -len(".json")]
+                )
 
     live_objects.update(active_transaction_objects)
 
@@ -3016,7 +3219,11 @@ def gc(args):
         if current is not None:
             keep.add(current)
         for gen, manifest_path, manifest in generations:
-            if gen in keep or (domain, gen) in running_generations or manifest.get("retention", {}).get("retain", False):
+            if (
+                gen in keep
+                or (domain, gen) in running_generations
+                or manifest.get("retention", {}).get("retain", False)
+            ):
                 retained_generations.add((domain, gen))
                 add_manifest_store_liveness(root, manifest, live_objects, live_views)
             else:
@@ -3056,8 +3263,8 @@ def gc(args):
     live_segment_refs = live_segment_references(root, live_objects, live_views)
     physical_refs = physical_segment_reference_details(root, live_objects, live_views)
     runtime_refs, stale_runtime_view_refs = runtime_segment_references(root)
-    removed_segments, retained_segments, partially_live_segments, blocked_segments = gc_segments(
-        root, live_segment_refs, physical_refs
+    removed_segments, retained_segments, partially_live_segments, blocked_segments = (
+        gc_segments(root, live_segment_refs, physical_refs)
     )
 
     return {
@@ -3087,7 +3294,9 @@ def gc(args):
         "retained_segments": retained_segments,
         "partially_live_segments": partially_live_segments,
         "blocked_segments": blocked_segments,
-        "runtime_segment_reference_count": sum(len(refs) for refs in runtime_refs.values()),
+        "runtime_segment_reference_count": sum(
+            len(refs) for refs in runtime_refs.values()
+        ),
         "segment_store_append_only": True,
         "segment_compaction": "available",
     }
@@ -3096,11 +3305,17 @@ def gc(args):
 def status(args):
     root = ensure_pool(args.pool_root)
     liveness = compute_liveness(root, 2)
-    physical_refs = physical_segment_reference_details(root, liveness["live_objects"], liveness["live_views"])
-    live_locations = current_live_locations(root, liveness["live_objects"], liveness["live_views"])
+    physical_refs = physical_segment_reference_details(
+        root, liveness["live_objects"], liveness["live_views"]
+    )
+    live_locations = current_live_locations(
+        root, liveness["live_objects"], liveness["live_views"]
+    )
     domains = {}
     for domain, generation, manifest_path, manifest in iter_committed_generations(root):
-        domains.setdefault(domain, {"current": current_generation(root, domain), "generations": []})
+        domains.setdefault(
+            domain, {"current": current_generation(root, domain), "generations": []}
+        )
         domains[domain]["generations"].append(
             {
                 "generation": generation,
@@ -3109,7 +3324,9 @@ def status(args):
                 "closure_hash": manifest["store"]["closure_hash"],
                 "object_count": manifest["store"]["object_count"],
                 "filesystem": manifest["store"].get("filesystem", "erofs"),
-                "view_backend": manifest["store"].get("view_backend", VIEW_BACKEND_EROFS_OBJECTMAP),
+                "view_backend": manifest["store"].get(
+                    "view_backend", VIEW_BACKEND_EROFS_OBJECTMAP
+                ),
             }
         )
     running = [
@@ -3147,20 +3364,31 @@ def status(args):
         "object_segment_count": object_blob_count,
         "segments_dir": str(segments_dir(root)),
         "segment_count": len(segments),
-        "sealed_segment_count": len([segment for segment in segments if segment["sealed"]]),
-        "open_segment_count": len([segment for segment in segments if not segment["sealed"]]),
+        "sealed_segment_count": len(
+            [segment for segment in segments if segment["sealed"]]
+        ),
+        "open_segment_count": len(
+            [segment for segment in segments if not segment["sealed"]]
+        ),
         "segment_bytes_total": sum(int(segment["used_bytes"]) for segment in segments),
         "segments": segments,
         "domains": domains,
         "running": running,
-        "runtime_view_reference_count": sum(len(refs) for refs in runtime_refs.values()),
+        "runtime_view_reference_count": sum(
+            len(refs) for refs in runtime_refs.values()
+        ),
         "stale_runtime_view_refs": stale_runtime_view_refs,
         "segment_compaction": "available",
     }
 
 
 def add_common(parser):
-    parser.add_argument("--pool-root", default=os.environ.get("NIXOME_CLOSURE_STORE_ROOT", "/var/lib/nixome/closure-store"))
+    parser.add_argument(
+        "--pool-root",
+        default=os.environ.get(
+            "NIXOME_CLOSURE_STORE_ROOT", "/var/lib/nixome/closure-store"
+        ),
+    )
 
 
 def build_parser():
@@ -3177,16 +3405,24 @@ def build_parser():
     admit_parser.add_argument("--store-device", default="/dev/xvde")
     admit_parser.add_argument("--store-blob-device", default="/dev/xvdf")
     admit_parser.add_argument("--store-mountpoint", default="/nix/store")
-    admit_parser.add_argument("--physical-store-root", default=default_physical_store_root())
+    admit_parser.add_argument(
+        "--physical-store-root", default=default_physical_store_root()
+    )
     admit_parser.add_argument(
         "--segment-target-bytes",
         default=os.environ.get("NIXOME_CLOSURE_STORE_SEGMENT_TARGET_BYTES", ""),
         help="target maximum size for open immutable object segments",
     )
-    admit_parser.add_argument("--verify-mode", default=os.environ.get("NIXOME_CLOSURE_STORE_VERIFY", "nix-store"), choices=["none", "tree", "nix-store", "nix-store-trust"])
+    admit_parser.add_argument(
+        "--verify-mode",
+        default=os.environ.get("NIXOME_CLOSURE_STORE_VERIFY", "nix-store"),
+        choices=["none", "tree", "nix-store", "nix-store-trust"],
+    )
     admit_parser.add_argument(
         "--view-backend",
-        default=os.environ.get("NIXOME_CLOSURE_STORE_VIEW_BACKEND", DEFAULT_VIEW_BACKEND),
+        default=os.environ.get(
+            "NIXOME_CLOSURE_STORE_VIEW_BACKEND", DEFAULT_VIEW_BACKEND
+        ),
         choices=[VIEW_BACKEND_EROFS_OBJECTMAP],
     )
     admit_parser.add_argument("--approved-by", default="dom0")
@@ -3272,13 +3508,17 @@ def build_parser():
     add_common(attach_parser)
     attach_parser.add_argument("--domain", required=True)
     attach_parser.add_argument("--generation", required=True)
-    attach_parser.set_defaults(func=lambda args: attach_blob_view(args.pool_root, args.domain, args.generation))
+    attach_parser.set_defaults(
+        func=lambda args: attach_blob_view(args.pool_root, args.domain, args.generation)
+    )
 
     detach_parser = sub.add_parser("detach-blob-view")
     add_common(detach_parser)
     detach_parser.add_argument("--domain", required=True)
     detach_parser.add_argument("--generation", required=True)
-    detach_parser.set_defaults(func=lambda args: detach_blob_view(args.pool_root, args.domain, args.generation))
+    detach_parser.set_defaults(
+        func=lambda args: detach_blob_view(args.pool_root, args.domain, args.generation)
+    )
 
     mark_running_parser = sub.add_parser("mark-running")
     add_common(mark_running_parser)
