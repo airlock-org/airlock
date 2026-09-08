@@ -56,9 +56,15 @@ GEN2_APPLY_LOG="$LOG_DIR/nix-closure-domain-apply-gen2.log"
 GEN2_APPLY_RESULT_JSON="$LOG_DIR/nix-closure-domain-config-apply-gen2.json"
 GEN2_SHARING_PROOF_LOG="$LOG_DIR/nix-closure-domain-sharing-proof-gen2.json"
 PRE_APPLY_SHUTDOWN_LOG="$LOG_DIR/nix-closure-domain-pre-apply-shutdown.log"
+DIRECT_TOPOLOGY_LOG="$LOG_DIR/nix-closure-domain-direct-topology.json"
+DIRECT_GEN2_TOPOLOGY_LOG="$LOG_DIR/nix-closure-domain-direct-topology-gen2.json"
 
 DOMAIN="${NIXOME_NIX_CLOSURE_DOMAIN:-nixome-closure-smoke}"
 PEER_DOMAIN="${NIXOME_NIX_CLOSURE_PEER_DOMAIN:-${DOMAIN}-peer}"
+APPLY_MODE="${NIXOME_NIX_CLOSURE_APPLY_MODE:-direct}"
+DIRECT_PRIMARY_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_PRIMARY_SOURCE_VM:-config-staging}"
+DIRECT_PEER_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_PEER_SOURCE_VM:-config-validator}"
+DIRECT_GEN2_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_GEN2_SOURCE_VM:-config-vault}"
 STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
 VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
 VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
@@ -91,6 +97,7 @@ store_filesystem=""
 store_blob_device=""
 store_blob_map=""
 store_blob_map_physical=""
+EXPECTED_DOMAIN_ROLE="${NIXOME_NIX_CLOSURE_EXPECTED_ROLE:-nix-closure-smoke}"
 reboot_status="not-run"
 shutdown_start_status="not-run"
 gui_status="skipped"
@@ -121,6 +128,12 @@ json_file_value_or_null() {
   fi
 }
 
+shell_literal() {
+  printf "'"
+  printf '%s' "$1" | sed "s/'/'\\\\''/g"
+  printf "'"
+}
+
 write_result() {
   status="$1"
   reason="$2"
@@ -146,6 +159,8 @@ write_result() {
     jq -Rn --arg value "$APPLY_MESSAGE" '$value' | tr -d '\n'
     printf ',"apply_message_gen2":'
     jq -Rn --arg value "$APPLY_MESSAGE_GEN2" '$value' | tr -d '\n'
+    printf ',"apply_mode":'
+    jq -Rn --arg value "$APPLY_MODE" '$value' | tr -d '\n'
     printf ',"system_source":'
     jq -Rn --arg value "$system_source" '$value' | tr -d '\n'
     printf ',"root_source":'
@@ -287,7 +302,9 @@ collect_diagnostics() {
     > "$JOURNAL_LOG" 2>&1 || true
   tail -n 320 /var/log/libvirt/libxl/libxl-driver.log > "$LIBXL_LOG" 2>&1 || true
   cat /var/log/nixome/config-apply-topology.json > "$APPLIED_TOPOLOGY_LOG" 2>/dev/null || true
-  cat /var/log/nixome/config-apply.json > "$APPLY_RESULT_JSON" 2>/dev/null || true
+  if [ "$APPLY_MODE" = "config-flow" ]; then
+    cat /var/log/nixome/config-apply.json > "$APPLY_RESULT_JSON" 2>/dev/null || true
+  fi
   cat /var/log/nixome/config-apply-nix-domain-materializations.json > "$MATERIALIZATIONS_LOG" 2>/dev/null || true
   cat /var/log/nixome/config-apply-nix-domain-builds.json > "$BUILDS_LOG" 2>/dev/null || true
   cat /var/log/nixome/setup-config.json > "$SETUP_LOG" 2>/dev/null || true
@@ -637,6 +654,198 @@ set_test_vm_memory() {
     qvm-prefs "$vm" maxmem "$maxmem"
 }
 
+require_source_domain_artifacts() {
+  vm="$1"
+
+  for feature in \
+    nixome-system-source \
+    nixome-root-source \
+    nixome-store-source \
+    nixome-role; do
+    [ -n "$(feature_value_for "$vm" "$feature")" ] ||
+      fail "source domain $vm is missing feature $feature"
+  done
+  [ -n "$(qvm-prefs "$vm" kernel 2>/dev/null | tr -d '\n')" ] ||
+    fail "source domain $vm has no kernel preference"
+}
+
+write_direct_topology() {
+  output="$1"
+  primary_source_vm="$2"
+  peer_source_vm="$3"
+
+  require_source_domain_artifacts "$primary_source_vm"
+  require_source_domain_artifacts "$peer_source_vm"
+
+  primary_system="$(feature_value_for "$primary_source_vm" nixome-system-source)"
+  primary_root="$(feature_value_for "$primary_source_vm" nixome-root-source)"
+  primary_store="$(feature_value_for "$primary_source_vm" nixome-store-source)"
+  primary_kernel="$(qvm-prefs "$primary_source_vm" kernel 2>/dev/null | tr -d '\n')"
+  primary_role="$(feature_value_for "$primary_source_vm" nixome-role)"
+  peer_system="$(feature_value_for "$peer_source_vm" nixome-system-source)"
+  peer_root="$(feature_value_for "$peer_source_vm" nixome-root-source)"
+  peer_store="$(feature_value_for "$peer_source_vm" nixome-store-source)"
+  peer_kernel="$(qvm-prefs "$peer_source_vm" kernel 2>/dev/null | tr -d '\n')"
+  peer_role="$(feature_value_for "$peer_source_vm" nixome-role)"
+
+  jq -n \
+    --arg domain "$DOMAIN" \
+    --arg peer "$PEER_DOMAIN" \
+    --arg primary_system "$primary_system" \
+    --arg primary_root "$primary_root" \
+    --arg primary_store "$primary_store" \
+    --arg primary_kernel "$primary_kernel" \
+    --arg primary_role "$primary_role" \
+    --arg peer_system "$peer_system" \
+    --arg peer_root "$peer_root" \
+    --arg peer_store "$peer_store" \
+    --arg peer_kernel "$peer_kernel" \
+    --arg peer_role "$peer_role" \
+    --arg qube_user "$QUBE_USER" \
+    '
+      def nix_domain($label; $system; $root; $store; $kernel; $role):
+        {
+          class: "StandaloneVM",
+          label: $label,
+          netvm: null,
+          template: null,
+          prefs: {
+            autostart: false,
+            default_user: $qube_user,
+            include_in_backups: false,
+            kernel: $kernel,
+            memory: 1024,
+            maxmem: 1024,
+            qrexec_timeout: 180,
+            vcpus: 1,
+            virt_mode: "pvh"
+          },
+          features: {
+            "nixome-backend": "nix-closure",
+            "nixome-role": $role,
+            "nixome-test": "nix-closure-domain",
+            os: "Linux",
+            qrexec: "1"
+          },
+          services: {
+            "network-manager": false
+          },
+          backend: {
+            type: "nix-closure",
+            template: null,
+            system: {
+              source: $system,
+              source_ref: null
+            },
+            kernel: {
+              name: $kernel,
+              source: null,
+              source_ref: null
+            },
+            initrd: {
+              name: null,
+              source: null,
+              source_ref: null
+            },
+            modules: {
+              name: null,
+              source: null,
+              source_ref: null
+            },
+            root: {
+              mode: "qubes-root-image",
+              source: $root,
+              source_ref: null,
+              read_only: false
+            },
+            store: {
+              mode: "shared-closure",
+              source: $store,
+              source_ref: null,
+              read_only: true,
+              device: "/dev/xvde",
+              blob_device: "/dev/xvdf",
+              blobDevice: "/dev/xvdf",
+              mountpoint: "/nix/store",
+              view_backend: "erofs-objectmap",
+              viewBackend: "erofs-objectmap",
+              chunk_size: 65536,
+              chunkSize: 65536
+            },
+            state: {
+              persistent: null,
+              volatile: null
+            }
+          }
+        };
+
+      {
+        schema: "nixome.qubes-topology.v1",
+        prefs: {},
+        templates: {},
+        kernels: {},
+        qrexec_policy: {
+          rules: [
+            {
+              service: "nixome.NixStoreRuntimeCheck",
+              argument: "*",
+              source: "dom0",
+              target: $domain,
+              action: "allow"
+            },
+            {
+              service: "nixome.NixStoreRuntimeCheck",
+              argument: "*",
+              source: "dom0",
+              target: $peer,
+              action: "allow"
+            },
+            {
+              service: "nixome.NixStoreRuntimeCheck",
+              argument: "*",
+              source: "@anyvm",
+              target: "@anyvm",
+              action: "deny"
+            }
+          ]
+        },
+        domains: {
+          ($domain): nix_domain("green"; $primary_system; $primary_root; $primary_store; $primary_kernel; $primary_role),
+          ($peer): nix_domain("blue"; $peer_system; $peer_root; $peer_store; $peer_kernel; $peer_role)
+        }
+      }
+    ' > "$output"
+}
+
+write_direct_apply_result() {
+  reason="$1"
+  topology="${2:-$DIRECT_TOPOLOGY_LOG}"
+  output="${3:-$APPLY_RESULT_JSON}"
+  setup_json="$(json_file_value_or_null "$SETUP_LOG")"
+
+  jq -c -n \
+    --arg schema "nixome.config-apply.v1" \
+    --arg status "passed" \
+    --arg reason "$reason" \
+    --arg domain "$DOMAIN" \
+    --arg peer "$PEER_DOMAIN" \
+    --arg topology "$topology" \
+    --argjson setup "$setup_json" \
+    '{
+      schema: $schema,
+      status: $status,
+      reason: $reason,
+      topology: $topology,
+      setup: $setup,
+      nix_domain_materializations_result: {
+        domains: [
+          { domain: $domain },
+          { domain: $peer }
+        ]
+      }
+    }' > "$output"
+}
+
 check_source_paths() {
   root_source="$(feature_value nixome-root-source)"
   store_source="$(feature_value nixome-store-source)"
@@ -811,8 +1020,12 @@ run_runtime_service_check() {
 }
 
 write_guest_probe_script() {
-  cat > "$GUEST_PROBE_SCRIPT" <<'EOF'
+  {
+    cat <<'EOF'
 set -eu
+EOF
+    printf 'expected_domain_role=%s\n' "$(shell_literal "$EXPECTED_DOMAIN_ROLE")"
+    cat <<'EOF'
 
 system_path="$(
   tr ' ' '\n' < /proc/cmdline |
@@ -886,7 +1099,7 @@ systemctl is-active qubes-qrexec-agent.service
 systemctl is-active nixome-qubes-rw-init.service
 
 case "$(cat /etc/nixome/domain-role)" in
-  nix-closure-smoke) ;;
+  "$expected_domain_role") ;;
   *) echo "unexpected domain role" >&2; exit 1 ;;
 esac
 
@@ -901,6 +1114,7 @@ test -d /var/log/qubes
 
 printf 'runtime_probe=passed\n'
 EOF
+  } > "$GUEST_PROBE_SCRIPT"
 }
 
 run_guest_probe() {
@@ -1012,7 +1226,7 @@ for cmd in \
   jq \
   journalctl \
   nixome-closure-store \
-  nixome-config-apply \
+  nixome-setup-config \
   qrexec-client \
   qvm-check \
   qvm-features \
@@ -1046,6 +1260,18 @@ esac
 [ "$PEER_DOMAIN" != "$DOMAIN" ] ||
   fail "peer Nix closure test domain must differ from primary domain"
 
+case "$APPLY_MODE" in
+  direct|config-flow)
+    ;;
+  *)
+    fail "unsupported NIXOME_NIX_CLOSURE_APPLY_MODE: $APPLY_MODE"
+    ;;
+esac
+
+if [ "$APPLY_MODE" = "config-flow" ]; then
+  require_command nixome-config-apply
+fi
+
 if ! [ -r "$XEN_CAPABILITIES" ] || ! grep -qw control_d "$XEN_CAPABILITIES"; then
   fail "host is not a Xen control domain"
 fi
@@ -1059,30 +1285,32 @@ qvm-check "$STAGING" >/dev/null 2>&1 || fail "missing config staging VM: $STAGIN
 qvm-check "$VALIDATOR" >/dev/null 2>&1 || fail "missing config validator VM: $VALIDATOR"
 qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
 
-set_test_vm_memory "$STAGING" "$CONFIG_VM_TEST_MEMORY" "$CONFIG_VM_TEST_MAXMEM"
-set_test_vm_memory "$VALIDATOR" "$VALIDATOR_TEST_MEMORY" "$VALIDATOR_TEST_MAXMEM"
-set_test_vm_memory "$VAULT" "$CONFIG_VM_TEST_MEMORY" "$CONFIG_VM_TEST_MAXMEM"
+case "$APPLY_MODE" in
+  config-flow)
+    set_test_vm_memory "$STAGING" "$CONFIG_VM_TEST_MEMORY" "$CONFIG_VM_TEST_MAXMEM"
+    set_test_vm_memory "$VALIDATOR" "$VALIDATOR_TEST_MEMORY" "$VALIDATOR_TEST_MAXMEM"
+    set_test_vm_memory "$VAULT" "$CONFIG_VM_TEST_MEMORY" "$CONFIG_VM_TEST_MAXMEM"
 
-start_vm "$STAGING"
-start_vm "$VALIDATOR"
-start_vm "$VAULT"
-wait_for_qrexec "$STAGING" "$STAGING" "$LOG_DIR/nix-closure-domain-$STAGING-qrexec.log"
-wait_for_qrexec "$VALIDATOR" "$VALIDATOR" "$LOG_DIR/nix-closure-domain-$VALIDATOR-qrexec.log"
-wait_for_qrexec "$VAULT" "$VAULT" "$LOG_DIR/nix-closure-domain-$VAULT-qrexec.log"
+    start_vm "$STAGING"
+    start_vm "$VALIDATOR"
+    start_vm "$VAULT"
+    wait_for_qrexec "$STAGING" "$STAGING" "$LOG_DIR/nix-closure-domain-$STAGING-qrexec.log"
+    wait_for_qrexec "$VALIDATOR" "$VALIDATOR" "$LOG_DIR/nix-closure-domain-$VALIDATOR-qrexec.log"
+    wait_for_qrexec "$VAULT" "$VAULT" "$LOG_DIR/nix-closure-domain-$VAULT-qrexec.log"
 
-run_qrexec_script_or_fail "$STAGING" "initialize $STAGING config repo" "$LOG_DIR/nix-closure-domain-staging-init.log" <(
-  printf 'set -eu\nnixome-config-staging-init\n'
-)
-run_qrexec_script_or_fail "$VALIDATOR" "initialize $VALIDATOR config tools" "$LOG_DIR/nix-closure-domain-validator-init.log" <(
-  printf 'set -eu\nnixome-config-validator-init\n'
-)
+    run_qrexec_script_or_fail "$STAGING" "initialize $STAGING config repo" "$LOG_DIR/nix-closure-domain-staging-init.log" <(
+      printf 'set -eu\nnixome-config-staging-init\n'
+    )
+    run_qrexec_script_or_fail "$VALIDATOR" "initialize $VALIDATOR config tools" "$LOG_DIR/nix-closure-domain-validator-init.log" <(
+      printf 'set -eu\nnixome-config-validator-init\n'
+    )
 
-{
-  shutdown_vm "$DOMAIN" "$LOG_DIR/nix-closure-domain-primary-pre-apply-shutdown.log"
-  shutdown_vm "$PEER_DOMAIN" "$LOG_DIR/nix-closure-domain-peer-pre-apply-shutdown.log"
-} > "$PRE_APPLY_SHUTDOWN_LOG" 2>&1 || true
+    {
+      shutdown_vm "$DOMAIN" "$LOG_DIR/nix-closure-domain-primary-pre-apply-shutdown.log"
+      shutdown_vm "$PEER_DOMAIN" "$LOG_DIR/nix-closure-domain-peer-pre-apply-shutdown.log"
+    } > "$PRE_APPLY_SHUTDOWN_LOG" 2>&1 || true
 
-cat > "$STAGING_UPDATE_SCRIPT" <<EOF
+    cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
 cd /home/$QUBE_USER/nixome-config
 cat > nixome/machine.nix <<'MACHINENIX'
@@ -1178,20 +1406,41 @@ git -c user.name='Nixome Closure Smoke' -c user.email='nixome-closure-smoke@loca
 git status --short --branch
 EOF
 
-run_qrexec_script_or_fail \
-  "$STAGING" \
-  "stage nix-closure domain config in $STAGING" \
-  "$STAGING_UPDATE_LOG" \
-  "$STAGING_UPDATE_SCRIPT"
+    run_qrexec_script_or_fail \
+      "$STAGING" \
+      "stage nix-closure domain config in $STAGING" \
+      "$STAGING_UPDATE_LOG" \
+      "$STAGING_UPDATE_SCRIPT"
 
-run_or_fail "apply nix-closure domain config through $VALIDATOR" "$APPLY_LOG" \
-  env \
-    NIXOME_LOG_DIR="$LOG_DIR" \
-    NIXOME_CONFIG_STAGING_VM="$STAGING" \
-    NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-    NIXOME_CONFIG_VAULT_VM="$VAULT" \
-    NIXOME_CONFIG_APPLY_NIX_OFFLINE="$CONFIG_APPLY_NIX_OFFLINE" \
-  nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+    run_or_fail "apply nix-closure domain config through $VALIDATOR" "$APPLY_LOG" \
+      env \
+        NIXOME_LOG_DIR="$LOG_DIR" \
+        NIXOME_CONFIG_STAGING_VM="$STAGING" \
+        NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+        NIXOME_CONFIG_VAULT_VM="$VAULT" \
+        NIXOME_CONFIG_APPLY_NIX_OFFLINE="$CONFIG_APPLY_NIX_OFFLINE" \
+      nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+    ;;
+  direct)
+    for source_vm in "$DIRECT_PRIMARY_SOURCE_VM" "$DIRECT_PEER_SOURCE_VM" "$DIRECT_GEN2_SOURCE_VM"; do
+      qvm-check "$source_vm" >/dev/null 2>&1 || fail "missing direct source VM: $source_vm"
+      require_source_domain_artifacts "$source_vm"
+    done
+
+    EXPECTED_DOMAIN_ROLE="$(feature_value_for "$DIRECT_PRIMARY_SOURCE_VM" nixome-role)"
+    {
+      shutdown_vm "$DOMAIN" "$LOG_DIR/nix-closure-domain-primary-pre-apply-shutdown.log"
+      shutdown_vm "$PEER_DOMAIN" "$LOG_DIR/nix-closure-domain-peer-pre-apply-shutdown.log"
+    } > "$PRE_APPLY_SHUTDOWN_LOG" 2>&1 || true
+
+    write_direct_topology "$DIRECT_TOPOLOGY_LOG" "$DIRECT_PRIMARY_SOURCE_VM" "$DIRECT_PEER_SOURCE_VM"
+    run_or_fail "apply direct nix-closure topology" "$APPLY_LOG" \
+      env NIXOME_LOG_DIR="$LOG_DIR" \
+      nixome-setup-config --apply --topology "$DIRECT_TOPOLOGY_LOG"
+    cat "$LOG_DIR/setup-config.json" > "$SETUP_LOG" 2>/dev/null || true
+    write_direct_apply_result "direct nix-closure topology setup" "$DIRECT_TOPOLOGY_LOG" "$APPLY_RESULT_JSON"
+    ;;
+esac
 
 collect_diagnostics
 
@@ -1300,7 +1549,9 @@ initial_generation="$(store_generation_for "$DOMAIN")"
 pre_gen2_blob_size="$(stat -c %s "$(sharing_json_value "$SHARING_PROOF_LOG" '.central_blob')")"
 shutdown_vm "$DOMAIN" "$LOG_DIR/nix-closure-domain-gen2-pre-shutdown.log"
 
-cat > "$GEN2_STAGING_UPDATE_SCRIPT" <<EOF
+case "$APPLY_MODE" in
+  config-flow)
+    cat > "$GEN2_STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
 cd /home/$QUBE_USER/nixome-config
 sed -i \
@@ -1313,21 +1564,35 @@ git -c user.name='Nixome Closure Smoke' -c user.email='nixome-closure-smoke@loca
 git status --short --branch
 EOF
 
-run_qrexec_script_or_fail \
-  "$STAGING" \
-  "stage second nix-closure domain generation in $STAGING" \
-  "$GEN2_STAGING_UPDATE_LOG" \
-  "$GEN2_STAGING_UPDATE_SCRIPT"
+    run_qrexec_script_or_fail \
+      "$STAGING" \
+      "stage second nix-closure domain generation in $STAGING" \
+      "$GEN2_STAGING_UPDATE_LOG" \
+      "$GEN2_STAGING_UPDATE_SCRIPT"
 
-run_or_fail "apply second nix-closure domain generation through $VALIDATOR" "$GEN2_APPLY_LOG" \
-  env \
-    NIXOME_LOG_DIR="$LOG_DIR" \
-    NIXOME_CONFIG_STAGING_VM="$STAGING" \
-    NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-    NIXOME_CONFIG_VAULT_VM="$VAULT" \
-    NIXOME_CONFIG_APPLY_NIX_OFFLINE="$CONFIG_APPLY_NIX_OFFLINE" \
-  nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
-cp "$LOG_DIR/config-apply.json" "$GEN2_APPLY_RESULT_JSON" 2>/dev/null || true
+    run_or_fail "apply second nix-closure domain generation through $VALIDATOR" "$GEN2_APPLY_LOG" \
+      env \
+        NIXOME_LOG_DIR="$LOG_DIR" \
+        NIXOME_CONFIG_STAGING_VM="$STAGING" \
+        NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+        NIXOME_CONFIG_VAULT_VM="$VAULT" \
+        NIXOME_CONFIG_APPLY_NIX_OFFLINE="$CONFIG_APPLY_NIX_OFFLINE" \
+      nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+    cp "$LOG_DIR/config-apply.json" "$GEN2_APPLY_RESULT_JSON" 2>/dev/null || true
+    ;;
+  direct)
+    EXPECTED_DOMAIN_ROLE="$(feature_value_for "$DIRECT_GEN2_SOURCE_VM" nixome-role)"
+    write_direct_topology "$DIRECT_GEN2_TOPOLOGY_LOG" "$DIRECT_GEN2_SOURCE_VM" "$DIRECT_PEER_SOURCE_VM"
+    run_or_fail "apply direct second nix-closure generation" "$GEN2_APPLY_LOG" \
+      env NIXOME_LOG_DIR="$LOG_DIR" \
+      nixome-setup-config --apply --topology "$DIRECT_GEN2_TOPOLOGY_LOG"
+    cat "$LOG_DIR/setup-config.json" > "$SETUP_LOG" 2>/dev/null || true
+    write_direct_apply_result \
+      "direct second nix-closure topology setup" \
+      "$DIRECT_GEN2_TOPOLOGY_LOG" \
+      "$GEN2_APPLY_RESULT_JSON"
+    ;;
+esac
 
 check_source_paths
 new_generation="$(store_generation_for "$DOMAIN")"
@@ -1368,9 +1633,12 @@ start_vm "$DOMAIN"
 wait_for_qrexec "$DOMAIN" "$DOMAIN after second generation" "$LOG_DIR/nix-closure-domain-qrexec-gen2.log"
 check_libvirt_filtered_devices "$DOMAIN" "$LIBVIRT_XML_LOG"
 run_runtime_service_check
+write_guest_probe_script
 run_guest_probe "$GUEST_PROBE_LOG"
-grep -Fx "applied_message=$APPLY_MESSAGE_GEN2" "$GUEST_PROBE_LOG" >/dev/null ||
-  fail "guest did not boot the second generation"
+if [ "$APPLY_MODE" = "config-flow" ]; then
+  grep -Fx "applied_message=$APPLY_MESSAGE_GEN2" "$GUEST_PROBE_LOG" >/dev/null ||
+    fail "guest did not boot the second generation"
+fi
 wait_for_qrexec "$PEER_DOMAIN" "$PEER_DOMAIN after primary generation switch" "$LOG_DIR/nix-closure-domain-peer-qrexec-after-gen2.log"
 run_runtime_service_check_for \
   "$PEER_DOMAIN" \
