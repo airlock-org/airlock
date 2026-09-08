@@ -33,7 +33,7 @@ PYTHON_FILES := \
 	pkgs/nixome-qubes-storage/src/nixome_qubes_storage/qubes.py \
 	scripts/nix-domain-storage.py
 
-.PHONY: ensure-generated-dirs build test py-sync py-format py-check py-lint py-complexity vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test py-sync py-format py-check py-lint py-complexity py-complexity-check vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -65,6 +65,9 @@ py-check:
 py-complexity:
 	uv run radon cc -s -a $(PYTHON_FILES)
 	uv run radon mi -s $(PYTHON_FILES)
+
+py-complexity-check:
+	uv run xenon --max-absolute E --max-modules C --max-average A $(PYTHON_FILES)
 
 vm-image: ensure-generated-dirs gc-auto
 	$(NIXOME_NIX) build .#nixome-vm-image --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-vm-image" --print-build-logs --show-trace
