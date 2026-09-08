@@ -131,6 +131,7 @@ run_logged config-apply-package nix build "$ROOT#packages.x86_64-linux.nixome-co
 run_logged config-archive-package nix build "$ROOT#packages.x86_64-linux.nixome-config-archive-candidate" --print-build-logs --show-trace
 run_logged config-boot-verify-package nix build "$ROOT#packages.x86_64-linux.nixome-config-boot-verify" --print-build-logs --show-trace
 run_logged config-status-package nix build "$ROOT#packages.x86_64-linux.nixome-config-status" --print-build-logs --show-trace
+run_logged config-seed-inputs-import-package nix build "$ROOT#packages.x86_64-linux.nixome-config-seed-inputs-import" --print-build-logs --show-trace
 run_logged config-vms-smoke-package nix build "$ROOT#packages.x86_64-linux.nixome-config-vms-smoke" --print-build-logs --show-trace
 run_logged observe-package nix build "$ROOT#packages.x86_64-linux.nixome-observe-dom0" --print-build-logs --show-trace
 run_logged setup-config-package nix build "$ROOT#packages.x86_64-linux.nixome-setup-config" --print-build-logs --show-trace
@@ -145,6 +146,8 @@ run_logged nix-closure-root-image "$ROOT/tests/nix-closure-root-image.sh"
 run_logged setup-config-runtime-path "$ROOT/tests/setup-config-runtime-path.sh"
 run_logged gc-nixome-store "$ROOT/tests/gc-nixome-store.sh"
 run_logged config-topology-eval "$ROOT/tests/config-topology-eval.sh"
+run_logged nixome-minimal-guest "$ROOT/tests/nixome-minimal-guest.sh"
+run_logged nixome-minimal-closure "$ROOT/tests/nixome-minimal-closure.sh"
 run_logged config-staging-validate "$ROOT/tests/config-staging-validate.sh"
 run_logged qrexec-policy-path "$ROOT/tests/qrexec-policy-path.sh"
 run_logged qube-guest-policy-probe "$ROOT/tests/qube-guest-policy-probe.sh"

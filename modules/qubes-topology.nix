@@ -218,6 +218,12 @@ let
         description = "Persistent private state volume identity.";
       };
 
+      persistentSize = lib.mkOption {
+        type = lib.types.nullOr lib.types.ints.positive;
+        default = null;
+        description = "Desired persistent private state volume size in bytes.";
+      };
+
       volatile = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
@@ -388,6 +394,7 @@ let
   configApply = pkgs.callPackage ../pkgs/nixome-config-apply { };
   configArchive = pkgs.callPackage ../pkgs/nixome-config-archive { };
   configBootVerify = pkgs.callPackage ../pkgs/nixome-config-boot-verify { };
+  configSeedInputsImport = pkgs.callPackage ../pkgs/nixome-config-seed-inputs-import { };
   configStatus = pkgs.callPackage ../pkgs/nixome-config-status { };
   configVmsSmoke = pkgs.callPackage ../pkgs/nixome-config-vms-smoke { };
   nixClosureDomainSmoke = pkgs.callPackage ../pkgs/nixome-nix-closure-domain-smoke { };
@@ -407,6 +414,9 @@ let
     ${access.candidateExportService} * @anyvm @anyvm deny
     ${access.candidateValidateService} * dom0 ${access.validator} allow
     ${access.candidateValidateService} * @anyvm @anyvm deny
+    ${access.seedInputsImportService} * dom0 ${access.staging} allow
+    ${access.seedInputsImportService} * dom0 ${access.validator} allow
+    ${access.seedInputsImportService} * @anyvm @anyvm deny
     ${access.archiveService} * dom0 ${access.vault} allow
     ${access.archiveService} * @anyvm @anyvm deny
     ${access.archiveDeploymentService} * dom0 ${access.vault} allow
@@ -539,6 +549,12 @@ in
         description = "qrexec service used by dom0 to archive deployment records.";
       };
 
+      seedInputsImportService = lib.mkOption {
+        type = lib.types.str;
+        default = "nixome.Config.SeedInputsImport";
+        description = "qrexec service used by dom0 to import offline config seed inputs.";
+      };
+
       vault = lib.mkOption {
         type = lib.types.str;
         default = "config-vault";
@@ -596,6 +612,7 @@ in
       configApply
       configArchive
       configBootVerify
+      configSeedInputsImport
       configStatus
       configVmsSmoke
       nixClosureDomainSmoke

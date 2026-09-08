@@ -28,6 +28,7 @@ writeShellApplication {
     gnutar
     jq
     nix
+    python3.pkgs.qubes-core-admin-client
     python3.pkgs.qubes-core-qrexec.dom0
     setupConfig
     systemd

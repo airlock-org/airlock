@@ -44,6 +44,8 @@ HOST_SYSTEM_PROFILE="${NIXOME_HOST_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}
 HOST_CURRENT_SYSTEM_LINK="${NIXOME_HOST_CURRENT_SYSTEM_LINK:-/run/current-system}"
 HOST_SYSTEM_ACTIVATION_LOG="$LOG_DIR/config-system-host-activation.log"
 CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-1}"
+QREXEC_RUN_DIR="${NIXOME_QREXEC_RUN_DIR:-/var/run/qubes}"
+QREXEC_READY_WAIT_SECONDS="${NIXOME_CONFIG_QREXEC_READY_WAIT_SECONDS:-60}"
 
 STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
 VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
@@ -326,19 +328,69 @@ run_to_files_or_fail() {
   fi
 }
 
+wait_for_qrexec_ready() {
+  vm="$1"
+  stderr="$2"
+
+  if [ ! -d "$QREXEC_RUN_DIR" ]; then
+    return 0
+  fi
+
+  socket="$QREXEC_RUN_DIR/qrexec.$vm"
+  if [ ! -S "$socket" ] && command -v qvm-start >/dev/null 2>&1; then
+    printf '+ qvm-start %q\n' "$vm"
+    qvm-start "$vm" >/dev/null 2>> "$stderr" || true
+  fi
+
+  waited=0
+  while [ "$waited" -lt "$QREXEC_READY_WAIT_SECONDS" ]; do
+    if [ -S "$socket" ]; then
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  printf 'qrexec endpoint did not become ready for %s: %s\n' "$vm" "$socket" >> "$stderr"
+  return 1
+}
+
 run_qrexec_service_with_stdin() {
   vm="$1"
   input="$2"
   output="$3"
   stderr="$4"
   service="$5"
+  attempt=1
+  rc=0
 
   qrexec_args=(qrexec-client -d "$vm" -T -w 120 "DEFAULT:QUBESRPC $service+ dom0")
-  printf '+'
-  printf ' %q' "${qrexec_args[@]}"
-  printf ' < %q\n' "$input"
 
-  "${qrexec_args[@]}" < "$input" > "$output" 2> "$stderr"
+  while [ "$attempt" -le 3 ]; do
+    : > "$stderr"
+    if ! wait_for_qrexec_ready "$vm" "$stderr"; then
+      return 1
+    fi
+
+    printf '+'
+    printf ' %q' "${qrexec_args[@]}"
+    printf ' < %q\n' "$input"
+
+    if "${qrexec_args[@]}" < "$input" > "$output" 2> "$stderr"; then
+      return 0
+    fi
+
+    rc="$?"
+    if ! grep -Eq 'connect .*/qrexec\.[^:]+: (No such file or directory|Connection refused)' "$stderr"; then
+      return "$rc"
+    fi
+
+    printf 'qrexec endpoint for %s disappeared during %s; retrying\n' "$vm" "$service" >> "$stderr"
+    attempt=$((attempt + 1))
+    sleep 2
+  done
+
+  return "$rc"
 }
 
 copy_or_empty() {

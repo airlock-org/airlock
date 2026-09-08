@@ -33,6 +33,7 @@ let
   reservedQrexecServices = [
     "nixome.Config.CandidateExport"
     "nixome.Config.ValidateCandidate"
+    "nixome.Config.SeedInputsImport"
     "nixome.Config.ArchiveCandidate"
     "nixome.Config.ArchiveDeployment"
   ];
@@ -78,6 +79,13 @@ let
   expectInt =
     path: value:
     if typeOf value == "int" then value else fail path "expected an integer, got ${typeOf value}";
+
+  expectPositiveInt =
+    path: value:
+    let
+      checked = expectInt path value;
+    in
+    if checked > 0 then checked else fail path "expected a positive integer, got ${toJSON value}";
 
   expectList =
     path: value:
@@ -614,11 +622,37 @@ let
         else
           expectOptions path [
             "persistent"
+            "persistentSize"
+            "persistent_size"
             "volatile"
           ] value;
       persistent = expectLooseName "persistent state volume" "${path}.persistent" (
         get state "persistent" "${domainName}-private"
       );
+      hasCamelPersistentSize = hasAttr "persistentSize" state;
+      hasSnakePersistentSize = hasAttr "persistent_size" state;
+      camelPersistentSize =
+        if hasCamelPersistentSize && state.persistentSize != null then
+          expectPositiveInt "${path}.persistentSize" state.persistentSize
+        else
+          null;
+      snakePersistentSize =
+        if hasSnakePersistentSize && state.persistent_size != null then
+          expectPositiveInt "${path}.persistent_size" state.persistent_size
+        else
+          null;
+      persistentSize =
+        if hasCamelPersistentSize && hasSnakePersistentSize then
+          if camelPersistentSize == snakePersistentSize then
+            camelPersistentSize
+          else
+            fail path "persistentSize and persistent_size disagree"
+        else if hasCamelPersistentSize then
+          camelPersistentSize
+        else if hasSnakePersistentSize then
+          snakePersistentSize
+        else
+          null;
       volatile =
         if hasAttr "volatile" state && state.volatile != null then
           expectLooseName "volatile state volume" "${path}.volatile" state.volatile
@@ -627,6 +661,7 @@ let
     in
     {
       inherit persistent volatile;
+      persistent_size = persistentSize;
     };
 
   normalizeDomainBackend =

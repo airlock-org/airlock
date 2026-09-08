@@ -23,6 +23,10 @@ GUEST_VAULT_HOSTNAME_JSON="$WORK_DIR/guest-vault-hostname.json"
 GUEST_STAGING_HOSTNAME_JSON="$WORK_DIR/guest-staging-hostname.json"
 GUEST_VALIDATOR_HOSTNAME_JSON="$WORK_DIR/guest-validator-hostname.json"
 GUEST_VALIDATOR_RPC_MODE_JSON="$WORK_DIR/guest-validator-rpc-mode.json"
+GUEST_STAGING_SEED_IMPORT_RPC_MODE_JSON="$WORK_DIR/guest-staging-seed-import-rpc-mode.json"
+GUEST_STAGING_SEED_IMPORT_RPC_CONFIG_JSON="$WORK_DIR/guest-staging-seed-import-rpc-config.json"
+GUEST_VALIDATOR_SEED_IMPORT_RPC_MODE_JSON="$WORK_DIR/guest-validator-seed-import-rpc-mode.json"
+GUEST_VAULT_SEED_IMPORT_RPC_PRESENT_JSON="$WORK_DIR/guest-vault-seed-import-rpc-present.json"
 GUEST_DEPLOYMENT_RPC_MODE_JSON="$WORK_DIR/guest-deployment-rpc-mode.json"
 GUEST_VAULT_ROOT_IMAGE_DRV="$WORK_DIR/guest-vault-root-image.drv"
 GUEST_STAGING_ROOT_IMAGE_DRV="$WORK_DIR/guest-staging-root-image.drv"
@@ -73,6 +77,15 @@ nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-vault.config.net
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.networking.hostName" > "$GUEST_STAGING_HOSTNAME_JSON"
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-validator.config.networking.hostName" > "$GUEST_VALIDATOR_HOSTNAME_JSON"
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-validator.config.environment.etc.\"qubes-rpc/nixome.Config.ValidateCandidate\".mode" > "$GUEST_VALIDATOR_RPC_MODE_JSON"
+nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.environment.etc.\"qubes-rpc/nixome.Config.SeedInputsImport\".mode" > "$GUEST_STAGING_SEED_IMPORT_RPC_MODE_JSON"
+nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-staging.config.environment.etc.\"qubes/rpc-config/nixome.Config.SeedInputsImport\".text" > "$GUEST_STAGING_SEED_IMPORT_RPC_CONFIG_JSON"
+nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-validator.config.environment.etc.\"qubes-rpc/nixome.Config.SeedInputsImport\".mode" > "$GUEST_VALIDATOR_SEED_IMPORT_RPC_MODE_JSON"
+nix eval --impure --json --expr '
+let
+  cfg = (builtins.getFlake "path:'"$ROOT"'").nixosConfigurations.nixome-domain-config-vault.config.environment.etc;
+in
+  cfg ? "qubes-rpc/nixome.Config.SeedInputsImport"
+' > "$GUEST_VAULT_SEED_IMPORT_RPC_PRESENT_JSON"
 nix eval --json "$ROOT#nixosConfigurations.nixome-domain-config-vault.config.environment.etc.\"qubes-rpc/nixome.Config.ArchiveDeployment\".mode" > "$GUEST_DEPLOYMENT_RPC_MODE_JSON"
 nix path-info --derivation "$ROOT#nixome-domain-config-vault-root-image" > "$GUEST_VAULT_ROOT_IMAGE_DRV"
 nix path-info --derivation "$ROOT#nixome-domain-config-staging-root-image" > "$GUEST_STAGING_ROOT_IMAGE_DRV"
@@ -160,9 +173,12 @@ jq -e '
   .domains."config-staging".backend.type == "nix-closure" and
   .domains."config-staging".template == null and
   .domains."config-staging".backend.store.read_only == true and
+  .domains."config-staging".backend.state.persistent_size == 8589934592 and
   .domains."config-validator".backend.type == "nix-closure" and
   .domains."config-validator".template == null and
   .domains."config-validator".backend.store.read_only == true and
+  .domains."config-validator".backend.state.persistent_size == 8589934592 and
+  .domains."config-vault".backend.state.persistent_size == null and
   .domains."config-staging".prefs.autostart == false and
   .domains."config-staging".prefs.include_in_backups == true and
   .domains."config-validator".prefs.autostart == false and
@@ -184,19 +200,25 @@ jq -e '
 
 jq -r . "$GUEST_INIT_SCRIPT_JSON" | grep -F 'HOME=/home/user' >/dev/null
 jq -r . "$GUEST_INIT_SCRIPT_JSON" | grep -F 'nixome-config-nix/bin' >/dev/null
-grep -qx '/home/user/.local/share/nixome/nix-root' "$GUEST_CONFIG_NIX_STORE_ROOT"
-grep -F 's|__NIXOME_NIXPKGS_URL__|path:/etc/nixome/config-seed-inputs/nixpkgs|g' \
+grep -qx '/rw/home/user/nixome-config-nix-root' "$GUEST_CONFIG_NIX_STORE_ROOT"
+grep -F 'seed_root="${NIXOME_CONFIG_SEED_INPUTS_PATH:-/etc/nixome/config-seed-inputs}"' \
   "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
-grep -F 's|__NIXPKGS_LIBVIRT_10_5_PATH__|/etc/nixome/config-seed-inputs/nixpkgs-libvirt_10_5|g' \
+grep -F 's|__NIXOME_NIXPKGS_URL__|path:$seed_root/nixpkgs|g' \
   "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
-grep -F 's|__NIXOME_NIXOS_QUBES_PATH__|/etc/nixome/config-seed-inputs/nixos-qubes|g' \
+grep -F 's|__NIXPKGS_LIBVIRT_10_5_PATH__|$seed_root/nixpkgs-libvirt_10_5|g' \
   "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
-grep -F 's|__NIXOME_SUPPORT_PATH__|/etc/nixome/config-seed-inputs/nixome-support|g' \
+grep -F 's|__NIXOME_NIXOS_QUBES_PATH__|$seed_root/nixos-qubes|g' \
+  "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
+grep -F 's|__NIXOME_SUPPORT_PATH__|$seed_root/nixome-support|g' \
   "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
 ! grep -F 's|__NIXOME_NIXPKGS_URL__|path:/nix/store/' "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
 ! grep -F 's|__NIXOME_SUPPORT_PATH__|/nix/store/' "$GUEST_STAGING_INIT_SCRIPT" >/dev/null
 jq -e '. == true' "$GUEST_STAGING_CONFIG_NIX_PACKAGE_JSON" >/dev/null
 jq -e '. == true' "$GUEST_VALIDATOR_CONFIG_NIX_PACKAGE_JSON" >/dev/null
+jq -e '. == "0555"' "$GUEST_STAGING_SEED_IMPORT_RPC_MODE_JSON" >/dev/null
+jq -e '. == "force-user='\''root'\''\n"' "$GUEST_STAGING_SEED_IMPORT_RPC_CONFIG_JSON" >/dev/null
+jq -e '. == "0555"' "$GUEST_VALIDATOR_SEED_IMPORT_RPC_MODE_JSON" >/dev/null
+jq -e '. == false' "$GUEST_VAULT_SEED_IMPORT_RPC_PRESENT_JSON" >/dev/null
 
 jq -e '
   index("nixome-config-guest-init.service") != null
@@ -288,6 +310,9 @@ nixome.Config.CandidateExport * dom0 config-staging allow
 nixome.Config.CandidateExport * @anyvm @anyvm deny
 nixome.Config.ValidateCandidate * dom0 config-validator allow
 nixome.Config.ValidateCandidate * @anyvm @anyvm deny
+nixome.Config.SeedInputsImport * dom0 config-staging allow
+nixome.Config.SeedInputsImport * dom0 config-validator allow
+nixome.Config.SeedInputsImport * @anyvm @anyvm deny
 nixome.Config.ArchiveCandidate * dom0 config-vault allow
 nixome.Config.ArchiveCandidate * @anyvm @anyvm deny
 nixome.Config.ArchiveDeployment * dom0 config-vault allow

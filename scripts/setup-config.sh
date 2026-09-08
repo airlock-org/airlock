@@ -101,6 +101,7 @@ qrexec_policy_changed=0
 unsupported_domains_count=0
 root_images_changed=0
 store_volumes_changed=0
+state_volumes_changed=0
 store_views_changed=0
 qubesd_restarts=0
 
@@ -272,6 +273,7 @@ write_result() {
     printf ',"qrexec_policy_changed":%s' "$qrexec_policy_changed"
     printf ',"root_images_changed":%s' "$root_images_changed"
     printf ',"store_volumes_changed":%s' "$store_volumes_changed"
+    printf ',"state_volumes_changed":%s' "$state_volumes_changed"
     printf ',"store_views_changed":%s' "$store_views_changed"
     printf ',"qubesd_restarts":%s' "$qubesd_restarts"
     printf ',"live_actions":'
@@ -481,6 +483,44 @@ set_global_pref() {
   record_live_action global-pref set "" "$pref" "$value"
 }
 
+volume_size_bytes() {
+  local domain="$1"
+  local volume="$2"
+
+  qvm-volume info "$domain:$volume" 2>/dev/null |
+    awk '$1 == "size" { print $2; found = 1 } END { exit(found ? 0 : 1) }'
+}
+
+ensure_state_volume_size() {
+  local domain="$1"
+  local volume="$2"
+  local desired_size="$3"
+  local current_size=""
+
+  [ -n "$desired_size" ] && [ "$desired_size" != "null" ] || return 0
+  case "$desired_size" in
+    *[!0-9]*)
+      fail "invalid persistent state volume size for $domain: $desired_size"
+      ;;
+  esac
+
+  if [ "$APPLY" = "1" ]; then
+    current_size="$(volume_size_bytes "$domain" "$volume" || true)"
+    if [ -n "$current_size" ] && [ "$current_size" -ge "$desired_size" ]; then
+      printf 'state volume current: %s %s=%s\n' "$domain" "$volume" "$current_size"
+      return 0
+    fi
+    if domain_is_running "$domain"; then
+      record_running_domain_storage_change "$domain" domain-state-volume "$volume" "$desired_size"
+      return 0
+    fi
+  fi
+
+  run_or_plan qvm-volume resize "$domain:$volume" "$desired_size"
+  state_volumes_changed=$((state_volumes_changed + 1))
+  record_live_action domain-state-volume resize "$domain" "$volume" "$desired_size"
+}
+
 set_feature() {
   domain="$1"
   feature="$2"
@@ -582,7 +622,7 @@ validate_qrexec_rule() {
   is_qrexec_service "$service" ||
     fail "qrexec policy rule $index has invalid service: $service"
   case "$service" in
-    nixome.Config.CandidateExport|nixome.Config.ValidateCandidate|nixome.Config.ArchiveCandidate|nixome.Config.ArchiveDeployment)
+    nixome.Config.CandidateExport|nixome.Config.ValidateCandidate|nixome.Config.SeedInputsImport|nixome.Config.ArchiveCandidate|nixome.Config.ArchiveDeployment)
       fail "qrexec policy rule $index uses reserved bootstrap service: $service"
       ;;
   esac
@@ -1100,6 +1140,7 @@ setup_nix_closure_domain() {
   store_device="$(jq_get '.domains[$name].backend.store.device // "/dev/xvde"' --arg name "$domain")"
   store_blob_device="$(jq_get '.domains[$name].backend.store.blob_device // .domains[$name].backend.store.blobDevice // "/dev/xvdf"' --arg name "$domain")"
   store_view_backend="$(jq_get '.domains[$name].backend.store.view_backend // .domains[$name].backend.store.viewBackend // "erofs-objectmap"' --arg name "$domain")"
+  persistent_size="$(jq_get '.domains[$name].backend.state.persistent_size // .domains[$name].backend.state.persistentSize // null' --arg name "$domain")"
   store_filesystem="erofs"
   root_image=""
   store_artifact=""
@@ -1147,6 +1188,7 @@ setup_nix_closure_domain() {
   fi
 
   install_nix_domain_root "$domain" "$root_source" "$root_image"
+  ensure_state_volume_size "$domain" private "$persistent_size"
   install_nix_domain_store \
     "$domain" \
     "$store_source" \

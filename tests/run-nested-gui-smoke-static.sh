@@ -45,10 +45,30 @@ grep -F 'assert_nix_closure_domain "$VAULT"' \
 ! grep -F 'cat >> "$STAGING_UPDATE_SCRIPT"' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN=1' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_KEEP_VM=1' "$ROOT/Makefile" >/dev/null
+grep -F 'NIXOME_REUSE_WARM_VM=1' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_SYNC_DOM0_TOOLS=1' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_VM_SKIP_BASE_BUILD=1' "$ROOT/Makefile" >/dev/null
+grep -F 'vm-warm-start' "$ROOT/Makefile" >/dev/null
+grep -F 'vm-warm-sync' "$ROOT/Makefile" >/dev/null
+grep -F 'vm-warm-apply' "$ROOT/Makefile" >/dev/null
+grep -F 'vm-warm-test-config' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_AUTO_GC_AFTER_RUN' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_SYNC_DOM0_TOOLS' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_REUSE_WARM_VM' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'ssh: reusing existing nested dom0' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_RUN_CONFIG_SEED_INPUTS_IMPORT' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_NESTED_WARM_TOPOLOGY_PATH' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_NESTED_WARM_SEED_INPUTS_PATH' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_NESTED_WARM_STOP_NIX_DOMAINS' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'qvm-kill' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'affected domain did not halt' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'CONFIG_VMS_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-config-vms-smoke"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'SETUP_CONFIG_TOPOLOGY="$REMOTE_WARM_TOPOLOGY_PATH"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_NIX_DOMAIN_STORAGE_HELPER="$REMOTE_WARM_BIN_DIR/nixome-nix-domain-storage"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_NIX_DOMAIN_STORAGE_HELPER;' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_CONFIG_SEED_INPUTS_SOURCE="$REMOTE_WARM_SEED_INPUTS_PATH"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_CONFIG_SEED_INPUTS_SOURCE \' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F -- '--topology $(shell_quote "$SETUP_CONFIG_TOPOLOGY")' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_VM_SKIP_BASE_BUILD' "$ROOT/scripts/run-nested-vm.sh" >/dev/null
 grep -F 'using existing Nixome VM base image result link' "$ROOT/scripts/run-nested-vm.sh" >/dev/null
 grep -F 'sync-nested-dom0-tools.sh' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
@@ -59,11 +79,27 @@ grep -F 'SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"' "$ROOT
 grep -F 'NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'nix-store --export' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
 grep -F 'sudo -n nix-store --import' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
+grep -F 'nixome-config-seed-inputs-import' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
+grep -F 'REMOTE_SEED_INPUTS_COMPAT_PATH' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
+grep -F 'nixos-qubes", .nixosQubes' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
+grep -F 'mount --bind' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
+grep -F 'store-export.nar.gz' "$ROOT/scripts/import-config-seed-inputs.sh" >/dev/null
+grep -F 'nix-store -q --references "$store_root"' "$ROOT/scripts/import-config-seed-inputs.sh" >/dev/null
+grep -F 'cut -f3 "$tmpdir/seed-inputs.tsv"' "$ROOT/scripts/import-config-seed-inputs.sh" >/dev/null
+grep -F 'nix-store --export $(cat "$seed_store_paths")' "$ROOT/scripts/import-config-seed-inputs.sh" >/dev/null
+grep -F 'store_export_bytes' "$ROOT/scripts/import-config-seed-inputs.sh" >/dev/null
+grep -F 'nix-store --store "$store_root" --import' "$ROOT/modules/qube-guest.nix" >/dev/null
+grep -F 'input_relative_path="'"''"'${input_path#"$input_store_path"}"' "$ROOT/modules/qube-guest.nix" >/dev/null
+grep -F 'mount --bind "$physical_path" "$mountpoint_path"' "$ROOT/modules/qube-guest.nix" >/dev/null
+grep -F 'nixome-config-vms-smoke' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
+grep -F 'nixosConfigurations.vm-gui-config.config.nixome.qubes.topology' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
+grep -F 'nixosConfigurations.nixome-domain-$domain.config.system.build.toplevel' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
+grep -F 'nixome-domain-$domain-store-closure' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
 grep -F 'PYTHONPATH=' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
 grep -F 'systemctl restart qubesd.service' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
 grep -F 'CONFIG_VMS_STAGING_UPDATE_LOG' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'config-vms-config-staging-update.sh' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
-grep -F 'sudo -n $config_vms_env NIXOME_LOG_DIR=/var/log/nixome nixome-config-vms-smoke' \
+grep -F 'sudo -n $config_vms_env NIXOME_LOG_DIR=/var/log/nixome $config_vms_smoke_command' \
   "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F '"$ROOT/scripts/nixome-nix.sh" shell nixpkgs#sshpass' \
   "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null

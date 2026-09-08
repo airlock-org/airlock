@@ -120,6 +120,7 @@ cat > "$TOPOLOGY" <<EOF
         },
         "state": {
           "persistent": "nix-native-work-private",
+          "persistent_size": 8589934592,
           "volatile": null
         }
       }
@@ -144,6 +145,16 @@ EOF
 
 cat > "$BIN_DIR/qvm-volume" <<'EOF'
 #!/usr/bin/env bash
+if [ "$1" = info ]; then
+  cat <<'INFO'
+pool               varlibqubes
+vid                appvms/nix-native-work/private
+rw                 True
+size               2147483648
+usage              0
+INFO
+  exit 0
+fi
 printf 'qvm-volume %s\n' "$*" >> "$MUTATION_LOG"
 EOF
 
@@ -216,6 +227,7 @@ jq -e '
   .domains_changed == 2 and
   .root_images_changed == 1 and
   .store_volumes_changed == 2 and
+  .state_volumes_changed == 1 and
   .store_views_changed == 1 and
   .unsupported_domains_count == 0
 ' "$PLAN_LOG_DIR/setup-config.json" >/dev/null
@@ -224,6 +236,8 @@ grep -F '+ qvm-create --class StandaloneVM --label green nix-native-work' \
 grep -F '+ qvm-create --class AppVM --label red --template fedora-44-xfce legacy-fedora-app' \
   "$PLAN_LOG_DIR/setup-config.commands.log" >/dev/null
 grep -F "+ qvm-volume import nix-native-work:root $ROOT_IMAGE" \
+  "$PLAN_LOG_DIR/setup-config.commands.log" >/dev/null
+grep -F '+ qvm-volume resize nix-native-work:private 8589934592' \
   "$PLAN_LOG_DIR/setup-config.commands.log" >/dev/null
 grep -F "+ nixome-nix-domain-storage ensure-store nix-native-work $STORE_SOURCE $STORE_SOURCE --mode shared-closure --system $SYSTEM_SOURCE --root $ROOT_SOURCE --kernel 6.12.64-1.fc41 --device /dev/xvde --blob-device /dev/xvdf --mountpoint /nix/store --view-backend erofs-objectmap" \
   "$PLAN_LOG_DIR/setup-config.commands.log" >/dev/null
@@ -246,10 +260,12 @@ jq -e '
   .domains_changed == 2 and
   .root_images_changed == 1 and
   .store_volumes_changed == 2 and
+  .state_volumes_changed == 1 and
   .store_views_changed == 1 and
   .qubesd_restarts == 1 and
   .unsupported_domains_count == 0 and
   any(.live_actions[]; .type == "domain-root" and .action == "import" and .domain == "nix-native-work") and
+  any(.live_actions[]; .type == "domain-state-volume" and .action == "resize" and .domain == "nix-native-work" and .field == "private" and .value == "8589934592") and
   any(.live_actions[]; .type == "domain-store-view" and .action == "materialize" and .domain == "nix-native-work") and
   any(.live_actions[]; .type == "domain-store-volume" and .action == "create" and .domain == "nix-native-work" and .value == "store") and
   any(.live_actions[]; .type == "domain-store-volume" and .action == "create" and .domain == "nix-native-work" and .value == "store-data") and
@@ -259,6 +275,7 @@ jq -e '
 grep -Fx 'qvm-create --class AppVM --label red --template fedora-44-xfce legacy-fedora-app' "$MUTATION_LOG" >/dev/null
 grep -Fx 'qvm-create --class StandaloneVM --label green nix-native-work' "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-volume import nix-native-work:root $ROOT_IMAGE" "$MUTATION_LOG" >/dev/null
+grep -Fx 'qvm-volume resize nix-native-work:private 8589934592' "$MUTATION_LOG" >/dev/null
 grep -Fx 'qvm-prefs nix-native-work kernel 6.12.64-1.fc41' "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-prefs nix-native-work kernelopts console=hvc0 init=/sbin/init nixome.system=$SYSTEM_SOURCE nixome.storedev=/dev/xvde nixome.storefmt=erofs nixome.storeblobdev=/dev/xvdf" "$MUTATION_LOG" >/dev/null
 grep -Fx "qvm-features nix-native-work nixome-root-source $ROOT_SOURCE" "$MUTATION_LOG" >/dev/null

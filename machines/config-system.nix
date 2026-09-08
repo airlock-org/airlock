@@ -77,6 +77,7 @@ in
       candidateValidateService = "nixome.Config.ValidateCandidate";
       archiveService = "nixome.Config.ArchiveCandidate";
       archiveDeploymentService = "nixome.Config.ArchiveDeployment";
+      seedInputsImportService = "nixome.Config.SeedInputsImport";
     };
   };
 

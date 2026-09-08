@@ -174,9 +174,11 @@ jq -e '
   .domains."config-vault".features."nixome-config-authority" == "1" and
   closure_domain("config-staging"; "gray"; "config-staging") and
   .domains."config-staging".prefs.memory == 2048 and
+  .domains."config-staging".backend.state.persistent_size == 8589934592 and
   .domains."config-staging".features."nixome-config-applied-message" == "initial" and
   closure_domain("config-validator"; "blue"; "config-validator") and
   .domains."config-validator".prefs.memory == 2048 and
+  .domains."config-validator".backend.state.persistent_size == 8589934592 and
   .domains."config-validator".features."nixome-config-validator" == "1" and
   .qrexec_policy.rules == [
     {

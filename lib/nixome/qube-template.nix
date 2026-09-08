@@ -33,11 +33,111 @@ let
     };
   };
 
+  nixomeGuestRuntimeOverlay = final: prev: {
+    qubes-core-agent-linux-rw-runtime = final.runCommand
+      "qubes-core-agent-linux-rw-runtime-${prev.qubes-core-agent-linux.version}"
+      {
+        nativeBuildInputs = [
+          final.gnugrep
+          final.gnused
+        ];
+        preferLocalBuild = true;
+        allowSubstitutes = false;
+      }
+      ''
+        set -eu
+
+        src="${prev.qubes-core-agent-linux}"
+        mkdir -p "$out/lib/qubes/init"
+
+        for script in functions qubes-sysinit.sh setup-rwdev.sh setup-rw.sh; do
+          cp "$src/lib/qubes/init/$script" "$out/lib/qubes/init/$script"
+        done
+
+        chmod -R u+w "$out"
+        for script in "$out"/lib/qubes/init/*; do
+          if grep -q "$src" "$script"; then
+            substituteInPlace "$script" --replace-fail "$src" "$out"
+          fi
+        done
+      '';
+
+    qubes-vmm-xen-vchan-runtime = final.runCommand "qubes-vmm-xen-vchan-runtime-${prev.qubes-vmm-xen.version}"
+      {
+        nativeBuildInputs = [
+          final.coreutils
+          final.patchelf
+        ];
+        preferLocalBuild = true;
+        allowSubstitutes = false;
+      }
+      ''
+        set -eu
+
+        src="${prev.qubes-vmm-xen}/lib"
+        mkdir -p "$out/lib"
+
+        copy_lib() {
+          soname="$1"
+          target="$(readlink -f "$src/$soname")"
+          base="$(basename "$target")"
+          cp "$target" "$out/lib/$base"
+          chmod u+w "$out/lib/$base"
+          ln -sfn "$base" "$out/lib/$soname"
+        }
+
+        copy_lib libxenvchan.so.4.19
+        copy_lib libxenctrl.so.4.19
+        copy_lib libxenstore.so.4
+        copy_lib libxentoollog.so.1
+        copy_lib libxengnttab.so.1
+        copy_lib libxenevtchn.so.1
+        copy_lib libxencall.so.1
+        copy_lib libxenforeignmemory.so.1
+        copy_lib libxendevicemodel.so.1
+        copy_lib libxentoolcore.so.1
+
+        for library in "$out"/lib/*.so.*; do
+          [ -f "$library" ] || continue
+          patchelf --set-rpath "$out/lib:${final.stdenv.cc.cc.lib}/lib" "$library"
+        done
+      '';
+
+    qubes-core-vchan-xen = prev.qubes-core-vchan-xen.overrideAttrs (oldAttrs: {
+      nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [ final.patchelf ];
+      postFixup = (oldAttrs.postFixup or "") + ''
+        for library in "$out"/lib/libvchan-xen.so*; do
+          [ -f "$library" ] || continue
+          patchelf --set-rpath "${final.qubes-vmm-xen-vchan-runtime}/lib:${final.stdenv.cc.cc.lib}/lib" "$library"
+        done
+      '';
+    });
+
+    qubes-core-qubesdb = prev.qubes-core-qubesdb.override {
+      systemd = final.systemdMinimal;
+    };
+
+    qubes-linux-utils = prev.qubes-linux-utils.overrideAttrs (oldAttrs: {
+      nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [
+        final.findutils
+        final.patchelf
+      ];
+      postFixup = (oldAttrs.postFixup or "") + ''
+        while IFS= read -r executable; do
+          if patchelf --print-rpath "$executable" >/dev/null 2>&1; then
+            patchelf --set-rpath "${final.qubes-vmm-xen-vchan-runtime}/lib:${final.icu}/lib:${final.qubes-core-qubesdb}/lib:${final.stdenv.cc.cc.lib}/lib" "$executable"
+          fi
+        done < <(find "$out" -type f -perm -0100 -print)
+      '';
+    });
+  };
+
   qubesOverlays = [
     imageBuildToolsOverlay
     (import "${nixosQubesSource}/pkgs/top-level/overlay.nix")
     (import "${nixpkgs}/pkgs/top-level/by-name-overlay.nix" "${nixosQubesSource}/pkgs/by-name")
     libvirt105Overlay
+    nixomeGuestRuntimeOverlay
     (import "${nixosQubesSource}/nix/overlay.nix")
   ];
 
@@ -657,9 +757,11 @@ let
       prefs ? { },
       features ? { },
       services ? { },
+      state ? { },
       rootImageSizeMiB ? 512,
       storeDevice ? "/dev/xvde",
       storeBlobDevice ? "/dev/xvdf",
+      guestNetworking ? netvm != null,
     }:
     let
       configuration = lib.nixosSystem {
@@ -672,15 +774,15 @@ let
         }
         // extraSpecialArgs;
         modules = [
-          "${nixpkgs}/nixos/modules/profiles/minimal.nix"
+          "${nixomeSupport}/modules/nixome-minimal.nix"
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
           "${nixomeSupport}/modules/qube-guest.nix"
           {
             nixpkgs.pkgs = pkgs;
+            nixome.minimalGuest.enable = true;
+            nixome.minimalGuest.networking.enable = lib.mkDefault guestNetworking;
             nixome.qubeGuest.enable = true;
             nixome.qubeGuest.role = guestRole;
-            documentation.enable = lib.mkDefault false;
-            programs.command-not-found.enable = lib.mkDefault false;
             system.nixos.versionSuffix = lib.mkForce "";
           }
         ]
@@ -758,6 +860,11 @@ let
             viewBackend = "erofs-objectmap";
             readOnly = true;
           };
+          state = {
+            persistent = "${name}-private";
+            volatile = null;
+          }
+          // state;
         };
       };
     in

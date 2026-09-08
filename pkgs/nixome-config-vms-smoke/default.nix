@@ -1,8 +1,11 @@
 {
+  callPackage,
   coreutils,
   gnugrep,
   jq,
   lib,
+  nixome-config-apply ? callPackage ../nixome-config-apply { },
+  nixome-config-seed-inputs-import ? callPackage ../nixome-config-seed-inputs-import { },
   python3,
   systemd,
   writeShellApplication,
@@ -42,6 +45,8 @@ writeShellApplication {
     coreutils
     gnugrep
     jq
+    nixome-config-apply
+    nixome-config-seed-inputs-import
     python3.pkgs.qubes-core-qrexec.dom0
     systemd
   ];

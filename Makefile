@@ -26,7 +26,7 @@ endif
 
 NIXOME_NIX ?= ./scripts/nixome-nix.sh
 
-.PHONY: ensure-generated-dirs build test vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -76,6 +76,22 @@ vm-gui-check: ensure-generated-dirs gc-auto
 
 vm-gui-smoke: ensure-generated-dirs gc-auto
 	NIXOME_AUTO_GC_AFTER_RUN=1 ./scripts/run-nested-gui-smoke.sh
+
+vm-warm-start: ensure-generated-dirs
+	@if ./scripts/ssh-nested-vm.sh true >/dev/null 2>&1; then \
+		printf 'nested dom0 already reachable on NIXOME_VM_SSH_PORT=%s\n' "$${NIXOME_VM_SSH_PORT:-2222}"; \
+	else \
+		NIXOME_KEEP_VM=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=0 NIXOME_RUN_CONFIG_SEED_INPUTS_IMPORT=0 NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh; \
+	fi
+
+vm-warm-sync: ensure-generated-dirs
+	NIXOME_SYNC_DOM0_TOOLS=1 ./scripts/sync-nested-dom0-tools.sh
+
+vm-warm-apply: ensure-generated-dirs
+	NIXOME_KEEP_VM=1 NIXOME_REUSE_WARM_VM=1 NIXOME_SYNC_DOM0_TOOLS=1 NIXOME_NESTED_WARM_STOP_NIX_DOMAINS=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_SEED_INPUTS_IMPORT=1 NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
+
+vm-warm-test-config: ensure-generated-dirs
+	NIXOME_KEEP_VM=1 NIXOME_REUSE_WARM_VM=1 NIXOME_SYNC_DOM0_TOOLS=1 NIXOME_NESTED_WARM_STOP_NIX_DOMAINS=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_SEED_INPUTS_IMPORT=0 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_NIX_CLOSURE_SMOKE=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh
 
 vm-config-setup: ensure-generated-dirs gc-auto
 	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh

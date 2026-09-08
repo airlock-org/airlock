@@ -56,11 +56,38 @@
 
       nixomeQubesVmKernelName = "6.12.64-1.fc41";
 
+      nixomeSupportSeedSource =
+        let
+          root = toString ./.;
+          keep =
+            path: _type:
+            let
+              rel = lib.removePrefix "${root}/" (toString path);
+              keepTree = name: rel == name || lib.hasPrefix "${name}/" rel;
+            in
+            rel == "flake.nix"
+            || rel == "flake.lock"
+            || keepTree "lib"
+            || keepTree "machines"
+            || keepTree "modules"
+            || keepTree "pkgs"
+            || keepTree "scripts"
+            || keepTree "seeds"
+            || rel == "tests"
+            || rel == "tests/qubes-gui-smoke.sh"
+            || rel == "tests/qubes-smoke.sh";
+        in
+        lib.cleanSourceWith {
+          name = "nixome-support-seed-source";
+          src = ./.;
+          filter = keep;
+        };
+
       nixomeConfigSeedInputs = {
         nixpkgs = "${nixpkgs}";
         nixpkgsLibvirt105 = "${nixpkgs-libvirt_10_5}";
         nixosQubes = "${nixos-qubes}";
-        nixomeSupport = "${self}";
+        nixomeSupport = "${nixomeSupportSeedSource}";
       };
 
       mkNixomeQubeBuilders =
@@ -77,6 +104,8 @@
         "config-staging"
         "config-validator"
       ];
+
+      configNixPrivateSizeBytes = 8589934592;
 
       configRoleDefaults = {
         config-vault = {
@@ -103,6 +132,7 @@
           guestHostName = "config-staging";
           label = "gray";
           rootImageSizeMiB = 128;
+          state.persistentSize = configNixPrivateSizeBytes;
           prefs = {
             autostart = false;
             include_in_backups = true;
@@ -124,6 +154,7 @@
           guestHostName = "config-validator";
           label = "blue";
           rootImageSizeMiB = 128;
+          state.persistentSize = configNixPrivateSizeBytes;
           prefs = {
             autostart = false;
             include_in_backups = true;
@@ -173,6 +204,7 @@
               prefs = defaults.prefs;
               features = defaults.features;
               services = defaults.services;
+              state = defaults.state or { };
             };
         in
         lib.listToAttrs (
@@ -311,6 +343,7 @@
           nixome-config-apply = pkgs.callPackage ./pkgs/nixome-config-apply { };
           nixome-config-archive-candidate = pkgs.callPackage ./pkgs/nixome-config-archive { };
           nixome-config-boot-verify = pkgs.callPackage ./pkgs/nixome-config-boot-verify { };
+          nixome-config-seed-inputs-import = pkgs.callPackage ./pkgs/nixome-config-seed-inputs-import { };
           nixome-config-status = pkgs.callPackage ./pkgs/nixome-config-status { };
           nixome-config-vms-smoke = pkgs.callPackage ./pkgs/nixome-config-vms-smoke { };
           nixome-nix-domain-storage = pkgs.callPackage ./pkgs/nixome-nix-domain-storage { };
@@ -357,6 +390,7 @@
         config-apply-package = self.packages.${system}.nixome-config-apply;
         config-archive-package = self.packages.${system}.nixome-config-archive-candidate;
         config-boot-verify-package = self.packages.${system}.nixome-config-boot-verify;
+        config-seed-inputs-import-package = self.packages.${system}.nixome-config-seed-inputs-import;
         config-status-package = self.packages.${system}.nixome-config-status;
         module-contract = mkModuleContractCheck system;
         config-vms-smoke-package = self.packages.${system}.nixome-config-vms-smoke;

@@ -32,6 +32,7 @@ CREATED_QUBE_PERSISTENCE_LOG="$LOG_DIR/config-vms-created-qube-persistence.log"
 STAGING_APPMENUS_LOG="$LOG_DIR/config-vms-config-staging-appmenus.log"
 VAULT_APPMENUS_LOG="$LOG_DIR/config-vms-config-vault-appmenus.log"
 VALIDATOR_APPMENUS_LOG="$LOG_DIR/config-vms-config-validator-appmenus.log"
+SEED_INPUTS_IMPORT_LOG="$LOG_DIR/config-vms-seed-inputs-import.log"
 STAGING_INIT_LOG="$LOG_DIR/config-vms-config-staging-init.log"
 VALIDATOR_INIT_LOG="$LOG_DIR/config-vms-config-validator-init.log"
 STAGING_UPDATE_SCRIPT="$LOG_DIR/config-vms-config-staging-update.sh"
@@ -529,6 +530,7 @@ for cmd in \
   journalctl \
   cat \
   date \
+  nixome-config-seed-inputs-import \
   nixome-config-apply \
   nixome-config-status \
   qrexec-client \
@@ -609,6 +611,17 @@ run_appmenus_sync_or_fail "$VALIDATOR" "$VALIDATOR_APPMENUS_LOG"
 check_persistent_home "$VAULT" "$VAULT_PERSISTENCE_LOG"
 check_persistent_home "$STAGING" "$STAGING_PERSISTENCE_LOG"
 check_persistent_home "$VALIDATOR" "$VALIDATOR_PERSISTENCE_LOG"
+
+if [ "${NIXOME_CONFIG_VMS_IMPORT_SEED_INPUTS:-1}" = "1" ]; then
+  run_or_fail "import config seed inputs" "$SEED_INPUTS_IMPORT_LOG" \
+    env \
+      NIXOME_LOG_DIR="$LOG_DIR" \
+      NIXOME_CONFIG_STAGING_VM="$STAGING" \
+      NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+      nixome-config-seed-inputs-import
+else
+  printf 'config seed inputs import skipped by NIXOME_CONFIG_VMS_IMPORT_SEED_INPUTS=0\n' > "$SEED_INPUTS_IMPORT_LOG"
+fi
 
 run_qrexec_or_fail "$VAULT" "config vault repo status" "$VAULT_REPO_STATUS_LOG" \
   "cd /home/$QUBE_USER/nixome-config-vault && git status --short --branch"
@@ -694,8 +707,8 @@ else
   nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
 fi
 nixpkgs_libvirt_10_5_path="\$(sed -n 's/^      nixpkgsLibvirt105Source = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
-if [ -z "\$nixpkgs_libvirt_10_5_path" ] && [ -e /etc/nixome/config-seed-inputs/nixpkgs-libvirt_10_5 ]; then
-  nixpkgs_libvirt_10_5_path="\$(readlink -f /etc/nixome/config-seed-inputs/nixpkgs-libvirt_10_5)"
+if [ -z "\$nixpkgs_libvirt_10_5_path" ] && [ -e /rw/home/user/nixome-config-seed-inputs/nixpkgs-libvirt_10_5 ]; then
+  nixpkgs_libvirt_10_5_path="\$(readlink -f /rw/home/user/nixome-config-seed-inputs/nixpkgs-libvirt_10_5)"
 fi
 [ -n "\$nixpkgs_url" ]
 [ -n "\$nixpkgs_libvirt_10_5_path" ]

@@ -80,6 +80,7 @@
           "netvm"
           "prefs"
           "services"
+          "state"
         ] (expectConfigAttrs path value);
       checkConfigGuest =
         path: value:
@@ -127,6 +128,7 @@
           "packages"
           "prefs"
           "services"
+          "state"
           "systemd"
           "rootImageSizeMiB"
         ] (expectNixNativeAttrs path value);
@@ -306,6 +308,7 @@
           prefs = (base.prefs or { }) // (override.prefs or { });
           features = (base.features or { }) // (override.features or { });
           services = (base.services or { }) // (override.services or { });
+          state = (base.state or { }) // (override.state or { });
         };
       mkNixNativeEntry =
         name: definition:
@@ -323,8 +326,10 @@
           prefs = definition.prefs or { };
           features = definition.features or { };
           services = definition.services or { };
+          state = definition.state or { };
         };
       userNixNativeDomainEntries = builtins.mapAttrs mkNixNativeEntry checkedNixNative.domains;
+      configNixPrivateSizeBytes = 8589934592;
       configRoleDefaults = {
         config-vault = {
           guestHostName = "config-vault";
@@ -352,6 +357,7 @@
           label = "gray";
           netvm = null;
           rootImageSizeMiB = 128;
+          state.persistentSize = configNixPrivateSizeBytes;
           prefs = {
             autostart = false;
             include_in_backups = true;
@@ -374,6 +380,7 @@
           label = "blue";
           netvm = null;
           rootImageSizeMiB = 128;
+          state.persistentSize = configNixPrivateSizeBytes;
           prefs = {
             autostart = false;
             include_in_backups = true;
@@ -404,6 +411,7 @@
               prefs
               services
               ;
+            state = defaults.state or { };
           } (checkedConfigVms.domains.${role} or { });
         in
         templateBuilders.mkNixNativeDomain {
@@ -424,6 +432,7 @@
           prefs = runtime.prefs;
           features = runtime.features;
           services = runtime.services;
+          state = runtime.state;
         };
       configRoleNameConflicts = builtins.filter (
         role:
