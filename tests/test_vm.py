@@ -83,6 +83,29 @@ def vm_parallel_enabled() -> bool:
     return lanes not in {"", "0", "1"}
 
 
+def seed_lane_image_result_link(
+    vm_dir: Path,
+    shared_image_attr: str,
+    shared_image_link: Path,
+) -> Path:
+    if not shared_image_attr:
+        pytest.fail("parallel VM image attr must not be empty")
+    try:
+        shared_image_output = shared_image_link.resolve(strict=True)
+    except FileNotFoundError:
+        pytest.fail(
+            "parallel VM shared image result link is missing; "
+            f"run make vm-parallel-prebuild-image: {shared_image_link}"
+        )
+    lane_image_link = vm_dir / f"{shared_image_attr}-result"
+    if lane_image_link.exists() or lane_image_link.is_symlink():
+        if lane_image_link.is_dir() and not lane_image_link.is_symlink():
+            pytest.fail(f"refusing to replace non-symlink directory: {lane_image_link}")
+        lane_image_link.unlink()
+    lane_image_link.symlink_to(shared_image_output)
+    return lane_image_link
+
+
 def write_log(path: Path, result: subprocess.CompletedProcess[str]) -> None:
     path.write_text(
         "".join(
@@ -127,12 +150,27 @@ def test_vm_flow(
     if parallel_enabled:
         # VM lanes isolate mutable VM state, result links, logs, and SSH ports.
         # They intentionally share the configured Nix store/cache so expensive
-        # builds are reused across workers.
+        # builds are reused across workers. The lane-local image result link is
+        # seeded from the Makefile prebuild so workers do not each resolve the
+        # same base image with nix build.
         data_root = Path(env["NIXOME_DATA_ROOT"])
         vm_dir = data_root / "vm-lanes" / str(lane)
         result_link_dir = data_root / "result-links" / "vm-lanes" / str(lane)
         vm_dir.mkdir(parents=True, exist_ok=True)
         result_link_dir.mkdir(parents=True, exist_ok=True)
+        shared_image_attr = env.get(
+            "NIXOME_VM_PARALLEL_IMAGE_ATTR",
+            "nixome-vm-gui-config-image",
+        )
+        shared_image_link_value = env.get("NIXOME_VM_PARALLEL_IMAGE_LINK")
+        lane_image_link = None
+        if shared_image_link_value:
+            lane_image_link = seed_lane_image_result_link(
+                vm_dir,
+                shared_image_attr,
+                Path(shared_image_link_value),
+            )
+            env["NIXOME_VM_SKIP_BASE_BUILD"] = "1"
         env["NIXOME_VM_LANE"] = str(lane)
         env["NIXOME_VM_DIR"] = str(vm_dir)
         env["NIXOME_RESULT_LINK_DIR"] = str(result_link_dir)
@@ -145,8 +183,13 @@ def test_vm_flow(
                 "NIXOME_RESULT_LINK_DIR": str(result_link_dir),
                 "NIXOME_VM_SSH_PORT": str(2222 + lane),
                 "NIXOME_SKIP_GC_AUTO": "1",
+                "NIXOME_VM_PARALLEL_IMAGE_ATTR": shared_image_attr,
+                "NIXOME_VM_PARALLEL_IMAGE_LINK": shared_image_link_value,
+                "NIXOME_VM_SKIP_BASE_BUILD": env.get("NIXOME_VM_SKIP_BASE_BUILD", "0"),
             }
         )
+        if lane_image_link is not None:
+            lane_env["NIXOME_VM_IMAGE_RESULT_LINK"] = str(lane_image_link)
     (flow_log_dir / "pytest-vm-env.json").write_text(
         json.dumps(lane_env, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

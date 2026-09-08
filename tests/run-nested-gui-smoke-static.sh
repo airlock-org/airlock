@@ -8,6 +8,7 @@ bash -n "$ROOT/scripts/sync-nested-dom0-tools.sh"
 bash -n "$ROOT/scripts/run-config-boot-activation-flow.sh"
 bash -n "$ROOT/scripts/nixos-config-vms-smoke.sh"
 bash -n "$ROOT/scripts/config-boot-verify.sh"
+bash -n "$ROOT/scripts/resolve-vm-image-result.sh"
 
 ! grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/Makefile" >/dev/null
 ! grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
@@ -71,6 +72,9 @@ grep -F 'NIXOME_CONFIG_SEED_INPUTS_SOURCE \' "$ROOT/scripts/run-nested-gui-smoke
 grep -F -- '--topology $(shell_quote "$SETUP_CONFIG_TOPOLOGY")' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_VM_SKIP_BASE_BUILD' "$ROOT/scripts/run-nested-vm.sh" >/dev/null
 grep -F 'using existing Nixome VM base image result link' "$ROOT/scripts/run-nested-vm.sh" >/dev/null
+grep -F 'vm-parallel-prebuild-image' "$ROOT/Makefile" >/dev/null
+grep -F 'NIXOME_VM_PARALLEL_IMAGE_LINK' "$ROOT/Makefile" >/dev/null
+grep -F 'NIXOME_VM_SKIP_BASE_BUILD' "$ROOT/tests/test_vm.py" >/dev/null
 grep -F 'sync-nested-dom0-tools.sh' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'prepare_warm_sync_boot_unit' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'warm tool sync uses explicit setup-config' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null

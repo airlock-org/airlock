@@ -106,9 +106,10 @@ Direct pytest runs without `NIXOME_RUN_VM_TESTS=1` collect the VM tests but skip
 them. Runtime reports use the same `test-runtimes-latest.*` and
 `test-runtimes-history.jsonl` files as the local layer.
 
-Experimental multi-lane VM runs start isolated nested VM instances in parallel.
-Each lane gets its own VM directory, result-link directory, log directory, and
-SSH port while sharing the Nix store/cache:
+Experimental multi-lane VM runs resolve the shared
+`nixome-vm-gui-config-image` output once, then start isolated nested VM
+instances in parallel. Each lane gets its own VM directory, result-link
+directory, log directory, and SSH port while sharing the Nix store/cache:
 
 ```bash
 make test-vm-parallel
@@ -117,9 +118,11 @@ make test-vm-parallel TEST_VM_JOBS=2 TESTS="vm-config-flow vm-nix-closure-flow"
 
 Serial-only VM flows such as `vm-prebuild-shared`,
 `vm-config-boot-activate-flow`, and `vm-gui-smoke` are excluded from the default
-parallel VM set. Multi-lane VM runs also set `NIXOME_SKIP_GC_AUTO=1` inside
-each lane to avoid concurrent GC lock contention; run `make gc-auto` before or
-after a parallel VM batch when needed.
+parallel VM set. The lane-local VM image result link is seeded from the shared
+prebuild and workers run with `NIXOME_VM_SKIP_BASE_BUILD=1`, so they do not each
+re-resolve the same base image with Nix. Multi-lane VM runs also set
+`NIXOME_SKIP_GC_AUTO=1` inside each lane to avoid concurrent GC lock contention;
+run `make gc-auto` before or after a parallel VM batch when needed.
 
 ## Build Layer
 

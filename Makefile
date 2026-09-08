@@ -25,6 +25,8 @@ export XDG_CACHE_HOME
 endif
 
 NIXOME_NIX ?= ./scripts/nixome-nix.sh
+VM_PARALLEL_IMAGE_ATTR ?= nixome-vm-gui-config-image
+VM_PARALLEL_IMAGE_LINK ?= $(NIXOME_RESULT_LINK_DIR)/$(VM_PARALLEL_IMAGE_ATTR)-parallel-shared-result
 
 VM_PREBUILD_ATTRS := \
 	packages.x86_64-linux.nixome-setup-config \
@@ -49,14 +51,15 @@ PYTHON_FILES := \
 PYTEST_LOG_DIR = $${NIXOME_LOG_DIR:-.nixome-logs}
 TEST_JOBS ?= 4
 TEST_VM_JOBS ?= 2
+PYTEST_CONFIG_ARGS = -c "$(CURDIR)/pyproject.toml" --rootdir "$(CURDIR)"
 PYTEST_WORKERS = $(if $(TEST_JOBS),-n $(TEST_JOBS),)
 PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
-PYTEST_REPORT_ARGS = --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
+PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
 PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 VM_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm.py::test_vm_flow[$(test)]')
 
-.PHONY: ensure-generated-dirs build test test-parallel test-serial test-vm test-vm-parallel test-vm-warm test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test test-parallel test-serial test-vm test-vm-parallel test-vm-warm test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -82,16 +85,16 @@ test-vm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
 	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm") $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
 
-test-vm-parallel: ensure-generated-dirs
+test-vm-parallel: vm-parallel-prebuild-image
 	@mkdir -p "$(PYTEST_LOG_DIR)"
-	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)" uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm and not serial_vm") -n $(TEST_VM_JOBS) --dist load --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json" $(PYTEST_ARGS)
+	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)" NIXOME_VM_PARALLEL_IMAGE_ATTR="$(VM_PARALLEL_IMAGE_ATTR)" NIXOME_VM_PARALLEL_IMAGE_LINK="$(VM_PARALLEL_IMAGE_LINK)" uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm and not serial_vm") -n $(TEST_VM_JOBS) --dist load $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
 
 test-vm-warm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
 	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and warm") $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
 
 test-list: ensure-generated-dirs
-	uv run pytest tests --collect-only -q
+	uv run pytest $(PYTEST_CONFIG_ARGS) tests --collect-only -q
 
 py-sync:
 	uv sync --only-dev
@@ -119,6 +122,10 @@ install-git-hooks:
 
 vm-prebuild-shared: ensure-generated-dirs gc-auto
 	$(NIXOME_NIX) build $(foreach attr,$(VM_PREBUILD_ATTRS),.#$(attr)) --no-link --print-build-logs --show-trace
+
+vm-parallel-prebuild-image: ensure-generated-dirs gc-auto
+	@mkdir -p "$(PYTEST_LOG_DIR)"
+	./scripts/resolve-vm-image-result.sh "$(VM_PARALLEL_IMAGE_ATTR)" "$(VM_PARALLEL_IMAGE_LINK)" > "$(PYTEST_LOG_DIR)/vm-parallel-shared-image-path.txt"
 
 vm-image: ensure-generated-dirs gc-auto
 	$(NIXOME_NIX) build .#nixome-vm-image --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-vm-image" --print-build-logs --show-trace
