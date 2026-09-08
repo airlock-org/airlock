@@ -169,7 +169,6 @@ if [ "\$#" -eq 2 ]; then
     config-staging:nixome-system-source) printf '$OLD_SYSTEM_SOURCE\\n' ;;
     config-staging:nixome-root-source) printf '$OLD_ROOT_SOURCE\\n' ;;
     config-staging:nixome-store-source) printf '$OLD_STORE_SOURCE\\n' ;;
-    config-staging:nixome-store-image) printf '$OLD_STORE_SOURCE\\n' ;;
     config-staging:nixome-store-mode) printf 'shared-closure\\n' ;;
     config-staging:nixome-store-view-backend) printf 'erofs-objectmap\\n' ;;
     config-staging:nixome-store-generation) printf '1\\n' ;;
@@ -259,7 +258,7 @@ jq -e \
   .domains_changed == 0 and
   .root_images_changed == 0 and
   .store_volumes_changed == 0 and
-  .store_images_changed == 0 and
+  .store_views_changed == 0 and
   .restart_required == true and
   .live_actions == [] and
   (.restart_actions | length) == 3 and
@@ -293,7 +292,7 @@ if grep -F '+ nixome-nix-domain-storage ensure-store config-staging' "$LOG_DIR/s
 fi
 
 if grep -F '+ qvm-prefs config-staging kernelopts' "$LOG_DIR/setup-config.commands.log" >/dev/null; then
-  printf 'setup-config changed kernelopts before the new store image was imported\n' >&2
+  printf 'setup-config changed kernelopts before the new store view was materialized\n' >&2
   exit 1
 fi
 

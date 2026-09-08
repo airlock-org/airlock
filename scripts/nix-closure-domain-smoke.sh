@@ -18,7 +18,7 @@ PRIVATE_VOLUME_LOG="$LOG_DIR/nix-closure-domain-private-volume.log"
 VOLATILE_VOLUME_LOG="$LOG_DIR/nix-closure-domain-volatile-volume.log"
 KERNEL_OPTS_LOG="$LOG_DIR/nix-closure-domain-kernelopts.log"
 ROOT_IMAGE_CHECK_LOG="$LOG_DIR/nix-closure-domain-root-image-check.log"
-STORE_IMAGE_CHECK_LOG="$LOG_DIR/nix-closure-domain-store-image-check.log"
+STORE_VIEW_CHECK_LOG="$LOG_DIR/nix-closure-domain-store-view-check.log"
 RUNTIME_SERVICE_LOG="$LOG_DIR/nix-closure-domain-runtime-service.log"
 RUNTIME_SERVICE_ERR="$LOG_DIR/nix-closure-domain-runtime-service.err.log"
 PEER_RUNTIME_SERVICE_LOG="$LOG_DIR/nix-closure-domain-peer-runtime-service.log"
@@ -94,8 +94,8 @@ root_source=""
 root_source_physical=""
 store_source=""
 store_source_physical=""
-store_image=""
-store_image_physical=""
+store_view_image=""
+store_view_image_physical=""
 store_mode=""
 system_source=""
 store_device=""
@@ -178,10 +178,10 @@ write_result() {
     jq -Rn --arg value "$store_source" '$value' | tr -d '\n'
     printf ',"store_source_physical":'
     jq -Rn --arg value "$store_source_physical" '$value' | tr -d '\n'
-    printf ',"store_image":'
-    jq -Rn --arg value "$store_image" '$value' | tr -d '\n'
-    printf ',"store_image_physical":'
-    jq -Rn --arg value "$store_image_physical" '$value' | tr -d '\n'
+    printf ',"store_view_image":'
+    jq -Rn --arg value "$store_view_image" '$value' | tr -d '\n'
+    printf ',"store_view_image_physical":'
+    jq -Rn --arg value "$store_view_image_physical" '$value' | tr -d '\n'
     printf ',"store_mode":'
     jq -Rn --arg value "$store_mode" '$value' | tr -d '\n'
     printf ',"store_device":'
@@ -225,8 +225,8 @@ write_result() {
     jq -Rn --arg value "$KERNEL_OPTS_LOG" '$value' | tr -d '\n'
     printf ',"root_image_check":'
     jq -Rn --arg value "$ROOT_IMAGE_CHECK_LOG" '$value' | tr -d '\n'
-    printf ',"store_image_check":'
-    jq -Rn --arg value "$STORE_IMAGE_CHECK_LOG" '$value' | tr -d '\n'
+    printf ',"store_view_check":'
+    jq -Rn --arg value "$STORE_VIEW_CHECK_LOG" '$value' | tr -d '\n'
     printf ',"runtime_service":'
     jq -Rn --arg value "$RUNTIME_SERVICE_LOG" '$value' | tr -d '\n'
     printf ',"peer_runtime_service":'
@@ -667,8 +667,8 @@ set_domain_generation_identity_from_switch() {
   selected_source="$(jq -r '.source // ""' "$switch_json")"
   selected_closure_hash="$(jq -r '.closure_hash' "$switch_json")"
   selected_view_image="$(jq -r '.view_image // .metadata_image // ""' "$switch_json")"
-  selected_backend="$(jq -r '.view_backend // "ext4-image"' "$switch_json")"
-  selected_filesystem="$(jq -r '.filesystem // "ext4"' "$switch_json")"
+  selected_backend="$(jq -r '.view_backend // "erofs-objectmap"' "$switch_json")"
+  selected_filesystem="$(jq -r '.filesystem // "erofs"' "$switch_json")"
   selected_blob_map="$(jq -r '.blob_map // ""' "$switch_json")"
   selected_blob_volume="$(jq -r '.blob_volume // ""' "$switch_json")"
   selected_blob_device="$(jq -r '.blob_device // ""' "$switch_json")"
@@ -711,7 +711,6 @@ set_domain_generation_identity_from_switch() {
     qvm-features "$DOMAIN" nixome-system-source "$selected_system"
     qvm-features "$DOMAIN" nixome-root-source "$selected_root"
     qvm-features "$DOMAIN" nixome-store-source "$selected_source"
-    qvm-features "$DOMAIN" nixome-store-image "$selected_source"
     qvm-features "$DOMAIN" nixome-store-mode shared-closure
     qvm-features "$DOMAIN" nixome-store-view-backend "$selected_backend"
     qvm-features "$DOMAIN" nixome-store-filesystem "$selected_filesystem"
@@ -1002,53 +1001,38 @@ check_source_paths() {
   store_filesystem="$(feature_value nixome-store-filesystem)"
   store_blob_device="$(feature_value nixome-store-blob-device)"
   store_blob_map="$(feature_value nixome-store-blob-map)"
-  [ -n "$store_mode" ] || store_mode="closure-image"
-  [ -n "$store_view_backend" ] || store_view_backend="ext4-image"
-  [ -n "$store_filesystem" ] || store_filesystem="ext4"
-  if [ "$store_mode" = "shared-closure" ]; then
-    store_image="$(feature_value nixome-store-view-image)"
-  else
-    store_image="$(feature_value nixome-store-image)"
-  fi
+  [ -n "$store_mode" ] || store_mode="shared-closure"
+  [ -n "$store_view_backend" ] || store_view_backend="erofs-objectmap"
+  [ -n "$store_filesystem" ] || store_filesystem="erofs"
+  store_view_image="$(feature_value nixome-store-view-image)"
   system_source="$(feature_value nixome-system-source)"
   store_device="$(feature_value nixome-store-device)"
   root_source_physical="$(nixome_physical_store_path "$root_source")"
   store_source_physical="$(nixome_physical_store_path "$store_source")"
-  store_image_physical="$(nixome_physical_store_path "$store_image")"
+  store_view_image_physical="$(nixome_physical_store_path "$store_view_image")"
   store_blob_map_physical="$(nixome_physical_store_path "$store_blob_map")"
 
   [ -n "$root_source" ] || fail "missing nixome-root-source feature"
   [ -n "$store_source" ] || fail "missing nixome-store-source feature"
-  [ -n "$store_image" ] || fail "missing nixome-store-image feature"
+  [ -n "$store_view_image" ] || fail "missing nixome-store-view-image feature"
   [ -n "$system_source" ] || fail "missing nixome-system-source feature"
   [ -n "$store_device" ] || fail "missing nixome-store-device feature"
   [ -f "$root_source_physical" ] || fail "root image source is missing: $root_source"
-  case "$store_mode" in
-    closure-image)
-      [ -f "$store_source_physical" ] || fail "store source image is missing: $store_source"
-      [ -f "$store_image_physical" ] || fail "store imported image path is missing: $store_image"
-      [ "$store_source_physical" = "$store_image_physical" ] ||
-        fail "store source and imported image path disagree"
-      ;;
-    shared-closure)
-      [ -d "$store_source_physical" ] || fail "store closure source is missing: $store_source"
-      [ -f "$store_source_physical/store-paths" ] ||
-        fail "store closure source is missing store-paths: $store_source/store-paths"
-      [ -f "$store_source_physical/manifest.json" ] ||
-        fail "store closure source is missing manifest.json: $store_source/manifest.json"
-      [ -f "$store_image_physical" ] || fail "store view image path is missing: $store_image"
-      if [ "$store_view_backend" = "erofs-blobmap" ] || [ "$store_view_backend" = "erofs-objectmap" ]; then
-        [ "$store_filesystem" = "erofs" ] ||
-          fail "shared closure EROFS filtered-blob backend did not report erofs filesystem"
-        [ -n "$store_blob_device" ] || fail "missing nixome-store-blob-device feature"
-        [ -n "$store_blob_map" ] || fail "missing nixome-store-blob-map feature"
-        [ -f "$store_blob_map_physical" ] || fail "store blob map path is missing: $store_blob_map"
-      fi
-      ;;
-    *)
-      fail "unsupported store mode for $DOMAIN: $store_mode"
-      ;;
-  esac
+  [ "$store_mode" = "shared-closure" ] ||
+    fail "unsupported store mode for $DOMAIN: $store_mode"
+  [ "$store_view_backend" = "erofs-objectmap" ] ||
+    fail "unsupported store view backend for $DOMAIN: $store_view_backend"
+  [ "$store_filesystem" = "erofs" ] ||
+    fail "shared closure objectmap backend did not report erofs filesystem"
+  [ -d "$store_source_physical" ] || fail "store closure source is missing: $store_source"
+  [ -f "$store_source_physical/store-paths" ] ||
+    fail "store closure source is missing store-paths: $store_source/store-paths"
+  [ -f "$store_source_physical/manifest.json" ] ||
+    fail "store closure source is missing manifest.json: $store_source/manifest.json"
+  [ -f "$store_view_image_physical" ] || fail "store view image path is missing: $store_view_image"
+  [ -n "$store_blob_device" ] || fail "missing nixome-store-blob-device feature"
+  [ -n "$store_blob_map" ] || fail "missing nixome-store-blob-map feature"
+  [ -f "$store_blob_map_physical" ] || fail "store blob map path is missing: $store_blob_map"
 }
 
 check_root_image_has_no_store() {
@@ -1068,7 +1052,7 @@ check_root_image_has_no_store() {
     fail "root image contains unexpected /nix/store entries: $entries"
 }
 
-check_store_image_contains_system() {
+check_store_view_contains_system() {
   system_entry="${system_source#/nix/store/}"
   [ "$system_entry" != "$system_source" ] ||
     fail "system source is not in /nix/store: $system_source"
@@ -1076,52 +1060,48 @@ check_store_image_contains_system() {
   {
     printf 'store_source=%s\n' "$store_source"
     printf 'store_source_physical=%s\n' "$store_source_physical"
-    printf 'store_image=%s\n' "$store_image"
-    printf 'store_image_physical=%s\n' "$store_image_physical"
+    printf 'store_view_image=%s\n' "$store_view_image"
+    printf 'store_view_image_physical=%s\n' "$store_view_image_physical"
     printf 'system_source=%s\n' "$system_source"
     printf 'system_entry=%s\n' "$system_entry"
-    printf 'bytes=%s\n' "$(stat -c %s "$store_image_physical")"
+    printf 'bytes=%s\n' "$(stat -c %s "$store_view_image_physical")"
     if [ -f "$store_source_physical/store-paths" ]; then
       grep -Fx "$system_source" "$store_source_physical/store-paths"
     elif [ -f "$(dirname "$store_source_physical")/store-paths" ]; then
       grep -Fx "$system_source" "$(dirname "$store_source_physical")/store-paths"
     fi
-    if [ "$store_view_backend" = "erofs-blobmap" ] || [ "$store_view_backend" = "erofs-objectmap" ]; then
-      generation="$(store_generation_for "$DOMAIN")"
-      attach_json="$LOG_DIR/nix-closure-domain-store-attach.json"
-      extract_dir="$LOG_DIR/nix-closure-domain-store-extract"
-      chmod -R u+w "$extract_dir" 2>/dev/null || true
-      rm -rf "$extract_dir"
-      mkdir -p "$extract_dir"
-      nixome-closure-store attach-blob-view \
-        --domain "$DOMAIN" \
-        --generation "$generation" \
-        > "$attach_json"
-      filtered_device="$(jq -r '.device' "$attach_json")"
-      case "$filtered_device" in
-        /dev/mapper/nixome-*) ;;
-        *) echo "unexpected filtered device: $filtered_device" >&2; exit 1 ;;
-      esac
-      if [ "$(readlink -f "$filtered_device")" = "$(readlink -f "$(jq -r '.central_blob' "$attach_json")")" ]; then
-        echo "filtered device resolves to the global backing blob" >&2
-        exit 1
-      fi
-      set +e
-      fsck.erofs --device="$filtered_device" --extract="$extract_dir" "$store_image_physical"
-      fsck_rc="$?"
-      nixome-closure-store detach-blob-view \
-        --domain "$DOMAIN" \
-        --generation "$generation"
-      detach_rc="$?"
-      set -e
-      [ "$fsck_rc" = "0" ]
-      [ "$detach_rc" = "0" ]
-      [ -x "$extract_dir/$system_entry/init" ]
-    else
-      debugfs -R "stat /$system_entry/init" "$store_image_physical"
+    generation="$(store_generation_for "$DOMAIN")"
+    attach_json="$LOG_DIR/nix-closure-domain-store-attach.json"
+    extract_dir="$LOG_DIR/nix-closure-domain-store-extract"
+    chmod -R u+w "$extract_dir" 2>/dev/null || true
+    rm -rf "$extract_dir"
+    mkdir -p "$extract_dir"
+    nixome-closure-store attach-blob-view \
+      --domain "$DOMAIN" \
+      --generation "$generation" \
+      > "$attach_json"
+    filtered_device="$(jq -r '.device' "$attach_json")"
+    case "$filtered_device" in
+      /dev/mapper/nixome-*) ;;
+      *) echo "unexpected filtered device: $filtered_device" >&2; exit 1 ;;
+    esac
+    if [ "$(readlink -f "$filtered_device")" = "$(readlink -f "$(jq -r '.central_blob' "$attach_json")")" ]; then
+      echo "filtered device resolves to the global backing blob" >&2
+      exit 1
     fi
-  } > "$STORE_IMAGE_CHECK_LOG" 2>&1 ||
-    fail "store image does not contain declared system init"
+    set +e
+    fsck.erofs --device="$filtered_device" --extract="$extract_dir" "$store_view_image_physical"
+    fsck_rc="$?"
+    nixome-closure-store detach-blob-view \
+      --domain "$DOMAIN" \
+      --generation "$generation"
+    detach_rc="$?"
+    set -e
+    [ "$fsck_rc" = "0" ]
+    [ "$detach_rc" = "0" ]
+    [ -x "$extract_dir/$system_entry/init" ]
+  } > "$STORE_VIEW_CHECK_LOG" 2>&1 ||
+    fail "store view does not contain declared system init"
 }
 
 run_runtime_service_check_for() {
@@ -1195,7 +1175,7 @@ store_blob_device="$(
     sed -n 's|^nixome.storeblobdev=||p' |
     head -n 1
 )"
-[ -n "$store_format" ] || store_format="ext4"
+[ -n "$store_format" ] || store_format="erofs"
 mount_source="$(findmnt -rn -T /nix/store -o SOURCE)"
 mount_options="$(findmnt -rn -T /nix/store -o OPTIONS)"
 current_system="$(readlink -f /run/current-system)"
@@ -1224,13 +1204,12 @@ printf 'applied_message=%s\n' "$applied_message"
 [ "$current_system" = "$system_path" ]
 [ -x "$system_path/init" ]
 [ "$mount_source" = "$store_device" ]
-if [ "$store_format" = "erofs" ]; then
-  [ -n "$store_blob_device" ]
-  [ -b "$store_blob_device" ]
-  blob_block="${store_blob_device#/dev/}"
-  [ -r "/sys/class/block/$blob_block/ro" ]
-  [ "$(cat "/sys/class/block/$blob_block/ro")" = "1" ]
-fi
+[ "$store_format" = "erofs" ]
+[ -n "$store_blob_device" ]
+[ -b "$store_blob_device" ]
+blob_block="${store_blob_device#/dev/}"
+[ -r "/sys/class/block/$blob_block/ro" ]
+[ "$(cat "/sys/class/block/$blob_block/ro")" = "1" ]
 case ",$mount_options," in
   *,ro,*) ;;
   *) echo "/nix/store is not read-only: $mount_options" >&2; exit 1 ;;
@@ -1477,7 +1456,6 @@ let
     label = "green";
     netvm = null;
     rootImageSizeMiB = 128;
-    additionalStoreSpaceMiB = 128;
     prefs = {
       memory = 1024;
       maxmem = 2048;
@@ -1666,7 +1644,7 @@ write_sharing_proof \
   "$SHARING_PROOF_LOG"
 
 check_root_image_has_no_store
-check_store_image_contains_system
+check_store_view_contains_system
 
 write_guest_probe_script
 start_vm "$DOMAIN"

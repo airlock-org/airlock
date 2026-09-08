@@ -2092,7 +2092,7 @@ in
             sed -n 's|^nixome.storeblobdev=||p' |
             head -n 1
         )"
-        [ -n "$store_format" ] || store_format="ext4"
+        [ -n "$store_format" ] || store_format="erofs"
 
         [ -n "$system_path" ] || {
           echo "missing nixome.system kernel option" >&2

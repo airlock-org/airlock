@@ -253,7 +253,6 @@ cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
     netvm = null;
     hostName = "nix-native-generated";
     rootImageSizeMiB = 128;
-    additionalStoreSpaceMiB = 128;
     packages = with pkgs; [
       jq
     ];

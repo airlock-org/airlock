@@ -326,8 +326,8 @@ let
                     return 0;
                 }
             } else {
-                fstype = "ext4";
-                snprintf(mount_data, sizeof(mount_data), "ro");
+                log_msg("unsupported nixome.storefmt=%s", store_format);
+                return 0;
             }
 
             if (mount(device, "/nix/store", fstype, MS_RDONLY | MS_NODEV, mount_data) != 0) {
@@ -354,7 +354,7 @@ let
         static int mount_store(const char *system_path) {
             char explicit_device[PATH_MAX] = "";
             char explicit_blob_device[PATH_MAX] = "/dev/xvdf";
-            char store_format[32] = "ext4";
+            char store_format[32] = "erofs";
             const char *fallback_devices[] = {
                 "/dev/xvde", "/dev/xvdf", "/dev/xvdg", "/dev/xvdh",
                 "/dev/xvdi", "/dev/xvdj", "/dev/xvdk", "/dev/xvdl",
@@ -380,7 +380,7 @@ let
             if (strcmp(store_format, "erofs") == 0) {
                 try_mount_kernel_modules();
                 try_modprobe("erofs");
-            } else if (strcmp(store_format, "ext4") != 0) {
+            } else {
                 log_msg("unsupported nixome.storefmt=%s", store_format);
                 return 0;
             }
@@ -579,7 +579,7 @@ let
           printf 'store_mountpoint=/nix/store\n'
           printf 'store_device_default=/dev/xvde\n'
           printf 'store_blob_device_default=/dev/xvdf\n'
-          printf 'store_formats=ext4 erofs\n'
+          printf 'store_formats=erofs\n'
         } > "$out/MANAGED_BY_NIXOME"
 
         (cd "$root" && find . -mindepth 1 -print | sort) > "$out/root-files.txt"
@@ -588,81 +588,7 @@ let
         mkfs.ext4 -q -F -L nixroot -d "$root" "$out/root.img"
 
         cat > "$out/manifest.json" <<EOF
-        {"schema":"nixome.nix-closure-root-image.v1","name":"${imageName}","image":"root.img","contains_store":false,"init":"/sbin/init","store_mountpoint":"/nix/store","store_device_default":"/dev/xvde","store_blob_device_default":"/dev/xvdf","store_formats":["ext4","erofs"]}
-        EOF
-      '';
-
-  mkNixStoreClosureImage =
-    {
-      name,
-      rootPaths,
-      additionalSpaceMiB ? 256,
-      device ? "/dev/xvde",
-    }:
-    let
-      closure = pkgs.closureInfo {
-        inherit rootPaths;
-      };
-    in
-    pkgs.runCommand "${name}-store-closure-image"
-      {
-        nativeBuildInputs = [
-          pkgs.coreutils
-          pkgs.e2fsprogs
-          pkgs.findutils
-          pkgs.gawk
-        ];
-        preferLocalBuild = true;
-        allowSubstitutes = false;
-      }
-      ''
-        set -eu
-
-        root="$PWD/root"
-        mkdir -p "$root" "$out"
-
-        while IFS= read -r store_path; do
-          store_entry="''${store_path#/nix/store/}"
-          case "$store_entry" in
-            ""|*/*)
-              printf 'unsupported Nix store path in closure: %s\n' "$store_path" >&2
-              exit 1
-              ;;
-          esac
-          cp -a "$store_path" "$root/$store_entry"
-        done < ${closure}/store-paths
-
-        used_apparent_bytes="$(du -sb "$root" | awk '{ print $1 }')"
-        used_bytes="$(du -sB1 "$root" | awk '{ print $1 }')"
-        used_inodes="$(find "$root" -mindepth 1 -printf x | wc -c)"
-        requested_spare_bytes="$((${toString additionalSpaceMiB} * 1024 * 1024))"
-        inode_spare="$((used_inodes / 2 + 8192))"
-        inode_count="$((used_inodes + inode_spare))"
-        metadata_spare_bytes="$((used_bytes / 2 + 512 * 1024 * 1024 + inode_count * 512))"
-        if [ "$requested_spare_bytes" -gt "$metadata_spare_bytes" ]; then
-          spare_bytes="$requested_spare_bytes"
-        else
-          spare_bytes="$metadata_spare_bytes"
-        fi
-        image_bytes="$((used_bytes + spare_bytes))"
-        image_bytes="$((((image_bytes + 1048575) / 1048576) * 1048576))"
-        truncate -s "$image_bytes" "$out/store.img"
-        mkfs.ext4 -q -F -m 0 -L nixstore -N "$inode_count" -d "$root" "$out/store.img"
-
-        cp ${closure}/store-paths "$out/store-paths"
-        {
-          printf 'used_apparent_bytes=%s\n' "$used_apparent_bytes"
-          printf 'used_bytes=%s\n' "$used_bytes"
-          printf 'used_inodes=%s\n' "$used_inodes"
-          printf 'requested_spare_bytes=%s\n' "$requested_spare_bytes"
-          printf 'metadata_spare_bytes=%s\n' "$metadata_spare_bytes"
-          printf 'spare_bytes=%s\n' "$spare_bytes"
-          printf 'inode_spare=%s\n' "$inode_spare"
-          printf 'inode_count=%s\n' "$inode_count"
-          printf 'image_bytes=%s\n' "$image_bytes"
-        } > "$out/image-sizing.txt"
-        cat > "$out/manifest.json" <<EOF
-        {"schema":"nixome.store-closure-image.v1","name":"${name}","image":"store.img","mountpoint":"/nix/store","device":"${device}","read_only":true,"sizing":"allocated-used-plus-metadata-spare","inode_sizing":"used-plus-50-percent-and-floor"}
+        {"schema":"nixome.nix-closure-root-image.v1","name":"${imageName}","image":"root.img","contains_store":false,"init":"/sbin/init","store_mountpoint":"/nix/store","store_device_default":"/dev/xvde","store_blob_device_default":"/dev/xvdf","store_formats":["erofs"]}
         EOF
       '';
 
@@ -722,15 +648,9 @@ let
       nixomePrebuiltTemplateSources ? { },
       extraSpecialArgs ? { },
       additionalRootSpace ? null,
-      additionalStoreSpaceMiB ? 256,
       configurationName ? "nixome-domain-${builtins.replaceStrings [ "." ] [ "-" ] name}",
       rootImageName ? "${configurationName}-root-image",
-      storeMode ? "shared-closure",
-      storeViewBackend ? if storeMode == "closure-image" then "ext4-image" else "erofs-objectmap",
-      storeChunkSize ? 65536,
-      storeArtifactName ? "${configurationName}-${
-        if storeMode == "closure-image" then "store-image" else "store-closure"
-      }",
+      storeArtifactName ? "${configurationName}-store-closure",
       kernelName ? "6.12.64-1.fc41",
       label ? "green",
       netvm ? null,
@@ -777,71 +697,16 @@ let
           (builtins.fromJSON (lib.removeSuffix "G" additionalRootSpace)) * 1024
         else
           throw "mkNixNativeDomain.additionalRootSpace must be an integer MiB value or a string ending in M/G";
-      _storeModeCheck =
-        if
-          builtins.elem storeMode [
-            "closure-image"
-            "shared-closure"
-          ]
-        then
-          null
-        else
-          throw "mkNixNativeDomain.storeMode must be closure-image or shared-closure";
-      _storeViewBackendCheck =
-        if
-          builtins.elem storeViewBackend [
-            "ext4-image"
-            "erofs-blobmap"
-            "erofs-objectmap"
-          ]
-        then
-          null
-        else
-          throw "mkNixNativeDomain.storeViewBackend must be ext4-image, erofs-blobmap, or erofs-objectmap";
-      _storeModeBackendCheck =
-        if storeMode == "closure-image" && storeViewBackend != "ext4-image" then
-          throw "mkNixNativeDomain closure-image storeMode must use ext4-image storeViewBackend"
-        else
-          null;
-      storeFormat =
-        if builtins.elem storeViewBackend [
-          "erofs-blobmap"
-          "erofs-objectmap"
-        ] then
-          "erofs"
-        else
-          "ext4";
-      storeBlobDeviceOpt =
-        if builtins.elem storeViewBackend [
-          "erofs-blobmap"
-          "erofs-objectmap"
-        ] then
-          storeBlobDevice
-        else
-          null;
+      storeFormat = "erofs";
       rootImage = mkNixClosureRootImage {
         imageName = rootImageName;
         rootImageSizeMiB = rootImageSizeMiBEffective;
       };
-      storeArtifact =
-        if
-          _storeModeCheck == null
-          && _storeViewBackendCheck == null
-          && _storeModeBackendCheck == null
-          && storeMode == "closure-image"
-        then
-          mkNixStoreClosureImage {
-            name = storeArtifactName;
-            rootPaths = [ configuration.config.system.build.toplevel ];
-            additionalSpaceMiB = additionalStoreSpaceMiB;
-            device = storeDevice;
-          }
-        else
-          mkNixStoreClosureManifest {
-            name = storeArtifactName;
-            rootPaths = [ configuration.config.system.build.toplevel ];
-            device = storeDevice;
-          };
+      storeArtifact = mkNixStoreClosureManifest {
+        name = storeArtifactName;
+        rootPaths = [ configuration.config.system.build.toplevel ];
+        device = storeDevice;
+      };
       defaultPrefs = {
         autostart = false;
         default_user = "user";
@@ -849,7 +714,7 @@ let
         kernel = kernelName;
         kernelopts = mkNixClosureKernelOpts configuration {
           inherit storeDevice storeFormat;
-          storeBlobDevice = storeBlobDeviceOpt;
+          storeBlobDevice = storeBlobDevice;
         };
         memory = 1024;
         maxmem = 2048;
@@ -882,16 +747,15 @@ let
             };
           };
           store = {
-            mode = storeMode;
+            mode = "shared-closure";
             sourceRef = {
               build = "packages.${system}.${storeArtifactName}";
-              subpath = if storeMode == "closure-image" then "store.img" else "";
+              subpath = "";
             };
             mountpoint = "/nix/store";
             device = storeDevice;
-            blobDevice = storeBlobDeviceOpt;
-            viewBackend = storeViewBackend;
-            chunkSize = storeChunkSize;
+            blobDevice = storeBlobDevice;
+            viewBackend = "erofs-objectmap";
             readOnly = true;
           };
         };
@@ -906,11 +770,9 @@ let
         storeArtifact
         storeArtifactName
         ;
-      storeImage = storeArtifact;
-      storeImageName = storeArtifactName;
       kernelopts = mkNixClosureKernelOpts configuration {
         inherit storeDevice storeFormat;
-        storeBlobDevice = storeBlobDeviceOpt;
+        storeBlobDevice = storeBlobDevice;
       };
       configurationName = configurationName;
     };
@@ -920,7 +782,6 @@ in
     mkNixNativeDomain
     mkNixClosureKernelOpts
     mkNixClosureRootImage
-    mkNixStoreClosureImage
     mkNixStoreClosureManifest
     mkQubeKernelOpts
     pkgs

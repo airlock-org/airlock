@@ -315,7 +315,6 @@ PATH="$WORK_DIR/bin:$PATH" \
     --root /nix/store/example-root \
     --kernel kernel-a \
     --pool-root "$POOL" \
-    --additional-space-mib 1 \
     > "$OUTPUT_JSON"
 
 jq -e '
@@ -326,7 +325,6 @@ jq -e '
   .pool_created == true and
   .volume_created == true and
   .view_created == true and
-  .image_imported == false and
   .metadata_changed == true and
   .qubesd_restart_required == false and
   .qubesd_restarted == true and
@@ -335,9 +333,7 @@ jq -e '
   .view_backend == "erofs-objectmap" and
   .objects_total == 3 and
   .objects_admitted == 3 and
-  .objects_reused == 0 and
-  .chunks_total == 0 and
-  .chunks_admitted == 0
+  .objects_reused == 0
 ' "$OUTPUT_JSON" >/dev/null
 
 VIEW_IMAGE="$(jq -r '.metadata_image' "$OUTPUT_JSON")"
@@ -345,7 +341,6 @@ BLOB_MAP="$(jq -r '.blob_map' "$OUTPUT_JSON")"
 [ -f "$VIEW_IMAGE" ]
 [ -f "$BLOB_MAP" ]
 [ ! -w "$VIEW_IMAGE" ]
-[ ! -e "$(dirname "$VIEW_IMAGE")/store.img" ]
 
 jq -e '
   .pools."nixome-closure".driver == "nixome-closure" and
@@ -401,7 +396,6 @@ PATH="$WORK_DIR/bin:$PATH" \
     --root /nix/store/example-root \
     --kernel kernel-a \
     --pool-root "$POOL" \
-    --additional-space-mib 1 \
     > "$OUTPUT_2_JSON"
 
 jq -e '
@@ -429,7 +423,6 @@ PATH="$WORK_DIR/bin:$PATH" \
     --root /nix/store/example-root \
     --kernel kernel-b \
     --pool-root "$POOL" \
-    --additional-space-mib 1 \
     > "$OUTPUT_GEN2_JSON"
 
 jq -e '

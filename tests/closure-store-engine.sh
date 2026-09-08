@@ -132,8 +132,7 @@ PATH="$WORK_DIR/bin:$PATH" \
   --physical-store-root "$PHYSICAL_STORE" \
   --root-source root-verify \
   --kernel-name kernel-a \
-  --verify-mode nix-store \
-  --additional-space-mib 1
+  --verify-mode nix-store
 
 jq -e '
   .schema == "nixome.closure-store.admission.v1" and
@@ -153,8 +152,7 @@ run_engine_json work-gen1 admit \
   --physical-store-root "$PHYSICAL_STORE" \
   --root-source root-work-gen1 \
   --kernel-name kernel-a \
-  --verify-mode tree \
-  --additional-space-mib 1
+  --verify-mode tree
 
 jq -e '
   .schema == "nixome.closure-store.admission.v1" and
@@ -175,8 +173,6 @@ jq -e '
   .store.image_contains_materialized_store_copy == false and
   .filesystem == "erofs" and
   .view_backend == "erofs-objectmap" and
-  .chunks_total == 0 and
-  .chunks_admitted == 0 and
   .object_data_bytes > 0 and
   .object_extent_count == 4
 ' "$RESULT_DIR/work-gen1.json" >/dev/null
@@ -189,9 +185,7 @@ WORK_GEN1_LOGICAL_BLOB_SIZE="$(jq -r '.blob_logical_size' "$RESULT_DIR/work-gen1
 [ -f "$WORK_GEN1_IMAGE" ]
 [ -f "$WORK_GEN1_BLOB_MAP" ]
 [ ! -w "$WORK_GEN1_IMAGE" ]
-[ ! -e "$(dirname "$WORK_GEN1_IMAGE")/store.img" ]
 [ "$(jq -r '.central_blob' "$WORK_GEN1_BLOB_MAP")" = "$POOL/objects/data.blob" ]
-[ ! -e "$POOL/objects/store/$COMMON" ]
 jq -e --arg object "$COMMON" '
   .view_backend == "erofs-objectmap" and
   .external_data_format == "posix-tar-index" and
@@ -220,8 +214,7 @@ run_engine_json dev-gen1 admit \
   --physical-store-root "$PHYSICAL_STORE" \
   --root-source root-dev-gen1 \
   --kernel-name kernel-a \
-  --verify-mode tree \
-  --additional-space-mib 1
+  --verify-mode tree
 
 jq -e '
   .domain == "dev" and
@@ -229,8 +222,6 @@ jq -e '
   .objects_total == 3 and
   .objects_admitted == 2 and
   .objects_reused == 1 and
-  .chunks_total == 0 and
-  .chunks_reused == 0 and
   .object_data_bytes > 0
 ' "$RESULT_DIR/dev-gen1.json" >/dev/null
 
@@ -268,8 +259,7 @@ run_engine_json symlink-gen admit \
   --physical-store-root "$PHYSICAL_STORE" \
   --root-source root-symlink \
   --kernel-name kernel-a \
-  --verify-mode tree \
-  --additional-space-mib 1
+  --verify-mode tree
 
 jq -e '
   .domain == "symlink-domain" and
@@ -298,7 +288,6 @@ run_engine_json work-gen2 admit \
   --root-source root-work-gen2 \
   --kernel-name kernel-a \
   --verify-mode tree \
-  --additional-space-mib 1 \
   --retain false
 
 OBJECT_BLOB_AFTER_WORK_GEN2="$(stat -c %s "$POOL/objects/data.blob")"
@@ -313,7 +302,6 @@ jq -e '
   .objects_total == 3 and
   .objects_admitted == 2 and
   .objects_reused == 1 and
-  .chunks_reused == 0 and
   .object_data_bytes > 0
 ' "$RESULT_DIR/work-gen2.json" >/dev/null
 [ "$WORK_GEN2_PHYSICAL_BYTES_ADDED" -lt "$WORK_GEN2_LOGICAL_BLOB_SIZE" ]
@@ -468,7 +456,6 @@ jq -e '
   (.running | length) == 0 and
   .object_count == 7 and
   .object_blob_count == 7 and
-  .chunk_count == 0 and
   .object_blob_size > 0
 ' "$RESULT_DIR/status.json" >/dev/null
 

@@ -993,28 +993,14 @@ validate_nix_domain_source() {
       ;;
     store)
       [ -n "$store_mode" ] || store_mode="shared-closure"
-      case "$store_mode" in
-        closure-image)
-          if [ -d "$source_physical" ]; then
-            [ -f "$source_physical/store.img" ] ||
-              fail "Nix-native domain store image directory is missing store.img for $domain: $source/store.img"
-          else
-            [ -f "$source_physical" ] ||
-              fail "Nix-native domain store image source is not a file for $domain: $source"
-          fi
-          ;;
-        shared-closure)
-          [ -d "$source_physical" ] ||
-            fail "Nix-native domain shared closure source is not a directory for $domain: $source"
-          [ -f "$source_physical/store-paths" ] ||
-            fail "Nix-native domain shared closure source is missing store-paths for $domain: $source/store-paths"
-          [ -f "$source_physical/manifest.json" ] ||
-            fail "Nix-native domain shared closure source is missing manifest.json for $domain: $source/manifest.json"
-          ;;
-        *)
-          fail "unsupported Nix-native domain store mode for $domain: $store_mode"
-          ;;
-      esac
+      [ "$store_mode" = "shared-closure" ] ||
+        fail "unsupported Nix-native domain store mode for $domain: $store_mode"
+      [ -d "$source_physical" ] ||
+        fail "Nix-native domain shared closure source is not a directory for $domain: $source"
+      [ -f "$source_physical/store-paths" ] ||
+        fail "Nix-native domain shared closure source is missing store-paths for $domain: $source/store-paths"
+      [ -f "$source_physical/manifest.json" ] ||
+        fail "Nix-native domain shared closure source is missing manifest.json for $domain: $source/manifest.json"
       ;;
     *)
       fail "unsupported Nix-native domain component for $domain: $component"

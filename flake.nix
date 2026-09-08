@@ -83,7 +83,6 @@
           guestHostName = "config-vault";
           label = "black";
           rootImageSizeMiB = 128;
-          additionalStoreSpaceMiB = 512;
           prefs = {
             autostart = false;
             include_in_backups = true;
@@ -104,7 +103,6 @@
           guestHostName = "config-staging";
           label = "gray";
           rootImageSizeMiB = 128;
-          additionalStoreSpaceMiB = 1024;
           prefs = {
             autostart = false;
             include_in_backups = true;
@@ -126,7 +124,6 @@
           guestHostName = "config-validator";
           label = "blue";
           rootImageSizeMiB = 128;
-          additionalStoreSpaceMiB = 1024;
           prefs = {
             autostart = false;
             include_in_backups = true;
@@ -169,7 +166,6 @@
               inherit nixomeConfigSeedInputs;
               nixomePrebuiltTemplateSources = { };
               modules = [ (mkGuestModule role) ];
-              additionalStoreSpaceMiB = defaults.additionalStoreSpaceMiB;
               rootImageSizeMiB = defaults.rootImageSizeMiB;
               kernelName = nixomeQubesVmKernelName;
               label = defaults.label;
@@ -340,13 +336,6 @@
           nixome-nix-closure-root-image-test = templateBuilders.mkNixClosureRootImage {
             imageName = "nixome-nix-closure-root-image-test";
             rootImageSizeMiB = 64;
-          };
-          nixome-nix-closure-store-image-test = templateBuilders.mkNixStoreClosureImage {
-            name = "nixome-nix-closure-store-image-test";
-            rootPaths = [
-              (pkgs.writeText "nixome-store-image-test-root" "nixome-store-image-test\n")
-            ];
-            additionalSpaceMiB = 16;
           };
           nixome-nix-closure-store-manifest-test = templateBuilders.mkNixStoreClosureManifest {
             name = "nixome-nix-closure-store-manifest-test";

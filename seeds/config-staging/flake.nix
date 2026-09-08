@@ -115,7 +115,6 @@
         path: value:
         checkNixNativeKeys path [
           "additionalRootSpace"
-          "additionalStoreSpaceMiB"
           "configuration"
           "etc"
           "features"
@@ -317,7 +316,6 @@
           ]
           ++ guestExtraModules definition;
           additionalRootSpace = definition.additionalRootSpace or null;
-          additionalStoreSpaceMiB = definition.additionalStoreSpaceMiB or 256;
           rootImageSizeMiB = definition.rootImageSizeMiB or 512;
           kernelName = definition.kernel or nixomeQubeKernelName;
           label = definition.label or "green";
@@ -333,7 +331,6 @@
           label = "black";
           netvm = null;
           rootImageSizeMiB = 128;
-          additionalStoreSpaceMiB = 512;
           prefs = {
             autostart = false;
             include_in_backups = true;
@@ -355,7 +352,6 @@
           label = "gray";
           netvm = null;
           rootImageSizeMiB = 128;
-          additionalStoreSpaceMiB = 1024;
           prefs = {
             autostart = false;
             include_in_backups = true;
@@ -378,7 +374,6 @@
           label = "blue";
           netvm = null;
           rootImageSizeMiB = 128;
-          additionalStoreSpaceMiB = 1024;
           prefs = {
             autostart = false;
             include_in_backups = true;
@@ -422,7 +417,6 @@
             (mkGuestContentModule defaults.guestHostName guestDefinition)
           ]
           ++ guestExtraModules guestDefinition;
-          additionalStoreSpaceMiB = defaults.additionalStoreSpaceMiB;
           rootImageSizeMiB = defaults.rootImageSizeMiB;
           kernelName = nixomeQubeKernelName;
           label = runtime.label;

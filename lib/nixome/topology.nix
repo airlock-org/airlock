@@ -502,7 +502,6 @@ let
           "read_only"
         ] value;
         mode = expectEnum "${path}.mode" [
-          "closure-image"
           "shared-closure"
         ] (get store "mode" "shared-closure");
         sourceInfo = normalizeSourceOption path store;
@@ -515,11 +514,8 @@ let
           else
             expectStringOrPath "${path}.blobDevice" blobDeviceRaw;
         viewBackend = expectEnum "${path}.viewBackend" [
-          "ext4-image"
-          "erofs-blobmap"
           "erofs-objectmap"
         ] (get store "viewBackend" (get store "view_backend" "erofs-objectmap"));
-        chunkSize = expectInt "${path}.chunkSize" (get store "chunkSize" (get store "chunk_size" 65536));
         hasCamelReadOnly = hasAttr "readOnly" store;
         hasSnakeReadOnly = hasAttr "read_only" store;
         camelReadOnly = if hasCamelReadOnly then expectBool "${path}.readOnly" store.readOnly else null;
@@ -541,18 +537,8 @@ let
         fail "${path}.mountpoint" "currently must be /nix/store"
       else if device != "/dev/xvde" then
         fail "${path}.device" "currently must be /dev/xvde"
-      else if builtins.elem viewBackend [
-        "erofs-blobmap"
-        "erofs-objectmap"
-      ] && blobDevice != "/dev/xvdf" then
-        fail "${path}.blobDevice" "currently must be /dev/xvdf for EROFS filtered-blob stores"
-      else if builtins.elem viewBackend [
-        "erofs-blobmap"
-        "erofs-objectmap"
-      ] && chunkSize <= 0 then
-        fail "${path}.chunkSize" "must be positive"
-      else if mode == "closure-image" && viewBackend != "ext4-image" then
-        fail "${path}.viewBackend" "closure-image stores must use ext4-image"
+      else if blobDevice != "/dev/xvdf" then
+        fail "${path}.blobDevice" "currently must be /dev/xvdf for erofs-objectmap stores"
       else if readOnly != true then
         fail path "nix-closure store views must be read-only"
       else if !(sourceIsSet sourceInfo) then
@@ -565,11 +551,9 @@ let
             device
             blobDevice
             viewBackend
-            chunkSize
             ;
           blob_device = blobDevice;
           view_backend = viewBackend;
-          chunk_size = chunkSize;
           read_only = readOnly;
           inherit (sourceInfo) source source_ref;
         };

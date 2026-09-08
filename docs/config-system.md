@@ -104,8 +104,7 @@ POSIX tar fragments in:
 /var/lib/nixome/closure-store/objects/blob-metadata/<store-entry>.json
 ```
 
-The default runtime view no longer creates a full per-closure ext4 `store.img`.
-Instead, each exact closure gets:
+Each exact closure gets:
 
 ```text
 /var/lib/nixome/closure-store/views/by-closure/<closure>/store.erofs
@@ -133,9 +132,9 @@ Each domain generation records an exact closure manifest under:
 ```
 
 The Qubes-facing volumes are produced by the `nixome-closure` storage pool.
-The object pool, chunk metadata, closure views, and generation manifests are the
-authoritative state. The older full ext4 image path remains only as the explicit
-`closure-image`/`ext4-image` fallback for tests and recovery.
+The object pool, closure views, and generation manifests are the authoritative
+state. `shared-closure` with `erofs-objectmap` is the only supported NixOS VM
+store backend.
 
 ## Warm Integration Loop
 

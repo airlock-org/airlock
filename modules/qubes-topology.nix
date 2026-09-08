@@ -130,7 +130,6 @@ let
     options = {
       mode = lib.mkOption {
         type = lib.types.enum [
-          "closure-image"
           "shared-closure"
         ];
         default = "shared-closure";
@@ -169,18 +168,10 @@ let
 
       viewBackend = lib.mkOption {
         type = lib.types.enum [
-          "ext4-image"
-          "erofs-blobmap"
           "erofs-objectmap"
         ];
         default = "erofs-objectmap";
         description = "Runtime representation for shared-closure store views.";
-      };
-
-      chunkSize = lib.mkOption {
-        type = lib.types.ints.positive;
-        default = 65536;
-        description = "Chunk size in bytes for shared immutable blob storage.";
       };
 
       readOnly = lib.mkOption {

@@ -33,7 +33,15 @@ EOF
 printf '#!/bin/sh\nexec /init\n' > "$CANDIDATE_DIR/system-source/init"
 chmod 0555 "$CANDIDATE_DIR/system-source/init"
 : > "$CANDIDATE_DIR/root-source/root.img"
-: > "$CANDIDATE_DIR/store-source/store.img"
+printf '%s\n' "$CANDIDATE_DIR/system-source" > "$CANDIDATE_DIR/store-source/store-paths"
+cat > "$CANDIDATE_DIR/store-source/manifest.json" <<'EOF'
+{
+  "schema": "nixome.store-closure-manifest.v1",
+  "name": "fixture-store",
+  "store_paths_file": "store-paths",
+  "read_only": true
+}
+EOF
 
 (
   cd "$CANDIDATE_DIR"
@@ -101,10 +109,13 @@ cat > "$WORK_DIR/topology.json" <<'EOF'
           "read_only": false
         },
         "store": {
-          "mode": "closure-image",
+          "mode": "shared-closure",
           "source": "store-source",
           "source_ref": null,
           "mountpoint": "/nix/store",
+          "device": "/dev/xvde",
+          "blob_device": "/dev/xvdf",
+          "view_backend": "erofs-objectmap",
           "read_only": true
         },
         "state": {
@@ -364,10 +375,11 @@ jq -e '.schema == "nixome.nix-domain-builds.v1"' \
   "$WORK_DIR/deployment-extract/nix-domain-builds.json" >/dev/null
 jq -e '
   .schema == "nixome.nix-domain-materializations.v1" and
-  .domains[0].domain == "nix-native-work" and
-  .domains[0].root.mode == "qubes-root-image" and
-  .domains[0].store.mode == "closure-image"
-' "$WORK_DIR/deployment-extract/nix-domain-materializations.json" >/dev/null
+	  .domains[0].domain == "nix-native-work" and
+	  .domains[0].root.mode == "qubes-root-image" and
+	  .domains[0].store.mode == "shared-closure" and
+	  .domains[0].store.view_backend == "erofs-objectmap"
+	' "$WORK_DIR/deployment-extract/nix-domain-materializations.json" >/dev/null
 jq -e '
   .schema == "nixome.unsupported-domain-backends.v1" and
   .domains == []

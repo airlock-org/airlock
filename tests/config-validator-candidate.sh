@@ -54,7 +54,7 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
     };
   in {
     packages.x86_64-linux.nix-work-system = mkFixturePackage "nix-work-system";
-    packages.x86_64-linux.nix-work-store-image = mkFixturePackage "nix-work-store-image";
+    packages.x86_64-linux.nix-work-store-closure = mkFixturePackage "nix-work-store-closure";
 
     nixome.topology = {
       schema = "nixome.qubes-topology.v1";
@@ -96,14 +96,17 @@ cat > "$CANDIDATE_DIR/flake.nix" <<'EOF'
               source_ref = null;
             };
             store = {
-              mode = "closure-image";
+              mode = "shared-closure";
               source = null;
               source_ref = {
                 type = "flake-output";
-                attr = "packages.x86_64-linux.nix-work-store-image";
+                attr = "packages.x86_64-linux.nix-work-store-closure";
                 subpath = "";
               };
               mountpoint = "/nix/store";
+              device = "/dev/xvde";
+              blob_device = "/dev/xvdf";
+              view_backend = "erofs-objectmap";
               read_only = true;
             };
             state = {
@@ -229,7 +232,7 @@ jq -e '.schema == "nixome.system.v1" and .dom0.profile.message == "portable-vali
 topology_refs_log="$(jq -r '.checks[] | select(.name == "nix-template-source-refs-dry-run").log' "$WORK_DIR/validation.json")"
 grep -F 'checking nix-domain=nix-native-work.system attr=packages.x86_64-linux.nix-work-system' \
   "$topology_refs_log" >/dev/null
-grep -F 'checking nix-domain=nix-native-work.store attr=packages.x86_64-linux.nix-work-store-image' \
+grep -F 'checking nix-domain=nix-native-work.store attr=packages.x86_64-linux.nix-work-store-closure' \
   "$topology_refs_log" >/dev/null
 
 printf 'config validator candidate tar ok\n'

@@ -22,10 +22,6 @@ def pool_name(pool):
     return getattr(pool, "name", str(pool))
 
 
-def uses_filtered_blob_backend(view_backend):
-    return view_backend in ("erofs-blobmap", "erofs-objectmap")
-
-
 def load_qubes():
     try:
         import qubes
@@ -66,31 +62,6 @@ def run_systemctl(action):
     )
 
 
-async def import_image(vm, volume_name, image_path):
-    size = os.stat(image_path).st_size
-    import_path = await maybe_await(vm.storage.import_data(volume_name, size))
-    success = False
-    try:
-        with open(image_path, "rb") as src, open(import_path, "wb") as dst:
-            shutil.copyfileobj(src, dst, length=16 * 1024 * 1024)
-        success = True
-    finally:
-        await maybe_await(vm.storage.import_data_end(volume_name, success))
-
-
-def legacy_volume_needs_mutation(vm, image_path, source):
-    image_size = os.stat(image_path).st_size
-    existing_source = vm.features.get("nixome-store-source", None)
-    if "store" not in vm.volumes:
-        return True
-    store_volume = vm.volumes["store"]
-    return (
-        existing_source != source
-        or bool(store_volume.rw)
-        or int(store_volume.size) != int(image_size)
-    )
-
-
 def shared_volume_needs_mutation(vm, source, view_backend):
     existing_source = vm.features.get("nixome-store-source", None)
     existing_mode = vm.features.get("nixome-store-mode", None)
@@ -108,8 +79,6 @@ def shared_volume_needs_mutation(vm, source, view_backend):
         or not bool(store_volume.save_on_stop)
         or getattr(store_volume, "source", None) is not None
     )
-    if not uses_filtered_blob_backend(view_backend):
-        return base_needs_mutation or "store-data" in vm.volumes
     if "store-data" not in vm.volumes:
         return True
     blob_volume = vm.volumes["store-data"]
@@ -130,26 +99,6 @@ def validate_vm(vm, domain):
         import qubes.storage
 
         vm.storage = qubes.storage.Storage(vm)
-
-
-def validate_legacy_store_volume(vm, domain, image_path):
-    image_size = os.stat(image_path).st_size
-    if "store" not in vm.volumes:
-        fail(f"store volume was not persisted for domain: {domain}")
-    store_volume = vm.volumes["store"]
-    if store_volume.snap_on_start:
-        fail(f"store volume must not use snap_on_start: {domain}")
-    if not store_volume.save_on_stop:
-        fail(f"store volume must use save_on_stop: {domain}")
-    if store_volume.source is not None:
-        fail(f"store volume must not have a source volume: {domain}")
-    if store_volume.rw:
-        fail(f"store volume must be read-only after import: {domain}")
-    if int(store_volume.size) != int(image_size):
-        fail(
-            "store volume size does not match imported image for "
-            f"{domain}: {store_volume.size} != {image_size}"
-        )
 
 
 def validate_shared_store_volume(vm, domain, expected):
@@ -180,34 +129,33 @@ def validate_shared_store_volume(vm, domain, expected):
             "shared store volume size mismatch for "
             f"{domain}: {store_volume.size} != {os.stat(expected['view_image']).st_size}"
         )
-    if uses_filtered_blob_backend(expected.get("view_backend")):
-        if "store-data" not in vm.volumes:
-            fail(f"shared store blob volume was not persisted for domain: {domain}")
-        blob_volume = vm.volumes["store-data"]
-        if blob_volume.snap_on_start:
-            fail(f"shared store blob volume must not use snap_on_start: {domain}")
-        if not blob_volume.save_on_stop:
-            fail(f"shared store blob volume must use save_on_stop: {domain}")
-        if blob_volume.source is not None:
-            fail(f"shared store blob volume must not have a source volume: {domain}")
-        if blob_volume.rw:
-            fail(f"shared store blob volume must be read-only: {domain}")
-        if pool_name(blob_volume.pool) != expected["pool_name"]:
-            fail(
-                "shared store blob volume pool mismatch for "
-                f"{domain}: {pool_name(blob_volume.pool)} != {expected['pool_name']}"
-            )
-        blob_map_path = getattr(blob_volume, "blob_map_path", None)
-        if blob_map_path is not None and os.path.abspath(blob_map_path) != os.path.abspath(expected["blob_map"]):
-            fail(
-                "shared store blob map mismatch for "
-                f"{domain}: {blob_map_path} != {expected['blob_map']}"
-            )
-        if int(blob_volume.size) != int(expected["blob_logical_size"]):
-            fail(
-                "shared store blob volume size mismatch for "
-                f"{domain}: {blob_volume.size} != {expected['blob_logical_size']}"
-            )
+    if "store-data" not in vm.volumes:
+        fail(f"shared store blob volume was not persisted for domain: {domain}")
+    blob_volume = vm.volumes["store-data"]
+    if blob_volume.snap_on_start:
+        fail(f"shared store blob volume must not use snap_on_start: {domain}")
+    if not blob_volume.save_on_stop:
+        fail(f"shared store blob volume must use save_on_stop: {domain}")
+    if blob_volume.source is not None:
+        fail(f"shared store blob volume must not have a source volume: {domain}")
+    if blob_volume.rw:
+        fail(f"shared store blob volume must be read-only: {domain}")
+    if pool_name(blob_volume.pool) != expected["pool_name"]:
+        fail(
+            "shared store blob volume pool mismatch for "
+            f"{domain}: {pool_name(blob_volume.pool)} != {expected['pool_name']}"
+        )
+    blob_map_path = getattr(blob_volume, "blob_map_path", None)
+    if blob_map_path is not None and os.path.abspath(blob_map_path) != os.path.abspath(expected["blob_map"]):
+        fail(
+            "shared store blob map mismatch for "
+            f"{domain}: {blob_map_path} != {expected['blob_map']}"
+        )
+    if int(blob_volume.size) != int(expected["blob_logical_size"]):
+        fail(
+            "shared store blob volume size mismatch for "
+            f"{domain}: {blob_volume.size} != {expected['blob_logical_size']}"
+        )
 
 
 def frontend_name(device_path):
@@ -240,9 +188,12 @@ def qubes_boot_frontends(volume_names):
 def validate_shared_store_frontends(vm, domain, store_device, store_blob_device, view_backend):
     volume_names = list(vm.volumes.keys())
     frontends = qubes_boot_frontends(volume_names)
-    expected = {"store": frontend_name(store_device)}
-    if uses_filtered_blob_backend(view_backend):
-        expected["store-data"] = frontend_name(store_blob_device)
+    if view_backend != "erofs-objectmap":
+        fail(f"unsupported Nixome store view backend for {domain}: {view_backend}")
+    expected = {
+        "store": frontend_name(store_device),
+        "store-data": frontend_name(store_blob_device),
+    }
 
     for volume_name, target in expected.items():
         actual = frontends.get(volume_name)
@@ -269,93 +220,6 @@ def load_domain(qubes, domain):
     vm = app.domains[domain]
     validate_vm(vm, domain)
     return app, vm
-
-
-async def ensure_legacy_store_loaded(qubes, domain, image_path, source):
-    app, vm = load_domain(qubes, domain)
-
-    image_size = os.stat(image_path).st_size
-    existing_source = vm.features.get("nixome-store-source", None)
-    volume_created = False
-    metadata_changed = False
-    image_imported = False
-    size_changed = False
-
-    if "store" not in vm.volumes:
-        if vm.is_running():
-            fail(f"store volume is missing but domain is running: {domain}")
-
-        root_pool = pool_name(vm.volumes["root"].pool)
-        volume_config = {
-            "name": "store",
-            "pool": root_pool,
-            "size": image_size,
-            "rw": True,
-            "snap_on_start": False,
-            "save_on_stop": True,
-            "source": None,
-            "revisions_to_keep": 0,
-        }
-        vm.volume_config["store"] = volume_config.copy()
-        store_volume = vm.storage.init_volume("store", volume_config.copy())
-        await maybe_await(store_volume.create())
-        volume_created = True
-        metadata_changed = True
-    else:
-        store_volume = vm.volumes["store"]
-        size_changed = int(store_volume.size) != int(image_size)
-        if store_volume.snap_on_start:
-            fail(f"store volume must not use snap_on_start: {domain}")
-        if not store_volume.save_on_stop:
-            fail(f"store volume must use save_on_stop: {domain}")
-        if store_volume.source is not None:
-            fail(f"store volume must not have a source volume: {domain}")
-
-    should_import = volume_created or existing_source != source or size_changed
-    if should_import:
-        if vm.is_running():
-            fail(f"store image changed but domain is running: {domain}")
-
-        original_rw = bool(store_volume.rw)
-        if not store_volume.rw:
-            store_volume.rw = True
-            metadata_changed = True
-
-        await import_image(vm, "store", image_path)
-        image_imported = True
-
-        if not original_rw:
-            store_volume.rw = False
-            metadata_changed = True
-
-    if store_volume.rw:
-        if vm.is_running():
-            fail(f"store volume is writable but domain is running: {domain}")
-        store_volume.rw = False
-        metadata_changed = True
-
-    if metadata_changed or image_imported:
-        app.save(lock=False)
-
-    verify_app, verify_vm = load_domain(qubes, domain)
-    validate_legacy_store_volume(verify_vm, domain, image_path)
-    verify_app.close()
-    app.close()
-
-    return {
-        "schema": "nixome.nix-domain-storage.v1",
-        "domain": domain,
-        "volume": "store",
-        "mode": "closure-image",
-        "image": image_path,
-        "source": source,
-        "read_only": True,
-        "volume_created": volume_created,
-        "image_imported": image_imported,
-        "metadata_changed": metadata_changed,
-        "qubesd_restart_required": metadata_changed or image_imported,
-        "qubesd_restarted": False,
-    }
 
 
 def run_engine(argv):
@@ -408,15 +272,12 @@ def load_generation_admission(pool_root, domain, generation):
         "blob_device": store.get("blob_device"),
         "blob_volume": store.get("blob_volume"),
         "blob_logical_size": store.get("blob_logical_size"),
-        "filesystem": store.get("filesystem", "ext4"),
-        "view_backend": store.get("view_backend", "ext4-image"),
+        "filesystem": store.get("filesystem", "erofs"),
+        "view_backend": store.get("view_backend", "erofs-objectmap"),
         "view_size": os.path.getsize(view_image),
         "objects_total": store.get("object_count", len(store.get("paths", []))),
         "objects_admitted": 0,
         "objects_reused": store.get("object_count", len(store.get("paths", []))),
-        "chunks_total": store.get("chunk_count", 0),
-        "chunks_admitted": 0,
-        "chunks_reused": store.get("chunk_count", 0),
     }
 
 
@@ -456,9 +317,9 @@ def shared_volume_configs(pool_name, domain, admission):
         "view_path": view_image,
         "manifest_path": admission["manifest"],
     }
-    configs = {"store": store}
-    if uses_filtered_blob_backend(admission.get("view_backend")):
-        configs["store-data"] = {
+    configs = {
+        "store": store,
+        "store-data": {
             "name": "store-data",
             "pool": pool_name,
             "vid": f"domains/{domain}/generations/{generation}/store-data",
@@ -475,7 +336,8 @@ def shared_volume_configs(pool_name, domain, admission):
             "blob_map_path": admission["blob_map"],
             "blob_logical_size": int(admission["blob_logical_size"]),
             "manifest_path": admission["manifest"],
-        }
+        },
+    }
     return configs
 
 
@@ -507,39 +369,32 @@ async def ensure_shared_store_loaded(qubes, args, admission):
         or current_path != desired["store"]["view_path"]
         or bool(getattr(current_volume, "rw", False))
     )
-    if "store-data" in desired:
-        existing_blob = vm.volume_config.get("store-data", {})
-        needs_volume = (
-            needs_volume
-            or current_blob_volume is None
-            or existing_blob.get("pool") != args.pool_name
-            or str(existing_blob.get("generation", "")) != str(desired["store-data"]["generation"])
-            or existing_blob.get("closure_hash") != desired["store-data"]["closure_hash"]
-            or existing_blob.get("blob_map_path") != desired["store-data"]["blob_map_path"]
-            or str(current_blob_generation or "") != str(desired["store-data"]["generation"])
-            or current_blob_hash != desired["store-data"]["closure_hash"]
-            or bool(getattr(current_blob_volume, "rw", False))
-        )
-    elif current_blob_volume is not None:
-        needs_volume = True
+    existing_blob = vm.volume_config.get("store-data", {})
+    needs_volume = (
+        needs_volume
+        or current_blob_volume is None
+        or existing_blob.get("pool") != args.pool_name
+        or str(existing_blob.get("generation", "")) != str(desired["store-data"]["generation"])
+        or existing_blob.get("closure_hash") != desired["store-data"]["closure_hash"]
+        or existing_blob.get("blob_map_path") != desired["store-data"]["blob_map_path"]
+        or str(current_blob_generation or "") != str(desired["store-data"]["generation"])
+        or current_blob_hash != desired["store-data"]["closure_hash"]
+        or bool(getattr(current_blob_volume, "rw", False))
+    )
 
     if needs_volume:
         if vm.is_running():
             fail(f"shared store generation changed but domain is running: {args.domain}")
-        if "store-data" not in desired and "store-data" in vm.volume_config:
-            del vm.volume_config["store-data"]
-            vm.volumes.pop("store-data", None)
         vm.volume_config["store"] = desired["store"].copy()
         store_volume = vm.storage.init_volume("store", desired["store"].copy())
         await maybe_await(store_volume.create())
         if current_volume is None:
             volumes_created.append("store")
-        if "store-data" in desired:
-            vm.volume_config["store-data"] = desired["store-data"].copy()
-            blob_volume = vm.storage.init_volume("store-data", desired["store-data"].copy())
-            await maybe_await(blob_volume.create())
-            if current_blob_volume is None:
-                volumes_created.append("store-data")
+        vm.volume_config["store-data"] = desired["store-data"].copy()
+        blob_volume = vm.storage.init_volume("store-data", desired["store-data"].copy())
+        await maybe_await(blob_volume.create())
+        if current_blob_volume is None:
+            volumes_created.append("store-data")
         volume_created = bool(volumes_created)
         metadata_changed = True
 
@@ -597,7 +452,6 @@ async def ensure_shared_store_loaded(qubes, args, admission):
         "read_only": True,
         "volume_created": volume_created,
         "volumes_created": volumes_created,
-        "image_imported": False,
         "view_created": admission["view_created"],
         "metadata_changed": metadata_changed,
         "qubesd_restart_required": metadata_changed,
@@ -627,9 +481,6 @@ async def ensure_shared_store_loaded(qubes, args, admission):
         "objects_total": admission["objects_total"],
         "objects_admitted": admission["objects_admitted"],
         "objects_reused": admission["objects_reused"],
-        "chunks_total": admission.get("chunks_total", 0),
-        "chunks_admitted": admission.get("chunks_admitted", 0),
-        "chunks_reused": admission.get("chunks_reused", 0),
         "engine_current_generation": switch_result["current_generation"],
     }
 
@@ -654,22 +505,6 @@ async def with_qubesd_restart(needs_mutation, operation):
         result["qubesd_restarted"] = True
     result["qubesd_was_active"] = qubesd_was_active
     return result
-
-
-async def ensure_legacy_store(args):
-    qubes = load_qubes()
-
-    if not os.path.isfile(args.artifact):
-        fail(f"store image does not exist: {args.artifact}")
-
-    app, vm = load_domain(qubes, args.domain)
-    needs_mutation = legacy_volume_needs_mutation(vm, args.artifact, args.source)
-    app.close()
-
-    return await with_qubesd_restart(
-        needs_mutation,
-        lambda: ensure_legacy_store_loaded(qubes, args.domain, args.artifact, args.source),
-    )
 
 
 async def ensure_shared_store(args):
@@ -699,7 +534,6 @@ async def ensure_shared_store(args):
             "read_only": True,
             "volume_created": False,
             "volumes_created": [],
-            "image_imported": False,
             "view_created": False,
             "metadata_changed": False,
             "qubesd_restart_required": False,
@@ -742,12 +576,8 @@ async def ensure_shared_store(args):
                 args.mountpoint,
                 "--verify-mode",
                 args.verify_mode,
-                "--additional-space-mib",
-                str(args.additional_space_mib),
                 "--view-backend",
                 args.view_backend,
-                "--chunk-size",
-                str(args.chunk_size),
                 "--approval-source",
                 args.source,
                 "--activate",
@@ -762,7 +592,7 @@ async def ensure_shared_store(args):
 async def switch_shared_store(args):
     qubes = load_qubes()
     admission = load_generation_admission(args.pool_root, args.domain, args.generation)
-    args.view_backend = admission.get("view_backend", "ext4-image")
+    args.view_backend = admission.get("view_backend", "erofs-objectmap")
 
     app, vm = load_domain(qubes, args.domain)
     if vm.is_running():
@@ -777,18 +607,18 @@ async def switch_shared_store(args):
 
 
 async def ensure_store(args):
-    if args.mode == "closure-image":
-        return await ensure_legacy_store(args)
-    if args.mode == "shared-closure":
-        missing = [
-            name
-            for name in ["system", "root", "kernel", "device", "mountpoint"]
-            if not getattr(args, name)
-        ]
-        if missing:
-            fail(f"shared-closure mode requires: {', '.join(missing)}")
-        return await ensure_shared_store(args)
-    fail(f"unsupported store mode: {args.mode}")
+    if args.mode != "shared-closure":
+        fail(f"unsupported store mode: {args.mode}")
+    if args.view_backend != "erofs-objectmap":
+        fail(f"unsupported store view backend: {args.view_backend}")
+    missing = [
+        name
+        for name in ["system", "root", "kernel", "device", "mountpoint"]
+        if not getattr(args, name)
+    ]
+    if missing:
+        fail(f"shared-closure mode requires: {', '.join(missing)}")
+    return await ensure_shared_store(args)
 
 
 def build_parser():
@@ -799,7 +629,7 @@ def build_parser():
     ensure.add_argument("domain")
     ensure.add_argument("artifact")
     ensure.add_argument("source")
-    ensure.add_argument("--mode", choices=["closure-image", "shared-closure"], default="closure-image")
+    ensure.add_argument("--mode", choices=["shared-closure"], default="shared-closure")
     ensure.add_argument("--system", default="")
     ensure.add_argument("--root", default="")
     ensure.add_argument("--kernel", default="")
@@ -809,16 +639,10 @@ def build_parser():
     ensure.add_argument("--pool-name", default=os.environ.get("NIXOME_CLOSURE_STORE_POOL", "nixome-closure"))
     ensure.add_argument("--pool-root", default=os.environ.get("NIXOME_CLOSURE_STORE_ROOT", "/var/lib/nixome/closure-store"))
     ensure.add_argument("--verify-mode", default=os.environ.get("NIXOME_CLOSURE_STORE_VERIFY", "nix-store"))
-    ensure.add_argument("--additional-space-mib", type=int, default=256)
     ensure.add_argument(
         "--view-backend",
-        choices=["ext4-image", "erofs-blobmap", "erofs-objectmap"],
+        choices=["erofs-objectmap"],
         default=os.environ.get("NIXOME_CLOSURE_STORE_VIEW_BACKEND", "erofs-objectmap"),
-    )
-    ensure.add_argument(
-        "--chunk-size",
-        type=int,
-        default=int(os.environ.get("NIXOME_CLOSURE_STORE_CHUNK_SIZE", str(64 * 1024))),
     )
     ensure.set_defaults(func=ensure_store)
 

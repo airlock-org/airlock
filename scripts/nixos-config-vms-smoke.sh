@@ -727,7 +727,6 @@ cat > nixome/machine.nix <<'MACHINENIXEOF'
     label = "green";
     netvm = null;
     rootImageSizeMiB = 128;
-    additionalStoreSpaceMiB = 128;
     prefs = {
       memory = 1024;
       maxmem = 2048;

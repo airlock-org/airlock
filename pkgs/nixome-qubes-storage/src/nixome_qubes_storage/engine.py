@@ -26,15 +26,8 @@ SCHEMA_BLOB_MAP = "nixome.closure-store.blob-map.v1"
 SCHEMA_OBJECT_BLOB = "nixome.closure-store.object-tar-fragment.v1"
 SCHEMA_RUNNING_REF = "nixome.closure-store.running-ref.v1"
 
-VIEW_BACKEND_EXT4_IMAGE = "ext4-image"
-VIEW_BACKEND_EROFS_BLOBMAP = "erofs-blobmap"
 VIEW_BACKEND_EROFS_OBJECTMAP = "erofs-objectmap"
-EROFS_FILTERED_BLOB_BACKENDS = {
-    VIEW_BACKEND_EROFS_BLOBMAP,
-    VIEW_BACKEND_EROFS_OBJECTMAP,
-}
 DEFAULT_VIEW_BACKEND = VIEW_BACKEND_EROFS_OBJECTMAP
-DEFAULT_CHUNK_SIZE = 64 * 1024
 OBJECT_BLOB_ALIGNMENT = 4096
 TAR_BLOCK_SIZE = 512
 TAR_EOF_SIZE = 1024
@@ -246,65 +239,12 @@ def remove_path(path):
         path.unlink()
 
 
-def copy_or_link_tree(src, dst):
-    src = Path(src)
-    dst = Path(dst)
-    if src.is_symlink():
-        os.symlink(os.readlink(src), dst)
-        return
-    if src.is_file():
-        try:
-            os.link(src, dst)
-        except OSError:
-            shutil.copy2(src, dst, follow_symlinks=False)
-        return
-    if not src.is_dir():
-        fail(f"unsupported path type while copying {src}")
-    dst.mkdir()
-    for child in sorted(src.iterdir()):
-        copy_or_link_tree(child, dst / child.name)
-    shutil.copystat(src, dst, follow_symlinks=False)
-
-
-def copy_tree(src, dst):
-    src = Path(src)
-    dst = Path(dst)
-    if src.is_symlink():
-        os.symlink(os.readlink(src), dst)
-        return
-    if src.is_file():
-        shutil.copy2(src, dst, follow_symlinks=False)
-        return
-    if not src.is_dir():
-        fail(f"unsupported path type while copying {src}")
-    dst.mkdir()
-    for child in sorted(src.iterdir()):
-        copy_tree(child, dst / child.name)
-    shutil.copystat(src, dst, follow_symlinks=False)
-
-
-def replace_tree(src, dst):
-    dst = Path(dst)
-    tmp = dst.with_name("." + dst.name + ".tmp-" + uuid.uuid4().hex)
-    if tmp.exists():
-        remove_path(tmp)
-    copy_tree(src, tmp)
-    chmod_readonly(tmp)
-    if dst.exists():
-        remove_path(dst)
-    os.replace(tmp, dst)
-    fsync_dir(dst.parent)
-
-
 def ensure_pool(root):
     root = Path(root)
     for subdir in [
-        "objects/store",
         "objects/metadata",
         "objects/blob-metadata",
-        "chunks/metadata",
         "domains",
-        "images/by-closure",
         "views/by-closure",
         "runtime",
         "running",
@@ -327,25 +267,9 @@ def ensure_pool(root):
                     "object_key": "nix-store-basename",
                     "format": "posix-tar-fragment-v1",
                 },
-                "chunk_store": {
-                    "schema": "nixome.closure-store.chunk-store.v1",
-                    "data": "chunks/data.blob",
-                    "metadata": "chunks/metadata",
-                    "object_key": "sha256",
-                },
             },
         )
     return root
-
-
-def parse_size(value, name):
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        fail(f"{name} must be an integer: {value!r}")
-    if parsed <= 0:
-        fail(f"{name} must be positive: {value!r}")
-    return parsed
 
 
 def require_tool(name, envvar=None):
@@ -443,10 +367,6 @@ def run_verify(paths, mode):
 
 def object_meta_path(root, entry):
     return Path(root) / "objects/metadata" / f"{entry}.json"
-
-
-def object_path(root, entry):
-    return Path(root) / "objects/store" / entry
 
 
 def object_blob_path(root):
@@ -670,48 +590,7 @@ def admit_object_tar_fragment(root, logical_path, source, source_hash, txid):
     return payload
 
 
-def ensure_object_tree_copy(root, logical_path, physical_store_root):
-    entry = store_entry(logical_path)
-    source = physical_store_path(logical_path, physical_store_root)
-    if not source.exists():
-        fail(f"store object source is missing: {logical_path} ({source})")
-
-    source_hash = tree_hash(source)
-    final = object_path(root, entry)
-    meta = object_meta_path(root, entry)
-    if final.exists():
-        current_hash = tree_hash(final)
-        if current_hash != source_hash:
-            fail(f"existing object hash mismatch for {logical_path}")
-        return {
-            "tree_hash": current_hash,
-            "tree_admitted": False,
-        }
-
-    tmp = Path(root) / "tmp" / f"object-tree-{entry}-{uuid.uuid4().hex}"
-    if tmp.exists():
-        remove_path(tmp)
-    copy_tree(source, tmp)
-    chmod_readonly(tmp)
-    tmp_hash = tree_hash(tmp)
-    if tmp_hash != source_hash:
-        fail(f"copied object hash mismatch for {logical_path}")
-    if not tmp.is_symlink():
-        os.chmod(tmp, stat.S_IMODE(tmp.lstat().st_mode) | 0o700)
-    try:
-        os.replace(tmp, final)
-    except FileExistsError:
-        remove_path(tmp)
-        return ensure_object_tree_copy(root, logical_path, physical_store_root)
-    fsync_dir(final.parent)
-    chmod_readonly(final)
-    return {
-        "tree_hash": source_hash,
-        "tree_admitted": True,
-    }
-
-
-def admit_object(root, logical_path, physical_store_root, txid, materialize_tree=False):
+def admit_object(root, logical_path, physical_store_root, txid):
     entry = store_entry(logical_path)
     source = physical_store_path(logical_path, physical_store_root)
     if not source.exists() and not source.is_symlink():
@@ -724,10 +603,6 @@ def admit_object(root, logical_path, physical_store_root, txid, materialize_tree
         fail(f"existing object hash mismatch for {logical_path}")
 
     tar_fragment = admit_object_tar_fragment(root, logical_path, source, source_hash, txid)
-    tree_copy = None
-    if materialize_tree:
-        tree_copy = ensure_object_tree_copy(root, logical_path, physical_store_root)
-
     admitted = not existing_meta or tar_fragment.get("admitted", False)
     payload = {
         "schema": "nixome.closure-store.object.v2",
@@ -742,7 +617,7 @@ def admit_object(root, logical_path, physical_store_root, txid, materialize_tree
             "sha256": tar_fragment["sha256"],
             "format": tar_fragment.get("format", "posix-tar-fragment-v1"),
         },
-        "tree_materialized": bool(tree_copy),
+        "tree_materialized": False,
         "admitted_at": existing_meta.get("admitted_at", utc_now()),
     }
     atomic_json(meta, payload)
@@ -782,245 +657,20 @@ def next_generation(domain_dir):
     return max(numbers, default=0) + 1
 
 
-def link_object_into_view(root, entry, destination):
-    source = object_path(root, entry)
-    if not source.exists():
-        fail(f"admitted object missing while creating view: {entry}")
-    copy_or_link_tree(source, destination)
-
-
-def tree_sizing(path):
-    apparent = 0
-    allocated = 0
-    inodes = 0
-    for current_root, dirs, files in os.walk(path):
-        inodes += 1
-        try:
-            allocated += os.lstat(current_root).st_blocks * 512
-        except OSError:
-            pass
-        for name in dirs + files:
-            full = Path(current_root) / name
-            try:
-                st = os.lstat(full)
-            except OSError:
-                continue
-            inodes += 1
-            allocated += st.st_blocks * 512
-            if stat.S_ISREG(st.st_mode):
-                apparent += st.st_size
-    return apparent, allocated, inodes
-
-
-def create_ext4_image(view_dir, image_path, additional_space_mib):
-    apparent, allocated, inodes = tree_sizing(view_dir)
-    requested_spare = int(additional_space_mib) * 1024 * 1024
-    metadata_spare = allocated // 2 + 128 * 1024 * 1024 + max(inodes, 8192) * 512
-    spare = max(requested_spare, metadata_spare)
-    image_bytes = apparent + spare
-    image_bytes = ((image_bytes + 1048575) // 1048576) * 1048576
-    inode_count = inodes + max(inodes // 2, 8192)
-    tmp = image_path.with_name("." + image_path.name + ".tmp-" + uuid.uuid4().hex)
-    with tmp.open("wb") as handle:
-        handle.truncate(image_bytes)
-    subprocess.run(
-        [
-            "mkfs.ext4",
-            "-q",
-            "-F",
-            "-m",
-            "0",
-            "-L",
-            "nixstore",
-            "-N",
-            str(inode_count),
-            "-d",
-            str(view_dir),
-            str(tmp),
-        ],
-        check=True,
-    )
-    os.chmod(tmp, 0o444)
-    os.replace(tmp, image_path)
-    fsync_dir(image_path.parent)
-    return {
-        "used_apparent_bytes": apparent,
-        "used_allocated_bytes": allocated,
-        "used_inodes": inodes,
-        "spare_bytes": spare,
-        "inode_count": inode_count,
-        "image_bytes": image_bytes,
-    }
-
-
-def chunk_blob_path(root):
-    return Path(root) / "chunks" / "data.blob"
-
-
-def chunk_meta_path(root, digest):
-    return Path(root) / "chunks" / "metadata" / f"{digest}.json"
-
-
-def ensure_chunk_blob(root):
-    path = chunk_blob_path(root)
-    if not path.exists():
-        with path.open("wb") as handle:
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(path, 0o600)
-        fsync_dir(path.parent)
-    return path
-
-
 def hash_bytes(data):
     return hashlib.sha256(data).hexdigest()
-
-
-def verify_blob_chunk(blob_path, offset, size, digest):
-    with Path(blob_path).open("rb") as handle:
-        handle.seek(offset)
-        data = handle.read(size)
-    if len(data) != size:
-        fail(f"central chunk blob is truncated at offset {offset}")
-    if hash_bytes(data) != digest:
-        fail(f"central chunk blob hash mismatch at offset {offset}")
 
 
 def closure_store_fsync_enabled():
     return parse_bool(os.environ.get("NIXOME_CLOSURE_STORE_FSYNC", "1"))
 
 
-def merge_blob_extents(extents):
-    merged = []
-    for extent in extents:
-        if (
-            merged
-            and merged[-1]["logical_offset"] + merged[-1]["length"] == extent["logical_offset"]
-            and merged[-1]["central_offset"] + merged[-1]["length"] == extent["central_offset"]
-        ):
-            merged[-1]["length"] += extent["length"]
-        else:
-            merged.append(dict(extent))
-    return merged
-
-
-def admit_blob_chunks(root, temp_blob, chunk_size, txid):
-    root = Path(root)
-    temp_blob = Path(temp_blob)
-    chunk_size = parse_size(chunk_size, "chunk size")
-    if chunk_size % 512 != 0:
-        fail(f"chunk size must be 512-byte aligned: {chunk_size}")
-
-    blob_size = temp_blob.stat().st_size
-    if blob_size % 512 != 0:
-        fail(f"temporary EROFS blob is not 512-byte aligned: {temp_blob}")
-
-    lock_path = root / "chunks" / "data.blob.lock"
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    admitted = 0
-    reused = 0
-    chunk_refs = []
-    extents = []
-    pending_metadata = []
-    blob_path = ensure_chunk_blob(root)
-
-    with lock_path.open("a+", encoding="utf-8") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        with temp_blob.open("rb") as source, blob_path.open("r+b") as backing:
-            logical_offset = 0
-            while True:
-                chunk = source.read(chunk_size)
-                if not chunk:
-                    break
-                if len(chunk) % 512 != 0:
-                    fail(f"temporary EROFS blob chunk is not 512-byte aligned at {logical_offset}")
-
-                digest = hash_bytes(chunk)
-                meta_path = chunk_meta_path(root, digest)
-                if meta_path.exists():
-                    meta = read_json(meta_path)
-                    central_offset = int(meta["offset"])
-                    central_size = int(meta["size"])
-                    if central_size != len(chunk):
-                        fail(f"central chunk size mismatch for {digest}")
-                    verify_blob_chunk(blob_path, central_offset, central_size, digest)
-                    reused += 1
-                else:
-                    backing.seek(0, os.SEEK_END)
-                    central_offset = align_up(backing.tell(), 4096)
-                    padding = central_offset - backing.tell()
-                    if padding:
-                        backing.write(b"\0" * padding)
-                    backing.write(chunk)
-                    pending_metadata.append(
-                        {
-                            "path": meta_path,
-                            "payload": {
-                                "schema": "nixome.closure-store.chunk.v1",
-                                "hash": digest,
-                                "offset": central_offset,
-                                "size": len(chunk),
-                                "admitted_at": utc_now(),
-                                "transaction": txid,
-                            },
-                        }
-                    )
-                    admitted += 1
-
-                chunk_refs.append(digest)
-                extents.append(
-                    {
-                        "logical_offset": logical_offset,
-                        "central_offset": central_offset,
-                        "length": len(chunk),
-                    }
-                )
-                logical_offset += len(chunk)
-
-            if pending_metadata:
-                backing.flush()
-                if closure_store_fsync_enabled():
-                    os.fsync(backing.fileno())
-
-        for metadata in pending_metadata:
-            atomic_json(metadata["path"], metadata["payload"])
-        if pending_metadata:
-            fsync_dir(root / "chunks" / "metadata")
-
-        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
-
-    return {
-        "blob": str(blob_path),
-        "blob_logical_size": blob_size,
-        "chunk_size": chunk_size,
-        "chunk_count": len(chunk_refs),
-        "chunks_admitted": admitted,
-        "chunks_reused": reused,
-        "chunk_refs": chunk_refs,
-        "extents": merge_blob_extents(extents),
-    }
-
-
 def write_blob_map(path, payload):
     atomic_json(path, payload, mode=0o444)
 
 
-def write_chunk_refs(path, refs):
-    atomic_write(path, "".join(f"{ref}\n" for ref in refs), mode=0o444)
-
-
 def write_object_refs(path, refs):
     atomic_write(path, "".join(f"{ref}\n" for ref in refs), mode=0o444)
-
-
-def read_chunk_refs(path):
-    if not path:
-        return []
-    return [
-        line.strip()
-        for line in Path(path).read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
 
 
 def read_object_refs(path):
@@ -1033,52 +683,21 @@ def read_object_refs(path):
     ]
 
 
-def add_manifest_store_liveness(root, manifest, live_objects, live_images, live_views, live_chunks):
+def add_manifest_store_liveness(root, manifest, live_objects, live_views):
     store = manifest.get("store", {})
     for path in store.get("paths", []):
         live_objects.add(store_entry(path))
-    if store.get("view_backend", VIEW_BACKEND_EXT4_IMAGE) == VIEW_BACKEND_EXT4_IMAGE:
-        image = store.get("canonical_image")
-        if image:
-            live_images.add(image)
     view_root = canonical_view_root(store)
     if view_root:
         live_views.add(view_root)
-    for chunk in read_chunk_refs(store.get("canonical_chunk_refs") or store.get("chunk_refs")):
-        live_chunks.add(chunk)
 
 
 def canonical_view_root(store):
-    for key in ("canonical_metadata_image", "canonical_blob_map", "canonical_object_refs", "canonical_chunk_refs"):
+    for key in ("canonical_metadata_image", "canonical_blob_map", "canonical_object_refs"):
         value = store.get(key)
         if value:
             return str(Path(value).parent)
-    canonical_image = store.get("canonical_image")
-    if canonical_image and "/views/by-closure/" in canonical_image:
-        return str(Path(canonical_image).parent)
     return None
-
-
-def create_erofs_metadata_image(view_dir, metadata_path, temp_blob_path, chunk_size):
-    mkfs_erofs = require_tool("mkfs.erofs", "NIXOME_MKFS_EROFS")
-    if temp_blob_path.exists():
-        temp_blob_path.unlink()
-    with temp_blob_path.open("wb") as handle:
-        handle.truncate(0)
-    run_checked(
-        [
-            mkfs_erofs,
-            "--quiet",
-            "--blobdev",
-            str(temp_blob_path),
-            "--chunksize",
-            str(chunk_size),
-            str(metadata_path),
-            str(view_dir),
-        ]
-    )
-    os.chmod(metadata_path, 0o444)
-    os.chmod(temp_blob_path, 0o400)
 
 
 def reconstruct_blob_view(blob_map, output_path):
@@ -1263,8 +882,8 @@ def attach_blob_view(root, domain, generation):
     if not generation_is_committed(root, manifest):
         fail(f"generation is not committed for {domain}: {generation}")
     store = manifest.get("store", {})
-    if store.get("view_backend") not in EROFS_FILTERED_BLOB_BACKENDS:
-        fail(f"generation is not an EROFS filtered-blob view: {domain} generation {generation}")
+    if store.get("view_backend") != VIEW_BACKEND_EROFS_OBJECTMAP:
+        fail(f"generation is not an erofs-objectmap view: {domain} generation {generation}")
 
     blob_map_path = store.get("canonical_blob_map") or store.get("blob_map")
     if not blob_map_path:
@@ -1313,168 +932,6 @@ def detach_blob_view(root, domain, generation):
         "dm_name": name,
         "device": dm_path(name),
         "removed": removed,
-    }
-
-
-def materialize_ext4_view(root, generation_dir, view_dir, closure_id, additional_space_mib):
-    image_dir = Path(root) / "images/by-closure" / closure_id
-    image_path = image_dir / "store.img"
-    image_manifest = image_dir / "manifest.json"
-
-    image_dir.mkdir(parents=True, exist_ok=True)
-    image_created = False
-    if not image_path.exists():
-        sizing = create_ext4_image(view_dir, image_path, additional_space_mib)
-        atomic_json(
-            image_manifest,
-            {
-                "schema": "nixome.closure-store.view-image.v1",
-                "closure_hash": closure_id,
-                "image": str(image_path),
-                "mountpoint": "/nix/store",
-                "read_only": True,
-                "filesystem": "ext4",
-                "view_backend": VIEW_BACKEND_EXT4_IMAGE,
-                "sizing": sizing,
-                "image_contains_materialized_store_copy": True,
-            },
-        )
-        image_created = True
-    else:
-        sizing = read_json(image_manifest).get("sizing", {}) if image_manifest.exists() else {}
-
-    generation_image = generation_dir / "store.img"
-    if generation_image.exists() or generation_image.is_symlink():
-        generation_image.unlink()
-    os.symlink(os.path.relpath(image_path, generation_dir), generation_image)
-    fsync_dir(generation_dir)
-    return {
-        "view_backend": VIEW_BACKEND_EXT4_IMAGE,
-        "filesystem": "ext4",
-        "view_dir": str(view_dir),
-        "image": str(generation_image),
-        "canonical_image": str(image_path),
-        "metadata_image": str(generation_image),
-        "canonical_metadata_image": str(image_path),
-        "blob_map": None,
-        "canonical_blob_map": None,
-        "chunk_refs": None,
-        "canonical_chunk_refs": None,
-        "blob_device": None,
-        "blob_volume": None,
-        "blob_logical_size": None,
-        "chunk_size": None,
-        "chunk_count": 0,
-        "chunks_admitted": 0,
-        "chunks_reused": 0,
-        "image_created": image_created,
-        "sizing": sizing,
-        "image_contains_materialized_store_copy": True,
-    }
-
-
-def materialize_erofs_blobmap_view(root, generation_dir, view_dir, closure_id, chunk_size, txid):
-    view_root = Path(root) / "views/by-closure" / closure_id
-    metadata_image = view_root / "store.erofs"
-    blob_map = view_root / "store.blob-map.json"
-    chunk_refs = view_root / "chunk-refs"
-    view_manifest = view_root / "manifest.json"
-    view_root.mkdir(parents=True, exist_ok=True)
-
-    view_created = False
-    if not metadata_image.exists() or not blob_map.exists() or not chunk_refs.exists():
-        tmp_dir = Path(root) / "tmp" / f"erofs-view-{closure_id}-{txid}"
-        if tmp_dir.exists():
-            remove_path(tmp_dir)
-        tmp_dir.mkdir(parents=True)
-        tmp_metadata = tmp_dir / "store.erofs"
-        tmp_blob = tmp_dir / "store.blob"
-        create_erofs_metadata_image(view_dir, tmp_metadata, tmp_blob, chunk_size)
-        chunk_map = admit_blob_chunks(root, tmp_blob, chunk_size, txid)
-
-        final_tmp_metadata = view_root / f".store.erofs.tmp-{uuid.uuid4().hex}"
-        shutil.copy2(tmp_metadata, final_tmp_metadata)
-        os.chmod(final_tmp_metadata, 0o444)
-        os.replace(final_tmp_metadata, metadata_image)
-
-        write_blob_map(
-            blob_map,
-            {
-                "schema": SCHEMA_BLOB_MAP,
-                "closure_hash": closure_id,
-                "filesystem": "erofs",
-                "view_backend": VIEW_BACKEND_EROFS_BLOBMAP,
-                "metadata_image": str(metadata_image),
-                "central_blob": chunk_map["blob"],
-                "logical_size": chunk_map["blob_logical_size"],
-                "chunk_size": chunk_map["chunk_size"],
-                "chunk_count": chunk_map["chunk_count"],
-                "chunks_admitted": chunk_map["chunks_admitted"],
-                "chunks_reused": chunk_map["chunks_reused"],
-                "extents": chunk_map["extents"],
-            },
-        )
-        write_chunk_refs(chunk_refs, chunk_map["chunk_refs"])
-        atomic_json(
-            view_manifest,
-            {
-                "schema": "nixome.closure-store.view-erofs-blobmap.v1",
-                "closure_hash": closure_id,
-                "filesystem": "erofs",
-                "view_backend": VIEW_BACKEND_EROFS_BLOBMAP,
-                "metadata_image": str(metadata_image),
-                "blob_map": str(blob_map),
-                "chunk_refs": str(chunk_refs),
-                "read_only": True,
-                "image_contains_materialized_store_copy": False,
-            },
-        )
-        remove_path(tmp_dir)
-        fsync_dir(view_root)
-        view_created = True
-
-    blob_map_payload = read_json(blob_map)
-    generation_metadata = generation_dir / "store.erofs"
-    generation_blob_map = generation_dir / "store.blob-map.json"
-    generation_chunk_refs = generation_dir / "chunk-refs"
-    for target, source in [
-        (generation_metadata, metadata_image),
-        (generation_blob_map, blob_map),
-        (generation_chunk_refs, chunk_refs),
-    ]:
-        if target.exists() or target.is_symlink():
-            target.unlink()
-        os.symlink(os.path.relpath(source, generation_dir), target)
-    fsync_dir(generation_dir)
-
-    return {
-        "view_backend": VIEW_BACKEND_EROFS_BLOBMAP,
-        "filesystem": "erofs",
-        "view_dir": str(view_dir),
-        "image": str(generation_metadata),
-        "canonical_image": str(metadata_image),
-        "metadata_image": str(generation_metadata),
-        "canonical_metadata_image": str(metadata_image),
-        "blob_map": str(generation_blob_map),
-        "canonical_blob_map": str(blob_map),
-        "chunk_refs": str(generation_chunk_refs),
-        "canonical_chunk_refs": str(chunk_refs),
-        "blob_device": "/dev/xvdf",
-        "blob_volume": "store-data",
-        "blob_logical_size": blob_map_payload["logical_size"],
-        "chunk_size": blob_map_payload["chunk_size"],
-        "chunk_count": blob_map_payload["chunk_count"],
-        "chunks_admitted": blob_map_payload.get("chunks_admitted", 0),
-        "chunks_reused": blob_map_payload.get("chunks_reused", 0),
-        "image_created": view_created,
-        "sizing": {
-            "metadata_image_bytes": os.path.getsize(metadata_image),
-            "blob_logical_size": blob_map_payload["logical_size"],
-            "chunk_size": blob_map_payload["chunk_size"],
-            "chunk_count": blob_map_payload["chunk_count"],
-            "extent_count": len(blob_map_payload.get("extents", [])),
-        },
-        "image_contains_materialized_store_copy": False,
     }
 
 
@@ -1601,17 +1058,11 @@ def materialize_erofs_objectmap_view(root, generation_dir, paths, closure_id, tx
         "canonical_metadata_image": str(metadata_image),
         "blob_map": str(generation_blob_map),
         "canonical_blob_map": str(blob_map),
-        "chunk_refs": None,
-        "canonical_chunk_refs": None,
         "object_refs": str(generation_object_refs),
         "canonical_object_refs": str(object_refs),
         "blob_device": "/dev/xvdf",
         "blob_volume": "store-data",
         "blob_logical_size": blob_map_payload["logical_size"],
-        "chunk_size": None,
-        "chunk_count": 0,
-        "chunks_admitted": 0,
-        "chunks_reused": 0,
         "object_data_bytes": blob_map_payload.get("object_data_bytes", 0),
         "object_extent_count": len(blob_map_payload.get("extents", [])),
         "image_created": view_created,
@@ -1632,29 +1083,12 @@ def materialize_view(
     generation,
     paths,
     closure_id,
-    additional_space_mib,
     view_backend,
-    chunk_size,
     txid,
 ):
     generation_dir = Path(root) / "domains" / domain / "generations" / str(generation)
     if view_backend == VIEW_BACKEND_EROFS_OBJECTMAP:
         return materialize_erofs_objectmap_view(root, generation_dir, paths, closure_id, txid)
-
-    view_dir = generation_dir / "view"
-    store_dir = view_dir
-    if view_dir.exists():
-        remove_path(view_dir)
-    view_dir.mkdir(parents=True)
-    for logical_path in sorted(paths):
-        link_object_into_view(root, store_entry(logical_path), store_dir / store_entry(logical_path))
-    chmod_readonly(view_dir)
-    fsync_dir(generation_dir)
-
-    if view_backend == VIEW_BACKEND_EXT4_IMAGE:
-        return materialize_ext4_view(root, generation_dir, view_dir, closure_id, additional_space_mib)
-    if view_backend == VIEW_BACKEND_EROFS_BLOBMAP:
-        return materialize_erofs_blobmap_view(root, generation_dir, view_dir, closure_id, chunk_size, txid)
     fail(f"unsupported closure view backend: {view_backend}")
 
 
@@ -1838,11 +1272,10 @@ def admit_generation(args):
         paths = sorted(set(paths))
 
     verification = run_verify([args.system], args.verify_mode)
-    materialize_tree = args.view_backend in (VIEW_BACKEND_EXT4_IMAGE, VIEW_BACKEND_EROFS_BLOBMAP)
     admitted = []
     reused = []
     for logical_path in paths:
-        result = admit_object(root, logical_path, args.physical_store_root, txid, materialize_tree=materialize_tree)
+        result = admit_object(root, logical_path, args.physical_store_root, txid)
         if result["admitted"]:
             admitted.append(result)
         else:
@@ -1855,9 +1288,7 @@ def admit_generation(args):
         generation,
         paths,
         closure_id,
-        args.additional_space_mib,
         args.view_backend,
-        args.chunk_size,
         txid,
     )
     manifest_path = generation_dir / "manifest.json"
@@ -1900,13 +1331,9 @@ def admit_generation(args):
             "canonical_metadata_image": view["canonical_metadata_image"],
             "blob_map": view["blob_map"],
             "canonical_blob_map": view["canonical_blob_map"],
-            "chunk_refs": view["chunk_refs"],
-            "canonical_chunk_refs": view["canonical_chunk_refs"],
             "object_refs": view.get("object_refs"),
             "canonical_object_refs": view.get("canonical_object_refs"),
             "blob_logical_size": view["blob_logical_size"],
-            "chunk_size": view["chunk_size"],
-            "chunk_count": view["chunk_count"],
             "object_data_bytes": view.get("object_data_bytes", 0),
             "object_extent_count": view.get("object_extent_count", 0),
             "image_contains_materialized_store_copy": view["image_contains_materialized_store_copy"],
@@ -1956,9 +1383,6 @@ def admit_generation(args):
         "objects_total": len(paths),
         "objects_admitted": len(admitted),
         "objects_reused": len(reused),
-        "chunks_total": view["chunk_count"],
-        "chunks_admitted": view["chunks_admitted"],
-        "chunks_reused": view["chunks_reused"],
         "admitted": admitted,
         "reused": reused,
         "view_created": view["image_created"],
@@ -1968,8 +1392,6 @@ def admit_generation(args):
         "canonical_metadata_image": view["canonical_metadata_image"],
         "blob_map": view["blob_map"],
         "canonical_blob_map": view["canonical_blob_map"],
-        "chunk_refs": view["chunk_refs"],
-        "canonical_chunk_refs": view["canonical_chunk_refs"],
         "object_refs": view.get("object_refs"),
         "canonical_object_refs": view.get("canonical_object_refs"),
         "blob_device": args.store_blob_device if view["blob_volume"] else None,
@@ -2045,14 +1467,12 @@ def switch(args):
         ),
         "blob_map": manifest["store"].get("blob_map"),
         "canonical_blob_map": manifest["store"].get("canonical_blob_map"),
-        "chunk_refs": manifest["store"].get("chunk_refs"),
-        "canonical_chunk_refs": manifest["store"].get("canonical_chunk_refs"),
         "object_refs": manifest["store"].get("object_refs"),
         "canonical_object_refs": manifest["store"].get("canonical_object_refs"),
         "blob_device": manifest["store"].get("blob_device"),
         "blob_volume": manifest["store"].get("blob_volume"),
-        "filesystem": manifest["store"].get("filesystem", "ext4"),
-        "view_backend": manifest["store"].get("view_backend", VIEW_BACKEND_EXT4_IMAGE),
+        "filesystem": manifest["store"].get("filesystem", "erofs"),
+        "view_backend": manifest["store"].get("view_backend", VIEW_BACKEND_EROFS_OBJECTMAP),
         "read_only": True,
     }
 
@@ -2135,12 +1555,9 @@ def recover(args):
 def gc(args):
     root = ensure_pool(args.pool_root)
     live_objects = set()
-    live_images = set()
     live_views = set()
-    live_chunks = set()
     active_transaction_ids = set()
     active_transaction_objects = set()
-    active_transaction_chunks = set()
     in_progress_generations = []
     running_generations = set()
     stale_running_refs = []
@@ -2178,7 +1595,7 @@ def gc(args):
                 "manifest": str(manifest_path),
             }
         )
-        add_manifest_store_liveness(root, manifest, live_objects, live_images, live_views, live_chunks)
+        add_manifest_store_liveness(root, manifest, live_objects, live_views)
 
     if active_transaction_ids:
         for meta in sorted((root / "objects/blob-metadata").glob("*.json")):
@@ -2187,13 +1604,8 @@ def gc(args):
             payload = read_json(meta)
             if payload.get("transaction") in active_transaction_ids:
                 active_transaction_objects.add(payload.get("entry") or meta.name[: -len(".json")])
-        for meta in sorted((root / "chunks/metadata").glob("*.json")):
-            payload = read_json(meta)
-            if payload.get("transaction") in active_transaction_ids:
-                active_transaction_chunks.add(payload.get("hash") or meta.stem)
 
     live_objects.update(active_transaction_objects)
-    live_chunks.update(active_transaction_chunks)
 
     for domain, generation, ref_path, _ref in iter_running_generation_refs(root):
         manifest_path = generation_manifest_path(root, domain, generation)
@@ -2217,24 +1629,12 @@ def gc(args):
         for gen, manifest_path, manifest in generations:
             if gen in keep or (domain, gen) in running_generations or manifest.get("retention", {}).get("retain", False):
                 retained_generations.add((domain, gen))
-                add_manifest_store_liveness(root, manifest, live_objects, live_images, live_views, live_chunks)
+                add_manifest_store_liveness(root, manifest, live_objects, live_views)
             else:
                 generation_dir = manifest_path.parent
                 remove_path(generation_dir)
                 removed_generations.append({"domain": domain, "generation": gen})
                 maybe_failpoint("gc-after-generation-remove")
-
-    removed_objects = []
-    for obj in sorted((root / "objects/store").iterdir()):
-        if obj.name not in live_objects:
-            if obj.is_dir():
-                remove_path(obj)
-            else:
-                remove_path(obj)
-            meta = object_meta_path(root, obj.name)
-            if meta.exists():
-                meta.unlink()
-            removed_objects.append(obj.name)
 
     removed_object_metadata = []
     for meta in sorted((root / "objects/metadata").glob("*.json")):
@@ -2253,25 +1653,11 @@ def gc(args):
             removed_object_blobs.append(entry)
             maybe_failpoint("gc-after-object-metadata-remove")
 
-    removed_images = []
-    for image_dir in sorted((root / "images/by-closure").iterdir()):
-        image = image_dir / "store.img"
-        if str(image) not in live_images:
-            remove_path(image_dir)
-            removed_images.append(image_dir.name)
-
     removed_views = []
     for view_dir in sorted((root / "views/by-closure").iterdir()):
         if str(view_dir) not in live_views:
             remove_path(view_dir)
             removed_views.append(view_dir.name)
-
-    removed_chunks = []
-    for meta in sorted((root / "chunks/metadata").glob("*.json")):
-        digest = meta.stem
-        if digest not in live_chunks:
-            meta.unlink()
-            removed_chunks.append(digest)
 
     return {
         "schema": SCHEMA_GC,
@@ -2289,17 +1675,10 @@ def gc(args):
         "in_progress_generations": in_progress_generations,
         "active_transaction_ids": sorted(active_transaction_ids),
         "active_transaction_objects": sorted(active_transaction_objects),
-        "active_transaction_chunks": sorted(active_transaction_chunks),
         "removed_generations": removed_generations,
-        "removed_objects": removed_objects,
         "removed_object_metadata": removed_object_metadata,
         "removed_object_blobs": removed_object_blobs,
-        "removed_images": removed_images,
         "removed_views": removed_views,
-        "removed_chunks": removed_chunks,
-        "chunk_blob": str(chunk_blob_path(root)),
-        "chunk_blob_append_only": True,
-        "chunk_blob_compaction": "not implemented",
         "object_blob": str(object_blob_path(root)),
         "object_blob_append_only": True,
         "object_blob_compaction": "not implemented",
@@ -2318,9 +1697,8 @@ def status(args):
                 "system": manifest["system"],
                 "closure_hash": manifest["store"]["closure_hash"],
                 "object_count": manifest["store"]["object_count"],
-                "filesystem": manifest["store"].get("filesystem", "ext4"),
-                "view_backend": manifest["store"].get("view_backend", VIEW_BACKEND_EXT4_IMAGE),
-                "chunk_count": manifest["store"].get("chunk_count", 0),
+                "filesystem": manifest["store"].get("filesystem", "erofs"),
+                "view_backend": manifest["store"].get("view_backend", VIEW_BACKEND_EROFS_OBJECTMAP),
             }
         )
     running = [
@@ -2347,8 +1725,6 @@ def status(args):
             if path.name != ".tar-eof.json"
         ]
     )
-    chunk_count = len(list((root / "chunks/metadata").glob("*.json")))
-    chunk_blob = chunk_blob_path(root)
     object_blob = object_blob_path(root)
     return {
         "schema": SCHEMA_STATUS,
@@ -2358,9 +1734,6 @@ def status(args):
         "object_blob_count": object_blob_count,
         "object_blob": str(object_blob),
         "object_blob_size": os.path.getsize(object_blob) if object_blob.exists() else 0,
-        "chunk_count": chunk_count,
-        "chunk_blob": str(chunk_blob),
-        "chunk_blob_size": os.path.getsize(chunk_blob) if chunk_blob.exists() else 0,
         "domains": domains,
         "running": running,
     }
@@ -2386,16 +1759,10 @@ def build_parser():
     admit_parser.add_argument("--store-mountpoint", default="/nix/store")
     admit_parser.add_argument("--physical-store-root", default=default_physical_store_root())
     admit_parser.add_argument("--verify-mode", default=os.environ.get("NIXOME_CLOSURE_STORE_VERIFY", "nix-store"), choices=["none", "tree", "nix-store", "nix-store-trust"])
-    admit_parser.add_argument("--additional-space-mib", type=int, default=256)
     admit_parser.add_argument(
         "--view-backend",
         default=os.environ.get("NIXOME_CLOSURE_STORE_VIEW_BACKEND", DEFAULT_VIEW_BACKEND),
-        choices=[VIEW_BACKEND_EXT4_IMAGE, VIEW_BACKEND_EROFS_BLOBMAP, VIEW_BACKEND_EROFS_OBJECTMAP],
-    )
-    admit_parser.add_argument(
-        "--chunk-size",
-        type=int,
-        default=int(os.environ.get("NIXOME_CLOSURE_STORE_CHUNK_SIZE", DEFAULT_CHUNK_SIZE)),
+        choices=[VIEW_BACKEND_EROFS_OBJECTMAP],
     )
     admit_parser.add_argument("--approved-by", default="dom0")
     admit_parser.add_argument("--approval-source", default="")
