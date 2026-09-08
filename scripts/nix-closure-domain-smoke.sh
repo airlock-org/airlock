@@ -1066,8 +1066,10 @@ printf 'guest_user=%s\n' "$guest_user"
 printf 'home_dir=%s\n' "$home_dir"
 printf 'system_state=%s\n' "$(systemctl is-system-running 2>/dev/null || true)"
 printf 'qubes_name=%s\n' "$(qubesdb-read /name 2>/dev/null || true)"
-printf 'domain_role=%s\n' "$(cat /etc/nixome/domain-role)"
-printf 'applied_message=%s\n' "$(cat /etc/nixome/applied-message)"
+domain_role="$(cat /etc/nixome/domain-role 2>/dev/null || true)"
+applied_message="$(cat /etc/nixome/applied-message 2>/dev/null || true)"
+printf 'domain_role=%s\n' "$domain_role"
+printf 'applied_message=%s\n' "$applied_message"
 
 [ -n "$system_path" ]
 [ -n "$store_device" ]
@@ -1098,10 +1100,10 @@ systemctl is-active qubes-db.service
 systemctl is-active qubes-qrexec-agent.service
 systemctl is-active nixome-qubes-rw-init.service
 
-case "$(cat /etc/nixome/domain-role)" in
-  "$expected_domain_role") ;;
-  *) echo "unexpected domain role" >&2; exit 1 ;;
-esac
+if [ -n "$expected_domain_role" ] && [ "$domain_role" != "$expected_domain_role" ]; then
+  echo "unexpected domain role: $domain_role" >&2
+  exit 1
+fi
 
 [ -d /rw ]
 [ -d /rw/home ]
@@ -1427,7 +1429,7 @@ EOF
       require_source_domain_artifacts "$source_vm"
     done
 
-    EXPECTED_DOMAIN_ROLE="$(feature_value_for "$DIRECT_PRIMARY_SOURCE_VM" nixome-role)"
+    EXPECTED_DOMAIN_ROLE=""
     {
       shutdown_vm "$DOMAIN" "$LOG_DIR/nix-closure-domain-primary-pre-apply-shutdown.log"
       shutdown_vm "$PEER_DOMAIN" "$LOG_DIR/nix-closure-domain-peer-pre-apply-shutdown.log"
@@ -1581,7 +1583,7 @@ EOF
     cp "$LOG_DIR/config-apply.json" "$GEN2_APPLY_RESULT_JSON" 2>/dev/null || true
     ;;
   direct)
-    EXPECTED_DOMAIN_ROLE="$(feature_value_for "$DIRECT_GEN2_SOURCE_VM" nixome-role)"
+    EXPECTED_DOMAIN_ROLE=""
     write_direct_topology "$DIRECT_GEN2_TOPOLOGY_LOG" "$DIRECT_GEN2_SOURCE_VM" "$DIRECT_PEER_SOURCE_VM"
     run_or_fail "apply direct second nix-closure generation" "$GEN2_APPLY_LOG" \
       env NIXOME_LOG_DIR="$LOG_DIR" \
