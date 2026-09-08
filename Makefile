@@ -37,10 +37,12 @@ PYTHON_FILES := \
 	tests/test_local.py
 
 PYTEST_LOG_DIR = $${NIXOME_LOG_DIR:-.nixome-logs}
+TEST_JOBS ?=
+PYTEST_WORKERS = $(if $(TEST_JOBS),-n $(TEST_JOBS),)
 PYTEST_REPORT_ARGS = --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 
-.PHONY: ensure-generated-dirs build test test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test test-parallel test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -54,7 +56,10 @@ build: ensure-generated-dirs
 
 test: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
-	uv run pytest $(PYTEST_SELECTED) $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
+	uv run pytest $(PYTEST_SELECTED) $(PYTEST_WORKERS) $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
+
+test-parallel: TEST_JOBS = 4
+test-parallel: test
 
 test-list: ensure-generated-dirs
 	uv run pytest tests --collect-only -q

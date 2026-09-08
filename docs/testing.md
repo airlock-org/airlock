@@ -33,6 +33,14 @@ Run selected tests by exact name:
 make test TESTS="host-capabilities topology-schema"
 ```
 
+Run the local layer in parallel:
+
+```bash
+make test-parallel
+make test TEST_JOBS=4
+make test TEST_JOBS=auto
+```
+
 Pass normal pytest arguments through `PYTEST_ARGS`:
 
 ```bash
@@ -45,6 +53,9 @@ reports under the log directory:
 
 - `pytest-report.json`
 - `pytest-junit.xml`
+
+Each shell check receives its own `NIXOME_LOG_DIR` subdirectory below the report
+directory so parallel workers do not overwrite same-named artifacts.
 
 Show the slowest tests from the latest run:
 

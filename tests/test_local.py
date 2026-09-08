@@ -289,10 +289,12 @@ def test_local_check(
     ):
         pytest.skip("set NIXOME_RUN_QUBES_SMOKE=1 on a Xen dom0 target")
 
-    command = format_command(local_check.command, repo_root, nixome_log_dir)
-    log_path = nixome_log_dir / f"{local_check.name}.log"
+    test_log_dir = nixome_log_dir / local_check.name
+    test_log_dir.mkdir(parents=True, exist_ok=True)
+    command = format_command(local_check.command, repo_root, test_log_dir)
+    log_path = test_log_dir / "pytest-command.log"
     env = os.environ.copy()
-    env["NIXOME_LOG_DIR"] = str(nixome_log_dir)
+    env["NIXOME_LOG_DIR"] = str(test_log_dir)
 
     result = subprocess.run(
         command,
