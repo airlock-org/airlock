@@ -317,6 +317,7 @@
           nixome-config-boot-verify = pkgs.callPackage ./pkgs/nixome-config-boot-verify { };
           nixome-config-status = pkgs.callPackage ./pkgs/nixome-config-status { };
           nixome-config-vms-smoke = pkgs.callPackage ./pkgs/nixome-config-vms-smoke { };
+          nixome-nix-domain-storage = pkgs.callPackage ./pkgs/nixome-nix-domain-storage { };
           nixome-nix-closure-domain-smoke = pkgs.callPackage ./pkgs/nixome-nix-closure-domain-smoke { };
           nixome-qubes-storage = pkgs.python3.pkgs.callPackage ./pkgs/nixome-qubes-storage { };
           nixome-qube-bootstrap = pkgs.callPackage ./pkgs/nixome-qube-bootstrap { };

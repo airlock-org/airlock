@@ -1376,6 +1376,7 @@ for cmd in \
   jq \
   journalctl \
   nixome-closure-store \
+  nixome-nix-domain-storage \
   nixome-setup-config \
   qrexec-client \
   qvm-check \

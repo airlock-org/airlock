@@ -6,9 +6,15 @@
   gnused,
   jq,
   lib,
+  nixome-config-apply ? callPackage ../nixome-config-apply { },
+  nixome-nix-domain-storage ? callPackage ../nixome-nix-domain-storage { },
+  nixome-qube-gui-smoke ? callPackage ../nixome-qube-gui-smoke { },
+  nixome-qubes-storage ? python3.pkgs.callPackage ../nixome-qubes-storage { },
+  nixome-setup-config ? callPackage ../nixome-setup-config { },
   python3,
   systemd,
   util-linux,
+  callPackage,
   writeShellApplication,
 }:
 
@@ -23,6 +29,11 @@ writeShellApplication {
     gnugrep
     gnused
     jq
+    nixome-config-apply
+    nixome-nix-domain-storage
+    nixome-qube-gui-smoke
+    nixome-qubes-storage
+    nixome-setup-config
     python3
     python3.pkgs.qubes-core-admin-client
     python3.pkgs.qubes-core-qrexec.dom0

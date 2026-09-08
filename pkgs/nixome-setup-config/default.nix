@@ -11,6 +11,7 @@
   lib,
   lvm2,
   nix,
+  nixome-nix-domain-storage ? callPackage ../nixome-nix-domain-storage { },
   nixome-qubes-storage ? python3.pkgs.callPackage ../nixome-qubes-storage { },
   python3,
   qubes-desktop-linux-common ? python3.pkgs.qubes-desktop-linux-common,
@@ -18,23 +19,9 @@
   sudo,
   systemd,
   util-linux,
+  callPackage,
   writeShellApplication,
-  writeTextFile,
 }:
-
-let
-  storageHelperPython = python3.withPackages (_: [
-    qubes-core-admin
-    nixome-qubes-storage
-  ]);
-  storageHelper = writeTextFile {
-    name = "nixome-nix-domain-storage";
-    destination = "/bin/nixome-nix-domain-storage";
-    executable = true;
-    text =
-      "#!${storageHelperPython}/bin/python3\n" + builtins.readFile ../../scripts/nix-domain-storage.py;
-  };
-in
 writeShellApplication {
   name = "nixome-setup-config";
   excludeShellChecks = [ "SC2016" ];
@@ -51,11 +38,11 @@ writeShellApplication {
     jq
     lvm2
     nix
+    nixome-nix-domain-storage
     nixome-qubes-storage
     python3
     qubes-core-admin
     qubes-desktop-linux-common
-    storageHelper
     sudo
     python3.pkgs.qubes-core-admin-client
     systemd
