@@ -72,6 +72,8 @@ RUN_GUI_PROBE="${NIXOME_NIX_CLOSURE_GUI_PROBE:-0}"
 RUN_REBOOT_PROBE="${NIXOME_NIX_CLOSURE_REBOOT_PROBE:-0}"
 CONFIG_VM_TEST_MEMORY="${NIXOME_NIX_CLOSURE_CONFIG_VM_MEMORY:-512}"
 CONFIG_VM_TEST_MAXMEM="${NIXOME_NIX_CLOSURE_CONFIG_VM_MAXMEM:-512}"
+VALIDATOR_TEST_MEMORY="${NIXOME_NIX_CLOSURE_VALIDATOR_MEMORY:-1024}"
+VALIDATOR_TEST_MAXMEM="${NIXOME_NIX_CLOSURE_VALIDATOR_MAXMEM:-1024}"
 CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-0}"
 
 result_written=0
@@ -625,12 +627,14 @@ check_libvirt_filtered_devices() {
 
 set_test_vm_memory() {
   vm="$1"
+  memory="$2"
+  maxmem="$3"
 
   shutdown_vm "$vm" "$LOG_DIR/nix-closure-domain-$vm-memory-shutdown.log"
   run_or_fail "set $vm test memory" "$LOG_DIR/nix-closure-domain-$vm-memory.log" \
-    qvm-prefs "$vm" memory "$CONFIG_VM_TEST_MEMORY"
+    qvm-prefs "$vm" memory "$memory"
   run_or_fail "set $vm test maxmem" "$LOG_DIR/nix-closure-domain-$vm-maxmem.log" \
-    qvm-prefs "$vm" maxmem "$CONFIG_VM_TEST_MAXMEM"
+    qvm-prefs "$vm" maxmem "$maxmem"
 }
 
 check_source_paths() {
@@ -1055,9 +1059,9 @@ qvm-check "$STAGING" >/dev/null 2>&1 || fail "missing config staging VM: $STAGIN
 qvm-check "$VALIDATOR" >/dev/null 2>&1 || fail "missing config validator VM: $VALIDATOR"
 qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
 
-set_test_vm_memory "$STAGING"
-set_test_vm_memory "$VALIDATOR"
-set_test_vm_memory "$VAULT"
+set_test_vm_memory "$STAGING" "$CONFIG_VM_TEST_MEMORY" "$CONFIG_VM_TEST_MAXMEM"
+set_test_vm_memory "$VALIDATOR" "$VALIDATOR_TEST_MEMORY" "$VALIDATOR_TEST_MAXMEM"
+set_test_vm_memory "$VAULT" "$CONFIG_VM_TEST_MEMORY" "$CONFIG_VM_TEST_MAXMEM"
 
 start_vm "$STAGING"
 start_vm "$VALIDATOR"
