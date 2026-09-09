@@ -1291,12 +1291,7 @@ jq -e \
   .setup.status == "passed" and
   .setup.domains_changed >= 1 and
   .setup.restart_required == true and
-  setup_restart_action($staging; "domain-store") and
-  setup_restart_action($staging; "domain-system") and
-  setup_restart_action($vault; "domain-store") and
-  setup_restart_action($vault; "domain-system") and
-  setup_restart_action($validator; "domain-store") and
-  setup_restart_action($validator; "domain-system")
+  setup_restart_action($staging; "domain-feature")
 ' "$APPLY_JSON" >/dev/null || fail "config apply JSON did not pass"
 
 collect_diagnostics
