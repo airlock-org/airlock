@@ -17,6 +17,13 @@ REMOTE_WARM_BIN_DIR = "/run/nixome-warm/bin"
 REMOTE_WARM_SEED_INPUTS = "/run/nixome-warm/config-seed-inputs"
 
 
+def default_nixome_log_dir() -> Path:
+    repo_root = Path(__file__).resolve().parents[1]
+    log_dir = Path(os.environ.get("NIXOME_LOG_DIR", repo_root / ".nixome-logs"))
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir
+
+
 @dataclass(frozen=True)
 class StagedVmStep:
     name: str
@@ -228,8 +235,8 @@ def write_log(path: Path, result: subprocess.CompletedProcess[str]) -> None:
 
 
 @pytest.fixture(scope="module")
-def staged_vm_state(nixome_log_dir: Path) -> Path:
-    state_dir = nixome_log_dir / "vm-staged"
+def staged_vm_state() -> Path:
+    state_dir = default_nixome_log_dir() / "vm-staged"
     state_dir.mkdir(parents=True, exist_ok=True)
     failure = state_dir / "failed-step.txt"
     failure.unlink(missing_ok=True)
