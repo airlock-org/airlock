@@ -8,6 +8,8 @@ ARCHIVE_STDOUT="$LOG_DIR/config-apply-archive.stdout.log"
 ARCHIVE_STDERR="$LOG_DIR/config-apply-archive.stderr.log"
 ARCHIVE_JSON="$LOG_DIR/config-archive.json"
 VALIDATED_CANDIDATE_TAR="$LOG_DIR/config-candidate-validated.tar"
+VALIDATION_JSON="$LOG_DIR/config-apply-validation.json"
+MANIFEST_JSON="$LOG_DIR/config-apply-manifest.json"
 VALIDATED_TOPOLOGY_JSON="$LOG_DIR/config-apply-topology-validated.json"
 APPLY_TOPOLOGY_JSON="$LOG_DIR/config-apply-topology.json"
 VALIDATED_SYSTEM_JSON="$LOG_DIR/config-apply-system-validated.json"
@@ -45,6 +47,7 @@ HOST_SYSTEM_PROFILE="${NIXOME_HOST_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}
 HOST_CURRENT_SYSTEM_LINK="${NIXOME_HOST_CURRENT_SYSTEM_LINK:-/run/current-system}"
 HOST_SYSTEM_ACTIVATION_LOG="$LOG_DIR/config-system-host-activation.log"
 CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-1}"
+CONFIG_APPLY_STAGE="${NIXOME_CONFIG_APPLY_STAGE:-full}"
 QREXEC_RUN_DIR="${NIXOME_QREXEC_RUN_DIR:-/var/run/qubes}"
 QREXEC_READY_WAIT_SECONDS="${NIXOME_CONFIG_QREXEC_READY_WAIT_SECONDS:-60}"
 
@@ -122,6 +125,16 @@ mkdir -p "$LOG_DIR"
 exec >> "$COMMAND_LOG" 2>&1
 trap cleanup EXIT
 
+case "$CONFIG_APPLY_STAGE" in
+  full|archive|resolve|setup|system|deploy)
+    ;;
+  *)
+    write_result failed "unsupported NIXOME_CONFIG_APPLY_STAGE: $CONFIG_APPLY_STAGE"
+    printf 'config apply failed: unsupported NIXOME_CONFIG_APPLY_STAGE: %s\n' "$CONFIG_APPLY_STAGE" >&2
+    exit 1
+    ;;
+esac
+
 json_file_or_null() {
   file="$1"
 
@@ -149,6 +162,7 @@ write_result() {
     --arg schema "nixome.config-apply.v1" \
     --arg status "$status" \
     --arg reason "$reason" \
+    --arg stage "$CONFIG_APPLY_STAGE" \
     --arg staging "$STAGING" \
     --arg validator "$VALIDATOR" \
     --arg vault "$VAULT" \
@@ -199,6 +213,7 @@ write_result() {
       schema: $schema,
       status: $status,
       reason: $reason,
+      stage: $stage,
       staging: $staging,
       validator: $validator,
       vault: $vault,
@@ -272,6 +287,19 @@ require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     fail "missing command: $1"
   fi
+}
+
+finish_stage() {
+  write_result passed "$1"
+  cat "$RESULT_JSON"
+  exit 0
+}
+
+load_candidate_commit_from_archive() {
+  [ -r "$ARCHIVE_JSON" ] || fail "archive result JSON is missing: $ARCHIVE_JSON"
+  candidate_commit="$(jq -r '.candidate_commit // ""' "$ARCHIVE_JSON")"
+  [ -n "$candidate_commit" ] && [ "$candidate_commit" != null ] ||
+    fail "archive result did not include candidate_commit"
 }
 
 nix_build_print_path() {
@@ -516,8 +544,8 @@ build_deployment_tar() {
   copy_or_empty "$SYSTEM_APPLY_JSON" "$record_dir/system-apply.json"
   copy_or_empty "$SYSTEM_BUILDS_JSON" "$record_dir/system-builds.json"
   copy_or_empty "$SYSTEMD_ACTIONS_JSON" "$record_dir/systemd-actions.json"
-  copy_or_empty "$tmpdir/validation.json" "$record_dir/validation.json"
-  copy_or_empty "$tmpdir/manifest.json" "$record_dir/manifest.json"
+  copy_or_empty "$VALIDATION_JSON" "$record_dir/validation.json"
+  copy_or_empty "$MANIFEST_JSON" "$record_dir/manifest.json"
   copy_or_empty "$COMMAND_LOG" "$record_dir/logs/apply.commands.log"
   copy_or_empty "$ARCHIVE_STDOUT" "$record_dir/logs/archive.stdout.log"
   copy_or_empty "$ARCHIVE_STDERR" "$record_dir/logs/archive.stderr.log"
@@ -585,6 +613,9 @@ archive_deployment_or_fail() {
   status="$1"
   reason="$2"
 
+  if [ -z "$tmpdir" ]; then
+    tmpdir="$(mktemp -d)"
+  fi
   build_deployment_tar "$status" "$reason"
 
   if ! run_qrexec_service_with_stdin \
@@ -1699,115 +1730,162 @@ systemctl is-active --quiet qubes-db-dom0.service || fail "qubes-db-dom0.service
 systemctl is-active --quiet qubesd.service || fail "qubesd.service is not active"
 systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qrexec-policy-daemon.service is not active"
 
-run_to_files_or_fail "config candidate archive" "$ARCHIVE_STDOUT" "$ARCHIVE_STDERR" \
-  env \
-    NIXOME_LOG_DIR="$LOG_DIR" \
-    NIXOME_CONFIG_STAGING_VM="$STAGING" \
-    NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-    NIXOME_CONFIG_VAULT_VM="$VAULT" \
-    nixome-config-archive-candidate \
-      --staging "$STAGING" \
-      --validator "$VALIDATOR" \
-      --vault "$VAULT"
+if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = archive ]; then
+  run_to_files_or_fail "config candidate archive" "$ARCHIVE_STDOUT" "$ARCHIVE_STDERR" \
+    env \
+      NIXOME_LOG_DIR="$LOG_DIR" \
+      NIXOME_CONFIG_STAGING_VM="$STAGING" \
+      NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+      NIXOME_CONFIG_VAULT_VM="$VAULT" \
+      nixome-config-archive-candidate \
+        --staging "$STAGING" \
+        --validator "$VALIDATOR" \
+        --vault "$VAULT"
 
-[ -r "$ARCHIVE_JSON" ] || fail "archive result JSON is missing: $ARCHIVE_JSON"
+  [ -r "$ARCHIVE_JSON" ] || fail "archive result JSON is missing: $ARCHIVE_JSON"
 
-archive_status="$(jq -r '.status' "$ARCHIVE_JSON")"
-candidate_commit="$(jq -r '.candidate_commit' "$ARCHIVE_JSON")"
-validation_status="$(jq -r '.validation.status' "$ARCHIVE_JSON")"
+  archive_status="$(jq -r '.status' "$ARCHIVE_JSON")"
+  candidate_commit="$(jq -r '.candidate_commit' "$ARCHIVE_JSON")"
+  validation_status="$(jq -r '.validation.status' "$ARCHIVE_JSON")"
 
-[ "$archive_status" = passed ] || fail "archive status is not passed: $archive_status"
-[ "$validation_status" = passed ] || fail "validation status is not passed: $validation_status"
-[ -n "$candidate_commit" ] && [ "$candidate_commit" != null ] ||
-  fail "archive result did not include candidate_commit"
-[ -r "$VALIDATED_CANDIDATE_TAR" ] ||
-  fail "validated candidate tar is missing: $VALIDATED_CANDIDATE_TAR"
-
-tmpdir="$(mktemp -d)"
-tar -tf "$VALIDATED_CANDIDATE_TAR" |
-  awk '
-    $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" && $0 != "topology.json" && $0 != "system.json" {
-      printf "unexpected validated candidate tar member: %s\n", $0 > "/dev/stderr"
-      exit 1
-    }
-  ' || fail "validated candidate tar contains unexpected paths"
-tar -C "$tmpdir" -xf "$VALIDATED_CANDIDATE_TAR"
-
-worktree="$tmpdir/worktree"
-git clone "$tmpdir/config.bundle" "$worktree" > "$CLONE_LOG" 2>&1 ||
-  fail "clone validated candidate bundle failed"
-git -C "$worktree" checkout --detach "$candidate_commit" > "$CHECKOUT_LOG" 2>&1 ||
-  fail "checkout validated candidate commit failed"
-
-topology="$tmpdir/topology.json"
-system_json="$tmpdir/system.json"
-[ -r "$topology" ] || fail "validated candidate is missing evaluated topology.json"
-[ -r "$system_json" ] || fail "validated candidate is missing evaluated system.json"
-jq -e '
-  .schema == "nixome.qubes-topology.v1" and
-  (.templates | type == "object") and
-  (.kernels | type == "object") and
-  (.prefs | type == "object") and
-  (.domains | type == "object")
-' "$topology" >/dev/null || fail "validated candidate topology JSON is invalid"
-jq -e '
-  .schema == "nixome.system.v1" and
-    (.dom0 | type == "object") and
-    (.plan | type == "object") and
-    (.plan.live_actions | type == "array") and
-    (.plan.reboot_actions | type == "array") and
-    (.plan.reboot_required | type == "boolean") and
-    (.plan.reboot_reasons | type == "array")
-' "$system_json" >/dev/null || fail "validated candidate system JSON is invalid"
-
-cp "$topology" "$VALIDATED_TOPOLOGY_JSON"
-cp "$topology" "$APPLY_TOPOLOGY_JSON"
-cp "$system_json" "$VALIDATED_SYSTEM_JSON"
-cp "$system_json" "$APPLY_SYSTEM_JSON"
-init_template_builds_json
-init_system_builds_json
-init_systemd_actions_json
-init_nix_domain_builds_json
-init_nix_domain_materializations_json
-preflight_apply_domain_backends "$topology"
-
-resolve_template_sources "$topology" "$worktree" "$APPLY_TOPOLOGY_JSON"
-resolve_nix_domain_sources "$APPLY_TOPOLOGY_JSON" "$worktree" "$APPLY_TOPOLOGY_JSON"
-resolve_system_sources "$system_json" "$worktree" "$APPLY_SYSTEM_JSON"
-
-printf '+ env NIXOME_LOG_DIR=%q %q --apply --topology %q\n' \
-  "$LOG_DIR" \
-  "$SETUP_CONFIG_COMMAND" \
-  "$APPLY_TOPOLOGY_JSON"
-if env NIXOME_LOG_DIR="$LOG_DIR" "$SETUP_CONFIG_COMMAND" --apply --topology "$APPLY_TOPOLOGY_JSON" \
-  > "$SETUP_STDOUT" 2> "$SETUP_STDERR"; then
-  setup_rc=0
+  [ "$archive_status" = passed ] || fail "archive status is not passed: $archive_status"
+  [ "$validation_status" = passed ] || fail "validation status is not passed: $validation_status"
+  [ -n "$candidate_commit" ] && [ "$candidate_commit" != null ] ||
+    fail "archive result did not include candidate_commit"
+  [ -r "$VALIDATED_CANDIDATE_TAR" ] ||
+    fail "validated candidate tar is missing: $VALIDATED_CANDIDATE_TAR"
 else
-  setup_rc="$?"
+  load_candidate_commit_from_archive
+fi
+
+if [ "$CONFIG_APPLY_STAGE" = archive ]; then
+  finish_stage "config candidate archived and validated"
+fi
+
+if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = resolve ]; then
+  [ -r "$VALIDATED_CANDIDATE_TAR" ] ||
+    fail "validated candidate tar is missing: $VALIDATED_CANDIDATE_TAR"
+
+  tmpdir="$(mktemp -d)"
+  tar -tf "$VALIDATED_CANDIDATE_TAR" |
+    awk '
+      $0 != "config.bundle" && $0 != "validation.json" && $0 != "manifest.json" && $0 != "topology.json" && $0 != "system.json" {
+        printf "unexpected validated candidate tar member: %s\n", $0 > "/dev/stderr"
+        exit 1
+      }
+    ' || fail "validated candidate tar contains unexpected paths"
+  tar -C "$tmpdir" -xf "$VALIDATED_CANDIDATE_TAR"
+
+  worktree="$tmpdir/worktree"
+  git clone "$tmpdir/config.bundle" "$worktree" > "$CLONE_LOG" 2>&1 ||
+    fail "clone validated candidate bundle failed"
+  git -C "$worktree" checkout --detach "$candidate_commit" > "$CHECKOUT_LOG" 2>&1 ||
+    fail "checkout validated candidate commit failed"
+
+  topology="$tmpdir/topology.json"
+  system_json="$tmpdir/system.json"
+  [ -r "$topology" ] || fail "validated candidate is missing evaluated topology.json"
+  [ -r "$system_json" ] || fail "validated candidate is missing evaluated system.json"
+  jq -e '
+    .schema == "nixome.qubes-topology.v1" and
+    (.templates | type == "object") and
+    (.kernels | type == "object") and
+    (.prefs | type == "object") and
+    (.domains | type == "object")
+  ' "$topology" >/dev/null || fail "validated candidate topology JSON is invalid"
+  jq -e '
+    .schema == "nixome.system.v1" and
+      (.dom0 | type == "object") and
+      (.plan | type == "object") and
+      (.plan.live_actions | type == "array") and
+      (.plan.reboot_actions | type == "array") and
+      (.plan.reboot_required | type == "boolean") and
+      (.plan.reboot_reasons | type == "array")
+  ' "$system_json" >/dev/null || fail "validated candidate system JSON is invalid"
+
+  cp "$tmpdir/validation.json" "$VALIDATION_JSON"
+  cp "$tmpdir/manifest.json" "$MANIFEST_JSON"
+  cp "$topology" "$VALIDATED_TOPOLOGY_JSON"
+  cp "$topology" "$APPLY_TOPOLOGY_JSON"
+  cp "$system_json" "$VALIDATED_SYSTEM_JSON"
+  cp "$system_json" "$APPLY_SYSTEM_JSON"
+  init_template_builds_json
+  init_system_builds_json
+  init_systemd_actions_json
+  init_nix_domain_builds_json
+  init_nix_domain_materializations_json
+  preflight_apply_domain_backends "$topology"
+
+  resolve_template_sources "$topology" "$worktree" "$APPLY_TOPOLOGY_JSON"
+  resolve_nix_domain_sources "$APPLY_TOPOLOGY_JSON" "$worktree" "$APPLY_TOPOLOGY_JSON"
+  resolve_system_sources "$system_json" "$worktree" "$APPLY_SYSTEM_JSON"
+fi
+
+if [ "$CONFIG_APPLY_STAGE" = resolve ]; then
+  finish_stage "validated config candidate resolved"
+fi
+
+if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = setup ]; then
+  [ -r "$APPLY_TOPOLOGY_JSON" ] ||
+    fail "resolved topology JSON is missing: $APPLY_TOPOLOGY_JSON"
+
+  printf '+ env NIXOME_LOG_DIR=%q %q --apply --topology %q\n' \
+    "$LOG_DIR" \
+    "$SETUP_CONFIG_COMMAND" \
+    "$APPLY_TOPOLOGY_JSON"
+  if env NIXOME_LOG_DIR="$LOG_DIR" "$SETUP_CONFIG_COMMAND" --apply --topology "$APPLY_TOPOLOGY_JSON" \
+    > "$SETUP_STDOUT" 2> "$SETUP_STDERR"; then
+    setup_rc=0
+  else
+    setup_rc="$?"
+  fi
+
+  [ -r "$SETUP_JSON" ] || fail "setup-config result JSON is missing: $SETUP_JSON"
+  setup_status="$(jq -r '.status' "$SETUP_JSON")"
+  if [ "$setup_rc" != 0 ] || [ "$setup_status" != passed ]; then
+    archive_deployment_or_fail failed "setup-config failed"
+    printf 'config apply failed: setup-config failed\n' >&2
+    exit 1
+  fi
+  persist_current_topology
+fi
+
+if [ "$CONFIG_APPLY_STAGE" = setup ]; then
+  finish_stage "resolved config topology applied"
+fi
+
+if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = system ]; then
+  [ -r "$APPLY_SYSTEM_JSON" ] ||
+    fail "resolved system JSON is missing: $APPLY_SYSTEM_JSON"
+
+  if apply_system "$APPLY_SYSTEM_JSON"; then
+    system_apply_rc=0
+  else
+    system_apply_rc="$?"
+  fi
+
+  [ -r "$SYSTEM_APPLY_JSON" ] || fail "system apply result JSON is missing: $SYSTEM_APPLY_JSON"
+  system_apply_status="$(jq -r '.status' "$SYSTEM_APPLY_JSON")"
+  if [ "$system_apply_rc" != 0 ] || [ "$system_apply_status" != passed ]; then
+    archive_deployment_or_fail failed "system apply failed"
+    printf 'config apply failed: system apply failed\n' >&2
+    exit 1
+  fi
+fi
+
+if [ "$CONFIG_APPLY_STAGE" = system ]; then
+  finish_stage "resolved config system applied"
 fi
 
 [ -r "$SETUP_JSON" ] || fail "setup-config result JSON is missing: $SETUP_JSON"
-setup_status="$(jq -r '.status' "$SETUP_JSON")"
-if [ "$setup_rc" != 0 ] || [ "$setup_status" != passed ]; then
-  archive_deployment_or_fail failed "setup-config failed"
-  printf 'config apply failed: setup-config failed\n' >&2
-  exit 1
-fi
-persist_current_topology
-
-if apply_system "$APPLY_SYSTEM_JSON"; then
-  system_apply_rc=0
-else
-  system_apply_rc="$?"
-fi
-
+[ "$(jq -r '.status' "$SETUP_JSON")" = passed ] ||
+  fail "setup-config status is not passed"
 [ -r "$SYSTEM_APPLY_JSON" ] || fail "system apply result JSON is missing: $SYSTEM_APPLY_JSON"
-system_apply_status="$(jq -r '.status' "$SYSTEM_APPLY_JSON")"
-if [ "$system_apply_rc" != 0 ] || [ "$system_apply_status" != passed ]; then
-  archive_deployment_or_fail failed "system apply failed"
-  printf 'config apply failed: system apply failed\n' >&2
-  exit 1
-fi
+[ "$(jq -r '.status' "$SYSTEM_APPLY_JSON")" = passed ] ||
+  fail "system apply status is not passed"
 
+if [ -z "$tmpdir" ]; then
+  tmpdir="$(mktemp -d)"
+fi
 archive_deployment_or_fail passed "validated config candidate applied"
 cat "$RESULT_JSON"

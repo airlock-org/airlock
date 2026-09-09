@@ -74,6 +74,8 @@ QUBE_USER="${NIXOME_QUBE_USER:-user}"
 DOM0_USER="${NIXOME_DOM0_USER:-${SUDO_USER:-nixome}}"
 APPLY_MESSAGE="${NIXOME_CONFIG_APPLY_MESSAGE:-smoke-applied-$(date -u +%Y%m%dT%H%M%SZ)}"
 CREATED_QUBE="${NIXOME_CONFIG_CREATED_QUBE:-nixome-work-from-config}"
+CONFIG_VMS_SMOKE_MODE="${NIXOME_CONFIG_VMS_SMOKE_MODE:-full}"
+CONFIG_APPLY_STAGE="${NIXOME_CONFIG_APPLY_STAGE:-full}"
 DOM0_SYSTEM_SWITCH_ACTION="${NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION:-switch}"
 case "$DOM0_SYSTEM_SWITCH_ACTION" in
   switch)
@@ -136,6 +138,10 @@ write_result() {
     json_string "$status"
     printf ',"reason":'
     json_string "$reason"
+    printf ',"mode":'
+    json_string "$CONFIG_VMS_SMOKE_MODE"
+    printf ',"config_apply_stage":'
+    json_string "$CONFIG_APPLY_STAGE"
     printf ',"staging":'
     json_string "$STAGING"
     printf ',"vault":'
@@ -306,6 +312,25 @@ require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     fail "missing command: $1"
   fi
+}
+
+mode_runs_preflight() {
+  [ "$CONFIG_VMS_SMOKE_MODE" = full ] || [ "$CONFIG_VMS_SMOKE_MODE" = preflight ]
+}
+
+mode_runs_stage_candidate() {
+  [ "$CONFIG_VMS_SMOKE_MODE" = full ] || [ "$CONFIG_VMS_SMOKE_MODE" = stage-candidate ]
+}
+
+mode_runs_apply_candidate() {
+  [ "$CONFIG_VMS_SMOKE_MODE" = full ] || [ "$CONFIG_VMS_SMOKE_MODE" = apply-candidate ]
+}
+
+finish_stage() {
+  collect_diagnostics
+  write_result passed "$1"
+  cat "$RESULT_JSON"
+  exit 0
 }
 
 collect_diagnostics() {
@@ -551,6 +576,14 @@ for cmd in \
   require_command "$cmd"
 done
 
+case "$CONFIG_VMS_SMOKE_MODE" in
+  full|preflight|stage-candidate|apply-candidate|post-apply)
+    ;;
+  *)
+    fail "unsupported NIXOME_CONFIG_VMS_SMOKE_MODE: $CONFIG_VMS_SMOKE_MODE"
+    ;;
+esac
+
 DOM0_SYSTEM_SWITCH_ACTION_NIX="$(json_string "$DOM0_SYSTEM_SWITCH_ACTION")"
 DOM0_SYSTEM_REASON_NIX="$(json_string "$DOM0_SYSTEM_REASON")"
 
@@ -579,67 +612,74 @@ qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
 qvm-check "$STAGING" >/dev/null 2>&1 || fail "missing config staging VM: $STAGING"
 qvm-check "$VALIDATOR" >/dev/null 2>&1 || fail "missing config validator VM: $VALIDATOR"
 
-assert_nix_closure_domain "$VAULT" "$VAULT_BACKEND_LOG" "$VAULT_STORE_VOLUME_LOG"
-assert_nix_closure_domain "$STAGING" "$STAGING_BACKEND_LOG" "$STAGING_STORE_VOLUME_LOG"
-assert_nix_closure_domain "$VALIDATOR" "$VALIDATOR_BACKEND_LOG" "$VALIDATOR_STORE_VOLUME_LOG"
+if mode_runs_preflight; then
+  assert_nix_closure_domain "$VAULT" "$VAULT_BACKEND_LOG" "$VAULT_STORE_VOLUME_LOG"
+  assert_nix_closure_domain "$STAGING" "$STAGING_BACKEND_LOG" "$STAGING_STORE_VOLUME_LOG"
+  assert_nix_closure_domain "$VALIDATOR" "$VALIDATOR_BACKEND_LOG" "$VALIDATOR_STORE_VOLUME_LOG"
 
-start_vm "$VAULT"
-start_vm "$STAGING"
-start_vm "$VALIDATOR"
+  start_vm "$VAULT"
+  start_vm "$STAGING"
+  start_vm "$VALIDATOR"
 
-run_qrexec_or_fail "$VAULT" "qrexec uname in $VAULT" "$VAULT_UNAME_LOG" "uname -a"
-run_qrexec_or_fail "$STAGING" "qrexec uname in $STAGING" "$STAGING_UNAME_LOG" "uname -a"
-run_qrexec_or_fail "$VALIDATOR" "qrexec uname in $VALIDATOR" "$VALIDATOR_UNAME_LOG" "uname -a"
-run_qrexec_or_fail "$VAULT" "qrexec user in $VAULT" "$VAULT_USER_LOG" "id -un"
-run_qrexec_or_fail "$STAGING" "qrexec user in $STAGING" "$STAGING_USER_LOG" "id -un"
-run_qrexec_or_fail "$VALIDATOR" "qrexec user in $VALIDATOR" "$VALIDATOR_USER_LOG" "id -un"
-assert_runtime_nix_store "$VAULT" "$VAULT_STORE_MOUNT_LOG"
-assert_runtime_nix_store "$STAGING" "$STAGING_STORE_MOUNT_LOG"
-assert_runtime_nix_store "$VALIDATOR" "$VALIDATOR_STORE_MOUNT_LOG"
+  run_qrexec_or_fail "$VAULT" "qrexec uname in $VAULT" "$VAULT_UNAME_LOG" "uname -a"
+  run_qrexec_or_fail "$STAGING" "qrexec uname in $STAGING" "$STAGING_UNAME_LOG" "uname -a"
+  run_qrexec_or_fail "$VALIDATOR" "qrexec uname in $VALIDATOR" "$VALIDATOR_UNAME_LOG" "uname -a"
+  run_qrexec_or_fail "$VAULT" "qrexec user in $VAULT" "$VAULT_USER_LOG" "id -un"
+  run_qrexec_or_fail "$STAGING" "qrexec user in $STAGING" "$STAGING_USER_LOG" "id -un"
+  run_qrexec_or_fail "$VALIDATOR" "qrexec user in $VALIDATOR" "$VALIDATOR_USER_LOG" "id -un"
+  assert_runtime_nix_store "$VAULT" "$VAULT_STORE_MOUNT_LOG"
+  assert_runtime_nix_store "$STAGING" "$STAGING_STORE_MOUNT_LOG"
+  assert_runtime_nix_store "$VALIDATOR" "$VALIDATOR_STORE_MOUNT_LOG"
 
-grep -q 'Linux' "$VAULT_UNAME_LOG" || fail "vault uname output did not contain Linux"
-grep -q 'Linux' "$STAGING_UNAME_LOG" || fail "staging uname output did not contain Linux"
-grep -q 'Linux' "$VALIDATOR_UNAME_LOG" || fail "validator uname output did not contain Linux"
-grep -qx "$QUBE_USER" "$VAULT_USER_LOG" || fail "vault qrexec user was not $QUBE_USER"
-grep -qx "$QUBE_USER" "$STAGING_USER_LOG" || fail "staging qrexec user was not $QUBE_USER"
-grep -qx "$QUBE_USER" "$VALIDATOR_USER_LOG" || fail "validator qrexec user was not $QUBE_USER"
+  grep -q 'Linux' "$VAULT_UNAME_LOG" || fail "vault uname output did not contain Linux"
+  grep -q 'Linux' "$STAGING_UNAME_LOG" || fail "staging uname output did not contain Linux"
+  grep -q 'Linux' "$VALIDATOR_UNAME_LOG" || fail "validator uname output did not contain Linux"
+  grep -qx "$QUBE_USER" "$VAULT_USER_LOG" || fail "vault qrexec user was not $QUBE_USER"
+  grep -qx "$QUBE_USER" "$STAGING_USER_LOG" || fail "staging qrexec user was not $QUBE_USER"
+  grep -qx "$QUBE_USER" "$VALIDATOR_USER_LOG" || fail "validator qrexec user was not $QUBE_USER"
 
-run_appmenus_sync_or_fail "$VAULT" "$VAULT_APPMENUS_LOG"
-run_appmenus_sync_or_fail "$STAGING" "$STAGING_APPMENUS_LOG"
-run_appmenus_sync_or_fail "$VALIDATOR" "$VALIDATOR_APPMENUS_LOG"
+  run_appmenus_sync_or_fail "$VAULT" "$VAULT_APPMENUS_LOG"
+  run_appmenus_sync_or_fail "$STAGING" "$STAGING_APPMENUS_LOG"
+  run_appmenus_sync_or_fail "$VALIDATOR" "$VALIDATOR_APPMENUS_LOG"
 
-check_persistent_home "$VAULT" "$VAULT_PERSISTENCE_LOG"
-check_persistent_home "$STAGING" "$STAGING_PERSISTENCE_LOG"
-check_persistent_home "$VALIDATOR" "$VALIDATOR_PERSISTENCE_LOG"
+  check_persistent_home "$VAULT" "$VAULT_PERSISTENCE_LOG"
+  check_persistent_home "$STAGING" "$STAGING_PERSISTENCE_LOG"
+  check_persistent_home "$VALIDATOR" "$VALIDATOR_PERSISTENCE_LOG"
 
-if [ "${NIXOME_CONFIG_VMS_IMPORT_SEED_INPUTS:-1}" = "1" ]; then
-  run_or_fail "import config seed inputs" "$SEED_INPUTS_IMPORT_LOG" \
-    env \
-      NIXOME_LOG_DIR="$LOG_DIR" \
-      NIXOME_CONFIG_STAGING_VM="$STAGING" \
-      NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-      nixome-config-seed-inputs-import
-else
-  printf 'config seed inputs import skipped by NIXOME_CONFIG_VMS_IMPORT_SEED_INPUTS=0\n' > "$SEED_INPUTS_IMPORT_LOG"
+  if [ "${NIXOME_CONFIG_VMS_IMPORT_SEED_INPUTS:-1}" = "1" ]; then
+    run_or_fail "import config seed inputs" "$SEED_INPUTS_IMPORT_LOG" \
+      env \
+        NIXOME_LOG_DIR="$LOG_DIR" \
+        NIXOME_CONFIG_STAGING_VM="$STAGING" \
+        NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+        nixome-config-seed-inputs-import
+  else
+    printf 'config seed inputs import skipped by NIXOME_CONFIG_VMS_IMPORT_SEED_INPUTS=0\n' > "$SEED_INPUTS_IMPORT_LOG"
+  fi
+
+  run_qrexec_or_fail "$VAULT" "config vault repo status" "$VAULT_REPO_STATUS_LOG" \
+    "cd /home/$QUBE_USER/nixome-config-vault && git status --short --branch"
+  run_qrexec_or_fail "$STAGING" "config staging repo status" "$STAGING_REPO_STATUS_LOG" \
+    "cd /home/$QUBE_USER/nixome-config && git status --short --branch"
+
+  grep -q '^## main$' "$VAULT_REPO_STATUS_LOG" ||
+    fail "config vault repository is not initialized cleanly"
+  grep -q '^## main$' "$STAGING_REPO_STATUS_LOG" ||
+    fail "config staging repository is not initialized cleanly"
+
+  run_qrexec_or_fail "$STAGING" "config staging init" "$STAGING_INIT_LOG" "nixome-config-staging-init"
+  run_qrexec_or_fail \
+    "$VALIDATOR" \
+    "config validator init" \
+    "$VALIDATOR_INIT_LOG" \
+    "nixome-config-validator-init"
 fi
 
-run_qrexec_or_fail "$VAULT" "config vault repo status" "$VAULT_REPO_STATUS_LOG" \
-  "cd /home/$QUBE_USER/nixome-config-vault && git status --short --branch"
-run_qrexec_or_fail "$STAGING" "config staging repo status" "$STAGING_REPO_STATUS_LOG" \
-  "cd /home/$QUBE_USER/nixome-config && git status --short --branch"
+if [ "$CONFIG_VMS_SMOKE_MODE" = preflight ]; then
+  finish_stage "config VMs passed runtime preflight"
+fi
 
-grep -q '^## main$' "$VAULT_REPO_STATUS_LOG" ||
-  fail "config vault repository is not initialized cleanly"
-grep -q '^## main$' "$STAGING_REPO_STATUS_LOG" ||
-  fail "config staging repository is not initialized cleanly"
-
-run_qrexec_or_fail "$STAGING" "config staging init" "$STAGING_INIT_LOG" "nixome-config-staging-init"
-run_qrexec_or_fail \
-  "$VALIDATOR" \
-  "config validator init" \
-  "$VALIDATOR_INIT_LOG" \
-  "nixome-config-validator-init"
-
+if mode_runs_stage_candidate; then
 if [ -z "${NIXOME_CONFIG_VMS_SEED:-}" ] || [ ! -r "$NIXOME_CONFIG_VMS_SEED" ]; then
   fail "missing config VM seed helper for smoke update"
 fi
@@ -856,7 +896,13 @@ run_qrexec_script_or_fail \
   "modify config candidate in $STAGING" \
   "$STAGING_UPDATE_LOG" \
   "$STAGING_UPDATE_SCRIPT"
+fi
 
+if [ "$CONFIG_VMS_SMOKE_MODE" = stage-candidate ]; then
+  finish_stage "config candidate staged in config-staging"
+fi
+
+if mode_runs_apply_candidate; then
 run_or_fail "apply config candidate from $STAGING through $VALIDATOR" "$APPLY_LOG" \
   env \
     NIXOME_LOG_DIR="$LOG_DIR" \
@@ -864,7 +910,13 @@ run_or_fail "apply config candidate from $STAGING through $VALIDATOR" "$APPLY_LO
     NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
     NIXOME_CONFIG_VAULT_VM="$VAULT" \
     NIXOME_CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-0}" \
+    NIXOME_CONFIG_APPLY_STAGE="$CONFIG_APPLY_STAGE" \
   nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+fi
+
+if [ "$CONFIG_VMS_SMOKE_MODE" = apply-candidate ]; then
+  finish_stage "config candidate apply stage completed"
+fi
 
 run_or_fail \
   "read applied topology" \

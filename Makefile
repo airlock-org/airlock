@@ -53,7 +53,8 @@ PYTHON_FILES := \
 	scripts/nix-domain-storage.py \
 	tests/conftest.py \
 	tests/test_local.py \
-	tests/test_vm.py
+	tests/test_vm.py \
+	tests/test_vm_staged.py
 
 PYTEST_LOG_DIR = $${NIXOME_LOG_DIR:-.nixome-logs}
 TEST_JOBS ?= 4
@@ -63,11 +64,13 @@ PYTEST_WORKERS = $(if $(TEST_JOBS),-n $(TEST_JOBS),)
 PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
 PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
+PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
 PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 VM_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm.py::test_vm_flow[$(test)]')
+VM_STAGED_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm_staged.py::test_staged_vm_step[$(test)]')
 
-.PHONY: ensure-generated-dirs build test test-parallel test-serial test-vm test-vm-parallel test-vm-warm test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test test-parallel test-serial test-vm test-vm-parallel test-vm-warm test-vm-staged test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -100,6 +103,10 @@ test-vm-parallel: vm-parallel-prebuild-baseline
 test-vm-warm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
 	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and warm") $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
+
+test-vm-staged: ensure-generated-dirs
+	@mkdir -p "$(PYTEST_LOG_DIR)"
+	NIXOME_RUN_VM_TESTS=1 NIXOME_SKIP_GC_AUTO=1 uv run pytest $(if $(TESTS),$(VM_STAGED_PYTEST_SELECTED),tests/test_vm_staged.py) $(PYTEST_VM_STAGED_ARGS) $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
 
 test-list: ensure-generated-dirs
 	uv run pytest $(PYTEST_CONFIG_ARGS) tests --collect-only -q

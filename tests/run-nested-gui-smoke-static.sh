@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bash -n "$ROOT/scripts/run-nested-gui-smoke.sh"
 bash -n "$ROOT/scripts/sync-nested-dom0-tools.sh"
 bash -n "$ROOT/scripts/run-config-boot-activation-flow.sh"
+bash -n "$ROOT/scripts/apply-config-candidate.sh"
 bash -n "$ROOT/scripts/nixos-config-vms-smoke.sh"
 bash -n "$ROOT/scripts/config-boot-verify.sh"
 bash -n "$ROOT/scripts/resolve-vm-image-result.sh"
@@ -15,6 +16,8 @@ bash -n "$ROOT/scripts/resolve-vm-image-result.sh"
 ! grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'vm-config-boot-flow' "$ROOT/Makefile" >/dev/null
 grep -F 'vm-config-boot-activate-flow' "$ROOT/Makefile" >/dev/null
+grep -F 'test-vm-staged' "$ROOT/Makefile" >/dev/null
+grep -F 'tests/test_vm_staged.py' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_RUN_CONFIG_BOOT_VERIFY=1' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
 grep -F 'NIXOME_SHUTDOWN_VM_ON_SUCCESS=1' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
@@ -24,6 +27,8 @@ grep -F 'stage_status: .stage.status' "$ROOT/scripts/run-config-boot-activation-
 ! grep -F 'cat "$RESULT_JSON"' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_REASON' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_CONFIG_APPLY_STAGE' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_CONFIG_VMS_SMOKE_MODE' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_RUN_CONFIG_BOOT_VERIFY' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'nixome-config-boot-verify' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_SETUP_CONFIG_BOOT_WAIT_SECONDS' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
@@ -86,8 +91,14 @@ grep -F 'Keep the boot oneshot in its active/exited state' "$ROOT/scripts/run-ne
 grep -F 'vm-gui-sync-dom0-tools.json' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_SETUP_CONFIG_COMMAND' "$ROOT/scripts/apply-config-candidate.sh" >/dev/null
+grep -F 'CONFIG_APPLY_STAGE="${NIXOME_CONFIG_APPLY_STAGE:-full}"' "$ROOT/scripts/apply-config-candidate.sh" >/dev/null
+grep -F 'full|archive|resolve|setup|system|deploy' "$ROOT/scripts/apply-config-candidate.sh" >/dev/null
 grep -F 'NIXOME_SETUP_CONFIG_COMMAND' "$ROOT/scripts/nix-closure-domain-smoke.sh" >/dev/null
+grep -F 'CONFIG_VMS_SMOKE_MODE="${NIXOME_CONFIG_VMS_SMOKE_MODE:-full}"' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
+grep -F 'full|preflight|stage-candidate|apply-candidate|post-apply' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'NIXOME_SKIP_GC_AUTO' "$ROOT/tests/test_vm.py" >/dev/null
+grep -F 'STAGED_VM_STEPS' "$ROOT/tests/test_vm_staged.py" >/dev/null
+grep -F 'config-apply-resolve' "$ROOT/tests/test_vm_staged.py" >/dev/null
 grep -F 'NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'nix-store --export' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
 grep -F 'sudo -n nix-store --import' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
