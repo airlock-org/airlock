@@ -18,6 +18,8 @@ grep -F 'vm-config-boot-flow' "$ROOT/Makefile" >/dev/null
 grep -F 'vm-config-boot-activate-flow' "$ROOT/Makefile" >/dev/null
 grep -F 'test-vm-staged' "$ROOT/Makefile" >/dev/null
 grep -F 'tests/test_vm_staged.py' "$ROOT/Makefile" >/dev/null
+grep -F 'VM_STAGED_CONFIG_TARGETS = tests/test_vm_staged.py -m "config_vm_staged"' "$ROOT/Makefile" >/dev/null
+grep -F 'VM_STAGED_WARM_TARGETS = tests/test_vm_staged.py' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_RUN_CONFIG_BOOT_VERIFY=1' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
 grep -F 'NIXOME_SHUTDOWN_VM_ON_SUCCESS=1' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
@@ -99,6 +101,8 @@ grep -F 'full|preflight|stage-candidate|apply-candidate|post-apply' "$ROOT/scrip
 grep -F 'NIXOME_SKIP_GC_AUTO' "$ROOT/tests/test_vm.py" >/dev/null
 grep -F 'STAGED_VM_STEPS' "$ROOT/tests/test_vm_staged.py" >/dev/null
 grep -F 'config-apply-resolve' "$ROOT/tests/test_vm_staged.py" >/dev/null
+grep -F 'nix-closure-domain-smoke' "$ROOT/tests/test_vm_staged.py" >/dev/null
+grep -F 'NIXOME_NIX_CLOSURE_DOMAIN_SMOKE_COMMAND' "$ROOT/tests/test_vm_staged.py" >/dev/null
 grep -F 'NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'nix-store --export' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
 grep -F 'sudo -n nix-store --import' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null

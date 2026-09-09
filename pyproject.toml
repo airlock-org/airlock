@@ -24,6 +24,7 @@ dev = [
 testpaths = ["tests"]
 timeout = 1800
 markers = [
+    "config_vm_staged: config VM integration flow split into pytest-visible stages",
     "local: local checks that should pass on ordinary NixOS development hosts",
     "nix: checks that evaluate or build Nix artifacts",
     "qubes: checks that require Qubes/Xen runtime support",
@@ -33,6 +34,7 @@ markers = [
     "serial_vm: VM flow that should not be included in multi-lane VM runs",
     "vm: nested VM integration flows",
     "warm: warm nested VM iteration flows",
+    "warm_extra: additional warm VM coverage beyond the config staged path",
     "xdist_group: pytest-xdist worker group",
 ]
 

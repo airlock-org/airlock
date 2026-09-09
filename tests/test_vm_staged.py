@@ -15,6 +15,8 @@ import pytest
 
 REMOTE_WARM_BIN_DIR = "/run/nixome-warm/bin"
 REMOTE_WARM_SEED_INPUTS = "/run/nixome-warm/config-seed-inputs"
+CONFIG_STAGED_MARK = pytest.mark.config_vm_staged
+WARM_EXTRA_MARK = pytest.mark.warm_extra
 
 
 def default_nixome_log_dir() -> Path:
@@ -62,9 +64,25 @@ def run_nested_gui_smoke_env(**overrides: str) -> dict[str, str]:
     return env
 
 
+def run_nested_nix_closure_env(**overrides: str) -> dict[str, str]:
+    return run_nested_gui_smoke_env(
+        NIXOME_RUN_CONFIG_VMS_SMOKE="0",
+        NIXOME_RUN_NIX_CLOSURE_SMOKE="1",
+        NIXOME_NIX_CLOSURE_DOMAIN_SMOKE_COMMAND=(
+            f"{REMOTE_WARM_BIN_DIR}/nixome-nix-closure-domain-smoke"
+        ),
+        **overrides,
+    )
+
+
 STAGED_VM_STEPS = (
-    StagedVmStep("warm-start", ("make", "vm-warm-start"), {}),
-    StagedVmStep("warm-baseline", ("make", "vm-warm-apply"), {}),
+    StagedVmStep("warm-start", ("make", "vm-warm-start"), {}, (CONFIG_STAGED_MARK,)),
+    StagedVmStep(
+        "warm-baseline",
+        ("make", "vm-warm-apply"),
+        {},
+        (CONFIG_STAGED_MARK,),
+    ),
     StagedVmStep(
         "config-vms-preflight",
         ("{root}/scripts/run-nested-gui-smoke.sh",),
@@ -72,11 +90,13 @@ STAGED_VM_STEPS = (
             NIXOME_CONFIG_VMS_SMOKE_MODE="preflight",
             NIXOME_CONFIG_VMS_IMPORT_SEED_INPUTS="0",
         ),
+        (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "config-vms-stage-candidate",
         ("{root}/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(NIXOME_CONFIG_VMS_SMOKE_MODE="stage-candidate"),
+        (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "config-apply-archive",
@@ -85,6 +105,7 @@ STAGED_VM_STEPS = (
             NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
             NIXOME_CONFIG_APPLY_STAGE="archive",
         ),
+        (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "config-apply-resolve",
@@ -93,6 +114,7 @@ STAGED_VM_STEPS = (
             NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
             NIXOME_CONFIG_APPLY_STAGE="resolve",
         ),
+        (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "config-apply-setup",
@@ -101,6 +123,7 @@ STAGED_VM_STEPS = (
             NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
             NIXOME_CONFIG_APPLY_STAGE="setup",
         ),
+        (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "config-apply-system",
@@ -109,6 +132,7 @@ STAGED_VM_STEPS = (
             NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
             NIXOME_CONFIG_APPLY_STAGE="system",
         ),
+        (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "config-apply-deploy",
@@ -117,11 +141,19 @@ STAGED_VM_STEPS = (
             NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
             NIXOME_CONFIG_APPLY_STAGE="deploy",
         ),
+        (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "config-vms-post-apply",
         ("{root}/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(NIXOME_CONFIG_VMS_SMOKE_MODE="post-apply"),
+        (CONFIG_STAGED_MARK,),
+    ),
+    StagedVmStep(
+        "nix-closure-domain-smoke",
+        ("{root}/scripts/run-nested-gui-smoke.sh",),
+        run_nested_nix_closure_env(),
+        (WARM_EXTRA_MARK,),
     ),
 )
 
