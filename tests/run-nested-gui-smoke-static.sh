@@ -16,10 +16,22 @@ bash -n "$ROOT/scripts/resolve-vm-image-result.sh"
 ! grep -F 'NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE' "$ROOT/scripts/nixos-config-vms-smoke.sh" >/dev/null
 grep -F 'vm-config-boot-flow' "$ROOT/Makefile" >/dev/null
 grep -F 'vm-config-boot-activate-flow' "$ROOT/Makefile" >/dev/null
-grep -F 'test-vm-staged' "$ROOT/Makefile" >/dev/null
+grep -F 'test-quick:' "$ROOT/Makefile" >/dev/null
+grep -F 'test-warm:' "$ROOT/Makefile" >/dev/null
+grep -F 'test-slow:' "$ROOT/Makefile" >/dev/null
+! grep -E '^(test|test-parallel|test-serial|test-vm|test-vm-parallel|test-vm-warm|test-vm-staged|test-list):' \
+  "$ROOT/Makefile" >/dev/null
 grep -F 'tests/test_vm_staged.py' "$ROOT/Makefile" >/dev/null
-grep -F 'VM_STAGED_CONFIG_TARGETS = tests/test_vm_staged.py -m "config_vm_staged"' "$ROOT/Makefile" >/dev/null
-grep -F 'VM_STAGED_WARM_TARGETS = tests/test_vm_staged.py' "$ROOT/Makefile" >/dev/null
+grep -F 'NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)"' "$ROOT/Makefile" >/dev/null
+grep -F 'NIXOME_VM_PARALLEL_SSH_BASE_PORT="$(VM_PARALLEL_SSH_BASE_PORT)"' "$ROOT/Makefile" >/dev/null
+grep -F 'VM_SLOW_SERIAL_VM_DIR ?=' "$ROOT/Makefile" >/dev/null
+grep -F 'VM_SLOW_SERIAL_SSH_PORT ?=' "$ROOT/Makefile" >/dev/null
+grep -F 'VM_SLOW_PARALLEL_FLOW_IDS =' "$ROOT/Makefile" >/dev/null
+grep -F 'VM_SLOW_SELECTED_PARALLEL_TARGETS =' "$ROOT/Makefile" >/dev/null
+grep -F 'VM_SLOW_SELECTED_SERIAL_TARGETS =' "$ROOT/Makefile" >/dev/null
+grep -F 'VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow' "$ROOT/Makefile" >/dev/null
+grep -F 'VM_SLOW_SERIAL_FLOW_IDS = vm-config-boot-activate-flow' "$ROOT/Makefile" >/dev/null
+grep -F 'tests/test_vm.py::test_vm_flow[$(test)]' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_RUN_CONFIG_BOOT_VERIFY=1' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
 grep -F 'NIXOME_SHUTDOWN_VM_ON_SUCCESS=1' "$ROOT/scripts/run-config-boot-activation-flow.sh" >/dev/null
@@ -85,6 +97,7 @@ grep -F 'using existing Nixome VM base image result link' "$ROOT/scripts/run-nes
 grep -F 'vm-parallel-prebuild-image' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_VM_PARALLEL_IMAGE_LINK' "$ROOT/Makefile" >/dev/null
 grep -F 'NIXOME_VM_SKIP_BASE_BUILD' "$ROOT/tests/test_vm.py" >/dev/null
+grep -F 'NIXOME_VM_PARALLEL_SSH_BASE_PORT' "$ROOT/tests/test_vm.py" >/dev/null
 grep -F 'sync-nested-dom0-tools.sh' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'prepare_warm_sync_boot_unit' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'warm tool sync uses explicit setup-config' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null

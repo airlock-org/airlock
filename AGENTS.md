@@ -8,7 +8,7 @@
   runtime state such as `qubes.xml` for the first milestone.
 - Keep development observation separate from production behavior. Observation
   tools should report state without expanding Qubes control authority.
-- `make test` is the primary feedback loop. Preserve clear logs and
+- `make test-quick` is the primary feedback loop. Preserve clear logs and
   machine-readable output under `.nixome-logs/`.
 - Do not make full GUI support block the first qrexec/VM lifecycle milestone.
 - Commit changes after each coherent conceptual change when practical. Use

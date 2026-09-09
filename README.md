@@ -21,13 +21,15 @@ integration layer for:
 ## Commands
 
 ```bash
-make test
+make test-quick
+make test-warm
+make test-slow
 ```
 
-Runs the local feedback loop. It evaluates the flake/module contracts, builds
-lightweight helper packages, checks topology/system schemas, writes host
-capability JSON, and skips real Xen/Qubes runtime tests unless explicitly
-enabled.
+Runs the test suites. `test-quick` is the local feedback loop and runs
+parallel-safe checks by default. `test-warm` reuses one warm nested dom0 and
+runs ordered staged VM coverage. `test-slow` runs cold VM coverage with
+parallel VM lanes where safe, followed by serial boot-activation coverage.
 
 ```bash
 make build

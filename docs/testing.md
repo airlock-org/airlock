@@ -1,15 +1,18 @@
 # Testing
 
-Nixome's test interface is layered so `make test` remains useful before a real
-Xen/Qubes target exists.
+Nixome exposes three test-suite targets. They are intentionally not aliases:
 
-## Local Layer
+- `make test-quick`
+- `make test-warm`
+- `make test-slow`
+
+## Quick
 
 ```bash
-make test
+make test-quick
 ```
 
-Runs fast local checks:
+Runs local checks:
 
 - `nix flake check --no-build`
 - topology and system schema tests,
@@ -18,7 +21,7 @@ Runs fast local checks:
 - host capability detection,
 - shell syntax and static runner checks.
 
-The local layer should pass on ordinary NixOS development hosts. It does not
+The quick layer should pass on ordinary NixOS development hosts. It does not
 prove that Xen boots or that Qubes services run.
 
 By default, local tests and Nix builds use the shared Nixome store under
@@ -27,36 +30,101 @@ By default, local tests and Nix builds use the shared Nixome store under
 Only set `NIXOME_USE_HOST_NIX_STORE=1` when you intentionally want test Nix
 commands to use your host store.
 
-List the local tests without running them:
-
-```bash
-make test-list
-```
-
-Run selected tests by exact name:
-
-```bash
-make test TESTS="host-capabilities topology-schema"
-```
-
-`make test` runs parallel-safe local tests with 4 pytest-xdist workers by
+`make test-quick` runs parallel-safe local tests with 4 pytest-xdist workers by
 default. Tune or disable that worker count with:
 
 ```bash
-make test TEST_JOBS=4
-make test TEST_JOBS=auto
-make test-serial
+make test-quick TEST_JOBS=4
+make test-quick TEST_JOBS=auto
+make test-quick TEST_JOBS=
 ```
 
-Pass normal pytest arguments through `PYTEST_ARGS`:
+Run selected tests by exact name, or pass normal pytest arguments through
+`PYTEST_ARGS`:
 
 ```bash
-make test PYTEST_ARGS="-m nix"
-make test PYTEST_ARGS="-k topology"
+make test-quick TESTS="host-capabilities topology-schema"
+make test-quick PYTEST_ARGS="-m nix"
+make test-quick PYTEST_ARGS="-k topology"
+make test-quick PYTEST_ARGS=--collect-only
 ```
 
-The runner prints the slowest tests with `--durations=20` and writes pytest
-reports under the log directory:
+## Warm
+
+```bash
+make test-warm
+```
+
+Runs the reusable warm nested-VM suite. It keeps one nested dom0 alive, executes
+ordered pytest-visible stages, and includes both config-authority coverage and
+the standalone nix-closure domain lifecycle check.
+
+Warm stages intentionally do not run in parallel: they share one mutable running
+VM and depend on state from earlier stages. Select a single stage by exact name
+when debugging:
+
+```bash
+make test-warm TESTS=nix-closure-domain-smoke
+make test-warm TESTS=config-apply-resolve
+```
+
+## Slow
+
+```bash
+make test-slow
+```
+
+Runs cold nested-VM confidence coverage. By default it prepares one shared
+baseline, starts isolated VM lanes in parallel for the config-authority flow
+and nix-closure lifecycle flow, then runs the serial boot-activation flow. The
+serial flow stages and verifies its own boot generation, so the default slow
+suite does not run a separate boot-only flow first.
+
+Tune the number of cold VM lanes with:
+
+```bash
+make test-slow TEST_VM_JOBS=2
+```
+
+Each lane gets its own VM directory, result-link directory, log directory, SSH
+port, and qcow2 overlay while sharing the Nix store/cache. The lane-local VM
+image result link is seeded from the shared prebuild and workers run with
+`NIXOME_VM_SKIP_BASE_BUILD=1`, so they do not each re-resolve the same base
+image with Nix. Slow parallel lanes use ports from
+`VM_PARALLEL_SSH_BASE_PORT`, defaulting to `2300`, and the serial
+boot-activation flow uses `VM_SLOW_SERIAL_VM_DIR` plus
+`VM_SLOW_SERIAL_SSH_PORT`, defaulting to `2310`. That keeps slow runs separate
+from the warm VM's default port and disk.
+
+Multi-lane VM runs also set `NIXOME_SKIP_GC_AUTO=1` inside each lane to avoid
+concurrent GC lock contention; run `make gc-auto` before or after a slow batch
+when needed.
+
+Selected slow tests run by exact `tests/test_vm.py` flow name. Parallel-safe
+selections use the same shared-baseline lane runner by default; serial
+selections run in the isolated serial VM path:
+
+```bash
+make test-slow TESTS=vm-config-flow
+make test-slow TESTS="vm-config-flow vm-nix-closure-flow"
+make test-slow TESTS=vm-config-boot-activate-flow
+```
+
+Full GUI smoke remains a manual VM target so GUI readiness does not block the
+core qrexec/VM-lifecycle suites.
+
+VM pytest targets stream each nested flow's stdout/stderr live by default and
+also save the raw command output to that flow's `pytest-command.log`. The
+default pytest capture mode is controlled by `PYTEST_VM_OUTPUT_ARGS`, which is
+set to `--capture=tee-sys`; set `PYTEST_VM_OUTPUT_ARGS=` for quieter runs.
+
+Direct pytest runs without `NIXOME_RUN_VM_TESTS=1` collect the VM tests but skip
+them.
+
+## Reports
+
+All test-suite targets print the slowest tests with `--durations=20` and write
+pytest reports under the log directory:
 
 - `pytest-report.json`
 - `pytest-junit.xml`
@@ -67,67 +135,15 @@ reports under the log directory:
 Each shell check receives its own `NIXOME_LOG_DIR` subdirectory below the report
 directory so parallel workers do not overwrite same-named artifacts.
 
-Before tests run, pytest initializes the shared Nixome environment once and
-warms the common `nixpkgs#erofs-utils` dependency in the shared Nix store. Set
-`NIXOME_PYTEST_WARM_STORE=0` to skip that warm-up for narrow runs.
+Before quick tests run, pytest initializes the shared Nixome environment once
+and warms the common `nixpkgs#erofs-utils` dependency in the shared Nix store.
+Set `NIXOME_PYTEST_WARM_STORE=0` to skip that warm-up for narrow runs.
 
 Show the slowest tests from the latest run:
 
 ```bash
 column -t -s $'\t' "${NIXOME_LOG_DIR:-.nixome-logs}/test-runtimes-latest.tsv"
 ```
-
-## VM Test Layer
-
-Cold nested VM flows are available through pytest for runtime tracking, but are
-not included in the default local layer:
-
-```bash
-make test-vm
-make test-vm TESTS=vm-prebuild-shared
-make test-vm TESTS=vm-nix-closure-flow
-make test-vm TESTS="vm-config-flow vm-nix-closure-flow"
-```
-
-`make test-vm` sets `NIXOME_RUN_VM_TESTS=1` and runs the cold VM flows
-serially. Its default set includes `vm-prebuild-shared`, which builds common
-Nix artifacts before booting nested dom0 so the runtime report separates shared
-build/cache preparation from VM execution.
-
-VM pytest targets stream each nested flow's stdout/stderr live by default and
-also save the raw command output to that flow's `pytest-command.log`. The
-default pytest capture mode is controlled by `PYTEST_VM_OUTPUT_ARGS`, which is
-set to `--capture=tee-sys`; set `PYTEST_VM_OUTPUT_ARGS=` for quieter runs.
-
-Warm VM iteration flows are measured separately:
-
-```bash
-make test-vm-warm
-make test-vm-warm TESTS=vm-warm-start
-make test-vm-warm TESTS="vm-warm-start vm-warm-sync vm-warm-test-config"
-```
-
-Direct pytest runs without `NIXOME_RUN_VM_TESTS=1` collect the VM tests but skip
-them. Runtime reports use the same `test-runtimes-latest.*` and
-`test-runtimes-history.jsonl` files as the local layer.
-
-Experimental multi-lane VM runs resolve the shared
-`nixome-vm-gui-config-image` output once, then start isolated nested VM
-instances in parallel. Each lane gets its own VM directory, result-link
-directory, log directory, and SSH port while sharing the Nix store/cache:
-
-```bash
-make test-vm-parallel
-make test-vm-parallel TEST_VM_JOBS=2 TESTS="vm-config-flow vm-nix-closure-flow"
-```
-
-Serial-only VM flows such as `vm-prebuild-shared`,
-`vm-config-boot-activate-flow`, and `vm-gui-smoke` are excluded from the default
-parallel VM set. The lane-local VM image result link is seeded from the shared
-prebuild and workers run with `NIXOME_VM_SKIP_BASE_BUILD=1`, so they do not each
-re-resolve the same base image with Nix. Multi-lane VM runs also set
-`NIXOME_SKIP_GC_AUTO=1` inside each lane to avoid concurrent GC lock contention;
-run `make gc-auto` before or after a parallel VM batch when needed.
 
 ## Build Layer
 

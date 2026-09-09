@@ -191,7 +191,7 @@ store backend.
 Use local tests first:
 
 ```bash
-make test
+make test-quick
 ```
 
 For repeated real Qubes/Xen checks against an already-created nested dom0 disk,

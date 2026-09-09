@@ -33,6 +33,9 @@ VM_PARALLEL_BASELINE_DISK ?= $(VM_PARALLEL_BASELINE_DIR)/$(VM_PARALLEL_IMAGE_ATT
 VM_PARALLEL_BASELINE_OVMF_VARS ?= $(VM_PARALLEL_BASELINE_DIR)/$(VM_PARALLEL_IMAGE_ATTR)-OVMF_VARS.fd
 VM_PARALLEL_BASELINE_LOG_DIR ?= $(or $(NIXOME_LOG_DIR),$(CURDIR)/.nixome-logs)/vm-baseline
 VM_PARALLEL_BASELINE_SSH_PORT ?= 2299
+VM_PARALLEL_SSH_BASE_PORT ?= 2300
+VM_SLOW_SERIAL_VM_DIR ?= $(or $(NIXOME_DATA_ROOT),$(CURDIR)/.nixome)/vm-slow-serial
+VM_SLOW_SERIAL_SSH_PORT ?= 2310
 VM_FLOW_RUN_SETUP_CONFIG ?= 1
 
 VM_PREBUILD_ATTRS := \
@@ -67,12 +70,20 @@ PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
 PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
-VM_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm.py::test_vm_flow[$(test)]')
 VM_STAGED_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm_staged.py::test_staged_vm_step[$(test)]')
-VM_STAGED_CONFIG_TARGETS = tests/test_vm_staged.py -m "config_vm_staged"
-VM_STAGED_WARM_TARGETS = tests/test_vm_staged.py
+VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow
+VM_SLOW_PARALLEL_FLOW_IDS = $(VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS) vm-config-boot-flow
+VM_SLOW_SERIAL_FLOW_IDS = vm-config-boot-activate-flow
+VM_SLOW_FLOW_IDS = $(VM_SLOW_PARALLEL_FLOW_IDS) $(VM_SLOW_SERIAL_FLOW_IDS)
+VM_SLOW_SELECTED_PARALLEL_FLOW_IDS = $(filter $(VM_SLOW_PARALLEL_FLOW_IDS),$(TESTS))
+VM_SLOW_SELECTED_SERIAL_FLOW_IDS = $(filter $(VM_SLOW_SERIAL_FLOW_IDS),$(TESTS))
+VM_SLOW_SELECTED_UNKNOWN_FLOW_IDS = $(filter-out $(VM_SLOW_FLOW_IDS),$(TESTS))
+VM_SLOW_DEFAULT_PARALLEL_TARGETS = $(foreach test,$(VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS),'tests/test_vm.py::test_vm_flow[$(test)]')
+VM_SLOW_SELECTED_PARALLEL_TARGETS = $(foreach test,$(VM_SLOW_SELECTED_PARALLEL_FLOW_IDS),'tests/test_vm.py::test_vm_flow[$(test)]')
+VM_SLOW_SELECTED_SERIAL_TARGETS = $(foreach test,$(VM_SLOW_SELECTED_SERIAL_FLOW_IDS),'tests/test_vm.py::test_vm_flow[$(test)]')
+VM_SLOW_SERIAL_TARGETS = $(foreach test,$(VM_SLOW_SERIAL_FLOW_IDS),'tests/test_vm.py::test_vm_flow[$(test)]')
 
-.PHONY: ensure-generated-dirs build test test-parallel test-serial test-vm test-vm-parallel test-vm-warm test-vm-staged test-list py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-config-smoke vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-vm-workdirs clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test-quick test-warm test-slow py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -84,34 +95,31 @@ endif
 build: ensure-generated-dirs
 	$(NIXOME_NIX) build .#nixosConfigurations.test.config.system.build.toplevel --out-link "$(NIXOME_RESULT_LINK_DIR)/test-system" --print-build-logs --show-trace
 
-test: ensure-generated-dirs
+test-quick: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
 	uv run pytest $(PYTEST_DEFAULT_TARGETS) $(PYTEST_SELECTED) $(PYTEST_WORKERS) $(PYTEST_DISTRIBUTION) $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
 
-test-parallel: TEST_JOBS = 4
-test-parallel: test
-
-test-serial: TEST_JOBS =
-test-serial: test
-
-test-vm: ensure-generated-dirs
+test-warm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
-	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm") $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
+	NIXOME_RUN_VM_TESTS=1 NIXOME_SKIP_GC_AUTO=1 uv run pytest $(if $(TESTS),$(VM_STAGED_PYTEST_SELECTED),tests/test_vm_staged.py) $(PYTEST_VM_STAGED_ARGS) $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
 
-test-vm-parallel: vm-parallel-prebuild-baseline
+test-slow: export NIXOME_SKIP_GC_AUTO = 1
+test-slow: $(if $(TESTS),$(if $(VM_SLOW_SELECTED_PARALLEL_FLOW_IDS),vm-parallel-prebuild-baseline,ensure-generated-dirs),vm-parallel-prebuild-baseline)
 	@mkdir -p "$(PYTEST_LOG_DIR)"
-	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)" NIXOME_VM_PARALLEL_IMAGE_ATTR="$(VM_PARALLEL_IMAGE_ATTR)" NIXOME_VM_PARALLEL_IMAGE_LINK="$(VM_PARALLEL_IMAGE_LINK)" NIXOME_VM_PARALLEL_BASELINE_DISK="$(VM_PARALLEL_BASELINE_DISK)" NIXOME_VM_PARALLEL_BASELINE_OVMF_VARS="$(VM_PARALLEL_BASELINE_OVMF_VARS)" uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm and not serial_vm") -n $(TEST_VM_JOBS) --dist load $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
-
-test-vm-warm: ensure-generated-dirs
-	@mkdir -p "$(PYTEST_LOG_DIR)"
-	NIXOME_RUN_VM_TESTS=1 NIXOME_SKIP_GC_AUTO=1 uv run pytest $(if $(TESTS),$(VM_STAGED_PYTEST_SELECTED),$(VM_STAGED_WARM_TARGETS)) $(PYTEST_VM_STAGED_ARGS) $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
-
-test-vm-staged: ensure-generated-dirs
-	@mkdir -p "$(PYTEST_LOG_DIR)"
-	NIXOME_RUN_VM_TESTS=1 NIXOME_SKIP_GC_AUTO=1 uv run pytest $(if $(TESTS),$(VM_STAGED_PYTEST_SELECTED),$(VM_STAGED_CONFIG_TARGETS)) $(PYTEST_VM_STAGED_ARGS) $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
-
-test-list: ensure-generated-dirs
-	uv run pytest $(PYTEST_CONFIG_ARGS) tests --collect-only -q
+ifneq ($(strip $(TESTS)),)
+ifneq ($(strip $(VM_SLOW_SELECTED_UNKNOWN_FLOW_IDS)),)
+	$(error unknown slow TESTS value(s): $(VM_SLOW_SELECTED_UNKNOWN_FLOW_IDS))
+endif
+ifneq ($(strip $(VM_SLOW_SELECTED_PARALLEL_FLOW_IDS)),)
+	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)" NIXOME_VM_PARALLEL_SSH_BASE_PORT="$(VM_PARALLEL_SSH_BASE_PORT)" NIXOME_VM_PARALLEL_IMAGE_ATTR="$(VM_PARALLEL_IMAGE_ATTR)" NIXOME_VM_PARALLEL_IMAGE_LINK="$(VM_PARALLEL_IMAGE_LINK)" NIXOME_VM_PARALLEL_BASELINE_DISK="$(VM_PARALLEL_BASELINE_DISK)" NIXOME_VM_PARALLEL_BASELINE_OVMF_VARS="$(VM_PARALLEL_BASELINE_OVMF_VARS)" uv run pytest $(VM_SLOW_SELECTED_PARALLEL_TARGETS) -n $(TEST_VM_JOBS) --dist load $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
+endif
+ifneq ($(strip $(VM_SLOW_SELECTED_SERIAL_FLOW_IDS)),)
+	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_DIR="$(VM_SLOW_SERIAL_VM_DIR)" NIXOME_VM_SSH_PORT="$(VM_SLOW_SERIAL_SSH_PORT)" uv run pytest $(VM_SLOW_SELECTED_SERIAL_TARGETS) $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
+endif
+else
+	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)" NIXOME_VM_PARALLEL_SSH_BASE_PORT="$(VM_PARALLEL_SSH_BASE_PORT)" NIXOME_VM_PARALLEL_IMAGE_ATTR="$(VM_PARALLEL_IMAGE_ATTR)" NIXOME_VM_PARALLEL_IMAGE_LINK="$(VM_PARALLEL_IMAGE_LINK)" NIXOME_VM_PARALLEL_BASELINE_DISK="$(VM_PARALLEL_BASELINE_DISK)" NIXOME_VM_PARALLEL_BASELINE_OVMF_VARS="$(VM_PARALLEL_BASELINE_OVMF_VARS)" uv run pytest $(VM_SLOW_DEFAULT_PARALLEL_TARGETS) -n $(TEST_VM_JOBS) --dist load $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
+	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_DIR="$(VM_SLOW_SERIAL_VM_DIR)" NIXOME_VM_SSH_PORT="$(VM_SLOW_SERIAL_SSH_PORT)" NIXOME_SKIP_GC_AUTO=1 uv run pytest $(VM_SLOW_SERIAL_TARGETS) $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
+endif
 
 py-sync:
 	uv sync --only-dev
@@ -214,8 +222,6 @@ vm-config-boot-flow: ensure-generated-dirs gc-auto
 
 vm-config-boot-activate-flow: ensure-generated-dirs gc-auto
 	./scripts/run-config-boot-activation-flow.sh
-
-vm-config-smoke: vm-config-flow
 
 vm-nix-closure-flow: ensure-generated-dirs gc-auto
 	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=$(VM_FLOW_RUN_SETUP_CONFIG) NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./scripts/run-nested-gui-smoke.sh

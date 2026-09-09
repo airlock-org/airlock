@@ -95,6 +95,14 @@ def vm_parallel_enabled() -> bool:
     return lanes not in {"", "0", "1"}
 
 
+def vm_parallel_ssh_base_port() -> int:
+    value = os.environ.get("NIXOME_VM_PARALLEL_SSH_BASE_PORT", "2300")
+    try:
+        return int(value)
+    except ValueError:
+        pytest.fail(f"NIXOME_VM_PARALLEL_SSH_BASE_PORT must be an integer: {value}")
+
+
 def vm_flow_has_mark(vm_flow: VmFlow, mark_name: str) -> bool:
     return any(mark.mark.name == mark_name for mark in vm_flow.marks)
 
@@ -291,14 +299,19 @@ def test_vm_flow(
         env["NIXOME_VM_LANE"] = str(lane)
         env["NIXOME_VM_DIR"] = str(vm_dir)
         env["NIXOME_RESULT_LINK_DIR"] = str(result_link_dir)
-        env["NIXOME_VM_SSH_PORT"] = str(2222 + lane)
+        ssh_port = vm_parallel_ssh_base_port() + lane
+        env["NIXOME_VM_SSH_PORT"] = str(ssh_port)
         env["NIXOME_SKIP_GC_AUTO"] = "1"
         lane_env.update(
             {
                 "NIXOME_VM_LANE": str(lane),
                 "NIXOME_VM_DIR": str(vm_dir),
                 "NIXOME_RESULT_LINK_DIR": str(result_link_dir),
-                "NIXOME_VM_SSH_PORT": str(2222 + lane),
+                "NIXOME_VM_PARALLEL_SSH_BASE_PORT": os.environ.get(
+                    "NIXOME_VM_PARALLEL_SSH_BASE_PORT",
+                    "2300",
+                ),
+                "NIXOME_VM_SSH_PORT": str(ssh_port),
                 "NIXOME_SKIP_GC_AUTO": "1",
                 "NIXOME_VM_PARALLEL_IMAGE_ATTR": shared_image_attr,
                 "NIXOME_VM_PARALLEL_IMAGE_LINK": shared_image_link_value,
