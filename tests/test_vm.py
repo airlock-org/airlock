@@ -3,9 +3,13 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
+import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO
 
 import pytest
 
@@ -125,11 +129,80 @@ def required_file_from_env(name: str, purpose: str) -> Path:
     return path
 
 
+def format_command(command: list[str]) -> str:
+    return shlex.join(command)
+
+
+def _stream_pipe(pipe: TextIO, stream: TextIO, output: list[str]) -> None:
+    try:
+        for line in pipe:
+            output.append(line)
+            stream.write(line)
+            stream.flush()
+    finally:
+        pipe.close()
+
+
+def run_streamed_command(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert process.stdout is not None
+    assert process.stderr is not None
+
+    stdout: list[str] = []
+    stderr: list[str] = []
+    stdout_thread = threading.Thread(
+        target=_stream_pipe,
+        args=(process.stdout, sys.stdout, stdout),
+        daemon=True,
+    )
+    stderr_thread = threading.Thread(
+        target=_stream_pipe,
+        args=(process.stderr, sys.stderr, stderr),
+        daemon=True,
+    )
+    stdout_thread.start()
+    stderr_thread.start()
+
+    try:
+        returncode = process.wait()
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        stdout_thread.join()
+        stderr_thread.join()
+
+    return subprocess.CompletedProcess(
+        command,
+        returncode,
+        stdout="".join(stdout),
+        stderr="".join(stderr),
+    )
+
+
 def write_log(path: Path, result: subprocess.CompletedProcess[str]) -> None:
     path.write_text(
         "".join(
             (
-                f"$ {' '.join(result.args)}\n",
+                f"$ {format_command(result.args)}\n",
                 f"exit_code={result.returncode}\n\n",
                 "stdout:\n",
                 result.stdout,
@@ -233,18 +306,19 @@ def test_vm_flow(
         encoding="utf-8",
     )
 
-    result = subprocess.run(
+    print(f"vm-flow: {vm_flow.name}: log dir: {flow_log_dir}", flush=True)
+    print(f"vm-flow: {vm_flow.name}: running: {format_command(command)}", flush=True)
+    result = run_streamed_command(
         command,
         cwd=repo_root,
         env=env,
-        check=False,
-        encoding="utf-8",
-        errors="replace",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
     )
     log_path = flow_log_dir / "pytest-command.log"
     write_log(log_path, result)
+    print(
+        f"vm-flow: {vm_flow.name}: exit {result.returncode}; log: {log_path}",
+        flush=True,
+    )
 
     assert (
         result.returncode == 0

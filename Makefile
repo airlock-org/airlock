@@ -62,6 +62,7 @@ PYTEST_CONFIG_ARGS = -c "$(CURDIR)/pyproject.toml" --rootdir "$(CURDIR)"
 PYTEST_WORKERS = $(if $(TEST_JOBS),-n $(TEST_JOBS),)
 PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
 PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
+PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 VM_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm.py::test_vm_flow[$(test)]')
@@ -90,15 +91,15 @@ test-serial: test
 
 test-vm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
-	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm") $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
+	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm") $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
 
 test-vm-parallel: vm-parallel-prebuild-baseline
 	@mkdir -p "$(PYTEST_LOG_DIR)"
-	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)" NIXOME_VM_PARALLEL_IMAGE_ATTR="$(VM_PARALLEL_IMAGE_ATTR)" NIXOME_VM_PARALLEL_IMAGE_LINK="$(VM_PARALLEL_IMAGE_LINK)" NIXOME_VM_PARALLEL_BASELINE_DISK="$(VM_PARALLEL_BASELINE_DISK)" NIXOME_VM_PARALLEL_BASELINE_OVMF_VARS="$(VM_PARALLEL_BASELINE_OVMF_VARS)" uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm and not serial_vm") -n $(TEST_VM_JOBS) --dist load $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
+	NIXOME_RUN_VM_TESTS=1 NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)" NIXOME_VM_PARALLEL_IMAGE_ATTR="$(VM_PARALLEL_IMAGE_ATTR)" NIXOME_VM_PARALLEL_IMAGE_LINK="$(VM_PARALLEL_IMAGE_LINK)" NIXOME_VM_PARALLEL_BASELINE_DISK="$(VM_PARALLEL_BASELINE_DISK)" NIXOME_VM_PARALLEL_BASELINE_OVMF_VARS="$(VM_PARALLEL_BASELINE_OVMF_VARS)" uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and not warm and not serial_vm") -n $(TEST_VM_JOBS) --dist load $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
 
 test-vm-warm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
-	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and warm") $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
+	NIXOME_RUN_VM_TESTS=1 uv run pytest $(VM_PYTEST_SELECTED) $(if $(TESTS),,-m "vm and warm") $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
 
 test-list: ensure-generated-dirs
 	uv run pytest $(PYTEST_CONFIG_ARGS) tests --collect-only -q

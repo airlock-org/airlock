@@ -94,6 +94,11 @@ serially. Its default set includes `vm-prebuild-shared`, which builds common
 Nix artifacts before booting nested dom0 so the runtime report separates shared
 build/cache preparation from VM execution.
 
+VM pytest targets stream each nested flow's stdout/stderr live by default and
+also save the raw command output to that flow's `pytest-command.log`. The
+default pytest capture mode is controlled by `PYTEST_VM_OUTPUT_ARGS`, which is
+set to `--capture=tee-sys`; set `PYTEST_VM_OUTPUT_ARGS=` for quieter runs.
+
 Warm VM iteration flows are measured separately:
 
 ```bash
