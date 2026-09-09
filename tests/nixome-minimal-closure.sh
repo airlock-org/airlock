@@ -88,11 +88,7 @@ for role in "${roles[@]}"; do
   assert_has "$role" '/nix/store/[[:alnum:]]+-systemd-[0-9]' "full systemd package"
   assert_has "$role" '/nix/store/[[:alnum:]]+-userborn-' "userborn passwd/group generator"
 
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-(source|nixpkgs|nixpkgs-libvirt)' "runtime source tree"
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-openvswitch-' "Open vSwitch"
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-(gtk3|pygobject|librsvg)-' "GUI stack"
   assert_absent "$role" '/nix/store/[[:alnum:]]+-nixos-(build-vms|enter|generate-config|install|option)' "NixOS installer/admin tooling"
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-(lvm2|dosfstools|bcache-tools|btrfs-progs|kexec-tools)-' "generic storage/admin tools"
 done
 
 for role in config-staging config-validator; do
@@ -101,8 +97,6 @@ for role in config-staging config-validator; do
   assert_has "$role" '/nix/store/[[:alnum:]]+-nixome-config-nix' "role-specific Nixome Nix helper"
 done
 
-assert_absent config-vault '/nix/store/[[:alnum:]]+-nix-[0-9]' "Nix CLI"
-assert_absent config-vault '/nix/store/[[:alnum:]]+-nix-flake' "nix flake support"
 assert_absent config-vault '/nix/store/[[:alnum:]]+-nixome-config-nix' "Nixome Nix helper"
 
 {

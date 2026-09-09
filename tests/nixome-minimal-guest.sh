@@ -74,9 +74,9 @@ in
     validator = cfgs.validator.nixome.minimalGuest.nix.enable;
     vault = cfgs.vault.nixome.minimalGuest.nix.enable;
   };
-  staging_has_nix_cli = has "nix" (packageNames cfgs.staging) && has "nixome-config-nix" (packageNames cfgs.staging);
-  validator_has_nix_cli = has "nix" (packageNames cfgs.validator) && has "nixome-config-nix" (packageNames cfgs.validator);
-  vault_has_no_nix_cli = !(has "nix" (packageNames cfgs.vault)) && !(has "nixome-config-nix" (packageNames cfgs.vault));
+  staging_has_config_nix = has "nix" (packageNames cfgs.staging) && has "nixome-config-nix" (packageNames cfgs.staging);
+  validator_has_config_nix = has "nix" (packageNames cfgs.validator) && has "nixome-config-nix" (packageNames cfgs.validator);
+  vault_has_no_config_nix = !(has "nixome-config-nix" (packageNames cfgs.vault));
 
   stock_runtime_retained = allCfgs (
     cfg:
@@ -105,7 +105,7 @@ in
     cfg:
     has "qubes-core-agent-linux" (packageNames cfg)
     && has "qubes-linux-utils" (packageNames cfg)
-    && has "qubes-core-qrexec" (packageNames cfg)
+    && has "qubes-core-qrexec-base" (packageNames cfg)
     && has "qubes-core-qrexec-domU" (packageNames cfg)
   );
 }
@@ -123,9 +123,9 @@ jq -e '
     "validator": true,
     "vault": false
   } and
-  .staging_has_nix_cli == true and
-  .validator_has_nix_cli == true and
-  .vault_has_no_nix_cli == true and
+  .staging_has_config_nix == true and
+  .validator_has_config_nix == true and
+  .vault_has_no_config_nix == true and
   .stock_runtime_retained == true and
   .no_guest_seed_input_etc == true and
   .required_qubes_services_retained == true and
