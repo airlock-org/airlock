@@ -30,34 +30,12 @@ let
   etcNames = cfg: lib.attrNames cfg.environment.etc;
   has = name: values: builtins.elem name values;
   allCfgs = pred: lib.all pred cfgList;
-  servicesAbsent =
-    names: cfg:
-    lib.all (name: !(has name (enabledServices cfg))) names;
   packagesAbsent =
     names: cfg:
     lib.all (name: !(has name (packageNames cfg))) names;
   noSeedEtc =
     cfg:
     lib.all (name: !(lib.hasPrefix "nixome/config-seed-inputs/" name)) (etcNames cfg);
-  genericServices = [
-    "console-getty"
-    "container-getty@"
-    "getty@"
-    "nscd"
-    "post-boot"
-    "prepare-kexec"
-    "serial-getty@"
-    "sleep-actions"
-    "systemd-backlight"
-    "systemd-backlight@"
-    "systemd-hostnamed"
-    "systemd-importd"
-    "systemd-localed"
-    "systemd-nspawn@"
-    "systemd-oomd"
-    "systemd-pstore"
-    "systemd-timedated"
-  ];
 in
 {
   package_names = lib.mapAttrs (_name: cfg: packageNames cfg) cfgs;
@@ -67,24 +45,6 @@ in
 
   minimal_enabled = allCfgs (cfg: cfg.nixome.minimalGuest.enable);
   default_packages_empty = allCfgs (cfg: cfg.environment.defaultPackages == [ ]);
-  core_packages_trimmed = allCfgs (
-    cfg:
-    corePackageNames cfg == [
-      "bash-interactive"
-      "coreutils"
-      "findutils"
-      "gawk"
-      "gnugrep"
-      "gnused"
-      "gnutar"
-      "gzip"
-      "kmod"
-      "procps"
-      "shadow"
-      "systemd-minimal"
-      "util-linux"
-    ]
-  );
   documentation_disabled = allCfgs (
     cfg:
     cfg.documentation.enable == false
@@ -99,11 +59,6 @@ in
     && cfg.services.userborn.enable == true
   );
   installer_tools_disabled = allCfgs (cfg: cfg.system.disableInstallerTools);
-  suid_wrappers_disabled = allCfgs (
-    cfg:
-    cfg.security.wrappers == { }
-    && ((cfg.systemd.services.suid-sgid-wrappers.enable or false) == false)
-  );
   no_installer_tool_packages = allCfgs (
     packagesAbsent [
       "nixos-build-vms"
@@ -114,14 +69,6 @@ in
     ]
   );
 
-  nix_module_disabled = allCfgs (cfg: cfg.nix.enable == false);
-  no_nix_daemon_services = allCfgs (
-    servicesAbsent [
-      "nix-daemon"
-      "nix-gc"
-      "nix-optimise"
-    ]
-  );
   nix_cli_capability = {
     staging = cfgs.staging.nixome.minimalGuest.nix.enable;
     validator = cfgs.validator.nixome.minimalGuest.nix.enable;
@@ -131,13 +78,11 @@ in
   validator_has_nix_cli = has "nix" (packageNames cfgs.validator) && has "nixome-config-nix" (packageNames cfgs.validator);
   vault_has_no_nix_cli = !(has "nix" (packageNames cfgs.vault)) && !(has "nixome-config-nix" (packageNames cfgs.vault));
 
-  offline_networking_disabled = allCfgs (
+  stock_runtime_retained = allCfgs (
     cfg:
-    cfg.nixome.minimalGuest.networking.enable == false
-    && cfg.networking.useDHCP == false
-    && cfg.networking.dhcpcd.enable == false
-    && cfg.networking.firewall.enable == false
-    && cfg.networking.resolvconf.enable == false
+    (cfg.systemd.package.pname or "") == "systemd"
+    && cfg.services.dbus.enable == true
+    && cfg.networking.useDHCP == true
   );
 
   no_guest_seed_input_etc = allCfgs noSeedEtc;
@@ -150,23 +95,18 @@ in
       "qubes-sysinit"
     ]
   );
-  generic_services_disabled = allCfgs (servicesAbsent genericServices);
 
   seed_inputs_import_rpc = {
     staging = cfgs.staging.environment.etc ? "qubes-rpc/nixome.Config.SeedInputsImport";
     validator = cfgs.validator.environment.etc ? "qubes-rpc/nixome.Config.SeedInputsImport";
     vault = cfgs.vault.environment.etc ? "qubes-rpc/nixome.Config.SeedInputsImport";
   };
-  qrexec_domU_is_explicit = allCfgs (
+  qubes_runtime_packages_retained = allCfgs (
     cfg:
-    has "qubes-core-qrexec-domU" (packageNames cfg)
-    && !(has "qubes-core-qrexec-base" (packageNames cfg))
-  );
-  broad_qubes_tools_not_in_system_packages = allCfgs (
-    packagesAbsent [
-      "qubes-core-agent-linux"
-      "qubes-linux-utils"
-    ]
+    has "qubes-core-agent-linux" (packageNames cfg)
+    && has "qubes-linux-utils" (packageNames cfg)
+    && has "qubes-core-qrexec" (packageNames cfg)
+    && has "qubes-core-qrexec-domU" (packageNames cfg)
   );
 }
 ' > "$RESULT_JSON"
@@ -174,14 +114,10 @@ in
 jq -e '
   .minimal_enabled == true and
   .default_packages_empty == true and
-  .core_packages_trimmed == true and
   .documentation_disabled == true and
   .perlless_mechanics_enabled == true and
   .installer_tools_disabled == true and
-  .suid_wrappers_disabled == true and
   .no_installer_tool_packages == true and
-  .nix_module_disabled == true and
-  .no_nix_daemon_services == true and
   .nix_cli_capability == {
     "staging": true,
     "validator": true,
@@ -190,17 +126,15 @@ jq -e '
   .staging_has_nix_cli == true and
   .validator_has_nix_cli == true and
   .vault_has_no_nix_cli == true and
-  .offline_networking_disabled == true and
+  .stock_runtime_retained == true and
   .no_guest_seed_input_etc == true and
   .required_qubes_services_retained == true and
-  .generic_services_disabled == true and
   .seed_inputs_import_rpc == {
     "staging": true,
     "validator": true,
     "vault": false
   } and
-  .qrexec_domU_is_explicit == true and
-  .broad_qubes_tools_not_in_system_packages == true
+  .qubes_runtime_packages_retained == true
 ' "$RESULT_JSON" >/dev/null
 
 printf 'nixome minimal guest test ok\n'

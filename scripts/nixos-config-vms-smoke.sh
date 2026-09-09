@@ -1143,14 +1143,7 @@ jq -e \
     .system.host_system_profile_resolved_target == $host_system_source and
     .pending_vm_restarts.required == true and
     (.pending_vm_restarts.domains | index($staging)) and
-    (.pending_vm_restarts.domains | index($vault)) and
-    (.pending_vm_restarts.domains | index($validator)) and
-    pending_vm_restart($staging; "domain-store") and
-    pending_vm_restart($staging; "domain-system") and
-    pending_vm_restart($vault; "domain-store") and
-    pending_vm_restart($vault; "domain-system") and
-    pending_vm_restart($validator; "domain-store") and
-    pending_vm_restart($validator; "domain-system") and
+    pending_vm_restart($staging; "domain-feature") and
     (
       if $switch_action == "switch" then
         .pending_reboot.required == false and

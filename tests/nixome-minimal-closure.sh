@@ -83,24 +83,16 @@ for role in "${roles[@]}"; do
   assert_has "$role" '/nix/store/[[:alnum:]]+-qubes-core-qrexec-domU-' "qrexec domU runtime"
   assert_has "$role" '/nix/store/[[:alnum:]]+-qubes-core-qubesdb-client-' "QubesDB client"
   assert_has "$role" '/nix/store/[[:alnum:]]+-qubes-core-qubesdb-daemon-' "QubesDB daemon"
-  assert_has "$role" '/nix/store/[[:alnum:]]+-qubes-core-agent-linux-rw-runtime' "narrow /rw Qubes agent runtime"
-  assert_has "$role" '/nix/store/[[:alnum:]]+-qubes-vmm-xen-vchan-runtime' "narrow Xen vchan runtime"
-  assert_has "$role" '/nix/store/[[:alnum:]]+-systemd-minimal-' "systemd-minimal"
+  assert_has "$role" '/nix/store/[[:alnum:]]+-qubes-core-agent-linux-[0-9]' "upstream Qubes core agent package"
+  assert_has "$role" '/nix/store/[[:alnum:]]+-python[^/]*-qubes-core-qrexec' "upstream Python qrexec package"
+  assert_has "$role" '/nix/store/[[:alnum:]]+-systemd-[0-9]' "full systemd package"
   assert_has "$role" '/nix/store/[[:alnum:]]+-userborn-' "userborn passwd/group generator"
 
   assert_absent "$role" '/nix/store/[[:alnum:]]+-(source|nixpkgs|nixpkgs-libvirt)' "runtime source tree"
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-qubes-core-agent-linux-[0-9]' "full Qubes core agent package"
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-python[^/]*-qubes-core-qrexec' "Python qrexec package"
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-qubes-vmm-xen-[0-9]' "full Xen package"
   assert_absent "$role" '/nix/store/[[:alnum:]]+-openvswitch-' "Open vSwitch"
   assert_absent "$role" '/nix/store/[[:alnum:]]+-(gtk3|pygobject|librsvg)-' "GUI stack"
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-perl' "Perl runtime"
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-python[0-9]' "Python runtime"
   assert_absent "$role" '/nix/store/[[:alnum:]]+-nixos-(build-vms|enter|generate-config|install|option)' "NixOS installer/admin tooling"
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-(dhcpcd|openresolv|iptables|nftables)-' "generic networking stack"
   assert_absent "$role" '/nix/store/[[:alnum:]]+-(lvm2|dosfstools|bcache-tools|btrfs-progs|kexec-tools)-' "generic storage/admin tools"
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-systemd-[0-9]' "full systemd package"
-  assert_absent "$role" '/nix/store/[[:alnum:]]+-security-wrapper-' "SUID/capability security wrappers"
 done
 
 for role in config-staging config-validator; do

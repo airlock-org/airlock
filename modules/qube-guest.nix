@@ -13,7 +13,7 @@ let
   hasConfigValidatorRole = cfg.role == "config-validator";
   hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole;
   hasConfigNixRole = hasConfigStagingRole || hasConfigValidatorRole;
-  qubesAgentLinux = pkgs.qubes-core-agent-linux-rw-runtime;
+  qubesAgentLinux = pkgs.qubes-core-agent-linux;
   roleGit = pkgs.gitMinimal;
   systemdPackage = config.systemd.package;
   configSeedInputsPublicPath = "/etc/nixome/config-seed-inputs";
@@ -2001,7 +2001,7 @@ in
     };
 
     networking.hostName = lib.mkDefault "nixome-qube";
-    networking.useDHCP = lib.mkDefault false;
+    networking.useDHCP = lib.mkDefault true;
 
     users.mutableUsers = lib.mkDefault false;
     users.allowNoPasswordLogin = lib.mkDefault true;
@@ -2019,6 +2019,7 @@ in
     };
 
     systemd.tmpfiles.packages = [
+      qubesAgentLinux
       pkgs.qubes-linux-utils
     ];
 
@@ -2546,6 +2547,9 @@ in
 
     environment.systemPackages = [
       pkgs.qubes-core-qubesdb
+      qubesAgentLinux
+      pkgs.qubes-linux-utils
+      pkgs.python3.pkgs.qubes-core-qrexec
       pkgs.python3.pkgs.qubes-core-qrexec.domU
     ]
     ++ (rolePackages.${cfg.role} or [ ]);
