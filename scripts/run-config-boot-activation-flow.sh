@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/nixome-env.sh"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
+IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-image}"
+VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
+VM_IMAGE_LINK="$VM_DIR/${IMAGE_ATTR}-result"
+VM_IMAGE_PATH_LOG="$LOG_DIR/vm-config-boot-activate-image-path.txt"
 mkdir -p "$LOG_DIR"
 
 STAGE_JSON="$LOG_DIR/vm-config-boot-activate-stage.json"
@@ -58,10 +62,21 @@ fail() {
   exit 1
 }
 
+mkdir -p "$VM_DIR"
+
+# This flow proves a staged boot generation survives a VM poweroff/reboot. Both
+# phases must use the same base image result link; otherwise a later image
+# rebuild can make run-nested-vm.sh replace the writable overlay and discard the
+# staged profile before verification.
+printf 'config-boot-activate: resolve stable base VM image\n'
+"$ROOT/scripts/resolve-vm-image-result.sh" "$IMAGE_ATTR" "$VM_IMAGE_LINK" > "$VM_IMAGE_PATH_LOG"
+
 printf 'config-boot-activate: stage next dom0 boot generation\n'
 env \
   NIXOME_AUTO_GC_AFTER_RUN=0 \
-  NIXOME_VM_IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-image}" \
+  NIXOME_VM_IMAGE_ATTR="$IMAGE_ATTR" \
+  NIXOME_VM_DIR="$VM_DIR" \
+  NIXOME_VM_SKIP_BASE_BUILD=1 \
   NIXOME_VM_DISPLAY="${NIXOME_VM_DISPLAY:-none}" \
   NIXOME_VM_FRESH=1 \
   NIXOME_SHUTDOWN_VM_ON_SUCCESS=1 \
@@ -99,7 +114,9 @@ jq -e '
 printf 'config-boot-activate: boot staged dom0 generation\n'
 env \
   NIXOME_AUTO_GC_AFTER_RUN=1 \
-  NIXOME_VM_IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-image}" \
+  NIXOME_VM_IMAGE_ATTR="$IMAGE_ATTR" \
+  NIXOME_VM_DIR="$VM_DIR" \
+  NIXOME_VM_SKIP_BASE_BUILD=1 \
   NIXOME_VM_DISPLAY="${NIXOME_VM_DISPLAY:-none}" \
   NIXOME_VM_FRESH=0 \
   NIXOME_SHUTDOWN_VM_ON_SUCCESS=1 \
