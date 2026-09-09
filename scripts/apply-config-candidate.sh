@@ -36,6 +36,7 @@ CHECKOUT_LOG="$LOG_DIR/config-apply-git-checkout.log"
 SETUP_STDOUT="$LOG_DIR/config-apply-setup.stdout.log"
 SETUP_STDERR="$LOG_DIR/config-apply-setup.stderr.log"
 SETUP_JSON="$LOG_DIR/setup-config.json"
+SETUP_CONFIG_COMMAND="${NIXOME_SETUP_CONFIG_COMMAND:-nixome-setup-config}"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 SYSTEM_STATE_DIR="${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
 SYSTEM_ETC_DIR="${NIXOME_SYSTEM_ETC_DIR:-/etc/nixome}"
@@ -1680,7 +1681,6 @@ for cmd in \
   nix \
   nix-env \
   nixome-config-archive-candidate \
-  nixome-setup-config \
   qrexec-client \
   readlink \
   rm \
@@ -1689,6 +1689,7 @@ for cmd in \
   tar; do
   require_command "$cmd"
 done
+require_command "$SETUP_CONFIG_COMMAND"
 
 if ! [ -r "$XEN_CAPABILITIES" ] || ! grep -qw control_d "$XEN_CAPABILITIES"; then
   fail "host is not a Xen control domain"
@@ -1774,10 +1775,11 @@ resolve_template_sources "$topology" "$worktree" "$APPLY_TOPOLOGY_JSON"
 resolve_nix_domain_sources "$APPLY_TOPOLOGY_JSON" "$worktree" "$APPLY_TOPOLOGY_JSON"
 resolve_system_sources "$system_json" "$worktree" "$APPLY_SYSTEM_JSON"
 
-printf '+ env NIXOME_LOG_DIR=%q nixome-setup-config --apply --topology %q\n' \
+printf '+ env NIXOME_LOG_DIR=%q %q --apply --topology %q\n' \
   "$LOG_DIR" \
+  "$SETUP_CONFIG_COMMAND" \
   "$APPLY_TOPOLOGY_JSON"
-if env NIXOME_LOG_DIR="$LOG_DIR" nixome-setup-config --apply --topology "$APPLY_TOPOLOGY_JSON" \
+if env NIXOME_LOG_DIR="$LOG_DIR" "$SETUP_CONFIG_COMMAND" --apply --topology "$APPLY_TOPOLOGY_JSON" \
   > "$SETUP_STDOUT" 2> "$SETUP_STDERR"; then
   setup_rc=0
 else

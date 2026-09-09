@@ -344,7 +344,8 @@ config_vms_env_prefix() {
     NIXOME_CONFIG_STAGING_VM \
     NIXOME_CONFIG_VALIDATOR_VM \
     NIXOME_CONFIG_VAULT_VM \
-    NIXOME_NIX_DOMAIN_STORAGE_HELPER; do
+    NIXOME_NIX_DOMAIN_STORAGE_HELPER \
+    NIXOME_SETUP_CONFIG_COMMAND; do
     if [ -n "${!name+x}" ]; then
       prefix="$prefix $name=$(shell_quote "${!name}")"
     fi
@@ -402,7 +403,8 @@ nix_closure_env_prefix() {
     NIXOME_NIX_CLOSURE_QREXEC_TIMEOUT_SECONDS \
     NIXOME_NIX_CLOSURE_REBOOT_PROBE \
     NIXOME_NIX_CLOSURE_WAIT_SECONDS \
-    NIXOME_QUBE_USER; do
+    NIXOME_QUBE_USER \
+    NIXOME_SETUP_CONFIG_COMMAND; do
     if [ -n "${!name+x}" ]; then
       prefix="$prefix $name=$(shell_quote "${!name}")"
     fi
@@ -456,7 +458,8 @@ sync_dom0_tools() {
     exit 1
   fi
 
-  SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"
+  NIXOME_SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"
+  SETUP_CONFIG_COMMAND="$NIXOME_SETUP_CONFIG_COMMAND"
   SETUP_CONFIG_TOPOLOGY="$REMOTE_WARM_TOPOLOGY_PATH"
   NIXOME_NIX_DOMAIN_STORAGE_HELPER="$REMOTE_WARM_BIN_DIR/nixome-nix-domain-storage"
   CONFIG_SEED_INPUTS_IMPORT_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-config-seed-inputs-import"
@@ -524,7 +527,11 @@ prepare_warm_sync_boot_unit() {
   esac
 
   copy_boot_setup_config_artifacts || true
-  remote 'sudo -n systemctl stop nixome-setup-config.service >/dev/null 2>&1 || true; sudo -n systemctl reset-failed nixome-setup-config.service >/dev/null 2>&1 || true'
+  # In warm-sync mode, setup-config is run explicitly from the synced tool path.
+  # Keep the boot oneshot in its active/exited state so later system switches do
+  # not start it again and reapply the boot image topology over the candidate
+  # topology that config-apply just applied.
+  remote 'sudo -n systemctl reset-failed nixome-setup-config.service >/dev/null 2>&1 || true'
   printf '{"schema":"nixome.setup-config.v1","status":"skipped","reason":"warm tool sync uses explicit setup-config"}\n' > "$SETUP_CONFIG_BOOT_JSON"
   printf '# warm tool sync uses explicit setup-config\n' > "$SETUP_CONFIG_BOOT_COMMANDS_LOG"
 }

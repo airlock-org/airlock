@@ -88,6 +88,7 @@ CONFIG_VM_TEST_MAXMEM="${NIXOME_NIX_CLOSURE_CONFIG_VM_MAXMEM:-512}"
 VALIDATOR_TEST_MEMORY="${NIXOME_NIX_CLOSURE_VALIDATOR_MEMORY:-1024}"
 VALIDATOR_TEST_MAXMEM="${NIXOME_NIX_CLOSURE_VALIDATOR_MAXMEM:-1024}"
 CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-0}"
+SETUP_CONFIG_COMMAND="${NIXOME_SETUP_CONFIG_COMMAND:-nixome-setup-config}"
 
 result_written=0
 root_source=""
@@ -1369,7 +1370,6 @@ for cmd in \
   journalctl \
   nixome-closure-store \
   nixome-nix-domain-storage \
-  nixome-setup-config \
   qrexec-client \
   qvm-check \
   qvm-features \
@@ -1389,6 +1389,7 @@ for cmd in \
   virsh; do
   require_command "$cmd"
 done
+require_command "$SETUP_CONFIG_COMMAND"
 
 case "$DOMAIN" in
   ""|*[!A-Za-z0-9_.-]*)
@@ -1578,7 +1579,7 @@ EOF
     write_direct_topology "$DIRECT_TOPOLOGY_LOG" "$DIRECT_PRIMARY_SOURCE_VM" "$DIRECT_PEER_SOURCE_VM"
     run_or_fail "apply direct nix-closure topology" "$APPLY_LOG" \
       env NIXOME_LOG_DIR="$LOG_DIR" \
-      nixome-setup-config --apply --topology "$DIRECT_TOPOLOGY_LOG"
+      "$SETUP_CONFIG_COMMAND" --apply --topology "$DIRECT_TOPOLOGY_LOG"
     cat "$LOG_DIR/setup-config.json" > "$SETUP_LOG" 2>/dev/null || true
     write_direct_apply_result "direct nix-closure topology setup" "$DIRECT_TOPOLOGY_LOG" "$APPLY_RESULT_JSON"
     ;;
@@ -1727,7 +1728,7 @@ EOF
     write_direct_topology "$DIRECT_GEN2_TOPOLOGY_LOG" "$DIRECT_GEN2_SOURCE_VM" "$DIRECT_PEER_SOURCE_VM"
     run_or_fail "apply direct second nix-closure generation" "$GEN2_APPLY_LOG" \
       env NIXOME_LOG_DIR="$LOG_DIR" \
-      nixome-setup-config --apply --topology "$DIRECT_GEN2_TOPOLOGY_LOG"
+      "$SETUP_CONFIG_COMMAND" --apply --topology "$DIRECT_GEN2_TOPOLOGY_LOG"
     cat "$LOG_DIR/setup-config.json" > "$SETUP_LOG" 2>/dev/null || true
     write_direct_apply_result \
       "direct second nix-closure topology setup" \

@@ -68,7 +68,8 @@ grep -F 'affected domain did not halt' "$ROOT/scripts/run-nested-gui-smoke.sh" >
 grep -F 'CONFIG_VMS_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-config-vms-smoke"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'SETUP_CONFIG_TOPOLOGY="$REMOTE_WARM_TOPOLOGY_PATH"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_NIX_DOMAIN_STORAGE_HELPER="$REMOTE_WARM_BIN_DIR/nixome-nix-domain-storage"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
-grep -F 'NIXOME_NIX_DOMAIN_STORAGE_HELPER;' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_NIX_DOMAIN_STORAGE_HELPER \' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_SETUP_CONFIG_COMMAND;' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_CONFIG_SEED_INPUTS_SOURCE="$REMOTE_WARM_SEED_INPUTS_PATH"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'NIXOME_CONFIG_SEED_INPUTS_SOURCE \' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F -- '--topology $(shell_quote "$SETUP_CONFIG_TOPOLOGY")' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
@@ -80,8 +81,13 @@ grep -F 'NIXOME_VM_SKIP_BASE_BUILD' "$ROOT/tests/test_vm.py" >/dev/null
 grep -F 'sync-nested-dom0-tools.sh' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'prepare_warm_sync_boot_unit' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'warm tool sync uses explicit setup-config' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'Keep the boot oneshot in its active/exited state' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+! grep -F 'systemctl stop nixome-setup-config.service' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'vm-gui-sync-dom0-tools.json' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
-grep -F 'SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
+grep -F 'NIXOME_SETUP_CONFIG_COMMAND' "$ROOT/scripts/apply-config-candidate.sh" >/dev/null
+grep -F 'NIXOME_SETUP_CONFIG_COMMAND' "$ROOT/scripts/nix-closure-domain-smoke.sh" >/dev/null
+grep -F 'NIXOME_SKIP_GC_AUTO' "$ROOT/tests/test_vm.py" >/dev/null
 grep -F 'NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"' "$ROOT/scripts/run-nested-gui-smoke.sh" >/dev/null
 grep -F 'nix-store --export' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null
 grep -F 'sudo -n nix-store --import' "$ROOT/scripts/sync-nested-dom0-tools.sh" >/dev/null

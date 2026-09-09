@@ -95,6 +95,10 @@ def vm_parallel_enabled() -> bool:
     return lanes not in {"", "0", "1"}
 
 
+def vm_flow_has_mark(vm_flow: VmFlow, mark_name: str) -> bool:
+    return any(mark.mark.name == mark_name for mark in vm_flow.marks)
+
+
 def seed_lane_image_result_link(
     vm_dir: Path,
     shared_image_attr: str,
@@ -239,6 +243,11 @@ def test_vm_flow(
         "NIXOME_LOG_DIR": str(flow_log_dir),
         "NIXOME_VM_PARALLEL_LANES": os.environ.get("NIXOME_VM_PARALLEL_LANES", "1"),
     }
+    if vm_flow_has_mark(vm_flow, "warm"):
+        # Warm flows intentionally keep the nested VM alive between test steps.
+        # The guarded Nixome GC must not run in the middle of that sequence.
+        env["NIXOME_SKIP_GC_AUTO"] = "1"
+        lane_env["NIXOME_SKIP_GC_AUTO"] = "1"
     if parallel_enabled:
         # VM lanes isolate mutable VM state, result links, logs, and SSH ports.
         # They intentionally share the configured Nix store/cache so expensive
