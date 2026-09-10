@@ -475,8 +475,19 @@ def check_setup_config_runtime_path(repo_root: Path, log_dir: Path) -> None:
     wrapper_text = wrapper.read_text(encoding="utf-8")
     match = re.search(r'^export PATH="(.*):\$PATH"$', wrapper_text, re.MULTILINE)
     assert match is not None, f"could not extract runtime PATH from {wrapper}"
+    qubesadmin_python_match = re.search(
+        r"^export NIXOME_QUBESADMIN_PYTHON=\$\{NIXOME_QUBESADMIN_PYTHON:-([^}]+)\}$",
+        wrapper_text,
+        re.MULTILINE,
+    )
+    assert (
+        qubesadmin_python_match is not None
+    ), f"could not extract NIXOME_QUBESADMIN_PYTHON from {wrapper}"
 
     path_value = _physical_path_list(repo_root, match.group(1))
+    qubesadmin_python = _physical_store_path(
+        repo_root, qubesadmin_python_match.group(1)
+    )
     required = [
         "awk",
         "chmod",
@@ -517,6 +528,7 @@ def check_setup_config_runtime_path(repo_root: Path, log_dir: Path) -> None:
     assert not missing, "setup-config runtime PATH is missing helper(s): " + ", ".join(
         missing
     )
+    _run([qubesadmin_python, "-c", "import qubesadmin"], cwd=repo_root)
 
 
 def _write_flake(path: Path, text: str) -> None:
@@ -3489,10 +3501,21 @@ def check_setup_config_auto_sys_net_pci(repo_root: Path, log_dir: Path) -> None:
     policy_dir = work_dir / "policy.d"
     capabilities = work_dir / "xen-capabilities"
     topology = work_dir / "topology.json"
+    qubesadmin_python = work_dir / "qubesadmin-python"
+    qubesadmin_python_log = work_dir / "qubesadmin-python.log"
     shutil.rmtree(work_dir, ignore_errors=True)
     for path in (setup_log_dir, policy_dir):
         path.mkdir(parents=True)
     capabilities.write_text("control_d\n", encoding="utf-8")
+    qubesadmin_python_log.write_text("", encoding="utf-8")
+    _write_executable(
+        qubesadmin_python,
+        """
+        #!/usr/bin/env bash
+        cat >> "$QUBESADMIN_PYTHON_LOG"
+        printf '00_03.0\n00_04.0\n'
+        """,
+    )
     topology.write_text(
         json.dumps(
             {
@@ -3568,8 +3591,9 @@ def check_setup_config_auto_sys_net_pci(repo_root: Path, log_dir: Path) -> None:
     env.update(
         {
             "PATH": f"{bin_dir}:{env['PATH']}",
-            "NIXOME_DOM0_NETWORK_PCI_DEVICES": "00_03.0 00_04.0",
             "NIXOME_DOM0_DEFAULT_ROUTE_PCI_DEVICES": "00_03.0",
+            "NIXOME_QUBESADMIN_PYTHON": str(qubesadmin_python),
+            "QUBESADMIN_PYTHON_LOG": str(qubesadmin_python_log),
             "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
             "NIXOME_XEN_CAPABILITIES": str(capabilities),
             "NIXOME_LOG_DIR": str(setup_log_dir),
@@ -3614,6 +3638,8 @@ def check_setup_config_auto_sys_net_pci(repo_root: Path, log_dir: Path) -> None:
         in command_lines
     )
     assert not any("dom0:00_03.0" in line for line in command_lines)
+    qubesadmin_script = qubesadmin_python_log.read_text(encoding="utf-8")
+    assert qubesadmin_script.count("import qubesadmin") == 2
 
 
 def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:

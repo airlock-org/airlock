@@ -24,6 +24,7 @@ MANAGED_POLICY_FILE="${NIXOME_QUBES_MANAGED_POLICY_FILE:-90-nixome.policy}"
 MANAGED_POLICY_PATH="$POLICY_DIR/$MANAGED_POLICY_FILE"
 RENDERED_POLICY="$LOG_DIR/$MANAGED_POLICY_FILE.rendered"
 NIX_DOMAIN_STORAGE_HELPER="${NIXOME_NIX_DOMAIN_STORAGE_HELPER:-nixome-nix-domain-storage}"
+QUBESADMIN_PYTHON="${NIXOME_QUBESADMIN_PYTHON:-python3}"
 result_written=0
 
 nixome_store_uses_chroot() {
@@ -318,6 +319,14 @@ fail() {
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     fail "missing command: $1"
+  fi
+}
+
+require_qubesadmin_python() {
+  if ! "$QUBESADMIN_PYTHON" - <<'PY' >/dev/null 2>&1; then
+import qubesadmin
+PY
+    fail "qubesadmin import unavailable in NIXOME_QUBESADMIN_PYTHON: $QUBESADMIN_PYTHON"
   fi
 }
 
@@ -655,7 +664,7 @@ list_dom0_network_pci_devices() {
     return 0
   fi
 
-  python3 - <<'PY'
+  "$QUBESADMIN_PYTHON" - <<'PY'
 import qubesadmin
 
 app = qubesadmin.Qubes()
@@ -1757,6 +1766,9 @@ if topology_has_auto_sys_net_pci; then
   require_command mktemp
   require_command qvm-device
   require_command readlink
+  if [ -z "${NIXOME_DOM0_NETWORK_PCI_DEVICES:-}" ]; then
+    require_qubesadmin_python
+  fi
 fi
 
 if ! [ -r "$XEN_CAPABILITIES" ] || ! grep -qw control_d "$XEN_CAPABILITIES"; then
