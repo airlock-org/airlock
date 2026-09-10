@@ -248,6 +248,7 @@ in
       path = [
         pkgs.erofs-utils
         pkgs.lvm2
+        pkgs.sudo
         pkgs.util-linux
       ];
     };

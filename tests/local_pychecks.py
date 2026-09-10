@@ -9259,6 +9259,9 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                   service_stdout =
                     dom0.systemd.services."nixome-dom0-updates-proxy@".serviceConfig.StandardOutput;
                   service_after = dom0.systemd.services."nixome-dom0-updates-proxy@".after;
+                  qubesd_path_names = map
+                    (package: package.pname or package.name or "")
+                    dom0.systemd.services.qubesd.path;
                   session_proxy = {{
                     http_proxy = dom0.environment.sessionVariables.http_proxy or null;
                     https_proxy = dom0.environment.sessionVariables.https_proxy or null;
@@ -9325,6 +9328,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert proxy_eval["service_stdout"] == "inherit"
     assert "nixome-start-network-providers.service" in proxy_eval["service_after"]
     assert "qubes-qrexec-policy-daemon.service" in proxy_eval["service_after"]
+    assert "sudo" in proxy_eval["qubesd_path_names"]
     expected_proxy = "http://127.0.0.1:8082"
     assert proxy_eval["session_proxy"] == {
         "http_proxy": expected_proxy,
