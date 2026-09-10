@@ -23,6 +23,7 @@ from local_pychecks import (
     check_qube_guest_policy_probe,
     check_run_nested_gui_smoke_static,
     check_setup_config_empty_global_pref,
+    check_setup_config_pref_order,
     check_setup_config_runtime_path,
     check_setup_config_static,
     check_system_schema,
@@ -269,7 +270,7 @@ LOCAL_CHECKS = (
         "setup-config-restart-actions",
         ("{root}/tests/setup-config-restart-actions.sh",),
     ),
-    LocalCheck("setup-config-pref-order", ("{root}/tests/setup-config-pref-order.sh",)),
+    LocalCheck("setup-config-pref-order", runner=check_setup_config_pref_order),
     LocalCheck(
         "setup-config-empty-global-pref",
         runner=check_setup_config_empty_global_pref,

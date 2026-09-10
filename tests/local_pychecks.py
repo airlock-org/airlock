@@ -3040,3 +3040,148 @@ def check_setup_config_empty_global_pref(repo_root: Path, log_dir: Path) -> None
         "qubes-prefs <default_kernel> <>"
         in mutation_log.read_text(encoding="utf-8").splitlines()
     )
+
+
+def check_setup_config_pref_order(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    setup_log_dir = work_dir / "logs"
+    policy_dir = work_dir / "policy.d"
+    state_dir = work_dir / "state"
+    capabilities = work_dir / "xen-capabilities"
+    mutation_log = work_dir / "mutations.log"
+    memory_marker = work_dir / "memory-set"
+    topology = work_dir / "topology.json"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (setup_log_dir, policy_dir, state_dir):
+        path.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+    mutation_log.write_text("", encoding="utf-8")
+    topology.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.qubes-topology.v1",
+                "templates": {},
+                "kernels": {},
+                "domains": {
+                    "config-staging": {
+                        "class": "AppVM",
+                        "template": "fedora-44-xfce",
+                        "label": "gray",
+                        "netvm": None,
+                        "prefs": {
+                            "autostart": False,
+                            "maxmem": 4096,
+                            "memory": 2048,
+                            "vcpus": 2,
+                        },
+                        "features": {},
+                        "services": {},
+                    }
+                },
+                "prefs": {},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    commands = {
+        "qvm-ls": """
+        #!/usr/bin/env bash
+        case "$*" in
+          *NAME,STATE*)
+            printf 'dom0|Running\nconfig-staging|Halted\n'
+            ;;
+          *)
+            printf 'dom0\nconfig-staging\n'
+            ;;
+        esac
+        """,
+        "qvm-prefs": """
+        #!/usr/bin/env bash
+        if [ "$#" -eq 2 ]; then
+          case "$1:$2" in
+            config-staging:label) printf 'gray\n' ;;
+            config-staging:netvm) printf 'none\n' ;;
+            config-staging:autostart) printf 'True\n' ;;
+            config-staging:memory) printf '400\n' ;;
+            config-staging:maxmem) printf '4000\n' ;;
+            config-staging:vcpus) printf '1\n' ;;
+            *) exit 1 ;;
+          esac
+          exit 0
+        fi
+        if [ "$#" -eq 3 ] && [ "$1" = "config-staging" ]; then
+          if [ "$2" = "maxmem" ] && [ ! -e "$MEMORY_SET_MARKER" ]; then
+            printf 'maxmem was set before memory\n' >&2
+            exit 42
+          fi
+          if [ "$2" = "memory" ]; then
+            : > "$MEMORY_SET_MARKER"
+          fi
+          printf 'qvm-prefs %s\n' "$*" >> "$MUTATION_LOG"
+          exit 0
+        fi
+        exit 1
+        """,
+        "systemctl": """
+        #!/usr/bin/env bash
+        case "$1" in
+          is-active|reload|try-restart)
+            exit 0
+            ;;
+        esac
+        exit 1
+        """,
+    }
+    for name in (
+        "qubes-prefs",
+        "qvm-create",
+        "qvm-features",
+        "qvm-service",
+        "qvm-template-postprocess",
+        "qvm-volume",
+        "qubesd-query",
+    ):
+        commands[name] = "#!/usr/bin/env bash\nexit 0\n"
+    _setup_fake_command_dir(bin_dir, commands)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "MEMORY_SET_MARKER": str(memory_marker),
+            "MUTATION_LOG": str(mutation_log),
+            "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
+            "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
+            "NIXOME_XEN_CAPABILITIES": str(capabilities),
+            "NIXOME_LOG_DIR": str(setup_log_dir),
+        }
+    )
+    _run(
+        [
+            "bash",
+            str(repo_root / "scripts/setup-config.sh"),
+            "--apply",
+            "--topology",
+            str(topology),
+        ],
+        cwd=repo_root,
+        env=env,
+        stdout=setup_log_dir / "stdout.log",
+        stderr=setup_log_dir / "stderr.log",
+    )
+    command_lines = (
+        (setup_log_dir / "setup-config.commands.log")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    assert command_lines.index("+ qvm-prefs config-staging memory 2048") < (
+        command_lines.index("+ qvm-prefs config-staging maxmem 4096")
+    )
+    result = json.loads(
+        (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
+    )
+    assert result["schema"] == "nixome.setup-config.v1"
+    assert result["status"] == "passed"
+    assert result["prefs_changed"] == 4
