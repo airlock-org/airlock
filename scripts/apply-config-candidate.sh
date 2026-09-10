@@ -739,7 +739,15 @@ validate_domain_references() {
           ref("template"; $domain; "template"; ($domain_cfg.template // $domain_cfg.backend.template))
         else
           empty
-        end
+        end,
+        ($domain_cfg.devices.pci // [] | to_entries[] |
+          ref(
+            "device-backend";
+            $domain;
+            ("devices.pci[" + (.key | tostring) + "].backend");
+            .value.backend
+          )
+        )
       ),
       (.prefs // {} | to_entries[] |
         select(.key == "clockvm"
@@ -1562,6 +1570,7 @@ resolve_nix_domain_sources() {
             prefs: (.value.prefs // {}),
             features: (.value.features // {}),
             services: (.value.services // {}),
+            devices: (.value.devices // {}),
             system: .value.backend.system,
             kernel: .value.backend.kernel,
             initrd: .value.backend.initrd,

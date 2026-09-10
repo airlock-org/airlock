@@ -657,6 +657,7 @@ let
       prefs ? { },
       features ? { },
       services ? { },
+      devices ? { },
       state ? { },
       rootImageSizeMiB ? 512,
       storeDevice ? "/dev/xvde",
@@ -730,7 +731,7 @@ let
         qrexec = "1";
       };
       domain = {
-        inherit label netvm services;
+        inherit label netvm services devices;
         class = "StandaloneVM";
         template = null;
         prefs = defaultPrefs // prefs;

@@ -12,6 +12,7 @@ let
   hasConfigStagingRole = cfg.role == "config-staging";
   hasConfigValidatorRole = cfg.role == "config-validator";
   hasDevRole = cfg.role == "dev";
+  hasSysNetRole = cfg.role == "sys-net";
   hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole;
   hasPrivateNixRole = hasConfigStagingRole || hasConfigValidatorRole || hasDevRole;
   hasSeedInputsImportRole = hasConfigStagingRole || hasConfigValidatorRole;
@@ -47,6 +48,66 @@ let
     pkgs.util-linux
   ];
 
+  networkGuestPath =
+    qubesGuestPath
+    ++ [
+      pkgs.conntrack-tools
+      pkgs.iproute2
+      pkgs.iptables
+      pkgs.networkmanager
+      pkgs.nftables
+      pkgs.procps
+    ];
+
+  qubesIptablesStart = pkgs.writeShellScript "nixome-qubes-iptables-start" ''
+    set -eu
+
+    apply_rules() {
+      family="$1"
+      rules="${qubesAgentLinux}/etc/qubes/qubes-$family.nft"
+
+      if [ "$family" = ipv6 ] &&
+        ! qubesdb-read /qubes-ip6 >/dev/null 2>&1 &&
+        ! qubesdb-read /qubes-netvm-gateway6 >/dev/null 2>&1; then
+        rules="${qubesAgentLinux}/etc/qubes/qubes-ipv6-disabled.nft"
+      fi
+
+      [ -f "$rules" ] || return 6
+      nft -f "$rules"
+    }
+
+    apply_rules ipv4
+    apply_rules ipv6
+  '';
+
+  qubesNetworkManagerHook = pkgs.writeShellScript "nixome-qubes-nmhook" ''
+    export PATH=${lib.escapeShellArg (lib.makeBinPath networkGuestPath)}:$PATH
+
+    case "''${2:-}" in
+      up|vpn-up|vpn-down|dhcp4-change)
+        ${qubesAgentLinux}/lib/qubes/qubes-setup-dnat-to-ns
+        rc="$?"
+        if [ "$rc" -ne 100 ]; then
+          systemctl --no-block try-restart qubes-updates-proxy.service
+        fi
+        ;;
+    esac
+
+    exit 0
+  '';
+
+  qubesExternalIpHook = pkgs.writeShellScript "nixome-qubes-external-ip" ''
+    case "''${2:-}" in
+      up)
+        inet="$(${pkgs.iproute2}/bin/ip addr show dev "$1" | ${pkgs.gnugrep}/bin/grep inet || true)"
+        ${pkgs.qubes-core-qubesdb}/bin/qubesdb-write /qubes-netvm-external-ip "$inet"
+        ;;
+      down)
+        ${pkgs.qubes-core-qubesdb}/bin/qubesdb-write /qubes-netvm-external-ip ""
+        ;;
+    esac
+  '';
+
   roleInitPathFor =
     role:
     lib.makeBinPath (
@@ -67,6 +128,14 @@ let
 
   rolePackages = {
     base = [ ];
+    sys-net = [
+      pkgs.conntrack-tools
+      pkgs.iproute2
+      pkgs.iptables
+      pkgs.networkmanager
+      pkgs.nftables
+      pkgs.procps
+    ];
     config-vault = [
       configVaultInit
       configVaultArchiveCandidate
@@ -2057,6 +2126,7 @@ in
         "config-staging"
         "config-validator"
         "dev"
+        "sys-net"
       ];
       default = "base";
       description = "Nixome role-specific userspace to place in the guest domain.";
@@ -2181,7 +2251,19 @@ in
     };
 
     networking.hostName = lib.mkDefault "nixome-qube";
-    networking.useDHCP = lib.mkDefault true;
+    networking.useDHCP = lib.mkDefault (!hasSysNetRole);
+    networking.firewall.enable = lib.mkIf hasSysNetRole false;
+    networking.networkmanager.enable = lib.mkIf hasSysNetRole true;
+    networking.networkmanager.settings = lib.mkIf hasSysNetRole {
+      main.dns = "default";
+      keyfile."unmanaged-devices" = "mac:fe:ff:ff:ff:ff:ff";
+      device."wifi.scan-rand-mac-address" = "yes";
+      connection = {
+        "wifi.cloned-mac-address" = "stable";
+        "connection.stable-id" = "\${CONNECTION}/\${BOOT}";
+        "ipv6.ip6-privacy" = "2";
+      };
+    };
 
     users.mutableUsers = lib.mkDefault false;
     users.allowNoPasswordLogin = lib.mkDefault true;
@@ -2549,6 +2631,133 @@ in
       };
     };
 
+    systemd.services.nixome-sys-net-networkmanager-state = lib.mkIf hasSysNetRole {
+      description = "Prepare persistent NetworkManager state for sys-net";
+      wants = [ "nixome-qubes-rw-init.service" ];
+      requires = [ "nixome-qubes-rw-init.service" ];
+      after = [ "nixome-qubes-rw-init.service" ];
+      before = [ "NetworkManager.service" ];
+      path = [
+        pkgs.coreutils
+      ];
+      script = ''
+        set -eu
+
+        target=/rw/config/NM-system-connections
+        link=/etc/NetworkManager/system-connections
+
+        install -d -m 0700 "$target"
+        install -d -m 0755 /etc/NetworkManager
+
+        if [ -d "$link" ] && [ ! -L "$link" ]; then
+          for entry in "$link"/*; do
+            [ -e "$entry" ] || continue
+            mv -n "$entry" "$target"/
+          done
+          rmdir "$link" 2>/dev/null || rm -rf "$link"
+        elif [ -e "$link" ] && [ ! -L "$link" ]; then
+          rm -rf "$link"
+        fi
+
+        ln -sfn "$target" "$link"
+        chmod 0700 "$target"
+      '';
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+    };
+
+    systemd.services.NetworkManager = lib.mkIf hasSysNetRole {
+      wants = [
+        "nixome-sys-net-networkmanager-state.service"
+        "qubes-sysinit.service"
+      ];
+      requires = [ "nixome-sys-net-networkmanager-state.service" ];
+      after = [
+        "nixome-sys-net-networkmanager-state.service"
+        "qubes-sysinit.service"
+      ];
+      unitConfig.ConditionPathExists = "/run/qubes-service/network-manager";
+    };
+
+    systemd.services.qubes-antispoof = lib.mkIf hasSysNetRole {
+      description = "Qubes anti-spoofing firewall rules";
+      before = [ "network-pre.target" ];
+      requiredBy = [ "network-pre.target" ];
+      path = [ pkgs.nftables ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${pkgs.nftables}/bin/nft -f ${qubesAgentLinux}/etc/qubes/qubes-antispoof.nft";
+      };
+    };
+
+    systemd.services.qubes-iptables = lib.mkIf hasSysNetRole {
+      description = "Qubes base firewall settings";
+      requires = [ "qubes-antispoof.service" ];
+      after = [ "qubes-antispoof.service" ];
+      before = [ "network-pre.target" ];
+      requiredBy = [ "network-pre.target" ];
+      path = networkGuestPath;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${qubesIptablesStart}";
+      };
+    };
+
+    systemd.services.qubes-network = lib.mkIf hasSysNetRole {
+      description = "Qubes network forwarding setup";
+      wantedBy = [ "multi-user.target" ];
+      wants = [
+        "qubes-iptables.service"
+        "qubes-sysinit.service"
+      ];
+      requires = [ "qubes-iptables.service" ];
+      after = [
+        "network-pre.target"
+        "qubes-iptables.service"
+        "qubes-sysinit.service"
+      ];
+      before = [ "network.target" ];
+      path = networkGuestPath;
+      unitConfig.ConditionPathExists = "/run/qubes-service/qubes-network";
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${qubesAgentLinux}/lib/qubes/init/network-proxy-setup.sh";
+        ExecStop = "${qubesAgentLinux}/lib/qubes/init/network-proxy-stop.sh";
+      };
+    };
+
+    systemd.services.qubes-firewall = lib.mkIf hasSysNetRole {
+      description = "Qubes firewall updater";
+      wantedBy = [ "multi-user.target" ];
+      wants = [ "qubes-iptables.service" ];
+      after = [ "qubes-iptables.service" ];
+      before = [ "qubes-network.service" ];
+      path = networkGuestPath;
+      unitConfig.ConditionPathExists = "/run/qubes-service/qubes-firewall";
+      serviceConfig = {
+        Type = "notify-reload";
+        ExecStart = "${qubesAgentLinux}/bin/qubes-firewall";
+      };
+    };
+
+    systemd.services.qubes-network-uplink = lib.mkIf hasSysNetRole {
+      description = "Qubes network uplink wait";
+      wantedBy = [ "multi-user.target" ];
+      wants = [ "network.target" ];
+      before = [ "network.target" ];
+      path = networkGuestPath;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${qubesAgentLinux}/lib/qubes/init/network-uplink-wait.sh";
+      };
+    };
+
     systemd.services.qubes-db = {
       enable = true;
       wantedBy = [ "sysinit.target" ];
@@ -2585,6 +2794,41 @@ in
       enable = true;
       wantedBy = [ "multi-user.target" ];
       before = [ "systemd-user-sessions.service" ];
+    };
+
+    environment.etc."NetworkManager/dispatcher.d/qubes-nmhook" = lib.mkIf hasSysNetRole {
+      source = qubesNetworkManagerHook;
+      mode = "0555";
+    };
+
+    environment.etc."NetworkManager/dispatcher.d/30-qubes-external-ip" = lib.mkIf hasSysNetRole {
+      source = qubesExternalIpHook;
+      mode = "0555";
+    };
+
+    environment.etc."systemd/network/80-qubes-vif.link" = lib.mkIf hasSysNetRole {
+      source = "${qubesAgentLinux}/lib/systemd/network/80-qubes-vif.link";
+      mode = "0444";
+    };
+
+    environment.etc."qubes/qubes-antispoof.nft" = lib.mkIf hasSysNetRole {
+      source = "${qubesAgentLinux}/etc/qubes/qubes-antispoof.nft";
+      mode = "0444";
+    };
+
+    environment.etc."qubes/qubes-ipv4.nft" = lib.mkIf hasSysNetRole {
+      source = "${qubesAgentLinux}/etc/qubes/qubes-ipv4.nft";
+      mode = "0444";
+    };
+
+    environment.etc."qubes/qubes-ipv6.nft" = lib.mkIf hasSysNetRole {
+      source = "${qubesAgentLinux}/etc/qubes/qubes-ipv6.nft";
+      mode = "0444";
+    };
+
+    environment.etc."qubes/qubes-ipv6-disabled.nft" = lib.mkIf hasSysNetRole {
+      source = "${qubesAgentLinux}/etc/qubes/qubes-ipv6-disabled.nft";
+      mode = "0444";
     };
 
     environment.etc."qubes-rpc/nixome.Config.CandidateExport" = lib.mkIf hasConfigStagingRole {

@@ -320,7 +320,15 @@ validate_domain_references() {
           ref("template"; $domain; "template"; ($domain_cfg.template // $domain_cfg.backend.template))
         else
           empty
-        end
+        end,
+        ($domain_cfg.devices.pci // [] | to_entries[] |
+          ref(
+            "device-backend";
+            $domain;
+            ("devices.pci[" + (.key | tostring) + "].backend");
+            .value.backend
+          )
+        )
       ),
       (.prefs // {} | to_entries[] |
         select(.key == "clockvm"

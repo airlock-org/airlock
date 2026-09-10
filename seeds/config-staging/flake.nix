@@ -117,6 +117,7 @@
         checkNixNativeKeys path [
           "additionalRootSpace"
           "configuration"
+          "devices"
           "etc"
           "features"
           "hostName"
@@ -142,11 +143,12 @@
           builtins.elem role [
             "base"
             "dev"
+            "sys-net"
           ]
         then
           role
         else
-          throw "nixome.nixNative.${path}.role: expected one of base, dev";
+          throw "nixome.nixNative.${path}.role: expected one of base, dev, sys-net";
       checkedNixNative =
         let
           checked = checkNixNativeKeys "" [ "domains" ] (
@@ -349,6 +351,7 @@
           prefs = definition.prefs or { };
           features = definition.features or { };
           services = definition.services or { };
+          devices = definition.devices or { };
           state = definition.state or { };
         };
       userNixNativeDomainEntries = builtins.mapAttrs mkNixNativeEntry checkedNixNative.domains;

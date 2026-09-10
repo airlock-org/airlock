@@ -34,6 +34,15 @@
   #   role = "base";
   #   label = "green";
   #   netvm = null;
+  #   devices.pci = [
+  #     {
+  #       backend = "dom0";
+  #       id = "00_14.0";
+  #       match = "port";
+  #       mode = "required";
+  #       options.no-strict-reset = true;
+  #     }
+  #   ];
   #   packages = with pkgs; [
   #     git
   #     jq
@@ -43,6 +52,35 @@
   #   };
   # };
   nixNative.domains = {
+    sys-net = {
+      role = "sys-net";
+      label = "red";
+      netvm = null;
+      rootImageSizeMiB = 512;
+      prefs = {
+        autostart = false;
+        include_in_backups = true;
+        memory = 768;
+        maxmem = 1024;
+        provides_network = true;
+        vcpus = 2;
+      };
+      features = {
+        "nixome-role" = "sys-net";
+        "nixome-network-provider" = "sys-net";
+      };
+      services = {
+        "network-manager" = true;
+        "qubes-firewall" = true;
+        "qubes-network" = true;
+      };
+      devices.pci = [
+        # Fill this with the NIC PCI ID from dom0, for example:
+        # { id = "00_14.0"; match = "port"; mode = "required"; options.no-strict-reset = true; }
+      ];
+      state.persistentSize = 2147483648;
+    };
+
     dev = {
       role = "dev";
       label = "green";

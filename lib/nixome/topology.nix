@@ -30,6 +30,18 @@ let
     "deny"
   ];
 
+  deviceAssignmentModes = [
+    "auto-attach"
+    "ask-to-attach"
+    "required"
+  ];
+
+  deviceMatchModes = [
+    "port-and-device"
+    "port"
+    "device"
+  ];
+
   reservedQrexecServices = [
     "nixome.Config.CandidateExport"
     "nixome.Config.ValidateCandidate"
@@ -283,6 +295,61 @@ let
       in
       expectBool "${path}.${checkedName}" service
     ) (expectAttrs path value);
+
+  normalizeDeviceOptionValue =
+    path: value:
+    if typeOf value == "string" then
+      value
+    else if typeOf value == "bool" then
+      if value then "True" else "False"
+    else if typeOf value == "int" then
+      toString value
+    else
+      fail path "expected a boolean, integer, or string, got ${typeOf value}";
+
+  normalizeDeviceOptions =
+    path: value:
+    mapAttrs (
+      name: option:
+      let
+        checkedName = expectLooseName "device option" "${path}.${name}" name;
+      in
+      normalizeDeviceOptionValue "${path}.${checkedName}" option
+    ) (expectAttrs path value);
+
+  normalizePciDevice =
+    domainName: index: value:
+    let
+      path = "domains.${domainName}.devices.pci.${toString index}";
+      device = expectOptions path [
+        "backend"
+        "id"
+        "match"
+        "mode"
+        "options"
+      ] value;
+    in
+    {
+      backend = expectQubesName "domain" "${path}.backend" (get device "backend" "dom0");
+      id = expectLooseName "PCI device id" "${path}.id" (get device "id" null);
+      match = expectEnum "${path}.match" deviceMatchModes (get device "match" "port");
+      mode = expectEnum "${path}.mode" deviceAssignmentModes (get device "mode" "required");
+      options = normalizeDeviceOptions "${path}.options" (get device "options" { });
+    };
+
+  normalizeDevices =
+    domainName: value:
+    let
+      path = "domains.${domainName}.devices";
+      devices =
+        if value == null then
+          { }
+        else
+          expectOptions path [ "pci" ] value;
+    in
+    {
+      pci = imap (normalizePciDevice domainName) (expectList "${path}.pci" (get devices "pci" [ ]));
+    };
 
   imap =
     f: list:
@@ -777,6 +844,7 @@ let
       domain = expectOptions "domains.${checkedName}" [
         "backend"
         "class"
+        "devices"
         "template"
         "label"
         "netvm"
@@ -824,6 +892,7 @@ let
         get domain "features" { }
       );
       services = normalizeServiceAttrs "domains.${checkedName}.services" (get domain "services" { });
+      devices = normalizeDevices checkedName (get domain "devices" null);
       backend = normalizeDomainBackend checkedName class template rawBackend;
       resolvedTemplate = if backend.type == "qubes-template" then backend.template else template;
     in
@@ -840,6 +909,7 @@ let
           prefs
           features
           services
+          devices
           backend
           ;
         template = resolvedTemplate;
@@ -890,6 +960,8 @@ in
   inherit
     domainClasses
     domainBackendTypes
+    deviceAssignmentModes
+    deviceMatchModes
     labels
     mkTopology
     qrexecActions

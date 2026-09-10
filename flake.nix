@@ -107,6 +107,7 @@
 
       configNixPrivateSizeBytes = 8589934592;
       devPrivateSizeBytes = 34359738368;
+      sysNetPrivateSizeBytes = 2147483648;
 
       configRoleDefaults = {
         config-vault = {
@@ -193,6 +194,33 @@
         };
       };
 
+      sysNetRoleDefaults = {
+        guestHostName = "sys-net";
+        label = "red";
+        rootImageSizeMiB = 512;
+        netvm = null;
+        state.persistentSize = sysNetPrivateSizeBytes;
+        prefs = {
+          autostart = false;
+          include_in_backups = true;
+          memory = 768;
+          maxmem = 1024;
+          provides_network = true;
+          vcpus = 2;
+        };
+        features = {
+          "nixome-managed" = "1";
+          "nixome-role" = "sys-net";
+          "nixome-network-provider" = "sys-net";
+        };
+        services = {
+          "network-manager" = true;
+          "qubes-firewall" = true;
+          "qubes-network" = true;
+        };
+        devices.pci = [ ];
+      };
+
       mkConfigDomainEntries =
         system:
         let
@@ -255,6 +283,30 @@
           features = devRoleDefaults.features;
           services = { };
           state = devRoleDefaults.state;
+        };
+
+      mkSysNetDomainEntry =
+        system:
+        let
+          qubeBuilders = mkNixomeQubeBuilders system;
+        in
+        qubeBuilders.mkNixNativeDomain {
+          name = "sys-net";
+          guestRole = "sys-net";
+          modules = [
+            ({ ... }: {
+              networking.hostName = sysNetRoleDefaults.guestHostName;
+            })
+          ];
+          rootImageSizeMiB = sysNetRoleDefaults.rootImageSizeMiB;
+          kernelName = nixomeQubesVmKernelName;
+          label = sysNetRoleDefaults.label;
+          netvm = sysNetRoleDefaults.netvm;
+          prefs = sysNetRoleDefaults.prefs;
+          features = sysNetRoleDefaults.features;
+          services = sysNetRoleDefaults.services;
+          devices = sysNetRoleDefaults.devices;
+          state = sysNetRoleDefaults.state;
         };
 
       materializeNixClosureDomain =
@@ -505,6 +557,7 @@
           nixomeConfigDomains =
             let
               bootstrapDomainEntries = (mkConfigDomainEntries "x86_64-linux") // {
+                sys-net = mkSysNetDomainEntry "x86_64-linux";
                 dev = mkDevDomainEntry "x86_64-linux";
               };
             in
@@ -524,6 +577,7 @@
         (mkConfigDomainEntries "x86_64-linux").config-staging.configuration;
       nixosConfigurations.nixome-domain-config-validator =
         (mkConfigDomainEntries "x86_64-linux").config-validator.configuration;
+      nixosConfigurations.nixome-domain-sys-net = (mkSysNetDomainEntry "x86_64-linux").configuration;
       nixosConfigurations.nixome-domain-dev = (mkDevDomainEntry "x86_64-linux").configuration;
     };
 }

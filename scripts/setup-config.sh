@@ -97,6 +97,7 @@ domains_changed=0
 prefs_changed=0
 features_changed=0
 services_changed=0
+devices_changed=0
 qrexec_policy_changed=0
 unsupported_domains_count=0
 root_images_changed=0
@@ -270,6 +271,7 @@ write_result() {
     printf ',"prefs_changed":%s' "$prefs_changed"
     printf ',"features_changed":%s' "$features_changed"
     printf ',"services_changed":%s' "$services_changed"
+    printf ',"devices_changed":%s' "$devices_changed"
     printf ',"qrexec_policy_changed":%s' "$qrexec_policy_changed"
     printf ',"root_images_changed":%s' "$root_images_changed"
     printf ',"store_volumes_changed":%s' "$store_volumes_changed"
@@ -589,6 +591,136 @@ set_service() {
   services_changed=$((services_changed + 1))
   record_live_action domain-service set "$domain" "$service" "$value"
   record_domain_restart_if_running "$domain" domain-service "$service" "$value"
+}
+
+pci_device_assignment_current() {
+  local domain="$1"
+  local backend="$2"
+  local device_id="$3"
+  local mode="$4"
+  local match_mode="$5"
+  local options_json="$6"
+  local device="${backend}:${device_id}"
+  local line=""
+  local option
+  local -a option_args=()
+
+  [ "$APPLY" = "1" ] || return 1
+  [ "$match_mode" = "port" ] || return 1
+
+  line="$(
+    qvm-device pci list --assignments "$backend" 2>/dev/null |
+      awk -v device="$device" -v domain="$domain" -v mode="$mode" '
+        $1 == device && index($0, "*" domain " (" mode) { print; found = 1 }
+        END { exit(found ? 0 : 1) }
+      ' || true
+  )"
+  [ -n "$line" ] || return 1
+
+  mapfile -t option_args < <(
+    printf '%s\n' "$options_json" |
+      jq -r 'to_entries | sort_by(.key)[] | "\(.key)=\(.value)"'
+  )
+  for option in "${option_args[@]}"; do
+    printf '%s\n' "$line" | grep -F "$option" >/dev/null 2>&1 || return 1
+  done
+
+  return 0
+}
+
+setup_domain_pci_devices() {
+  local domain="$1"
+  local count
+  local index
+  local backend
+  local device_id
+  local mode
+  local match_mode
+  local options_json
+  local option
+  local -a args
+  local -a option_args=()
+  local value
+
+  count="$(jq_get '(.domains[$name].devices.pci // []) | length' --arg name "$domain")"
+  [ "$count" -gt 0 ] || return 0
+
+  if [ "$APPLY" = "1" ] && ! domain_exists "$domain"; then
+    fail "domain is missing before PCI assignment: $domain"
+  fi
+
+  index=0
+  while [ "$index" -lt "$count" ]; do
+    backend="$(jq_get '.domains[$name].devices.pci[$index].backend' --arg name "$domain" --argjson index "$index")"
+    device_id="$(jq_get '.domains[$name].devices.pci[$index].id' --arg name "$domain" --argjson index "$index")"
+    mode="$(jq_get '.domains[$name].devices.pci[$index].mode' --arg name "$domain" --argjson index "$index")"
+    match_mode="$(jq_get '.domains[$name].devices.pci[$index].match' --arg name "$domain" --argjson index "$index")"
+    options_json="$(
+      jq -c \
+        --arg name "$domain" \
+        --argjson index "$index" \
+        '.domains[$name].devices.pci[$index].options // {}' \
+        "$TOPOLOGY"
+    )"
+
+    if pci_device_assignment_current "$domain" "$backend" "$device_id" "$mode" "$match_mode" "$options_json"; then
+      printf 'PCI assignment current: %s %s:%s mode=%s match=%s\n' \
+        "$domain" "$backend" "$device_id" "$mode" "$match_mode"
+      index=$((index + 1))
+      continue
+    fi
+
+    args=(qvm-device pci assign)
+    case "$mode" in
+      auto-attach)
+        ;;
+      ask-to-attach)
+        args+=(--ask)
+        ;;
+      required)
+        args+=(--required)
+        ;;
+      *)
+        fail "unsupported PCI assignment mode for $domain: $mode"
+        ;;
+    esac
+    case "$match_mode" in
+      port-and-device)
+        ;;
+      port)
+        args+=(--port)
+        ;;
+      device)
+        args+=(--device)
+        ;;
+      *)
+        fail "unsupported PCI assignment match mode for $domain: $match_mode"
+        ;;
+    esac
+
+    mapfile -t option_args < <(
+      printf '%s\n' "$options_json" |
+        jq -r 'to_entries | sort_by(.key)[] | "\(.key)=\(.value)"'
+    )
+    for option in "${option_args[@]}"; do
+      args+=(--option "$option")
+    done
+    args+=("$domain" "$backend:$device_id")
+
+    run_or_plan "${args[@]}"
+    devices_changed=$((devices_changed + 1))
+    value="${backend}:${device_id} mode=${mode} match=${match_mode}"
+    record_live_action domain-device assign "$domain" pci "$value"
+    record_domain_restart_if_running "$domain" domain-device pci "$value"
+
+    index=$((index + 1))
+  done
+}
+
+setup_domain_devices() {
+  local domain="$1"
+
+  setup_domain_pci_devices "$domain"
 }
 
 is_preferred_domain_pref() {
@@ -1315,6 +1447,14 @@ topology_has_nix_closure_domains() {
   ' "$TOPOLOGY" >/dev/null
 }
 
+topology_has_device_assignments() {
+  jq -e '
+    (.domains // {})
+    | to_entries
+    | any(((.value.devices.pci // []) | length) > 0)
+  ' "$TOPOLOGY" >/dev/null
+}
+
 for cmd in \
   awk \
   chmod \
@@ -1340,6 +1480,10 @@ done
 
 if topology_has_nix_closure_domains; then
   require_command "$NIX_DOMAIN_STORAGE_HELPER"
+fi
+
+if topology_has_device_assignments; then
+  require_command qvm-device
 fi
 
 if ! [ -r "$XEN_CAPABILITIES" ] || ! grep -qw control_d "$XEN_CAPABILITIES"; then
@@ -1484,6 +1628,13 @@ for domain in "${domain_names[@]}"; do
       value="$(jq_get '.domains[$name].services[$service] | if . then "on" else "off" end' --arg name "$domain" --arg service "$service")"
       set_service "$domain" "$service" "$value"
     done
+  fi
+done
+
+printf 'setting up domain devices\n'
+for domain in "${domain_names[@]}"; do
+  if [ "$APPLY" = "1" ] || [ "$PLAN" = "1" ] || domain_exists "$domain"; then
+    setup_domain_devices "$domain"
   fi
 done
 

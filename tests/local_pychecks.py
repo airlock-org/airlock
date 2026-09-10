@@ -754,6 +754,12 @@ def check_topology_schema(repo_root: Path, log_dir: Path) -> None:
                   prefs.memory = 1024;
                   features."nixome-role" = "test";
                   services."network-manager" = false;
+                  devices.pci = [
+                    {
+                      id = "00_14.0";
+                      options.no-strict-reset = true;
+                    }
+                  ];
                 };
                 domains."legacy-fedora" = {
                   backend = {
@@ -821,6 +827,15 @@ def check_topology_schema(repo_root: Path, log_dir: Path) -> None:
     assert test_qube["prefs"]["include_in_backups"] is False
     assert test_qube["prefs"]["memory"] == 1024
     assert test_qube["services"]["network-manager"] is False
+    assert test_qube["devices"]["pci"] == [
+        {
+            "backend": "dom0",
+            "id": "00_14.0",
+            "match": "port",
+            "mode": "required",
+            "options": {"no-strict-reset": "True"},
+        }
+    ]
 
     legacy = topology["domains"]["legacy-fedora"]
     assert legacy["class"] == "AppVM"
@@ -929,6 +944,16 @@ def check_topology_schema(repo_root: Path, log_dir: Path) -> None:
             "unknown-option",
             "nixome.topology.domains.bad: unknown option(s): servies",
             '{ domains.bad = { template = "nixome-template"; servies = { }; }; }',
+        ),
+        (
+            "invalid-pci-device-id",
+            "invalid PCI device id",
+            '{ domains.bad = { template = "nixome-template"; devices.pci = [ { id = "../bad"; } ]; }; }',
+        ),
+        (
+            "invalid-pci-assignment-mode",
+            "expected one of auto-attach, ask-to-attach, required",
+            '{ domains.bad = { template = "nixome-template"; devices.pci = [ { id = "00_14.0"; mode = "manual"; } ]; }; }',
         ),
         (
             "template-import-without-source",

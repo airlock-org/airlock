@@ -44,6 +44,11 @@ let
       lib.types.str
     ]
   );
+  deviceOptionScalar = lib.types.oneOf [
+    lib.types.bool
+    lib.types.int
+    lib.types.str
+  ];
 
   templateType = lib.types.submodule {
     options = {
@@ -290,6 +295,47 @@ let
     };
   };
 
+  pciDeviceType = lib.types.submodule {
+    options = {
+      backend = lib.mkOption {
+        type = lib.types.str;
+        default = "dom0";
+        description = "Qubes domain exposing the PCI device.";
+      };
+
+      id = lib.mkOption {
+        type = lib.types.str;
+        description = "Qubes PCI device ID, such as 00_14.0.";
+      };
+
+      match = lib.mkOption {
+        type = lib.types.enum topologyLib.deviceMatchModes;
+        default = "port";
+        description = "Which parts of the Qubes device identity must match.";
+      };
+
+      mode = lib.mkOption {
+        type = lib.types.enum topologyLib.deviceAssignmentModes;
+        default = "required";
+        description = "Persistent Qubes device assignment mode.";
+      };
+
+      options = lib.mkOption {
+        type = lib.types.attrsOf deviceOptionScalar;
+        default = { };
+        description = "Qubes device assignment options passed as opt=value.";
+      };
+    };
+  };
+
+  devicesType = lib.types.submodule {
+    options.pci = lib.mkOption {
+      type = lib.types.listOf pciDeviceType;
+      default = [ ];
+      description = "Persistent Qubes PCI assignments for this domain.";
+    };
+  };
+
   domainType = lib.types.submodule {
     options = {
       backend = lib.mkOption {
@@ -338,6 +384,12 @@ let
         type = lib.types.attrsOf lib.types.bool;
         default = { };
         description = "qvm-service values to set.";
+      };
+
+      devices = lib.mkOption {
+        type = devicesType;
+        default = { };
+        description = "Qubes devices to assign persistently to this domain.";
       };
     };
   };
