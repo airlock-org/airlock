@@ -1841,6 +1841,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       staged_dev_declared = builtins.hasAttr "dev" stagedNixNativeDomains;
       staged_sys_net_declared = builtins.hasAttr "sys-net" stagedNixNativeDomains;
       staged_sys_net_autostart = sysNetDomainDefinition.prefs.autostart;
+      staged_sys_net_virt_mode = sysNetDomainDefinition.prefs.virt_mode;
       staged_sys_net_updates_proxy = sysNetDomainDefinition.services."qubes-updates-proxy";
       staged_sys_firewall_declared = builtins.hasAttr "sys-firewall" stagedNixNativeDomains;
       staged_sys_firewall_netvm = sysFirewallDomainDefinition.netvm;
@@ -1859,6 +1860,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       bootstrap_sys_firewall_present = builtins.hasAttr "sys-firewall" bootstrapDomains;
       bootstrap_sys_net_autostart = bootstrapSysNetDomain.prefs.autostart;
       bootstrap_sys_net_netvm = bootstrapSysNetDomain.netvm;
+      bootstrap_sys_net_virt_mode = bootstrapSysNetDomain.prefs.virt_mode;
       bootstrap_sys_net_updates_proxy = bootstrapSysNetDomain.services."qubes-updates-proxy";
       bootstrap_sys_firewall_netvm = bootstrapSysFirewallDomain.netvm;
       bootstrap_sys_firewall_autostart = bootstrapSysFirewallDomain.prefs.autostart;
@@ -1921,6 +1923,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       release_bootstrap_sys_net_present = builtins.hasAttr "sys-net" releaseBootstrapDomains;
       release_bootstrap_sys_net_netvm = releaseBootstrapDomains.sys-net.netvm;
       release_bootstrap_sys_net_autostart = releaseBootstrapDomains.sys-net.prefs.autostart;
+      release_bootstrap_sys_net_virt_mode =
+        releaseBootstrapDomains.sys-net.prefs.virt_mode;
       release_bootstrap_sys_firewall_present =
         builtins.hasAttr "sys-firewall" releaseBootstrapDomains;
       release_bootstrap_sys_firewall_netvm = releaseBootstrapDomains.sys-firewall.netvm;
@@ -2010,6 +2014,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["staged_dev_declared"] is False
     assert data["staged_sys_net_declared"] is True
     assert data["staged_sys_net_autostart"] is True
+    assert data["staged_sys_net_virt_mode"] == "hvm"
     assert data["staged_sys_net_updates_proxy"] is True
     assert data["staged_sys_firewall_declared"] is True
     assert data["staged_sys_firewall_netvm"] == "sys-net"
@@ -2026,6 +2031,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["bootstrap_sys_firewall_present"] is True
     assert data["bootstrap_sys_net_autostart"] is True
     assert data["bootstrap_sys_net_netvm"] is None
+    assert data["bootstrap_sys_net_virt_mode"] == "hvm"
     assert data["bootstrap_sys_net_updates_proxy"] is True
     assert data["bootstrap_sys_firewall_netvm"] == "sys-net"
     assert data["bootstrap_sys_firewall_autostart"] is True
@@ -2066,6 +2072,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["release_bootstrap_sys_net_present"] is True
     assert data["release_bootstrap_sys_net_netvm"] is None
     assert data["release_bootstrap_sys_net_autostart"] is True
+    assert data["release_bootstrap_sys_net_virt_mode"] == "hvm"
     assert data["release_bootstrap_sys_firewall_present"] is True
     assert data["release_bootstrap_sys_firewall_netvm"] == "sys-net"
     assert data["release_bootstrap_sys_firewall_autostart"] is True
@@ -9203,6 +9210,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert domains["sys-net"]["class"] == "StandaloneVM"
     assert domains["sys-net"]["netvm"] is None
     assert domains["sys-net"]["prefs"]["provides_network"] is True
+    assert domains["sys-net"]["prefs"]["virt_mode"] == "hvm"
     assert domains["sys-net"]["services"]["network-manager"] is True
     assert domains["sys-net"]["services"]["qubes-updates-proxy"] is True
     assert domains["sys-firewall"]["class"] == "StandaloneVM"
@@ -9250,6 +9258,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
             "options": {},
         }
     ]
+    assert topology["domains"]["sys-net"]["prefs"]["virt_mode"] == "hvm"
     assert topology["domains"]["sys-firewall"]["netvm"] == "sys-net"
     assert topology["domains"]["sys-firewall"]["prefs"]["autostart"] is True
     assert topology["domains"]["sys-firewall"]["prefs"]["provides_network"] is True
@@ -10080,6 +10089,7 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
     assert topology["templates"] == {}
     assert topology["domains"]["sys-net"]["netvm"] is None
     assert topology["domains"]["sys-net"]["prefs"]["provides_network"] is True
+    assert topology["domains"]["sys-net"]["prefs"]["virt_mode"] == "hvm"
     assert topology["domains"]["sys-firewall"]["netvm"] == "sys-net"
     assert topology["domains"]["sys-firewall"]["prefs"]["autostart"] is True
     assert topology["domains"]["sys-firewall"]["prefs"]["provides_network"] is True

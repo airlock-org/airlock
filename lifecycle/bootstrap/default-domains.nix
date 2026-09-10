@@ -93,6 +93,7 @@ let
       maxmem = 1024;
       provides_network = true;
       vcpus = 2;
+      virt_mode = "hvm";
     };
     features = {
       "nixome-managed" = "1";
