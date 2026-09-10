@@ -7955,3 +7955,436 @@ def check_config_system_apply(repo_root: Path, log_dir: Path) -> None:
     )
     assert fail_systemd_actions["schema"] == "nixome.systemd-actions.v1"
     assert fail_systemd_actions["status"] == "skipped"
+
+
+def check_config_validator_candidate(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    candidate_dir = work_dir / "candidate"
+    portable_source = work_dir / "portable-seed-input-source"
+    portable_source_link = work_dir / "portable-seed-input"
+    validation_dir = work_dir / "validation"
+    staged_tar = work_dir / "config-candidate-staged.tar"
+    validated_tar = work_dir / "config-candidate-validated.tar"
+    fail_candidate_dir = work_dir / "failing-check-candidate"
+    fail_staged_tar = work_dir / "config-candidate-failing-check.tar"
+    fail_validated_tar = work_dir / "config-candidate-failing-check-validated.tar"
+    if (work_dir / "nix-root").exists():
+        _run(["chmod", "-R", "u+w", str(work_dir / "nix-root")], check=False)
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (
+        candidate_dir / "dom0-profile/bin",
+        candidate_dir / "dom0-profile/share/nixome",
+        validation_dir,
+        portable_source,
+    ):
+        path.mkdir(parents=True)
+    (portable_source / "marker").write_text(
+        "portable-validator-test\n", encoding="utf-8"
+    )
+    portable_source_link.symlink_to(portable_source)
+    (candidate_dir / "dom0-profile/share/nixome/profile.json").write_text(
+        '{"schema":"nixome.dom0-profile.v1","message":"validator-test","built_by":"config-validator-candidate-test"}\n',
+        encoding="utf-8",
+    )
+    _write_executable(
+        candidate_dir / "dom0-profile/bin/nixome-dom0-profile-activate",
+        """
+        #!/bin/sh
+        set -eu
+        exit 0
+        """,
+    )
+    _write_flake(
+        candidate_dir / "flake.nix",
+        f"""
+        {{
+          description = "Nixome config validator fixture";
+
+          inputs.portable-source = {{
+            url = "path:{portable_source_link}";
+            flake = false;
+          }};
+
+          outputs = {{ self, portable-source }}: let
+            mkFixturePackage = name: builtins.derivation {{
+              inherit name;
+              system = "x86_64-linux";
+              builder = "/bin/sh";
+              args = [
+                "-c"
+                "mkdir -p $out"
+              ];
+            }};
+          in {{
+            packages.x86_64-linux.nix-work-system = mkFixturePackage "nix-work-system";
+            packages.x86_64-linux.nix-work-store-closure = mkFixturePackage "nix-work-store-closure";
+
+            nixome.topology = {{
+              schema = "nixome.qubes-topology.v1";
+              templates = {{ }};
+              kernels = {{ }};
+              domains = {{
+                nix-native-work = {{
+                  class = "StandaloneVM";
+                  template = null;
+                  label = "green";
+                  netvm = null;
+                  prefs = {{ }};
+                  features = {{ }};
+                  services = {{ }};
+                  backend = {{
+                    type = "nix-closure";
+                    template = null;
+                    system = {{
+                      source = null;
+                      source_ref = {{
+                        type = "flake-output";
+                        attr = "packages.x86_64-linux.nix-work-system";
+                        subpath = "";
+                      }};
+                    }};
+                    kernel = {{
+                      name = "6.12.64-1.fc41";
+                      source = null;
+                      source_ref = null;
+                    }};
+                    initrd = {{
+                      name = null;
+                      source = null;
+                      source_ref = null;
+                    }};
+                    modules = {{
+                      name = null;
+                      source = null;
+                      source_ref = null;
+                    }};
+                    store = {{
+                      mode = "shared-closure";
+                      source = null;
+                      source_ref = {{
+                        type = "flake-output";
+                        attr = "packages.x86_64-linux.nix-work-store-closure";
+                        subpath = "";
+                      }};
+                      mountpoint = "/nix/store";
+                      device = "/dev/xvde";
+                      blob_device = "/dev/xvdf";
+                      view_backend = "erofs-objectmap";
+                      read_only = true;
+                    }};
+                    state = {{
+                      persistent = "nix-native-work-private";
+                      volatile = null;
+                    }};
+                  }};
+                }};
+              }};
+              prefs = {{ }};
+              qrexec_policy.rules = [ ];
+            }};
+
+            nixome.system = {{
+              schema = "nixome.system.v1";
+              dom0 = {{
+                profile = {{
+                  source = "dom0-profile";
+                  source_ref = null;
+                  activation_command = "bin/nixome-dom0-profile-activate";
+                  activation_action = "none";
+                  message = builtins.readFile "${{portable-source}}/marker";
+                }};
+                packages = [ ];
+                systemd.services = {{ }};
+                nixos = {{
+                  system = {{
+                    enable = false;
+                    reason = "dom0 system change requires reboot";
+                    source = null;
+                    source_ref = null;
+                  }};
+                  kernel = {{
+                    enable = false;
+                    reason = "dom0 kernel change requires reboot";
+                    source = null;
+                    source_ref = null;
+                  }};
+                  xen = {{
+                    enable = false;
+                    reason = "dom0 xen change requires reboot";
+                    source = null;
+                    source_ref = null;
+                  }};
+                  bootloader = {{
+                    enable = false;
+                    reason = "dom0 bootloader change requires reboot";
+                    source = null;
+                    source_ref = null;
+                  }};
+                  qubes = {{
+                    enable = false;
+                    reason = "dom0 qubes change requires reboot";
+                    source = null;
+                    source_ref = null;
+                  }};
+                }};
+              }};
+              plan = {{
+                live_actions = [ ];
+                reboot_actions = [ ];
+                reboot_required = false;
+                reboot_reasons = [ ];
+              }};
+            }};
+          }};
+        }}
+        """,
+    )
+    commit = _git_commit_all(
+        candidate_dir,
+        "validator fixture",
+        name="Nixome Validator Test",
+        email="nixome-validator-test@localhost",
+    )
+    _run(
+        ["git", "bundle", "create", str(work_dir / "config.bundle"), "HEAD"],
+        cwd=candidate_dir,
+    )
+    (work_dir / "manifest.json").write_text(
+        json.dumps(
+            {"schema": "nixome.config-candidate.v1", "commit": commit},
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with tarfile.open(staged_tar, "w") as tar:
+        tar.add(work_dir / "config.bundle", arcname="config.bundle")
+        tar.add(work_dir / "manifest.json", arcname="manifest.json")
+    validator_cmd = _run(
+        [
+            "nix",
+            "build",
+            "--no-link",
+            "--print-out-paths",
+            f'{repo_root}#nixosConfigurations.nixome-domain-config-validator.config.environment.etc."qubes-rpc/nixome.Config.ValidateCandidate".source',
+        ],
+        cwd=repo_root,
+    ).stdout.strip()
+
+    def run_validator(
+        input_tar: Path, output_tar: Path, stderr_path: Path, *, check: bool
+    ) -> subprocess.CompletedProcess[str]:
+        env = os.environ.copy()
+        env.update(
+            {
+                "NIXOME_CONFIG_VALIDATION_DIR": str(validation_dir),
+                "NIXOME_CONFIG_NIX_STORE_ROOT": str(work_dir / "nix-root"),
+            }
+        )
+        with (
+            input_tar.open("rb") as stdin,
+            output_tar.open("wb") as stdout,
+            stderr_path.open("wb") as stderr,
+        ):
+            result = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    'source "$1"; nixome_run_store_path "$2"',
+                    "bash",
+                    str(repo_root / "scripts/lib/nixome-env.sh"),
+                    validator_cmd,
+                ],
+                cwd=repo_root,
+                env=env,
+                check=False,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+            )
+        if check and result.returncode != 0:
+            raise AssertionError(f"validator failed with exit {result.returncode}")
+        return result
+
+    run_validator(
+        staged_tar, validated_tar, work_dir / "validator.stderr.log", check=True
+    )
+    with tarfile.open(validated_tar) as tar:
+        members = set(tar.getnames())
+        assert {
+            "config.bundle",
+            "manifest.json",
+            "validation.json",
+            "topology.json",
+            "system.json",
+        } <= members
+        validation = json.load(tar.extractfile("validation.json"))
+        topology = json.load(tar.extractfile("topology.json"))
+        system = json.load(tar.extractfile("system.json"))
+    assert validation["schema"] == "nixome.config-validation.v1"
+    assert validation["status"] == "passed"
+    assert any(
+        check["name"] == "nix-template-source-refs-dry-run"
+        and check["status"] == "passed"
+        for check in validation["checks"]
+    )
+    assert any(
+        check["name"] == "nixome-topology-json" and check["status"] == "passed"
+        for check in validation["checks"]
+    )
+    assert any(
+        check["name"] == "nixome-system-json" and check["status"] == "passed"
+        for check in validation["checks"]
+    )
+    assert any(
+        check["name"] == "nix-flake-check" and check["status"] == "passed"
+        for check in validation["checks"]
+    )
+    assert topology["schema"] == "nixome.qubes-topology.v1"
+    assert system["schema"] == "nixome.system.v1"
+    assert system["dom0"]["profile"]["message"] == "portable-validator-test\n"
+    refs_log = next(
+        check["log"]
+        for check in validation["checks"]
+        if check["name"] == "nix-template-source-refs-dry-run"
+    )
+    assert "checking nix-domain=nix-native-work.system attr=packages.x86_64-linux.nix-work-system" in Path(
+        refs_log
+    ).read_text(
+        encoding="utf-8"
+    )
+    assert "checking nix-domain=nix-native-work.store attr=packages.x86_64-linux.nix-work-store-closure" in Path(
+        refs_log
+    ).read_text(
+        encoding="utf-8"
+    )
+
+    fail_candidate_dir.mkdir()
+    _write_flake(
+        fail_candidate_dir / "flake.nix",
+        """
+        {
+          description = "Nixome config validator failing check fixture";
+
+          outputs = { self }: {
+            checks.x86_64-linux.failing = derivation {
+              name = "nixome-failing-check";
+              system = "x86_64-linux";
+              builder = "/bin/sh";
+              args = [
+                "-c"
+                "echo failing check >&2; exit 23"
+              ];
+            };
+
+            nixome.topology = {
+              schema = "nixome.qubes-topology.v1";
+              templates = { };
+              kernels = { };
+              domains = { };
+              prefs = { };
+              qrexec_policy.rules = [ ];
+            };
+
+            nixome.system = {
+              schema = "nixome.system.v1";
+              dom0 = {
+                profile = {
+                  source = null;
+                  source_ref = null;
+                  activation_command = "bin/nixome-dom0-profile-activate";
+                  activation_action = "none";
+                  message = "";
+                };
+                packages = [ ];
+                systemd.services = { };
+                nixos = {
+                  system = {
+                    enable = false;
+                    reason = "no host system change";
+                    source = null;
+                    source_ref = null;
+                  };
+                  kernel = {
+                    enable = false;
+                    reason = "no kernel change";
+                    source = null;
+                    source_ref = null;
+                  };
+                  xen = {
+                    enable = false;
+                    reason = "no xen change";
+                    source = null;
+                    source_ref = null;
+                  };
+                  bootloader = {
+                    enable = false;
+                    reason = "no bootloader change";
+                    source = null;
+                    source_ref = null;
+                  };
+                  qubes = {
+                    enable = false;
+                    reason = "no qubes package change";
+                    source = null;
+                    source_ref = null;
+                  };
+                };
+              };
+              plan = {
+                live_actions = [ ];
+                reboot_actions = [ ];
+                reboot_required = false;
+                reboot_reasons = [ ];
+              };
+            };
+          };
+        }
+        """,
+    )
+    fail_commit = _git_commit_all(
+        fail_candidate_dir,
+        "failing flake check fixture",
+        name="Nixome Validator Test",
+        email="nixome-validator-test@localhost",
+    )
+    _run(
+        [
+            "git",
+            "bundle",
+            "create",
+            str(work_dir / "failing-check.bundle"),
+            "HEAD",
+        ],
+        cwd=fail_candidate_dir,
+    )
+    (work_dir / "failing-check-manifest.json").write_text(
+        json.dumps(
+            {"schema": "nixome.config-candidate.v1", "commit": fail_commit},
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with tarfile.open(fail_staged_tar, "w") as tar:
+        tar.add(work_dir / "failing-check.bundle", arcname="config.bundle")
+        tar.add(work_dir / "failing-check-manifest.json", arcname="manifest.json")
+    failed = run_validator(
+        fail_staged_tar,
+        fail_validated_tar,
+        work_dir / "validator-failing-check.stderr.log",
+        check=False,
+    )
+    assert failed.returncode != 0
+    fail_validation = json.loads((validation_dir / f"{fail_commit}.json").read_text())
+    assert fail_validation["schema"] == "nixome.config-validation.v1"
+    assert fail_validation["status"] == "failed"
+    assert fail_validation["commit"] == fail_commit
+    assert any(
+        check["name"] == "nix-flake-check" and check["status"] == "failed"
+        for check in fail_validation["checks"]
+    )
+    assert any(
+        check["name"] == "nix-flake-check-no-build" and check["status"] == "passed"
+        for check in fail_validation["checks"]
+    )

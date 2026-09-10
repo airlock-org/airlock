@@ -19,6 +19,7 @@ from local_pychecks import (
     check_config_staging_validate,
     check_config_status,
     check_config_system_apply,
+    check_config_validator_candidate,
     check_config_vault_deployment_archive,
     check_dev_role,
     check_host_capabilities,
@@ -219,8 +220,8 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "config-validator-candidate",
-        ("{root}/tests/config-validator-candidate.sh",),
-        (pytest.mark.nix,),
+        marks=(pytest.mark.nix,),
+        runner=check_config_validator_candidate,
     ),
     LocalCheck(
         "config-vault-deployment-archive",
