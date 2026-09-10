@@ -10,6 +10,7 @@ import pytest
 from local_pychecks import (
     check_config_candidate_nix_native,
     check_config_staging_validate,
+    check_config_vault_deployment_archive,
     check_dev_role,
     check_host_capabilities,
     check_config_boot_verify,
@@ -204,7 +205,7 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "config-vault-deployment-archive",
-        ("{root}/tests/config-vault-deployment-archive.sh",),
+        runner=check_config_vault_deployment_archive,
     ),
     LocalCheck(
         "config-archive-domain-references",

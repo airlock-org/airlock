@@ -2521,3 +2521,284 @@ def check_config_staging_validate(repo_root: Path, log_dir: Path) -> None:
         check["name"] == "git-clean" and check["status"] == "failed"
         for check in dirty["checks"]
     )
+
+
+def check_config_vault_deployment_archive(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    vault_repo = work_dir / "vault"
+    deployment_dir = work_dir / "deployment"
+    deployment_tar = work_dir / "deployment.tar"
+    candidate_commit = "0123456789abcdef0123456789abcdef01234567"
+    deployment_id = "20260907T000000Z-0123456789ab"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    (vault_repo / f"candidates/{candidate_commit}").mkdir(parents=True)
+    (deployment_dir / "logs").mkdir(parents=True)
+    (vault_repo / f"candidates/{candidate_commit}/README.md").write_text(
+        "candidate placeholder\n", encoding="utf-8"
+    )
+    _git_commit_all(
+        vault_repo,
+        "archive candidate fixture",
+        name="Nixome Vault Deployment Test",
+        email="nixome-vault-deployment-test@localhost",
+    )
+
+    artifacts = {
+        "topology": "topology.json",
+        "system": "system.json",
+        "resolved_system": "resolved-system.json",
+        "system_plan": "system-plan.json",
+        "system_apply": "system-apply.json",
+        "system_builds": "system-builds.json",
+        "systemd_actions": "systemd-actions.json",
+        "apply": "apply.json",
+        "archive": "archive.json",
+        "setup": "setup.json",
+        "template_builds": "template-builds.json",
+        "nix_domain_builds": "nix-domain-builds.json",
+        "nix_domain_materializations": "nix-domain-materializations.json",
+        "unsupported_domain_backends": "unsupported-domain-backends.json",
+        "validated_topology": "validated-topology.json",
+        "validation": "validation.json",
+        "manifest": "manifest.json",
+    }
+    deployment_payloads = {
+        "deployment.json": {
+            "schema": "nixome.config-deployment.v1",
+            "status": "passed",
+            "reason": "test deployment",
+            "deployment_id": deployment_id,
+            "deployed_at": "20260907T000000Z",
+            "deployed_by": "dom0",
+            "staging": "config-staging",
+            "validator": "config-validator",
+            "vault": "config-vault",
+            "candidate_commit": candidate_commit,
+            "artifacts": artifacts,
+        },
+        "apply.json": {
+            "schema": "nixome.config-apply.v1",
+            "status": "passed",
+            "reason": "test apply",
+            "candidate_commit": candidate_commit,
+        },
+        "archive.json": {
+            "schema": "nixome.config-archive.v1",
+            "status": "passed",
+            "reason": "test archive",
+            "candidate_commit": candidate_commit,
+        },
+        "setup.json": {
+            "schema": "nixome.setup-config.v1",
+            "status": "passed",
+            "mode": "apply",
+            "reason": "test setup",
+        },
+        "topology.json": {
+            "schema": "nixome.qubes-topology.v1",
+            "templates": {},
+            "kernels": {},
+            "domains": {},
+            "prefs": {},
+            "qrexec_policy": {"rules": []},
+        },
+        "template-builds.json": {"schema": "nixome.template-builds.v1", "builds": []},
+        "nix-domain-builds.json": {
+            "schema": "nixome.nix-domain-builds.v1",
+            "builds": [],
+        },
+        "nix-domain-materializations.json": {
+            "schema": "nixome.nix-domain-materializations.v1",
+            "domains": [],
+        },
+        "unsupported-domain-backends.json": {
+            "schema": "nixome.unsupported-domain-backends.v1",
+            "domains": [],
+        },
+        "system.json": {
+            "schema": "nixome.system.v1",
+            "dom0": {
+                "profile": {
+                    "source": None,
+                    "source_ref": None,
+                    "activation_command": "bin/nixome-dom0-profile-activate",
+                    "activation_action": "none",
+                    "message": "",
+                },
+                "packages": [],
+                "systemd": {"services": {}},
+                "nixos": {
+                    "system": {
+                        "enable": False,
+                        "reason": "",
+                        "source": None,
+                        "source_ref": None,
+                        "switch_action": "switch",
+                    },
+                    "kernel": {
+                        "enable": False,
+                        "reason": "",
+                        "source": None,
+                        "source_ref": None,
+                    },
+                    "xen": {
+                        "enable": False,
+                        "reason": "",
+                        "source": None,
+                        "source_ref": None,
+                    },
+                    "bootloader": {
+                        "enable": False,
+                        "reason": "",
+                        "source": None,
+                        "source_ref": None,
+                    },
+                    "qubes": {
+                        "enable": False,
+                        "reason": "",
+                        "source": None,
+                        "source_ref": None,
+                    },
+                },
+            },
+            "plan": {
+                "live_actions": [],
+                "reboot_actions": [],
+                "reboot_required": False,
+                "reboot_reasons": [],
+            },
+        },
+        "system-apply.json": {
+            "schema": "nixome.system-apply.v1",
+            "status": "passed",
+            "reason": "test system apply",
+        },
+        "system-builds.json": {"schema": "nixome.system-builds.v1", "builds": []},
+        "systemd-actions.json": {
+            "schema": "nixome.systemd-actions.v1",
+            "status": "passed",
+            "reason": "test systemd actions",
+            "actions": [],
+        },
+        "validation.json": {
+            "schema": "nixome.config-validation.v1",
+            "status": "passed",
+            "reason": "test validation",
+            "commit": candidate_commit,
+            "checks": [],
+        },
+        "manifest.json": {
+            "schema": "nixome.config-candidate.v1",
+            "commit": candidate_commit,
+            "branch": "main",
+        },
+    }
+    for name, payload in deployment_payloads.items():
+        (deployment_dir / name).write_text(
+            json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    shutil.copy(
+        deployment_dir / "topology.json", deployment_dir / "validated-topology.json"
+    )
+    shutil.copy(deployment_dir / "system.json", deployment_dir / "resolved-system.json")
+    (deployment_dir / "system-plan.json").write_text(
+        json.dumps(deployment_payloads["system.json"]["plan"], sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    log_names = [
+        "apply.commands.log",
+        "archive.stdout.log",
+        "archive.stderr.log",
+        "setup.stdout.log",
+        "setup.stderr.log",
+        "template-builds.log",
+        "nix-domain-builds.log",
+        "system-builds.log",
+        "system-apply.log",
+        "profile-activation.log",
+        "host-system-activation.log",
+        "systemd-actions.log",
+        "clone.log",
+        "checkout.log",
+    ]
+    for name in log_names:
+        (deployment_dir / f"logs/{name}").write_text(f"{name}\n", encoding="utf-8")
+    with tarfile.open(deployment_tar, "w") as tar:
+        for name in [
+            "deployment.json",
+            "apply.json",
+            "archive.json",
+            "setup.json",
+            "topology.json",
+            "validated-topology.json",
+            "template-builds.json",
+            "nix-domain-builds.json",
+            "nix-domain-materializations.json",
+            "unsupported-domain-backends.json",
+            "system.json",
+            "resolved-system.json",
+            "system-plan.json",
+            "system-apply.json",
+            "system-builds.json",
+            "systemd-actions.json",
+            "validation.json",
+            "manifest.json",
+            *[f"logs/{name}" for name in log_names],
+        ]:
+            tar.add(deployment_dir / name, arcname=name)
+
+    archive_cmd = _run(
+        [
+            "nix",
+            "build",
+            "--no-link",
+            "--print-out-paths",
+            f'{repo_root}#nixosConfigurations.nixome-domain-config-vault.config.environment.etc."qubes-rpc/nixome.Config.ArchiveDeployment".source',
+        ]
+    ).stdout.strip()
+    env = os.environ.copy()
+    env["NIXOME_CONFIG_ARCHIVE_PATH"] = str(vault_repo)
+    with deployment_tar.open("rb") as stdin:
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'source "$1"; nixome_run_store_path "$2"',
+                "bash",
+                str(repo_root / "scripts/lib/nixome-env.sh"),
+                archive_cmd,
+            ],
+            cwd=repo_root,
+            env=env,
+            check=False,
+            stdin=stdin,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    (work_dir / "result.json").write_bytes(result.stdout)
+    (work_dir / "result.stderr.log").write_bytes(result.stderr)
+    assert result.returncode == 0
+    archive_result = json.loads(result.stdout.decode("utf-8"))
+    assert archive_result["schema"] == "nixome.config-vault-deployment.v1"
+    assert archive_result["status"] == "passed"
+    assert archive_result["deployment_status"] == "passed"
+    assert archive_result["deployment_id"] == deployment_id
+    assert archive_result["candidate_commit"] == candidate_commit
+
+    archived_dir = vault_repo / f"deployments/{deployment_id}"
+    for rel_path in (
+        "systemd-actions.json",
+        "nix-domain-builds.json",
+        "nix-domain-materializations.json",
+        "unsupported-domain-backends.json",
+        "logs/host-system-activation.log",
+        "logs/systemd-actions.log",
+    ):
+        assert (archived_dir / rel_path).is_file()
+    assert (vault_repo / "latest-deployment").read_text(
+        encoding="utf-8"
+    ).strip() == deployment_id
+    assert (
+        _run(["git", "status", "--short", "--branch"], cwd=vault_repo).stdout.strip()
+        == "## main"
+    )
