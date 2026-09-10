@@ -10,6 +10,8 @@
   tools should report state without expanding Qubes control authority.
 - `make test-quick` is the primary feedback loop. Preserve clear logs and
   machine-readable output under `.nixome-logs/`.
+- New tests should be written in the pytest framework. Do not add new Bash test
+  scripts; migrate or extend pytest coverage instead.
 - Do not make full GUI support block the first qrexec/VM lifecycle milestone.
 - Commit changes after each coherent conceptual change when practical. Use
   judgment about granularity, but avoid bundling unrelated work into one commit.
