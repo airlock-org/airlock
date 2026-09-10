@@ -6648,3 +6648,373 @@ def check_setup_config_nix_native_running_storage(
     assert "+ qvm-volume import config-staging:root" not in commands_log
     assert "+ nixome-nix-domain-storage ensure-store config-staging" not in commands_log
     assert "+ qvm-prefs config-staging kernelopts" not in commands_log
+
+
+def check_setup_config_nix_native(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    topology_path = work_dir / "topology.json"
+    capabilities = work_dir / "xen-capabilities"
+    plan_log_dir = work_dir / "plan-logs"
+    apply_log_dir = work_dir / "apply-logs"
+    policy_dir = work_dir / "policy.d"
+    kernel_base = work_dir / "vm-kernels"
+    system_source = work_dir / "system-source"
+    root_source = work_dir / "root-source"
+    store_source = work_dir / "store-source"
+    root_image = root_source / "root.img"
+    mutation_log = work_dir / "mutations.log"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (
+        bin_dir,
+        plan_log_dir,
+        apply_log_dir,
+        policy_dir,
+        kernel_base,
+        system_source,
+        root_source,
+        store_source,
+    ):
+        path.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+    _write_executable(
+        system_source / "init",
+        """
+        #!/bin/sh
+        exec /init
+        """,
+    )
+    root_image.touch()
+    (store_source / "store-paths").write_text(
+        str(system_source) + "\n", encoding="utf-8"
+    )
+    (store_source / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.store-closure-manifest.v1",
+                "name": "test-store",
+                "read_only": True,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    mutation_log.touch()
+    topology_path.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.qubes-topology.v1",
+                "templates": {},
+                "kernels": {},
+                "domains": {
+                    "legacy-fedora-app": {
+                        "class": "AppVM",
+                        "template": "fedora-44-xfce",
+                        "label": "red",
+                        "netvm": None,
+                        "prefs": {"autostart": False},
+                        "features": {
+                            "nixome-managed": "1",
+                            "nixome-role": "legacy-fedora-app",
+                        },
+                        "services": {},
+                        "backend": {
+                            "type": "qubes-template",
+                            "template": "fedora-44-xfce",
+                        },
+                    },
+                    "nix-native-work": {
+                        "class": "StandaloneVM",
+                        "template": None,
+                        "label": "green",
+                        "netvm": None,
+                        "prefs": {
+                            "autostart": False,
+                            "include_in_backups": True,
+                            "kernelopts": "console=hvc0 init=/sbin/init",
+                            "memory": 1536,
+                            "virt_mode": "pvh",
+                        },
+                        "features": {
+                            "nixome-managed": "1",
+                            "nixome-role": "nix-native-work",
+                            "qrexec": "1",
+                        },
+                        "services": {},
+                        "backend": {
+                            "type": "nix-closure",
+                            "template": None,
+                            "system": {
+                                "source": str(system_source),
+                                "source_ref": None,
+                            },
+                            "kernel": {
+                                "name": "6.12.64-1.fc41",
+                                "source": None,
+                                "source_ref": None,
+                            },
+                            "initrd": {
+                                "name": None,
+                                "source": None,
+                                "source_ref": None,
+                            },
+                            "modules": {
+                                "name": None,
+                                "source": None,
+                                "source_ref": None,
+                            },
+                            "root": {
+                                "mode": "qubes-root-image",
+                                "source": str(root_source),
+                                "source_ref": None,
+                                "read_only": False,
+                            },
+                            "store": {
+                                "mode": "shared-closure",
+                                "source": str(store_source),
+                                "source_ref": None,
+                                "view_backend": "erofs-objectmap",
+                                "blob_device": "/dev/xvdf",
+                                "chunk_size": 65536,
+                                "mountpoint": "/nix/store",
+                                "read_only": True,
+                            },
+                            "state": {
+                                "persistent": "nix-native-work-private",
+                                "persistent_size": 8589934592,
+                                "volatile": None,
+                            },
+                        },
+                    },
+                },
+                "prefs": {},
+                "qrexec_policy": {"rules": []},
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _setup_fake_command_dir(
+        bin_dir,
+        {
+            "qvm-ls": """
+                #!/usr/bin/env bash
+                exit 0
+            """,
+            "qvm-create": """
+                #!/usr/bin/env bash
+                printf 'qvm-create %s\\n' "$*" >> "$MUTATION_LOG"
+            """,
+            "qvm-volume": """
+                #!/usr/bin/env bash
+                if [ "$1" = info ]; then
+                  cat <<'INFO'
+                pool               varlibqubes
+                vid                appvms/nix-native-work/private
+                rw                 True
+                size               2147483648
+                usage              0
+                INFO
+                  exit 0
+                fi
+                printf 'qvm-volume %s\\n' "$*" >> "$MUTATION_LOG"
+            """,
+            "qvm-prefs": """
+                #!/usr/bin/env bash
+                if [ "$#" = 2 ]; then
+                  exit 1
+                fi
+                printf 'qvm-prefs %s\\n' "$*" >> "$MUTATION_LOG"
+            """,
+            "qvm-features": """
+                #!/usr/bin/env bash
+                if [ "$#" = 2 ]; then
+                  exit 1
+                fi
+                printf 'qvm-features %s\\n' "$*" >> "$MUTATION_LOG"
+            """,
+            "qvm-service": """
+                #!/usr/bin/env bash
+                if [ "$#" = 2 ]; then
+                  exit 1
+                fi
+                printf 'qvm-service %s\\n' "$*" >> "$MUTATION_LOG"
+            """,
+            "systemctl": """
+                #!/usr/bin/env bash
+                case "$1" in
+                  is-active|reload|try-restart)
+                    exit 0
+                    ;;
+                esac
+                exit 1
+            """,
+            "qubes-prefs": """
+                #!/usr/bin/env bash
+                printf 'unexpected command execution: %s\\n' "$0" >&2
+                exit 97
+            """,
+            "qvm-template-postprocess": """
+                #!/usr/bin/env bash
+                printf 'unexpected command execution: %s\\n' "$0" >&2
+                exit 97
+            """,
+            "qubesd-query": """
+                #!/usr/bin/env bash
+                printf 'unexpected command execution: %s\\n' "$0" >&2
+                exit 97
+            """,
+            "nixome-nix-domain-storage": """
+                #!/usr/bin/env bash
+                printf 'nixome-nix-domain-storage %s\\n' "$*" >> "$MUTATION_LOG"
+                cat <<JSON
+                {"schema":"nixome.nix-domain-storage.v1","domain":"$2","volume":"store","mode":"shared-closure","source":"$4","read_only":true,"volume_created":true,"volumes_created":["store","store-data"],"view_created":true,"metadata_changed":true,"qubesd_restart_required":false,"qubesd_restarted":true,"generation":1,"closure_hash":"fixture","filesystem":"erofs","view_backend":"erofs-objectmap","view_image":"/var/lib/nixome/closure-store/domains/$2/generations/1/store.erofs","metadata_image":"/var/lib/nixome/closure-store/domains/$2/generations/1/store.erofs","blob_map":"/var/lib/nixome/closure-store/domains/$2/generations/1/store.blob-map.json","blob_volume":"store-data","blob_device":"/dev/xvdf","blob_logical_size":65536}
+                JSON
+            """,
+        },
+    )
+
+    def run_setup(mode: str, output_dir: Path, state_dir: Path) -> None:
+        env = os.environ.copy()
+        env.update(
+            {
+                "PATH": f"{bin_dir}:{env['PATH']}",
+                "MUTATION_LOG": str(mutation_log),
+                "NIXOME_QUBES_KERNEL_BASE": str(kernel_base),
+                "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
+                "NIXOME_XEN_CAPABILITIES": str(capabilities),
+                "NIXOME_LOG_DIR": str(output_dir),
+                "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
+            }
+        )
+        _run(
+            [
+                "bash",
+                str(repo_root / "scripts/setup-config.sh"),
+                f"--{mode}",
+                "--topology",
+                str(topology_path),
+            ],
+            cwd=repo_root,
+            env=env,
+            stdout=output_dir / "stdout.log",
+            stderr=output_dir / "stderr.log",
+        )
+
+    run_setup("plan", plan_log_dir, work_dir / "state-plan")
+    plan = json.loads((plan_log_dir / "setup-config.json").read_text())
+    assert plan["schema"] == "nixome.setup-config.v1"
+    assert plan["status"] == "passed"
+    assert plan["mode"] == "plan"
+    assert plan["domains_changed"] == 2
+    assert plan["root_images_changed"] == 1
+    assert plan["store_volumes_changed"] == 2
+    assert plan["state_volumes_changed"] == 1
+    assert plan["store_views_changed"] == 1
+    assert plan["unsupported_domains_count"] == 0
+    plan_commands = (plan_log_dir / "setup-config.commands.log").read_text(
+        encoding="utf-8"
+    )
+    expected_store_command = (
+        f"+ nixome-nix-domain-storage ensure-store nix-native-work {store_source} "
+        f"{store_source} --mode shared-closure --system {system_source} --root "
+        f"{root_source} --kernel 6.12.64-1.fc41 --device /dev/xvde --blob-device "
+        "/dev/xvdf --mountpoint /nix/store --view-backend erofs-objectmap"
+    )
+    for expected in (
+        "+ qvm-create --class StandaloneVM --label green nix-native-work",
+        "+ qvm-create --class AppVM --label red --template fedora-44-xfce "
+        "legacy-fedora-app",
+        f"+ qvm-volume import nix-native-work:root {root_image}",
+        "+ qvm-volume resize nix-native-work:private 8589934592",
+        expected_store_command,
+    ):
+        assert expected in plan_commands
+    assert plan_commands.count("+ nixome-nix-domain-storage ensure-store ") == 1
+
+    run_setup("apply", apply_log_dir, work_dir / "state-apply")
+    apply = json.loads((apply_log_dir / "setup-config.json").read_text())
+    assert apply["schema"] == "nixome.setup-config.v1"
+    assert apply["status"] == "passed"
+    assert apply["mode"] == "apply"
+    assert apply["domains_changed"] == 2
+    assert apply["root_images_changed"] == 1
+    assert apply["store_volumes_changed"] == 2
+    assert apply["state_volumes_changed"] == 1
+    assert apply["store_views_changed"] == 1
+    assert apply["qubesd_restarts"] == 1
+    assert apply["unsupported_domains_count"] == 0
+    live_actions = apply["live_actions"]
+    assert any(
+        action["type"] == "domain-root"
+        and action["action"] == "import"
+        and action["domain"] == "nix-native-work"
+        for action in live_actions
+    )
+    assert any(
+        action["type"] == "domain-state-volume"
+        and action["action"] == "resize"
+        and action["domain"] == "nix-native-work"
+        and action["field"] == "private"
+        and action["value"] == "8589934592"
+        for action in live_actions
+    )
+    assert any(
+        action["type"] == "domain-store-view"
+        and action["action"] == "materialize"
+        and action["domain"] == "nix-native-work"
+        for action in live_actions
+    )
+    for volume in ("store", "store-data"):
+        assert any(
+            action["type"] == "domain-store-volume"
+            and action["action"] == "create"
+            and action["domain"] == "nix-native-work"
+            and action["value"] == volume
+            for action in live_actions
+        )
+    assert any(
+        action["type"] == "systemd"
+        and action["action"] == "restart"
+        and action["field"] == "service"
+        and action["value"] == "qubesd.service"
+        for action in live_actions
+    )
+    mutation_lines = mutation_log.read_text(encoding="utf-8").splitlines()
+    expected_mutations = [
+        "qvm-create --class AppVM --label red --template fedora-44-xfce "
+        "legacy-fedora-app",
+        "qvm-create --class StandaloneVM --label green nix-native-work",
+        f"qvm-volume import nix-native-work:root {root_image}",
+        "qvm-volume resize nix-native-work:private 8589934592",
+        "qvm-prefs nix-native-work kernel 6.12.64-1.fc41",
+        f"qvm-prefs nix-native-work kernelopts console=hvc0 init=/sbin/init "
+        f"nixome.system={system_source} nixome.storedev=/dev/xvde "
+        "nixome.storefmt=erofs nixome.storeblobdev=/dev/xvdf",
+        f"qvm-features nix-native-work nixome-root-source {root_source}",
+        f"qvm-features nix-native-work nixome-store-source {store_source}",
+        "qvm-features nix-native-work nixome-store-mode shared-closure",
+        "qvm-features nix-native-work nixome-store-view-backend erofs-objectmap",
+        "qvm-features nix-native-work nixome-store-filesystem erofs",
+        "qvm-features nix-native-work nixome-store-generation 1",
+        "qvm-features nix-native-work nixome-store-closure-hash fixture",
+        "qvm-features nix-native-work nixome-store-view-image "
+        "/var/lib/nixome/closure-store/domains/nix-native-work/generations/1/store.erofs",
+        "qvm-features nix-native-work nixome-store-blob-map "
+        "/var/lib/nixome/closure-store/domains/nix-native-work/generations/1/store.blob-map.json",
+        "qvm-features nix-native-work nixome-store-blob-volume store-data",
+        "qvm-features nix-native-work nixome-store-device /dev/xvde",
+        "qvm-features nix-native-work nixome-store-blob-device /dev/xvdf",
+        expected_store_command.removeprefix("+ "),
+    ]
+    for expected in expected_mutations:
+        assert expected in mutation_lines
+    assert (
+        sum(
+            line.startswith("nixome-nix-domain-storage ensure-store ")
+            for line in mutation_lines
+        )
+        == 1
+    )
