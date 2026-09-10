@@ -26,6 +26,7 @@ from local_pychecks import (
     check_setup_config_external_netvm,
     check_setup_config_pref_order,
     check_setup_config_qrexec_policy,
+    check_setup_config_restart_actions,
     check_setup_config_runtime_path,
     check_setup_config_static,
     check_system_schema,
@@ -271,7 +272,7 @@ LOCAL_CHECKS = (
     LocalCheck("setup-config-idempotent", ("{root}/tests/setup-config-idempotent.sh",)),
     LocalCheck(
         "setup-config-restart-actions",
-        ("{root}/tests/setup-config-restart-actions.sh",),
+        runner=check_setup_config_restart_actions,
     ),
     LocalCheck("setup-config-pref-order", runner=check_setup_config_pref_order),
     LocalCheck(
