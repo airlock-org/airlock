@@ -3185,3 +3185,165 @@ def check_setup_config_pref_order(repo_root: Path, log_dir: Path) -> None:
     assert result["schema"] == "nixome.setup-config.v1"
     assert result["status"] == "passed"
     assert result["prefs_changed"] == 4
+
+
+def check_setup_config_external_netvm(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    setup_log_dir = work_dir / "logs"
+    policy_dir = work_dir / "policy.d"
+    capabilities = work_dir / "xen-capabilities"
+    mutation_log = work_dir / "mutations.log"
+    topology = work_dir / "topology.json"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    setup_log_dir.mkdir(parents=True)
+    policy_dir.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+    mutation_log.write_text("", encoding="utf-8")
+    topology.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.qubes-topology.v1",
+                "templates": {},
+                "kernels": {},
+                "domains": {
+                    "dev": {
+                        "class": "StandaloneVM",
+                        "template": None,
+                        "label": "green",
+                        "netvm": "sys-firewall",
+                        "prefs": {"autostart": False},
+                        "features": {"nixome-role": "dev"},
+                        "services": {},
+                    }
+                },
+                "prefs": {"default_kernel": ""},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    commands = {
+        "qvm-ls": """
+        #!/usr/bin/env bash
+        case "$*" in
+          "--raw-data --fields NAME --no-spinner")
+            printf 'dom0\n'
+            printf 'dev\n'
+            ;;
+          "--raw-data --fields NAME,STATE --no-spinner")
+            printf 'dom0|Running\n'
+            printf 'dev|Halted\n'
+            ;;
+          "--raw-data --fields NAME,CLASS --no-spinner")
+            printf 'dom0|AdminVM\n'
+            printf 'dev|StandaloneVM\n'
+            ;;
+          *)
+            printf 'unexpected qvm-ls args: %s\n' "$*" >&2
+            exit 1
+            ;;
+        esac
+        """,
+        "systemctl": """
+        #!/usr/bin/env bash
+        if [ "$1" = "is-active" ]; then
+          exit 0
+        fi
+        if [ "$1" = "reload" ] || [ "$1" = "try-restart" ]; then
+          printf 'systemctl %s\n' "$*" >> "$MUTATION_LOG"
+          exit 0
+        fi
+        exit 1
+        """,
+        "qubes-prefs": """
+        #!/usr/bin/env bash
+        if [ "$#" -eq 1 ] && [ "$1" = "default_kernel" ]; then
+          printf '\n'
+          exit 0
+        fi
+        printf 'qubes-prefs %s\n' "$*" >> "$MUTATION_LOG"
+        exit 0
+        """,
+        "qvm-create": """
+        #!/usr/bin/env bash
+        printf 'qvm-create %s\n' "$*" >> "$MUTATION_LOG"
+        exit 0
+        """,
+        "qvm-prefs": """
+        #!/usr/bin/env bash
+        if [ "$#" -eq 2 ]; then
+          case "$1:$2" in
+            dev:label) printf 'green\n' ;;
+            dev:autostart) printf 'False\n' ;;
+            *) exit 1 ;;
+          esac
+          exit 0
+        fi
+        if [ "$#" -eq 3 ] && [ "$1:$2:$3" = "dev:netvm:sys-firewall" ]; then
+          printf 'setup-config should defer missing external sys-firewall instead of setting it\n' >&2
+          exit 97
+        fi
+        printf 'qvm-prefs %s\n' "$*" >> "$MUTATION_LOG"
+        exit 0
+        """,
+    }
+    for name in (
+        "qvm-appmenus",
+        "qvm-features",
+        "qvm-service",
+        "qvm-template-postprocess",
+        "qvm-volume",
+        "qubesd-query",
+        "runuser",
+    ):
+        commands[name] = """
+        #!/usr/bin/env bash
+        printf '%s %s\n' "$(basename "$0")" "$*" >> "$MUTATION_LOG"
+        exit 0
+        """
+    _setup_fake_command_dir(bin_dir, commands)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "MUTATION_LOG": str(mutation_log),
+            "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
+            "NIXOME_SETUP_CONFIG_PERSIST_STATE": "0",
+            "NIXOME_XEN_CAPABILITIES": str(capabilities),
+            "NIXOME_LOG_DIR": str(setup_log_dir),
+        }
+    )
+    _run(
+        [
+            "bash",
+            str(repo_root / "scripts/setup-config.sh"),
+            "--apply",
+            "--topology",
+            str(topology),
+        ],
+        cwd=repo_root,
+        env=env,
+        stdout=setup_log_dir / "stdout.log",
+        stderr=setup_log_dir / "stderr.log",
+    )
+    result = json.loads(
+        (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
+    )
+    assert result["schema"] == "nixome.setup-config.v1"
+    assert result["status"] == "passed"
+    assert result["domains_changed"] == 0
+    assert result["prefs_changed"] == 1
+    assert any(
+        action["type"] == "domain-pref"
+        and action["action"] == "defer"
+        and action["domain"] == "dev"
+        and action["field"] == "netvm"
+        and action["value"] == "sys-firewall"
+        for action in result["live_actions"]
+    )
+    assert (
+        "qvm-prefs dev netvm sys-firewall"
+        not in mutation_log.read_text(encoding="utf-8").splitlines()
+    )

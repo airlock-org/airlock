@@ -23,6 +23,7 @@ from local_pychecks import (
     check_qube_guest_policy_probe,
     check_run_nested_gui_smoke_static,
     check_setup_config_empty_global_pref,
+    check_setup_config_external_netvm,
     check_setup_config_pref_order,
     check_setup_config_runtime_path,
     check_setup_config_static,
@@ -263,7 +264,7 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "setup-config-external-netvm",
-        ("{root}/tests/setup-config-external-netvm.sh",),
+        runner=check_setup_config_external_netvm,
     ),
     LocalCheck("setup-config-idempotent", ("{root}/tests/setup-config-idempotent.sh",)),
     LocalCheck(
