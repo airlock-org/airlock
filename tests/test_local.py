@@ -9,6 +9,7 @@ import pytest
 
 from local_pychecks import (
     check_config_candidate_nix_native,
+    check_config_staging_validate,
     check_dev_role,
     check_host_capabilities,
     check_config_boot_verify,
@@ -186,7 +187,7 @@ LOCAL_CHECKS = (
         runner=check_nixome_minimal_closure,
     ),
     LocalCheck("dev-role", marks=(pytest.mark.nix,), runner=check_dev_role),
-    LocalCheck("config-staging-validate", ("{root}/tests/config-staging-validate.sh",)),
+    LocalCheck("config-staging-validate", runner=check_config_staging_validate),
     LocalCheck("qrexec-policy-path", runner=check_qrexec_policy_path),
     LocalCheck("qube-guest-policy-probe", runner=check_qube_guest_policy_probe),
     LocalCheck("topology-schema", runner=check_topology_schema),

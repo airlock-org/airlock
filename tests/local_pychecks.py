@@ -6,6 +6,7 @@ import platform
 import re
 import shutil
 import subprocess
+import tarfile
 import textwrap
 from pathlib import Path
 
@@ -2283,4 +2284,240 @@ def check_nixome_minimal_closure(repo_root: Path, log_dir: Path) -> None:
         )
         + "\n",
         encoding="utf-8",
+    )
+
+
+def _git_commit_all(repo: Path, message: str, *, name: str, email: str) -> str:
+    _run(["git", "init", "-b", "main"], cwd=repo)
+    _run(["git", "add", "."], cwd=repo)
+    _run(
+        [
+            "git",
+            "-c",
+            f"user.name={name}",
+            "-c",
+            f"user.email={email}",
+            "commit",
+            "-m",
+            message,
+        ],
+        cwd=repo,
+    )
+    return _run(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip()
+
+
+def check_config_staging_validate(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    candidate_dir = work_dir / "candidate"
+    validation_dir = work_dir / "validation"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    (candidate_dir / "dom0-profile/bin").mkdir(parents=True)
+    (candidate_dir / "dom0-profile/share/nixome").mkdir(parents=True)
+    validation_dir.mkdir()
+
+    _write_executable(
+        candidate_dir / "dom0-profile/bin/nixome-dom0-profile-activate",
+        """
+        #!/bin/sh
+        set -eu
+        exit 0
+        """,
+    )
+    (candidate_dir / "dom0-profile/share/nixome/profile.json").write_text(
+        '{"schema":"nixome.dom0-profile.v1","message":"staging-validate-test"}\n',
+        encoding="utf-8",
+    )
+    _write_flake(
+        candidate_dir / "flake.nix",
+        """
+        {
+          description = "Nixome staging validation fixture";
+
+          outputs = { self }: {
+            nixome.topology = {
+              schema = "nixome.qubes-topology.v1";
+              templates = { };
+              kernels = { };
+              domains = { };
+              prefs = { };
+              qrexec_policy.rules = [ ];
+            };
+
+            nixome.system = {
+              schema = "nixome.system.v1";
+              dom0 = {
+                profile = {
+                  source = "dom0-profile";
+                  source_ref = null;
+                  activation_command = "bin/nixome-dom0-profile-activate";
+                  activation_action = "none";
+                  message = "staging-validate-test";
+                };
+                packages = [ ];
+                systemd.services = { };
+                nixos = {
+                  system = {
+                    enable = false;
+                    reason = "no host switch in staging validation fixture";
+                    source = null;
+                    source_ref = null;
+                    switch_action = "switch";
+                  };
+                  kernel = {
+                    enable = false;
+                    reason = "no kernel change";
+                    source = null;
+                    source_ref = null;
+                  };
+                  xen = {
+                    enable = false;
+                    reason = "no xen change";
+                    source = null;
+                    source_ref = null;
+                  };
+                  bootloader = {
+                    enable = false;
+                    reason = "no bootloader change";
+                    source = null;
+                    source_ref = null;
+                  };
+                  qubes = {
+                    enable = false;
+                    reason = "no qubes package change";
+                    source = null;
+                    source_ref = null;
+                  };
+                };
+              };
+              plan = {
+                live_actions = [ ];
+                reboot_actions = [ ];
+                reboot_required = false;
+                reboot_reasons = [ ];
+              };
+            };
+          };
+        }
+        """,
+    )
+    commit = _git_commit_all(
+        candidate_dir,
+        "staging validation fixture",
+        name="Nixome Staging Test",
+        email="nixome-staging-test@localhost",
+    )
+    validator_package = _run(
+        [
+            "nix",
+            "build",
+            "--no-link",
+            "--print-out-paths",
+            f'{repo_root}#nixosConfigurations.nixome-domain-config-staging.config.environment.etc."nixome/guest-tools/nixome-config-staging-validate".source',
+        ]
+    ).stdout.strip()
+    validator_tool = f"{validator_package}/bin/nixome-config-staging-validate"
+    env = os.environ.copy()
+    env.update(
+        {
+            "NIXOME_CONFIG_REPO_PATH": str(candidate_dir),
+            "NIXOME_CONFIG_VALIDATION_DIR": str(validation_dir),
+            "NIXOME_CONFIG_NIX_STORE_ROOT": str(work_dir / "nix-root"),
+        }
+    )
+    command = [
+        "bash",
+        "-c",
+        'source "$1"; nixome_run_store_path "$2"',
+        "bash",
+        str(repo_root / "scripts/lib/nixome-env.sh"),
+        validator_tool,
+    ]
+    _run(
+        command,
+        cwd=repo_root,
+        env=env,
+        stdout=work_dir / "stdout.log",
+        stderr=work_dir / "stderr.log",
+    )
+
+    output = json.loads((work_dir / "stdout.log").read_text(encoding="utf-8"))
+    assert output["schema"] == "nixome.config-validation.v1"
+    assert output["status"] == "passed"
+    assert output["commit"] == commit
+    assert output["repo"] == str(candidate_dir)
+    assert output["validated_candidate"] == str(
+        validation_dir / f"validated-candidate-{commit}.tar"
+    )
+    checks = {check["name"]: check for check in output["checks"]}
+    expected_checks = {
+        "nix-eval-nixome-topology": "output",
+        "nixome-topology-json": "path",
+        "nix-eval-nixome-system": "output",
+        "nixome-system-json": "path",
+        "nix-system-source-refs-dry-run": None,
+        "nix-flake-check-no-build": None,
+        "nix-flake-check": None,
+    }
+    for name, path_key in expected_checks.items():
+        assert checks[name]["status"] == "passed"
+        if path_key == "output" and "topology" in name:
+            assert checks[name][path_key] == str(
+                validation_dir / f"topology-{commit}.json"
+            )
+        elif path_key == "path" and "topology" in name:
+            assert checks[name][path_key] == str(
+                validation_dir / f"topology-{commit}.json"
+            )
+        elif path_key == "output":
+            assert checks[name][path_key] == str(
+                validation_dir / f"system-{commit}.json"
+            )
+        elif path_key == "path":
+            assert checks[name][path_key] == str(
+                validation_dir / f"system-{commit}.json"
+            )
+
+    validation = json.loads(
+        (validation_dir / f"{commit}.json").read_text(encoding="utf-8")
+    )
+    topology = json.loads(
+        (validation_dir / f"topology-{commit}.json").read_text(encoding="utf-8")
+    )
+    system = json.loads(
+        (validation_dir / f"system-{commit}.json").read_text(encoding="utf-8")
+    )
+    assert validation["schema"] == "nixome.config-validation.v1"
+    assert validation["status"] == "passed"
+    assert topology["schema"] == "nixome.qubes-topology.v1"
+    assert topology["domains"] == {}
+    assert system["schema"] == "nixome.system.v1"
+    assert system["dom0"]["profile"]["message"] == "staging-validate-test"
+    with tarfile.open(validation_dir / f"validated-candidate-{commit}.tar") as tar:
+        members = sorted(tar.getnames())
+    for member in (
+        "config.bundle",
+        "manifest.json",
+        "validation.json",
+        "topology.json",
+        "system.json",
+    ):
+        assert member in members
+
+    (candidate_dir / "README.md").write_text("dirty\n", encoding="utf-8")
+    result = _run(
+        command,
+        cwd=repo_root,
+        env=env,
+        stdout=work_dir / "dirty-stdout.log",
+        stderr=work_dir / "dirty-stderr.log",
+        check=False,
+    )
+    assert result.returncode != 0
+    dirty = json.loads((work_dir / "dirty-stdout.log").read_text(encoding="utf-8"))
+    assert dirty["schema"] == "nixome.config-validation.v1"
+    assert dirty["status"] == "failed"
+    assert dirty["validator_role"] == "config-staging-local"
+    assert any(
+        check["name"] == "git-clean" and check["status"] == "failed"
+        for check in dirty["checks"]
     )
