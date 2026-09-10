@@ -237,6 +237,8 @@ starting VM
   vga: $VGA
   memory: ${MEMORY} MiB
   ssh: NIXOME_VM_SSH_PORT=$SSH_PORT $ROOT/lifecycle/misc/tools/scripts/ssh-nested-vm.sh
+  dom0 NIC: QEMU user network with SSH forwarding
+  sys-net NIC: separate QEMU user network, auto-assigned by setup-config
   login: $SSH_USER / $SSH_PASSWORD
   monitor: $MONITOR_SOCKET
 
@@ -259,6 +261,8 @@ nixome_exec_store_path "$qemu_out/bin/qemu-system-x86_64" \
   -vga "$VGA" \
   -device virtio-net-pci,netdev=net0 \
   -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22" \
+  -device virtio-net-pci,netdev=sysnet0 \
+  -netdev "user,id=sysnet0" \
   -device virtio-rng-pci \
   -monitor "unix:$MONITOR_SOCKET,server=on,wait=off" \
   -no-reboot \

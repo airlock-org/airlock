@@ -7,6 +7,7 @@
   gnugrep,
   gnutar,
   gnused,
+  iproute2,
   jq,
   lib,
   lvm2,
@@ -35,6 +36,7 @@ writeShellApplication {
     gnugrep
     gnutar
     gnused
+    iproute2
     jq
     lvm2
     nix

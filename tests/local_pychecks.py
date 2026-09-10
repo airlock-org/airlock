@@ -484,6 +484,7 @@ def check_setup_config_runtime_path(repo_root: Path, log_dir: Path) -> None:
         "cp",
         "dd",
         "grep",
+        "ip",
         "jq",
         "mkdir",
         "mkfs.erofs",
@@ -3439,6 +3440,140 @@ def check_setup_config_external_netvm(repo_root: Path, log_dir: Path) -> None:
         "qvm-prefs dev netvm sys-firewall"
         not in mutation_log.read_text(encoding="utf-8").splitlines()
     )
+
+
+def check_setup_config_auto_sys_net_pci(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    setup_log_dir = work_dir / "logs"
+    policy_dir = work_dir / "policy.d"
+    capabilities = work_dir / "xen-capabilities"
+    topology = work_dir / "topology.json"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (setup_log_dir, policy_dir):
+        path.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+    topology.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.qubes-topology.v1",
+                "templates": {},
+                "kernels": {},
+                "domains": {
+                    "sys-net": {
+                        "class": "StandaloneVM",
+                        "template": None,
+                        "label": "red",
+                        "netvm": None,
+                        "prefs": {
+                            "autostart": False,
+                            "provides_network": True,
+                        },
+                        "features": {"nixome-role": "sys-net"},
+                        "services": {
+                            "network-manager": True,
+                            "qubes-firewall": True,
+                            "qubes-network": True,
+                        },
+                        "devices": {"pci": []},
+                    }
+                },
+                "prefs": {},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    commands = {
+        "qvm-ls": """
+        #!/usr/bin/env bash
+        case "$*" in
+          "--raw-data --fields NAME --no-spinner")
+            printf 'dom0\nsys-net\n'
+            ;;
+          "--raw-data --fields NAME,STATE --no-spinner")
+            printf 'dom0|Running\nsys-net|Halted\n'
+            ;;
+          *)
+            printf 'unexpected qvm-ls args: %s\n' "$*" >&2
+            exit 1
+            ;;
+        esac
+        """,
+        "systemctl": """
+        #!/usr/bin/env bash
+        if [ "$1" = "is-active" ]; then
+          exit 0
+        fi
+        exit 1
+        """,
+        "ip": "#!/usr/bin/env bash\nexit 0\n",
+        "readlink": "#!/usr/bin/env bash\nexit 0\n",
+    }
+    for name in (
+        "qubes-prefs",
+        "qvm-create",
+        "qvm-device",
+        "qvm-features",
+        "qvm-prefs",
+        "qvm-service",
+        "qvm-template-postprocess",
+        "qvm-volume",
+        "qubesd-query",
+    ):
+        commands[name] = "#!/usr/bin/env bash\nexit 0\n"
+    _setup_fake_command_dir(bin_dir, commands)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "NIXOME_DOM0_NETWORK_PCI_DEVICES": "00_03.0 00_04.0",
+            "NIXOME_DOM0_DEFAULT_ROUTE_PCI_DEVICES": "00_03.0",
+            "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
+            "NIXOME_XEN_CAPABILITIES": str(capabilities),
+            "NIXOME_LOG_DIR": str(setup_log_dir),
+        }
+    )
+    _run(
+        [
+            "bash",
+            str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
+            "--plan",
+            "--topology",
+            str(topology),
+        ],
+        cwd=repo_root,
+        env=env,
+        stdout=setup_log_dir / "stdout.log",
+        stderr=setup_log_dir / "stderr.log",
+    )
+    result = json.loads(
+        (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
+    )
+    command_lines = (
+        (setup_log_dir / "setup-config.commands.log")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+
+    assert result["schema"] == "nixome.setup-config.v1"
+    assert result["status"] == "passed"
+    assert result["mode"] == "plan"
+    assert result["devices_changed"] == 1
+    assert any(
+        action["type"] == "domain-device"
+        and action["action"] == "assign"
+        and action["domain"] == "sys-net"
+        and action["field"] == "pci"
+        and action["value"] == "dom0:00_04.0 mode=required match=port"
+        for action in result["live_actions"]
+    )
+    assert (
+        "+ qvm-device pci assign --required --port sys-net dom0:00_04.0"
+        in command_lines
+    )
+    assert not any("dom0:00_03.0" in line for line in command_lines)
 
 
 def check_setup_config_qrexec_policy(repo_root: Path, log_dir: Path) -> None:

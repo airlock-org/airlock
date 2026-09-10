@@ -74,8 +74,11 @@
         "qubes-firewall" = true;
         "qubes-network" = true;
       };
+      # Empty means setup-config discovers dom0 network-class PCI devices for
+      # sys-net, matching the normal Qubes installer behavior. Add entries here
+      # only when this machine needs explicit pinning.
       devices.pci = [
-        # Fill this with the NIC PCI ID from dom0, for example:
+        # Explicit override example:
         # { id = "00_14.0"; match = "port"; mode = "required"; options.no-strict-reset = true; }
       ];
       state.persistentSize = 2147483648;

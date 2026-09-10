@@ -66,9 +66,9 @@ domains.sys-net = {
 };
 ```
 
-These are ordinary Qubes domains. Fedora, Debian, `sys-net`, `sys-firewall`,
-`sys-usb`, and other conventional guests stay on this path unless there is a
-specific reason to move them.
+These are ordinary Qubes domains. Fedora, Debian, `sys-usb`, and other
+conventional guests stay on this path unless there is a specific reason to move
+them. The bootstrap `sys-net` and `dev` domains use the Nix-native path below.
 
 NixOS domains use the `nix-closure` backend:
 
@@ -336,24 +336,31 @@ nixNative.domains.dev = {
 The bootstrap `vm-gui-config` topology materializes the same domain, so a fresh
 boot has `dev` available before the first self-hosted apply.
 
-`sys-firewall` and `sys-net` are the stock QubesOS networking qubes. Nixome
-does not materialize Nix-native replacements for them. The expected dev network
-path is:
+`sys-net` is part of the Nixome bootstrap topology. It is an ordinary Qubes
+domain, but its first-boot configuration is generated from the Nix topology
+instead of being hand-created after boot. The expected dev network path is:
 
 ```text
-dev -> sys-firewall -> sys-net -> physical network
+dev -> sys-net -> physical network
 ```
 
-If a fresh test image has not created the stock domains yet, setup defers the
-`dev.netvm` assignment until `sys-firewall` exists; create or restore the normal
-QubesOS networking domains and rerun setup.
+For `sys-net`, an empty `devices.pci` list means `nixome-setup-config`
+discovers dom0 PCI devices with the network-controller class and assigns the
+available devices to `sys-net`, matching the normal Qubes installer behavior.
+In nested development images the launcher exposes two emulated NICs: one remains
+dom0's direct development uplink for SSH and package access, and the second is
+available for sys-net. On non-dev images dom0 has no direct DHCP uplink, so the
+same sys-net topology can claim the host network-class PCI devices.
+
+If an external domain is referenced by a candidate but does not exist yet, setup
+defers that NetVM assignment until the domain exists and setup is rerun.
 The self-hosted `nixome check` and `nixome apply` path is stricter: after the
 validator emits a topology, dom0 verifies that referenced domains are either
 declared by the candidate or already exist in Qubes, and rejects the candidate
-before promotion or activation if a reference such as `sys-firewall` is missing.
-For the stock network path, dom0 also verifies that external `sys-firewall`
-provides network, is routed through `sys-net`, and that `sys-net` exists,
-provides network, and has no upstream NetVM.
+before promotion or activation if a referenced NetVM is missing. For external
+network paths, dom0 verifies that any external provider exists and provides
+network, and that `sys-net` has no upstream NetVM when it is used as the
+physical uplink.
 
 The `dev` role layers development tools on top of the minimal Qubes guest base.
 It includes `git`, the private-store Nix CLI wrapper, Rust and Python tooling

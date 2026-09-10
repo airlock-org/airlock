@@ -40,6 +40,7 @@ from local_pychecks import (
     check_qube_guest_policy_probe,
     check_run_nested_gui_smoke_static,
     check_setup_config_empty_global_pref,
+    check_setup_config_auto_sys_net_pci,
     check_setup_config_external_netvm,
     check_setup_config_idempotent,
     check_setup_config_nix_native,
@@ -294,6 +295,10 @@ LOCAL_CHECKS = (
     LocalCheck(
         "setup-config-external-netvm",
         runner=check_setup_config_external_netvm,
+    ),
+    LocalCheck(
+        "setup-config-auto-sys-net-pci",
+        runner=check_setup_config_auto_sys_net_pci,
     ),
     LocalCheck("setup-config-idempotent", runner=check_setup_config_idempotent),
     LocalCheck(

@@ -628,6 +628,190 @@ pci_device_assignment_current() {
   return 0
 }
 
+split_device_words_unique() {
+  tr ' \t,\r' '\n' | awk 'NF && !seen[$0]++ { print }'
+}
+
+sysfs_bdf_to_qubes_port_id() {
+  local bdf="$1"
+
+  case "$bdf" in
+    [0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f].[0-7])
+      bdf="${bdf#*:}"
+      ;;
+    [0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f].[0-7])
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  printf '%s\n' "${bdf/:/_}"
+}
+
+list_dom0_network_pci_devices() {
+  if [ -n "${NIXOME_DOM0_NETWORK_PCI_DEVICES:-}" ]; then
+    printf '%s\n' "$NIXOME_DOM0_NETWORK_PCI_DEVICES" | split_device_words_unique
+    return 0
+  fi
+
+  python3 - <<'PY'
+import qubesadmin
+
+app = qubesadmin.Qubes()
+for dev in app.domains["dom0"].devices["pci"]:
+    try:
+        interface = repr(dev.interfaces[0])
+    except Exception:
+        continue
+    if interface.startswith("p02"):
+        print(dev.port_id)
+PY
+}
+
+list_dom0_default_route_pci_devices() {
+  local iface
+  local device_path
+  local bdf
+
+  if [ -n "${NIXOME_DOM0_DEFAULT_ROUTE_PCI_DEVICES:-}" ]; then
+    printf '%s\n' "$NIXOME_DOM0_DEFAULT_ROUTE_PCI_DEVICES" | split_device_words_unique
+    return 0
+  fi
+
+  ip -o route show default 2>/dev/null |
+    awk '
+      {
+        for (i = 1; i <= NF; i++) {
+          if ($i == "dev" && (i + 1) <= NF) {
+            print $(i + 1)
+          }
+        }
+      }
+    ' |
+    awk 'NF && !seen[$0]++ { print }' |
+    while IFS= read -r iface; do
+      case "$iface" in
+        ""|lo)
+          continue
+          ;;
+      esac
+
+      device_path="$(readlink -f "/sys/class/net/$iface/device" 2>/dev/null || true)"
+      bdf="${device_path##*/}"
+      sysfs_bdf_to_qubes_port_id "$bdf"
+    done |
+    awk 'NF && !seen[$0]++ { print }'
+}
+
+list_auto_sys_net_pci_devices() {
+  local network_devices_file
+  local excluded_devices_file
+
+  network_devices_file="$(mktemp)"
+  excluded_devices_file="$(mktemp)"
+  list_dom0_network_pci_devices > "$network_devices_file"
+  {
+    list_dom0_default_route_pci_devices
+    if [ -n "${NIXOME_SYS_NET_PCI_EXCLUDE:-}" ]; then
+      printf '%s\n' "$NIXOME_SYS_NET_PCI_EXCLUDE" | split_device_words_unique
+    fi
+  } > "$excluded_devices_file"
+
+  awk '
+    NR == FNR {
+      if ($0 != "") {
+        excluded[$0] = 1
+      }
+      next
+    }
+    $0 != "" && !excluded[$0] && !seen[$0]++ {
+      print
+    }
+  ' "$excluded_devices_file" "$network_devices_file"
+
+  rm -f "$network_devices_file" "$excluded_devices_file"
+}
+
+domain_wants_auto_sys_net_pci() {
+  local domain="$1"
+
+  [ "$domain" = "sys-net" ] || return 1
+  jq -e --arg name "$domain" '
+    (.domains[$name] // null) as $domain
+    | $domain != null
+    and (($domain.devices.pci // []) | length == 0)
+    and (($domain.prefs.provides_network // false) == true)
+    and (
+      ($domain.netvm // null) == null
+      or ($domain.netvm | tostring | ascii_downcase) == "none"
+      or ($domain.netvm | tostring) == ""
+    )
+  ' "$TOPOLOGY" >/dev/null
+}
+
+assign_domain_pci_device() {
+  local domain="$1"
+  local backend="$2"
+  local device_id="$3"
+  local mode="$4"
+  local match_mode="$5"
+  local options_json="$6"
+  local option
+  local -a args
+  local -a option_args=()
+  local value
+
+  if pci_device_assignment_current "$domain" "$backend" "$device_id" "$mode" "$match_mode" "$options_json"; then
+    printf 'PCI assignment current: %s %s:%s mode=%s match=%s\n' \
+      "$domain" "$backend" "$device_id" "$mode" "$match_mode"
+    return 0
+  fi
+
+  args=(qvm-device pci assign)
+  case "$mode" in
+    auto-attach)
+      ;;
+    ask-to-attach)
+      args+=(--ask)
+      ;;
+    required)
+      args+=(--required)
+      ;;
+    *)
+      fail "unsupported PCI assignment mode for $domain: $mode"
+      ;;
+  esac
+  case "$match_mode" in
+    port-and-device)
+      ;;
+    port)
+      args+=(--port)
+      ;;
+    device)
+      args+=(--device)
+      ;;
+    *)
+      fail "unsupported PCI assignment match mode for $domain: $match_mode"
+      ;;
+  esac
+
+  mapfile -t option_args < <(
+    printf '%s\n' "$options_json" |
+      jq -r 'to_entries | sort_by(.key)[] | "\(.key)=\(.value)"'
+  )
+  for option in "${option_args[@]}"; do
+    args+=(--option "$option")
+  done
+  args+=("$domain" "$backend:$device_id")
+
+  run_or_plan "${args[@]}"
+  devices_changed=$((devices_changed + 1))
+  value="${backend}:${device_id} mode=${mode} match=${match_mode}"
+  record_live_action domain-device assign "$domain" pci "$value"
+  record_domain_restart_if_running "$domain" domain-device pci "$value"
+}
+
 setup_domain_pci_devices() {
   local domain="$1"
   local count
@@ -637,10 +821,6 @@ setup_domain_pci_devices() {
   local mode
   local match_mode
   local options_json
-  local option
-  local -a args
-  local -a option_args=()
-  local value
 
   count="$(jq_get '(.domains[$name].devices.pci // []) | length' --arg name "$domain")"
   [ "$count" -gt 0 ] || return 0
@@ -663,57 +843,31 @@ setup_domain_pci_devices() {
         "$TOPOLOGY"
     )"
 
-    if pci_device_assignment_current "$domain" "$backend" "$device_id" "$mode" "$match_mode" "$options_json"; then
-      printf 'PCI assignment current: %s %s:%s mode=%s match=%s\n' \
-        "$domain" "$backend" "$device_id" "$mode" "$match_mode"
-      index=$((index + 1))
-      continue
-    fi
-
-    args=(qvm-device pci assign)
-    case "$mode" in
-      auto-attach)
-        ;;
-      ask-to-attach)
-        args+=(--ask)
-        ;;
-      required)
-        args+=(--required)
-        ;;
-      *)
-        fail "unsupported PCI assignment mode for $domain: $mode"
-        ;;
-    esac
-    case "$match_mode" in
-      port-and-device)
-        ;;
-      port)
-        args+=(--port)
-        ;;
-      device)
-        args+=(--device)
-        ;;
-      *)
-        fail "unsupported PCI assignment match mode for $domain: $match_mode"
-        ;;
-    esac
-
-    mapfile -t option_args < <(
-      printf '%s\n' "$options_json" |
-        jq -r 'to_entries | sort_by(.key)[] | "\(.key)=\(.value)"'
-    )
-    for option in "${option_args[@]}"; do
-      args+=(--option "$option")
-    done
-    args+=("$domain" "$backend:$device_id")
-
-    run_or_plan "${args[@]}"
-    devices_changed=$((devices_changed + 1))
-    value="${backend}:${device_id} mode=${mode} match=${match_mode}"
-    record_live_action domain-device assign "$domain" pci "$value"
-    record_domain_restart_if_running "$domain" domain-device pci "$value"
+    assign_domain_pci_device "$domain" "$backend" "$device_id" "$mode" "$match_mode" "$options_json"
 
     index=$((index + 1))
+  done
+}
+
+setup_domain_auto_sys_net_pci_devices() {
+  local domain="$1"
+  local device_id
+  local -a device_ids=()
+
+  domain_wants_auto_sys_net_pci "$domain" || return 0
+
+  if [ "$APPLY" = "1" ] && ! domain_exists "$domain"; then
+    fail "domain is missing before automatic sys-net PCI assignment: $domain"
+  fi
+
+  mapfile -t device_ids < <(list_auto_sys_net_pci_devices)
+  if [ "${#device_ids[@]}" -eq 0 ]; then
+    fail "automatic sys-net PCI assignment found no available dom0 network PCI devices"
+  fi
+
+  for device_id in "${device_ids[@]}"; do
+    printf 'automatic sys-net PCI assignment candidate: dom0:%s\n' "$device_id"
+    assign_domain_pci_device "$domain" dom0 "$device_id" required port '{}'
   done
 }
 
@@ -721,6 +875,7 @@ setup_domain_devices() {
   local domain="$1"
 
   setup_domain_pci_devices "$domain"
+  setup_domain_auto_sys_net_pci_devices "$domain"
 }
 
 is_preferred_domain_pref() {
@@ -1455,6 +1610,20 @@ topology_has_device_assignments() {
   ' "$TOPOLOGY" >/dev/null
 }
 
+topology_has_auto_sys_net_pci() {
+  jq -e '
+    (.domains["sys-net"] // null) as $domain
+    | $domain != null
+    and (($domain.devices.pci // []) | length == 0)
+    and (($domain.prefs.provides_network // false) == true)
+    and (
+      ($domain.netvm // null) == null
+      or ($domain.netvm | tostring | ascii_downcase) == "none"
+      or ($domain.netvm | tostring) == ""
+    )
+  ' "$TOPOLOGY" >/dev/null
+}
+
 for cmd in \
   awk \
   chmod \
@@ -1484,6 +1653,13 @@ fi
 
 if topology_has_device_assignments; then
   require_command qvm-device
+fi
+
+if topology_has_auto_sys_net_pci; then
+  require_command ip
+  require_command mktemp
+  require_command qvm-device
+  require_command readlink
 fi
 
 if ! [ -r "$XEN_CAPABILITIES" ] || ! grep -qw control_d "$XEN_CAPABILITIES"; then
