@@ -30,6 +30,7 @@ from local_pychecks import (
     check_run_nested_gui_smoke_static,
     check_setup_config_empty_global_pref,
     check_setup_config_external_netvm,
+    check_setup_config_idempotent,
     check_setup_config_pref_order,
     check_setup_config_qrexec_policy,
     check_setup_config_restart_actions,
@@ -275,7 +276,7 @@ LOCAL_CHECKS = (
         "setup-config-external-netvm",
         runner=check_setup_config_external_netvm,
     ),
-    LocalCheck("setup-config-idempotent", ("{root}/tests/setup-config-idempotent.sh",)),
+    LocalCheck("setup-config-idempotent", runner=check_setup_config_idempotent),
     LocalCheck(
         "setup-config-restart-actions",
         runner=check_setup_config_restart_actions,
