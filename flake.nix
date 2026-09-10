@@ -132,6 +132,12 @@
       boolString = value: if value then "true" else "false";
 
       nixomeQubesVmKernelName = "6.12.64-1.fc41";
+      nestedDevSysNetPciAssignment = {
+        backend = "dom0";
+        id = "00_03.0";
+        match = "port";
+        mode = "required";
+      };
 
       nixomeSupportConfigInputSource =
         let
@@ -216,7 +222,15 @@
             (if gui then ./lifecycle/image/profiles/vm-gui-base.nix else ./lifecycle/image/profiles/vm-base.nix)
           ]
           ++ lib.optional devMode ./lifecycle/image/profiles/dev-mode.nix
-          ++ lib.optional configSystem ./lifecycle/bootstrap/config-system.nix;
+          ++ lib.optional configSystem ./lifecycle/bootstrap/config-system.nix
+          ++ lib.optional (configSystem && devMode) (
+            { ... }:
+            {
+              # The nested QEMU launcher exposes the first virtio NIC for dom0
+              # SSH/package access and the second virtio NIC for sys-net.
+              nixome.qubes.domains.sys-net.devices.pci = [ nestedDevSysNetPciAssignment ];
+            }
+          );
         };
 
       mkModuleContractCheck =

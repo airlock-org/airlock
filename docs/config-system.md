@@ -347,10 +347,11 @@ dev -> sys-net -> physical network
 For `sys-net`, an empty `devices.pci` list means `nixome-setup-config`
 discovers dom0 PCI devices with the network-controller class and assigns the
 available devices to `sys-net`, matching the normal Qubes installer behavior.
-In nested development images the launcher exposes two emulated NICs: one remains
-dom0's direct development uplink for SSH and package access, and the second is
-available for sys-net. On non-dev images dom0 has no direct DHCP uplink, so the
-same sys-net topology can claim the host network-class PCI devices.
+In nested bootstrap development images the launcher exposes two emulated NICs:
+one remains dom0's direct development uplink for SSH and package access, and the
+second is assigned to sys-net as `dom0:00_03.0`. On non-dev images dom0 has no
+direct DHCP uplink, so the same sys-net topology can claim the host
+network-class PCI devices.
 
 If an external domain is referenced by a candidate but does not exist yet, setup
 defers that NetVM assignment until the domain exists and setup is rerun.

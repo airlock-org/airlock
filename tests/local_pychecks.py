@@ -9221,7 +9221,15 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         topology["domains"]["config-vault"]["backend"]["state"]["persistent_size"]
         is None
     )
-    assert topology["domains"]["sys-net"]["devices"]["pci"] == []
+    assert topology["domains"]["sys-net"]["devices"]["pci"] == [
+        {
+            "backend": "dom0",
+            "id": "00_03.0",
+            "match": "port",
+            "mode": "required",
+            "options": {},
+        }
+    ]
     assert topology["domains"]["sys-firewall"]["netvm"] == "sys-net"
     assert topology["domains"]["sys-firewall"]["prefs"]["autostart"] is True
     assert topology["domains"]["sys-firewall"]["prefs"]["provides_network"] is True
