@@ -674,9 +674,9 @@ let
         }
         // extraSpecialArgs;
         modules = [
-          "${nixomeSupport}/runtime/tools/modules/nixome-minimal.nix"
+          "${nixomeSupport}/lifecycle/runtime/tools/modules/nixome-minimal.nix"
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
-          "${nixomeSupport}/runtime/tools/modules/qube-guest.nix"
+          "${nixomeSupport}/lifecycle/runtime/tools/modules/qube-guest.nix"
           {
             nixpkgs.pkgs = pkgs;
             nixome.minimalGuest.enable = true;

@@ -316,7 +316,7 @@
       nixomeSupport = "__NIXOME_SUPPORT_PATH__";
       nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
       nixpkgsLibvirt105Source = "__NIXPKGS_LIBVIRT_10_5_PATH__";
-      templateBuilders = import "${nixomeSupport}/runtime/tools/lib/qube-template.nix" {
+      templateBuilders = import "${nixomeSupport}/lifecycle/runtime/tools/lib/qube-template.nix" {
         inherit nixpkgs system;
         inherit
           nixomeSupport
@@ -619,10 +619,10 @@
         };
         modules = [
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
-          "${nixomeSupport}/runtime/tools/modules/dom0.nix"
-          "${nixomeSupport}/runtime/tools/modules/qubes-topology.nix"
-          "${nixomeSupport}/image/profiles/vm-gui.nix"
-          "${nixomeSupport}/bootstrap/config-system.nix"
+          "${nixomeSupport}/lifecycle/runtime/tools/modules/dom0.nix"
+          "${nixomeSupport}/lifecycle/runtime/tools/modules/qubes-topology.nix"
+          "${nixomeSupport}/lifecycle/image/profiles/vm-gui.nix"
+          "${nixomeSupport}/lifecycle/bootstrap/config-system.nix"
           {
             nixpkgs.overlays = templateBuilders.qubesOverlays;
           }

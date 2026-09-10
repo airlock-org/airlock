@@ -85,7 +85,7 @@ STAGED_VM_STEPS = (
     ),
     StagedVmStep(
         "config-vms-preflight",
-        ("{root}/runtime/tools/scripts/run-nested-gui-smoke.sh",),
+        ("{root}/lifecycle/runtime/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
             NIXOME_CONFIG_VMS_SMOKE_MODE="preflight",
             NIXOME_CONFIG_VMS_IMPORT_INPUTS="0",
@@ -94,13 +94,13 @@ STAGED_VM_STEPS = (
     ),
     StagedVmStep(
         "config-vms-stage-candidate",
-        ("{root}/runtime/tools/scripts/run-nested-gui-smoke.sh",),
+        ("{root}/lifecycle/runtime/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(NIXOME_CONFIG_VMS_SMOKE_MODE="stage-candidate"),
         (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "config-apply-archive",
-        ("{root}/runtime/tools/scripts/run-nested-gui-smoke.sh",),
+        ("{root}/lifecycle/runtime/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
             NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
             NIXOME_CONFIG_APPLY_STAGE="archive",
@@ -109,7 +109,7 @@ STAGED_VM_STEPS = (
     ),
     StagedVmStep(
         "config-apply-resolve",
-        ("{root}/runtime/tools/scripts/run-nested-gui-smoke.sh",),
+        ("{root}/lifecycle/runtime/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
             NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
             NIXOME_CONFIG_APPLY_STAGE="resolve",
@@ -118,7 +118,7 @@ STAGED_VM_STEPS = (
     ),
     StagedVmStep(
         "config-apply-setup",
-        ("{root}/runtime/tools/scripts/run-nested-gui-smoke.sh",),
+        ("{root}/lifecycle/runtime/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
             NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
             NIXOME_CONFIG_APPLY_STAGE="setup",
@@ -127,7 +127,7 @@ STAGED_VM_STEPS = (
     ),
     StagedVmStep(
         "config-apply-system",
-        ("{root}/runtime/tools/scripts/run-nested-gui-smoke.sh",),
+        ("{root}/lifecycle/runtime/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
             NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
             NIXOME_CONFIG_APPLY_STAGE="system",
@@ -136,7 +136,7 @@ STAGED_VM_STEPS = (
     ),
     StagedVmStep(
         "config-apply-deploy",
-        ("{root}/runtime/tools/scripts/run-nested-gui-smoke.sh",),
+        ("{root}/lifecycle/runtime/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
             NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
             NIXOME_CONFIG_APPLY_STAGE="deploy",
@@ -145,13 +145,13 @@ STAGED_VM_STEPS = (
     ),
     StagedVmStep(
         "config-vms-post-apply",
-        ("{root}/runtime/tools/scripts/run-nested-gui-smoke.sh",),
+        ("{root}/lifecycle/runtime/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(NIXOME_CONFIG_VMS_SMOKE_MODE="post-apply"),
         (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "nix-closure-domain-smoke",
-        ("{root}/runtime/tools/scripts/run-nested-gui-smoke.sh",),
+        ("{root}/lifecycle/runtime/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_nix_closure_env(),
         (WARM_EXTRA_MARK,),
     ),

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-source "$ROOT/runtime/tools/scripts/lib/nixome-env.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+source "$ROOT/lifecycle/runtime/tools/scripts/lib/nixome-env.sh"
 
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 RESULT_JSON="$LOG_DIR/vm-gui-sync-dom0-tools.json"
@@ -34,7 +34,7 @@ shell_quote() {
 }
 
 ssh_base() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     ssh \
       -F /dev/null \
       -o LogLevel=ERROR \
@@ -49,7 +49,7 @@ ssh_base() {
 }
 
 scp_base() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     scp \
       -F /dev/null \
       -q \
@@ -67,7 +67,7 @@ build_output() {
   local attr="$1"
   local out
 
-  out="$("$ROOT/runtime/tools/scripts/nixome-nix.sh" build "$ROOT#$attr" --no-link --print-out-paths --print-build-logs --show-trace)"
+  out="$("$ROOT/lifecycle/runtime/tools/scripts/nixome-nix.sh" build "$ROOT#$attr" --no-link --print-out-paths --print-build-logs --show-trace)"
   awk 'NF { last = $0 } END { print last }' <<< "$out"
 }
 
@@ -100,7 +100,7 @@ topology_sources=()
 case "$SYNC_TOPOLOGY" in
   1|true|yes)
     printf 'warm-sync: evaluating current concrete Qubes topology\n' >&2
-    "$ROOT/runtime/tools/scripts/nixome-nix.sh" eval \
+    "$ROOT/lifecycle/runtime/tools/scripts/nixome-nix.sh" eval \
       --impure \
       --json \
       "$ROOT#nixosConfigurations.vm-gui-config.config.nixome.qubes.topology" \
@@ -154,7 +154,7 @@ config_input_sources=()
 case "$SYNC_CONFIG_INPUTS" in
   1|true|yes)
     printf 'warm-sync: evaluating current config inputs\n' >&2
-    "$ROOT/runtime/tools/scripts/nixome-nix.sh" eval \
+    "$ROOT/lifecycle/runtime/tools/scripts/nixome-nix.sh" eval \
       --impure \
       --json \
       "$ROOT#nixome.configInputs" \

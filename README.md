@@ -20,11 +20,13 @@ integration layer for:
 
 ## Repository Layout
 
-- `image/`: image build profiles and overlays for bootable Nixome systems.
-- `bootstrap/`: first-boot wiring and the starting runtime config bundled into an image.
-- `bootstrap/initial-runtime-config/`: starter runtime config that `config-vault` turns into the first current baseline.
-- `runtime/`: code used after bootstrap to operate the running system.
-- `runtime/tools/`: Nix libraries, schemas, modules, packages, and scripts used to run and manage Nixome.
+- `lifecycle/`: image, bootstrap, and runtime layers for the Nixome system lifecycle.
+- `lifecycle/image/`: image build profiles and overlays for bootable Nixome systems.
+- `lifecycle/bootstrap/`: first-boot wiring and the starting runtime config bundled into an image.
+- `lifecycle/bootstrap/initial-runtime-config/`: starter runtime config that `config-vault` turns into the first current baseline.
+- `lifecycle/runtime/`: code used after bootstrap to operate the running system.
+- `lifecycle/runtime/tools/`: Nix libraries, schemas, modules, packages, and scripts used to run and manage Nixome.
+- `docs/`: design notes, config authority details, and test documentation.
 - `vendor/`: upstream source inputs carried locally for the POC.
 
 ## Commands

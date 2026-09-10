@@ -6,7 +6,7 @@ come from a Nix flake edited inside dedicated config VMs.
 
 ## Declared Objects
 
-`bootstrap/config-system.nix` declares:
+`lifecycle/bootstrap/config-system.nix` declares:
 
 - `config-vault`, an offline closure-backed NixOS `StandaloneVM`.
 - `config-staging`, an offline closure-backed NixOS `StandaloneVM`.

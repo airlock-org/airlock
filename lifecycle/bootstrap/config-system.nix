@@ -22,15 +22,15 @@ in
   assertions = [
     {
       assertion = haveConfigDomains;
-      message = "bootstrap/config-system.nix requires generated nix-closure config domains: ${builtins.concatStringsSep ", " missingConfigDomains}";
+      message = "lifecycle/bootstrap/config-system.nix requires generated nix-closure config domains: ${builtins.concatStringsSep ", " missingConfigDomains}";
     }
     {
       assertion = haveQubeKernel;
-      message = "bootstrap/config-system.nix requires nixomeQubeKernel specialArg.";
+      message = "lifecycle/bootstrap/config-system.nix requires nixomeQubeKernel specialArg.";
     }
     {
       assertion = haveConfigInputs;
-      message = "bootstrap/config-system.nix requires nixomeConfigInputs specialArgs.";
+      message = "lifecycle/bootstrap/config-system.nix requires nixomeConfigInputs specialArgs.";
     }
   ];
 
