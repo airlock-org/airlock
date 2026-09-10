@@ -41,7 +41,7 @@ def run_nested_gui_smoke_env(**overrides: str) -> dict[str, str]:
         "NIXOME_SYNC_DOM0_TOOLS": "0",
         "NIXOME_NESTED_WARM_STOP_NIX_DOMAINS": "1",
         "NIXOME_VM_SKIP_BASE_BUILD": "1",
-        "NIXOME_VM_IMAGE_ATTR": "nixome-vm-gui-config-image",
+        "NIXOME_VM_IMAGE_ATTR": "nixome-vm-gui-config-dev-image",
         "NIXOME_VM_DISPLAY": "none",
         "NIXOME_VM_FRESH": "0",
         "NIXOME_BOOTSTRAP_QUBES": "0",

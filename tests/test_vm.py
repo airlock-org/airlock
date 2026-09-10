@@ -269,7 +269,7 @@ def test_vm_flow(
         result_link_dir.mkdir(parents=True, exist_ok=True)
         shared_image_attr = env.get(
             "NIXOME_VM_PARALLEL_IMAGE_ATTR",
-            "nixome-vm-gui-config-image",
+            "nixome-vm-gui-config-dev-image",
         )
         shared_image_link_value = env.get("NIXOME_VM_PARALLEL_IMAGE_LINK")
         lane_image_link = None

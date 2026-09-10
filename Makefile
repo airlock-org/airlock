@@ -25,7 +25,18 @@ export XDG_CACHE_HOME
 endif
 
 NIXOME_NIX ?= ./lifecycle/misc/tools/scripts/nixome-nix.sh
-VM_PARALLEL_IMAGE_ATTR ?= nixome-vm-gui-config-image
+VM_IMAGE_MODE ?= dev
+ifeq ($(VM_IMAGE_MODE),dev)
+VM_IMAGE_MODE_SUFFIX := dev
+else ifeq ($(VM_IMAGE_MODE),normal)
+VM_IMAGE_MODE_SUFFIX := normal
+else
+$(error VM_IMAGE_MODE must be dev or normal)
+endif
+VM_IMAGE_ATTR ?= nixome-vm-$(VM_IMAGE_MODE_SUFFIX)-image
+VM_GUI_IMAGE_ATTR ?= nixome-vm-gui-$(VM_IMAGE_MODE_SUFFIX)-image
+VM_GUI_CONFIG_IMAGE_ATTR ?= nixome-vm-gui-config-$(VM_IMAGE_MODE_SUFFIX)-image
+VM_PARALLEL_IMAGE_ATTR ?= $(VM_GUI_CONFIG_IMAGE_ATTR)
 VM_PARALLEL_IMAGE_LINK ?= $(NIXOME_RESULT_LINK_DIR)/$(VM_PARALLEL_IMAGE_ATTR)-parallel-shared-result
 VM_PARALLEL_BASELINE_ROOT ?= $(or $(NIXOME_DATA_ROOT),$(CURDIR)/.nixome)/vm-baselines
 VM_PARALLEL_BASELINE_DIR ?= $(VM_PARALLEL_BASELINE_ROOT)/$(VM_PARALLEL_IMAGE_ATTR)-setup
@@ -45,7 +56,7 @@ VM_PREBUILD_ATTRS := \
 	packages.x86_64-linux.nixome-nix-closure-domain-smoke \
 	packages.x86_64-linux.nixome-qubes-storage \
 	packages.x86_64-linux.nixome-qubes-vm-kernel \
-	nixome-vm-gui-config-image
+	$(VM_GUI_CONFIG_IMAGE_ATTR)
 
 PYTHON_FILES := \
 	lifecycle/runtime/tools/pkgs/nixome-qubes-storage/src/nixome_qubes_storage/__init__.py \
@@ -160,34 +171,34 @@ vm-parallel-prebuild-baseline: vm-parallel-prebuild-image
 	NIXOME_VM_IMAGE_ATTR="$(VM_PARALLEL_IMAGE_ATTR)" NIXOME_VM_SHARED_IMAGE_LINK="$(VM_PARALLEL_IMAGE_LINK)" NIXOME_VM_BASELINE_DIR="$(VM_PARALLEL_BASELINE_DIR)" NIXOME_VM_BASELINE_DISK="$(VM_PARALLEL_BASELINE_DISK)" NIXOME_VM_BASELINE_OVMF_VARS="$(VM_PARALLEL_BASELINE_OVMF_VARS)" NIXOME_VM_BASELINE_LOG_DIR="$(VM_PARALLEL_BASELINE_LOG_DIR)" NIXOME_VM_BASELINE_SSH_PORT="$(VM_PARALLEL_BASELINE_SSH_PORT)" ./lifecycle/misc/tools/scripts/prepare-vm-baseline.sh
 
 vm-image: ensure-generated-dirs gc-auto
-	$(NIXOME_NIX) build .#nixome-vm-image --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-vm-image" --print-build-logs --show-trace
+	$(NIXOME_NIX) build .#$(VM_IMAGE_ATTR) --out-link "$(NIXOME_RESULT_LINK_DIR)/$(VM_IMAGE_ATTR)" --print-build-logs --show-trace
 
 vm-image-dry-run: ensure-generated-dirs
-	$(NIXOME_NIX) build .#nixome-vm-image --dry-run --show-trace
+	$(NIXOME_NIX) build .#$(VM_IMAGE_ATTR) --dry-run --show-trace
 
 vm-run: ensure-generated-dirs gc-auto
-	./lifecycle/misc/tools/scripts/run-nested-vm.sh
+	NIXOME_VM_IMAGE_ATTR="$(VM_IMAGE_ATTR)" ./lifecycle/misc/tools/scripts/run-nested-vm.sh
 
 vm-ssh: ensure-generated-dirs
 	./lifecycle/misc/tools/scripts/ssh-nested-vm.sh
 
 vm-gui-image: ensure-generated-dirs gc-auto
-	$(NIXOME_NIX) build .#nixome-vm-gui-image --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-vm-gui-image" --print-build-logs --show-trace
+	$(NIXOME_NIX) build .#$(VM_GUI_IMAGE_ATTR) --out-link "$(NIXOME_RESULT_LINK_DIR)/$(VM_GUI_IMAGE_ATTR)" --print-build-logs --show-trace
 
 vm-gui-image-dry-run: ensure-generated-dirs
-	$(NIXOME_NIX) build .#nixome-vm-gui-image --dry-run --show-trace
+	$(NIXOME_NIX) build .#$(VM_GUI_IMAGE_ATTR) --dry-run --show-trace
 
 vm-gui-run: ensure-generated-dirs gc-auto
-	NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-image NIXOME_VM_DISPLAY=gtk ./lifecycle/misc/tools/scripts/run-nested-vm.sh
+	NIXOME_VM_IMAGE_ATTR="$(VM_GUI_IMAGE_ATTR)" NIXOME_VM_DISPLAY=gtk ./lifecycle/misc/tools/scripts/run-nested-vm.sh
 
 vm-gui-config-image: ensure-generated-dirs gc-auto
-	$(NIXOME_NIX) build .#nixome-vm-gui-config-image --out-link "$(NIXOME_RESULT_LINK_DIR)/nixome-vm-gui-config-image" --print-build-logs --show-trace
+	$(NIXOME_NIX) build .#$(VM_GUI_CONFIG_IMAGE_ATTR) --out-link "$(NIXOME_RESULT_LINK_DIR)/$(VM_GUI_CONFIG_IMAGE_ATTR)" --print-build-logs --show-trace
 
 vm-gui-config-image-dry-run: ensure-generated-dirs
-	$(NIXOME_NIX) build .#nixome-vm-gui-config-image --dry-run --show-trace
+	$(NIXOME_NIX) build .#$(VM_GUI_CONFIG_IMAGE_ATTR) --dry-run --show-trace
 
 vm-gui-config-run: ensure-generated-dirs gc-auto
-	NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=gtk ./lifecycle/misc/tools/scripts/run-nested-vm.sh
+	NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=gtk ./lifecycle/misc/tools/scripts/run-nested-vm.sh
 
 vm-gui-check: ensure-generated-dirs gc-auto
 	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
@@ -199,7 +210,7 @@ vm-warm-start: ensure-generated-dirs
 	@if ./lifecycle/misc/tools/scripts/ssh-nested-vm.sh true >/dev/null 2>&1; then \
 		printf 'nested dom0 already reachable on NIXOME_VM_SSH_PORT=%s\n' "$${NIXOME_VM_SSH_PORT:-2222}"; \
 	else \
-		NIXOME_KEEP_VM=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=0 NIXOME_RUN_CONFIG_INPUTS_IMPORT=0 NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh; \
+		NIXOME_KEEP_VM=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=0 NIXOME_RUN_CONFIG_INPUTS_IMPORT=0 NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh; \
 	fi
 
 vm-warm-sync: ensure-generated-dirs
@@ -209,31 +220,31 @@ vm-sync-codex-auth: ensure-generated-dirs
 	./lifecycle/misc/tools/scripts/sync-nested-codex-auth.sh
 
 vm-warm-apply: ensure-generated-dirs
-	NIXOME_KEEP_VM=1 NIXOME_REUSE_WARM_VM=1 NIXOME_SYNC_DOM0_TOOLS=1 NIXOME_NESTED_WARM_STOP_NIX_DOMAINS=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_INPUTS_IMPORT=1 NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
+	NIXOME_KEEP_VM=1 NIXOME_REUSE_WARM_VM=1 NIXOME_SYNC_DOM0_TOOLS=1 NIXOME_NESTED_WARM_STOP_NIX_DOMAINS=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_INPUTS_IMPORT=1 NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
 
 vm-warm-test-config: ensure-generated-dirs
-	NIXOME_KEEP_VM=1 NIXOME_REUSE_WARM_VM=1 NIXOME_SYNC_DOM0_TOOLS=1 NIXOME_NESTED_WARM_STOP_NIX_DOMAINS=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_INPUTS_IMPORT=0 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_NIX_CLOSURE_SMOKE=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
+	NIXOME_KEEP_VM=1 NIXOME_REUSE_WARM_VM=1 NIXOME_SYNC_DOM0_TOOLS=1 NIXOME_NESTED_WARM_STOP_NIX_DOMAINS=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_INPUTS_IMPORT=0 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_NIX_CLOSURE_SMOKE=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
 
 vm-config-setup: ensure-generated-dirs gc-auto
-	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
+	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=none NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
 
 vm-config-flow: ensure-generated-dirs gc-auto
-	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=$(VM_FLOW_RUN_SETUP_CONFIG) NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
+	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=$(VM_FLOW_RUN_SETUP_CONFIG) NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
 
 vm-config-warm-flow: ensure-generated-dirs gc-auto
-	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
+	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
 
 vm-config-boot-flow: ensure-generated-dirs gc-auto
-	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=$(VM_FLOW_RUN_SETUP_CONFIG) NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
+	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=$(VM_FLOW_RUN_SETUP_CONFIG) NIXOME_RUN_CONFIG_VMS_SMOKE=1 NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
 
 vm-config-boot-activate-flow: ensure-generated-dirs gc-auto
 	./lifecycle/misc/tools/scripts/run-config-boot-activation-flow.sh
 
 vm-nix-closure-flow: ensure-generated-dirs gc-auto
-	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=$(VM_FLOW_RUN_SETUP_CONFIG) NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
+	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=$(VM_FLOW_RUN_SETUP_CONFIG) NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
 
 vm-nix-closure-warm-flow: ensure-generated-dirs gc-auto
-	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_KEEP_VM=1 NIXOME_SYNC_DOM0_TOOLS=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR=nixome-vm-gui-config-image NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
+	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_KEEP_VM=1 NIXOME_SYNC_DOM0_TOOLS=1 NIXOME_VM_SKIP_BASE_BUILD=1 NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=none NIXOME_VM_FRESH=0 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_SETUP_CONFIG=1 NIXOME_RUN_CONFIG_VMS_SMOKE=0 NIXOME_RUN_NIX_CLOSURE_SMOKE=1 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
 
 disk-usage:
 	./lifecycle/misc/tools/scripts/clean-generated.sh disk-usage

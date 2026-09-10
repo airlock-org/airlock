@@ -142,10 +142,7 @@
               rel = lib.removePrefix "${root}/" (toString path);
               keepTree = name: rel == name || lib.hasPrefix "${name}/" rel;
             in
-            rel == "flake.nix"
-            || rel == "flake.lock"
-            || keepTree "lifecycle"
-            || rel == "tests";
+            rel == "flake.nix" || rel == "flake.lock" || keepTree "lifecycle" || rel == "tests";
         in
         lib.cleanSourceWith {
           name = "nixome-support-config-input-source";
@@ -184,6 +181,43 @@
         mkDevDomainEntry
         mkSysNetDomainEntry
         ;
+
+      mkBootstrapConfigDomains =
+        system:
+        let
+          bootstrapDomainEntries = (mkConfigDomainEntries system) // {
+            sys-net = mkSysNetDomainEntry system;
+            dev = mkDevDomainEntry system;
+          };
+        in
+        builtins.mapAttrs (_name: entry: materializeNixClosureDomain entry) bootstrapDomainEntries;
+
+      mkConfigSystemSpecialArgs = system: {
+        nixomeQubeKernel = {
+          name = nixomeQubesVmKernelName;
+          package = self.packages.${system}.nixome-qubes-vm-kernel;
+        };
+        nixomeConfigDomains = mkBootstrapConfigDomains system;
+        inherit nixomeConfigInputs;
+      };
+
+      mkVmConfiguration =
+        {
+          system ? "x86_64-linux",
+          gui ? false,
+          configSystem ? false,
+          devMode ? true,
+        }:
+        lib.nixosSystem {
+          inherit system;
+          specialArgs = lib.optionalAttrs configSystem (mkConfigSystemSpecialArgs system);
+          modules = [
+            self.nixosModules.dom0
+            (if gui then ./lifecycle/image/profiles/vm-gui-base.nix else ./lifecycle/image/profiles/vm-base.nix)
+          ]
+          ++ lib.optional devMode ./lifecycle/image/profiles/dev-mode.nix
+          ++ lib.optional configSystem ./lifecycle/bootstrap/config-system.nix;
+        };
 
       mkModuleContractCheck =
         system:
@@ -289,20 +323,34 @@
         configDomainPackages
         // {
           nixome-config-apply = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-apply { };
-          nixome-config-archive-candidate = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-archive { };
-          nixome-config-bootstrap-current = pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/nixome-config-bootstrap-current { };
-          nixome-config-boot-verify = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-boot-verify { };
+          nixome-config-archive-candidate =
+            pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-archive
+              { };
+          nixome-config-bootstrap-current =
+            pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/nixome-config-bootstrap-current
+              { };
+          nixome-config-boot-verify =
+            pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-boot-verify
+              { };
           nixome-config-control = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-control { };
-          nixome-config-inputs-import = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-config-inputs-import { };
+          nixome-config-inputs-import =
+            pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-config-inputs-import
+              { };
           nixome-config-status = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-status { };
           nixome-config-vms-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-config-vms-smoke { };
           nixome-cli = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-cli { };
           nixome = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-cli { };
           codex = pkgs.codex;
           zellij = pkgs.zellij;
-          nixome-nix-domain-storage = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-nix-domain-storage { };
-          nixome-nix-closure-domain-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-nix-closure-domain-smoke { };
-          nixome-qubes-storage = pkgs.python3.pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-qubes-storage { };
+          nixome-nix-domain-storage =
+            pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-nix-domain-storage
+              { };
+          nixome-nix-closure-domain-smoke =
+            pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-nix-closure-domain-smoke
+              { };
+          nixome-qubes-storage =
+            pkgs.python3.pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-qubes-storage
+              { };
           nixome-qube-bootstrap = pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/nixome-qube-bootstrap { };
           nixome-qube-gui-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-qube-gui-smoke { };
           nixome-setup-config = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-setup-config { };
@@ -330,8 +378,20 @@
               (pkgs.writeText "nixome-store-manifest-test-root" "nixome-store-manifest-test\n")
             ];
           };
+          nixome-vm-dev-image = self.nixosConfigurations."vm-dev".config.system.build.image;
+          nixome-vm-normal-image = self.nixosConfigurations."vm-normal".config.system.build.image;
+          nixome-vm-nodev-image = self.nixosConfigurations."vm-normal".config.system.build.image;
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
+          nixome-vm-gui-dev-image = self.nixosConfigurations."vm-gui-dev".config.system.build.image;
+          nixome-vm-gui-normal-image = self.nixosConfigurations."vm-gui-normal".config.system.build.image;
+          nixome-vm-gui-nodev-image = self.nixosConfigurations."vm-gui-normal".config.system.build.image;
           nixome-vm-gui-image = self.nixosConfigurations.vm-gui.config.system.build.image;
+          nixome-vm-gui-config-dev-image =
+            self.nixosConfigurations."vm-gui-config-dev".config.system.build.image;
+          nixome-vm-gui-config-normal-image =
+            self.nixosConfigurations."vm-gui-config-normal".config.system.build.image;
+          nixome-vm-gui-config-nodev-image =
+            self.nixosConfigurations."vm-gui-config-normal".config.system.build.image;
           nixome-vm-gui-config-image = self.nixosConfigurations.vm-gui-config.config.system.build.image;
           ovmf-fd = pkgs.OVMF.fd;
           qemu-kvm = pkgs.qemu_kvm;
@@ -386,45 +446,34 @@
         ];
       };
 
-      nixosConfigurations.vm = lib.nixosSystem {
-        system = "x86_64-linux";
-        modules = [
-          self.nixosModules.dom0
-          ./lifecycle/image/profiles/vm.nix
-        ];
-      };
+      nixosConfigurations."vm-dev" = mkVmConfiguration { devMode = true; };
+      nixosConfigurations."vm-normal" = mkVmConfiguration { devMode = false; };
+      nixosConfigurations."vm-nodev" = self.nixosConfigurations."vm-normal";
+      nixosConfigurations.vm = self.nixosConfigurations."vm-dev";
 
-      nixosConfigurations.vm-gui = lib.nixosSystem {
-        system = "x86_64-linux";
-        modules = [
-          self.nixosModules.dom0
-          ./lifecycle/image/profiles/vm-gui.nix
-        ];
+      nixosConfigurations."vm-gui-dev" = mkVmConfiguration {
+        gui = true;
+        devMode = true;
       };
+      nixosConfigurations."vm-gui-normal" = mkVmConfiguration {
+        gui = true;
+        devMode = false;
+      };
+      nixosConfigurations."vm-gui-nodev" = self.nixosConfigurations."vm-gui-normal";
+      nixosConfigurations.vm-gui = self.nixosConfigurations."vm-gui-dev";
 
-      nixosConfigurations.vm-gui-config = lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = {
-          nixomeQubeKernel = {
-            name = nixomeQubesVmKernelName;
-            package = self.packages.x86_64-linux.nixome-qubes-vm-kernel;
-          };
-          nixomeConfigDomains =
-            let
-              bootstrapDomainEntries = (mkConfigDomainEntries "x86_64-linux") // {
-                sys-net = mkSysNetDomainEntry "x86_64-linux";
-                dev = mkDevDomainEntry "x86_64-linux";
-              };
-            in
-            builtins.mapAttrs (_name: entry: materializeNixClosureDomain entry) bootstrapDomainEntries;
-          inherit nixomeConfigInputs;
-        };
-        modules = [
-          self.nixosModules.dom0
-          ./lifecycle/image/profiles/vm-gui.nix
-          ./lifecycle/bootstrap/config-system.nix
-        ];
+      nixosConfigurations."vm-gui-config-dev" = mkVmConfiguration {
+        gui = true;
+        configSystem = true;
+        devMode = true;
       };
+      nixosConfigurations."vm-gui-config-normal" = mkVmConfiguration {
+        gui = true;
+        configSystem = true;
+        devMode = false;
+      };
+      nixosConfigurations."vm-gui-config-nodev" = self.nixosConfigurations."vm-gui-config-normal";
+      nixosConfigurations.vm-gui-config = self.nixosConfigurations."vm-gui-config-dev";
 
       nixosConfigurations.nixome-domain-config-vault =
         (mkConfigDomainEntries "x86_64-linux").config-vault.configuration;

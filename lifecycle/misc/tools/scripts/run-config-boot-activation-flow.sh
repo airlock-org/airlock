@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
-IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-image}"
+IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-dev-image}"
 VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
 VM_IMAGE_LINK="$VM_DIR/${IMAGE_ATTR}-result"
 VM_IMAGE_PATH_LOG="$LOG_DIR/vm-config-boot-activate-image-path.txt"

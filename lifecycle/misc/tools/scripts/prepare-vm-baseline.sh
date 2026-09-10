@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
 
-IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-image}"
+IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-dev-image}"
 BASELINE_DIR="${NIXOME_VM_BASELINE_DIR:-${NIXOME_DATA_ROOT:-$ROOT/.nixome}/vm-baselines/$IMAGE_ATTR-setup}"
 BASELINE_LOG_DIR="${NIXOME_VM_BASELINE_LOG_DIR:-${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}/vm-baseline}"
 BASELINE_RESULT_LINK_DIR="${NIXOME_VM_BASELINE_RESULT_LINK_DIR:-$BASELINE_DIR/result-links}"

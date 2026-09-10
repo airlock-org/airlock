@@ -386,6 +386,12 @@ login state can be copied at runtime with `make vm-sync-codex-auth`. That helper
 refuses non-dev images and copies only `auth.json` by default; set
 `NIXOME_SYNC_CODEX_CONFIG=1` when `config.toml` should be copied too.
 
+Dev-mode dom0 behavior is selected at image build time. The Make image targets
+default to `VM_IMAGE_MODE=dev`; pass `VM_IMAGE_MODE=normal` to build the same
+image family without dom0 direct DHCP, the dev marker, or dev-only dom0 tools.
+Explicit flake outputs are also available, for example
+`nixome-vm-gui-config-dev-image` and `nixome-vm-gui-config-normal-image`.
+
 The expected repository path is:
 
 ```text

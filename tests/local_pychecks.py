@@ -1173,13 +1173,13 @@ def check_gc_nixome_store(repo_root: Path, log_dir: Path) -> None:
         result_link_dir,
     ):
         path.mkdir(parents=True)
-    (vm_dir / "nixome-vm-gui-config-image-result").symlink_to(
+    (vm_dir / "nixome-vm-gui-config-dev-image-result").symlink_to(
         store_dir / "11111111111111111111111111111111-vm-image"
     )
     (result_link_dir / "qemu-kvm-result").symlink_to(
         "/nix/store/44444444444444444444444444444444-tool"
     )
-    (vm_dir / "nixome-vm-gui-config-image.qcow2").touch()
+    (vm_dir / "nixome-vm-gui-config-dev-image.qcow2").touch()
     (gc_log_dir / "config-apply.json").write_text(
         json.dumps(
             {
@@ -1619,7 +1619,9 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     let
       flake = builtins.getFlake "path:{repo_root}";
       lib = flake.inputs.nixpkgs.lib;
-      dom0Cfg = flake.nixosConfigurations.vm-gui-config.config;
+      legacyDevDom0Cfg = flake.nixosConfigurations.vm-gui-config.config;
+      dom0Cfg = flake.nixosConfigurations."vm-gui-config-dev".config;
+      normalDom0Cfg = flake.nixosConfigurations."vm-gui-config-normal".config;
       nonDevDom0Cfg = flake.nixosConfigurations.test.config;
       devCfg = flake.nixosConfigurations.nixome-domain-dev.config;
       builders = import {repo_root}/lifecycle/misc/lib/qube-template.nix {{
@@ -1637,9 +1639,10 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       }};
       devDomainDefinition = defaultRuntime.nixNative.domains.dev;
       stagedNixNativeDomains = defaultRuntime.nixNative.domains;
-      bootstrapDomains = flake.nixosConfigurations.vm-gui-config.config.nixome.qubes.domains;
+      bootstrapDomains = dom0Cfg.nixome.qubes.domains;
+      normalBootstrapDomains = normalDom0Cfg.nixome.qubes.domains;
       bootstrapDevDomain = bootstrapDomains.dev;
-      bootstrapTopologyDevDomain = flake.nixosConfigurations.vm-gui-config.config.nixome.qubes.topology.domains.dev;
+      bootstrapTopologyDevDomain = dom0Cfg.nixome.qubes.topology.domains.dev;
       generatedDevDomain = (builders.mkNixNativeDomain {{
         name = "dev";
         guestRole = devDomainDefinition.role;
@@ -1660,6 +1663,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       }}).configuration.config;
       packageNames = cfg: map (package: package.pname or package.name or "") cfg.environment.systemPackages;
       dom0Packages = packageNames dom0Cfg;
+      legacyDevDom0Packages = packageNames legacyDevDom0Cfg;
+      normalDom0Packages = packageNames normalDom0Cfg;
       nonDevDom0Packages = packageNames nonDevDom0Cfg;
       devPackages = packageNames devCfg;
       basePackages = packageNames baseCfg;
@@ -1709,6 +1714,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       bootstrap_dev_topology_netvm = bootstrapTopologyDevDomain.netvm;
       bootstrap_dev_topology_backend = bootstrapTopologyDevDomain.backend.type;
       image_dev_mode_enabled = dom0Cfg.nixome.image.devMode.enable;
+      legacy_image_dev_mode_enabled = legacyDevDom0Cfg.nixome.image.devMode.enable;
       dom0_dhcp_enabled = dom0Cfg.networking.useDHCP;
       dom0_dev_mode_marker = dom0Cfg.environment.etc."nixome/dev-mode".text;
       dom0_observability_enabled = dom0Cfg.nixome.dom0.observability.enable;
@@ -1718,6 +1724,29 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         "git"
         "zellij"
       ];
+      legacy_dev_tools_present = lib.all (name: has name legacyDevDom0Packages) [
+        "codex"
+        "git"
+        "zellij"
+      ];
+      normal_image_dev_mode_enabled = normalDom0Cfg.nixome.image.devMode.enable;
+      normal_dom0_dhcp_enabled = normalDom0Cfg.networking.useDHCP;
+      normal_dom0_dev_marker_absent =
+        !(builtins.hasAttr "nixome/dev-mode" normalDom0Cfg.environment.etc);
+      normal_dom0_observability_enabled = normalDom0Cfg.nixome.dom0.observability.enable;
+      normal_dom0_testing_tools_enabled = normalDom0Cfg.nixome.dom0.testingTools.enable;
+      normal_dom0_dev_tools_absent = lib.all (name: !(has name normalDom0Packages)) [
+        "codex"
+        "git"
+        "nixome-observe-dom0"
+        "nixome-qube-bootstrap"
+        "nixome-qube-gui-smoke"
+        "nixome-qubes-smoke"
+        "zellij"
+      ];
+      normal_bootstrap_dev_domain_netvm = normalBootstrapDomains.dev.netvm;
+      normal_bootstrap_sys_net_present = builtins.hasAttr "sys-net" normalBootstrapDomains;
+      normal_bootstrap_sys_net_netvm = normalBootstrapDomains.sys-net.netvm;
       non_dev_image_dev_mode_enabled = nonDevDom0Cfg.nixome.image.devMode.enable;
       non_dev_dom0_dhcp_enabled = nonDevDom0Cfg.networking.useDHCP;
       non_dev_dom0_dev_marker_absent =
@@ -1776,7 +1805,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       dev_qrexec_requires = devCfg.systemd.services.qubes-qrexec-agent.requires;
       dev_qrexec_after = devCfg.systemd.services.qubes-qrexec-agent.after;
       dev_forbidden_rpc_absent = lib.all (name: !(has name (etcNames devCfg))) forbiddenConfigRpc;
-      dev_allowed_submitters = flake.nixosConfigurations.vm-gui-config.config.nixome.qubes.configAccessPolicy.allowedSubmitters;
+      dev_allowed_submitters = dom0Cfg.nixome.qubes.configAccessPolicy.allowedSubmitters;
       dev_no_secret_env = lib.all (name: !(builtins.hasAttr name devCfg.environment.sessionVariables)) secretEnvNames;
       dev_no_codex_auth_etc = lib.all (
         name:
@@ -1808,11 +1837,22 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["bootstrap_dev_topology_netvm"] == "sys-net"
     assert data["bootstrap_dev_topology_backend"] == "nix-closure"
     assert data["image_dev_mode_enabled"] is True
+    assert data["legacy_image_dev_mode_enabled"] is True
     assert data["dom0_dhcp_enabled"] is True
     assert data["dom0_dev_mode_marker"] == "enabled\n"
     assert data["dom0_observability_enabled"] is True
     assert data["dom0_testing_tools_enabled"] is True
     assert data["dom0_dev_tools_present"] is True
+    assert data["legacy_dev_tools_present"] is True
+    assert data["normal_image_dev_mode_enabled"] is False
+    assert data["normal_dom0_dhcp_enabled"] is False
+    assert data["normal_dom0_dev_marker_absent"] is True
+    assert data["normal_dom0_observability_enabled"] is False
+    assert data["normal_dom0_testing_tools_enabled"] is False
+    assert data["normal_dom0_dev_tools_absent"] is True
+    assert data["normal_bootstrap_dev_domain_netvm"] == "sys-net"
+    assert data["normal_bootstrap_sys_net_present"] is True
+    assert data["normal_bootstrap_sys_net_netvm"] is None
     assert data["non_dev_image_dev_mode_enabled"] is False
     assert data["non_dev_dom0_dhcp_enabled"] is False
     assert data["non_dev_dom0_dev_marker_absent"] is True
