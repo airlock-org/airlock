@@ -710,8 +710,14 @@ validate_domain_references() {
   local references_json="$tmpdir/domain-references.json"
   local missing_json="$tmpdir/domain-references-missing.json"
   local existing_domains_file="$tmpdir/domain-references-existing.txt"
+  local external_netvms_file="$tmpdir/domain-references-external-netvms.txt"
   local reference_count
   local missing_count
+  local netvm
+  local provides_network
+  local upstream_netvm
+  local sys_net_provides_network
+  local sys_net_netvm
 
   jq -c '
     def ref($kind; $domain; $field; $target):
@@ -822,6 +828,147 @@ validate_domain_references() {
         end
     ' "$missing_json" >&2 || true
     fail "topology references missing domains"
+  fi
+
+  if ! command -v qvm-prefs >/dev/null 2>&1; then
+    printf '[]\n' > "$missing_json"
+    jq -c \
+      --arg kind "network-capability" \
+      --arg field "qvm-prefs" \
+      --arg target "qvm-prefs" \
+      --arg reason "missing command: qvm-prefs" \
+      '. + [{kind: $kind, domain: null, field: $field, target: $target, reason: $reason}]' \
+      "$missing_json" > "$missing_json.tmp"
+    mv "$missing_json.tmp" "$missing_json"
+    write_domain_reference_report \
+      "$topology_file" \
+      "$references_json" \
+      "$missing_json" \
+      "$existing_domains_file" \
+      failed \
+      "topology references unusable network domains"
+    fail "missing command: qvm-prefs"
+  fi
+
+  jq -r \
+    --slurpfile references "$references_json" \
+    '
+      ((.domains // {}) | keys) as $declared_domains |
+      ((.templates // {}) | keys) as $declared_templates |
+      ($declared_domains + $declared_templates) as $candidate_domains |
+      ($references[0] // [])
+      | map(select(.kind == "netvm" or (.kind == "global-pref" and .field == "default_netvm")))
+      | map(select(.target as $target | ($candidate_domains | index($target)) == null))
+      | map(.target)
+      | unique
+      | .[]
+    ' "$topology_file" > "$external_netvms_file"
+
+  printf '[]\n' > "$missing_json"
+  while IFS= read -r netvm; do
+    [ -n "$netvm" ] || continue
+
+    provides_network="$(qvm-prefs "$netvm" provides_network 2>/dev/null || true)"
+    case "$provides_network" in
+      True|true|1)
+        ;;
+      *)
+        jq -c \
+          --arg kind "network-capability" \
+          --arg field "provides_network" \
+          --arg target "$netvm" \
+          --arg value "$provides_network" \
+          --arg reason "external NetVM does not provide network" \
+          '. + [{kind: $kind, domain: null, field: $field, target: $target, value: $value, expected: "true", reason: $reason}]' \
+          "$missing_json" > "$missing_json.tmp"
+        mv "$missing_json.tmp" "$missing_json"
+        ;;
+    esac
+
+    if [ "$netvm" = "sys-firewall" ]; then
+      upstream_netvm="$(qvm-prefs sys-firewall netvm 2>/dev/null || true)"
+      if [ "$upstream_netvm" != "sys-net" ]; then
+        jq -c \
+          --arg kind "stock-network-chain" \
+          --arg domain "sys-firewall" \
+          --arg field "netvm" \
+          --arg target "sys-net" \
+          --arg value "$upstream_netvm" \
+          --arg reason "stock sys-firewall is not routed through sys-net" \
+          '. + [{kind: $kind, domain: $domain, field: $field, target: $target, value: $value, expected: $target, reason: $reason}]' \
+          "$missing_json" > "$missing_json.tmp"
+        mv "$missing_json.tmp" "$missing_json"
+      fi
+
+      if ! grep -Fx sys-net "$existing_domains_file" >/dev/null 2>&1; then
+        jq -c \
+          --arg kind "stock-network-chain" \
+          --arg domain "sys-firewall" \
+          --arg field "netvm" \
+          --arg target "sys-net" \
+          --arg reason "stock sys-firewall upstream sys-net is missing" \
+          '. + [{kind: $kind, domain: $domain, field: $field, target: $target, reason: $reason}]' \
+          "$missing_json" > "$missing_json.tmp"
+        mv "$missing_json.tmp" "$missing_json"
+        continue
+      fi
+
+      sys_net_provides_network="$(qvm-prefs sys-net provides_network 2>/dev/null || true)"
+      case "$sys_net_provides_network" in
+        True|true|1)
+          ;;
+        *)
+          jq -c \
+            --arg kind "stock-network-chain" \
+            --arg domain "sys-net" \
+            --arg field "provides_network" \
+            --arg target "sys-net" \
+            --arg value "$sys_net_provides_network" \
+            --arg reason "stock sys-net does not provide network" \
+            '. + [{kind: $kind, domain: $domain, field: $field, target: $target, value: $value, expected: "true", reason: $reason}]' \
+            "$missing_json" > "$missing_json.tmp"
+          mv "$missing_json.tmp" "$missing_json"
+          ;;
+      esac
+
+      sys_net_netvm="$(qvm-prefs sys-net netvm 2>/dev/null || true)"
+      case "$sys_net_netvm" in
+        ""|none|None)
+          ;;
+        *)
+          jq -c \
+            --arg kind "stock-network-chain" \
+            --arg domain "sys-net" \
+            --arg field "netvm" \
+            --arg target "none" \
+            --arg value "$sys_net_netvm" \
+            --arg reason "stock sys-net should not be routed through another NetVM" \
+            '. + [{kind: $kind, domain: $domain, field: $field, target: $target, value: $value, expected: "none", reason: $reason}]' \
+            "$missing_json" > "$missing_json.tmp"
+          mv "$missing_json.tmp" "$missing_json"
+          ;;
+      esac
+    fi
+  done < "$external_netvms_file"
+
+  missing_count="$(jq -r 'length' "$missing_json")"
+  if [ "$missing_count" != "0" ]; then
+    write_domain_reference_report \
+      "$topology_file" \
+      "$references_json" \
+      "$missing_json" \
+      "$existing_domains_file" \
+      failed \
+      "topology references unusable network domains"
+    jq -r '
+      .[]
+      | if .domain == null then
+          "\(.field) for \(.target) failed: \(.reason)"
+        else
+          "domain \(.domain) \(.field) for \(.target) failed: \(.reason)"
+        end
+    ' "$missing_json" >&2 || true
+    fail "topology references unusable network domains"
   fi
 
   write_domain_reference_report \

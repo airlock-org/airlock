@@ -139,7 +139,9 @@ tar -C "$WORK_DIR" -cf "$VALIDATED_TAR" config.bundle validation.json manifest.j
 run_case() {
   case_name="$1"
   sys_firewall_present="$2"
-  expect_status="$3"
+  sys_net_present="$3"
+  expect_status="$4"
+  expect_reason="${5:-}"
   case_dir="$WORK_DIR/$case_name"
   bin_dir="$case_dir/bin"
   log_dir="$case_dir/logs"
@@ -167,18 +169,34 @@ set -euo pipefail
 [ "${1:-}" = "config-validator" ]
 EOF
 
-  cat > "$bin_dir/qvm-prefs" <<'EOF'
+  cat > "$bin_dir/qvm-prefs" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-case "${2:-}" in
-  netvm)
+case "\${1:-}:\${2:-}" in
+  config-validator:netvm)
     printf '\n'
     ;;
-  provides_network)
+  config-validator:provides_network)
     printf 'False\n'
     ;;
+  sys-firewall:provides_network)
+    [ "$sys_firewall_present" = "1" ] || exit 1
+    printf 'True\n'
+    ;;
+  sys-firewall:netvm)
+    [ "$sys_firewall_present" = "1" ] || exit 1
+    printf 'sys-net\n'
+    ;;
+  sys-net:provides_network)
+    [ "$sys_net_present" = "1" ] || exit 1
+    printf 'True\n'
+    ;;
+  sys-net:netvm)
+    [ "$sys_net_present" = "1" ] || exit 1
+    printf '\n'
+    ;;
   *)
-    printf 'unexpected qvm-prefs args: %s\n' "$*" >&2
+    printf 'unexpected qvm-prefs args: %s\n' "\$*" >&2
     exit 1
     ;;
 esac
@@ -192,11 +210,14 @@ EOF
 
   cat > "$bin_dir/qvm-ls" <<EOF
 #!/usr/bin/env bash
-if [ "\$*" = "--raw-data --fields NAME --no-spinner" ]; then
+  if [ "\$*" = "--raw-data --fields NAME --no-spinner" ]; then
   printf 'dom0\n'
   printf 'dev\n'
   if [ "$sys_firewall_present" = "1" ]; then
     printf 'sys-firewall\n'
+  fi
+  if [ "$sys_net_present" = "1" ]; then
+    printf 'sys-net\n'
   fi
   exit 0
 fi
@@ -242,11 +263,15 @@ EOF
     ' "$log_dir/config-archive.json" >/dev/null
   else
     [ "$rc" -ne 0 ]
-    jq -e '
+    jq -e --arg reason "$expect_reason" '
       .schema == "nixome.config-archive.v1" and
       .status == "failed" and
-      .reason == "topology references missing domains" and
-      .domain_references_result.status == "failed" and
+      .reason == $reason and
+      .domain_references_result.status == "failed"
+    ' "$log_dir/config-archive.json" >/dev/null
+
+    if [ "$expect_reason" = "topology references missing domains" ]; then
+      jq -e '
       .domain_references_result.missing == [
         {
           "kind": "netvm",
@@ -255,11 +280,22 @@ EOF
           "target": "sys-firewall"
         }
       ]
-    ' "$log_dir/config-archive.json" >/dev/null
+      ' "$log_dir/config-archive.json" >/dev/null
+    else
+      jq -e '
+        any(.domain_references_result.missing[];
+          .kind == "stock-network-chain" and
+          .domain == "sys-firewall" and
+          .field == "netvm" and
+          .target == "sys-net" and
+          .reason == "stock sys-firewall upstream sys-net is missing")
+      ' "$log_dir/config-archive.json" >/dev/null
+    fi
   fi
 }
 
-run_case missing 0 failed
-run_case present 1 passed
+run_case missing-sys-firewall 0 0 failed "topology references missing domains"
+run_case missing-sys-net 1 0 failed "topology references unusable network domains"
+run_case present 1 1 passed
 
 printf 'config archive domain references test ok\n'

@@ -135,7 +135,9 @@ tar -C "$WORK_DIR" -cf "$VALIDATED_TAR" config.bundle validation.json manifest.j
 run_case() {
   case_name="$1"
   sys_firewall_present="$2"
-  expect_status="$3"
+  sys_net_present="$3"
+  expect_status="$4"
+  expect_reason="${5:-}"
   case_dir="$WORK_DIR/$case_name"
   bin_dir="$case_dir/bin"
   log_dir="$case_dir/logs"
@@ -220,10 +222,40 @@ if [ "\$*" = "--raw-data --fields NAME --no-spinner" ]; then
   if [ "$sys_firewall_present" = "1" ]; then
     printf 'sys-firewall\n'
   fi
+  if [ "$sys_net_present" = "1" ]; then
+    printf 'sys-net\n'
+  fi
   exit 0
 fi
 printf 'unexpected qvm-ls args: %s\n' "\$*" >&2
 exit 1
+EOF
+
+  cat > "$bin_dir/qvm-prefs" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+case "\${1:-}:\${2:-}" in
+  sys-firewall:provides_network)
+    [ "$sys_firewall_present" = "1" ] || exit 1
+    printf 'True\n'
+    ;;
+  sys-firewall:netvm)
+    [ "$sys_firewall_present" = "1" ] || exit 1
+    printf 'sys-net\n'
+    ;;
+  sys-net:provides_network)
+    [ "$sys_net_present" = "1" ] || exit 1
+    printf 'True\n'
+    ;;
+  sys-net:netvm)
+    [ "$sys_net_present" = "1" ] || exit 1
+    printf '\n'
+    ;;
+  *)
+    printf 'unexpected qvm-prefs args: %s\n' "\$*" >&2
+    exit 1
+    ;;
+esac
 EOF
 
   cat > "$bin_dir/systemctl" <<'EOF'
@@ -239,6 +271,7 @@ EOF
     "$bin_dir/nixome-setup-config" \
     "$bin_dir/qrexec-client" \
     "$bin_dir/qvm-ls" \
+    "$bin_dir/qvm-prefs" \
     "$bin_dir/systemctl"
 
   set +e
@@ -268,11 +301,15 @@ EOF
   else
     [ "$rc" -ne 0 ]
     [ ! -e "$setup_capture" ]
-    jq -e '
+    jq -e --arg reason "$expect_reason" '
       .schema == "nixome.config-apply.v1" and
       .status == "failed" and
-      .reason == "topology references missing domains" and
-      .domain_references_result.status == "failed" and
+      .reason == $reason and
+      .domain_references_result.status == "failed"
+    ' "$log_dir/config-apply.json" >/dev/null
+
+    if [ "$expect_reason" = "topology references missing domains" ]; then
+      jq -e '
       .domain_references_result.missing == [
         {
           "kind": "netvm",
@@ -281,11 +318,22 @@ EOF
           "target": "sys-firewall"
         }
       ]
-    ' "$log_dir/config-apply.json" >/dev/null
+      ' "$log_dir/config-apply.json" >/dev/null
+    else
+      jq -e '
+        any(.domain_references_result.missing[];
+          .kind == "stock-network-chain" and
+          .domain == "sys-firewall" and
+          .field == "netvm" and
+          .target == "sys-net" and
+          .reason == "stock sys-firewall upstream sys-net is missing")
+      ' "$log_dir/config-apply.json" >/dev/null
+    fi
   fi
 }
 
-run_case missing 0 failed
-run_case present 1 passed
+run_case missing-sys-firewall 0 0 failed "topology references missing domains"
+run_case missing-sys-net 1 0 failed "topology references unusable network domains"
+run_case present 1 1 passed
 
 printf 'config apply domain references test ok\n'

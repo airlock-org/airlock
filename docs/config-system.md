@@ -316,14 +316,24 @@ nixNative.domains.dev = {
 The bootstrap `vm-gui-config` topology materializes the same domain, so a fresh
 boot has `dev` available before the first self-hosted apply.
 
-`sys-firewall` is the stock QubesOS network qube. Nixome does not materialize a
-Nix-native replacement for it. If a fresh test image has not created the stock
-domain yet, setup defers the `dev.netvm` assignment until `sys-firewall` exists;
-create or restore the normal QubesOS networking domain and rerun setup.
+`sys-firewall` and `sys-net` are the stock QubesOS networking qubes. Nixome
+does not materialize Nix-native replacements for them. The expected dev network
+path is:
+
+```text
+dev -> sys-firewall -> sys-net -> physical network
+```
+
+If a fresh test image has not created the stock domains yet, setup defers the
+`dev.netvm` assignment until `sys-firewall` exists; create or restore the normal
+QubesOS networking domains and rerun setup.
 The self-hosted `nixome check` and `nixome apply` path is stricter: after the
 validator emits a topology, dom0 verifies that referenced domains are either
 declared by the candidate or already exist in Qubes, and rejects the candidate
 before promotion or activation if a reference such as `sys-firewall` is missing.
+For the stock network path, dom0 also verifies that external `sys-firewall`
+provides network, is routed through `sys-net`, and that `sys-net` exists,
+provides network, and has no upstream NetVM.
 
 The `dev` role layers development tools on top of the minimal Qubes guest base.
 It includes `git`, the private-store Nix CLI wrapper, Rust and Python tooling
