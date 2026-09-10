@@ -3856,6 +3856,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     policy_dir = work_dir / "policy.d"
     state_dir = work_dir / "state"
     capabilities = work_dir / "xen-capabilities"
+    qubes_xml = work_dir / "qubes.xml"
     topology = work_dir / "topology.json"
     mutation_log = work_dir / "mutations.log"
     created_domains = work_dir / "created-domains"
@@ -3865,6 +3866,20 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     capabilities.write_text("control_d\n", encoding="utf-8")
     mutation_log.write_text("", encoding="utf-8")
     created_domains.write_text("", encoding="utf-8")
+    qubes_xml.write_text(
+        """
+        <qubes>
+          <domains>
+            <domain id="domain-1" class="StandaloneVM">
+              <properties>
+                <property name="name">sys-net</property>
+              </properties>
+            </domain>
+          </domains>
+        </qubes>
+        """,
+        encoding="utf-8",
+    )
     topology.write_text(
         json.dumps(
             {
@@ -3982,6 +3997,10 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
         "qvm-prefs": """
         #!/usr/bin/env bash
         if [ "$#" -eq 2 ]; then
+          if [ "$1" = "sys-net" ] && [ "$2" = "netvm" ]; then
+            printf 'none\n'
+            exit 0
+          fi
           exit 1
         fi
         printf 'qvm-prefs %s\n' "$*" >> "$MUTATION_LOG"
@@ -4033,6 +4052,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
             "NIXOME_DOM0_NETWORK_PCI_DEVICES": "00_02.0 00_03.0",
             "NIXOME_DOM0_DEFAULT_ROUTE_PCI_DEVICES": "00_02.0",
             "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
+            "NIXOME_QUBES_XML": str(qubes_xml),
             "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
             "NIXOME_XEN_CAPABILITIES": str(capabilities),
             "NIXOME_LOG_DIR": str(setup_log_dir),

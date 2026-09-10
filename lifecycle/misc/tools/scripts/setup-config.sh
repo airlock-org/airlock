@@ -451,6 +451,43 @@ sys.exit(1)
 PY
 }
 
+domain_pref_explicitly_set() {
+  domain="$1"
+  pref="$2"
+
+  [ -r "$QUBES_XML" ] || return 1
+
+  python3 - "$QUBES_XML" "$domain" "$pref" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+tree = ET.parse(sys.argv[1])
+domains = tree.getroot().find("domains")
+if domains is None:
+    sys.exit(1)
+
+for domain in domains.findall("domain"):
+    properties = domain.find("properties")
+    if properties is None:
+        continue
+
+    name = None
+    for prop in properties.findall("property"):
+        if prop.get("name") == "name":
+            name = prop.text
+            break
+    if name != sys.argv[2]:
+        continue
+
+    for prop in properties.findall("property"):
+        if prop.get("name") == sys.argv[3]:
+            sys.exit(0)
+    sys.exit(1)
+
+sys.exit(1)
+PY
+}
+
 set_pref() {
   domain="$1"
   pref="$2"
@@ -471,13 +508,35 @@ set_pref() {
   record_domain_restart_if_running "$domain" domain-pref "$pref" "$value"
 }
 
+set_explicit_none_netvm_pref() {
+  domain="$1"
+
+  if [ "$APPLY" = "1" ]; then
+    if current="$(qvm-prefs "$domain" netvm 2>/dev/null)"; then
+      if value_matches none "$current" && domain_pref_explicitly_set "$domain" netvm; then
+        printf 'pref current: %s netvm=none\n' "$domain"
+        return
+      fi
+    fi
+  fi
+
+  run_or_plan qvm-prefs "$domain" netvm none
+  prefs_changed=$((prefs_changed + 1))
+  record_live_action domain-pref set "$domain" netvm none
+  record_domain_restart_if_running "$domain" domain-pref netvm none
+}
+
 set_netvm_pref() {
   domain="$1"
   netvm="$2"
 
   case "$netvm" in
     ""|none|None|null)
-      set_pref "$domain" netvm none
+      if domain_is_root_network_provider "$domain"; then
+        set_explicit_none_netvm_pref "$domain"
+      else
+        set_pref "$domain" netvm none
+      fi
       return
       ;;
   esac
