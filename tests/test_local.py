@@ -9,6 +9,7 @@ import pytest
 
 from local_pychecks import (
     check_config_candidate_nix_native,
+    check_config_control,
     check_config_apply_template_build_ref,
     check_config_staging_validate,
     check_config_vault_deployment_archive,
@@ -220,7 +221,7 @@ LOCAL_CHECKS = (
         ("{root}/tests/config-archive-domain-references.sh",),
     ),
     LocalCheck("nixome-cli", marks=(pytest.mark.nix,), runner=check_nixome_cli),
-    LocalCheck("config-control", ("{root}/tests/config-control.sh",)),
+    LocalCheck("config-control", runner=check_config_control),
     LocalCheck("config-boot-verify", runner=check_config_boot_verify),
     LocalCheck("config-status", ("{root}/tests/config-status.sh",)),
     LocalCheck(

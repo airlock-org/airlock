@@ -4310,3 +4310,302 @@ def check_nixome_cli(repo_root: Path, log_dir: Path) -> None:
         "dom0 nixome.Config.Rollback",
     ):
         assert line in qrexec_lines
+
+
+def check_config_control(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    control_log_dir = work_dir / "control-logs"
+    state_dir = work_dir / "state"
+    host_profile = work_dir / "host-system-profile"
+    host_current = work_dir / "run-current-system"
+    payload_marker = work_dir / "payload-executed"
+    activation_marker = work_dir / "activated"
+    fake_call_log = work_dir / "fake-calls.log"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (bin_dir, control_log_dir, state_dir):
+        path.mkdir(parents=True)
+
+    _write_executable(
+        bin_dir / "nixome-config-status",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        jq -c -n --arg schema "nixome.config-status.v1" --arg status "applied" \
+          '{schema: $schema, status: $status, deployment: {current: {candidate_commit: "base"}}}'
+        """,
+    )
+    _write_executable(
+        bin_dir / "nixome-config-archive-candidate",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        candidate_tar=""
+        validate_only=0
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --candidate-tar) shift; candidate_tar="$1" ;;
+            --validate-only) validate_only=1 ;;
+          esac
+          shift
+        done
+        [ -n "$candidate_tar" ] || exit 2
+        [ "$validate_only" = 1 ] || exit 3
+        printf 'archive %s validate-only=%s\n' "$candidate_tar" "$validate_only" >> "$FAKE_CALL_LOG"
+        tmpdir="$(mktemp -d)"
+        trap 'rm -rf "$tmpdir"' EXIT
+        tar -C "$tmpdir" -xf "$candidate_tar"
+        commit="$(jq -r '.commit' "$tmpdir/manifest.json")"
+        scenario="$(jq -r '.scenario // "valid"' "$tmpdir/manifest.json")"
+        if [ "$scenario" = "invalid-eval" ]; then
+          jq -c -n --arg schema "nixome.config-archive.v1" --arg status "failed" --arg commit "$commit" \
+            '{schema: $schema, status: $status, reason: "candidate validation failed", candidate_commit: $commit, validation: {schema: "nixome.config-validation.v1", status: "failed", commit: $commit}}' \
+            > "$NIXOME_LOG_DIR/config-archive.json"
+          exit 1
+        fi
+        jq -c -n --arg schema "nixome.config-archive.v1" --arg status "passed" --arg commit "$commit" \
+          '{schema: $schema, status: $status, reason: "validated by fake validator", candidate_commit: $commit, validation_commit: $commit, validation: {schema: "nixome.config-validation.v1", status: "passed", commit: $commit}}' \
+          > "$NIXOME_LOG_DIR/config-archive.json"
+        printf 'fake archive ok\n'
+        """,
+    )
+    _write_executable(
+        bin_dir / "nixome-config-apply",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        candidate_tar=""
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --candidate-tar) shift; candidate_tar="$1" ;;
+          esac
+          shift
+        done
+        [ -n "$candidate_tar" ] || exit 2
+        printf 'apply %s\n' "$candidate_tar" >> "$FAKE_CALL_LOG"
+        tmpdir="$(mktemp -d)"
+        trap 'rm -rf "$tmpdir"' EXIT
+        tar -C "$tmpdir" -xf "$candidate_tar"
+        commit="$(jq -r '.commit' "$tmpdir/manifest.json")"
+        scenario="$(jq -r '.scenario // "valid"' "$tmpdir/manifest.json")"
+        case "$scenario" in
+          valid)
+            printf '%s\n' "$commit" > "$ACTIVATION_MARKER"
+            jq -c -n --arg schema "nixome.config-apply.v1" --arg status "passed" --arg commit "$commit" \
+              '{schema: $schema, status: $status, candidate_commit: $commit, system_apply_result: {status: "passed"}}' \
+              > "$NIXOME_LOG_DIR/config-apply.json"
+            ;;
+          build-failed)
+            jq -c -n --arg schema "nixome.config-apply.v1" --arg status "failed" --arg commit "$commit" \
+              '{schema: $schema, status: $status, reason: "system build failed", candidate_commit: $commit}' \
+              > "$NIXOME_LOG_DIR/config-apply.json"
+            exit 1
+            ;;
+          test-failed)
+            jq -c -n --arg schema "nixome.config-apply.v1" --arg status "failed" --arg commit "$commit" \
+              '{schema: $schema, status: $status, reason: "candidate tests failed", candidate_commit: $commit}' \
+              > "$NIXOME_LOG_DIR/config-apply.json"
+            exit 1
+            ;;
+          invalid-eval)
+            jq -c -n --arg schema "nixome.config-apply.v1" --arg status "failed" --arg commit "$commit" \
+              '{schema: $schema, status: $status, reason: "candidate validation failed", candidate_commit: $commit}' \
+              > "$NIXOME_LOG_DIR/config-apply.json"
+            exit 1
+            ;;
+        esac
+        printf 'fake apply ok\n'
+        """,
+    )
+    _write_executable(
+        bin_dir / "nix-env",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        printf 'nix-env %s\n' "$*" >> "$FAKE_CALL_LOG"
+        exit 1
+        """,
+    )
+
+    def make_candidate(scenario: str, output: Path) -> str:
+        tmpdir = work_dir / f"candidate-{scenario}"
+        repo = tmpdir / "repo"
+        repo.mkdir(parents=True)
+        _write_flake(
+            repo / "flake.nix",
+            """
+            {
+              outputs = { self }: {
+                nixome.topology = {
+                  schema = "nixome.qubes-topology.v1";
+                  templates = {};
+                  kernels = {};
+                  domains = {};
+                  prefs = {};
+                  qrexec_policy.rules = [];
+                };
+              };
+            }
+            """,
+        )
+        commit = _git_commit_all(
+            repo,
+            f"{scenario} candidate",
+            name="Nixome Control Test",
+            email="nixome-control-test@localhost",
+        )
+        _run(
+            [
+                "git",
+                "bundle",
+                "create",
+                str(tmpdir / "config.bundle"),
+                "HEAD",
+                "refs/heads/main",
+            ],
+            cwd=repo,
+        )
+        (tmpdir / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema": "nixome.config-candidate.v1",
+                    "commit": commit,
+                    "branch": "main",
+                    "source_role": "dev",
+                    "scenario": scenario,
+                    "payload": f"touch {payload_marker}",
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        with tarfile.open(output, "w") as tar:
+            tar.add(tmpdir / "config.bundle", arcname="config.bundle")
+            tar.add(tmpdir / "manifest.json", arcname="manifest.json")
+        return commit
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "NIXOME_CONFIG_CONTROL_LOG_DIR": str(control_log_dir),
+            "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
+            "NIXOME_HOST_SYSTEM_PROFILE": str(host_profile),
+            "NIXOME_HOST_CURRENT_SYSTEM_LINK": str(host_current),
+            "FAKE_CALL_LOG": str(fake_call_log),
+            "ACTIVATION_MARKER": str(activation_marker),
+        }
+    )
+    script = repo_root / "scripts/config-control.sh"
+    _run(
+        ["bash", str(script), "status"],
+        cwd=repo_root,
+        env=env,
+        stdout=work_dir / "status.json",
+    )
+    status = json.loads((work_dir / "status.json").read_text(encoding="utf-8"))
+    assert status["schema"] == "nixome.config-status.v1"
+    assert status["status"] == "applied"
+
+    valid_tar = work_dir / "valid.tar"
+    make_candidate("valid", valid_tar)
+    for mode, output_path in (
+        ("check", work_dir / "check-valid.json"),
+        ("apply", work_dir / "apply-valid.json"),
+    ):
+        activation_marker.unlink(missing_ok=True)
+        with valid_tar.open("rb") as stdin:
+            result = subprocess.run(
+                ["bash", str(script), mode],
+                cwd=repo_root,
+                env=env,
+                check=False,
+                stdin=stdin,
+                stdout=subprocess.PIPE,
+            )
+        output_path.write_bytes(result.stdout)
+        assert result.returncode == 0
+        payload = json.loads(result.stdout.decode("utf-8"))
+        assert payload["status"] == "passed"
+        if mode == "check":
+            assert payload["schema"] == "nixome.config-archive.v1"
+            assert "validate-only=1" in fake_call_log.read_text(encoding="utf-8")
+            assert not payload_marker.exists()
+        else:
+            assert payload["schema"] == "nixome.config-apply.v1"
+            assert activation_marker.is_file()
+            assert not payload_marker.exists()
+
+    for scenario in ("invalid-eval", "build-failed", "test-failed"):
+        activation_marker.unlink(missing_ok=True)
+        tar_path = work_dir / f"{scenario}.tar"
+        make_candidate(scenario, tar_path)
+        with tar_path.open("rb") as stdin:
+            result = subprocess.run(
+                ["bash", str(script), "apply"],
+                cwd=repo_root,
+                env=env,
+                check=False,
+                stdin=stdin,
+                stdout=subprocess.PIPE,
+            )
+        (work_dir / f"apply-{scenario}.json").write_bytes(result.stdout)
+        assert result.returncode != 0
+        failed = json.loads(result.stdout.decode("utf-8"))
+        assert failed["schema"] == "nixome.config-apply.v1"
+        assert failed["status"] == "failed"
+        assert not activation_marker.exists()
+
+    previous_system = work_dir / "previous-system"
+    current_system = work_dir / "current-system-source"
+    (previous_system / "bin").mkdir(parents=True)
+    current_system.mkdir()
+    _write_executable(
+        previous_system / "bin/switch-to-configuration",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        printf '%s\n' "$1" > "$NIXOME_SYSTEM_STATE_DIR/rollback-switch-action"
+        ln -sfn "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)" "$NIXOME_HOST_CURRENT_SYSTEM_LINK"
+        """,
+    )
+    host_profile.symlink_to(current_system)
+    (state_dir / "previous-host-system").write_text(
+        str(previous_system) + "\n", encoding="utf-8"
+    )
+    _run(
+        ["bash", str(script), "rollback"],
+        cwd=repo_root,
+        env=env,
+        stdout=work_dir / "rollback.json",
+    )
+    rollback = json.loads((work_dir / "rollback.json").read_text(encoding="utf-8"))
+    assert rollback["schema"] == "nixome.config-rollback.v1"
+    assert rollback["status"] == "passed"
+    assert rollback["method"] == "state"
+    assert rollback["target_system"] == str(previous_system)
+    assert os.readlink(host_profile) == str(previous_system)
+    assert os.readlink(host_current) == str(previous_system)
+    assert (state_dir / "rollback-switch-action").read_text(
+        encoding="utf-8"
+    ).strip() == "switch"
+
+    with tarfile.open(work_dir / "bad.tar", "w") as tar:
+        tar.add(valid_tar, arcname="valid.tar")
+    with (work_dir / "bad.tar").open("rb") as stdin:
+        result = subprocess.run(
+            ["bash", str(script), "check"],
+            cwd=repo_root,
+            env=env,
+            check=False,
+            stdin=stdin,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    (work_dir / "bad.json").write_bytes(result.stdout)
+    (work_dir / "bad.stderr").write_bytes(result.stderr)
+    assert result.returncode != 0
+    bad = json.loads(result.stdout.decode("utf-8"))
+    assert bad["schema"] == "nixome.config-control.v1"
+    assert bad["status"] == "failed"
