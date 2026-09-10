@@ -1333,3 +1333,227 @@ def check_gc_nixome_store(repo_root: Path, log_dir: Path) -> None:
     assert "refusing nonstandard data root" in (work_dir / "nonstandard.out").read_text(
         encoding="utf-8"
     )
+
+
+def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
+    result_json = log_dir / "run-nested-gui-smoke-static.json"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    for rel_path in (
+        "scripts/run-nested-gui-smoke.sh",
+        "scripts/sync-nested-dom0-tools.sh",
+        "scripts/run-config-boot-activation-flow.sh",
+        "scripts/apply-config-candidate.sh",
+        "scripts/nixos-config-vms-smoke.sh",
+        "scripts/config-boot-verify.sh",
+        "scripts/resolve-vm-image-result.sh",
+    ):
+        _run(["bash", "-n", str(repo_root / rel_path)], cwd=repo_root)
+
+    texts = {
+        "Makefile": (repo_root / "Makefile").read_text(encoding="utf-8"),
+        "run_nested": (repo_root / "scripts/run-nested-gui-smoke.sh").read_text(
+            encoding="utf-8"
+        ),
+        "config_vms": (repo_root / "scripts/nixos-config-vms-smoke.sh").read_text(
+            encoding="utf-8"
+        ),
+        "boot_flow": (
+            repo_root / "scripts/run-config-boot-activation-flow.sh"
+        ).read_text(encoding="utf-8"),
+        "run_vm": (repo_root / "scripts/run-nested-vm.sh").read_text(encoding="utf-8"),
+        "test_vm": (repo_root / "tests/test_vm.py").read_text(encoding="utf-8"),
+        "test_vm_staged": (repo_root / "tests/test_vm_staged.py").read_text(
+            encoding="utf-8"
+        ),
+        "sync_tools": (repo_root / "scripts/sync-nested-dom0-tools.sh").read_text(
+            encoding="utf-8"
+        ),
+        "seed_import": (repo_root / "scripts/import-config-seed-inputs.sh").read_text(
+            encoding="utf-8"
+        ),
+        "qube_guest": (repo_root / "modules/qube-guest.nix").read_text(
+            encoding="utf-8"
+        ),
+        "ssh_vm": (repo_root / "scripts/ssh-nested-vm.sh").read_text(encoding="utf-8"),
+        "apply_candidate": (repo_root / "scripts/apply-config-candidate.sh").read_text(
+            encoding="utf-8"
+        ),
+        "closure_smoke": (repo_root / "scripts/nix-closure-domain-smoke.sh").read_text(
+            encoding="utf-8"
+        ),
+    }
+
+    for key in ("Makefile", "run_nested", "config_vms"):
+        assert "NIXOME_CONFIG_BUILD_EXTRA_TEMPLATE" not in texts[key]
+    assert (
+        re.search(
+            r"^(test|test-parallel|test-serial|test-vm|test-vm-parallel|"
+            r"test-vm-warm|test-vm-staged|test-list):",
+            texts["Makefile"],
+            re.MULTILINE,
+        )
+        is None
+    )
+
+    expected_fragments = {
+        "Makefile": [
+            "vm-config-boot-flow",
+            "vm-config-boot-activate-flow",
+            "test-quick:",
+            "test-warm:",
+            "test-slow:",
+            "tests/test_vm_staged.py",
+            'NIXOME_VM_PARALLEL_LANES="$(TEST_VM_JOBS)"',
+            'NIXOME_VM_PARALLEL_SSH_BASE_PORT="$(VM_PARALLEL_SSH_BASE_PORT)"',
+            "VM_SLOW_SERIAL_VM_DIR ?=",
+            "VM_SLOW_SERIAL_SSH_PORT ?=",
+            "VM_SLOW_PARALLEL_FLOW_IDS =",
+            "VM_SLOW_SELECTED_PARALLEL_TARGETS =",
+            "VM_SLOW_SELECTED_SERIAL_TARGETS =",
+            "VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow",
+            "VM_SLOW_SERIAL_FLOW_IDS = vm-config-boot-activate-flow",
+            "tests/test_vm.py::test_vm_flow[$(test)]",
+            "NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot",
+            "NIXOME_AUTO_GC_AFTER_RUN=1",
+            "NIXOME_KEEP_VM=1",
+            "NIXOME_REUSE_WARM_VM=1",
+            "NIXOME_SYNC_DOM0_TOOLS=1",
+            "NIXOME_VM_SKIP_BASE_BUILD=1",
+            "vm-warm-start",
+            "vm-warm-sync",
+            "vm-warm-apply",
+            "vm-warm-test-config",
+            "vm-parallel-prebuild-image",
+            "NIXOME_VM_PARALLEL_IMAGE_LINK",
+        ],
+        "boot_flow": [
+            "NIXOME_RUN_CONFIG_BOOT_VERIFY=1",
+            "NIXOME_SHUTDOWN_VM_ON_SUCCESS=1",
+            "resolve-vm-image-result.sh",
+            "NIXOME_VM_SKIP_BASE_BUILD=1",
+            "stage_status: .stage.status",
+        ],
+        "run_nested": [
+            "NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION",
+            "NIXOME_CONFIG_DOM0_SYSTEM_REASON",
+            "NIXOME_CONFIG_APPLY_STAGE",
+            "NIXOME_CONFIG_VMS_SMOKE_MODE",
+            "NIXOME_RUN_CONFIG_BOOT_VERIFY",
+            "nixome-config-boot-verify",
+            "NIXOME_SETUP_CONFIG_BOOT_WAIT_SECONDS",
+            "wait_for_setup_config_boot_unit",
+            "systemctl cat nixome-setup-config.service",
+            "vm-gui-setup-config-boot.json",
+            "copy_boot_setup_config_artifacts",
+            "copy_boot_setup_config_result",
+            "NIXOME_AUTO_GC_AFTER_RUN",
+            "NIXOME_SYNC_DOM0_TOOLS",
+            "NIXOME_REUSE_WARM_VM",
+            "ssh: reusing existing nested dom0",
+            "NIXOME_RUN_CONFIG_SEED_INPUTS_IMPORT",
+            "NIXOME_NESTED_WARM_TOPOLOGY_PATH",
+            "NIXOME_NESTED_WARM_SEED_INPUTS_PATH",
+            "NIXOME_NESTED_WARM_STOP_NIX_DOMAINS",
+            "qvm-kill",
+            "affected domain did not halt",
+            'CONFIG_VMS_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-config-vms-smoke"',
+            'SETUP_CONFIG_TOPOLOGY="$REMOTE_WARM_TOPOLOGY_PATH"',
+            'NIXOME_NIX_DOMAIN_STORAGE_HELPER="$REMOTE_WARM_BIN_DIR/nixome-nix-domain-storage"',
+            "NIXOME_NIX_DOMAIN_STORAGE_HELPER \\",
+            "NIXOME_SETUP_CONFIG_COMMAND;",
+            'NIXOME_CONFIG_SEED_INPUTS_SOURCE="$REMOTE_WARM_SEED_INPUTS_PATH"',
+            "NIXOME_CONFIG_SEED_INPUTS_SOURCE \\",
+            '--topology $(shell_quote "$SETUP_CONFIG_TOPOLOGY")',
+            "sync-nested-dom0-tools.sh",
+            "prepare_warm_sync_boot_unit",
+            "warm tool sync uses explicit setup-config",
+            "Keep the boot oneshot in its active/exited state",
+            "vm-gui-sync-dom0-tools.json",
+            'NIXOME_SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"',
+            "CONFIG_VMS_STAGING_UPDATE_LOG",
+            "config-vms-config-staging-update.sh",
+            "sudo -n $config_vms_env NIXOME_LOG_DIR=/var/log/nixome $config_vms_smoke_command",
+            '"$ROOT/scripts/nixome-nix.sh" shell nixpkgs#sshpass',
+            'NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"',
+        ],
+        "config_vms": [
+            'if $DOM0_SYSTEM_SWITCH_ACTION_NIX == "switch" then',
+            'EXPECTED_SYSTEMD_ACTIONS_STATUS="skipped"',
+            "grep -F 'rawLocalConfig = import ./nixome/machine.nix {' flake.nix",
+            "grep -F 'nixosConfigurations = nixNativeConfigurations // {' flake.nix",
+            "grep -F 'nixome-dom0 = nixomeDom0System;' flake.nix",
+            "grep -F 'nixNative.domains.",
+            'assert_nix_closure_domain "$VAULT"',
+            "full|preflight|stage-candidate|apply-candidate|post-apply",
+        ],
+        "run_vm": [
+            "NIXOME_VM_SKIP_BASE_BUILD",
+            "using existing Nixome VM base image result link",
+        ],
+        "test_vm": [
+            "NIXOME_VM_SKIP_BASE_BUILD",
+            "NIXOME_VM_PARALLEL_SSH_BASE_PORT",
+            "NIXOME_SKIP_GC_AUTO",
+        ],
+        "test_vm_staged": [
+            "STAGED_VM_STEPS",
+            "config-apply-resolve",
+            "nix-closure-domain-smoke",
+            "NIXOME_NIX_CLOSURE_DOMAIN_SMOKE_COMMAND",
+        ],
+        "sync_tools": [
+            "nix-store --export",
+            "sudo -n nix-store --import",
+            "nixome-config-seed-inputs-import",
+            "REMOTE_SEED_INPUTS_COMPAT_PATH",
+            'nixos-qubes", .nixosQubes',
+            "mount --bind",
+            "nixome-config-vms-smoke",
+            "nixosConfigurations.vm-gui-config.config.nixome.qubes.topology",
+            "nixosConfigurations.nixome-domain-$domain.config.system.build.toplevel",
+            "nixome-domain-$domain-store-closure",
+            "PYTHONPATH=",
+            "systemctl restart qubesd.service",
+        ],
+        "seed_import": [
+            "store-export.nar.gz",
+            'nix-store -q --references "$store_root"',
+            'cut -f3 "$tmpdir/seed-inputs.tsv"',
+            'nix-store --export $(cat "$seed_store_paths")',
+            "store_export_bytes",
+        ],
+        "qube_guest": [
+            'nix-store --store "$store_root" --import',
+            "input_relative_path=",
+            '${input_path#"$input_store_path"}',
+            'mount --bind "$physical_path" "$mountpoint_path"',
+        ],
+        "ssh_vm": ['"$ROOT/scripts/nixome-nix.sh" shell nixpkgs#sshpass'],
+        "apply_candidate": [
+            "NIXOME_SETUP_CONFIG_COMMAND",
+            'CONFIG_APPLY_STAGE="${NIXOME_CONFIG_APPLY_STAGE:-full}"',
+            "full|archive|resolve|setup|system|deploy",
+        ],
+        "closure_smoke": ["NIXOME_SETUP_CONFIG_COMMAND"],
+    }
+    for key, fragments in expected_fragments.items():
+        for fragment in fragments:
+            assert fragment in texts[key], f"missing {fragment!r} in {key}"
+
+    assert 'cat "$RESULT_JSON"' not in texts["boot_flow"]
+    assert 'cat >> "$STAGING_UPDATE_SCRIPT"' not in texts["config_vms"]
+    assert "systemctl stop nixome-setup-config.service" not in texts["run_nested"]
+    scripts_text = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in (repo_root / "scripts").glob("*.sh")
+    )
+    assert "nix shell nixpkgs#sshpass" not in scripts_text
+
+    result_json.write_text(
+        json.dumps(
+            {"schema": "nixome.run-nested-gui-smoke-static.v1", "status": "passed"}
+        )
+        + "\n",
+        encoding="utf-8",
+    )

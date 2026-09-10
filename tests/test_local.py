@@ -15,6 +15,7 @@ from local_pychecks import (
     check_nix_closure_root_image,
     check_qrexec_policy_path,
     check_qube_guest_policy_probe,
+    check_run_nested_gui_smoke_static,
     check_setup_config_runtime_path,
     check_system_schema,
     check_topology_schema,
@@ -234,7 +235,8 @@ LOCAL_CHECKS = (
         "config-system-apply-boot", ("{root}/tests/config-system-apply-boot.sh",)
     ),
     LocalCheck(
-        "run-nested-gui-smoke-static", ("{root}/tests/run-nested-gui-smoke-static.sh",)
+        "run-nested-gui-smoke-static",
+        runner=check_run_nested_gui_smoke_static,
     ),
     LocalCheck(
         "host-capabilities",
