@@ -22,7 +22,9 @@ from local_pychecks import (
     check_qrexec_policy_path,
     check_qube_guest_policy_probe,
     check_run_nested_gui_smoke_static,
+    check_setup_config_empty_global_pref,
     check_setup_config_runtime_path,
+    check_setup_config_static,
     check_system_schema,
     check_topology_schema,
 )
@@ -244,7 +246,7 @@ LOCAL_CHECKS = (
         "host-capabilities",
         runner=check_host_capabilities,
     ),
-    LocalCheck("setup-config-static", ("{root}/tests/setup-config-static.sh",)),
+    LocalCheck("setup-config-static", runner=check_setup_config_static),
     LocalCheck(
         "setup-config-nix-native",
         ("{root}/tests/setup-config-nix-native.sh",),
@@ -270,7 +272,7 @@ LOCAL_CHECKS = (
     LocalCheck("setup-config-pref-order", ("{root}/tests/setup-config-pref-order.sh",)),
     LocalCheck(
         "setup-config-empty-global-pref",
-        ("{root}/tests/setup-config-empty-global-pref.sh",),
+        runner=check_setup_config_empty_global_pref,
     ),
     LocalCheck(
         "qubes-smoke",

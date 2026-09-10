@@ -525,6 +525,12 @@ def _write_executable(path: Path, text: str) -> None:
     path.chmod(0o755)
 
 
+def _setup_fake_command_dir(bin_dir: Path, commands: dict[str, str]) -> None:
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    for name, script in commands.items():
+        _write_executable(bin_dir / name, script)
+
+
 def check_system_schema(repo_root: Path, log_dir: Path) -> None:
     work_dir = log_dir / "work"
     shutil.rmtree(work_dir, ignore_errors=True)
@@ -2801,4 +2807,236 @@ def check_config_vault_deployment_archive(repo_root: Path, log_dir: Path) -> Non
     assert (
         _run(["git", "status", "--short", "--branch"], cwd=vault_repo).stdout.strip()
         == "## main"
+    )
+
+
+def check_setup_config_static(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    kernel_dir = work_dir / "kernel/6.12.64-1.fc41"
+    template_dir = work_dir / "template/fedora-44-xfce"
+    setup_log_dir = work_dir / "logs"
+    kernel_base = work_dir / "vm-kernels"
+    policy_dir = work_dir / "policy.d"
+    capabilities = work_dir / "xen-capabilities"
+    topology = work_dir / "topology.json"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (kernel_dir, template_dir, setup_log_dir, policy_dir):
+        path.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+    for name in ("vmlinuz", "initramfs", "modules.img"):
+        (kernel_dir / name).touch()
+    (template_dir / "root.img").touch()
+    (template_dir / "template.conf").write_text(
+        "qrexec=1\nvirt-mode=pvh\n", encoding="utf-8"
+    )
+    topology.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.qubes-topology.v1",
+                "templates": {
+                    "fedora-44-xfce": {
+                        "import": True,
+                        "skip_start": True,
+                        "source": str(template_dir),
+                    }
+                },
+                "kernels": {"6.12.64-1.fc41": {"source": str(kernel_dir)}},
+                "domains": {
+                    "legacy-fedora-app": {
+                        "class": "AppVM",
+                        "template": "fedora-44-xfce",
+                        "label": "green",
+                        "netvm": None,
+                        "prefs": {"autostart": False, "memory": 1024},
+                        "features": {"nixome-role": "legacy-fedora-app"},
+                        "services": {"network-manager": False},
+                    }
+                },
+                "prefs": {"default_kernel": ""},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    unexpected = """
+    #!/usr/bin/env bash
+    printf 'unexpected command execution: %s\n' "$0" >&2
+    exit 97
+    """
+    commands = {
+        name: unexpected
+        for name in (
+            "qubes-prefs",
+            "qvm-appmenus",
+            "qvm-create",
+            "qvm-features",
+            "qvm-prefs",
+            "qvm-service",
+            "qvm-template-postprocess",
+            "qvm-volume",
+            "qubesd-query",
+            "runuser",
+        )
+    }
+    commands["qvm-ls"] = "#!/usr/bin/env bash\nexit 0\n"
+    commands["systemctl"] = """
+    #!/usr/bin/env bash
+    if [ "$1" = "is-active" ]; then
+      exit 0
+    fi
+    exit 1
+    """
+    _setup_fake_command_dir(bin_dir, commands)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "NIXOME_QUBES_KERNEL_BASE": str(kernel_base),
+            "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
+            "NIXOME_XEN_CAPABILITIES": str(capabilities),
+            "NIXOME_LOG_DIR": str(setup_log_dir),
+        }
+    )
+    _run(
+        [
+            "bash",
+            str(repo_root / "scripts/setup-config.sh"),
+            "--plan",
+            "--topology",
+            str(topology),
+        ],
+        cwd=repo_root,
+        env=env,
+        stdout=setup_log_dir / "stdout.log",
+        stderr=setup_log_dir / "stderr.log",
+    )
+    result = json.loads(
+        (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
+    )
+    assert result["schema"] == "nixome.setup-config.v1"
+    assert result["status"] == "passed"
+    assert result["mode"] == "plan"
+    assert result["templates_changed"] == 1
+    assert result["kernels_changed"] == 1
+    assert result["domains_changed"] == 1
+    assert result["prefs_changed"] == 1
+    assert result["qrexec_policy_changed"] == 1
+
+
+def check_setup_config_empty_global_pref(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    setup_log_dir = work_dir / "logs"
+    policy_dir = work_dir / "policy.d"
+    state_dir = work_dir / "state"
+    capabilities = work_dir / "xen-capabilities"
+    mutation_log = work_dir / "mutations.log"
+    topology = work_dir / "topology.json"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (setup_log_dir, policy_dir, state_dir):
+        path.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+    mutation_log.write_text("", encoding="utf-8")
+    topology.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.qubes-topology.v1",
+                "templates": {},
+                "kernels": {},
+                "domains": {},
+                "prefs": {"default_kernel": ""},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    commands = {
+        "systemctl": """
+        #!/usr/bin/env bash
+        if [ "$1" = "is-active" ]; then
+          exit 0
+        fi
+        if [ "$1" = "reload" ] || [ "$1" = "try-restart" ]; then
+          exit 0
+        fi
+        exit 1
+        """,
+        "qvm-ls": "#!/usr/bin/env bash\nprintf 'dom0\n'\n",
+        "qubes-prefs": """
+        #!/usr/bin/env bash
+        if [ "$#" -eq 1 ] && [ "$1" = "default_kernel" ]; then
+          printf '\n'
+          exit 0
+        fi
+        {
+          printf 'qubes-prefs'
+          for arg in "$@"; do
+            printf ' <%s>' "$arg"
+          done
+          printf '\n'
+        } >> "$MUTATION_LOG"
+        """,
+    }
+    unexpected = """
+    #!/usr/bin/env bash
+    printf 'unexpected command execution: %s\n' "$0" >&2
+    exit 97
+    """
+    for name in (
+        "qvm-create",
+        "qvm-features",
+        "qvm-prefs",
+        "qvm-service",
+        "qvm-template-postprocess",
+        "qvm-volume",
+        "qubesd-query",
+    ):
+        commands[name] = unexpected
+    _setup_fake_command_dir(bin_dir, commands)
+    for command in ("cmp", "grep", "jq"):
+        path = shutil.which(command)
+        if path is not None:
+            (bin_dir / command).symlink_to(path)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "MUTATION_LOG": str(mutation_log),
+            "NIXOME_XEN_CAPABILITIES": str(capabilities),
+            "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
+            "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
+            "NIXOME_LOG_DIR": str(setup_log_dir),
+        }
+    )
+    _run(
+        [
+            "bash",
+            str(repo_root / "scripts/setup-config.sh"),
+            "--apply",
+            "--topology",
+            str(topology),
+        ],
+        cwd=repo_root,
+        env=env,
+        stdout=setup_log_dir / "stdout.log",
+        stderr=setup_log_dir / "stderr.log",
+    )
+    result = json.loads(
+        (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
+    )
+    assert result["schema"] == "nixome.setup-config.v1"
+    assert result["status"] == "passed"
+    assert result["mode"] == "apply"
+    assert result["prefs_changed"] == 1
+    assert result["qrexec_policy_changed"] == 1
+    current = json.loads((state_dir / "current-setup.json").read_text(encoding="utf-8"))
+    assert current["schema"] == "nixome.setup-config.v1"
+    assert current["status"] == "passed"
+    assert current["prefs_changed"] == 1
+    assert (
+        "qubes-prefs <default_kernel> <>"
+        in mutation_log.read_text(encoding="utf-8").splitlines()
     )
