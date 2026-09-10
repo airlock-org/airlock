@@ -36,7 +36,11 @@ def _run(
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     stdout_handle = stdout.open("w", encoding="utf-8") if stdout is not None else None
-    stderr_handle = stderr.open("w", encoding="utf-8") if stderr is not None else None
+    stderr_handle = None
+    if stderr is not None and stderr == stdout:
+        stderr_handle = stdout_handle
+    elif stderr is not None:
+        stderr_handle = stderr.open("w", encoding="utf-8")
     try:
         result = subprocess.run(
             command,
@@ -51,7 +55,7 @@ def _run(
     finally:
         if stdout_handle is not None:
             stdout_handle.close()
-        if stderr_handle is not None:
+        if stderr_handle is not None and stderr_handle is not stdout_handle:
             stderr_handle.close()
     if check and result.returncode != 0:
         raise AssertionError(
@@ -513,6 +517,11 @@ def check_setup_config_runtime_path(repo_root: Path, log_dir: Path) -> None:
 
 def _write_flake(path: Path, text: str) -> None:
     path.write_text(textwrap.dedent(text).lstrip(), encoding="utf-8")
+
+
+def _write_executable(path: Path, text: str) -> None:
+    path.write_text(textwrap.dedent(text).lstrip(), encoding="utf-8")
+    path.chmod(0o755)
 
 
 def check_system_schema(repo_root: Path, log_dir: Path) -> None:
@@ -989,3 +998,313 @@ def check_topology_schema(repo_root: Path, log_dir: Path) -> None:
     ]
     for name, needle, config_expr in invalid_cases:
         expect_failure(name, needle, config_expr)
+
+
+def check_config_boot_verify(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    result_log_dir = work_dir / "logs"
+    status_json = work_dir / "status.json"
+    failed_status_json = work_dir / "status-failed.json"
+    result_json = result_log_dir / "config-boot-verify.json"
+
+    shutil.rmtree(work_dir, ignore_errors=True)
+    bin_dir.mkdir(parents=True)
+    result_log_dir.mkdir()
+    _write_executable(
+        bin_dir / "nixome-config-status",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        cat "$NIXOME_FAKE_CONFIG_STATUS"
+        """,
+    )
+
+    status_json.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.config-status.v1",
+                "pending_reboot": {"required": False, "actions": [], "reasons": []},
+                "system": {
+                    "last_apply": {"host_system_source": "/nix/store/new-system"},
+                    "host_system_profile_resolved_target": "/nix/store/new-system",
+                    "run_current_system_resolved_target": "/nix/store/new-system",
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "NIXOME_LOG_DIR": str(result_log_dir),
+            "NIXOME_FAKE_CONFIG_STATUS": str(status_json),
+            "NIXOME_EXPECTED_HOST_SYSTEM_SOURCE": "/nix/store/new-system",
+        }
+    )
+    _run(
+        ["bash", str(repo_root / "scripts/config-boot-verify.sh")],
+        cwd=repo_root,
+        env=env,
+        stdout=work_dir / "stdout.log",
+    )
+    passed = json.loads(result_json.read_text(encoding="utf-8"))
+    assert passed["schema"] == "nixome.config-boot-verify.v1"
+    assert passed["status"] == "passed"
+    assert passed["expected_host_system_source"] == "/nix/store/new-system"
+    assert passed["last_apply_host_system_source"] == "/nix/store/new-system"
+    assert passed["host_system_profile_resolved_target"] == "/nix/store/new-system"
+    assert passed["run_current_system_resolved_target"] == "/nix/store/new-system"
+    assert passed["pending_reboot"]["required"] is False
+    assert passed["status_json"]["schema"] == "nixome.config-status.v1"
+
+    failed_status_json.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.config-status.v1",
+                "pending_reboot": {
+                    "required": True,
+                    "actions": [
+                        {
+                            "type": "dom0-nixos-system",
+                            "switch_action": "boot",
+                            "reason": "install next dom0 boot generation",
+                        }
+                    ],
+                    "reasons": ["install next dom0 boot generation"],
+                },
+                "system": {
+                    "last_apply": {"host_system_source": "/nix/store/new-system"},
+                    "host_system_profile_resolved_target": "/nix/store/new-system",
+                    "run_current_system_resolved_target": "/nix/store/old-system",
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    env["NIXOME_FAKE_CONFIG_STATUS"] = str(failed_status_json)
+    result = _run(
+        ["bash", str(repo_root / "scripts/config-boot-verify.sh")],
+        cwd=repo_root,
+        env=env,
+        stdout=work_dir / "failed-stdout.log",
+        stderr=work_dir / "failed-stderr.log",
+        check=False,
+    )
+    assert result.returncode != 0
+    failed = json.loads(result_json.read_text(encoding="utf-8"))
+    assert failed["schema"] == "nixome.config-boot-verify.v1"
+    assert failed["status"] == "failed"
+    assert failed["reason"] == "running system does not point at expected generation"
+    assert failed["pending_reboot"]["required"] is True
+
+
+def check_gc_nixome_store(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    data_root = work_dir / "data"
+    nix_root = data_root / "nix-root"
+    store_dir = nix_root / "nix/store"
+    vm_dir = data_root / "vm"
+    gc_log_dir = data_root / "logs"
+    result_link_dir = data_root / "result-links"
+    bin_dir = work_dir / "bin"
+    mock_log = work_dir / "mock.log"
+
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (
+        bin_dir,
+        store_dir / "11111111111111111111111111111111-vm-image",
+        store_dir / "22222222222222222222222222222222-backing-image",
+        store_dir / "33333333333333333333333333333333-system",
+        store_dir / "44444444444444444444444444444444-tool",
+        vm_dir,
+        gc_log_dir,
+        result_link_dir,
+    ):
+        path.mkdir(parents=True)
+    (vm_dir / "nixome-vm-gui-config-image-result").symlink_to(
+        store_dir / "11111111111111111111111111111111-vm-image"
+    )
+    (result_link_dir / "qemu-kvm-result").symlink_to(
+        "/nix/store/44444444444444444444444444444444-tool"
+    )
+    (vm_dir / "nixome-vm-gui-config-image.qcow2").touch()
+    (gc_log_dir / "config-apply.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.config-apply.v1",
+                "system_apply_result": {
+                    "host_system_source": "/nix/store/33333333333333333333333333333333-system"
+                },
+                "apply_log": (
+                    "this noisy log may mention "
+                    "/nix/store/99999999999999999999999999999999-do-not-root"
+                ),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_executable(
+        bin_dir / "nix-store",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        {
+          printf 'NIX_CONFIG=%s\n' "${NIX_CONFIG:-}"
+          printf 'ARGS='
+          printf '[%s]' "$@"
+          printf '\n'
+        } >> "$NIXOME_GC_TEST_MOCK_LOG"
+        case "$*" in
+          "--gc --print-dead")
+            printf '/nix/store/deadbeefdeadbeefdeadbeefdeadbeef-dead\n'
+            printf 'removing stale temporary roots file fixture\n' >&2
+            ;;
+          "--gc")
+            printf 'freed 0 bytes\n'
+            ;;
+          *)
+            printf 'unexpected nix-store args: %s\n' "$*" >&2
+            exit 2
+            ;;
+        esac
+        """,
+    )
+    _write_executable(
+        bin_dir / "qemu-img",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        if [ "$1" = "info" ]; then
+          cat <<'INFO'
+        image: test.qcow2
+        file format: qcow2
+        backing file: /nix/store/22222222222222222222222222222222-backing-image/base.qcow2
+        INFO
+          exit 0
+        fi
+        printf 'unexpected qemu-img args: %s\n' "$*" >&2
+        exit 2
+        """,
+    )
+
+    base_env = os.environ.copy()
+    base_env.update(
+        {
+            "PATH": f"{bin_dir}:{base_env['PATH']}",
+            "NIXOME_GC_ALLOW_NONSTANDARD_DATA_ROOT": "1",
+            "NIXOME_GC_TEST_MOCK_LOG": str(mock_log),
+            "NIXOME_DATA_ROOT": str(data_root),
+            "NIXOME_NIX_ROOT": str(nix_root),
+            "NIXOME_NIX_STORE": str(nix_root),
+            "NIXOME_VM_DIR": str(vm_dir),
+            "NIXOME_LOG_DIR": str(gc_log_dir),
+            "NIXOME_RESULT_LINK_DIR": str(result_link_dir),
+            "NIXOME_NIX_STORE_BIN": str(bin_dir / "nix-store"),
+            "NIXOME_QEMU_IMG_BIN": str(bin_dir / "qemu-img"),
+        }
+    )
+
+    _run(
+        [str(repo_root / "scripts/gc-nixome-store.sh"), "dry-run"],
+        cwd=repo_root,
+        env=base_env,
+        stdout=work_dir / "dry-run.out",
+    )
+    roots_dir = nix_root / "nix/var/nix/gcroots/nixome"
+    manifest_text = (roots_dir / "manifest.tsv").read_text(encoding="utf-8")
+    mock_text = mock_log.read_text(encoding="utf-8")
+    dry_run_text = (work_dir / "dry-run.out").read_text(encoding="utf-8")
+    assert f"store = {nix_root}" in mock_text
+    assert "ARGS=[--gc][--print-dead]" in mock_text
+    for store_name in (
+        "11111111111111111111111111111111-vm-image",
+        "22222222222222222222222222222222-backing-image",
+        "33333333333333333333333333333333-system",
+        "44444444444444444444444444444444-tool",
+    ):
+        assert f"/nix/store/{store_name}" in manifest_text
+    assert "99999999999999999999999999999999-do-not-root" not in manifest_text
+    assert "Dead path count:  1" in dry_run_text
+    assert "Dead stderr log:" in dry_run_text
+    assert "Result JSON:" in dry_run_text
+    assert "removing stale temporary roots file fixture" in (
+        gc_log_dir / "nixome-store-gc-dead-paths.stderr.log"
+    ).read_text(encoding="utf-8")
+    gc_json = json.loads(
+        (gc_log_dir / "nixome-store-gc.json").read_text(encoding="utf-8")
+    )
+    assert gc_json["schema"] == "nixome.store-gc.v1"
+    assert gc_json["mode"] == "dry-run"
+    assert gc_json["nix_root"] == str(nix_root)
+    assert gc_json["root_count"] == 4
+    assert gc_json["dead_count"] == 1
+    assert gc_json["gc_ran"] is False
+    assert gc_json["dead_stderr_log"] == str(
+        gc_log_dir / "nixome-store-gc-dead-paths.stderr.log"
+    )
+
+    _run(
+        [str(repo_root / "scripts/gc-nixome-store.sh"), "run"],
+        cwd=repo_root,
+        env=base_env,
+        stdout=work_dir / "run.out",
+    )
+    run_text = (work_dir / "run.out").read_text(encoding="utf-8")
+    assert "ARGS=[--gc]" in mock_log.read_text(encoding="utf-8")
+    assert "GC output tail:" in run_text
+    assert "freed 0 bytes" in run_text
+    gc_json = json.loads(
+        (gc_log_dir / "nixome-store-gc.json").read_text(encoding="utf-8")
+    )
+    assert gc_json["schema"] == "nixome.store-gc.v1"
+    assert gc_json["mode"] == "run"
+    assert gc_json["gc_ran"] is True
+
+    auto_env = base_env | {"NIXOME_GC_AUTO_THRESHOLD_GIB": "0"}
+    _run(
+        [str(repo_root / "scripts/gc-nixome-store.sh"), "auto"],
+        cwd=repo_root,
+        env=auto_env,
+        stdout=work_dir / "auto.out",
+    )
+    auto_text = (work_dir / "auto.out").read_text(encoding="utf-8")
+    mock_lines = mock_log.read_text(encoding="utf-8").splitlines()
+    assert "Auto decision:    running full GC" in auto_text
+    assert mock_lines.count("ARGS=[--gc][--print-dead]") == 2
+    assert mock_lines.count("ARGS=[--gc]") == 2
+    gc_json = json.loads(
+        (gc_log_dir / "nixome-store-gc.json").read_text(encoding="utf-8")
+    )
+    assert gc_json["schema"] == "nixome.store-gc.v1"
+    assert gc_json["mode"] == "auto"
+    assert gc_json["gc_ran"] is True
+    assert gc_json["dead_count"] == 1
+
+    nonstandard_root = Path(f"/tmp/nixome-gc-nonstandard-{os.getpid()}")
+    result = _run(
+        [str(repo_root / "scripts/gc-nixome-store.sh"), "dry-run"],
+        cwd=repo_root,
+        env={
+            **os.environ,
+            "NIXOME_DATA_ROOT": str(nonstandard_root),
+            "NIXOME_NIX_ROOT": str(nonstandard_root / "nix-root"),
+            "NIXOME_NIX_STORE": str(nonstandard_root / "nix-root"),
+            "NIXOME_LOG_DIR": str(nonstandard_root / "logs"),
+            "NIXOME_VM_DIR": str(nonstandard_root / "vm"),
+        },
+        stdout=work_dir / "nonstandard.out",
+        stderr=work_dir / "nonstandard.out",
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "refusing nonstandard data root" in (work_dir / "nonstandard.out").read_text(
+        encoding="utf-8"
+    )

@@ -9,6 +9,8 @@ import pytest
 
 from local_pychecks import (
     check_host_capabilities,
+    check_config_boot_verify,
+    check_gc_nixome_store,
     check_nix_closure_domain_volume_list,
     check_nix_closure_root_image,
     check_qrexec_policy_path,
@@ -162,7 +164,7 @@ LOCAL_CHECKS = (
         "setup-config-runtime-path",
         runner=check_setup_config_runtime_path,
     ),
-    LocalCheck("gc-nixome-store", ("{root}/tests/gc-nixome-store.sh",)),
+    LocalCheck("gc-nixome-store", runner=check_gc_nixome_store),
     LocalCheck(
         "config-topology-eval",
         ("{root}/tests/config-topology-eval.sh",),
@@ -208,7 +210,7 @@ LOCAL_CHECKS = (
     ),
     LocalCheck("nixome-cli", ("{root}/tests/nixome-cli.sh",), (pytest.mark.nix,)),
     LocalCheck("config-control", ("{root}/tests/config-control.sh",)),
-    LocalCheck("config-boot-verify", ("{root}/tests/config-boot-verify.sh",)),
+    LocalCheck("config-boot-verify", runner=check_config_boot_verify),
     LocalCheck("config-status", ("{root}/tests/config-status.sh",)),
     LocalCheck(
         "config-apply-template-build-ref",
