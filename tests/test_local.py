@@ -18,6 +18,7 @@ from local_pychecks import (
     check_config_system_apply_boot,
     check_config_staging_validate,
     check_config_status,
+    check_config_system_apply,
     check_config_vault_deployment_archive,
     check_dev_role,
     check_host_capabilities,
@@ -250,7 +251,7 @@ LOCAL_CHECKS = (
         "config-apply-nix-domain-materialization",
         runner=check_config_apply_nix_domain_materialization,
     ),
-    LocalCheck("config-system-apply", ("{root}/tests/config-system-apply.sh",)),
+    LocalCheck("config-system-apply", runner=check_config_system_apply),
     LocalCheck("config-system-apply-boot", runner=check_config_system_apply_boot),
     LocalCheck(
         "run-nested-gui-smoke-static",
