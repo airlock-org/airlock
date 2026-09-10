@@ -57,6 +57,7 @@ PYTHON_FILES := \
 	tests/conftest.py \
 	tests/local_harness.py \
 	tests/local_pychecks.py \
+	tests/run_local.py \
 	tests/test_local.py \
 	tests/test_vm.py \
 	tests/test_vm_staged.py
