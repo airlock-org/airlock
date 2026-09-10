@@ -43,7 +43,7 @@ def _load_nixome_env(repo_root: Path) -> None:
             "-c",
             'source "$1"; env -0',
             "bash",
-            str(repo_root / "runtime/control-tools/scripts/lib/nixome-env.sh"),
+            str(repo_root / "runtime/tools/scripts/lib/nixome-env.sh"),
         ],
         check=False,
         stdout=subprocess.PIPE,

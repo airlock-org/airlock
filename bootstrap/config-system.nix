@@ -1,7 +1,7 @@
 {
   lib,
   nixomeConfigDomains ? { },
-  nixomeConfigSeedInputs ? null,
+  nixomeConfigInputs ? null,
   nixomeQubeKernel ? null,
   ...
 }:
@@ -16,7 +16,7 @@ let
   ) configRoles;
   haveConfigDomains = missingConfigDomains == [ ];
   haveQubeKernel = nixomeQubeKernel != null;
-  haveConfigSeedInputs = nixomeConfigSeedInputs != null;
+  haveConfigInputs = nixomeConfigInputs != null;
 in
 {
   assertions = [
@@ -29,23 +29,23 @@ in
       message = "bootstrap/config-system.nix requires nixomeQubeKernel specialArg.";
     }
     {
-      assertion = haveConfigSeedInputs;
-      message = "bootstrap/config-system.nix requires nixomeConfigSeedInputs specialArgs.";
+      assertion = haveConfigInputs;
+      message = "bootstrap/config-system.nix requires nixomeConfigInputs specialArgs.";
     }
   ];
 
   environment.etc = {
-    "nixome/config-seed-inputs/nixpkgs".source =
-      if haveConfigSeedInputs then nixomeConfigSeedInputs.nixpkgs else null;
-    "nixome/config-seed-inputs/nixpkgs-libvirt_10_5".source =
-      if haveConfigSeedInputs && nixomeConfigSeedInputs ? nixpkgsLibvirt105 then
-        nixomeConfigSeedInputs.nixpkgsLibvirt105
+    "nixome/config-inputs/nixpkgs".source =
+      if haveConfigInputs then nixomeConfigInputs.nixpkgs else null;
+    "nixome/config-inputs/nixpkgs-libvirt_10_5".source =
+      if haveConfigInputs && nixomeConfigInputs ? nixpkgsLibvirt105 then
+        nixomeConfigInputs.nixpkgsLibvirt105
       else
         null;
-    "nixome/config-seed-inputs/nixos-qubes".source =
-      if haveConfigSeedInputs then nixomeConfigSeedInputs.nixosQubes else null;
-    "nixome/config-seed-inputs/nixome-support".source =
-      if haveConfigSeedInputs then nixomeConfigSeedInputs.nixomeSupport else null;
+    "nixome/config-inputs/nixos-qubes".source =
+      if haveConfigInputs then nixomeConfigInputs.nixosQubes else null;
+    "nixome/config-inputs/nixome-support".source =
+      if haveConfigInputs then nixomeConfigInputs.nixomeSupport else null;
   };
 
   nixome.qubes = {
@@ -80,7 +80,7 @@ in
       archiveDeploymentService = "nixome.Config.ArchiveDeployment";
       currentExportService = "nixome.Config.ExportCurrent";
       currentImportService = "nixome.Config.ImportCurrent";
-      seedInputsImportService = "nixome.Config.SeedInputsImport";
+      configInputsImportService = "nixome.Config.InputsImport";
     };
   };
 

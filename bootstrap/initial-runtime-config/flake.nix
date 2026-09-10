@@ -316,7 +316,7 @@
       nixomeSupport = "__NIXOME_SUPPORT_PATH__";
       nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
       nixpkgsLibvirt105Source = "__NIXPKGS_LIBVIRT_10_5_PATH__";
-      templateBuilders = import "${nixomeSupport}/platform/lib/qube-template.nix" {
+      templateBuilders = import "${nixomeSupport}/runtime/tools/lib/qube-template.nix" {
         inherit nixpkgs system;
         inherit
           nixomeSupport
@@ -444,7 +444,7 @@
           name = role;
           guestRole = role;
           inherit
-            nixomeConfigSeedInputs
+            nixomeConfigInputs
             ;
           nixomePrebuiltTemplateSources = prebuiltTemplateSources;
           modules = [
@@ -566,7 +566,7 @@
         kernelVersion = "6.12.64-1";
         fedoraVersion = "fc41";
       };
-      nixomeConfigSeedInputs = {
+      nixomeConfigInputs = {
         nixpkgs = "${nixpkgs}";
         nixpkgsLibvirt105 = nixpkgsLibvirt105Source;
         nixosQubes = nixosQubesSource;
@@ -608,7 +608,7 @@
         specialArgs = {
           inherit
             appliedMessage
-            nixomeConfigSeedInputs
+            nixomeConfigInputs
             ;
           nixomeQubeKernel = {
             name = nixomeQubeKernelName;
@@ -619,8 +619,8 @@
         };
         modules = [
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
-          "${nixomeSupport}/platform/modules/dom0.nix"
-          "${nixomeSupport}/platform/modules/qubes-topology.nix"
+          "${nixomeSupport}/runtime/tools/modules/dom0.nix"
+          "${nixomeSupport}/runtime/tools/modules/qubes-topology.nix"
           "${nixomeSupport}/image/profiles/vm-gui.nix"
           "${nixomeSupport}/bootstrap/config-system.nix"
           {

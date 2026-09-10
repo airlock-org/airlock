@@ -88,7 +88,7 @@ make test-slow TEST_VM_JOBS=2
 
 Each lane gets its own VM directory, result-link directory, log directory, SSH
 port, and qcow2 overlay while sharing the Nix store/cache. The lane-local VM
-image result link is seeded from the shared prebuild and workers run with
+image result link is prepared from the shared prebuild and workers run with
 `NIXOME_VM_SKIP_BASE_BUILD=1`, so they do not each re-resolve the same base
 image with Nix. Slow parallel lanes use ports from
 `VM_PARALLEL_SSH_BASE_PORT`, defaulting to `2300`, and the serial

@@ -21,11 +21,10 @@ integration layer for:
 ## Repository Layout
 
 - `image/`: image build profiles and overlays for bootable Nixome systems.
-- `bootstrap/`: first-boot wiring and the default domains placed into an initial image.
-- `runtime/`: ongoing runtime configuration plus the tools that apply, import, export, inspect, and test it.
-- `runtime/config-staging/`: the default staged runtime config repo seeded into `config-staging`.
-- `runtime/control-tools/`: packages and scripts used by dom0 and config VMs to operate runtime state.
-- `platform/`: reusable Nix modules, schemas, and library builders shared by image, bootstrap, and runtime code.
+- `bootstrap/`: first-boot wiring and the starting runtime config bundled into an image.
+- `bootstrap/initial-runtime-config/`: starter runtime config that `config-vault` turns into the first current baseline.
+- `runtime/`: code used after bootstrap to operate the running system.
+- `runtime/tools/`: Nix libraries, schemas, modules, packages, and scripts used to run and manage Nixome.
 - `vendor/`: upstream source inputs carried locally for the POC.
 
 ## Commands

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-source "$ROOT/runtime/control-tools/scripts/lib/nixome-env.sh"
+source "$ROOT/runtime/tools/scripts/lib/nixome-env.sh"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-image}"
 VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
@@ -69,7 +69,7 @@ mkdir -p "$VM_DIR"
 # rebuild can make run-nested-vm.sh replace the writable overlay and discard the
 # staged profile before verification.
 printf 'config-boot-activate: resolve stable base VM image\n'
-"$ROOT/runtime/control-tools/scripts/resolve-vm-image-result.sh" "$IMAGE_ATTR" "$VM_IMAGE_LINK" > "$VM_IMAGE_PATH_LOG"
+"$ROOT/runtime/tools/scripts/resolve-vm-image-result.sh" "$IMAGE_ATTR" "$VM_IMAGE_LINK" > "$VM_IMAGE_PATH_LOG"
 
 printf 'config-boot-activate: stage next dom0 boot generation\n'
 env \
@@ -87,7 +87,7 @@ env \
   NIXOME_RUN_CONFIG_BOOT_VERIFY=0 \
   NIXOME_RUN_QUBES_SMOKE=0 \
   NIXOME_RUN_GUI_SMOKE=0 \
-  "$ROOT/runtime/control-tools/scripts/run-nested-gui-smoke.sh"
+  "$ROOT/runtime/tools/scripts/run-nested-gui-smoke.sh"
 
 [ -r "$CONFIG_VMS_JSON" ] ||
   fail "stage run did not write config VMs result"
@@ -127,7 +127,7 @@ env \
   NIXOME_EXPECTED_HOST_SYSTEM_SOURCE="$expected_host_system_source" \
   NIXOME_RUN_QUBES_SMOKE=0 \
   NIXOME_RUN_GUI_SMOKE=0 \
-  "$ROOT/runtime/control-tools/scripts/run-nested-gui-smoke.sh"
+  "$ROOT/runtime/tools/scripts/run-nested-gui-smoke.sh"
 
 [ -r "$CONFIG_BOOT_VERIFY_JSON" ] ||
   fail "verify run did not write boot verify result" "$expected_host_system_source"

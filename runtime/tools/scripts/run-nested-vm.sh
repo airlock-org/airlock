@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-source "$ROOT/runtime/control-tools/scripts/lib/nixome-env.sh"
+source "$ROOT/runtime/tools/scripts/lib/nixome-env.sh"
 VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
 RESULT_LINK_DIR="${NIXOME_RESULT_LINK_DIR:-${NIXOME_DATA_ROOT:-$ROOT/.nixome}/result-links}"
 IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-image}"
@@ -236,7 +236,7 @@ starting VM
   display: $DISPLAY_MODE
   vga: $VGA
   memory: ${MEMORY} MiB
-  ssh: NIXOME_VM_SSH_PORT=$SSH_PORT $ROOT/runtime/control-tools/scripts/ssh-nested-vm.sh
+  ssh: NIXOME_VM_SSH_PORT=$SSH_PORT $ROOT/runtime/tools/scripts/ssh-nested-vm.sh
   login: $SSH_USER / $SSH_PASSWORD
   monitor: $MONITOR_SOCKET
 

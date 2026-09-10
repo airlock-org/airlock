@@ -1,7 +1,7 @@
 {
   lib,
   mkNixomeQubeBuilders,
-  nixomeConfigSeedInputs,
+  nixomeConfigInputs,
   nixomeQubesVmKernelName,
 }:
 let
@@ -148,7 +148,7 @@ let
         qubeBuilders.mkNixNativeDomain {
           name = role;
           guestRole = role;
-          inherit nixomeConfigSeedInputs;
+          inherit nixomeConfigInputs;
           nixomePrebuiltTemplateSources = { };
           modules = [ (mkGuestModule role) ];
           rootImageSizeMiB = defaults.rootImageSizeMiB;

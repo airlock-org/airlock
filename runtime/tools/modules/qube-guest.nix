@@ -1,7 +1,7 @@
 {
   config,
   lib,
-  nixomeConfigSeedInputs ? null,
+  nixomeConfigInputs ? null,
   nixomePrebuiltTemplateSources ? { },
   pkgs,
   ...
@@ -16,12 +16,12 @@ let
   hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole;
   hasPrivateNixRole =
     hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole || hasDevRole;
-  hasSeedInputsImportRole = hasConfigStagingRole || hasConfigValidatorRole;
+  hasConfigInputsImportRole = hasConfigStagingRole || hasConfigValidatorRole;
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
   roleGit = pkgs.gitMinimal;
-  nixomeCli = pkgs.callPackage ../../runtime/control-tools/pkgs/nixome-cli { };
+  nixomeCli = pkgs.callPackage ../pkgs/nixome-cli { };
   systemdPackage = config.systemd.package;
-  configSeedInputsPublicPath = "/etc/nixome/config-seed-inputs";
+  configInputsPublicPath = "/etc/nixome/config-inputs";
   devPersistentPaths = lib.unique (cfg.devPersistentPaths ++ [ cfg.codexHome ]);
 
   qubesGuestPath = [
@@ -205,18 +205,18 @@ let
     ];
   };
 
-  configStagingSeedFlake = builtins.readFile ../../runtime/config-staging/flake.nix;
-  configStagingConfigVms = builtins.readFile ../../runtime/config-staging/nixome/config-vms.nix;
-  configStagingDom0Host = builtins.readFile ../../runtime/config-staging/nixome/dom0-host.nix;
-  configStagingDom0ProfileActivate = builtins.readFile ../../runtime/config-staging/dom0-profile/bin/nixome-dom0-profile-activate;
-  configStagingDom0ProfileJson = builtins.readFile ../../runtime/config-staging/dom0-profile/share/nixome/profile.json;
-  configStagingLocal = builtins.readFile ../../runtime/config-staging/nixome/local.nix;
-  configStagingRuntime = builtins.readFile ../../runtime/config-staging/nixome/runtime.nix;
-  configStagingSystem = builtins.readFile ../../runtime/config-staging/nixome/system.nix;
-  configStagingSystemSchema = builtins.readFile ../lib/system.nix;
-  configStagingTopologySchema = builtins.readFile ../lib/topology.nix;
-  configStagingPrebuiltTemplateSources = lib.generators.toPretty { } nixomePrebuiltTemplateSources;
-  configSeedRepoPaths = [
+  initialRuntimeConfigFlake = builtins.readFile ../../../bootstrap/initial-runtime-config/flake.nix;
+  initialRuntimeConfigVms = builtins.readFile ../../../bootstrap/initial-runtime-config/nixome/config-vms.nix;
+  initialRuntimeDom0Host = builtins.readFile ../../../bootstrap/initial-runtime-config/nixome/dom0-host.nix;
+  initialRuntimeDom0ProfileActivate = builtins.readFile ../../../bootstrap/initial-runtime-config/dom0-profile/bin/nixome-dom0-profile-activate;
+  initialRuntimeDom0ProfileJson = builtins.readFile ../../../bootstrap/initial-runtime-config/dom0-profile/share/nixome/profile.json;
+  initialRuntimeLocal = builtins.readFile ../../../bootstrap/initial-runtime-config/nixome/local.nix;
+  initialRuntimeConfig = builtins.readFile ../../../bootstrap/initial-runtime-config/nixome/runtime.nix;
+  initialRuntimeSystem = builtins.readFile ../../../bootstrap/initial-runtime-config/nixome/system.nix;
+  initialRuntimeSystemSchema = builtins.readFile ../lib/system.nix;
+  initialRuntimeTopologySchema = builtins.readFile ../lib/topology.nix;
+  initialRuntimePrebuiltTemplateSources = lib.generators.toPretty { } nixomePrebuiltTemplateSources;
+  initialRuntimeConfigRepoPaths = [
     "README.md"
     "dom0-profile/bin/nixome-dom0-profile-activate"
     "dom0-profile/share/nixome/profile.json"
@@ -230,9 +230,9 @@ let
     "nixome/system-schema.nix"
     "nixome/topology.nix"
   ];
-  configSeedRepoGitAddArgs = lib.escapeShellArgs configSeedRepoPaths;
-  configSeedRepoFilesScript = ''
-    write_config_seed_repo_files() {
+  initialRuntimeConfigRepoGitAddArgs = lib.escapeShellArgs initialRuntimeConfigRepoPaths;
+  initialRuntimeConfigRepoFilesScript = ''
+    write_initial_runtime_config_repo_files() {
       mkdir -p dom0-profile/bin dom0-profile/share/nixome nixome
       cat > README.md <<'EOF'
     # Nixome Runtime Configuration
@@ -241,59 +241,59 @@ let
     validated commit into config-vault before attempting deployment.
     EOF
       cat > flake.nix <<'EOF'
-    ${configStagingSeedFlake}
+    ${initialRuntimeConfigFlake}
     EOF
       cat > nixome/topology.nix <<'EOF'
-    ${configStagingTopologySchema}
+    ${initialRuntimeTopologySchema}
     EOF
       cat > nixome/system-schema.nix <<'EOF'
-    ${configStagingSystemSchema}
+    ${initialRuntimeSystemSchema}
     EOF
       cat > nixome/config-vms.nix <<'EOF'
-    ${configStagingConfigVms}
+    ${initialRuntimeConfigVms}
     EOF
       cat > nixome/dom0-host.nix <<'EOF'
-    ${configStagingDom0Host}
+    ${initialRuntimeDom0Host}
     EOF
       cat > nixome/local.nix <<'EOF'
-    ${configStagingLocal}
+    ${initialRuntimeLocal}
     EOF
       cat > nixome/runtime.nix <<'EOF'
-    ${configStagingRuntime}
+    ${initialRuntimeConfig}
     EOF
       cat > nixome/system.nix <<'EOF'
-    ${configStagingSystem}
+    ${initialRuntimeSystem}
     EOF
       cat > nixome/prebuilt-template-sources.nix <<'EOF'
-    ${configStagingPrebuiltTemplateSources}
+    ${initialRuntimePrebuiltTemplateSources}
     EOF
       cat > dom0-profile/bin/nixome-dom0-profile-activate <<'EOF'
-    ${configStagingDom0ProfileActivate}
+    ${initialRuntimeDom0ProfileActivate}
     EOF
       cat > dom0-profile/share/nixome/profile.json <<'EOF'
-    ${configStagingDom0ProfileJson}
+    ${initialRuntimeDom0ProfileJson}
     EOF
       chmod 0755 dom0-profile/bin/nixome-dom0-profile-activate
     }
   '';
-  configSeedInputSubstitutionScript = ''
-    substitute_seed_inputs() {
-      seed_root="$1"
+  configInputPathSubstitutionScript = ''
+    substitute_config_inputs() {
+      config_inputs_root="$1"
       ${pkgs.gnused}/bin/sed -i \
-        -e "s|__NIXOME_NIXPKGS_URL__|path:$seed_root/nixpkgs|g" \
-        -e "s|__NIXPKGS_LIBVIRT_10_5_PATH__|$seed_root/nixpkgs-libvirt_10_5|g" \
-        -e "s|__NIXOME_NIXOS_QUBES_PATH__|$seed_root/nixos-qubes|g" \
-        -e "s|__NIXOME_SUPPORT_PATH__|$seed_root/nixome-support|g" \
+        -e "s|__NIXOME_NIXPKGS_URL__|path:$config_inputs_root/nixpkgs|g" \
+        -e "s|__NIXPKGS_LIBVIRT_10_5_PATH__|$config_inputs_root/nixpkgs-libvirt_10_5|g" \
+        -e "s|__NIXOME_NIXOS_QUBES_PATH__|$config_inputs_root/nixos-qubes|g" \
+        -e "s|__NIXOME_SUPPORT_PATH__|$config_inputs_root/nixome-support|g" \
         flake.nix
-      for old_seed_root in \
-        /rw/nixome/config-seed-inputs \
-        /rw/home/${lib.escapeShellArg cfg.user}/.local/share/nixome/config-seed-inputs \
-        ${lib.escapeShellArg cfg.configSeedInputsPath}; do
+      for old_config_inputs_root in \
+        /rw/nixome/config-inputs \
+        /rw/home/${lib.escapeShellArg cfg.user}/.local/share/nixome/config-inputs \
+        ${lib.escapeShellArg cfg.configInputsPath}; do
         ${pkgs.gnused}/bin/sed -i \
-          -e "s|path:$old_seed_root/nixpkgs|path:$seed_root/nixpkgs|g" \
-          -e "s|$old_seed_root/nixpkgs-libvirt_10_5|$seed_root/nixpkgs-libvirt_10_5|g" \
-          -e "s|$old_seed_root/nixos-qubes|$seed_root/nixos-qubes|g" \
-          -e "s|$old_seed_root/nixome-support|$seed_root/nixome-support|g" \
+          -e "s|path:$old_config_inputs_root/nixpkgs|path:$config_inputs_root/nixpkgs|g" \
+          -e "s|$old_config_inputs_root/nixpkgs-libvirt_10_5|$config_inputs_root/nixpkgs-libvirt_10_5|g" \
+          -e "s|$old_config_inputs_root/nixos-qubes|$config_inputs_root/nixos-qubes|g" \
+          -e "s|$old_config_inputs_root/nixome-support|$config_inputs_root/nixome-support|g" \
           flake.nix
       done
     }
@@ -340,18 +340,18 @@ let
         set -eu
 
         repo="''${NIXOME_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
-        seed_root="''${NIXOME_CONFIG_SEED_INPUTS_PATH:-${configSeedInputsPublicPath}}"
+        config_inputs_root="''${NIXOME_CONFIG_INPUTS_PATH:-${configInputsPublicPath}}"
         tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
         trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
-        ${configSeedRepoFilesScript}
-        ${configSeedInputSubstitutionScript}
+        ${initialRuntimeConfigRepoFilesScript}
+        ${configInputPathSubstitutionScript}
 
-        seed_inputs_ready() {
-          [ -d "$seed_root/nixpkgs" ] &&
-            [ -d "$seed_root/nixpkgs-libvirt_10_5" ] &&
-            [ -d "$seed_root/nixos-qubes" ] &&
-            [ -d "$seed_root/nixome-support" ]
+        config_inputs_ready() {
+          [ -d "$config_inputs_root/nixpkgs" ] &&
+            [ -d "$config_inputs_root/nixpkgs-libvirt_10_5" ] &&
+            [ -d "$config_inputs_root/nixos-qubes" ] &&
+            [ -d "$config_inputs_root/nixome-support" ]
         }
 
         write_archive_readme() {
@@ -413,14 +413,14 @@ let
         }
 
         create_initial_current() {
-          seed_repo="$tmpdir/initial-config"
-          ${pkgs.coreutils}/bin/mkdir -p "$seed_repo"
-          cd "$seed_repo"
-          write_config_seed_repo_files
-          substitute_seed_inputs "$seed_root"
+          initial_repo="$tmpdir/initial-config"
+          ${pkgs.coreutils}/bin/mkdir -p "$initial_repo"
+          cd "$initial_repo"
+          write_initial_runtime_config_repo_files
+          substitute_config_inputs "$config_inputs_root"
           ${roleGit}/bin/git init -b main
-          ${roleGit}/bin/git add ${configSeedRepoGitAddArgs}
-          if seed_inputs_ready; then
+          ${roleGit}/bin/git add ${initialRuntimeConfigRepoGitAddArgs}
+          if config_inputs_ready; then
             ${configNix}/bin/nixome-config-nix \
               --extra-experimental-features nix-command \
               --extra-experimental-features flakes \
@@ -428,14 +428,14 @@ let
               --impure \
               --offline
           else
-            printf 'config vault seed inputs are not present yet under %s; flake.lock deferred\n' "$seed_root"
+            printf 'config vault config inputs are not present yet under %s; flake.lock deferred\n' "$config_inputs_root"
           fi
           if [ -f flake.lock ]; then
             ${roleGit}/bin/git add flake.lock
           fi
           ${roleGit}/bin/git \
-            -c user.name='Nixome Config Seed' \
-            -c user.email='nixome-config-seed@localhost' \
+            -c user.name='Nixome Initial Runtime Config' \
+            -c user.email='nixome-initial-runtime-config@localhost' \
             commit -m 'init nixome config candidate'
 
           candidate_commit="$(${roleGit}/bin/git rev-parse HEAD)"
@@ -448,7 +448,7 @@ let
             --arg commit "$candidate_commit" \
             --arg branch "main" \
             --arg source_role "config-vault" \
-            --arg source "initial-seed" \
+            --arg source "initial-runtime-config" \
             '{
               schema: $schema,
               commit: $commit,
@@ -463,7 +463,7 @@ let
             --arg status "current" \
             --arg candidate_commit "$candidate_commit" \
             --arg branch "main" \
-            --arg source "initial-seed" \
+            --arg source "initial-runtime-config" \
             --arg snapshot "$archive_dir/snapshot" \
             --arg bundle "$archive_dir/config.bundle" \
             '{
@@ -685,49 +685,49 @@ let
     set -eu
 
     repo="''${NIXOME_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
-    seed_root="''${NIXOME_CONFIG_SEED_INPUTS_PATH:-${configSeedInputsPublicPath}}"
+    config_inputs_root="''${NIXOME_CONFIG_INPUTS_PATH:-${configInputsPublicPath}}"
 
-    seed_inputs_ready() {
-      [ -d "$seed_root/nixpkgs" ] &&
-        [ -d "$seed_root/nixpkgs-libvirt_10_5" ] &&
-        [ -d "$seed_root/nixos-qubes" ] &&
-        [ -d "$seed_root/nixome-support" ]
+    config_inputs_ready() {
+      [ -d "$config_inputs_root/nixpkgs" ] &&
+        [ -d "$config_inputs_root/nixpkgs-libvirt_10_5" ] &&
+        [ -d "$config_inputs_root/nixos-qubes" ] &&
+        [ -d "$config_inputs_root/nixome-support" ]
     }
 
-    ${configSeedRepoFilesScript}
-    ${configSeedInputSubstitutionScript}
+    ${initialRuntimeConfigRepoFilesScript}
+    ${configInputPathSubstitutionScript}
 
-    seed_inputs_need_refresh() {
+    config_inputs_need_refresh() {
       for input_file in flake.nix flake.lock; do
         [ -f "$input_file" ] || continue
         ${pkgs.gnugrep}/bin/grep -F '__NIXOME_NIXPKGS_URL__' "$input_file" >/dev/null 2>&1 && return 0
-        ${pkgs.gnugrep}/bin/grep -F '/rw/nixome/config-seed-inputs/' "$input_file" >/dev/null 2>&1 && return 0
-        ${pkgs.gnugrep}/bin/grep -F '/rw/home/${lib.escapeShellArg cfg.user}/.local/share/nixome/config-seed-inputs/' "$input_file" >/dev/null 2>&1 && return 0
-        ${pkgs.gnugrep}/bin/grep -F '${cfg.configSeedInputsPath}/' "$input_file" >/dev/null 2>&1 && return 0
+        ${pkgs.gnugrep}/bin/grep -F '/rw/nixome/config-inputs/' "$input_file" >/dev/null 2>&1 && return 0
+        ${pkgs.gnugrep}/bin/grep -F '/rw/home/${lib.escapeShellArg cfg.user}/.local/share/nixome/config-inputs/' "$input_file" >/dev/null 2>&1 && return 0
+        ${pkgs.gnugrep}/bin/grep -F '${cfg.configInputsPath}/' "$input_file" >/dev/null 2>&1 && return 0
       done
       return 1
     }
 
-    require_clean_worktree_for_seed_update() {
+    require_clean_worktree_for_input_update() {
       dirty="$(${roleGit}/bin/git status --porcelain)"
       if [ -n "$dirty" ]; then
-        printf 'config staging worktree is dirty; refusing to refresh seed input paths\n%s\n' "$dirty" >&2
+        printf 'config staging worktree is dirty; refusing to refresh config input paths\n%s\n' "$dirty" >&2
         exit 1
       fi
     }
 
-    add_seed_lock_if_ready() {
+    add_config_input_lock_if_ready() {
       if [ -f flake.lock ]; then
         printf 'config staging flake.lock already exists: %s\n' "$repo/flake.lock"
         return 0
       fi
 
-      if ! seed_inputs_ready; then
-        printf 'config staging seed inputs are not present yet under %s; flake.lock deferred\n' "$seed_root"
+      if ! config_inputs_ready; then
+        printf 'config staging config inputs are not present yet under %s; flake.lock deferred\n' "$config_inputs_root"
         return 0
       fi
 
-      substitute_seed_inputs "$seed_root"
+      substitute_config_inputs "$config_inputs_root"
       ${configNix}/bin/nixome-config-nix \
         --extra-experimental-features nix-command \
         --extra-experimental-features flakes \
@@ -739,17 +739,17 @@ let
 
     if [ -d "$repo/.git" ]; then
       cd "$repo"
-      if [ "''${NIXOME_CONFIG_REFRESH_SEED_INPUTS:-0}" = 1 ]; then
-        if ! seed_inputs_ready; then
-          printf 'config staging seed inputs are not present yet under %s; refresh deferred\n' "$seed_root"
+      if [ "''${NIXOME_CONFIG_REFRESH_INPUTS:-0}" = 1 ]; then
+        if ! config_inputs_ready; then
+          printf 'config staging config inputs are not present yet under %s; refresh deferred\n' "$config_inputs_root"
           printf 'config staging repo already exists: %s\n' "$repo"
           exit 0
         fi
         dirty="$(${roleGit}/bin/git status --porcelain)"
         if [ -n "$dirty" ]; then
-          printf 'config staging seed input refresh deferred because worktree is dirty\n%s\n' "$dirty"
+          printf 'config staging config input refresh deferred because worktree is dirty\n%s\n' "$dirty"
         else
-          substitute_seed_inputs "$seed_root"
+          substitute_config_inputs "$config_inputs_root"
           ${configNix}/bin/nixome-config-nix \
             --extra-experimental-features nix-command \
             --extra-experimental-features flakes \
@@ -762,20 +762,20 @@ let
             ${roleGit}/bin/git \
               -c user.name='Nixome Config Staging' \
               -c user.email='nixome-config-staging@localhost' \
-              commit -m 'refresh nixome config seed inputs'
-          elif seed_inputs_need_refresh; then
-            printf 'config staging seed input paths still need refresh after lock update\n' >&2
+              commit -m 'refresh nixome config inputs'
+          elif config_inputs_need_refresh; then
+            printf 'config staging config input paths still need refresh after lock update\n' >&2
             exit 1
           else
-            printf 'config staging seed input lock is current\n'
+            printf 'config staging config input lock is current\n'
           fi
         fi
-      elif seed_inputs_need_refresh; then
-        printf 'config staging seed input refresh is required but deferred for existing repo: %s\n' "$repo"
+      elif config_inputs_need_refresh; then
+        printf 'config staging config input refresh is required but deferred for existing repo: %s\n' "$repo"
       fi
       if [ ! -f flake.lock ]; then
-        require_clean_worktree_for_seed_update
-        add_seed_lock_if_ready
+        require_clean_worktree_for_input_update
+        add_config_input_lock_if_ready
         if ! ${roleGit}/bin/git diff --cached --quiet; then
           ${roleGit}/bin/git \
             -c user.name='Nixome Config Staging' \
@@ -787,7 +787,7 @@ let
       exit 0
     fi
 
-    if [ "''${NIXOME_CONFIG_STAGING_INIT_FROM_SEED:-0}" != 1 ]; then
+    if [ "''${NIXOME_CONFIG_STAGING_INIT_FROM_INITIAL_CONFIG:-0}" != 1 ]; then
       ${pkgs.coreutils}/bin/mkdir -p "$repo"
       if [ -n "$(${pkgs.findutils}/bin/find "$repo" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)" ]; then
         printf 'config staging path exists but is not a Git repo; waiting for config-vault current import: %s\n' "$repo"
@@ -800,10 +800,10 @@ let
     mkdir -p "$repo"
     cd "$repo"
     ${roleGit}/bin/git init -b main
-    write_config_seed_repo_files
-    substitute_seed_inputs "$seed_root"
-    ${roleGit}/bin/git add ${configSeedRepoGitAddArgs}
-    add_seed_lock_if_ready
+    write_initial_runtime_config_repo_files
+    substitute_config_inputs "$config_inputs_root"
+    ${roleGit}/bin/git add ${initialRuntimeConfigRepoGitAddArgs}
+    add_config_input_lock_if_ready
     ${roleGit}/bin/git \
       -c user.name='Nixome Config Staging' \
       -c user.email='nixome-config-staging@localhost' \
@@ -1598,7 +1598,7 @@ let
     exec ${configValidatorValidateCandidate}/bin/nixome-config-validator-validate-candidate
   '';
 
-  configSeedInputsImportService = pkgs.writeShellScript "nixome-config-seed-inputs-import-qrexec" ''
+  configInputsImportService = pkgs.writeShellScript "nixome-config-inputs-import-qrexec" ''
     set -eu
 
     export PATH=${
@@ -1615,13 +1615,13 @@ let
     }
 
     import_user=${lib.escapeShellArg cfg.user}
-    target_root="''${NIXOME_CONFIG_SEED_INPUTS_PATH:-${cfg.configSeedInputsPath}}"
+    target_root="''${NIXOME_CONFIG_INPUTS_PATH:-${cfg.configInputsPath}}"
     store_root="''${NIXOME_CONFIG_NIX_STORE_ROOT:-${cfg.configNixStoreRoot}}"
-    public_root=${lib.escapeShellArg configSeedInputsPublicPath}
+    public_root=${lib.escapeShellArg configInputsPublicPath}
     case "$target_root" in
       /rw/*) ;;
       *)
-        printf 'NIXOME_CONFIG_SEED_INPUTS_PATH must live under /rw: %s\n' "$target_root" >&2
+        printf 'NIXOME_CONFIG_INPUTS_PATH must live under /rw: %s\n' "$target_root" >&2
         exit 1
         ;;
     esac
@@ -1633,10 +1633,10 @@ let
         ;;
     esac
 
-    seed_parent="''${target_root%/*}"
-    mkdir -p "$seed_parent" "$store_root" "$target_root"
+    config_inputs_parent="''${target_root%/*}"
+    mkdir -p "$config_inputs_parent" "$store_root" "$target_root"
     chown "$import_user:users" "$target_root" "$store_root" || true
-    tmpdir="$(mktemp -d "$seed_parent/.config-seed-inputs-import.XXXXXX")"
+    tmpdir="$(mktemp -d "$config_inputs_parent/.config-inputs-import.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT
 
     run_as_import_user() {
@@ -1649,14 +1649,14 @@ let
           "$@"
     }
 
-    mount_seed_inputs() {
+    mount_config_inputs() {
       mkdir -p "$public_root"
       jq -r '.inputs | to_entries[] | [.key, .value] | @tsv' "$target_root/manifest.json" |
         while IFS="$(printf '\t')" read -r name input_path; do
           case "$name" in
             nixpkgs|nixpkgs-libvirt_10_5|nixos-qubes|nixome-support) ;;
             *)
-              printf 'invalid seed input name: %s\n' "$name" >&2
+              printf 'invalid config input name: %s\n' "$name" >&2
               exit 1
               ;;
           esac
@@ -1664,7 +1664,7 @@ let
           input_relative_path="''${input_path#"$input_store_path"}"
           physical_path="$store_root$input_store_path$input_relative_path"
           [ -d "$physical_path" ] || {
-            printf 'imported seed input path is missing from private Nix store: %s\n' "$physical_path" >&2
+            printf 'imported config input path is missing from private Nix store: %s\n' "$physical_path" >&2
             exit 1
           }
           mountpoint_path="$public_root/$name"
@@ -1679,7 +1679,7 @@ let
         done
     }
 
-    archive="$tmpdir/seed-inputs.tar"
+    archive="$tmpdir/config-inputs.tar"
     cat > "$archive"
     mkdir -p "$tmpdir/unpack"
 
@@ -1689,7 +1689,7 @@ let
         $0 ~ /^\// ||
         $0 ~ /(^|\/)\.\.($|\/)/ ||
         $0 ~ /\/\// {
-          printf "unsafe seed input tar member: %s\n", $0 > "/dev/stderr"
+          printf "unsafe config input tar member: %s\n", $0 > "/dev/stderr"
           exit 1
         }
         $0 == "manifest.json" ||
@@ -1698,27 +1698,27 @@ let
           next
         }
         {
-          printf "unexpected seed input tar member: %s\n", $0 > "/dev/stderr"
+          printf "unexpected config input tar member: %s\n", $0 > "/dev/stderr"
           exit 1
         }
       '
 
     tar -C "$tmpdir/unpack" -xf "$archive"
     [ -f "$tmpdir/unpack/manifest.json" ] || {
-      printf 'seed input tar is missing manifest.json\n' >&2
+      printf 'config input tar is missing manifest.json\n' >&2
       exit 1
     }
     [ -f "$tmpdir/unpack/store-paths" ] || {
-      printf 'seed input tar is missing store-paths\n' >&2
+      printf 'config input tar is missing store-paths\n' >&2
       exit 1
     }
     [ -f "$tmpdir/unpack/store-export.nar.gz" ] || {
-      printf 'seed input tar is missing store-export.nar.gz\n' >&2
+      printf 'config input tar is missing store-export.nar.gz\n' >&2
       exit 1
     }
 
     jq -e '
-      .schema == "nixome.config-seed-inputs.v1" and
+      .schema == "nixome.config-inputs.v1" and
       (.inputs | keys | sort) == [
         "nixome-support",
         "nixos-qubes",
@@ -1734,7 +1734,7 @@ let
 
     awk '
       $0 !~ /^\/nix\/store\/[A-Za-z0-9]+-[^\/]+$/ {
-        printf "invalid seed input store path: %s\n", $0 > "/dev/stderr"
+        printf "invalid config input store path: %s\n", $0 > "/dev/stderr"
         exit 1
       }
     ' "$tmpdir/unpack/store-paths"
@@ -1753,7 +1753,7 @@ let
     cp "$tmpdir/unpack/manifest.json" "$target_root/manifest.json.new"
     chown "$import_user:users" "$target_root/manifest.json.new" || true
     mv "$target_root/manifest.json.new" "$target_root/manifest.json"
-    mount_seed_inputs
+    mount_config_inputs
 
     locked=false
     ${lib.optionalString hasConfigStagingRole ''
@@ -1763,8 +1763,8 @@ let
           USER=${lib.escapeShellArg cfg.user} \
           LOGNAME=${lib.escapeShellArg cfg.user} \
           XDG_CACHE_HOME=/home/${lib.escapeShellArg cfg.user}/.cache \
-          NIXOME_CONFIG_SEED_INPUTS_PATH=${lib.escapeShellArg configSeedInputsPublicPath} \
-          NIXOME_CONFIG_REFRESH_SEED_INPUTS=1 \
+          NIXOME_CONFIG_INPUTS_PATH=${lib.escapeShellArg configInputsPublicPath} \
+          NIXOME_CONFIG_REFRESH_INPUTS=1 \
           PATH=${lib.escapeShellArg (roleInitPathFor "config-staging")} \
           ${configStagingInit}/bin/nixome-config-staging-init
       }
@@ -1777,15 +1777,15 @@ let
             USER=${lib.escapeShellArg cfg.user} \
             LOGNAME=${lib.escapeShellArg cfg.user} \
             XDG_CACHE_HOME=/home/${lib.escapeShellArg cfg.user}/.cache \
-            NIXOME_CONFIG_SEED_INPUTS_PATH=${lib.escapeShellArg configSeedInputsPublicPath} \
-            NIXOME_CONFIG_REFRESH_SEED_INPUTS=1 \
+            NIXOME_CONFIG_INPUTS_PATH=${lib.escapeShellArg configInputsPublicPath} \
+            NIXOME_CONFIG_REFRESH_INPUTS=1 \
             PATH=${lib.escapeShellArg (roleInitPathFor "config-staging")} \
             ${configStagingInit}/bin/nixome-config-staging-init
       fi
       [ -f ${lib.escapeShellArg cfg.configRepoPath}/flake.lock ] && locked=true
     ''}
 
-    printf '{"schema":"nixome.config-seed-inputs-import.v1","status":"passed","path":"%s","flake_lock":%s}\n' \
+    printf '{"schema":"nixome.config-inputs-import.v1","status":"passed","path":"%s","flake_lock":%s}\n' \
       "$target_root" \
       "$locked"
   '';
@@ -2509,10 +2509,10 @@ in
       description = "Private writable chroot Nix store root for config validation in read-only-store guests.";
     };
 
-    configSeedInputsPath = lib.mkOption {
+    configInputsPath = lib.mkOption {
       type = lib.types.str;
-      default = "/rw/home/${cfg.user}/nixome-config-seed-inputs";
-      description = "Persistent path where dom0 imports offline config flake seed inputs.";
+      default = "/rw/home/${cfg.user}/nixome-config-inputs";
+      description = "Persistent path where dom0 imports offline config flake config inputs.";
     };
 
     codexHome = lib.mkOption {
@@ -2551,8 +2551,8 @@ in
         message = "nixome.qubeGuest.configNixStoreRoot should live under /rw for Qubes private storage.";
       }
       {
-        assertion = lib.hasPrefix "/rw/" cfg.configSeedInputsPath;
-        message = "nixome.qubeGuest.configSeedInputsPath should live under /rw for Qubes private storage.";
+        assertion = lib.hasPrefix "/rw/" cfg.configInputsPath;
+        message = "nixome.qubeGuest.configInputsPath should live under /rw for Qubes private storage.";
       }
       {
         assertion = lib.hasPrefix "/home/" cfg.codexHome;
@@ -2789,8 +2789,8 @@ in
       unitConfig.OnFailure = [ "nixome-qubes-rw-init-diagnostics.service" ];
     };
 
-    systemd.services.nixome-config-seed-inputs-mount = lib.mkIf hasSeedInputsImportRole {
-      description = "Expose imported Nixome config seed inputs";
+    systemd.services.nixome-config-inputs-mount = lib.mkIf hasConfigInputsImportRole {
+      description = "Expose imported Nixome config inputs";
       wantedBy = [ "multi-user.target" ];
       wants = [ "nixome-qubes-rw-init.service" ];
       requires = [ "nixome-qubes-rw-init.service" ];
@@ -2808,9 +2808,9 @@ in
       script = ''
         set -eu
 
-        target_root=${lib.escapeShellArg cfg.configSeedInputsPath}
+        target_root=${lib.escapeShellArg cfg.configInputsPath}
         store_root=${lib.escapeShellArg cfg.configNixStoreRoot}
-        public_root=${lib.escapeShellArg configSeedInputsPublicPath}
+        public_root=${lib.escapeShellArg configInputsPublicPath}
         manifest="$target_root/manifest.json"
 
         mkdir -p "$target_root" "$public_root"
@@ -2821,7 +2821,7 @@ in
             case "$name" in
               nixpkgs|nixpkgs-libvirt_10_5|nixos-qubes|nixome-support) ;;
               *)
-                printf 'invalid seed input name: %s\n' "$name" >&2
+                printf 'invalid config input name: %s\n' "$name" >&2
                 exit 1
                 ;;
             esac
@@ -2829,7 +2829,7 @@ in
             input_relative_path="''${input_path#"$input_store_path"}"
             physical_path="$store_root$input_store_path$input_relative_path"
             [ -d "$physical_path" ] || {
-              printf 'imported seed input path is missing from private Nix store: %s\n' "$physical_path" >&2
+              printf 'imported config input path is missing from private Nix store: %s\n' "$physical_path" >&2
               exit 1
             }
             mountpoint_path="$public_root/$name"
@@ -2879,16 +2879,16 @@ in
       wants = [
         "nixome-qubes-rw-init.service"
       ]
-      ++ lib.optionals hasSeedInputsImportRole [ "nixome-config-seed-inputs-mount.service" ];
+      ++ lib.optionals hasConfigInputsImportRole [ "nixome-config-inputs-mount.service" ];
       requires = [
         "nixome-qubes-rw-init.service"
       ]
-      ++ lib.optionals hasSeedInputsImportRole [ "nixome-config-seed-inputs-mount.service" ];
+      ++ lib.optionals hasConfigInputsImportRole [ "nixome-config-inputs-mount.service" ];
       after = [
         "nixome-qubes-rw-init.service"
         "qubes-db.service"
       ]
-      ++ lib.optionals hasSeedInputsImportRole [ "nixome-config-seed-inputs-mount.service" ];
+      ++ lib.optionals hasConfigInputsImportRole [ "nixome-config-inputs-mount.service" ];
       before = [ "qubes-qrexec-agent.service" ];
       path = [
         pkgs.coreutils
@@ -3216,13 +3216,13 @@ in
           mode = "0444";
         };
 
-    environment.etc."qubes-rpc/nixome.Config.SeedInputsImport" = lib.mkIf hasSeedInputsImportRole {
-      source = configSeedInputsImportService;
+    environment.etc."qubes-rpc/nixome.Config.InputsImport" = lib.mkIf hasConfigInputsImportRole {
+      source = configInputsImportService;
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/nixome.Config.SeedInputsImport" =
-      lib.mkIf hasSeedInputsImportRole
+    environment.etc."qubes/rpc-config/nixome.Config.InputsImport" =
+      lib.mkIf hasConfigInputsImportRole
         {
           text = "force-user='root'\n";
           mode = "0444";

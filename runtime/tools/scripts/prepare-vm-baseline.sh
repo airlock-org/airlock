@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-source "$ROOT/runtime/control-tools/scripts/lib/nixome-env.sh"
+source "$ROOT/runtime/tools/scripts/lib/nixome-env.sh"
 
 IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-image}"
 BASELINE_DIR="${NIXOME_VM_BASELINE_DIR:-${NIXOME_DATA_ROOT:-$ROOT/.nixome}/vm-baselines/$IMAGE_ATTR-setup}"
@@ -97,13 +97,13 @@ env \
   NIXOME_REQUIRE_CLEAN_SHUTDOWN=1 \
   NIXOME_BOOTSTRAP_QUBES=0 \
   NIXOME_RUN_SETUP_CONFIG=1 \
-  NIXOME_RUN_CONFIG_SEED_INPUTS_IMPORT=0 \
+  NIXOME_RUN_CONFIG_INPUTS_IMPORT=0 \
   NIXOME_RUN_CONFIG_VMS_SMOKE=0 \
   NIXOME_RUN_CONFIG_BOOT_VERIFY=0 \
   NIXOME_RUN_NIX_CLOSURE_SMOKE=0 \
   NIXOME_RUN_QUBES_SMOKE=0 \
   NIXOME_RUN_GUI_SMOKE=0 \
-  "$ROOT/runtime/control-tools/scripts/run-nested-gui-smoke.sh"
+  "$ROOT/runtime/tools/scripts/run-nested-gui-smoke.sh"
 run_rc="$?"
 set -e
 

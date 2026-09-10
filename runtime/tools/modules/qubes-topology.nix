@@ -442,16 +442,16 @@ let
       ;
   };
 
-  setupConfig = pkgs.callPackage ../../runtime/control-tools/pkgs/nixome-setup-config { };
-  configApply = pkgs.callPackage ../../runtime/control-tools/pkgs/nixome-config-apply { };
-  configArchive = pkgs.callPackage ../../runtime/control-tools/pkgs/nixome-config-archive { };
-  configBootstrapCurrent = pkgs.callPackage ../../runtime/control-tools/pkgs/nixome-config-bootstrap-current { };
-  configBootVerify = pkgs.callPackage ../../runtime/control-tools/pkgs/nixome-config-boot-verify { };
-  configControl = pkgs.callPackage ../../runtime/control-tools/pkgs/nixome-config-control { };
-  configSeedInputsImport = pkgs.callPackage ../../runtime/control-tools/pkgs/nixome-config-seed-inputs-import { };
-  configStatus = pkgs.callPackage ../../runtime/control-tools/pkgs/nixome-config-status { };
-  configVmsSmoke = pkgs.callPackage ../../runtime/control-tools/pkgs/nixome-config-vms-smoke { };
-  nixClosureDomainSmoke = pkgs.callPackage ../../runtime/control-tools/pkgs/nixome-nix-closure-domain-smoke { };
+  setupConfig = pkgs.callPackage ../pkgs/nixome-setup-config { };
+  configApply = pkgs.callPackage ../pkgs/nixome-config-apply { };
+  configArchive = pkgs.callPackage ../pkgs/nixome-config-archive { };
+  configBootstrapCurrent = pkgs.callPackage ../pkgs/nixome-config-bootstrap-current { };
+  configBootVerify = pkgs.callPackage ../pkgs/nixome-config-boot-verify { };
+  configControl = pkgs.callPackage ../pkgs/nixome-config-control { };
+  configInputsImport = pkgs.callPackage ../pkgs/nixome-config-inputs-import { };
+  configStatus = pkgs.callPackage ../pkgs/nixome-config-status { };
+  configVmsSmoke = pkgs.callPackage ../pkgs/nixome-config-vms-smoke { };
+  nixClosureDomainSmoke = pkgs.callPackage ../pkgs/nixome-nix-closure-domain-smoke { };
   qrexecPolicyStaticDir = "/etc/qubes/policy.d";
   qrexecPolicyRuntimeDir = "/var/lib/nixome/qubes-policy.d";
   qrexecManagedPolicyFile = "90-nixome.policy";
@@ -490,9 +490,9 @@ let
     ${access.candidateExportService} * @anyvm @anyvm deny
     ${access.candidateValidateService} * dom0 ${access.validator} allow
     ${access.candidateValidateService} * @anyvm @anyvm deny
-    ${access.seedInputsImportService} * dom0 ${access.staging} allow
-    ${access.seedInputsImportService} * dom0 ${access.validator} allow
-    ${access.seedInputsImportService} * @anyvm @anyvm deny
+    ${access.configInputsImportService} * dom0 ${access.staging} allow
+    ${access.configInputsImportService} * dom0 ${access.validator} allow
+    ${access.configInputsImportService} * @anyvm @anyvm deny
     ${access.archiveService} * dom0 ${access.vault} allow
     ${access.archiveService} * @anyvm @anyvm deny
     ${access.archiveDeploymentService} * dom0 ${access.vault} allow
@@ -655,10 +655,10 @@ in
         description = "qrexec service used by dom0 to archive deployment records.";
       };
 
-      seedInputsImportService = lib.mkOption {
+      configInputsImportService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.SeedInputsImport";
-        description = "qrexec service used by dom0 to import offline config seed inputs.";
+        default = "nixome.Config.InputsImport";
+        description = "qrexec service used by dom0 to import offline config inputs.";
       };
 
       statusService = lib.mkOption {
@@ -760,7 +760,7 @@ in
       configBootstrapCurrent
       configBootVerify
       configControl
-      configSeedInputsImport
+      configInputsImport
       configStatus
       configVmsSmoke
       nixClosureDomainSmoke

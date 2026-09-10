@@ -133,7 +133,7 @@
 
       nixomeQubesVmKernelName = "6.12.64-1.fc41";
 
-      nixomeSupportSeedSource =
+      nixomeSupportConfigInputSource =
         let
           root = toString ./.;
           keep =
@@ -144,28 +144,27 @@
             in
             rel == "flake.nix"
             || rel == "flake.lock"
-            || keepTree "platform"
             || keepTree "runtime"
             || keepTree "bootstrap"
             || keepTree "image"
             || rel == "tests";
         in
         lib.cleanSourceWith {
-          name = "nixome-support-seed-source";
+          name = "nixome-support-config-input-source";
           src = ./.;
           filter = keep;
         };
 
-      nixomeConfigSeedInputs = {
+      nixomeConfigInputs = {
         nixpkgs = "${nixpkgs}";
         nixpkgsLibvirt105 = "${nixpkgs-libvirt_10_5}";
         nixosQubes = "${nixos-qubes}";
-        nixomeSupport = "${nixomeSupportSeedSource}";
+        nixomeSupport = "${nixomeSupportConfigInputSource}";
       };
 
       mkNixomeQubeBuilders =
         system:
-        import ./platform/lib/qube-template.nix {
+        import ./runtime/tools/lib/qube-template.nix {
           inherit nixpkgs system;
           nixpkgsLibvirt105Source = "${nixpkgs-libvirt_10_5}";
           nixomeSupport = "${self}";
@@ -176,7 +175,7 @@
         inherit
           lib
           mkNixomeQubeBuilders
-          nixomeConfigSeedInputs
+          nixomeConfigInputs
           nixomeQubesVmKernelName
           ;
       };
@@ -255,12 +254,12 @@
     in
     {
       lib = {
-        nixomeSystem = import ./platform/lib/system.nix;
-        nixomeTopology = import ./platform/lib/topology.nix;
-        nixomeQubeTemplate = import ./platform/lib/qube-template.nix;
+        nixomeSystem = import ./runtime/tools/lib/system.nix;
+        nixomeTopology = import ./runtime/tools/lib/topology.nix;
+        nixomeQubeTemplate = import ./runtime/tools/lib/qube-template.nix;
       };
 
-      nixome.seedInputs = nixomeConfigSeedInputs;
+      nixome.configInputs = nixomeConfigInputs;
 
       overlays.nixomeImageBuildTools = nixomeImageBuildToolsOverlay;
 
@@ -291,26 +290,26 @@
         in
         configDomainPackages
         // {
-          nixome-config-apply = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-apply { };
-          nixome-config-archive-candidate = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-archive { };
-          nixome-config-bootstrap-current = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-bootstrap-current { };
-          nixome-config-boot-verify = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-boot-verify { };
-          nixome-config-control = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-control { };
-          nixome-config-seed-inputs-import = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-seed-inputs-import { };
-          nixome-config-status = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-status { };
-          nixome-config-vms-smoke = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-vms-smoke { };
-          nixome-cli = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-cli { };
-          nixome = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-cli { };
+          nixome-config-apply = pkgs.callPackage ./runtime/tools/pkgs/nixome-config-apply { };
+          nixome-config-archive-candidate = pkgs.callPackage ./runtime/tools/pkgs/nixome-config-archive { };
+          nixome-config-bootstrap-current = pkgs.callPackage ./runtime/tools/pkgs/nixome-config-bootstrap-current { };
+          nixome-config-boot-verify = pkgs.callPackage ./runtime/tools/pkgs/nixome-config-boot-verify { };
+          nixome-config-control = pkgs.callPackage ./runtime/tools/pkgs/nixome-config-control { };
+          nixome-config-inputs-import = pkgs.callPackage ./runtime/tools/pkgs/nixome-config-inputs-import { };
+          nixome-config-status = pkgs.callPackage ./runtime/tools/pkgs/nixome-config-status { };
+          nixome-config-vms-smoke = pkgs.callPackage ./runtime/tools/pkgs/nixome-config-vms-smoke { };
+          nixome-cli = pkgs.callPackage ./runtime/tools/pkgs/nixome-cli { };
+          nixome = pkgs.callPackage ./runtime/tools/pkgs/nixome-cli { };
           codex = pkgs.codex;
           zellij = pkgs.zellij;
-          nixome-nix-domain-storage = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-nix-domain-storage { };
-          nixome-nix-closure-domain-smoke = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-nix-closure-domain-smoke { };
-          nixome-qubes-storage = pkgs.python3.pkgs.callPackage ./runtime/control-tools/pkgs/nixome-qubes-storage { };
-          nixome-qube-bootstrap = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-qube-bootstrap { };
-          nixome-qube-gui-smoke = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-qube-gui-smoke { };
-          nixome-setup-config = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-setup-config { };
-          nixome-qubes-smoke = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-qubes-smoke { };
-          nixome-observe-dom0 = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-observe { };
+          nixome-nix-domain-storage = pkgs.callPackage ./runtime/tools/pkgs/nixome-nix-domain-storage { };
+          nixome-nix-closure-domain-smoke = pkgs.callPackage ./runtime/tools/pkgs/nixome-nix-closure-domain-smoke { };
+          nixome-qubes-storage = pkgs.python3.pkgs.callPackage ./runtime/tools/pkgs/nixome-qubes-storage { };
+          nixome-qube-bootstrap = pkgs.callPackage ./runtime/tools/pkgs/nixome-qube-bootstrap { };
+          nixome-qube-gui-smoke = pkgs.callPackage ./runtime/tools/pkgs/nixome-qube-gui-smoke { };
+          nixome-setup-config = pkgs.callPackage ./runtime/tools/pkgs/nixome-setup-config { };
+          nixome-qubes-smoke = pkgs.callPackage ./runtime/tools/pkgs/nixome-qubes-smoke { };
+          nixome-observe-dom0 = pkgs.callPackage ./runtime/tools/pkgs/nixome-observe { };
           nixome-qubes-vm-kernel = pkgs.repackRpmKernel {
             kernelSrc = pkgs.fetchurl {
               url = "https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm";
@@ -351,7 +350,7 @@
         config-control-package = self.packages.${system}.nixome-config-control;
         codex-package = self.packages.${system}.codex;
         zellij-package = self.packages.${system}.zellij;
-        config-seed-inputs-import-package = self.packages.${system}.nixome-config-seed-inputs-import;
+        config-inputs-import-package = self.packages.${system}.nixome-config-inputs-import;
         config-status-package = self.packages.${system}.nixome-config-status;
         nixome-cli-package = self.packages.${system}.nixome-cli;
         module-contract = mkModuleContractCheck system;
@@ -374,8 +373,8 @@
 
           imports = [
             nixos-qubes.nixosModules.qubes
-            ./platform/modules/dom0.nix
-            ./platform/modules/qubes-topology.nix
+            ./runtime/tools/modules/dom0.nix
+            ./runtime/tools/modules/qubes-topology.nix
           ];
         };
 
@@ -420,7 +419,7 @@
               };
             in
             builtins.mapAttrs (_name: entry: materializeNixClosureDomain entry) bootstrapDomainEntries;
-          inherit nixomeConfigSeedInputs;
+          inherit nixomeConfigInputs;
         };
         modules = [
           self.nixosModules.dom0

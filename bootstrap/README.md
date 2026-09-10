@@ -2,6 +2,9 @@
 
 Defines the first-boot bridge between an image and a manageable runtime.
 
-This layer owns the generated config-domain defaults and the initial system
-configuration imported by the image profile. Ongoing desired state belongs in
-`runtime/`.
+This layer owns the generated config-domain defaults and the starter runtime
+configuration bundled into the image.
+
+On first boot, `config-vault` turns `initial-runtime-config/` into the first
+authoritative current config. `config-staging` later imports that current config
+from vault when it needs an editable workspace.

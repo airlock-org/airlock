@@ -45,7 +45,7 @@ let
   reservedQrexecServices = [
     "nixome.Config.CandidateExport"
     "nixome.Config.ValidateCandidate"
-    "nixome.Config.SeedInputsImport"
+    "nixome.Config.InputsImport"
     "nixome.Config.ArchiveCandidate"
     "nixome.Config.ArchiveDeployment"
   ];

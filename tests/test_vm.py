@@ -107,7 +107,7 @@ def vm_flow_has_mark(vm_flow: VmFlow, mark_name: str) -> bool:
     return any(mark.mark.name == mark_name for mark in vm_flow.marks)
 
 
-def seed_lane_image_result_link(
+def prepare_lane_image_result_link(
     vm_dir: Path,
     shared_image_attr: str,
     shared_image_link: Path,
@@ -260,7 +260,7 @@ def test_vm_flow(
         # VM lanes isolate mutable VM state, result links, logs, and SSH ports.
         # They intentionally share the configured Nix store/cache so expensive
         # builds are reused across workers. The lane-local image result link is
-        # seeded from the Makefile prebuild so workers do not each resolve the
+        # prepared from the Makefile prebuild so workers do not each resolve the
         # same base image with nix build.
         data_root = Path(env["NIXOME_DATA_ROOT"])
         vm_dir = data_root / "vm-lanes" / str(lane)
@@ -274,7 +274,7 @@ def test_vm_flow(
         shared_image_link_value = env.get("NIXOME_VM_PARALLEL_IMAGE_LINK")
         lane_image_link = None
         if shared_image_link_value:
-            lane_image_link = seed_lane_image_result_link(
+            lane_image_link = prepare_lane_image_result_link(
                 vm_dir,
                 shared_image_attr,
                 Path(shared_image_link_value),

@@ -32,7 +32,7 @@ CREATED_QUBE_PERSISTENCE_LOG="$LOG_DIR/config-vms-created-qube-persistence.log"
 STAGING_APPMENUS_LOG="$LOG_DIR/config-vms-config-staging-appmenus.log"
 VAULT_APPMENUS_LOG="$LOG_DIR/config-vms-config-vault-appmenus.log"
 VALIDATOR_APPMENUS_LOG="$LOG_DIR/config-vms-config-validator-appmenus.log"
-SEED_INPUTS_IMPORT_LOG="$LOG_DIR/config-vms-seed-inputs-import.log"
+CONFIG_INPUTS_IMPORT_LOG="$LOG_DIR/config-vms-config-inputs-import.log"
 STAGING_INIT_LOG="$LOG_DIR/config-vms-config-staging-init.log"
 VALIDATOR_INIT_LOG="$LOG_DIR/config-vms-config-validator-init.log"
 STAGING_UPDATE_SCRIPT="$LOG_DIR/config-vms-config-staging-update.sh"
@@ -555,7 +555,7 @@ for cmd in \
   journalctl \
   cat \
   date \
-  nixome-config-seed-inputs-import \
+  nixome-config-inputs-import \
   nixome-config-apply \
   nixome-config-status \
   qrexec-client \
@@ -646,15 +646,15 @@ if mode_runs_preflight; then
   check_persistent_home "$STAGING" "$STAGING_PERSISTENCE_LOG"
   check_persistent_home "$VALIDATOR" "$VALIDATOR_PERSISTENCE_LOG"
 
-  if [ "${NIXOME_CONFIG_VMS_IMPORT_SEED_INPUTS:-1}" = "1" ]; then
-    run_or_fail "import config seed inputs" "$SEED_INPUTS_IMPORT_LOG" \
+  if [ "${NIXOME_CONFIG_VMS_IMPORT_INPUTS:-1}" = "1" ]; then
+    run_or_fail "import config inputs" "$CONFIG_INPUTS_IMPORT_LOG" \
       env \
         NIXOME_LOG_DIR="$LOG_DIR" \
         NIXOME_CONFIG_STAGING_VM="$STAGING" \
         NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-        nixome-config-seed-inputs-import
+        nixome-config-inputs-import
   else
-    printf 'config seed inputs import skipped by NIXOME_CONFIG_VMS_IMPORT_SEED_INPUTS=0\n' > "$SEED_INPUTS_IMPORT_LOG"
+    printf 'config inputs import skipped by NIXOME_CONFIG_VMS_IMPORT_INPUTS=0\n' > "$CONFIG_INPUTS_IMPORT_LOG"
   fi
 
   run_qrexec_or_fail "$VAULT" "config vault repo status" "$VAULT_REPO_STATUS_LOG" \
@@ -680,37 +680,37 @@ if [ "$CONFIG_VMS_SMOKE_MODE" = preflight ]; then
 fi
 
 if mode_runs_stage_candidate; then
-if [ -z "${NIXOME_CONFIG_VMS_SEED:-}" ] || [ ! -r "$NIXOME_CONFIG_VMS_SEED" ]; then
-  fail "missing config VM seed helper for smoke update"
+if [ -z "${NIXOME_INITIAL_CONFIG_VMS:-}" ] || [ ! -r "$NIXOME_INITIAL_CONFIG_VMS" ]; then
+  fail "missing initial config VM helper for smoke update"
 fi
-if [ -z "${NIXOME_DOM0_HOST_SEED:-}" ] || [ ! -r "$NIXOME_DOM0_HOST_SEED" ]; then
-  fail "missing dom0 host seed helper for smoke update"
+if [ -z "${NIXOME_INITIAL_DOM0_HOST_CONFIG:-}" ] || [ ! -r "$NIXOME_INITIAL_DOM0_HOST_CONFIG" ]; then
+  fail "missing initial dom0 host config helper for smoke update"
 fi
-if [ -z "${NIXOME_FLAKE_SEED:-}" ] || [ ! -r "$NIXOME_FLAKE_SEED" ]; then
-  fail "missing flake seed helper for smoke update"
+if [ -z "${NIXOME_INITIAL_CONFIG_FLAKE:-}" ] || [ ! -r "$NIXOME_INITIAL_CONFIG_FLAKE" ]; then
+  fail "missing initial config flake helper for smoke update"
 fi
-if [ -z "${NIXOME_LOCAL_SEED:-}" ] || [ ! -r "$NIXOME_LOCAL_SEED" ]; then
-  fail "missing local config compatibility seed helper for smoke update"
+if [ -z "${NIXOME_INITIAL_LOCAL_CONFIG:-}" ] || [ ! -r "$NIXOME_INITIAL_LOCAL_CONFIG" ]; then
+  fail "missing initial local config helper for smoke update"
 fi
-if [ -z "${NIXOME_RUNTIME_SEED:-}" ] || [ ! -r "$NIXOME_RUNTIME_SEED" ]; then
-  fail "missing runtime config seed helper for smoke update"
+if [ -z "${NIXOME_INITIAL_RUNTIME_CONFIG:-}" ] || [ ! -r "$NIXOME_INITIAL_RUNTIME_CONFIG" ]; then
+  fail "missing runtime config input helper for smoke update"
 fi
-if [ -z "${NIXOME_SYSTEM_SEED:-}" ] || [ ! -r "$NIXOME_SYSTEM_SEED" ]; then
-  fail "missing system seed helper for smoke update"
+if [ -z "${NIXOME_INITIAL_SYSTEM_CONFIG:-}" ] || [ ! -r "$NIXOME_INITIAL_SYSTEM_CONFIG" ]; then
+  fail "missing initial system config helper for smoke update"
 fi
-if [ -z "${NIXOME_SYSTEM_SCHEMA_SEED:-}" ] || [ ! -r "$NIXOME_SYSTEM_SCHEMA_SEED" ]; then
-  fail "missing system schema seed helper for smoke update"
+if [ -z "${NIXOME_SYSTEM_SCHEMA_SOURCE:-}" ] || [ ! -r "$NIXOME_SYSTEM_SCHEMA_SOURCE" ]; then
+  fail "missing system schema source helper for smoke update"
 fi
-if [ -z "${NIXOME_TOPOLOGY_SCHEMA_SEED:-}" ] || [ ! -r "$NIXOME_TOPOLOGY_SCHEMA_SEED" ]; then
-  fail "missing topology schema seed helper for smoke update"
+if [ -z "${NIXOME_TOPOLOGY_SCHEMA_SOURCE:-}" ] || [ ! -r "$NIXOME_TOPOLOGY_SCHEMA_SOURCE" ]; then
+  fail "missing topology schema source helper for smoke update"
 fi
-CONFIG_VMS_SEED_TEXT="$(cat "$NIXOME_CONFIG_VMS_SEED")"
-DOM0_HOST_SEED_TEXT="$(cat "$NIXOME_DOM0_HOST_SEED")"
-FLAKE_SEED_TEXT="$(cat "$NIXOME_FLAKE_SEED")"
-LOCAL_SEED_TEXT="$(cat "$NIXOME_LOCAL_SEED")"
-SYSTEM_SEED_TEXT="$(cat "$NIXOME_SYSTEM_SEED")"
-SYSTEM_SCHEMA_SEED_TEXT="$(cat "$NIXOME_SYSTEM_SCHEMA_SEED")"
-TOPOLOGY_SCHEMA_SEED_TEXT="$(cat "$NIXOME_TOPOLOGY_SCHEMA_SEED")"
+INITIAL_CONFIG_VMS_TEXT="$(cat "$NIXOME_INITIAL_CONFIG_VMS")"
+INITIAL_DOM0_HOST_CONFIG_TEXT="$(cat "$NIXOME_INITIAL_DOM0_HOST_CONFIG")"
+INITIAL_CONFIG_FLAKE_TEXT="$(cat "$NIXOME_INITIAL_CONFIG_FLAKE")"
+INITIAL_LOCAL_CONFIG_TEXT="$(cat "$NIXOME_INITIAL_LOCAL_CONFIG")"
+INITIAL_SYSTEM_CONFIG_TEXT="$(cat "$NIXOME_INITIAL_SYSTEM_CONFIG")"
+SYSTEM_SCHEMA_SOURCE_TEXT="$(cat "$NIXOME_SYSTEM_SCHEMA_SOURCE")"
+TOPOLOGY_SCHEMA_SOURCE_TEXT="$(cat "$NIXOME_TOPOLOGY_SCHEMA_SOURCE")"
 
 cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
@@ -747,8 +747,8 @@ else
   nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
 fi
 nixpkgs_libvirt_10_5_path="\$(sed -n 's/^      nixpkgsLibvirt105Source = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
-if [ -z "\$nixpkgs_libvirt_10_5_path" ] && [ -e /rw/home/user/nixome-config-seed-inputs/nixpkgs-libvirt_10_5 ]; then
-  nixpkgs_libvirt_10_5_path="\$(readlink -f /rw/home/user/nixome-config-seed-inputs/nixpkgs-libvirt_10_5)"
+if [ -z "\$nixpkgs_libvirt_10_5_path" ] && [ -e /rw/home/user/nixome-config-inputs/nixpkgs-libvirt_10_5 ]; then
+  nixpkgs_libvirt_10_5_path="\$(readlink -f /rw/home/user/nixome-config-inputs/nixpkgs-libvirt_10_5)"
 fi
 [ -n "\$nixpkgs_url" ]
 [ -n "\$nixpkgs_libvirt_10_5_path" ]
@@ -757,16 +757,16 @@ fi
 mkdir -p dom0-profile/bin dom0-profile/share/nixome nixome
 rm -f dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json
 cat > flake.nix <<'FLAKENIXEOF'
-$FLAKE_SEED_TEXT
+$INITIAL_CONFIG_FLAKE_TEXT
 FLAKENIXEOF
 cat > nixome/config-vms.nix <<'CONFIGVMSNIXEOF'
-$CONFIG_VMS_SEED_TEXT
+$INITIAL_CONFIG_VMS_TEXT
 CONFIGVMSNIXEOF
 cat > nixome/dom0-host.nix <<'DOM0HOSTNIXEOF'
-$DOM0_HOST_SEED_TEXT
+$INITIAL_DOM0_HOST_CONFIG_TEXT
 DOM0HOSTNIXEOF
 cat > nixome/local.nix <<'LOCALNIXEOF'
-${LOCAL_SEED_TEXT}
+${INITIAL_LOCAL_CONFIG_TEXT}
 LOCALNIXEOF
 cat > nixome/runtime.nix <<'RUNTIMENIXEOF'
 {
@@ -833,13 +833,13 @@ cat > nixome/runtime.nix <<'RUNTIMENIXEOF'
 }
 RUNTIMENIXEOF
 cat > nixome/topology.nix <<'TOPOLOGYNIXEOF'
-$TOPOLOGY_SCHEMA_SEED_TEXT
+$TOPOLOGY_SCHEMA_SOURCE_TEXT
 TOPOLOGYNIXEOF
 cat > nixome/system-schema.nix <<'SYSTEMSCHEMANIXEOF'
-$SYSTEM_SCHEMA_SEED_TEXT
+$SYSTEM_SCHEMA_SOURCE_TEXT
 SYSTEMSCHEMANIXEOF
 cat > nixome/system.nix <<'SYSTEMNIXEOF'
-$SYSTEM_SEED_TEXT
+$INITIAL_SYSTEM_CONFIG_TEXT
 SYSTEMNIXEOF
 cat > dom0-profile/share/nixome/profile.json <<PROFILEJSONEOF
 {"schema":"nixome.dom0-profile.v1","message":"$APPLY_MESSAGE","built_by":"config-staging"}

@@ -644,7 +644,7 @@ let
       name,
       modules,
       guestRole ? "base",
-      nixomeConfigSeedInputs ? null,
+      nixomeConfigInputs ? null,
       nixomePrebuiltTemplateSources ? { },
       extraSpecialArgs ? { },
       additionalRootSpace ? null,
@@ -668,15 +668,15 @@ let
         inherit system;
         specialArgs = {
           inherit
-            nixomeConfigSeedInputs
+            nixomeConfigInputs
             nixomePrebuiltTemplateSources
             ;
         }
         // extraSpecialArgs;
         modules = [
-          "${nixomeSupport}/platform/modules/nixome-minimal.nix"
+          "${nixomeSupport}/runtime/tools/modules/nixome-minimal.nix"
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
-          "${nixomeSupport}/platform/modules/qube-guest.nix"
+          "${nixomeSupport}/runtime/tools/modules/qube-guest.nix"
           {
             nixpkgs.pkgs = pkgs;
             nixome.minimalGuest.enable = true;

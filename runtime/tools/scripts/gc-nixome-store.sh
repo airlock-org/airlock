@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MODE="${1:-dry-run}"
 shift || true
 
-source "$ROOT/runtime/control-tools/scripts/lib/nixome-env.sh"
+source "$ROOT/runtime/tools/scripts/lib/nixome-env.sh"
 
 NIX_STORE_BIN="${NIXOME_NIX_STORE_BIN:-nix-store}"
 QEMU_IMG_BIN="${NIXOME_QEMU_IMG_BIN:-qemu-img}"

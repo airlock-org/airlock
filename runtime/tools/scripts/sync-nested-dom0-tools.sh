@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-source "$ROOT/runtime/control-tools/scripts/lib/nixome-env.sh"
+source "$ROOT/runtime/tools/scripts/lib/nixome-env.sh"
 
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 RESULT_JSON="$LOG_DIR/vm-gui-sync-dom0-tools.json"
@@ -11,22 +11,22 @@ SSH_USER="${NIXOME_VM_SSH_USER:-nixome}"
 SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
 REMOTE_BIN_DIR="${NIXOME_NESTED_WARM_BIN_DIR:-/run/nixome-warm/bin}"
 REMOTE_TOPOLOGY_PATH="${NIXOME_NESTED_WARM_TOPOLOGY_PATH:-/run/nixome-warm/current-qubes-topology.json}"
-REMOTE_SEED_INPUTS_PATH="${NIXOME_NESTED_WARM_SEED_INPUTS_PATH:-/run/nixome-warm/config-seed-inputs}"
-REMOTE_SEED_INPUTS_COMPAT_PATH="${NIXOME_NESTED_WARM_SEED_INPUTS_COMPAT_PATH:-/etc/nixome/config-seed-inputs}"
+REMOTE_CONFIG_INPUTS_PATH="${NIXOME_NESTED_WARM_CONFIG_INPUTS_PATH:-/run/nixome-warm/config-inputs}"
+REMOTE_CONFIG_INPUTS_SYSTEM_PATH="${NIXOME_NESTED_WARM_CONFIG_INPUTS_SYSTEM_PATH:-/etc/nixome/config-inputs}"
 REMOTE_DROPIN="/run/systemd/system/qubesd.service.d/zz-nixome-warm-tools.conf"
 REMOTE_OLD_DROPIN="/run/systemd/system/qubesd.service.d/90-nixome-warm-tools.conf"
 RESTART_QUBESD="${NIXOME_NESTED_WARM_RESTART_QUBESD:-1}"
 SYNC_TOPOLOGY="${NIXOME_NESTED_WARM_SYNC_TOPOLOGY:-1}"
-SYNC_SEED_INPUTS="${NIXOME_NESTED_WARM_SYNC_SEED_INPUTS:-1}"
+SYNC_CONFIG_INPUTS="${NIXOME_NESTED_WARM_SYNC_CONFIG_INPUTS:-1}"
 WARM_NIX_DOMAINS="${NIXOME_NESTED_WARM_NIX_DOMAINS:-config-staging config-validator config-vault}"
 TOPOLOGY_JSON="$LOG_DIR/vm-gui-current-qubes-topology.json"
-SEED_INPUTS_JSON="$LOG_DIR/vm-gui-current-config-seed-inputs.json"
-SEED_INPUTS_MANIFEST_JSON="$LOG_DIR/vm-gui-current-config-seed-inputs-manifest.json"
-SEED_INPUTS_JSONL="$LOG_DIR/vm-gui-sync-dom0-tools-seed-inputs.jsonl"
+CONFIG_INPUTS_JSON="$LOG_DIR/vm-gui-current-config-inputs.json"
+CONFIG_INPUTS_MANIFEST_JSON="$LOG_DIR/vm-gui-current-config-inputs-manifest.json"
+CONFIG_INPUTS_JSONL="$LOG_DIR/vm-gui-sync-dom0-tools-config-inputs.jsonl"
 DOMAIN_ARTIFACTS_JSONL="$LOG_DIR/vm-gui-sync-dom0-tools-nix-domains.jsonl"
 
 mkdir -p "$LOG_DIR"
-: > "$SEED_INPUTS_JSONL"
+: > "$CONFIG_INPUTS_JSONL"
 : > "$DOMAIN_ARTIFACTS_JSONL"
 
 shell_quote() {
@@ -34,7 +34,7 @@ shell_quote() {
 }
 
 ssh_base() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/control-tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     ssh \
       -F /dev/null \
       -o LogLevel=ERROR \
@@ -49,7 +49,7 @@ ssh_base() {
 }
 
 scp_base() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/control-tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     scp \
       -F /dev/null \
       -q \
@@ -67,7 +67,7 @@ build_output() {
   local attr="$1"
   local out
 
-  out="$("$ROOT/runtime/control-tools/scripts/nixome-nix.sh" build "$ROOT#$attr" --no-link --print-out-paths --print-build-logs --show-trace)"
+  out="$("$ROOT/runtime/tools/scripts/nixome-nix.sh" build "$ROOT#$attr" --no-link --print-out-paths --print-build-logs --show-trace)"
   awk 'NF { last = $0 } END { print last }' <<< "$out"
 }
 
@@ -90,7 +90,7 @@ find_output_with_bin() {
 
 printf 'warm-sync: building current dom0 tools\n' >&2
 setup_config_out="$(build_output packages.x86_64-linux.nixome-setup-config)"
-seed_inputs_import_out="$(build_output packages.x86_64-linux.nixome-config-seed-inputs-import)"
+config_inputs_import_out="$(build_output packages.x86_64-linux.nixome-config-inputs-import)"
 config_vms_smoke_out="$(build_output packages.x86_64-linux.nixome-config-vms-smoke)"
 nix_closure_out="$(build_output packages.x86_64-linux.nixome-nix-closure-domain-smoke)"
 storage_out="$(build_output packages.x86_64-linux.nixome-qubes-storage)"
@@ -100,7 +100,7 @@ topology_sources=()
 case "$SYNC_TOPOLOGY" in
   1|true|yes)
     printf 'warm-sync: evaluating current concrete Qubes topology\n' >&2
-    "$ROOT/runtime/control-tools/scripts/nixome-nix.sh" eval \
+    "$ROOT/runtime/tools/scripts/nixome-nix.sh" eval \
       --impure \
       --json \
       "$ROOT#nixosConfigurations.vm-gui-config.config.nixome.qubes.topology" \
@@ -149,25 +149,25 @@ case "$SYNC_TOPOLOGY" in
     ;;
 esac
 
-seed_inputs_synced=false
-seed_input_sources=()
-case "$SYNC_SEED_INPUTS" in
+config_inputs_synced=false
+config_input_sources=()
+case "$SYNC_CONFIG_INPUTS" in
   1|true|yes)
-    printf 'warm-sync: evaluating current config seed inputs\n' >&2
-    "$ROOT/runtime/control-tools/scripts/nixome-nix.sh" eval \
+    printf 'warm-sync: evaluating current config inputs\n' >&2
+    "$ROOT/runtime/tools/scripts/nixome-nix.sh" eval \
       --impure \
       --json \
-      "$ROOT#nixome.seedInputs" \
-      > "$SEED_INPUTS_JSON"
+      "$ROOT#nixome.configInputs" \
+      > "$CONFIG_INPUTS_JSON"
     jq -e '
       (.nixpkgs | startswith("/nix/store/")) and
       (.nixpkgsLibvirt105 | startswith("/nix/store/")) and
       (.nixosQubes | startswith("/nix/store/")) and
       (.nixomeSupport | startswith("/nix/store/"))
-    ' "$SEED_INPUTS_JSON" >/dev/null
+    ' "$CONFIG_INPUTS_JSON" >/dev/null
     jq '
       {
-        schema: "nixome.config-seed-inputs.v1",
+        schema: "nixome.config-inputs.v1",
         inputs: {
           nixpkgs: .nixpkgs,
           "nixpkgs-libvirt_10_5": .nixpkgsLibvirt105,
@@ -175,14 +175,14 @@ case "$SYNC_SEED_INPUTS" in
           "nixome-support": .nixomeSupport
         }
       }
-    ' "$SEED_INPUTS_JSON" > "$SEED_INPUTS_MANIFEST_JSON"
+    ' "$CONFIG_INPUTS_JSON" > "$CONFIG_INPUTS_MANIFEST_JSON"
 
     jq -r '
       to_entries[]
       | .value
       | capture("^(?<root>/nix/store/[^/]+)").root
-    ' "$SEED_INPUTS_JSON" | sort -u > "$LOG_DIR/vm-gui-current-config-seed-store-roots.txt"
-    mapfile -t seed_input_sources < "$LOG_DIR/vm-gui-current-config-seed-store-roots.txt"
+    ' "$CONFIG_INPUTS_JSON" | sort -u > "$LOG_DIR/vm-gui-current-config-input-store-roots.txt"
+    mapfile -t config_input_sources < "$LOG_DIR/vm-gui-current-config-input-store-roots.txt"
 
     jq -r '
       [
@@ -192,14 +192,14 @@ case "$SYNC_SEED_INPUTS" in
         ["nixome-support", .nixomeSupport]
       ][]
       | @tsv
-    ' "$SEED_INPUTS_JSON" > "$SEED_INPUTS_JSONL"
-    seed_inputs_synced=true
+    ' "$CONFIG_INPUTS_JSON" > "$CONFIG_INPUTS_JSONL"
+    config_inputs_synced=true
     ;;
   0|false|no)
-    printf 'warm-sync: config seed input sync disabled\n' >&2
+    printf 'warm-sync: config input sync disabled\n' >&2
     ;;
   *)
-    printf 'unsupported NIXOME_NESTED_WARM_SYNC_SEED_INPUTS value: %s\n' "$SYNC_SEED_INPUTS" >&2
+    printf 'unsupported NIXOME_NESTED_WARM_SYNC_CONFIG_INPUTS value: %s\n' "$SYNC_CONFIG_INPUTS" >&2
     exit 1
     ;;
 esac
@@ -207,12 +207,12 @@ esac
 mapfile -t closure_paths < <(
   nix-store -qR \
     "$setup_config_out" \
-    "$seed_inputs_import_out" \
+    "$config_inputs_import_out" \
     "$config_vms_smoke_out" \
     "$nix_closure_out" \
     "$storage_out" \
     "${topology_sources[@]}" \
-    "${seed_input_sources[@]}" |
+    "${config_input_sources[@]}" |
     sort -u
 )
 
@@ -267,7 +267,7 @@ dropin="$LOG_DIR/vm-gui-sync-dom0-tools-qubesd.conf"
 printf 'warm-sync: installing warm tool symlinks and qubesd override\n' >&2
 ssh_base "sudo -n mkdir -p $(shell_quote "$REMOTE_BIN_DIR") /run/systemd/system/qubesd.service.d"
 ssh_base "sudo -n ln -sfn $(shell_quote "$setup_config_out/bin/nixome-setup-config") $(shell_quote "$REMOTE_BIN_DIR/nixome-setup-config")"
-ssh_base "sudo -n ln -sfn $(shell_quote "$seed_inputs_import_out/bin/nixome-config-seed-inputs-import") $(shell_quote "$REMOTE_BIN_DIR/nixome-config-seed-inputs-import")"
+ssh_base "sudo -n ln -sfn $(shell_quote "$config_inputs_import_out/bin/nixome-config-inputs-import") $(shell_quote "$REMOTE_BIN_DIR/nixome-config-inputs-import")"
 ssh_base "sudo -n ln -sfn $(shell_quote "$config_vms_smoke_out/bin/nixome-config-vms-smoke") $(shell_quote "$REMOTE_BIN_DIR/nixome-config-vms-smoke")"
 ssh_base "sudo -n ln -sfn $(shell_quote "$nix_closure_out/bin/nixome-nix-closure-domain-smoke") $(shell_quote "$REMOTE_BIN_DIR/nixome-nix-closure-domain-smoke")"
 ssh_base "sudo -n ln -sfn $(shell_quote "$storage_out/bin/nixome-closure-store") $(shell_quote "$REMOTE_BIN_DIR/nixome-closure-store")"
@@ -282,37 +282,37 @@ if [ "$topology_synced" = true ]; then
   ssh_base "sudo -n mv /tmp/nixome-warm-current-qubes-topology.json $(shell_quote "$REMOTE_TOPOLOGY_PATH")"
 fi
 
-if [ "$seed_inputs_synced" = true ]; then
-  remote_seed_parent="${REMOTE_SEED_INPUTS_PATH%/*}"
-  mapfile -t seed_input_entries < "$SEED_INPUTS_JSONL"
-  ssh_base "sudo -n mkdir -p $(shell_quote "$remote_seed_parent") $(shell_quote "$REMOTE_SEED_INPUTS_PATH")"
-  remote_seed_compat_parent="${REMOTE_SEED_INPUTS_COMPAT_PATH%/*}"
-  ssh_base "sudo -n mkdir -p $(shell_quote "$remote_seed_compat_parent") $(shell_quote "$REMOTE_SEED_INPUTS_COMPAT_PATH")"
-  scp_base "$SEED_INPUTS_MANIFEST_JSON" "$SSH_USER@127.0.0.1:/tmp/nixome-warm-config-seed-inputs-manifest.json"
+if [ "$config_inputs_synced" = true ]; then
+  remote_config_inputs_parent="${REMOTE_CONFIG_INPUTS_PATH%/*}"
+  mapfile -t config_input_entries < "$CONFIG_INPUTS_JSONL"
+  ssh_base "sudo -n mkdir -p $(shell_quote "$remote_config_inputs_parent") $(shell_quote "$REMOTE_CONFIG_INPUTS_PATH")"
+  remote_config_inputs_system_parent="${REMOTE_CONFIG_INPUTS_SYSTEM_PATH%/*}"
+  ssh_base "sudo -n mkdir -p $(shell_quote "$remote_config_inputs_system_parent") $(shell_quote "$REMOTE_CONFIG_INPUTS_SYSTEM_PATH")"
+  scp_base "$CONFIG_INPUTS_MANIFEST_JSON" "$SSH_USER@127.0.0.1:/tmp/nixome-warm-config-inputs-manifest.json"
   ssh_base "
     set -e
-    manifest_tmp=/tmp/nixome-warm-config-seed-inputs-manifest.json
-    sudo -n install -m 0644 \"\$manifest_tmp\" $(shell_quote "$REMOTE_SEED_INPUTS_PATH/manifest.json")
-    sudo -n install -m 0644 \"\$manifest_tmp\" $(shell_quote "$REMOTE_SEED_INPUTS_COMPAT_PATH/manifest.json")
+    manifest_tmp=/tmp/nixome-warm-config-inputs-manifest.json
+    sudo -n install -m 0644 \"\$manifest_tmp\" $(shell_quote "$REMOTE_CONFIG_INPUTS_PATH/manifest.json")
+    sudo -n install -m 0644 \"\$manifest_tmp\" $(shell_quote "$REMOTE_CONFIG_INPUTS_SYSTEM_PATH/manifest.json")
     sudo -n rm -f \"\$manifest_tmp\"
   "
-  for remote_seed_root in "$REMOTE_SEED_INPUTS_PATH" "$REMOTE_SEED_INPUTS_COMPAT_PATH"; do
-    for seed_input_entry in "${seed_input_entries[@]}"; do
-      IFS=$'\t' read -r seed_name seed_path <<< "$seed_input_entry"
-      [ -n "$seed_name" ] || continue
-      seed_dest="$remote_seed_root/$seed_name"
+  for remote_config_inputs_root in "$REMOTE_CONFIG_INPUTS_PATH" "$REMOTE_CONFIG_INPUTS_SYSTEM_PATH"; do
+    for config_input_entry in "${config_input_entries[@]}"; do
+      IFS=$'\t' read -r input_name input_path <<< "$config_input_entry"
+      [ -n "$input_name" ] || continue
+      input_dest="$remote_config_inputs_root/$input_name"
       ssh_base "
         set -e
-        seed_dest=$(shell_quote "$seed_dest")
-        seed_path=$(shell_quote "$seed_path")
-        if mountpoint -q \"\$seed_dest\"; then
-          sudo -n umount \"\$seed_dest\"
+        input_dest=$(shell_quote "$input_dest")
+        input_path=$(shell_quote "$input_path")
+        if mountpoint -q \"\$input_dest\"; then
+          sudo -n umount \"\$input_dest\"
         fi
-        if [ -L \"\$seed_dest\" ] || { [ -e \"\$seed_dest\" ] && [ ! -d \"\$seed_dest\" ]; }; then
-          sudo -n rm -rf \"\$seed_dest\"
+        if [ -L \"\$input_dest\" ] || { [ -e \"\$input_dest\" ] && [ ! -d \"\$input_dest\" ]; }; then
+          sudo -n rm -rf \"\$input_dest\"
         fi
-        sudo -n mkdir -p \"\$seed_dest\"
-        sudo -n mount --bind \"\$seed_path\" \"\$seed_dest\"
+        sudo -n mkdir -p \"\$input_dest\"
+        sudo -n mount --bind \"\$input_path\" \"\$input_dest\"
       "
     done
   done
@@ -338,32 +338,32 @@ if [ "${#topology_sources[@]}" -gt 0 ]; then
 else
   topology_sources_json='[]'
 fi
-if [ "${#seed_input_sources[@]}" -gt 0 ]; then
-  seed_input_sources_json="$(printf '%s\n' "${seed_input_sources[@]}" | jq -R . | jq -s .)"
+if [ "${#config_input_sources[@]}" -gt 0 ]; then
+  config_input_sources_json="$(printf '%s\n' "${config_input_sources[@]}" | jq -R . | jq -s .)"
 else
-  seed_input_sources_json='[]'
+  config_input_sources_json='[]'
 fi
 domain_artifacts_json="$(jq -s '.' "$DOMAIN_ARTIFACTS_JSONL")"
-seed_inputs_json="$(jq -Rn '
+config_inputs_json="$(jq -Rn '
   reduce inputs as $line (
     {};
     ($line | split("\t")) as $fields
     | if ($fields | length) == 2 then .[$fields[0]] = $fields[1] else . end
   )
-' < "$SEED_INPUTS_JSONL")"
+' < "$CONFIG_INPUTS_JSONL")"
 
 jq -n \
   --arg schema "nixome.nested-dom0-tool-sync.v1" \
   --arg status "passed" \
   --arg setup_config "$setup_config_out" \
-  --arg seed_inputs_import "$seed_inputs_import_out" \
+  --arg config_inputs_import "$config_inputs_import_out" \
   --arg config_vms_smoke "$config_vms_smoke_out" \
   --arg nix_closure_smoke "$nix_closure_out" \
   --arg storage "$storage_out" \
   --arg domain_storage "$domain_storage_out" \
   --arg remote_topology "$REMOTE_TOPOLOGY_PATH" \
-  --arg remote_seed_inputs "$REMOTE_SEED_INPUTS_PATH" \
-  --arg remote_seed_inputs_compat "$REMOTE_SEED_INPUTS_COMPAT_PATH" \
+  --arg remote_config_inputs "$REMOTE_CONFIG_INPUTS_PATH" \
+  --arg remote_config_inputs_system "$REMOTE_CONFIG_INPUTS_SYSTEM_PATH" \
   --arg storage_site "$storage_site" \
   --arg remote_bin_dir "$REMOTE_BIN_DIR" \
   --arg qubesd_pythonpath "$qubesd_pythonpath" \
@@ -371,9 +371,9 @@ jq -n \
   --argjson topology_synced "$topology_synced" \
   --argjson topology_sources "$topology_sources_json" \
   --argjson domain_artifacts "$domain_artifacts_json" \
-  --argjson seed_inputs_synced "$seed_inputs_synced" \
-  --argjson seed_input_sources "$seed_input_sources_json" \
-  --argjson seed_inputs "$seed_inputs_json" \
+  --argjson config_inputs_synced "$config_inputs_synced" \
+  --argjson config_input_sources "$config_input_sources_json" \
+  --argjson config_inputs "$config_inputs_json" \
   --argjson closure_paths_total "${#closure_paths[@]}" \
   --argjson imported_paths "${#missing_paths[@]}" \
   --argjson qubesd_restarted "$qubesd_restarted" \
@@ -381,7 +381,7 @@ jq -n \
     schema: $schema,
     status: $status,
     setup_config: $setup_config,
-    seed_inputs_import: $seed_inputs_import,
+    config_inputs_import: $config_inputs_import,
     config_vms_smoke: $config_vms_smoke,
     nix_closure_smoke: $nix_closure_smoke,
     storage: $storage,
@@ -392,12 +392,12 @@ jq -n \
       sources: $topology_sources,
       domains: $domain_artifacts
     },
-    seed_inputs: {
-      synced: $seed_inputs_synced,
-      remote_path: $remote_seed_inputs,
-      compat_path: $remote_seed_inputs_compat,
-      sources: $seed_input_sources,
-      inputs: $seed_inputs
+    config_inputs: {
+      synced: $config_inputs_synced,
+      remote_path: $remote_config_inputs,
+      system_path: $remote_config_inputs_system,
+      sources: $config_input_sources,
+      inputs: $config_inputs
     },
     storage_site: $storage_site,
     remote_bin_dir: $remote_bin_dir,

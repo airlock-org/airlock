@@ -784,7 +784,7 @@ validate_qrexec_rule() {
   is_qrexec_service "$service" ||
     fail "qrexec policy rule $index has invalid service: $service"
   case "$service" in
-    nixome.Config.CandidateExport|nixome.Config.ValidateCandidate|nixome.Config.SeedInputsImport|nixome.Config.ArchiveCandidate|nixome.Config.ArchiveDeployment|nixome.Config.Status|nixome.Config.Check|nixome.Config.Apply|nixome.Config.Rollback)
+    nixome.Config.CandidateExport|nixome.Config.ValidateCandidate|nixome.Config.InputsImport|nixome.Config.ArchiveCandidate|nixome.Config.ArchiveDeployment|nixome.Config.Status|nixome.Config.Check|nixome.Config.Apply|nixome.Config.Rollback)
       fail "qrexec policy rule $index uses reserved bootstrap service: $service"
       ;;
   esac

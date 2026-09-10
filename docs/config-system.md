@@ -40,7 +40,7 @@ starts `qubes-qrexec-policy-daemon` with that runtime policy path.
 `config-vault` is the authoritative archive. On first boot it initializes
 `/home/user/nixome-config-vault` as a Git repository and, if no current
 deployment or baseline exists yet, creates an initial current candidate from the
-Nixome seed config embedded in the image. It records that baseline under
+initial runtime config embedded in the image. It records that baseline under
 `candidates/<commit>/`, writes `latest-current`, and maintains a `current`
 symlink to the selected candidate snapshot.
 
@@ -324,7 +324,7 @@ first-class for Fedora, Debian, and other non-NixOS guests.
 
 ## Dev VM
 
-The default staged runtime declares a Nix-native `dev` domain with:
+The initial runtime config declares a Nix-native `dev` domain with:
 
 ```nix
 nixNative.domains.dev = {

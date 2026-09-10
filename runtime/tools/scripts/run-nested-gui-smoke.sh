@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-source "$ROOT/runtime/control-tools/scripts/lib/nixome-env.sh"
+source "$ROOT/runtime/tools/scripts/lib/nixome-env.sh"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 mkdir -p "$LOG_DIR"
 
@@ -21,10 +21,10 @@ AUTO_GC_AFTER_RUN="${NIXOME_AUTO_GC_AFTER_RUN:-0}"
 SYNC_DOM0_TOOLS="${NIXOME_SYNC_DOM0_TOOLS:-0}"
 REMOTE_WARM_BIN_DIR="${NIXOME_NESTED_WARM_BIN_DIR:-/run/nixome-warm/bin}"
 REMOTE_WARM_TOPOLOGY_PATH="${NIXOME_NESTED_WARM_TOPOLOGY_PATH:-/run/nixome-warm/current-qubes-topology.json}"
-REMOTE_WARM_SEED_INPUTS_PATH="${NIXOME_NESTED_WARM_SEED_INPUTS_PATH:-/run/nixome-warm/config-seed-inputs}"
+REMOTE_WARM_CONFIG_INPUTS_PATH="${NIXOME_NESTED_WARM_CONFIG_INPUTS_PATH:-/run/nixome-warm/config-inputs}"
 SETUP_CONFIG_COMMAND="${NIXOME_SETUP_CONFIG_COMMAND:-nixome-setup-config}"
 SETUP_CONFIG_TOPOLOGY="${NIXOME_SETUP_CONFIG_TOPOLOGY:-}"
-CONFIG_SEED_INPUTS_IMPORT_COMMAND="${NIXOME_CONFIG_SEED_INPUTS_IMPORT_COMMAND:-nixome-config-seed-inputs-import}"
+CONFIG_INPUTS_IMPORT_COMMAND="${NIXOME_CONFIG_INPUTS_IMPORT_COMMAND:-nixome-config-inputs-import}"
 CONFIG_VMS_SMOKE_COMMAND="${NIXOME_CONFIG_VMS_SMOKE_COMMAND:-nixome-config-vms-smoke}"
 NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="${NIXOME_NIX_CLOSURE_DOMAIN_SMOKE_COMMAND:-nixome-nix-closure-domain-smoke}"
 STOP_WARM_NIX_DOMAINS="${NIXOME_NESTED_WARM_STOP_NIX_DOMAINS:-0}"
@@ -32,7 +32,7 @@ WARM_NIX_DOMAINS="${NIXOME_NESTED_WARM_NIX_DOMAINS:-config-staging config-valida
 
 BOOTSTRAP_QUBES="${NIXOME_BOOTSTRAP_QUBES:-1}"
 RUN_SETUP_CONFIG="${NIXOME_RUN_SETUP_CONFIG:-0}"
-RUN_CONFIG_SEED_INPUTS_IMPORT="${NIXOME_RUN_CONFIG_SEED_INPUTS_IMPORT:-0}"
+RUN_CONFIG_INPUTS_IMPORT="${NIXOME_RUN_CONFIG_INPUTS_IMPORT:-0}"
 RUN_CONFIG_VMS_SMOKE="${NIXOME_RUN_CONFIG_VMS_SMOKE:-0}"
 RUN_CONFIG_BOOT_VERIFY="${NIXOME_RUN_CONFIG_BOOT_VERIFY:-0}"
 RUN_NIX_CLOSURE_SMOKE="${NIXOME_RUN_NIX_CLOSURE_SMOKE:-0}"
@@ -72,9 +72,9 @@ CONFIG_VMS_STDERR="$LOG_DIR/vm-gui-config-vms-smoke.stderr.log"
 CONFIG_VMS_COMMANDS_LOG="$LOG_DIR/vm-gui-config-vms-smoke.commands.log"
 CONFIG_VMS_STAGING_UPDATE_LOG="$LOG_DIR/vm-gui-config-vms-config-staging-update.log"
 CONFIG_VMS_STAGING_UPDATE_SCRIPT="$LOG_DIR/vm-gui-config-vms-config-staging-update.sh"
-CONFIG_SEED_INPUTS_IMPORT_JSON="$LOG_DIR/vm-gui-config-seed-inputs-import.json"
-CONFIG_SEED_INPUTS_IMPORT_STDOUT="$LOG_DIR/vm-gui-config-seed-inputs-import.stdout.log"
-CONFIG_SEED_INPUTS_IMPORT_STDERR="$LOG_DIR/vm-gui-config-seed-inputs-import.stderr.log"
+CONFIG_INPUTS_IMPORT_JSON="$LOG_DIR/vm-gui-config-inputs-import.json"
+CONFIG_INPUTS_IMPORT_STDOUT="$LOG_DIR/vm-gui-config-inputs-import.stdout.log"
+CONFIG_INPUTS_IMPORT_STDERR="$LOG_DIR/vm-gui-config-inputs-import.stderr.log"
 CONFIG_BOOT_VERIFY_JSON="$LOG_DIR/vm-gui-config-boot-verify.json"
 CONFIG_BOOT_VERIFY_STDOUT="$LOG_DIR/vm-gui-config-boot-verify.stdout.log"
 CONFIG_BOOT_VERIFY_STDERR="$LOG_DIR/vm-gui-config-boot-verify.stderr.log"
@@ -120,9 +120,9 @@ rm -f \
   "$CONFIG_VMS_COMMANDS_LOG" \
   "$CONFIG_VMS_STAGING_UPDATE_LOG" \
   "$CONFIG_VMS_STAGING_UPDATE_SCRIPT" \
-  "$CONFIG_SEED_INPUTS_IMPORT_JSON" \
-  "$CONFIG_SEED_INPUTS_IMPORT_STDOUT" \
-  "$CONFIG_SEED_INPUTS_IMPORT_STDERR" \
+  "$CONFIG_INPUTS_IMPORT_JSON" \
+  "$CONFIG_INPUTS_IMPORT_STDOUT" \
+  "$CONFIG_INPUTS_IMPORT_STDERR" \
   "$CONFIG_BOOT_VERIFY_JSON" \
   "$CONFIG_BOOT_VERIFY_STDOUT" \
   "$CONFIG_BOOT_VERIFY_STDERR" \
@@ -151,7 +151,7 @@ cleanup() {
 
   case "$AUTO_GC_AFTER_RUN" in
     1|true|yes)
-      "$ROOT/runtime/control-tools/scripts/gc-nixome-store.sh" auto || true
+      "$ROOT/runtime/tools/scripts/gc-nixome-store.sh" auto || true
       ;;
     0|false|no)
       ;;
@@ -341,13 +341,13 @@ config_vms_env_prefix() {
     NIXOME_CONFIG_CREATED_QUBE \
     NIXOME_CONFIG_DOM0_SYSTEM_REASON \
     NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION \
-    NIXOME_CONFIG_SEED_INPUTS_IMPORT_SERVICE \
-    NIXOME_CONFIG_SEED_INPUTS_QREXEC_TIMEOUT \
-    NIXOME_CONFIG_SEED_INPUTS_SOURCE \
+    NIXOME_CONFIG_INPUTS_IMPORT_SERVICE \
+    NIXOME_CONFIG_INPUTS_QREXEC_TIMEOUT \
+    NIXOME_CONFIG_INPUTS_SOURCE \
     NIXOME_CONFIG_STAGING_VM \
     NIXOME_CONFIG_VALIDATOR_VM \
     NIXOME_CONFIG_VAULT_VM \
-    NIXOME_CONFIG_VMS_IMPORT_SEED_INPUTS \
+    NIXOME_CONFIG_VMS_IMPORT_INPUTS \
     NIXOME_CONFIG_VMS_SMOKE_MODE \
     NIXOME_NIX_DOMAIN_STORAGE_HELPER \
     NIXOME_SETUP_CONFIG_COMMAND; do
@@ -359,14 +359,14 @@ config_vms_env_prefix() {
   printf '%s' "$prefix"
 }
 
-config_seed_inputs_env_prefix() {
+config_inputs_import_env_prefix() {
   local prefix="env"
   local name
 
   for name in \
-    NIXOME_CONFIG_SEED_INPUTS_IMPORT_SERVICE \
-    NIXOME_CONFIG_SEED_INPUTS_QREXEC_TIMEOUT \
-    NIXOME_CONFIG_SEED_INPUTS_SOURCE \
+    NIXOME_CONFIG_INPUTS_IMPORT_SERVICE \
+    NIXOME_CONFIG_INPUTS_QREXEC_TIMEOUT \
+    NIXOME_CONFIG_INPUTS_SOURCE \
     NIXOME_CONFIG_STAGING_VM \
     NIXOME_CONFIG_VALIDATOR_VM; do
     if [ -n "${!name+x}" ]; then
@@ -419,7 +419,7 @@ nix_closure_env_prefix() {
 }
 
 ssh_command() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/control-tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     ssh \
       -F /dev/null \
       -o LogLevel=ERROR \
@@ -452,7 +452,7 @@ sync_dom0_tools() {
   esac
 
   printf 'warm-sync: syncing current dom0 tools into nested VM\n'
-  if ! NIXOME_LOG_DIR="$LOG_DIR" NIXOME_NESTED_WARM_SEED_INPUTS_PATH="$REMOTE_WARM_SEED_INPUTS_PATH" "$ROOT/runtime/control-tools/scripts/sync-nested-dom0-tools.sh" > "$SYNC_DOM0_TOOLS_STDOUT" 2> "$SYNC_DOM0_TOOLS_STDERR"; then
+  if ! NIXOME_LOG_DIR="$LOG_DIR" NIXOME_NESTED_WARM_CONFIG_INPUTS_PATH="$REMOTE_WARM_CONFIG_INPUTS_PATH" "$ROOT/runtime/tools/scripts/sync-nested-dom0-tools.sh" > "$SYNC_DOM0_TOOLS_STDOUT" 2> "$SYNC_DOM0_TOOLS_STDERR"; then
     collect_diagnostics
     cat "$SYNC_DOM0_TOOLS_STDERR" >&2 || true
     exit 1
@@ -467,9 +467,9 @@ sync_dom0_tools() {
   SETUP_CONFIG_COMMAND="$NIXOME_SETUP_CONFIG_COMMAND"
   SETUP_CONFIG_TOPOLOGY="$REMOTE_WARM_TOPOLOGY_PATH"
   NIXOME_NIX_DOMAIN_STORAGE_HELPER="$REMOTE_WARM_BIN_DIR/nixome-nix-domain-storage"
-  CONFIG_SEED_INPUTS_IMPORT_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-config-seed-inputs-import"
-  if [ -z "${NIXOME_CONFIG_SEED_INPUTS_SOURCE+x}" ]; then
-    NIXOME_CONFIG_SEED_INPUTS_SOURCE="$REMOTE_WARM_SEED_INPUTS_PATH"
+  CONFIG_INPUTS_IMPORT_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-config-inputs-import"
+  if [ -z "${NIXOME_CONFIG_INPUTS_SOURCE+x}" ]; then
+    NIXOME_CONFIG_INPUTS_SOURCE="$REMOTE_WARM_CONFIG_INPUTS_PATH"
   fi
   CONFIG_VMS_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-config-vms-smoke"
   NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"
@@ -554,8 +554,8 @@ collect_diagnostics() {
   remote 'sudo -n cat /var/log/nixome/config-vms-smoke.commands.log 2>/dev/null || true' > "$CONFIG_VMS_COMMANDS_LOG" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-config-staging-update.log 2>/dev/null || true' > "$CONFIG_VMS_STAGING_UPDATE_LOG" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-vms-config-staging-update.sh 2>/dev/null || true' > "$CONFIG_VMS_STAGING_UPDATE_SCRIPT" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-seed-inputs-import.json 2>/dev/null || true' > "$CONFIG_SEED_INPUTS_IMPORT_JSON" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-seed-inputs-import.stderr.log 2>/dev/null || true' > "$CONFIG_SEED_INPUTS_IMPORT_STDERR" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-inputs-import.json 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_JSON" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/nixome/config-inputs-import.stderr.log 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_STDERR" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-archive.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.json" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-archive.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.commands.log" 2>/dev/null || true
   remote 'sudo -n cat /var/log/nixome/config-apply.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply.json" 2>/dev/null || true
@@ -730,7 +730,7 @@ if [ "$reuse_existing_vm" != true ]; then
     NIXOME_VM_IMAGE_ATTR="$IMAGE_ATTR" \
     NIXOME_VM_DISPLAY="$DISPLAY_MODE" \
     NIXOME_VM_SSH_PORT="$SSH_PORT" \
-    "$ROOT/runtime/control-tools/scripts/run-nested-vm.sh" > "$QEMU_LOG" 2>&1 &
+    "$ROOT/runtime/tools/scripts/run-nested-vm.sh" > "$QEMU_LOG" 2>&1 &
   vm_pid="$!"
 
   vm_start_deadline=$((SECONDS + VM_START_WAIT_SECONDS))
@@ -834,26 +834,26 @@ else
   fi
 fi
 
-if [ "$RUN_CONFIG_SEED_INPUTS_IMPORT" = "1" ]; then
-  printf 'config-seeds: importing offline seed inputs into config VMs\n'
-  config_seed_inputs_env="$(config_seed_inputs_env_prefix)"
-  config_seed_inputs_import_command="$(shell_quote "$CONFIG_SEED_INPUTS_IMPORT_COMMAND")"
-  if ! remote "sudo -n $config_seed_inputs_env NIXOME_LOG_DIR=/var/log/nixome $config_seed_inputs_import_command" > "$CONFIG_SEED_INPUTS_IMPORT_STDOUT" 2> "$CONFIG_SEED_INPUTS_IMPORT_STDERR"; then
-    remote 'sudo -n cat /var/log/nixome/config-seed-inputs-import.json 2>/dev/null || true' > "$CONFIG_SEED_INPUTS_IMPORT_JSON" 2>/dev/null || true
+if [ "$RUN_CONFIG_INPUTS_IMPORT" = "1" ]; then
+  printf 'config-inputs: importing offline config inputs into config VMs\n'
+  config_inputs_import_env="$(config_inputs_import_env_prefix)"
+  config_inputs_import_command="$(shell_quote "$CONFIG_INPUTS_IMPORT_COMMAND")"
+  if ! remote "sudo -n $config_inputs_import_env NIXOME_LOG_DIR=/var/log/nixome $config_inputs_import_command" > "$CONFIG_INPUTS_IMPORT_STDOUT" 2> "$CONFIG_INPUTS_IMPORT_STDERR"; then
+    remote 'sudo -n cat /var/log/nixome/config-inputs-import.json 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_JSON" 2>/dev/null || true
     collect_diagnostics
-    cat "$CONFIG_SEED_INPUTS_IMPORT_STDERR" >&2 || true
+    cat "$CONFIG_INPUTS_IMPORT_STDERR" >&2 || true
     exit 1
   fi
-  if ! extract_json_result "nixome.config-seed-inputs-import.v1" "$CONFIG_SEED_INPUTS_IMPORT_STDOUT" "$CONFIG_SEED_INPUTS_IMPORT_JSON"; then
-    remote 'sudo -n cat /var/log/nixome/config-seed-inputs-import.json 2>/dev/null || true' > "$CONFIG_SEED_INPUTS_IMPORT_JSON" 2>/dev/null || true
-    if ! grep -q '"schema":"nixome.config-seed-inputs-import.v1"' "$CONFIG_SEED_INPUTS_IMPORT_JSON"; then
+  if ! extract_json_result "nixome.config-inputs-import.v1" "$CONFIG_INPUTS_IMPORT_STDOUT" "$CONFIG_INPUTS_IMPORT_JSON"; then
+    remote 'sudo -n cat /var/log/nixome/config-inputs-import.json 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_JSON" 2>/dev/null || true
+    if ! grep -q '"schema":"nixome.config-inputs-import.v1"' "$CONFIG_INPUTS_IMPORT_JSON"; then
       collect_diagnostics
-      printf 'config seed import did not emit result JSON; see %s\n' "$CONFIG_SEED_INPUTS_IMPORT_STDOUT" >&2
+      printf 'config input import did not emit result JSON; see %s\n' "$CONFIG_INPUTS_IMPORT_STDOUT" >&2
       exit 1
     fi
   fi
 else
-  printf '{"schema":"nixome.config-seed-inputs-import.v1","status":"skipped","reason":"NIXOME_RUN_CONFIG_SEED_INPUTS_IMPORT=0"}\n' > "$CONFIG_SEED_INPUTS_IMPORT_JSON"
+  printf '{"schema":"nixome.config-inputs-import.v1","status":"skipped","reason":"NIXOME_RUN_CONFIG_INPUTS_IMPORT=0"}\n' > "$CONFIG_INPUTS_IMPORT_JSON"
 fi
 
 if [ "$RUN_CONFIG_VMS_SMOKE" = "1" ]; then
@@ -952,7 +952,7 @@ printf 'observe: %s\n' "$OBSERVE_JSON"
 printf 'bootstrap: %s\n' "$BOOTSTRAP_JSON"
 printf 'setup-config boot: %s\n' "$SETUP_CONFIG_BOOT_JSON"
 printf 'setup-config: %s\n' "$SETUP_CONFIG_JSON"
-printf 'config-seeds: %s\n' "$CONFIG_SEED_INPUTS_IMPORT_JSON"
+printf 'config-inputs: %s\n' "$CONFIG_INPUTS_IMPORT_JSON"
 printf 'config-vms: %s\n' "$CONFIG_VMS_JSON"
 printf 'config-boot: %s\n' "$CONFIG_BOOT_VERIFY_JSON"
 printf 'warm-sync: %s\n' "$SYNC_DOM0_TOOLS_JSON"

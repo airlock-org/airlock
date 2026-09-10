@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-source "$ROOT/runtime/control-tools/scripts/lib/nixome-env.sh"
+source "$ROOT/runtime/tools/scripts/lib/nixome-env.sh"
 
 IMAGE_ATTR="${1:-${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-image}}"
 OUT_LINK="${2:-${NIXOME_VM_SHARED_IMAGE_LINK:-$NIXOME_RESULT_LINK_DIR/${IMAGE_ATTR}-result}}"

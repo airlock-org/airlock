@@ -1,9 +1,6 @@
 # Runtime Layer
 
-Holds the ongoing state Nixome operates after boot.
+Holds code used after bootstrap to operate the running system.
 
-`config-staging/` is the default runtime configuration candidate. It is the
-edit surface copied into the config authority workflow.
-
-`control-tools/` contains the packages and scripts that apply, archive, import,
-export, inspect, and test runtime state.
+`tools/` contains the Nix libraries, schemas, modules, packages, and scripts
+that apply, archive, import, export, inspect, and test runtime state.

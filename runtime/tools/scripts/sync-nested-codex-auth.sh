@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-source "$ROOT/runtime/control-tools/scripts/lib/nixome-env.sh"
+source "$ROOT/runtime/tools/scripts/lib/nixome-env.sh"
 
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 RESULT_JSON="$LOG_DIR/vm-gui-sync-codex-auth.json"
@@ -61,7 +61,7 @@ require_command() {
 }
 
 ssh_base() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/control-tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     ssh \
       -F /dev/null \
       -o LogLevel=ERROR \
@@ -76,7 +76,7 @@ ssh_base() {
 }
 
 scp_base() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/control-tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     scp \
       -F /dev/null \
       -q \

@@ -123,11 +123,11 @@ LOCAL_CHECKS = (
         (pytest.mark.nix,),
     ),
     LocalCheck(
-        "config-seed-inputs-import-package",
+        "config-inputs-import-package",
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-config-seed-inputs-import",
+            "{root}#packages.x86_64-linux.nixome-config-inputs-import",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),

@@ -12,7 +12,7 @@
 }:
 
 writeShellApplication {
-  name = "nixome-config-seed-inputs-import";
+  name = "nixome-config-inputs-import";
 
   runtimeInputs = [
     coreutils
@@ -26,10 +26,10 @@ writeShellApplication {
     python3.pkgs.qubes-core-qrexec.dom0
   ];
 
-  text = builtins.readFile ../../scripts/import-config-seed-inputs.sh;
+  text = builtins.readFile ../../scripts/import-config-inputs.sh;
 
   meta = {
-    description = "Import Nixome config seed inputs into closure-backed config VMs";
+    description = "Import Nixome config inputs into closure-backed config VMs";
     license = lib.licenses.mit;
     platforms = [ "x86_64-linux" ];
   };
