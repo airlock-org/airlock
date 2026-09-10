@@ -8388,3 +8388,33 @@ def check_config_validator_candidate(repo_root: Path, log_dir: Path) -> None:
         check["name"] == "nix-flake-check-no-build" and check["status"] == "passed"
         for check in fail_validation["checks"]
     )
+
+
+def check_closure_store_linux_storage(repo_root: Path, log_dir: Path) -> None:
+    shutil.rmtree(log_dir, ignore_errors=True)
+    log_dir.mkdir(parents=True)
+    result_path = log_dir / "result.json"
+    if os.geteuid() != 0:
+        result_path.write_text(
+            json.dumps(
+                {
+                    "schema": "nixome.closure-store-linux-storage.v1",
+                    "status": "skipped",
+                    "reason": "root or passwordless sudo is required for loop, device-mapper, and mount namespace coverage",
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return
+
+    # The privileged path needs real loop, device-mapper, and mount namespace
+    # operations. Keep the pytest entry explicit rather than silently faking that
+    # integration coverage.
+    for command in ("dmsetup", "losetup", "mount", "unshare", "findmnt"):
+        if shutil.which(command) is None:
+            raise AssertionError(f"missing required command: {command}")
+    raise AssertionError(
+        "privileged closure-store-linux-storage pytest migration is not implemented"
+    )

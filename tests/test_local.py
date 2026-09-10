@@ -9,6 +9,7 @@ import pytest
 
 from local_pychecks import (
     check_closure_volume_filtered_device,
+    check_closure_store_linux_storage,
     check_config_candidate_nix_native,
     check_config_control,
     check_config_apply_domain_references,
@@ -171,9 +172,7 @@ LOCAL_CHECKS = (
         "closure-store-failure-recovery",
         ("{root}/tests/closure-store-failure-recovery.sh",),
     ),
-    LocalCheck(
-        "closure-store-linux-storage", ("{root}/tests/closure-store-linux-storage.sh",)
-    ),
+    LocalCheck("closure-store-linux-storage", runner=check_closure_store_linux_storage),
     LocalCheck(
         "closure-volume-filtered-device",
         runner=check_closure_volume_filtered_device,
