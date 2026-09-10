@@ -393,6 +393,7 @@
           nixome-cli = pkgs.callPackage ./pkgs/nixome-cli { };
           nixome = pkgs.callPackage ./pkgs/nixome-cli { };
           codex = pkgs.codex;
+          zellij = pkgs.zellij;
           nixome-nix-domain-storage = pkgs.callPackage ./pkgs/nixome-nix-domain-storage { };
           nixome-nix-closure-domain-smoke = pkgs.callPackage ./pkgs/nixome-nix-closure-domain-smoke { };
           nixome-qubes-storage = pkgs.python3.pkgs.callPackage ./pkgs/nixome-qubes-storage { };
@@ -439,6 +440,7 @@
         config-boot-verify-package = self.packages.${system}.nixome-config-boot-verify;
         config-control-package = self.packages.${system}.nixome-config-control;
         codex-package = self.packages.${system}.codex;
+        zellij-package = self.packages.${system}.zellij;
         config-seed-inputs-import-package = self.packages.${system}.nixome-config-seed-inputs-import;
         config-status-package = self.packages.${system}.nixome-config-status;
         nixome-cli-package = self.packages.${system}.nixome-cli;

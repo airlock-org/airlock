@@ -8,6 +8,8 @@ RESULT_DIR="$LOG_DIR/dev-role"
 ROLE_JSON="$RESULT_DIR/role.json"
 CODEX_VERSION="$RESULT_DIR/codex-version.txt"
 CODEX_OUT="$RESULT_DIR/codex-out.txt"
+ZELLIJ_VERSION="$RESULT_DIR/zellij-version.txt"
+ZELLIJ_OUT="$RESULT_DIR/zellij-out.txt"
 
 rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
@@ -24,6 +26,26 @@ let
     nixomeSupport = "'"$ROOT"'";
     system = "x86_64-linux";
   };
+  defaultMachine = import '"$ROOT"'/seeds/config-staging/nixome/machine.nix {
+    appliedMessage = "test";
+    pkgs = builders.pkgs;
+    system = "x86_64-linux";
+    templateBuilders = builders;
+  };
+  devDomainDefinition = defaultMachine.nixNative.domains.dev;
+  generatedDevDomain = (builders.mkNixNativeDomain {
+    name = "dev";
+    guestRole = devDomainDefinition.role;
+    modules = [ ];
+    rootImageSizeMiB = devDomainDefinition.rootImageSizeMiB or 512;
+    kernelName = devDomainDefinition.kernel or "6.12.64-1.fc41";
+    label = devDomainDefinition.label or "green";
+    netvm = devDomainDefinition.netvm or null;
+    prefs = devDomainDefinition.prefs or { };
+    features = devDomainDefinition.features or { };
+    services = devDomainDefinition.services or { };
+    state = devDomainDefinition.state or { };
+  }).domain;
   baseCfg = (builders.mkNixNativeDomain {
     name = "minimal-base";
     guestRole = "base";
@@ -53,6 +75,7 @@ let
     "rustc"
     "rustfmt"
     "uv"
+    "zellij"
   ];
   secretEnvNames = [
     "CODEX_AUTH_TOKEN"
@@ -64,6 +87,8 @@ in
 {
   role = devCfg.nixome.qubeGuest.role;
   hostname = devCfg.networking.hostName;
+  staged_dev_declared_netvm = devDomainDefinition.netvm;
+  generated_dev_domain_netvm = generatedDevDomain.netvm;
   package_names = devPackages;
   required_tools_present = lib.all (name: has name devPackages) [
     "cargo"
@@ -83,7 +108,18 @@ in
     "rustfmt"
     "uv"
     "vim"
+    "zellij"
   ] && hasAnyPrefix "python3" devPackages;
+  network_client_support_present = lib.all (name: has name devPackages) [
+    "bind"
+    "codex"
+    "dhcpcd"
+    "git"
+    "nix"
+    "nss-cacert"
+    "openresolv"
+    "openssh"
+  ];
   private_nix_enabled = devCfg.nixome.minimalGuest.nix.enable;
   nix_features = devCfg.nix.settings.experimental-features;
   nix_allowed_users = devCfg.nix.settings.allowed-users;
@@ -114,7 +150,10 @@ in
 jq -e '
   .role == "dev" and
   .hostname == "dev" and
+  .staged_dev_declared_netvm == "sys-firewall" and
+  .generated_dev_domain_netvm == "sys-firewall" and
   .required_tools_present == true and
+  .network_client_support_present == true and
   .private_nix_enabled == true and
   (.nix_features | index("nix-command") != null) and
   (.nix_features | index("flakes") != null) and
@@ -145,5 +184,10 @@ if find "$(nixome_physical_store_path "$codex_path")" -name auth.json -print -qu
   printf 'codex package output unexpectedly contains auth.json\n' >&2
   exit 1
 fi
+
+nix build "$ROOT#packages.x86_64-linux.zellij" --no-link --print-build-logs --print-out-paths > "$ZELLIJ_OUT"
+zellij_path="$(tail -n 1 "$ZELLIJ_OUT")"
+nixome_run_store_path "$zellij_path/bin/zellij" --version > "$ZELLIJ_VERSION"
+grep -Eq '^zellij [0-9]+\.[0-9]+\.[0-9]+$' "$ZELLIJ_VERSION"
 
 printf 'dev role test ok\n'

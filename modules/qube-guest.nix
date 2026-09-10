@@ -127,6 +127,7 @@ let
       pkgs.vim
       pkgs.which
       pkgs.xz
+      pkgs.zellij
     ];
   };
 

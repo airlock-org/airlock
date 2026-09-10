@@ -316,7 +316,7 @@ nixNative.domains.dev = {
 The `dev` role layers development tools on top of the minimal Qubes guest base.
 It includes `git`, the private-store Nix CLI wrapper, Rust and Python tooling
 used by this repository, `make`, shell/editor basics, the `nixome` VM control
-CLI, and the pinned nixpkgs `codex` package.
+CLI, and the pinned nixpkgs `codex` and `zellij` packages.
 
 The VM keeps `/nix/store` as the read-only activated generation identity.
 Interactive Nix commands run through `nixome-config-nix`, which stores mutable
@@ -346,6 +346,7 @@ there once, then use:
 
 ```text
 cd ~/dev/nixome
+zellij --version
 codex
 nix flake check
 make test-quick
