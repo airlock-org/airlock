@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -72,6 +73,20 @@ def _run_store_path(repo_root: Path, store_path: str, env: dict[str, str]) -> No
         cwd=repo_root,
         env=env,
     )
+
+
+def _physical_store_path(repo_root: Path, path: str) -> str:
+    return _run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; nixome_physical_store_path "$2"',
+            "bash",
+            str(repo_root / "scripts/lib/nixome-env.sh"),
+            path,
+        ],
+        cwd=repo_root,
+    ).stdout.strip()
 
 
 def _file_contains_word(path: Path, word: str) -> bool:
@@ -252,3 +267,171 @@ def check_qrexec_policy_path(repo_root: Path, log_dir: Path) -> None:
     assert "refusing unmanaged Nixome qrexec policy file" in (
         work_dir / "unmanaged-stderr.log"
     ).read_text(encoding="utf-8")
+
+
+def check_qube_guest_policy_probe(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    service_path_file = work_dir / "policy-probe-path"
+    fake_qdb = work_dir / "qubesdb-read"
+
+    shutil.rmtree(work_dir, ignore_errors=True)
+    work_dir.mkdir(parents=True)
+
+    attr = (
+        f"{repo_root}#nixosConfigurations.nixome-domain-config-vault.config."
+        'environment.etc."qubes-rpc/nixome.PolicyProbe".source'
+    )
+    _run(["nix", "build", "--no-link", attr], cwd=repo_root)
+    service = _run(["nix", "eval", "--raw", attr], cwd=repo_root).stdout.strip()
+    service_path_file.write_text(service + "\n", encoding="utf-8")
+
+    fake_qdb.write_text(
+        "#!/usr/bin/env bash\n"
+        'case "$1" in\n'
+        "  /features/nixome-role)\n"
+        "    exit 1\n"
+        "    ;;\n"
+        "  /name)\n"
+        "    printf 'config-vault\\n'\n"
+        "    ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    fake_qdb.chmod(0o755)
+
+    env = os.environ.copy()
+    env["NIXOME_QUBESDB_READ"] = str(fake_qdb)
+    first = _run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; nixome_run_store_path "$2"',
+            "bash",
+            str(repo_root / "scripts/lib/nixome-env.sh"),
+            service,
+        ],
+        cwd=repo_root,
+        env=env,
+    ).stdout
+    (work_dir / "from-name.log").write_text(first, encoding="utf-8")
+    assert re.search(r"^nixome-policy-probe role=config-vault user=.+$", first)
+
+    fake_qdb.write_text(
+        "#!/usr/bin/env bash\n"
+        'case "$1" in\n'
+        "  /features/nixome-role)\n"
+        "    printf 'config-validator\\n'\n"
+        "    ;;\n"
+        "  /name)\n"
+        "    printf 'other-name\\n'\n"
+        "    ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    second = _run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; nixome_run_store_path "$2"',
+            "bash",
+            str(repo_root / "scripts/lib/nixome-env.sh"),
+            service,
+        ],
+        cwd=repo_root,
+        env=env,
+    ).stdout
+    (work_dir / "from-feature.log").write_text(second, encoding="utf-8")
+    assert re.search(r"^nixome-policy-probe role=config-validator user=.+$", second)
+
+
+def check_nix_closure_domain_volume_list(repo_root: Path, log_dir: Path) -> None:
+    script = repo_root / "scripts/nix-closure-domain-smoke.sh"
+    work_dir = log_dir
+    work_dir.mkdir(parents=True, exist_ok=True)
+    volume_list = work_dir / "qvm-volume-list.txt"
+    volume_list.write_text(
+        "POOL:VOLUME                                       VMNAME                "
+        "VOLUME_NAME  REVERT_POSSIBLE\n"
+        "linux-kernel:6.12.64-1.fc41                       nixome-closure-smoke  "
+        "kernel       No\n"
+        "varlibqubes:appvms/nixome-closure-smoke/private   "
+        "nixome-closure-smoke  private      No\n"
+        "varlibqubes:appvms/nixome-closure-smoke/root      "
+        "nixome-closure-smoke  root         No\n"
+        "varlibqubes:appvms/nixome-closure-smoke/store     "
+        "nixome-closure-smoke  store        No\n"
+        "varlibqubes:appvms/nixome-closure-smoke/store-data "
+        "nixome-closure-smoke store-data   No\n"
+        "varlibqubes:appvms/nixome-closure-smoke/volatile  "
+        "nixome-closure-smoke  volatile     No\n",
+        encoding="utf-8",
+    )
+
+    rows = volume_list.read_text(encoding="utf-8").splitlines()[1:]
+    assert any(
+        len(parts := row.split()) >= 3
+        and (parts[2] == "store" or parts[0].endswith("/store"))
+        for row in rows
+    )
+
+    script_text = script.read_text(encoding="utf-8")
+    assert 'grep -F "$DOMAIN:store"' not in script_text
+    assert 'qvm_volume_list_has_volume "$DOMAIN" store' in script_text
+    assert 'qvm_volume_list_has_volume "$DOMAIN" store-data' in script_text
+    assert 'touch "$home_dir/nixome-closure-smoke-home"' in script_text
+    assert "touch /rw/nixome-closure-smoke-persistent" not in script_text
+
+    assert re.search(
+        r"^store_options=([^,\n]+,)*ro(,|$)",
+        "store_options=ro,nodev,relatime\n",
+        re.MULTILINE,
+    )
+    assert not re.search(
+        r"^store_options=([^,\n]+,)*ro(,|$)",
+        "store_options=nodev,rw,relatime\n",
+        re.MULTILINE,
+    )
+
+
+def check_nix_closure_root_image(repo_root: Path, log_dir: Path) -> None:
+    result_dir = log_dir
+    shutil.rmtree(result_dir, ignore_errors=True)
+    result_dir.mkdir(parents=True)
+
+    _run(
+        [
+            "nix",
+            "build",
+            "--out-link",
+            str(result_dir / "root-image"),
+            f"{repo_root}#nixome-nix-closure-root-image-test",
+        ],
+        cwd=repo_root,
+        stdout=result_dir / "nix-build.stdout",
+        stderr=result_dir / "nix-build.stderr",
+    )
+    root_image_out = Path(
+        _physical_store_path(repo_root, os.readlink(result_dir / "root-image"))
+    )
+    manifest = json.loads(
+        (root_image_out / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["schema"] == "nixome.nix-closure-root-image.v1"
+    assert manifest["contains_store"] is False
+    assert manifest["store_mountpoint"] == "/nix/store"
+    assert manifest["store_device_default"] == "/dev/xvde"
+
+    root_files = (
+        (root_image_out / "root-files.txt").read_text(encoding="utf-8").splitlines()
+    )
+    assert "./sbin/init" in root_files
+    assert "./nix/store" in root_files
+    assert not any(re.search(r"^\./nix/store/.+", item) for item in root_files)
+
+    _run(
+        ["debugfs", "-R", "ls -p /nix/store", str(root_image_out / "root.img")],
+        stdout=result_dir / "debugfs-nix-store.txt",
+        stderr=result_dir / "debugfs-nix-store.stderr",
+    )
+    debugfs_output = (result_dir / "debugfs-nix-store.txt").read_text(encoding="utf-8")
+    assert not re.search(r"/[A-Za-z0-9]{32}-", debugfs_output)

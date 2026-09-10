@@ -7,7 +7,13 @@ from typing import Callable
 
 import pytest
 
-from local_pychecks import check_host_capabilities, check_qrexec_policy_path
+from local_pychecks import (
+    check_host_capabilities,
+    check_nix_closure_domain_volume_list,
+    check_nix_closure_root_image,
+    check_qrexec_policy_path,
+    check_qube_guest_policy_probe,
+)
 from local_harness import run_local_command
 
 
@@ -146,9 +152,9 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "nix-closure-domain-volume-list",
-        ("{root}/tests/nix-closure-domain-volume-list.sh",),
+        runner=check_nix_closure_domain_volume_list,
     ),
-    LocalCheck("nix-closure-root-image", ("{root}/tests/nix-closure-root-image.sh",)),
+    LocalCheck("nix-closure-root-image", runner=check_nix_closure_root_image),
     LocalCheck(
         "setup-config-runtime-path", ("{root}/tests/setup-config-runtime-path.sh",)
     ),
@@ -175,7 +181,7 @@ LOCAL_CHECKS = (
     ),
     LocalCheck("config-staging-validate", ("{root}/tests/config-staging-validate.sh",)),
     LocalCheck("qrexec-policy-path", runner=check_qrexec_policy_path),
-    LocalCheck("qube-guest-policy-probe", ("{root}/tests/qube-guest-policy-probe.sh",)),
+    LocalCheck("qube-guest-policy-probe", runner=check_qube_guest_policy_probe),
     LocalCheck("topology-schema", ("{root}/tests/topology-schema.sh",)),
     LocalCheck("system-schema", ("{root}/tests/system-schema.sh",)),
     LocalCheck(
