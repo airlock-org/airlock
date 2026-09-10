@@ -609,6 +609,7 @@ let
     result_file="$validation_dir/$candidate_commit.json"
     result_tmp="$result_file.tmp"
     flake_log="$validation_dir/logs/flake-check-$candidate_commit.log"
+    flake_tests_log="$validation_dir/logs/flake-check-build-$candidate_commit.log"
     topology_eval_log="$validation_dir/logs/nix-eval-topology-$candidate_commit.log"
     topology_log="$validation_dir/logs/topology-json-$candidate_commit.log"
     template_refs_log="$validation_dir/logs/template-source-refs-$candidate_commit.log"
@@ -616,6 +617,7 @@ let
     system_log="$validation_dir/logs/system-json-$candidate_commit.log"
     system_refs_log="$validation_dir/logs/system-source-refs-$candidate_commit.log"
     local_flake_log="$tmpdir/flake-check.log"
+    local_flake_tests_log="$tmpdir/flake-check-build.log"
     local_topology_eval_log="$tmpdir/nix-eval-topology.log"
     local_topology_log="$tmpdir/topology-json.log"
     local_template_refs_log="$tmpdir/template-source-refs.log"
@@ -643,6 +645,7 @@ let
       system_refs_status="''${15}"
       system_refs_log_path="''${16}"
       flake_status="''${17}"
+      flake_tests_status="''${18}"
 
       ${pkgs.jq}/bin/jq -c -n \
         --arg schema "nixome.config-validation.v1" \
@@ -670,6 +673,8 @@ let
         --arg system_refs_log "$system_refs_log_path" \
         --arg flake_status "$flake_status" \
         --arg flake_log "$flake_log" \
+        --arg flake_tests_status "$flake_tests_status" \
+        --arg flake_tests_log "$flake_tests_log" \
         '{
           schema: $schema,
           status: $status,
@@ -737,6 +742,11 @@ let
               name: "nix-flake-check-no-build",
               status: $flake_status,
               log: $flake_log
+            },
+            {
+              name: "nix-flake-check",
+              status: $flake_tests_status,
+              log: $flake_tests_log
             }
           ]
         }' > "$result_tmp"
@@ -745,7 +755,7 @@ let
     }
 
     if [ -n "$dirty" ]; then
-      write_validation failed "validated candidate worktree is dirty" skipped skipped "topology.json" "$topology_eval_log" "$topology_log" skipped "$template_refs_log" skipped skipped "system.json" "$system_eval_log" "$system_log" skipped "$system_refs_log" skipped
+      write_validation failed "validated candidate worktree is dirty" skipped skipped "topology.json" "$topology_eval_log" "$topology_log" skipped "$template_refs_log" skipped skipped "system.json" "$system_eval_log" "$system_log" skipped "$system_refs_log" skipped skipped
       cat "$tmpdir/validation.json" >&2
       exit 1
     fi
@@ -764,6 +774,7 @@ let
     system_status=skipped
     system_refs_status=skipped
     flake_status=skipped
+    flake_tests_status=skipped
     reason="validation passed"
     status=passed
 
@@ -1000,9 +1011,29 @@ let
         mark_failed "nix flake check --no-build failed"
       fi
       ${pkgs.coreutils}/bin/cp "$local_flake_log" "$flake_log"
+      if [ "$flake_status" = passed ]; then
+        if ${configNix}/bin/nixome-config-nix \
+          --extra-experimental-features nix-command \
+          --extra-experimental-features flakes \
+          flake check \
+          --impure \
+          --offline \
+          --no-write-lock-file \
+          . > "$local_flake_tests_log" 2>&1; then
+          flake_tests_status=passed
+        else
+          flake_tests_status=failed
+          mark_failed "nix flake check failed"
+        fi
+        ${pkgs.coreutils}/bin/cp "$local_flake_tests_log" "$flake_tests_log"
+      else
+        printf 'skipped because nix flake check --no-build did not pass\n' > "$flake_tests_log"
+      fi
     else
       printf 'no flake.nix present; cannot evaluate nixome.topology\n' > "$flake_log"
+      printf 'no flake.nix present; cannot run nix flake check\n' > "$flake_tests_log"
       flake_status=failed
+      flake_tests_status=failed
       mark_failed "flake.nix is missing"
     fi
 
@@ -1100,7 +1131,7 @@ let
         printf 'skipped because nix eval .#nixome.system did not pass\n' > "$system_refs_log"
       fi
 
-    write_validation "$status" "$reason" "$topology_eval_status" "$topology_status" "topology.json" "$topology_eval_log" "$topology_log" "$template_refs_status" "$template_refs_log" "$system_eval_status" "$system_status" "system.json" "$system_eval_log" "$system_log" "$system_refs_status" "$system_refs_log" "$flake_status"
+    write_validation "$status" "$reason" "$topology_eval_status" "$topology_status" "topology.json" "$topology_eval_log" "$topology_log" "$template_refs_status" "$template_refs_log" "$system_eval_status" "$system_status" "system.json" "$system_eval_log" "$system_log" "$system_refs_status" "$system_refs_log" "$flake_status" "$flake_tests_status"
     if [ "$status" != passed ]; then
       cat "$tmpdir/validation.json" >&2
       exit 1

@@ -142,7 +142,8 @@ jq -e \
     any(.checks[]; .name == "nix-eval-nixome-system" and .status == "passed" and .output == $system) and
     any(.checks[]; .name == "nixome-system-json" and .status == "passed" and .path == $system) and
     any(.checks[]; .name == "nix-system-source-refs-dry-run" and .status == "passed") and
-    any(.checks[]; .name == "nix-flake-check-no-build" and .status == "passed")
+    any(.checks[]; .name == "nix-flake-check-no-build" and .status == "passed") and
+    any(.checks[]; .name == "nix-flake-check" and .status == "passed")
   ' "$STDOUT_LOG" >/dev/null
 
 jq -e '.schema == "nixome.config-validation.v1" and .status == "passed"' \

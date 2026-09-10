@@ -394,6 +394,7 @@ let
   configApply = pkgs.callPackage ../pkgs/nixome-config-apply { };
   configArchive = pkgs.callPackage ../pkgs/nixome-config-archive { };
   configBootVerify = pkgs.callPackage ../pkgs/nixome-config-boot-verify { };
+  configControl = pkgs.callPackage ../pkgs/nixome-config-control { };
   configSeedInputsImport = pkgs.callPackage ../pkgs/nixome-config-seed-inputs-import { };
   configStatus = pkgs.callPackage ../pkgs/nixome-config-status { };
   configVmsSmoke = pkgs.callPackage ../pkgs/nixome-config-vms-smoke { };
@@ -402,6 +403,27 @@ let
   qrexecPolicyRuntimeDir = "/var/lib/nixome/qubes-policy.d";
   qrexecManagedPolicyFile = "90-nixome.policy";
   qrexecBase = pkgs.python3.pkgs.qubes-core-qrexec;
+  configControlStatusService = pkgs.writeShellScript "nixome-config-control-status-qrexec" ''
+    exec ${configControl}/bin/nixome-config-control status
+  '';
+  configControlCheckService = pkgs.writeShellScript "nixome-config-control-check-qrexec" ''
+    exec ${configControl}/bin/nixome-config-control check
+  '';
+  configControlApplyService = pkgs.writeShellScript "nixome-config-control-apply-qrexec" ''
+    exec ${configControl}/bin/nixome-config-control apply
+  '';
+  configControlRollbackService = pkgs.writeShellScript "nixome-config-control-rollback-qrexec" ''
+    exec ${configControl}/bin/nixome-config-control rollback
+  '';
+  configSubmitterAllowRules = lib.concatMapStrings (
+    source:
+    ''
+      ${access.statusService} * ${source} dom0 allow
+      ${access.checkService} * ${source} dom0 allow
+      ${access.applyService} * ${source} dom0 allow
+      ${access.rollbackService} * ${source} dom0 allow
+    ''
+  ) access.allowedSubmitters;
 
   configAccessPolicyPackage = pkgs.runCommand "nixome-config-access-policy" { } ''
         set -eu
@@ -421,6 +443,10 @@ let
     ${access.archiveService} * @anyvm @anyvm deny
     ${access.archiveDeploymentService} * dom0 ${access.vault} allow
     ${access.archiveDeploymentService} * @anyvm @anyvm deny
+    ${configSubmitterAllowRules}${access.statusService} * @anyvm @anyvm deny
+    ${access.checkService} * @anyvm @anyvm deny
+    ${access.applyService} * @anyvm @anyvm deny
+    ${access.rollbackService} * @anyvm @anyvm deny
     EOF
   '';
 
@@ -555,6 +581,36 @@ in
         description = "qrexec service used by dom0 to import offline config seed inputs.";
       };
 
+      statusService = lib.mkOption {
+        type = lib.types.str;
+        default = "nixome.Config.Status";
+        description = "qrexec service used by allowed dev VMs to request Nixome config status from dom0.";
+      };
+
+      checkService = lib.mkOption {
+        type = lib.types.str;
+        default = "nixome.Config.Check";
+        description = "qrexec service used by allowed dev VMs to submit a candidate for validation only.";
+      };
+
+      applyService = lib.mkOption {
+        type = lib.types.str;
+        default = "nixome.Config.Apply";
+        description = "qrexec service used by allowed dev VMs to submit a candidate for validation, archival, and activation.";
+      };
+
+      rollbackService = lib.mkOption {
+        type = lib.types.str;
+        default = "nixome.Config.Rollback";
+        description = "qrexec service used by allowed dev VMs to request rollback to a previous validated generation.";
+      };
+
+      allowedSubmitters = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ "dev" ];
+        description = "Qubes domains allowed to request Nixome config status, check, apply, and rollback through dom0.";
+      };
+
       vault = lib.mkOption {
         type = lib.types.str;
         default = "config-vault";
@@ -612,6 +668,7 @@ in
       configApply
       configArchive
       configBootVerify
+      configControl
       configSeedInputsImport
       configStatus
       configVmsSmoke
@@ -622,6 +679,26 @@ in
     virtualisation.qubes.packages = lib.optionals cfg.configAccessPolicy.enable [
       configAccessPolicyPackage
     ];
+
+    environment.etc."qubes-rpc/${access.statusService}" = lib.mkIf cfg.configAccessPolicy.enable {
+      source = configControlStatusService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes-rpc/${access.checkService}" = lib.mkIf cfg.configAccessPolicy.enable {
+      source = configControlCheckService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes-rpc/${access.applyService}" = lib.mkIf cfg.configAccessPolicy.enable {
+      source = configControlApplyService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes-rpc/${access.rollbackService}" = lib.mkIf cfg.configAccessPolicy.enable {
+      source = configControlRollbackService;
+      mode = "0555";
+    };
 
     systemd.services.nixome-qubes-policy-path = {
       description = "Prepare the mutable Nixome qrexec policy path";

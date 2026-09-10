@@ -183,6 +183,8 @@ LOCAL_CHECKS = (
         "config-vault-deployment-archive",
         ("{root}/tests/config-vault-deployment-archive.sh",),
     ),
+    LocalCheck("nixome-cli", ("{root}/tests/nixome-cli.sh",), (pytest.mark.nix,)),
+    LocalCheck("config-control", ("{root}/tests/config-control.sh",)),
     LocalCheck("config-boot-verify", ("{root}/tests/config-boot-verify.sh",)),
     LocalCheck("config-status", ("{root}/tests/config-status.sh",)),
     LocalCheck(

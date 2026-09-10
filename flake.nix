@@ -343,9 +343,12 @@
           nixome-config-apply = pkgs.callPackage ./pkgs/nixome-config-apply { };
           nixome-config-archive-candidate = pkgs.callPackage ./pkgs/nixome-config-archive { };
           nixome-config-boot-verify = pkgs.callPackage ./pkgs/nixome-config-boot-verify { };
+          nixome-config-control = pkgs.callPackage ./pkgs/nixome-config-control { };
           nixome-config-seed-inputs-import = pkgs.callPackage ./pkgs/nixome-config-seed-inputs-import { };
           nixome-config-status = pkgs.callPackage ./pkgs/nixome-config-status { };
           nixome-config-vms-smoke = pkgs.callPackage ./pkgs/nixome-config-vms-smoke { };
+          nixome-cli = pkgs.callPackage ./pkgs/nixome-cli { };
+          nixome = pkgs.callPackage ./pkgs/nixome-cli { };
           nixome-nix-domain-storage = pkgs.callPackage ./pkgs/nixome-nix-domain-storage { };
           nixome-nix-closure-domain-smoke = pkgs.callPackage ./pkgs/nixome-nix-closure-domain-smoke { };
           nixome-qubes-storage = pkgs.python3.pkgs.callPackage ./pkgs/nixome-qubes-storage { };
@@ -390,8 +393,10 @@
         config-apply-package = self.packages.${system}.nixome-config-apply;
         config-archive-package = self.packages.${system}.nixome-config-archive-candidate;
         config-boot-verify-package = self.packages.${system}.nixome-config-boot-verify;
+        config-control-package = self.packages.${system}.nixome-config-control;
         config-seed-inputs-import-package = self.packages.${system}.nixome-config-seed-inputs-import;
         config-status-package = self.packages.${system}.nixome-config-status;
+        nixome-cli-package = self.packages.${system}.nixome-cli;
         module-contract = mkModuleContractCheck system;
         config-vms-smoke-package = self.packages.${system}.nixome-config-vms-smoke;
         nix-closure-domain-smoke-package = self.packages.${system}.nixome-nix-closure-domain-smoke;

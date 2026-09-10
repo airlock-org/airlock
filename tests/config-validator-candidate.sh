@@ -12,6 +12,10 @@ STAGED_TAR="$WORK_DIR/config-candidate-staged.tar"
 VALIDATED_TAR="$WORK_DIR/config-candidate-validated.tar"
 VALIDATOR_STDERR="$WORK_DIR/validator.stderr.log"
 MEMBERS="$WORK_DIR/validated-members.txt"
+FAIL_CANDIDATE_DIR="$WORK_DIR/failing-check-candidate"
+FAIL_STAGED_TAR="$WORK_DIR/config-candidate-failing-check.tar"
+FAIL_VALIDATED_TAR="$WORK_DIR/config-candidate-failing-check-validated.tar"
+FAIL_VALIDATOR_STDERR="$WORK_DIR/validator-failing-check.stderr.log"
 
 if [ -e "$WORK_DIR/nix-root" ]; then
   chmod -R u+w "$WORK_DIR/nix-root" 2>/dev/null || true
@@ -223,7 +227,8 @@ jq -e '
   .status == "passed" and
   any(.checks[]; .name == "nix-template-source-refs-dry-run" and .status == "passed") and
   any(.checks[]; .name == "nixome-topology-json" and .status == "passed") and
-  any(.checks[]; .name == "nixome-system-json" and .status == "passed")
+  any(.checks[]; .name == "nixome-system-json" and .status == "passed") and
+  any(.checks[]; .name == "nix-flake-check" and .status == "passed")
 ' "$WORK_DIR/validation.json" >/dev/null
 
 jq -e '.schema == "nixome.qubes-topology.v1"' "$WORK_DIR/topology.json" >/dev/null
@@ -234,5 +239,129 @@ grep -F 'checking nix-domain=nix-native-work.system attr=packages.x86_64-linux.n
   "$topology_refs_log" >/dev/null
 grep -F 'checking nix-domain=nix-native-work.store attr=packages.x86_64-linux.nix-work-store-closure' \
   "$topology_refs_log" >/dev/null
+
+mkdir -p "$FAIL_CANDIDATE_DIR"
+cat > "$FAIL_CANDIDATE_DIR/flake.nix" <<'EOF'
+{
+  description = "Nixome config validator failing check fixture";
+
+  outputs = { self }: {
+    checks.x86_64-linux.failing = derivation {
+      name = "nixome-failing-check";
+      system = "x86_64-linux";
+      builder = "/bin/sh";
+      args = [
+        "-c"
+        "echo failing check >&2; exit 23"
+      ];
+    };
+
+    nixome.topology = {
+      schema = "nixome.qubes-topology.v1";
+      templates = { };
+      kernels = { };
+      domains = { };
+      prefs = { };
+      qrexec_policy.rules = [ ];
+    };
+
+    nixome.system = {
+      schema = "nixome.system.v1";
+      dom0 = {
+        profile = {
+          source = null;
+          source_ref = null;
+          activation_command = "bin/nixome-dom0-profile-activate";
+          activation_action = "none";
+          message = "";
+        };
+        packages = [ ];
+        systemd.services = { };
+        nixos = {
+          system = {
+            enable = false;
+            reason = "no host system change";
+            source = null;
+            source_ref = null;
+          };
+          kernel = {
+            enable = false;
+            reason = "no kernel change";
+            source = null;
+            source_ref = null;
+          };
+          xen = {
+            enable = false;
+            reason = "no xen change";
+            source = null;
+            source_ref = null;
+          };
+          bootloader = {
+            enable = false;
+            reason = "no bootloader change";
+            source = null;
+            source_ref = null;
+          };
+          qubes = {
+            enable = false;
+            reason = "no qubes package change";
+            source = null;
+            source_ref = null;
+          };
+        };
+      };
+      plan = {
+        live_actions = [ ];
+        reboot_actions = [ ];
+        reboot_required = false;
+        reboot_reasons = [ ];
+      };
+    };
+  };
+}
+EOF
+
+(
+  cd "$FAIL_CANDIDATE_DIR"
+  git init -b main >/dev/null
+  git add flake.nix
+  git \
+    -c user.name='Nixome Validator Test' \
+    -c user.email='nixome-validator-test@localhost' \
+    commit -m 'failing flake check fixture' >/dev/null
+  fail_commit="$(git rev-parse HEAD)"
+  git bundle create "$WORK_DIR/failing-check.bundle" HEAD >/dev/null
+  jq -c -n \
+    --arg schema "nixome.config-candidate.v1" \
+    --arg commit "$fail_commit" \
+    '{ schema: $schema, commit: $commit }' > "$WORK_DIR/failing-check-manifest.json"
+)
+
+tar -C "$WORK_DIR" -cf "$FAIL_STAGED_TAR" \
+  --transform 's|failing-check.bundle|config.bundle|' \
+  --transform 's|failing-check-manifest.json|manifest.json|' \
+  failing-check.bundle \
+  failing-check-manifest.json
+
+fail_commit="$(git -C "$FAIL_CANDIDATE_DIR" rev-parse HEAD)"
+if NIXOME_CONFIG_VALIDATION_DIR="$VALIDATION_DIR" \
+  NIXOME_CONFIG_NIX_STORE_ROOT="$WORK_DIR/nix-root" \
+  nixome_run_store_path "$validator_cmd" \
+  < "$FAIL_STAGED_TAR" \
+  > "$FAIL_VALIDATED_TAR" \
+  2> "$FAIL_VALIDATOR_STDERR"; then
+  printf 'expected failing flake check candidate to fail validation\n' >&2
+  exit 1
+fi
+
+jq -e \
+  --arg commit "$fail_commit" \
+  '
+    .schema == "nixome.config-validation.v1" and
+    .status == "failed" and
+    .commit == $commit and
+    any(.checks[]; .name == "nix-flake-check" and .status == "failed") and
+    any(.checks[]; .name == "nix-flake-check-no-build" and .status == "passed")
+  ' "$VALIDATION_DIR/$fail_commit.json" >/dev/null
 
 printf 'config validator candidate tar ok\n'

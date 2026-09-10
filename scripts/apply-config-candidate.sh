@@ -56,6 +56,7 @@ VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
 VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
 DEPLOYMENT_ARCHIVE_SERVICE="${NIXOME_CONFIG_DEPLOYMENT_ARCHIVE_SERVICE:-nixome.Config.ArchiveDeployment}"
 APPLY=0
+CANDIDATE_TAR=""
 result_written=0
 candidate_commit=""
 deployment_id=""
@@ -79,7 +80,7 @@ nixome_physical_store_path() {
 
 usage() {
   cat >&2 <<'EOF'
-Usage: nixome-config-apply --apply [--staging VM] [--validator VM] [--vault VM]
+Usage: nixome-config-apply --apply [--staging VM] [--validator VM] [--vault VM] [--candidate-tar PATH]
 
 Validate a staged config candidate in config-validator, archive it into
 config-vault, then apply the validated candidate topology from dom0.
@@ -106,6 +107,11 @@ while [ "$#" -gt 0 ]; do
       shift
       [ "$#" -gt 0 ] || usage
       VAULT="$1"
+      ;;
+    --candidate-tar)
+      shift
+      [ "$#" -gt 0 ] || usage
+      CANDIDATE_TAR="$1"
       ;;
     --help|-h)
       usage
@@ -1424,8 +1430,16 @@ install_host_system_profile() {
   host_system_source="$1"
   host_system_source_physical="$2"
   host_profile_parent="$(dirname "$HOST_SYSTEM_PROFILE")"
+  current_host_system=""
 
   mkdir -p "$host_profile_parent"
+  if [ -e "$HOST_SYSTEM_PROFILE" ] || [ -L "$HOST_SYSTEM_PROFILE" ]; then
+    current_host_system="$(readlink -f "$HOST_SYSTEM_PROFILE" || true)"
+  fi
+  if [ -n "$current_host_system" ] && [ "$current_host_system" != "$host_system_source_physical" ]; then
+    mkdir -p "$SYSTEM_STATE_DIR"
+    printf '%s\n' "$current_host_system" > "$SYSTEM_STATE_DIR/previous-host-system"
+  fi
 
   if [ "${host_system_source#/nix/store/}" = "$host_system_source" ]; then
     ln -sfn "$host_system_source_physical" "$HOST_SYSTEM_PROFILE"
@@ -1726,21 +1740,32 @@ if ! [ -r "$XEN_CAPABILITIES" ] || ! grep -qw control_d "$XEN_CAPABILITIES"; the
   fail "host is not a Xen control domain"
 fi
 
+if [ -n "$CANDIDATE_TAR" ] && [ ! -r "$CANDIDATE_TAR" ]; then
+  fail "candidate tar is not readable: $CANDIDATE_TAR"
+fi
+
 systemctl is-active --quiet qubes-db-dom0.service || fail "qubes-db-dom0.service is not active"
 systemctl is-active --quiet qubesd.service || fail "qubesd.service is not active"
 systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qrexec-policy-daemon.service is not active"
 
 if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = archive ]; then
+  archive_args=(
+    nixome-config-archive-candidate
+    --staging "$STAGING"
+    --validator "$VALIDATOR"
+    --vault "$VAULT"
+  )
+  if [ -n "$CANDIDATE_TAR" ]; then
+    archive_args+=(--candidate-tar "$CANDIDATE_TAR")
+  fi
+
   run_to_files_or_fail "config candidate archive" "$ARCHIVE_STDOUT" "$ARCHIVE_STDERR" \
     env \
       NIXOME_LOG_DIR="$LOG_DIR" \
       NIXOME_CONFIG_STAGING_VM="$STAGING" \
       NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
       NIXOME_CONFIG_VAULT_VM="$VAULT" \
-      nixome-config-archive-candidate \
-        --staging "$STAGING" \
-        --validator "$VALIDATOR" \
-        --vault "$VAULT"
+      "${archive_args[@]}"
 
   [ -r "$ARCHIVE_JSON" ] || fail "archive result JSON is missing: $ARCHIVE_JSON"
 

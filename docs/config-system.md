@@ -357,6 +357,54 @@ current deployment records, current host generation links, pending reboot
 state, pending VM restart state, and the Nixome-managed qrexec policy file as
 JSON.
 
+## Dev VM Control Path
+
+An ordinary VM named `dev` is allowed, by default, to request narrow config
+generation operations from dom0:
+
+```text
+dev
+    nixome status/check/apply/rollback
+        ↓ qrexec
+dom0 nixome-config-control
+        ↓
+config-validator / config-vault / dom0 apply or rollback
+```
+
+The VM-facing `nixome` command submits a clean Git commit as a `config.bundle`
+plus a `nixome.config-candidate.v1` manifest. The manifest records the commit,
+tree, branch, source role, qrexec transport, requested target class, and the
+dom0 status observed by the client before submission. Dom0 and
+`config-validator` do not trust this status to decide validity; it is candidate
+identity/context only.
+
+The dom0 qrexec entry point is fixed to four operations:
+
+```text
+nixome.Config.Status
+nixome.Config.Check
+nixome.Config.Apply
+nixome.Config.Rollback
+```
+
+`Check` and `Apply` accept only the staged candidate tar shape
+`config.bundle + manifest.json`. They then call the existing
+`nixome-config-archive-candidate` and `nixome-config-apply` machinery with that
+candidate tar. The dev VM never receives a qrexec primitive for shell commands,
+scripts, arbitrary file writes, direct dom0 filesystem access, or direct Nix
+store writes.
+
+`nixome.Config.Check` validates in `config-validator` without archiving or
+activating. `nixome.Config.Apply` validates in `config-validator`, archives the
+validated candidate in `config-vault`, resolves build references in dom0, and
+activates only the resulting validated topology/system plan. Failed evaluation,
+build, test, or activation leaves the last current deployment record intact.
+
+Rollback is intentionally narrow. `nixome.Config.Rollback` can only switch the
+dom0 NixOS host profile back to the previous recorded/profile generation and
+run that generation's `switch-to-configuration switch`. It does not accept a
+client-supplied path or command.
+
 ## Setup Path
 
 The dom0 module writes the desired bootstrap topology to:

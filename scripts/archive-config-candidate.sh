@@ -28,10 +28,13 @@ result_written=0
 candidate_commit=""
 validation_commit=""
 vault_commit=""
+CANDIDATE_TAR=""
+VALIDATE_ONLY=0
 
 usage() {
   cat >&2 <<'EOF'
 Usage: nixome-config-archive-candidate [--staging VM] [--validator VM] [--vault VM]
+       nixome-config-archive-candidate --candidate-tar PATH [--validate-only] [--validator VM] [--vault VM]
 
 Fetch a config candidate from config-staging, validate it in config-validator, and
 archive the validated candidate into config-vault before any deployment attempt.
@@ -55,6 +58,14 @@ while [ "$#" -gt 0 ]; do
       shift
       [ "$#" -gt 0 ] || usage
       VAULT="$1"
+      ;;
+    --candidate-tar)
+      shift
+      [ "$#" -gt 0 ] || usage
+      CANDIDATE_TAR="$1"
+      ;;
+    --validate-only)
+      VALIDATE_ONLY=1
       ;;
     --help|-h)
       usage
@@ -340,6 +351,10 @@ for cmd in \
   require_command "$cmd"
 done
 
+if [ -n "$CANDIDATE_TAR" ] && [ ! -r "$CANDIDATE_TAR" ]; then
+  fail "candidate tar is not readable: $CANDIDATE_TAR"
+fi
+
 if ! [ -r "$XEN_CAPABILITIES" ] || ! grep -qw control_d "$XEN_CAPABILITIES"; then
   fail "host is not a Xen control domain"
 fi
@@ -348,20 +363,42 @@ systemctl is-active --quiet qubes-db-dom0.service || fail "qubes-db-dom0.service
 systemctl is-active --quiet qubesd.service || fail "qubesd.service is not active"
 systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qrexec-policy-daemon.service is not active"
 
-qvm-check "$STAGING" >/dev/null 2>&1 || fail "missing config staging VM: $STAGING"
+if [ -z "$CANDIDATE_TAR" ]; then
+  qvm-check "$STAGING" >/dev/null 2>&1 || fail "missing config staging VM: $STAGING"
+fi
 qvm-check "$VALIDATOR" >/dev/null 2>&1 || fail "missing config validator VM: $VALIDATOR"
-qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
+if [ "$VALIDATE_ONLY" != "1" ]; then
+  qvm-check "$VAULT" >/dev/null 2>&1 || fail "missing config vault VM: $VAULT"
+fi
 
-verify_offline_vm "$STAGING" "config staging"
+if [ -z "$CANDIDATE_TAR" ]; then
+  verify_offline_vm "$STAGING" "config staging"
+fi
 verify_offline_vm "$VALIDATOR" "config validator"
-verify_offline_vm "$VAULT" "config vault"
-start_vm "$STAGING"
+if [ "$VALIDATE_ONLY" != "1" ]; then
+  verify_offline_vm "$VAULT" "config vault"
+fi
+if [ -z "$CANDIDATE_TAR" ]; then
+  start_vm "$STAGING"
+fi
 start_vm "$VALIDATOR"
-start_vm "$VAULT"
+if [ "$VALIDATE_ONLY" != "1" ]; then
+  start_vm "$VAULT"
+fi
 
-run_qrexec_service_to_file "$STAGING" "config candidate export from $STAGING" "$STAGED_CANDIDATE_TAR" "$EXPORT_STDERR" "$CANDIDATE_EXPORT_SERVICE"
+if [ -n "$CANDIDATE_TAR" ]; then
+  cp "$CANDIDATE_TAR" "$STAGED_CANDIDATE_TAR"
+else
+  run_qrexec_service_to_file "$STAGING" "config candidate export from $STAGING" "$STAGED_CANDIDATE_TAR" "$EXPORT_STDERR" "$CANDIDATE_EXPORT_SERVICE"
+fi
 run_qrexec_service_with_stdin "$VALIDATOR" "config candidate validation in $VALIDATOR" "$STAGED_CANDIDATE_TAR" "$VALIDATED_CANDIDATE_TAR" "$VALIDATE_STDERR" "$CANDIDATE_VALIDATE_SERVICE"
 verify_candidate "$VALIDATED_CANDIDATE_TAR"
+
+if [ "$VALIDATE_ONLY" = "1" ]; then
+  write_result passed "config candidate validated in config-validator"
+  cat "$RESULT_JSON"
+  exit 0
+fi
 
 run_qrexec_service_with_stdin "$VAULT" "archive candidate into $VAULT" "$VALIDATED_CANDIDATE_TAR" "$VAULT_ARCHIVE_LOG" "$VAULT_ARCHIVE_STDERR" "$ARCHIVE_SERVICE"
 extract_vault_archive_json || fail "vault archive command did not emit result JSON"
