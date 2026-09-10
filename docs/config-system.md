@@ -6,7 +6,7 @@ come from a Nix flake edited inside dedicated config VMs.
 
 ## Declared Objects
 
-`machines/config-system.nix` declares:
+`bootstrap/config-system.nix` declares:
 
 - `config-vault`, an offline closure-backed NixOS `StandaloneVM`.
 - `config-staging`, an offline closure-backed NixOS `StandaloneVM`.
@@ -300,7 +300,7 @@ latest-deployment-attempt
 Inside `config-staging`, edit:
 
 ```text
-/home/user/nixome-config/nixome/machine.nix
+/home/user/nixome-config/nixome/runtime.nix
 ```
 
 The high-level Nix-native domain surface is:
@@ -324,7 +324,7 @@ first-class for Fedora, Debian, and other non-NixOS guests.
 
 ## Dev VM
 
-The default staged machine declares a Nix-native `dev` domain with:
+The default staged runtime declares a Nix-native `dev` domain with:
 
 ```nix
 nixNative.domains.dev = {

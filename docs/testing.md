@@ -158,7 +158,7 @@ Builds:
 ```
 
 This proves the NixOS dom0 closure can be built. A real target should replace
-or extend `machines/test.nix` with its hardware-specific disk layout.
+or extend `image/profiles/test.nix` with its hardware-specific disk layout.
 
 ## Nested GUI Dom0
 

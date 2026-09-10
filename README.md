@@ -18,6 +18,16 @@ integration layer for:
 - config authority VMs for staging, validation, and archival,
 - local checks and nested Xen/Qubes integration feedback.
 
+## Repository Layout
+
+- `image/`: image build profiles and overlays for bootable Nixome systems.
+- `bootstrap/`: first-boot wiring and the default domains placed into an initial image.
+- `runtime/`: ongoing runtime configuration plus the tools that apply, import, export, inspect, and test it.
+- `runtime/config-staging/`: the default staged runtime config repo seeded into `config-staging`.
+- `runtime/control-tools/`: packages and scripts used by dom0 and config VMs to operate runtime state.
+- `platform/`: reusable Nix modules, schemas, and library builders shared by image, bootstrap, and runtime code.
+- `vendor/`: upstream source inputs carried locally for the POC.
+
 ## Commands
 
 ```bash
@@ -113,9 +123,8 @@ The old NixOS TemplateVM path for config domains has been removed. Generic
 Qubes TemplateVM support remains for Fedora, Debian, and other conventional
 guests.
 
-See [docs/config-system.md](/home/user/dev/nixome/docs/config-system.md) for
-the config authority model and [docs/testing.md](/home/user/dev/nixome/docs/testing.md)
-for the test layers.
+See [docs/config-system.md](docs/config-system.md) for the config authority
+model and [docs/testing.md](docs/testing.md) for the test layers.
 
 ## Generated Data
 

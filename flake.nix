@@ -144,12 +144,10 @@
             in
             rel == "flake.nix"
             || rel == "flake.lock"
-            || keepTree "lib"
-            || keepTree "machines"
-            || keepTree "modules"
-            || keepTree "pkgs"
-            || keepTree "scripts"
-            || keepTree "seeds"
+            || keepTree "platform"
+            || keepTree "runtime"
+            || keepTree "bootstrap"
+            || keepTree "image"
             || rel == "tests";
         in
         lib.cleanSourceWith {
@@ -167,245 +165,28 @@
 
       mkNixomeQubeBuilders =
         system:
-        import ./lib/nixome/qube-template.nix {
+        import ./platform/lib/qube-template.nix {
           inherit nixpkgs system;
           nixpkgsLibvirt105Source = "${nixpkgs-libvirt_10_5}";
           nixomeSupport = "${self}";
           nixosQubesSource = "${nixos-qubes}";
         };
 
-      configVmRoles = [
-        "config-vault"
-        "config-staging"
-        "config-validator"
-      ];
-
-      configNixPrivateSizeBytes = 8589934592;
-      devPrivateSizeBytes = 34359738368;
-      sysNetPrivateSizeBytes = 2147483648;
-
-      configRoleDefaults = {
-        config-vault = {
-          guestHostName = "config-vault";
-          label = "black";
-          rootImageSizeMiB = 128;
-          prefs = {
-            autostart = false;
-            include_in_backups = true;
-            memory = 1024;
-            maxmem = 2048;
-            vcpus = 1;
-          };
-          features = {
-            "nixome-managed" = "1";
-            "nixome-role" = "config-vault";
-            "nixome-config-authority" = "1";
-          };
-          services = {
-            "network-manager" = false;
-          };
-        };
-        config-staging = {
-          guestHostName = "config-staging";
-          label = "gray";
-          rootImageSizeMiB = 128;
-          state.persistentSize = configNixPrivateSizeBytes;
-          prefs = {
-            autostart = false;
-            include_in_backups = true;
-            memory = 2048;
-            maxmem = 4096;
-            vcpus = 2;
-          };
-          features = {
-            "nixome-managed" = "1";
-            "nixome-role" = "config-staging";
-            "nixome-config-staging" = "1";
-            "nixome-config-applied-message" = "initial";
-          };
-          services = {
-            "network-manager" = false;
-          };
-        };
-        config-validator = {
-          guestHostName = "config-validator";
-          label = "blue";
-          rootImageSizeMiB = 128;
-          state.persistentSize = configNixPrivateSizeBytes;
-          prefs = {
-            autostart = false;
-            include_in_backups = true;
-            memory = 2048;
-            maxmem = 4096;
-            vcpus = 2;
-          };
-          features = {
-            "nixome-managed" = "1";
-            "nixome-role" = "config-validator";
-            "nixome-config-validator" = "1";
-          };
-          services = {
-            "network-manager" = false;
-          };
-        };
+      bootstrapDomains = import ./bootstrap/default-domains.nix {
+        inherit
+          lib
+          mkNixomeQubeBuilders
+          nixomeConfigSeedInputs
+          nixomeQubesVmKernelName
+          ;
       };
 
-      devRoleDefaults = {
-        guestHostName = "dev";
-        label = "green";
-        rootImageSizeMiB = 512;
-        state.persistentSize = devPrivateSizeBytes;
-        prefs = {
-          autostart = false;
-          include_in_backups = true;
-          memory = 4096;
-          maxmem = 8192;
-          vcpus = 4;
-        };
-        features = {
-          "nixome-managed" = "1";
-          "nixome-role" = "dev";
-          "nixome-dev" = "1";
-        };
-      };
-
-      sysNetRoleDefaults = {
-        guestHostName = "sys-net";
-        label = "red";
-        rootImageSizeMiB = 512;
-        netvm = null;
-        state.persistentSize = sysNetPrivateSizeBytes;
-        prefs = {
-          autostart = false;
-          include_in_backups = true;
-          memory = 768;
-          maxmem = 1024;
-          provides_network = true;
-          vcpus = 2;
-        };
-        features = {
-          "nixome-managed" = "1";
-          "nixome-role" = "sys-net";
-          "nixome-network-provider" = "sys-net";
-        };
-        services = {
-          "network-manager" = true;
-          "qubes-firewall" = true;
-          "qubes-network" = true;
-        };
-        devices.pci = [ ];
-      };
-
-      mkConfigDomainEntries =
-        system:
-        let
-          qubeBuilders = mkNixomeQubeBuilders system;
-          mkGuestModule =
-            role:
-            let
-              defaults = configRoleDefaults.${role};
-            in
-            { ... }:
-            {
-              networking.hostName = defaults.guestHostName;
-            };
-          mkEntry =
-            role:
-            let
-              defaults = configRoleDefaults.${role};
-            in
-            qubeBuilders.mkNixNativeDomain {
-              name = role;
-              guestRole = role;
-              inherit nixomeConfigSeedInputs;
-              nixomePrebuiltTemplateSources = { };
-              modules = [ (mkGuestModule role) ];
-              rootImageSizeMiB = defaults.rootImageSizeMiB;
-              kernelName = nixomeQubesVmKernelName;
-              label = defaults.label;
-              netvm = null;
-              prefs = defaults.prefs;
-              features = defaults.features;
-              services = defaults.services;
-              state = defaults.state or { };
-            };
-        in
-        lib.listToAttrs (
-          builtins.map (role: {
-            name = role;
-            value = mkEntry role;
-          }) configVmRoles
-        );
-
-      mkDevDomainEntry =
-        system:
-        let
-          qubeBuilders = mkNixomeQubeBuilders system;
-        in
-        qubeBuilders.mkNixNativeDomain {
-          name = "dev";
-          guestRole = "dev";
-          modules = [
-            ({ ... }: {
-              networking.hostName = devRoleDefaults.guestHostName;
-            })
-          ];
-          rootImageSizeMiB = devRoleDefaults.rootImageSizeMiB;
-          kernelName = nixomeQubesVmKernelName;
-          label = devRoleDefaults.label;
-          netvm = "sys-net";
-          prefs = devRoleDefaults.prefs;
-          features = devRoleDefaults.features;
-          services = { };
-          state = devRoleDefaults.state;
-        };
-
-      mkSysNetDomainEntry =
-        system:
-        let
-          qubeBuilders = mkNixomeQubeBuilders system;
-        in
-        qubeBuilders.mkNixNativeDomain {
-          name = "sys-net";
-          guestRole = "sys-net";
-          modules = [
-            ({ ... }: {
-              networking.hostName = sysNetRoleDefaults.guestHostName;
-            })
-          ];
-          rootImageSizeMiB = sysNetRoleDefaults.rootImageSizeMiB;
-          kernelName = nixomeQubesVmKernelName;
-          label = sysNetRoleDefaults.label;
-          netvm = sysNetRoleDefaults.netvm;
-          prefs = sysNetRoleDefaults.prefs;
-          features = sysNetRoleDefaults.features;
-          services = sysNetRoleDefaults.services;
-          devices = sysNetRoleDefaults.devices;
-          state = sysNetRoleDefaults.state;
-        };
-
-      materializeNixClosureDomain =
-        entry:
-        entry.domain
-        // {
-          prefs = entry.domain.prefs // {
-            kernelopts = entry.kernelopts;
-          };
-          backend = entry.domain.backend // {
-            system = entry.domain.backend.system // {
-              source = "${entry.configuration.config.system.build.toplevel}";
-              sourceRef = null;
-            };
-            root = entry.domain.backend.root // {
-              source = "${entry.rootImage}/root.img";
-              sourceRef = null;
-            };
-            store = entry.domain.backend.store // {
-              source = "${entry.storeArtifact}";
-              sourceRef = null;
-            };
-          };
-        };
+      inherit (bootstrapDomains)
+        materializeNixClosureDomain
+        mkConfigDomainEntries
+        mkDevDomainEntry
+        mkSysNetDomainEntry
+        ;
 
       mkModuleContractCheck =
         system:
@@ -474,9 +255,9 @@
     in
     {
       lib = {
-        nixomeSystem = import ./lib/nixome/system.nix;
-        nixomeTopology = import ./lib/nixome/topology.nix;
-        nixomeQubeTemplate = import ./lib/nixome/qube-template.nix;
+        nixomeSystem = import ./platform/lib/system.nix;
+        nixomeTopology = import ./platform/lib/topology.nix;
+        nixomeQubeTemplate = import ./platform/lib/qube-template.nix;
       };
 
       nixome.seedInputs = nixomeConfigSeedInputs;
@@ -510,26 +291,26 @@
         in
         configDomainPackages
         // {
-          nixome-config-apply = pkgs.callPackage ./pkgs/nixome-config-apply { };
-          nixome-config-archive-candidate = pkgs.callPackage ./pkgs/nixome-config-archive { };
-          nixome-config-bootstrap-current = pkgs.callPackage ./pkgs/nixome-config-bootstrap-current { };
-          nixome-config-boot-verify = pkgs.callPackage ./pkgs/nixome-config-boot-verify { };
-          nixome-config-control = pkgs.callPackage ./pkgs/nixome-config-control { };
-          nixome-config-seed-inputs-import = pkgs.callPackage ./pkgs/nixome-config-seed-inputs-import { };
-          nixome-config-status = pkgs.callPackage ./pkgs/nixome-config-status { };
-          nixome-config-vms-smoke = pkgs.callPackage ./pkgs/nixome-config-vms-smoke { };
-          nixome-cli = pkgs.callPackage ./pkgs/nixome-cli { };
-          nixome = pkgs.callPackage ./pkgs/nixome-cli { };
+          nixome-config-apply = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-apply { };
+          nixome-config-archive-candidate = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-archive { };
+          nixome-config-bootstrap-current = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-bootstrap-current { };
+          nixome-config-boot-verify = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-boot-verify { };
+          nixome-config-control = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-control { };
+          nixome-config-seed-inputs-import = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-seed-inputs-import { };
+          nixome-config-status = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-status { };
+          nixome-config-vms-smoke = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-config-vms-smoke { };
+          nixome-cli = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-cli { };
+          nixome = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-cli { };
           codex = pkgs.codex;
           zellij = pkgs.zellij;
-          nixome-nix-domain-storage = pkgs.callPackage ./pkgs/nixome-nix-domain-storage { };
-          nixome-nix-closure-domain-smoke = pkgs.callPackage ./pkgs/nixome-nix-closure-domain-smoke { };
-          nixome-qubes-storage = pkgs.python3.pkgs.callPackage ./pkgs/nixome-qubes-storage { };
-          nixome-qube-bootstrap = pkgs.callPackage ./pkgs/nixome-qube-bootstrap { };
-          nixome-qube-gui-smoke = pkgs.callPackage ./pkgs/nixome-qube-gui-smoke { };
-          nixome-setup-config = pkgs.callPackage ./pkgs/nixome-setup-config { };
-          nixome-qubes-smoke = pkgs.callPackage ./pkgs/nixome-qubes-smoke { };
-          nixome-observe-dom0 = pkgs.callPackage ./pkgs/nixome-observe { };
+          nixome-nix-domain-storage = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-nix-domain-storage { };
+          nixome-nix-closure-domain-smoke = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-nix-closure-domain-smoke { };
+          nixome-qubes-storage = pkgs.python3.pkgs.callPackage ./runtime/control-tools/pkgs/nixome-qubes-storage { };
+          nixome-qube-bootstrap = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-qube-bootstrap { };
+          nixome-qube-gui-smoke = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-qube-gui-smoke { };
+          nixome-setup-config = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-setup-config { };
+          nixome-qubes-smoke = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-qubes-smoke { };
+          nixome-observe-dom0 = pkgs.callPackage ./runtime/control-tools/pkgs/nixome-observe { };
           nixome-qubes-vm-kernel = pkgs.repackRpmKernel {
             kernelSrc = pkgs.fetchurl {
               url = "https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm";
@@ -593,8 +374,8 @@
 
           imports = [
             nixos-qubes.nixosModules.qubes
-            ./modules/dom0.nix
-            ./modules/qubes-topology.nix
+            ./platform/modules/dom0.nix
+            ./platform/modules/qubes-topology.nix
           ];
         };
 
@@ -604,7 +385,7 @@
         system = "x86_64-linux";
         modules = [
           self.nixosModules.dom0
-          ./machines/test.nix
+          ./image/profiles/test.nix
         ];
       };
 
@@ -612,7 +393,7 @@
         system = "x86_64-linux";
         modules = [
           self.nixosModules.dom0
-          ./machines/vm.nix
+          ./image/profiles/vm.nix
         ];
       };
 
@@ -620,7 +401,7 @@
         system = "x86_64-linux";
         modules = [
           self.nixosModules.dom0
-          ./machines/vm-gui.nix
+          ./image/profiles/vm-gui.nix
         ];
       };
 
@@ -643,8 +424,8 @@
         };
         modules = [
           self.nixosModules.dom0
-          ./machines/vm-gui.nix
-          ./machines/config-system.nix
+          ./image/profiles/vm-gui.nix
+          ./bootstrap/config-system.nix
         ];
       };
 
