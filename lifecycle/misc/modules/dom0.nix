@@ -12,11 +12,30 @@ let
   qubesStorage = pkgs.python3.pkgs.callPackage ../../runtime/tools/pkgs/nixome-qubes-storage { };
   observeDom0 = pkgs.callPackage ../../runtime/tools/pkgs/nixome-observe { };
   qubesSmoke = pkgs.callPackage ../tools/pkgs/nixome-qubes-smoke { };
+  qrexecDom0 = pkgs.python3.pkgs.qubes-core-qrexec.dom0;
   dom0DevPackages = with pkgs; [
     codex
     git
     zellij
   ];
+  devNetworkProxy = cfg.devModeNetworkProxy;
+  devNetworkProxyListen = "${devNetworkProxy.listenAddress}:${toString devNetworkProxy.port}";
+  devNetworkProxyUrl = "http://${devNetworkProxyListen}";
+  devNetworkProxyEnv = {
+    http_proxy = devNetworkProxyUrl;
+    https_proxy = devNetworkProxyUrl;
+    HTTP_PROXY = devNetworkProxyUrl;
+    HTTPS_PROXY = devNetworkProxyUrl;
+    no_proxy = "127.0.0.1,localhost,::1";
+    NO_PROXY = "127.0.0.1,localhost,::1";
+  };
+  dom0SysNetProxyPolicyPackage = pkgs.runCommand "nixome-dom0-sys-net-proxy-policy" { } ''
+    install -d "$out/etc/qubes/policy.d"
+    cat > "$out/etc/qubes/policy.d/35-nixome-dom0-sys-net-proxy.policy" <<'EOF'
+    # Managed by Nixome. Let dev-mode dom0 reach the updates proxy through sys-net.
+    qubes.UpdatesProxy * dom0 ${devNetworkProxy.target} allow
+    EOF
+  '';
   xorgQubesShmoverride = pkgs.writeShellScript "X-qubes-shmoverride" ''
     export LD_PRELOAD=${pkgs.qubes-gui-daemon}/lib/qubes-gui-daemon/shmoverride.so''${LD_PRELOAD:+:$LD_PRELOAD}
     exec ${pkgs.xorg-server}/bin/X "$@"
@@ -89,6 +108,36 @@ in
       };
     };
 
+    devModeNetworkProxy = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = imageCfg.devMode.enable;
+        defaultText = lib.literalExpression "config.nixome.image.devMode.enable";
+        description = ''
+          In development images, expose a dom0 loopback HTTP proxy that
+          forwards requests over qrexec to the selected network qube.
+        '';
+      };
+
+      target = lib.mkOption {
+        type = lib.types.str;
+        default = "sys-net";
+        description = "Network qube that serves qubes.UpdatesProxy for dev-mode dom0.";
+      };
+
+      listenAddress = lib.mkOption {
+        type = lib.types.str;
+        default = "127.0.0.1";
+        description = "Loopback address where dom0 listens for the development proxy.";
+      };
+
+      port = lib.mkOption {
+        type = lib.types.port;
+        default = 8082;
+        description = "Loopback TCP port where dom0 listens for the development proxy.";
+      };
+    };
+
     extraOptOutRecommendedConfiguration = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
@@ -124,6 +173,14 @@ in
       {
         assertion = cfg.dom0Resources.maxMemoryMiB >= cfg.dom0Resources.memoryMiB;
         message = "nixome.dom0.dom0Resources.maxMemoryMiB must be >= memoryMiB.";
+      }
+      {
+        assertion = !devNetworkProxy.enable || devNetworkProxy.target != "";
+        message = "nixome.dom0.devModeNetworkProxy.target must not be empty when the proxy is enabled.";
+      }
+      {
+        assertion = !devNetworkProxy.enable || lib.match "[A-Za-z0-9_.-]+" devNetworkProxy.target != null;
+        message = "nixome.dom0.devModeNetworkProxy.target must be a simple Qubes domain name.";
       }
     ];
 
@@ -201,6 +258,52 @@ in
     ];
 
     networking.useDHCP = lib.mkDefault imageCfg.devMode.enable;
+    networking.dhcpcd.extraConfig = lib.mkIf devNetworkProxy.enable (
+      lib.mkAfter ''
+        nogateway
+      ''
+    );
+
+    virtualisation.qubes.packages = lib.optionals devNetworkProxy.enable [
+      dom0SysNetProxyPolicyPackage
+    ];
+
+    systemd.sockets.nixome-dom0-sys-net-updates-proxy = lib.mkIf devNetworkProxy.enable {
+      description = "Listen for dev-mode dom0 traffic to the sys-net updates proxy";
+      wantedBy = [ "sockets.target" ];
+      listenStreams = [ devNetworkProxyListen ];
+      socketConfig = {
+        Accept = true;
+        BindToDevice = "lo";
+      };
+    };
+
+    systemd.services."nixome-dom0-sys-net-updates-proxy@" = lib.mkIf devNetworkProxy.enable {
+      description = "Forward a dev-mode dom0 proxy connection to sys-net";
+      wants = [
+        "nixome-start-network-providers.service"
+        "qubes-qrexec-policy-daemon.service"
+        "qubesd.service"
+      ];
+      after = [
+        "nixome-start-network-providers.service"
+        "qubes-qrexec-policy-daemon.service"
+        "qubesd.service"
+      ];
+      serviceConfig = {
+        ExecStart = "${qrexecDom0}/bin/qrexec-client ${
+          lib.escapeShellArgs [
+            "--use-stdin-socket"
+            "-d"
+            devNetworkProxy.target
+            "DEFAULT:QUBESRPC qubes.UpdatesProxy+ dom0"
+          ]
+        }";
+        StandardInput = "socket";
+        StandardOutput = "inherit";
+        StandardError = "journal";
+      };
+    };
 
     environment.systemPackages = [
       qubesStorage
@@ -220,5 +323,8 @@ in
         enabled
       '';
     };
+
+    environment.sessionVariables = lib.mkIf devNetworkProxy.enable devNetworkProxyEnv;
+    systemd.services.nix-daemon.environment = lib.mkIf devNetworkProxy.enable devNetworkProxyEnv;
   };
 }

@@ -73,6 +73,7 @@
         "network-manager" = true;
         "qubes-firewall" = true;
         "qubes-network" = true;
+        "qubes-updates-proxy" = true;
       };
       # Empty means setup-config discovers dom0 network-class PCI devices for
       # sys-net, matching the normal Qubes installer behavior. Add entries here

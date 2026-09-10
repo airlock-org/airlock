@@ -1835,6 +1835,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       staged_dev_declared = builtins.hasAttr "dev" stagedNixNativeDomains;
       staged_sys_net_declared = builtins.hasAttr "sys-net" stagedNixNativeDomains;
       staged_sys_net_autostart = sysNetDomainDefinition.prefs.autostart;
+      staged_sys_net_updates_proxy = sysNetDomainDefinition.services."qubes-updates-proxy";
       staged_sys_firewall_external = !(builtins.hasAttr "sys-firewall" stagedNixNativeDomains);
       generated_dev_domain_netvm = generatedDevDomain.netvm;
       generated_dev_domain_role_feature = generatedDevDomain.features."nixome-role";
@@ -1844,11 +1845,20 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       bootstrap_sys_firewall_external = !(builtins.hasAttr "sys-firewall" bootstrapDomains);
       bootstrap_sys_net_autostart = bootstrapSysNetDomain.prefs.autostart;
       bootstrap_sys_net_netvm = bootstrapSysNetDomain.netvm;
+      bootstrap_sys_net_updates_proxy = bootstrapSysNetDomain.services."qubes-updates-proxy";
       bootstrap_dev_topology_present = builtins.hasAttr "dev" dom0Cfg.nixome.qubes.topology.domains;
       bootstrap_sys_net_topology_autostart = bootstrapTopologySysNetDomain.prefs.autostart;
       image_dev_mode_enabled = dom0Cfg.nixome.image.devMode.enable;
       legacy_image_dev_mode_enabled = legacyDevDom0Cfg.nixome.image.devMode.enable;
       dom0_dhcp_enabled = dom0Cfg.networking.useDHCP;
+      dom0_dhcpcd_no_gateway = lib.hasInfix "nogateway" dom0Cfg.networking.dhcpcd.extraConfig;
+      dom0_proxy_enabled = dom0Cfg.nixome.dom0.devModeNetworkProxy.enable;
+      dom0_proxy_target = dom0Cfg.nixome.dom0.devModeNetworkProxy.target;
+      dom0_proxy_http = dom0Cfg.environment.sessionVariables.http_proxy or null;
+      dom0_proxy_https = dom0Cfg.environment.sessionVariables.https_proxy or null;
+      dom0_proxy_no_proxy = dom0Cfg.environment.sessionVariables.no_proxy or null;
+      dom0_nix_daemon_proxy_http =
+        dom0Cfg.systemd.services.nix-daemon.environment.http_proxy or null;
       dom0_dev_mode_marker = dom0Cfg.environment.etc."nixome/dev-mode".text;
       dom0_observability_enabled = dom0Cfg.nixome.dom0.observability.enable;
       dom0_testing_tools_enabled = dom0Cfg.nixome.dom0.testingTools.enable;
@@ -1864,6 +1874,10 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       ];
       release_image_dev_mode_enabled = releaseDom0Cfg.nixome.image.devMode.enable;
       release_dom0_dhcp_enabled = releaseDom0Cfg.networking.useDHCP;
+      release_dom0_dhcpcd_no_gateway =
+        lib.hasInfix "nogateway" releaseDom0Cfg.networking.dhcpcd.extraConfig;
+      release_dom0_proxy_enabled = releaseDom0Cfg.nixome.dom0.devModeNetworkProxy.enable;
+      release_dom0_proxy_http = releaseDom0Cfg.environment.sessionVariables.http_proxy or null;
       release_dom0_dev_marker_absent =
         !(builtins.hasAttr "nixome/dev-mode" releaseDom0Cfg.environment.etc);
       release_dom0_observability_enabled = releaseDom0Cfg.nixome.dom0.observability.enable;
@@ -1883,6 +1897,10 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       release_bootstrap_sys_net_autostart = releaseBootstrapDomains.sys-net.prefs.autostart;
       non_dev_image_dev_mode_enabled = nonDevDom0Cfg.nixome.image.devMode.enable;
       non_dev_dom0_dhcp_enabled = nonDevDom0Cfg.networking.useDHCP;
+      non_dev_dom0_dhcpcd_no_gateway =
+        lib.hasInfix "nogateway" nonDevDom0Cfg.networking.dhcpcd.extraConfig;
+      non_dev_dom0_proxy_enabled = nonDevDom0Cfg.nixome.dom0.devModeNetworkProxy.enable;
+      non_dev_dom0_proxy_http = nonDevDom0Cfg.environment.sessionVariables.http_proxy or null;
       non_dev_dom0_dev_marker_absent =
         !(builtins.hasAttr "nixome/dev-mode" nonDevDom0Cfg.environment.etc);
       non_dev_dom0_observability_enabled = nonDevDom0Cfg.nixome.dom0.observability.enable;
@@ -1961,6 +1979,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["staged_dev_declared"] is False
     assert data["staged_sys_net_declared"] is True
     assert data["staged_sys_net_autostart"] is True
+    assert data["staged_sys_net_updates_proxy"] is True
     assert data["staged_sys_firewall_external"] is True
     assert data["generated_dev_domain_netvm"] is None
     assert data["generated_dev_domain_role_feature"] == "dev"
@@ -1970,11 +1989,19 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["bootstrap_sys_firewall_external"] is True
     assert data["bootstrap_sys_net_autostart"] is True
     assert data["bootstrap_sys_net_netvm"] is None
+    assert data["bootstrap_sys_net_updates_proxy"] is True
     assert data["bootstrap_dev_topology_present"] is False
     assert data["bootstrap_sys_net_topology_autostart"] is True
     assert data["image_dev_mode_enabled"] is True
     assert data["legacy_image_dev_mode_enabled"] is True
     assert data["dom0_dhcp_enabled"] is True
+    assert data["dom0_dhcpcd_no_gateway"] is True
+    assert data["dom0_proxy_enabled"] is True
+    assert data["dom0_proxy_target"] == "sys-net"
+    assert data["dom0_proxy_http"] == "http://127.0.0.1:8082"
+    assert data["dom0_proxy_https"] == "http://127.0.0.1:8082"
+    assert data["dom0_proxy_no_proxy"] == "127.0.0.1,localhost,::1"
+    assert data["dom0_nix_daemon_proxy_http"] == "http://127.0.0.1:8082"
     assert data["dom0_dev_mode_marker"] == "enabled\n"
     assert data["dom0_observability_enabled"] is True
     assert data["dom0_testing_tools_enabled"] is True
@@ -1982,6 +2009,9 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["legacy_dev_tools_present"] is True
     assert data["release_image_dev_mode_enabled"] is False
     assert data["release_dom0_dhcp_enabled"] is False
+    assert data["release_dom0_dhcpcd_no_gateway"] is False
+    assert data["release_dom0_proxy_enabled"] is False
+    assert data["release_dom0_proxy_http"] is None
     assert data["release_dom0_dev_marker_absent"] is True
     assert data["release_dom0_observability_enabled"] is False
     assert data["release_dom0_testing_tools_enabled"] is False
@@ -1992,6 +2022,9 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["release_bootstrap_sys_net_autostart"] is True
     assert data["non_dev_image_dev_mode_enabled"] is False
     assert data["non_dev_dom0_dhcp_enabled"] is False
+    assert data["non_dev_dom0_dhcpcd_no_gateway"] is False
+    assert data["non_dev_dom0_proxy_enabled"] is False
+    assert data["non_dev_dom0_proxy_http"] is None
     assert data["non_dev_dom0_dev_marker_absent"] is True
     assert data["non_dev_dom0_observability_enabled"] is False
     assert data["non_dev_dom0_testing_tools_enabled"] is False
@@ -9065,6 +9098,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert domains["sys-net"]["netvm"] is None
     assert domains["sys-net"]["prefs"]["provides_network"] is True
     assert domains["sys-net"]["services"]["network-manager"] is True
+    assert domains["sys-net"]["services"]["qubes-updates-proxy"] is True
     assert "dev" not in domains
     assert "qubes-kernel-6.12.64-1.fc41" in kernels["6.12.64-1.fc41"]["source"]
     assert templates == {}
@@ -9090,6 +9124,117 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     )
     assert topology["domains"]["sys-net"]["devices"]["pci"] == []
     assert "dev" not in topology["domains"]
+
+    proxy_eval = json.loads(
+        _run(
+            [
+                "nix",
+                "eval",
+                "--impure",
+                "--json",
+                "--expr",
+                f"""
+                let
+                  flake = builtins.getFlake "path:{repo_root}";
+                  dom0 = flake.nixosConfigurations.vm-gui-config.config;
+                  sysNet = flake.nixosConfigurations.nixome-domain-sys-net.config;
+                  packageNames = cfg: map (package: package.pname or package.name or "") cfg.environment.systemPackages;
+                in
+                {{
+                  dom0_proxy_enabled = dom0.nixome.dom0.devModeNetworkProxy.enable;
+                  dom0_proxy_target = dom0.nixome.dom0.devModeNetworkProxy.target;
+                  dom0_dhcpcd_extra_config = dom0.networking.dhcpcd.extraConfig;
+                  socket_listen = dom0.systemd.sockets.nixome-dom0-sys-net-updates-proxy.listenStreams;
+                  socket_wanted_by = dom0.systemd.sockets.nixome-dom0-sys-net-updates-proxy.wantedBy;
+                  socket_accept = dom0.systemd.sockets.nixome-dom0-sys-net-updates-proxy.socketConfig.Accept;
+                  socket_bind_to_device =
+                    dom0.systemd.sockets.nixome-dom0-sys-net-updates-proxy.socketConfig.BindToDevice;
+                  service_exec =
+                    dom0.systemd.services."nixome-dom0-sys-net-updates-proxy@".serviceConfig.ExecStart;
+                  service_stdin =
+                    dom0.systemd.services."nixome-dom0-sys-net-updates-proxy@".serviceConfig.StandardInput;
+                  service_stdout =
+                    dom0.systemd.services."nixome-dom0-sys-net-updates-proxy@".serviceConfig.StandardOutput;
+                  service_after = dom0.systemd.services."nixome-dom0-sys-net-updates-proxy@".after;
+                  session_proxy = {{
+                    http_proxy = dom0.environment.sessionVariables.http_proxy or null;
+                    https_proxy = dom0.environment.sessionVariables.https_proxy or null;
+                    HTTP_PROXY = dom0.environment.sessionVariables.HTTP_PROXY or null;
+                    HTTPS_PROXY = dom0.environment.sessionVariables.HTTPS_PROXY or null;
+                    no_proxy = dom0.environment.sessionVariables.no_proxy or null;
+                    NO_PROXY = dom0.environment.sessionVariables.NO_PROXY or null;
+                  }};
+                  nix_daemon_proxy = {{
+                    http_proxy = dom0.systemd.services.nix-daemon.environment.http_proxy or null;
+                    https_proxy = dom0.systemd.services.nix-daemon.environment.https_proxy or null;
+                  }};
+                  sys_net_service_exec =
+                    sysNet.systemd.services.qubes-updates-proxy.serviceConfig.ExecStart;
+                  sys_net_service_wanted_by =
+                    sysNet.systemd.services.qubes-updates-proxy.wantedBy;
+                  sys_net_service_after = sysNet.systemd.services.qubes-updates-proxy.after;
+                  sys_net_service_condition =
+                    sysNet.systemd.services.qubes-updates-proxy.unitConfig.ConditionPathExists;
+                  sys_net_rpc_config_text =
+                    sysNet.environment.etc."qubes/rpc-config/qubes.UpdatesProxy".text;
+                  sys_net_rpc_service_mode =
+                    sysNet.environment.etc."qubes-rpc/qubes.UpdatesProxy".mode;
+                  sys_net_rpc_service_source =
+                    toString sysNet.environment.etc."qubes-rpc/qubes.UpdatesProxy".source;
+                  sys_net_tinyproxy_user = sysNet.users.users.tinyproxy.isSystemUser;
+                  sys_net_tinyproxy_group = sysNet.users.users.tinyproxy.group;
+                  sys_net_package_names = packageNames sysNet;
+                }}
+                """,
+            ],
+            cwd=repo_root,
+        ).stdout
+    )
+    assert proxy_eval["dom0_proxy_enabled"] is True
+    assert proxy_eval["dom0_proxy_target"] == "sys-net"
+    assert "nogateway" in proxy_eval["dom0_dhcpcd_extra_config"]
+    assert proxy_eval["socket_listen"] == ["127.0.0.1:8082"]
+    assert "sockets.target" in proxy_eval["socket_wanted_by"]
+    assert proxy_eval["socket_accept"] is True
+    assert proxy_eval["socket_bind_to_device"] == "lo"
+    assert "qrexec-client --use-stdin-socket -d sys-net" in proxy_eval["service_exec"]
+    assert "DEFAULT:QUBESRPC qubes.UpdatesProxy+ dom0" in proxy_eval["service_exec"]
+    assert proxy_eval["service_stdin"] == "socket"
+    assert proxy_eval["service_stdout"] == "inherit"
+    assert "nixome-start-network-providers.service" in proxy_eval["service_after"]
+    assert "qubes-qrexec-policy-daemon.service" in proxy_eval["service_after"]
+    expected_proxy = "http://127.0.0.1:8082"
+    assert proxy_eval["session_proxy"] == {
+        "http_proxy": expected_proxy,
+        "https_proxy": expected_proxy,
+        "HTTP_PROXY": expected_proxy,
+        "HTTPS_PROXY": expected_proxy,
+        "no_proxy": "127.0.0.1,localhost,::1",
+        "NO_PROXY": "127.0.0.1,localhost,::1",
+    }
+    assert proxy_eval["nix_daemon_proxy"] == {
+        "http_proxy": expected_proxy,
+        "https_proxy": expected_proxy,
+    }
+    assert "tinyproxy -d -c" in proxy_eval["sys_net_service_exec"]
+    assert "multi-user.target" in proxy_eval["sys_net_service_wanted_by"]
+    assert "qubes-iptables.service" in proxy_eval["sys_net_service_after"]
+    assert (
+        proxy_eval["sys_net_service_condition"]
+        == "|/run/qubes-service/qubes-updates-proxy"
+    )
+    assert (
+        proxy_eval["sys_net_rpc_config_text"]
+        == "skip-service-descriptor=true\nexit-on-service-eof=true\n"
+    )
+    assert proxy_eval["sys_net_rpc_service_mode"] == "0555"
+    assert (
+        "nixome-qubes-updates-proxy-rpc-service"
+        in proxy_eval["sys_net_rpc_service_source"]
+    )
+    assert proxy_eval["sys_net_tinyproxy_user"] is True
+    assert proxy_eval["sys_net_tinyproxy_group"] == "tinyproxy"
+    assert "tinyproxy" in proxy_eval["sys_net_package_names"]
 
     guest_init_wanted_by = _nix_eval_json(
         repo_root,
@@ -9493,6 +9638,36 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         )
     )
     assert policy_text == expected_policy
+
+    dom0_proxy_policy_pkg = _run(
+        [
+            "nix",
+            "build",
+            "--impure",
+            "--expr",
+            f"""
+            let
+              packages = (builtins.getFlake "git+file://{repo_root}").nixosConfigurations."vm-gui-config".config.virtualisation.qubes.packages;
+              matches = builtins.filter (package: package.name == "nixome-dom0-sys-net-proxy-policy") packages;
+            in
+              builtins.head matches
+            """,
+            "--no-link",
+            "--print-out-paths",
+        ],
+        cwd=repo_root,
+    ).stdout.strip()
+    dom0_proxy_policy_text = (
+        Path(_physical_store_path(repo_root, dom0_proxy_policy_pkg))
+        / "etc/qubes/policy.d/35-nixome-dom0-sys-net-proxy.policy"
+    ).read_text(encoding="utf-8")
+    assert dom0_proxy_policy_text == "\n".join(
+        (
+            "# Managed by Nixome. Let dev-mode dom0 reach the updates proxy through sys-net.",
+            "qubes.UpdatesProxy * dom0 sys-net allow",
+            "",
+        )
+    )
 
     staging_init_pkg = _run(
         [

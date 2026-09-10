@@ -56,7 +56,35 @@ let
     pkgs.networkmanager
     pkgs.nftables
     pkgs.procps
+    pkgs.tinyproxy
   ];
+
+  updatesProxyRpcService = pkgs.runCommand "nixome-qubes-updates-proxy-rpc-service" { } ''
+    ln -s /dev/tcp/127.0.0.1/8082 "$out"
+  '';
+
+  tinyproxyUpdatesConfig = pkgs.writeText "tinyproxy-updates.conf" ''
+    User tinyproxy
+    Group tinyproxy
+    Port 8082
+    Timeout 60
+    DefaultErrorFile "${pkgs.tinyproxy}/share/tinyproxy/default.html"
+    StatFile "${pkgs.tinyproxy}/share/tinyproxy/stats.html"
+    Syslog On
+    LogLevel Notice
+    PidFile "/run/tinyproxy-updates/tinyproxy.pid"
+
+    MaxClients 50
+    DisableViaHeader Yes
+
+    Allow 127.0.0.1
+    Allow 10.137.0.0/16
+
+    ConnectPort 443
+    ConnectPort 873
+
+    Filter "${qubesAgentLinux}/etc/tinyproxy/updates-blacklist"
+  '';
 
   qubesIptablesStart = pkgs.writeShellScript "nixome-qubes-iptables-start" ''
     set -eu
@@ -137,6 +165,7 @@ let
       pkgs.networkmanager
       pkgs.nftables
       pkgs.procps
+      pkgs.tinyproxy
     ];
     config-vault = [
       configVaultInit
@@ -2615,10 +2644,15 @@ in
     users.mutableUsers = lib.mkDefault false;
     users.allowNoPasswordLogin = lib.mkDefault true;
     users.groups.qubes = { };
+    users.groups.tinyproxy = lib.mkIf hasSysNetRole { };
     users.users.${cfg.user} = {
       isNormalUser = true;
       group = "users";
       extraGroups = [ "qubes" ];
+    };
+    users.users.tinyproxy = lib.mkIf hasSysNetRole {
+      isSystemUser = true;
+      group = "tinyproxy";
     };
 
     security.pam.services.qrexec = {
@@ -3092,6 +3126,19 @@ in
       };
     };
 
+    systemd.services.qubes-updates-proxy = lib.mkIf hasSysNetRole {
+      description = "Qubes updates proxy";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "qubes-iptables.service" ];
+      unitConfig.ConditionPathExists = "|/run/qubes-service/qubes-updates-proxy";
+      serviceConfig = {
+        ExecStart = "${pkgs.tinyproxy}/bin/tinyproxy -d -c ${tinyproxyUpdatesConfig}";
+        Restart = "on-failure";
+        RestartSec = "5s";
+        RuntimeDirectory = "tinyproxy-updates";
+      };
+    };
+
     systemd.services.qubes-network-uplink = lib.mkIf hasSysNetRole {
       description = "Qubes network uplink wait";
       wantedBy = [ "multi-user.target" ];
@@ -3175,6 +3222,19 @@ in
 
     environment.etc."qubes/qubes-ipv6-disabled.nft" = lib.mkIf hasSysNetRole {
       source = "${qubesAgentLinux}/etc/qubes/qubes-ipv6-disabled.nft";
+      mode = "0444";
+    };
+
+    environment.etc."qubes-rpc/qubes.UpdatesProxy" = lib.mkIf hasSysNetRole {
+      source = updatesProxyRpcService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes/rpc-config/qubes.UpdatesProxy" = lib.mkIf hasSysNetRole {
+      text = ''
+        skip-service-descriptor=true
+        exit-on-service-eof=true
+      '';
       mode = "0444";
     };
 

@@ -11,10 +11,11 @@ the system is running.
 Nixome VM image outputs are split into explicit development and release flavors.
 Development mode is a build-time image profile flag, not a runtime switch.
 
-Development images enable dom0 conveniences for nested work: direct dom0 DHCP,
-the `/etc/nixome/dev-mode` marker, extra dom0 tools, and test/observation
-commands. Release images leave those dom0 conveniences disabled. The sys-net
-topology is the same in both modes.
+Development images enable dom0 conveniences for nested work: the
+`/etc/nixome/dev-mode` marker, extra dom0 tools, test/observation commands,
+and a loopback HTTP(S) proxy that forwards through sys-net. Release images
+leave those dom0 conveniences disabled. The sys-net topology is the same in
+both modes.
 
 Build with Make:
 

@@ -1,7 +1,6 @@
 { ... }:
 {
-  # Development-only image flavor: installs temporary dom0 tools and leaves
-  # direct dom0 DHCP available in the throwaway nested VM. sys-net remains
-  # configured the same way as non-dev images.
+  # Development-only image flavor: installs temporary dom0 tools and routes
+  # dom0 HTTP(S) traffic through sys-net's Qubes updates proxy.
   nixome.image.devMode.enable = true;
 }

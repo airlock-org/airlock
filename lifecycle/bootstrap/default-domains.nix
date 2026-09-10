@@ -103,6 +103,7 @@ let
       "network-manager" = true;
       "qubes-firewall" = true;
       "qubes-network" = true;
+      "qubes-updates-proxy" = true;
     };
     devices.pci = [ ];
   };
