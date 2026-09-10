@@ -6313,3 +6313,338 @@ def check_config_system_apply_boot(repo_root: Path, log_dir: Path) -> None:
     )
     assert os.readlink(host_system_profile) == str(expected_host_system_source)
     assert not host_current_system_link.exists()
+
+
+def check_setup_config_nix_native_running_storage(
+    repo_root: Path, log_dir: Path
+) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    topology_path = work_dir / "topology.json"
+    capabilities = work_dir / "xen-capabilities"
+    setup_log_dir = work_dir / "logs"
+    policy_dir = work_dir / "policy.d"
+    policy_file = policy_dir / "90-nixome.policy"
+    state_dir = work_dir / "state"
+    mutation_log = work_dir / "mutations.log"
+    old_system_source = work_dir / "old/system-source"
+    old_root_source = work_dir / "old/root-source"
+    old_store_source = work_dir / "old/store-source"
+    new_system_source = work_dir / "new/system-source"
+    new_root_source = work_dir / "new/root-source"
+    new_store_source = work_dir / "new/store-source"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (
+        bin_dir,
+        setup_log_dir,
+        policy_dir,
+        state_dir,
+        old_system_source,
+        old_root_source,
+        old_store_source,
+        new_system_source,
+        new_root_source,
+        new_store_source,
+    ):
+        path.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+    for source in (old_system_source, new_system_source):
+        _write_executable(
+            source / "init",
+            """
+            #!/bin/sh
+            exec /init
+            """,
+        )
+    (old_root_source / "root.img").write_text("old-root\n", encoding="utf-8")
+    (new_root_source / "root.img").write_text("new-root\n", encoding="utf-8")
+    (old_store_source / "store-paths").write_text(
+        str(old_system_source) + "\n", encoding="utf-8"
+    )
+    (new_store_source / "store-paths").write_text(
+        str(new_system_source) + "\n", encoding="utf-8"
+    )
+    for store_source, name in (
+        (old_store_source, "old-store"),
+        (new_store_source, "new-store"),
+    ):
+        (store_source / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema": "nixome.store-closure-manifest.v1",
+                    "name": name,
+                    "read_only": True,
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    mutation_log.touch()
+    policy_file.write_text(
+        "\n".join(
+            (
+                "# Managed by Nixome setup-config.",
+                "# Source: nixome.qubes.topology.qrexec_policy.",
+                "# Bootstrap config transport policy remains in 30-nixome-config.policy.",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    topology_path.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.qubes-topology.v1",
+                "templates": {},
+                "kernels": {},
+                "domains": {
+                    "config-staging": {
+                        "class": "StandaloneVM",
+                        "template": None,
+                        "label": "green",
+                        "netvm": None,
+                        "prefs": {
+                            "autostart": False,
+                            "memory": 1024,
+                            "virt_mode": "pvh",
+                        },
+                        "features": {
+                            "nixome-managed": "1",
+                            "nixome-role": "config-staging",
+                            "qrexec": "1",
+                        },
+                        "services": {},
+                        "backend": {
+                            "type": "nix-closure",
+                            "template": None,
+                            "system": {
+                                "source": str(new_system_source),
+                                "source_ref": None,
+                            },
+                            "kernel": {
+                                "name": "old-kernel",
+                                "source": None,
+                                "source_ref": None,
+                            },
+                            "initrd": {
+                                "name": None,
+                                "source": None,
+                                "source_ref": None,
+                            },
+                            "modules": {
+                                "name": None,
+                                "source": None,
+                                "source_ref": None,
+                            },
+                            "root": {
+                                "mode": "qubes-root-image",
+                                "source": str(new_root_source),
+                                "source_ref": None,
+                                "read_only": False,
+                            },
+                            "store": {
+                                "mode": "shared-closure",
+                                "source": str(new_store_source),
+                                "source_ref": None,
+                                "view_backend": "erofs-objectmap",
+                                "mountpoint": "/nix/store",
+                                "blob_device": "/dev/xvdf",
+                                "chunk_size": 65536,
+                                "device": "/dev/xvde",
+                                "read_only": True,
+                            },
+                            "state": {
+                                "persistent": "config-staging-private",
+                                "volatile": None,
+                            },
+                        },
+                    }
+                },
+                "prefs": {},
+                "qrexec_policy": {"rules": []},
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _setup_fake_command_dir(
+        bin_dir,
+        {
+            "qvm-ls": """
+                #!/usr/bin/env bash
+                case "$*" in
+                  *"--fields NAME,STATE"*)
+                    printf 'config-staging|Running\\n'
+                    ;;
+                  *"--fields NAME,CLASS"*)
+                    printf 'config-staging|StandaloneVM\\n'
+                    ;;
+                  *)
+                    printf 'config-staging\\n'
+                    ;;
+                esac
+            """,
+            "qvm-prefs": f"""
+                #!/usr/bin/env bash
+                if [ "$#" -eq 2 ]; then
+                  case "$1:$2" in
+                    config-staging:label) printf 'green\\n' ;;
+                    config-staging:netvm) printf 'none\\n' ;;
+                    config-staging:autostart) printf 'False\\n' ;;
+                    config-staging:memory) printf '1024\\n' ;;
+                    config-staging:virt_mode) printf 'pvh\\n' ;;
+                    config-staging:kernel) printf 'old-kernel\\n' ;;
+                    config-staging:kernelopts) printf 'console=hvc0 init=/sbin/init nixome.system={old_system_source} nixome.storedev=/dev/xvde nixome.storefmt=erofs nixome.storeblobdev=/dev/xvdf\\n' ;;
+                    *) exit 1 ;;
+                  esac
+                  exit 0
+                fi
+                printf 'qvm-prefs %s\\n' "$*" >> "$MUTATION_LOG"
+            """,
+            "qvm-features": f"""
+                #!/usr/bin/env bash
+                if [ "$#" -eq 2 ]; then
+                  case "$1:$2" in
+                    config-staging:nixome-backend) printf 'nix-closure\\n' ;;
+                    config-staging:nixome-system-source) printf '{old_system_source}\\n' ;;
+                    config-staging:nixome-root-source) printf '{old_root_source}\\n' ;;
+                    config-staging:nixome-store-source) printf '{old_store_source}\\n' ;;
+                    config-staging:nixome-store-mode) printf 'shared-closure\\n' ;;
+                    config-staging:nixome-store-view-backend) printf 'erofs-objectmap\\n' ;;
+                    config-staging:nixome-store-generation) printf '1\\n' ;;
+                    config-staging:nixome-store-closure-hash) printf 'old-closure\\n' ;;
+                    config-staging:nixome-store-view-image) printf '/var/lib/nixome/closure-store/domains/config-staging/generations/1/store.erofs\\n' ;;
+                    config-staging:nixome-store-filesystem) printf 'erofs\\n' ;;
+                    config-staging:nixome-store-blob-map) printf '/var/lib/nixome/closure-store/domains/config-staging/generations/1/store.blob-map.json\\n' ;;
+                    config-staging:nixome-store-blob-volume) printf 'store-data\\n' ;;
+                    config-staging:nixome-store-blob-device) printf '/dev/xvdf\\n' ;;
+                    config-staging:nixome-store-mountpoint) printf '/nix/store\\n' ;;
+                    config-staging:nixome-store-device) printf '/dev/xvde\\n' ;;
+                    config-staging:nixome-store-read-only) printf 'True\\n' ;;
+                    config-staging:nixome-managed) printf '1\\n' ;;
+                    config-staging:nixome-role) printf 'config-staging\\n' ;;
+                    config-staging:qrexec) printf '1\\n' ;;
+                    *) exit 1 ;;
+                  esac
+                  exit 0
+                fi
+                printf 'qvm-features %s\\n' "$*" >> "$MUTATION_LOG"
+            """,
+            "systemctl": """
+                #!/usr/bin/env bash
+                case "$1" in
+                  is-active|reload|try-restart)
+                    exit 0
+                    ;;
+                esac
+                exit 1
+            """,
+            "qvm-create": """
+                #!/usr/bin/env bash
+                printf 'unexpected mutation: %s %s\\n' "$0" "$*" >> "$MUTATION_LOG"
+                exit 97
+            """,
+            "qvm-template-postprocess": """
+                #!/usr/bin/env bash
+                printf 'unexpected mutation: %s %s\\n' "$0" "$*" >> "$MUTATION_LOG"
+                exit 97
+            """,
+            "qvm-volume": """
+                #!/usr/bin/env bash
+                printf 'unexpected mutation: %s %s\\n' "$0" "$*" >> "$MUTATION_LOG"
+                exit 97
+            """,
+            "nixome-nix-domain-storage": """
+                #!/usr/bin/env bash
+                printf 'unexpected mutation: %s %s\\n' "$0" "$*" >> "$MUTATION_LOG"
+                exit 97
+            """,
+            "qvm-service": """
+                #!/usr/bin/env bash
+                if [ "$#" -eq 2 ]; then
+                  exit 1
+                fi
+                printf 'qvm-service %s\\n' "$*" >> "$MUTATION_LOG"
+            """,
+            "qubes-prefs": """
+                #!/usr/bin/env bash
+                if [ "$#" -eq 1 ]; then
+                  exit 1
+                fi
+                printf 'qubes-prefs %s\\n' "$*" >> "$MUTATION_LOG"
+            """,
+            "qubesd-query": """
+                #!/usr/bin/env bash
+                exit 0
+            """,
+        },
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "MUTATION_LOG": str(mutation_log),
+            "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
+            "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
+            "NIXOME_XEN_CAPABILITIES": str(capabilities),
+            "NIXOME_LOG_DIR": str(setup_log_dir),
+        }
+    )
+    _run(
+        [
+            "bash",
+            str(repo_root / "scripts/setup-config.sh"),
+            "--apply",
+            "--topology",
+            str(topology_path),
+        ],
+        cwd=repo_root,
+        env=env,
+        stdout=setup_log_dir / "stdout.log",
+        stderr=setup_log_dir / "stderr.log",
+    )
+    setup = json.loads((setup_log_dir / "setup-config.json").read_text())
+    assert setup["schema"] == "nixome.setup-config.v1"
+    assert setup["status"] == "passed"
+    assert setup["mode"] == "apply"
+    assert setup["domains_changed"] == 0
+    assert setup["root_images_changed"] == 0
+    assert setup["store_volumes_changed"] == 0
+    assert setup["store_views_changed"] == 0
+    assert setup["restart_required"] is True
+    assert setup["live_actions"] == []
+    assert len(setup["restart_actions"]) == 3
+    restart_reason = (
+        "domain is running; stop it and re-run setup-config for this storage change "
+        "to take effect"
+    )
+    for expected_type, expected_value in (
+        ("domain-root", str(new_root_source)),
+        ("domain-store", str(new_store_source)),
+        ("domain-system", str(new_system_source)),
+    ):
+        assert any(
+            action["type"] == expected_type
+            and action["action"] == "restart"
+            and action["domain"] == "config-staging"
+            and action["field"] == "source"
+            and action["value"] == expected_value
+            and action["state"] == "Running"
+            and action["reason"] == restart_reason
+            for action in setup["restart_actions"]
+        )
+
+    current_setup = json.loads((state_dir / "current-setup.json").read_text())
+    assert current_setup["schema"] == "nixome.setup-config.v1"
+    assert current_setup["status"] == "passed"
+    assert current_setup["restart_required"] is True
+    assert len(current_setup["restart_actions"]) == 3
+    assert mutation_log.read_text(encoding="utf-8") == ""
+    commands_log = (setup_log_dir / "setup-config.commands.log").read_text(
+        encoding="utf-8"
+    )
+    assert "+ qvm-volume import config-staging:root" not in commands_log
+    assert "+ nixome-nix-domain-storage ensure-store config-staging" not in commands_log
+    assert "+ qvm-prefs config-staging kernelopts" not in commands_log

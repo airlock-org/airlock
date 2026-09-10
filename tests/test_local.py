@@ -33,6 +33,7 @@ from local_pychecks import (
     check_setup_config_empty_global_pref,
     check_setup_config_external_netvm,
     check_setup_config_idempotent,
+    check_setup_config_nix_native_running_storage,
     check_setup_config_pref_order,
     check_setup_config_qrexec_policy,
     check_setup_config_restart_actions,
@@ -265,8 +266,8 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "setup-config-nix-native-running-storage",
-        ("{root}/tests/setup-config-nix-native-running-storage.sh",),
-        (pytest.mark.nix,),
+        runner=check_setup_config_nix_native_running_storage,
+        marks=(pytest.mark.nix,),
     ),
     LocalCheck(
         "setup-config-qrexec-policy",
