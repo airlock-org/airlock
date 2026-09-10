@@ -59,8 +59,9 @@ let
     pkgs.tinyproxy
   ];
 
-  updatesProxyRpcService = pkgs.runCommand "nixome-qubes-updates-proxy-rpc-service" { } ''
-    ln -s /dev/tcp/127.0.0.1/8082 "$out"
+  updatesProxyRpcService = pkgs.writeShellScript "nixome-qubes-updates-proxy-rpc-service" ''
+    set -euo pipefail
+    exec ${pkgs.socat}/bin/socat STDIO TCP:127.0.0.1:8082
   '';
 
   tinyproxyUpdatesConfig = pkgs.writeText "tinyproxy-updates.conf" ''

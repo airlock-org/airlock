@@ -9232,9 +9232,37 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         "nixome-qubes-updates-proxy-rpc-service"
         in proxy_eval["sys_net_rpc_service_source"]
     )
+    rpc_service = _run(
+        [
+            "nix",
+            "build",
+            "--no-link",
+            "--print-out-paths",
+            f'{repo_root}#nixosConfigurations.nixome-domain-sys-net.config.environment.etc."qubes-rpc/qubes.UpdatesProxy".source',
+        ],
+        cwd=repo_root,
+    ).stdout.strip()
+    rpc_service_path = Path(_physical_store_path(repo_root, rpc_service))
+    assert rpc_service_path.is_file()
+    assert not rpc_service_path.is_symlink()
+    rpc_service_text = rpc_service_path.read_text(encoding="utf-8")
+    assert "socat STDIO TCP:127.0.0.1:8082" in rpc_service_text
     assert proxy_eval["sys_net_tinyproxy_user"] is True
     assert proxy_eval["sys_net_tinyproxy_group"] == "tinyproxy"
     assert "tinyproxy" in proxy_eval["sys_net_package_names"]
+    _run(
+        [
+            "nix",
+            "build",
+            "--no-link",
+            "--print-build-logs",
+            "--show-trace",
+            f"{repo_root}#nixosConfigurations.nixome-domain-sys-net.config.system.build.etcBasedir",
+        ],
+        cwd=repo_root,
+        stdout=log_dir / "sys-net-etc-lowerdir-build.log",
+        stderr=log_dir / "sys-net-etc-lowerdir-build.log",
+    )
 
     guest_init_wanted_by = _nix_eval_json(
         repo_root,
