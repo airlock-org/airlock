@@ -11,6 +11,7 @@ from local_pychecks import (
     check_config_candidate_nix_native,
     check_config_control,
     check_config_apply_domain_references,
+    check_config_apply_nix_domain_materialization,
     check_config_apply_template_build_ref,
     check_config_archive_domain_references,
     check_config_staging_validate,
@@ -241,7 +242,7 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "config-apply-nix-domain-materialization",
-        ("{root}/tests/config-apply-nix-domain-materialization.sh",),
+        runner=check_config_apply_nix_domain_materialization,
     ),
     LocalCheck("config-system-apply", ("{root}/tests/config-system-apply.sh",)),
     LocalCheck(

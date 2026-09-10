@@ -5118,3 +5118,423 @@ def check_config_apply_domain_references(repo_root: Path, log_dir: Path) -> None
         _assert_domain_reference_result(
             payload, "nixome.config-apply.v1", status, reason
         )
+
+
+def check_config_apply_nix_domain_materialization(
+    repo_root: Path, log_dir: Path
+) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    candidate_dir = work_dir / "candidate"
+    apply_log_dir = work_dir / "logs"
+    capabilities = work_dir / "xen-capabilities"
+    state_dir = work_dir / "state"
+    etc_dir = work_dir / "etc"
+    validated_tar = work_dir / "config-candidate-validated.tar"
+    deployment_tar_capture = work_dir / "deployment.tar"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (
+        bin_dir,
+        candidate_dir / "system-source",
+        candidate_dir / "root-source",
+        candidate_dir / "store-source",
+        apply_log_dir,
+        state_dir,
+        etc_dir,
+    ):
+        path.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+
+    _write_flake(
+        candidate_dir / "flake.nix",
+        """
+        {
+          description = "Nixome Nix-native domain materialization fixture";
+          outputs = { self }: { };
+        }
+        """,
+    )
+    system_source = candidate_dir / "system-source"
+    root_source = candidate_dir / "root-source"
+    store_source = candidate_dir / "store-source"
+    _write_executable(
+        system_source / "init",
+        """
+        #!/bin/sh
+        exec /init
+        """,
+    )
+    (root_source / "root.img").touch()
+    (store_source / "store-paths").write_text(
+        str(system_source) + "\n", encoding="utf-8"
+    )
+    (store_source / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.store-closure-manifest.v1",
+                "name": "fixture-store",
+                "store_paths_file": "store-paths",
+                "read_only": True,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    commit = _git_commit_all(
+        candidate_dir,
+        "fixture candidate",
+        name="Nixome Test",
+        email="nixome-test@localhost",
+    )
+    _run(
+        [
+            "git",
+            "bundle",
+            "create",
+            str(work_dir / "config.bundle"),
+            "HEAD",
+            "refs/heads/main",
+        ],
+        cwd=candidate_dir,
+    )
+    topology = {
+        "schema": "nixome.qubes-topology.v1",
+        "templates": {},
+        "kernels": {},
+        "domains": {
+            "nix-native-work": {
+                "class": "StandaloneVM",
+                "template": None,
+                "label": "green",
+                "netvm": None,
+                "prefs": {
+                    "autostart": False,
+                    "include_in_backups": True,
+                    "kernelopts": "console=hvc0 init=/sbin/init",
+                    "memory": 1536,
+                    "virt_mode": "pvh",
+                },
+                "features": {
+                    "nixome-managed": "1",
+                    "nixome-role": "nix-native-work",
+                    "qrexec": "1",
+                },
+                "services": {},
+                "backend": {
+                    "type": "nix-closure",
+                    "template": None,
+                    "system": {"source": "system-source", "source_ref": None},
+                    "kernel": {
+                        "name": "6.12.64-1.fc41",
+                        "source": None,
+                        "source_ref": None,
+                    },
+                    "initrd": {"name": None, "source": None, "source_ref": None},
+                    "modules": {"name": None, "source": None, "source_ref": None},
+                    "root": {
+                        "mode": "qubes-root-image",
+                        "source": "root-source",
+                        "source_ref": None,
+                        "read_only": False,
+                    },
+                    "store": {
+                        "mode": "shared-closure",
+                        "source": "store-source",
+                        "source_ref": None,
+                        "mountpoint": "/nix/store",
+                        "device": "/dev/xvde",
+                        "blob_device": "/dev/xvdf",
+                        "view_backend": "erofs-objectmap",
+                        "read_only": True,
+                    },
+                    "state": {
+                        "persistent": "nix-native-work-private",
+                        "volatile": None,
+                    },
+                },
+            }
+        },
+        "prefs": {},
+        "qrexec_policy": {"rules": []},
+    }
+    (work_dir / "topology.json").write_text(
+        json.dumps(topology, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    (work_dir / "system.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.system.v1",
+                "dom0": {
+                    "profile": {
+                        "source": None,
+                        "source_ref": None,
+                        "activation_command": "bin/nixome-dom0-profile-activate",
+                        "activation_action": "none",
+                        "message": "",
+                    },
+                    "packages": [],
+                    "systemd": {"services": {}},
+                    "nixos": {
+                        name: {
+                            "enable": False,
+                            "reason": "",
+                            "source": None,
+                            "source_ref": None,
+                            **({"switch_action": "switch"} if name == "system" else {}),
+                        }
+                        for name in ("system", "kernel", "xen", "bootloader", "qubes")
+                    },
+                },
+                "plan": {
+                    "live_actions": [],
+                    "reboot_actions": [],
+                    "reboot_required": False,
+                    "reboot_reasons": [],
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (work_dir / "validation.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.config-validation.v1",
+                "status": "passed",
+                "commit": commit,
+                "checks": [],
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (work_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.config-candidate.v1",
+                "commit": commit,
+                "branch": "main",
+                "source_role": "config-staging",
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with tarfile.open(validated_tar, "w") as tar:
+        for member in (
+            "config.bundle",
+            "validation.json",
+            "manifest.json",
+            "topology.json",
+            "system.json",
+        ):
+            tar.add(work_dir / member, arcname=member)
+
+    _setup_fake_command_dir(
+        bin_dir,
+        {
+            "nixome-config-archive-candidate": f"""
+                #!/usr/bin/env bash
+                set -euo pipefail
+                cp {validated_tar} "$NIXOME_LOG_DIR/config-candidate-validated.tar"
+                jq -c -n \\
+                  --arg schema "nixome.config-archive.v1" \\
+                  --arg status "passed" \\
+                  --arg candidate_commit "{commit}" \\
+                  '{{
+                    schema: $schema,
+                    status: $status,
+                    candidate_commit: $candidate_commit,
+                    validation_commit: $candidate_commit,
+                    validation: {{
+                      schema: "nixome.config-validation.v1",
+                      status: "passed",
+                      commit: $candidate_commit
+                    }},
+                    vault_archive: {{
+                      schema: "nixome.config-vault-archive.v1",
+                      status: "passed",
+                      candidate_commit: $candidate_commit
+                    }}
+                  }}' > "$NIXOME_LOG_DIR/config-archive.json"
+                printf 'archive fixture ok\\n'
+            """,
+            "nixome-setup-config": """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                topology=""
+                while [ "$#" -gt 0 ]; do
+                  case "$1" in
+                    --topology)
+                      shift
+                      topology="$1"
+                      ;;
+                  esac
+                  shift
+                done
+                [ -n "$topology" ]
+                jq -e \
+                  --arg state "$SYSTEM_STATE_DIR_FIXTURE" \
+                  --arg commit "$CANDIDATE_COMMIT_FIXTURE" \
+                  '
+                    .domains."nix-native-work".backend.type == "nix-closure" and
+                    .domains."nix-native-work".backend.system.source_ref == null and
+                    .domains."nix-native-work".backend.root.source_ref == null and
+                    .domains."nix-native-work".backend.store.source_ref == null and
+                    (.domains."nix-native-work".backend.system.source | startswith($state + "/sources/" + $commit + "/nix-domain-nix-native-work-system")) and
+                    (.domains."nix-native-work".backend.root.source | startswith($state + "/sources/" + $commit + "/nix-domain-nix-native-work-root")) and
+                    (.domains."nix-native-work".backend.store.source | startswith($state + "/sources/" + $commit + "/nix-domain-nix-native-work-store"))
+                  ' "$topology" >/dev/null
+                jq -c -n \
+                  --arg schema "nixome.setup-config.v1" \
+                  '{
+                    schema: $schema,
+                    status: "passed",
+                    mode: "apply",
+                    reason: "fixture setup passed",
+                    templates_changed: 0,
+                    kernels_changed: 0,
+                    domains_changed: 1,
+                    prefs_changed: 0,
+                    features_changed: 0,
+                    services_changed: 0,
+                    qrexec_policy_changed: 0,
+                    root_images_changed: 1,
+                    live_actions: [],
+                    restart_actions: [],
+                    unsupported_domains: [],
+                    unsupported_domains_count: 0,
+                    restart_required: false
+                  }' > "$NIXOME_LOG_DIR/setup-config.json"
+                cat "$NIXOME_LOG_DIR/setup-config.json"
+            """,
+            "qrexec-client": """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                cat > "$DEPLOYMENT_TAR_CAPTURE_FIXTURE"
+                jq -c -n \
+                  --arg schema "nixome.config-vault-deployment.v1" \
+                  --arg status "passed" \
+                  --arg candidate_commit "$CANDIDATE_COMMIT_FIXTURE" \
+                  '{
+                    schema: $schema,
+                    status: $status,
+                    deployment_status: "passed",
+                    candidate_commit: $candidate_commit,
+                    vault_commit: "fixture-vault"
+                  }'
+            """,
+            "systemctl": """
+                #!/usr/bin/env bash
+                if [ "$1" = "is-active" ]; then
+                  exit 0
+                fi
+                exit 1
+            """,
+        },
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "CANDIDATE_COMMIT_FIXTURE": commit,
+            "DEPLOYMENT_TAR_CAPTURE_FIXTURE": str(deployment_tar_capture),
+            "SYSTEM_STATE_DIR_FIXTURE": str(state_dir),
+            "NIXOME_XEN_CAPABILITIES": str(capabilities),
+            "NIXOME_LOG_DIR": str(apply_log_dir),
+            "NIXOME_USE_HOST_NIX_STORE": "1",
+            "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
+            "NIXOME_SYSTEM_ETC_DIR": str(etc_dir),
+        }
+    )
+    _run(
+        ["bash", str(repo_root / "scripts/apply-config-candidate.sh"), "--apply"],
+        cwd=repo_root,
+        env=env,
+        stdout=work_dir / "stdout.log",
+        stderr=work_dir / "stderr.log",
+    )
+
+    apply_payload = json.loads((apply_log_dir / "config-apply.json").read_text())
+    assert apply_payload["schema"] == "nixome.config-apply.v1"
+    assert apply_payload["status"] == "passed"
+    assert apply_payload["candidate_commit"] == commit
+    assert apply_payload["reason"] == "validated config candidate applied"
+    assert apply_payload["setup"]["status"] == "passed"
+    assert apply_payload["system_apply_result"]["status"] == "passed"
+    assert apply_payload["nix_domain_builds_result"]["schema"] == (
+        "nixome.nix-domain-builds.v1"
+    )
+    materializations = apply_payload["nix_domain_materializations_result"]
+    assert materializations["schema"] == "nixome.nix-domain-materializations.v1"
+    assert materializations["domains"][0]["domain"] == "nix-native-work"
+    assert materializations["domains"][0]["root"]["source"].startswith(
+        f"{state_dir}/sources/{commit}/nix-domain-nix-native-work-root"
+    )
+    assert apply_payload["unsupported_domain_backends_result"]["schema"] == (
+        "nixome.unsupported-domain-backends.v1"
+    )
+    assert apply_payload["unsupported_domain_backends_result"]["domains"] == []
+    assert apply_payload["deployment"]["status"] == "passed"
+    assert (
+        apply_payload["deployment"]["nix_domain_materializations"]["domains"][0][
+            "domain"
+        ]
+        == "nix-native-work"
+    )
+    assert apply_payload["deployment_archive"]["status"] == "passed"
+
+    current_deployment = json.loads((state_dir / "current-deployment.json").read_text())
+    assert current_deployment["schema"] == "nixome.config-deployment.v1"
+    assert current_deployment["status"] == "passed"
+    assert current_deployment["candidate_commit"] == commit
+    assert (
+        current_deployment["nix_domain_builds"]["schema"]
+        == "nixome.nix-domain-builds.v1"
+    )
+    assert current_deployment["nix_domain_materializations"]["schema"] == (
+        "nixome.nix-domain-materializations.v1"
+    )
+
+    with tarfile.open(deployment_tar_capture) as tar:
+        members = sorted(tar.getnames())
+        assert "nix-domain-builds.json" in members
+        assert "nix-domain-materializations.json" in members
+        assert "unsupported-domain-backends.json" in members
+        assert "logs/nix-domain-builds.log" in members
+        nix_domain_builds = json.load(tar.extractfile("nix-domain-builds.json"))
+        extracted_materializations = json.load(
+            tar.extractfile("nix-domain-materializations.json")
+        )
+        unsupported = json.load(tar.extractfile("unsupported-domain-backends.json"))
+        deployment = json.load(tar.extractfile("deployment.json"))
+
+    assert nix_domain_builds["schema"] == "nixome.nix-domain-builds.v1"
+    assert (
+        extracted_materializations["schema"] == "nixome.nix-domain-materializations.v1"
+    )
+    assert extracted_materializations["domains"][0]["domain"] == "nix-native-work"
+    assert extracted_materializations["domains"][0]["root"]["mode"] == (
+        "qubes-root-image"
+    )
+    assert extracted_materializations["domains"][0]["store"]["mode"] == (
+        "shared-closure"
+    )
+    assert extracted_materializations["domains"][0]["store"]["view_backend"] == (
+        "erofs-objectmap"
+    )
+    assert unsupported["schema"] == "nixome.unsupported-domain-backends.v1"
+    assert unsupported["domains"] == []
+    assert deployment["artifacts"]["nix_domain_builds"] == "nix-domain-builds.json"
+    assert (
+        deployment["artifacts"]["nix_domain_materializations"]
+        == "nix-domain-materializations.json"
+    )
+    assert (
+        deployment["artifacts"]["unsupported_domain_backends"]
+        == "unsupported-domain-backends.json"
+    )
