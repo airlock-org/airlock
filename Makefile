@@ -28,10 +28,10 @@ NIXOME_NIX ?= ./lifecycle/misc/tools/scripts/nixome-nix.sh
 VM_IMAGE_MODE ?= dev
 ifeq ($(VM_IMAGE_MODE),dev)
 VM_IMAGE_MODE_SUFFIX := dev
-else ifeq ($(VM_IMAGE_MODE),normal)
-VM_IMAGE_MODE_SUFFIX := normal
+else ifeq ($(VM_IMAGE_MODE),release)
+VM_IMAGE_MODE_SUFFIX := release
 else
-$(error VM_IMAGE_MODE must be dev or normal)
+$(error VM_IMAGE_MODE must be dev or release)
 endif
 VM_IMAGE_ATTR ?= nixome-vm-$(VM_IMAGE_MODE_SUFFIX)-image
 VM_GUI_IMAGE_ATTR ?= nixome-vm-gui-$(VM_IMAGE_MODE_SUFFIX)-image

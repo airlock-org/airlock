@@ -8,26 +8,26 @@ the system is running.
 
 ## Image Mode
 
-Nixome VM image outputs are split into explicit development and normal flavors.
+Nixome VM image outputs are split into explicit development and release flavors.
 Development mode is a build-time image profile flag, not a runtime switch.
 
 Development images enable dom0 conveniences for nested work: direct dom0 DHCP,
 the `/etc/nixome/dev-mode` marker, extra dom0 tools, and test/observation
-commands. Normal images leave those dom0 conveniences disabled. The sys-net
+commands. Release images leave those dom0 conveniences disabled. The sys-net
 topology is the same in both modes.
 
 Build with Make:
 
 ```bash
 make vm-gui-config-image
-make vm-gui-config-image VM_IMAGE_MODE=normal
+make vm-gui-config-image VM_IMAGE_MODE=release
 ```
 
 Build explicit flake outputs:
 
 ```bash
 nix build .#nixome-vm-gui-config-dev-image
-nix build .#nixome-vm-gui-config-normal-image
+nix build .#nixome-vm-gui-config-release-image
 ```
 
 The historic unsuffixed image outputs remain development-mode aliases for now.

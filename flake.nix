@@ -379,19 +379,15 @@
             ];
           };
           nixome-vm-dev-image = self.nixosConfigurations."vm-dev".config.system.build.image;
-          nixome-vm-normal-image = self.nixosConfigurations."vm-normal".config.system.build.image;
-          nixome-vm-nodev-image = self.nixosConfigurations."vm-normal".config.system.build.image;
+          nixome-vm-release-image = self.nixosConfigurations."vm-release".config.system.build.image;
           nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
           nixome-vm-gui-dev-image = self.nixosConfigurations."vm-gui-dev".config.system.build.image;
-          nixome-vm-gui-normal-image = self.nixosConfigurations."vm-gui-normal".config.system.build.image;
-          nixome-vm-gui-nodev-image = self.nixosConfigurations."vm-gui-normal".config.system.build.image;
+          nixome-vm-gui-release-image = self.nixosConfigurations."vm-gui-release".config.system.build.image;
           nixome-vm-gui-image = self.nixosConfigurations.vm-gui.config.system.build.image;
           nixome-vm-gui-config-dev-image =
             self.nixosConfigurations."vm-gui-config-dev".config.system.build.image;
-          nixome-vm-gui-config-normal-image =
-            self.nixosConfigurations."vm-gui-config-normal".config.system.build.image;
-          nixome-vm-gui-config-nodev-image =
-            self.nixosConfigurations."vm-gui-config-normal".config.system.build.image;
+          nixome-vm-gui-config-release-image =
+            self.nixosConfigurations."vm-gui-config-release".config.system.build.image;
           nixome-vm-gui-config-image = self.nixosConfigurations.vm-gui-config.config.system.build.image;
           ovmf-fd = pkgs.OVMF.fd;
           qemu-kvm = pkgs.qemu_kvm;
@@ -447,19 +443,17 @@
       };
 
       nixosConfigurations."vm-dev" = mkVmConfiguration { devMode = true; };
-      nixosConfigurations."vm-normal" = mkVmConfiguration { devMode = false; };
-      nixosConfigurations."vm-nodev" = self.nixosConfigurations."vm-normal";
+      nixosConfigurations."vm-release" = mkVmConfiguration { devMode = false; };
       nixosConfigurations.vm = self.nixosConfigurations."vm-dev";
 
       nixosConfigurations."vm-gui-dev" = mkVmConfiguration {
         gui = true;
         devMode = true;
       };
-      nixosConfigurations."vm-gui-normal" = mkVmConfiguration {
+      nixosConfigurations."vm-gui-release" = mkVmConfiguration {
         gui = true;
         devMode = false;
       };
-      nixosConfigurations."vm-gui-nodev" = self.nixosConfigurations."vm-gui-normal";
       nixosConfigurations.vm-gui = self.nixosConfigurations."vm-gui-dev";
 
       nixosConfigurations."vm-gui-config-dev" = mkVmConfiguration {
@@ -467,12 +461,11 @@
         configSystem = true;
         devMode = true;
       };
-      nixosConfigurations."vm-gui-config-normal" = mkVmConfiguration {
+      nixosConfigurations."vm-gui-config-release" = mkVmConfiguration {
         gui = true;
         configSystem = true;
         devMode = false;
       };
-      nixosConfigurations."vm-gui-config-nodev" = self.nixosConfigurations."vm-gui-config-normal";
       nixosConfigurations.vm-gui-config = self.nixosConfigurations."vm-gui-config-dev";
 
       nixosConfigurations.nixome-domain-config-vault =
