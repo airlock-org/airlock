@@ -9,6 +9,7 @@ import pytest
 
 from local_pychecks import (
     check_config_candidate_nix_native,
+    check_config_apply_template_build_ref,
     check_config_staging_validate,
     check_config_vault_deployment_archive,
     check_dev_role,
@@ -223,7 +224,7 @@ LOCAL_CHECKS = (
     LocalCheck("config-status", ("{root}/tests/config-status.sh",)),
     LocalCheck(
         "config-apply-template-build-ref",
-        ("{root}/tests/config-apply-template-build-ref.sh",),
+        runner=check_config_apply_template_build_ref,
     ),
     LocalCheck(
         "config-apply-domain-references",

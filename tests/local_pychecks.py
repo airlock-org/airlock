@@ -3750,3 +3750,358 @@ def check_setup_config_restart_actions(repo_root: Path, log_dir: Path) -> None:
     mutation_lines = mutation_log.read_text(encoding="utf-8").splitlines()
     assert "qvm-prefs legacy-fedora-app memory 1024" in mutation_lines
     assert "qvm-service legacy-fedora-app network-manager off" in mutation_lines
+
+
+def check_config_apply_template_build_ref(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    candidate_dir = work_dir / "candidate"
+    apply_log_dir = work_dir / "logs"
+    capabilities = work_dir / "xen-capabilities"
+    validated_tar = work_dir / "config-candidate-validated.tar"
+    setup_capture = work_dir / "setup-topology.json"
+    state_dir = work_dir / "state"
+    etc_dir = work_dir / "etc"
+    system_profile = work_dir / "nixome-system-profile"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (bin_dir, candidate_dir, apply_log_dir):
+        path.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+    nixpkgs_path = _run(
+        ["nix", "eval", "--raw", f"{repo_root}#nixome.seedInputs.nixpkgs"]
+    ).stdout.strip()
+
+    _write_flake(
+        candidate_dir / "flake.nix",
+        f"""
+        {{
+          description = "Nixome config apply template build-ref fixture";
+
+          inputs.nixpkgs.url = "path:{nixpkgs_path}";
+
+          outputs =
+            {{ self, nixpkgs }}:
+            let
+              system = "x86_64-linux";
+              pkgs = nixpkgs.legacyPackages.${{system}};
+            in
+            {{
+              packages.${{system}}.test-template =
+                pkgs.runCommand "test-template"
+                  {{
+                    preferLocalBuild = true;
+                    allowSubstitutes = false;
+                  }}
+                  ''
+                    mkdir -p "$out/test-template"
+                    printf 'root image fixture\n' > "$out/test-template/root.img"
+                    printf 'qrexec=1\nvirt-mode=pvh\n' > "$out/test-template/template.conf"
+                  '';
+
+              nixome.topology = {{
+                schema = "nixome.qubes-topology.v1";
+                templates.test-template = {{
+                  import = true;
+                  source = null;
+                  source_ref = {{
+                    type = "flake-output";
+                    attr = "packages.x86_64-linux.test-template";
+                    subpath = "test-template";
+                  }};
+                  skip_start = true;
+                }};
+                kernels = {{ }};
+                domains = {{ }};
+                prefs = {{ }};
+                qrexec_policy.rules = [ ];
+              }};
+
+              nixome.system = {{
+                schema = "nixome.system.v1";
+                dom0 = {{
+                  profile = {{
+                    source = null;
+                    source_ref = null;
+                    activation_command = "bin/nixome-dom0-profile-activate";
+                    activation_action = "none";
+                    message = "";
+                  }};
+                  packages = [ ];
+                  systemd.services = {{ }};
+                  nixos = {{
+                    system = {{
+                      enable = false;
+                      reason = "dom0 system change requires reboot";
+                      source = null;
+                      source_ref = null;
+                    }};
+                    kernel = {{
+                      enable = false;
+                      reason = "dom0 kernel change requires reboot";
+                      source = null;
+                      source_ref = null;
+                    }};
+                    xen = {{
+                      enable = false;
+                      reason = "dom0 xen change requires reboot";
+                      source = null;
+                      source_ref = null;
+                    }};
+                    bootloader = {{
+                      enable = false;
+                      reason = "dom0 bootloader change requires reboot";
+                      source = null;
+                      source_ref = null;
+                    }};
+                    qubes = {{
+                      enable = false;
+                      reason = "dom0 qubes change requires reboot";
+                      source = null;
+                      source_ref = null;
+                    }};
+                  }};
+                }};
+                plan = {{
+                  live_actions = [ ];
+                  reboot_actions = [ ];
+                  reboot_required = false;
+                  reboot_reasons = [ ];
+                }};
+              }};
+            }};
+        }}
+        """,
+    )
+    nix_flags = [
+        "nix",
+        "--extra-experimental-features",
+        "nix-command",
+        "--extra-experimental-features",
+        "flakes",
+    ]
+    _run([*nix_flags, "flake", "lock", "--impure", "--offline"], cwd=candidate_dir)
+    _git_commit_all(
+        candidate_dir,
+        "fixture candidate",
+        name="Nixome Test",
+        email="nixome-test@localhost",
+    )
+    candidate_commit = _run(
+        ["git", "rev-parse", "HEAD"], cwd=candidate_dir
+    ).stdout.strip()
+    _run(
+        [
+            "git",
+            "bundle",
+            "create",
+            str(work_dir / "config.bundle"),
+            "HEAD",
+            "refs/heads/main",
+        ],
+        cwd=candidate_dir,
+    )
+    (work_dir / "validation.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.config-validation.v1",
+                "status": "passed",
+                "commit": candidate_commit,
+                "checks": [],
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (work_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.config-candidate.v1",
+                "commit": candidate_commit,
+                "branch": "main",
+                "source_role": "config-staging",
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _run(
+        [
+            *nix_flags,
+            "eval",
+            "--impure",
+            "--offline",
+            "--no-write-lock-file",
+            "--json",
+            f"{candidate_dir}#nixome.topology",
+        ],
+        stdout=work_dir / "topology.json",
+    )
+    _run(
+        [
+            *nix_flags,
+            "eval",
+            "--impure",
+            "--offline",
+            "--no-write-lock-file",
+            "--json",
+            f"{candidate_dir}#nixome.system",
+        ],
+        stdout=work_dir / "system.json",
+    )
+    with tarfile.open(validated_tar, "w") as tar:
+        for name in (
+            "config.bundle",
+            "validation.json",
+            "manifest.json",
+            "topology.json",
+            "system.json",
+        ):
+            tar.add(work_dir / name, arcname=name)
+
+    _write_executable(
+        bin_dir / "nixome-config-archive-candidate",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        cp "$VALIDATED_TAR_FIXTURE" "$NIXOME_LOG_DIR/config-candidate-validated.tar"
+        jq -c -n \
+          --arg schema "nixome.config-archive.v1" \
+          --arg status "passed" \
+          --arg candidate_commit "$CANDIDATE_COMMIT_FIXTURE" \
+          '{
+            schema: $schema,
+            status: $status,
+            candidate_commit: $candidate_commit,
+            validation_commit: $candidate_commit,
+            validation: {
+              schema: "nixome.config-validation.v1",
+              status: "passed",
+              commit: $candidate_commit
+            },
+            vault_archive: {
+              schema: "nixome.config-vault-archive.v1",
+              status: "passed",
+              candidate_commit: $candidate_commit
+            }
+          }' > "$NIXOME_LOG_DIR/config-archive.json"
+        printf 'archive fixture ok\n'
+        """,
+    )
+    _write_executable(
+        bin_dir / "nixome-setup-config",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        topology=""
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --topology)
+              shift
+              topology="$1"
+              ;;
+          esac
+          shift
+        done
+        [ -n "$topology" ] || exit 2
+        cp "$topology" "$SETUP_CAPTURE_FIXTURE"
+        jq -e '
+          .templates."test-template".source != null and
+          .templates."test-template".source_ref == null and
+          (.templates."test-template".source | test("^/nix/store/")) and
+          (.templates."test-template".source | test("/test-template$"))
+        ' "$topology" >/dev/null
+        jq -c -n \
+          --arg schema "nixome.setup-config.v1" \
+          --arg status "passed" \
+          '{schema: $schema, status: $status, domains_changed: 0, templates_changed: 1}' \
+          > "$NIXOME_LOG_DIR/setup-config.json"
+        printf 'setup fixture ok\n'
+        """,
+    )
+    _write_executable(
+        bin_dir / "qrexec-client",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        cat >/dev/null
+        jq -c -n \
+          --arg schema "nixome.config-vault-deployment.v1" \
+          --arg status "passed" \
+          --arg candidate_commit "$CANDIDATE_COMMIT_FIXTURE" \
+          '{
+            schema: $schema,
+            status: $status,
+            deployment_status: "passed",
+            candidate_commit: $candidate_commit,
+            vault_commit: "fixture-vault"
+          }'
+        """,
+    )
+    _write_executable(
+        bin_dir / "systemctl",
+        """
+        #!/usr/bin/env bash
+        if [ "$1" = "is-active" ]; then
+          exit 0
+        fi
+        exit 1
+        """,
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "CANDIDATE_COMMIT_FIXTURE": candidate_commit,
+            "SETUP_CAPTURE_FIXTURE": str(setup_capture),
+            "VALIDATED_TAR_FIXTURE": str(validated_tar),
+            "NIXOME_XEN_CAPABILITIES": str(capabilities),
+            "NIXOME_LOG_DIR": str(apply_log_dir),
+            "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
+            "NIXOME_SYSTEM_ETC_DIR": str(etc_dir),
+            "NIXOME_SYSTEM_PROFILE": str(system_profile),
+        }
+    )
+    _run(
+        ["bash", str(repo_root / "scripts/apply-config-candidate.sh"), "--apply"],
+        cwd=repo_root,
+        env=env,
+        stdout=work_dir / "stdout.log",
+        stderr=work_dir / "stderr.log",
+    )
+    result = json.loads(
+        (apply_log_dir / "config-apply.json").read_text(encoding="utf-8")
+    )
+    assert result["schema"] == "nixome.config-apply.v1"
+    assert result["status"] == "passed"
+    assert result["candidate_commit"] == candidate_commit
+    assert result["setup"]["status"] == "passed"
+    assert result["deployment"]["status"] == "passed"
+    template_builds = json.loads(
+        (apply_log_dir / "config-apply-template-builds.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert template_builds["schema"] == "nixome.template-builds.v1"
+    assert len(template_builds["builds"]) == 1
+    build = template_builds["builds"][0]
+    assert build["template"] == "test-template"
+    assert build["attr"] == "packages.x86_64-linux.test-template"
+    assert build["status"] == "passed"
+    assert re.search(r"^/nix/store/.*/test-template$", build["source_path"])
+    system_builds = json.loads(
+        (apply_log_dir / "config-apply-system-builds.json").read_text(encoding="utf-8")
+    )
+    assert system_builds["schema"] == "nixome.system-builds.v1"
+    assert system_builds["builds"] == []
+    system_apply = json.loads(
+        (apply_log_dir / "config-system-apply.json").read_text(encoding="utf-8")
+    )
+    assert system_apply["schema"] == "nixome.system-apply.v1"
+    assert system_apply["status"] == "passed"
+    assert system_apply["profile_status"] == "skipped"
+    assert system_apply["reboot_required"] is False
+    captured_topology = json.loads(setup_capture.read_text(encoding="utf-8"))
+    assert captured_topology["templates"]["test-template"]["source"] is not None
+    assert captured_topology["templates"]["test-template"]["source_ref"] is None
