@@ -11,6 +11,7 @@ from local_pychecks import (
     check_closure_volume_filtered_device,
     check_closure_store_linux_storage,
     check_closure_store_engine,
+    check_closure_store_failure_recovery,
     check_config_candidate_nix_native,
     check_config_candidate_flake,
     check_config_control,
@@ -173,7 +174,7 @@ LOCAL_CHECKS = (
     LocalCheck("closure-store-engine", runner=check_closure_store_engine),
     LocalCheck(
         "closure-store-failure-recovery",
-        ("{root}/tests/closure-store-failure-recovery.sh",),
+        runner=check_closure_store_failure_recovery,
     ),
     LocalCheck("closure-store-linux-storage", runner=check_closure_store_linux_storage),
     LocalCheck(

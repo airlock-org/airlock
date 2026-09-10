@@ -9371,3 +9371,416 @@ def check_closure_store_engine(repo_root: Path, log_dir: Path) -> None:
         item["domain"] == "work" and item["generation"] == 1
         for item in gc["removed_generations"]
     )
+
+
+def _run_storage_failpoint(
+    repo_root: Path,
+    result_dir: Path,
+    name: str,
+    failpoint: str,
+    args: list[str],
+    *,
+    env: dict[str, str] | None = None,
+) -> None:
+    fail_env = (env or _storage_env(repo_root)).copy()
+    fail_env["NIXOME_CLOSURE_STORE_FAILPOINT"] = failpoint
+    result, _payload = _run_storage(
+        repo_root, result_dir, name, args, env=fail_env, check=False
+    )
+    assert result.returncode != 0
+    assert f"simulated failure at {failpoint}" in (
+        result_dir / f"{name}.err"
+    ).read_text(encoding="utf-8")
+
+
+def check_closure_store_failure_recovery(repo_root: Path, log_dir: Path) -> None:
+    result_dir = log_dir
+    work_dir = result_dir / "work"
+    if work_dir.exists():
+        _run(["chmod", "-R", "u+w", str(work_dir)], check=False)
+    shutil.rmtree(result_dir, ignore_errors=True)
+    (work_dir / "physical-store").mkdir(parents=True)
+    (work_dir / "closures").mkdir()
+    (work_dir / "bin").mkdir()
+    result_dir.mkdir(parents=True, exist_ok=True)
+    physical_store = work_dir / "physical-store"
+    entries = {
+        "common": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-common",
+        "one": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-one",
+        "two": "cccccccccccccccccccccccccccccccc-two",
+        "three": "dddddddddddddddddddddddddddddddd-three",
+        "four": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-four",
+        "five": "ffffffffffffffffffffffffffffffff-five",
+        "six": "11111111111111111111111111111111-six",
+        "seven": "22222222222222222222222222222222-seven",
+    }
+    for entry in entries.values():
+        _make_storage_object(physical_store, entry, entry)
+    for name in ("one", "two", "three", "four", "five"):
+        _make_storage_closure(work_dir, name, [entries[name]])
+    _make_storage_closure(work_dir, "six", [entries["common"], entries["six"]])
+    _make_storage_closure(work_dir, "seven", [entries["common"], entries["seven"]])
+    _write_executable(
+        work_dir / "bin/nix",
+        """
+        #!/usr/bin/env bash
+        printf '%s\n' "$@" > "$NIXOME_FAKE_NIX_LOG"
+        """,
+    )
+    verify_env = _storage_env(repo_root, str(work_dir / "bin"))
+    verify_env["NIXOME_FAKE_NIX_LOG"] = str(result_dir / "nix-verify.args")
+    verify_pool = work_dir / "verify-pool"
+    _run_storage_failpoint(
+        repo_root,
+        result_dir,
+        "verification-before-command",
+        "verification-before-command",
+        [
+            "admit",
+            "--pool-root",
+            str(verify_pool),
+            "--domain",
+            "verify",
+            "--system",
+            f"/nix/store/{entries['one']}",
+            "--closure-source",
+            str(work_dir / "closures/one"),
+            "--physical-store-root",
+            str(physical_store),
+            "--verify-mode",
+            "nix-store",
+        ],
+        env=verify_env,
+    )
+    _run_storage(
+        repo_root,
+        result_dir,
+        "recover-verify",
+        ["recover", "--pool-root", str(verify_pool)],
+    )
+    _result, status = _run_storage(
+        repo_root,
+        result_dir,
+        "verify-status",
+        ["status", "--pool-root", str(verify_pool)],
+    )
+    assert status["domains"].get("verify") is None
+
+    append_pool = work_dir / "append-pool"
+    _run_storage_failpoint(
+        repo_root,
+        result_dir,
+        "object-after-append",
+        "object-after-append",
+        [
+            "admit",
+            "--pool-root",
+            str(append_pool),
+            "--domain",
+            "append",
+            "--system",
+            f"/nix/store/{entries['one']}",
+            "--closure-source",
+            str(work_dir / "closures/one"),
+            "--physical-store-root",
+            str(physical_store),
+            "--verify-mode",
+            "tree",
+        ],
+    )
+    assert not (append_pool / f"objects/blob-metadata/{entries['one']}.json").exists()
+    assert any((append_pool / "objects/segments").glob("*.blob"))
+    _run_storage(
+        repo_root,
+        result_dir,
+        "recover-append",
+        ["recover", "--pool-root", str(append_pool)],
+    )
+    _result, status = _run_storage(
+        repo_root,
+        result_dir,
+        "append-status",
+        ["status", "--pool-root", str(append_pool)],
+    )
+    assert status["domains"].get("append") is None
+
+    metadata_pool = work_dir / "metadata-pool"
+    _run_storage_failpoint(
+        repo_root,
+        result_dir,
+        "object-after-metadata",
+        "object-after-metadata",
+        [
+            "admit",
+            "--pool-root",
+            str(metadata_pool),
+            "--domain",
+            "metadata",
+            "--system",
+            f"/nix/store/{entries['two']}",
+            "--closure-source",
+            str(work_dir / "closures/two"),
+            "--physical-store-root",
+            str(physical_store),
+            "--verify-mode",
+            "tree",
+        ],
+    )
+    assert (metadata_pool / f"objects/blob-metadata/{entries['two']}.json").is_file()
+    _result, gc_active = _run_storage(
+        repo_root,
+        result_dir,
+        "gc-active-metadata",
+        ["gc", "--pool-root", str(metadata_pool), "--keep-generations", "0"],
+    )
+    assert entries["two"] in gc_active["active_transaction_objects"]
+    assert entries["two"] not in gc_active["removed_object_blobs"]
+    _run_storage(
+        repo_root,
+        result_dir,
+        "recover-metadata",
+        ["recover", "--pool-root", str(metadata_pool)],
+    )
+    _result, status = _run_storage(
+        repo_root,
+        result_dir,
+        "metadata-status",
+        ["status", "--pool-root", str(metadata_pool)],
+    )
+    assert status["domains"].get("metadata") is None
+    _result, gc_aborted = _run_storage(
+        repo_root,
+        result_dir,
+        "gc-aborted-metadata",
+        ["gc", "--pool-root", str(metadata_pool), "--keep-generations", "0"],
+    )
+    assert entries["two"] in gc_aborted["removed_object_blobs"]
+
+    finalize_pool = work_dir / "finalize-pool"
+    _run_storage_failpoint(
+        repo_root,
+        result_dir,
+        "generation-after-tx-commit",
+        "generation-after-tx-commit",
+        [
+            "admit",
+            "--pool-root",
+            str(finalize_pool),
+            "--domain",
+            "finalize",
+            "--system",
+            f"/nix/store/{entries['five']}",
+            "--closure-source",
+            str(work_dir / "closures/five"),
+            "--physical-store-root",
+            str(physical_store),
+            "--verify-mode",
+            "tree",
+            "--activate",
+            "false",
+        ],
+    )
+    manifest = json.loads(
+        (finalize_pool / "domains/finalize/generations/1/manifest.json").read_text()
+    )
+    assert manifest["status"] == "prepared"
+    _result, gc_before = _run_storage(
+        repo_root,
+        result_dir,
+        "gc-finalize-before-recover",
+        ["gc", "--pool-root", str(finalize_pool), "--keep-generations", "0"],
+    )
+    assert any(
+        item["domain"] == "finalize"
+        and item["generation"] == 1
+        and item["transaction_status"] == "committed"
+        for item in gc_before["in_progress_generations"]
+    )
+    _result, recover_finalize = _run_storage(
+        repo_root,
+        result_dir,
+        "recover-finalize",
+        ["recover", "--pool-root", str(finalize_pool)],
+    )
+    assert len(recover_finalize["finalized_generations"]) == 1
+    _result, status = _run_storage(
+        repo_root,
+        result_dir,
+        "status-finalize-after",
+        ["status", "--pool-root", str(finalize_pool)],
+    )
+    assert status["domains"]["finalize"]["current"] is None
+    assert status["domains"]["finalize"]["generations"][0]["generation"] == 1
+
+    switch_pool = work_dir / "switch-pool"
+    _run_storage(
+        repo_root,
+        result_dir,
+        "switch-gen1",
+        [
+            "admit",
+            "--pool-root",
+            str(switch_pool),
+            "--domain",
+            "switch",
+            "--system",
+            f"/nix/store/{entries['six']}",
+            "--closure-source",
+            str(work_dir / "closures/six"),
+            "--physical-store-root",
+            str(physical_store),
+            "--verify-mode",
+            "tree",
+        ],
+    )
+    _run_storage(
+        repo_root,
+        result_dir,
+        "switch-gen2",
+        [
+            "admit",
+            "--pool-root",
+            str(switch_pool),
+            "--domain",
+            "switch",
+            "--system",
+            f"/nix/store/{entries['seven']}",
+            "--closure-source",
+            str(work_dir / "closures/seven"),
+            "--physical-store-root",
+            str(physical_store),
+            "--verify-mode",
+            "tree",
+            "--activate",
+            "false",
+        ],
+    )
+    _run_storage_failpoint(
+        repo_root,
+        result_dir,
+        "switch-before-current-replace",
+        "switch-before-current-replace",
+        [
+            "switch",
+            "--pool-root",
+            str(switch_pool),
+            "--domain",
+            "switch",
+            "--generation",
+            "2",
+        ],
+    )
+    _run_storage(
+        repo_root,
+        result_dir,
+        "recover-switch-before",
+        ["recover", "--pool-root", str(switch_pool)],
+    )
+    _result, status = _run_storage(
+        repo_root,
+        result_dir,
+        "status-switch-before",
+        ["status", "--pool-root", str(switch_pool)],
+    )
+    assert status["domains"]["switch"]["current"] == 1
+    _run_storage_failpoint(
+        repo_root,
+        result_dir,
+        "switch-after-current-replace",
+        "switch-after-current-replace",
+        [
+            "switch",
+            "--pool-root",
+            str(switch_pool),
+            "--domain",
+            "switch",
+            "--generation",
+            "2",
+        ],
+    )
+    _run_storage(
+        repo_root,
+        result_dir,
+        "recover-switch-after",
+        ["recover", "--pool-root", str(switch_pool)],
+    )
+    _result, status = _run_storage(
+        repo_root,
+        result_dir,
+        "status-switch-after",
+        ["status", "--pool-root", str(switch_pool)],
+    )
+    assert status["domains"]["switch"]["current"] == 2
+
+    gc_pool = work_dir / "gc-pool"
+    _run_storage(
+        repo_root,
+        result_dir,
+        "gc-gen1",
+        [
+            "admit",
+            "--pool-root",
+            str(gc_pool),
+            "--domain",
+            "gc-domain",
+            "--system",
+            f"/nix/store/{entries['common']}",
+            "--closure-source",
+            str(work_dir / "closures/six"),
+            "--physical-store-root",
+            str(physical_store),
+            "--verify-mode",
+            "tree",
+        ],
+    )
+    _run_storage(
+        repo_root,
+        result_dir,
+        "gc-gen2",
+        [
+            "admit",
+            "--pool-root",
+            str(gc_pool),
+            "--domain",
+            "gc-domain",
+            "--system",
+            f"/nix/store/{entries['seven']}",
+            "--closure-source",
+            str(work_dir / "closures/seven"),
+            "--physical-store-root",
+            str(physical_store),
+            "--verify-mode",
+            "tree",
+            "--retain",
+            "false",
+        ],
+    )
+    _run_storage(
+        repo_root,
+        result_dir,
+        "gc-rollback",
+        [
+            "rollback",
+            "--pool-root",
+            str(gc_pool),
+            "--domain",
+            "gc-domain",
+            "--generation",
+            "1",
+        ],
+    )
+    _run_storage_failpoint(
+        repo_root,
+        result_dir,
+        "gc-after-object-metadata-remove",
+        "gc-after-object-metadata-remove",
+        ["gc", "--pool-root", str(gc_pool), "--keep-generations", "0"],
+    )
+    _run_storage(
+        repo_root, result_dir, "recover-gc", ["recover", "--pool-root", str(gc_pool)]
+    )
+    _result, status = _run_storage(
+        repo_root, result_dir, "status-gc", ["status", "--pool-root", str(gc_pool)]
+    )
+    assert status["domains"]["gc-domain"]["current"] == 1
+    assert len(status["domains"]["gc-domain"]["generations"]) == 1
