@@ -17,6 +17,7 @@ from local_pychecks import (
     check_config_archive_domain_references,
     check_config_system_apply_boot,
     check_config_staging_validate,
+    check_config_status,
     check_config_vault_deployment_archive,
     check_dev_role,
     check_host_capabilities,
@@ -231,7 +232,7 @@ LOCAL_CHECKS = (
     LocalCheck("nixome-cli", marks=(pytest.mark.nix,), runner=check_nixome_cli),
     LocalCheck("config-control", runner=check_config_control),
     LocalCheck("config-boot-verify", runner=check_config_boot_verify),
-    LocalCheck("config-status", ("{root}/tests/config-status.sh",)),
+    LocalCheck("config-status", runner=check_config_status),
     LocalCheck(
         "config-apply-template-build-ref",
         runner=check_config_apply_template_build_ref,

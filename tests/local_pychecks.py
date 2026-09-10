@@ -7018,3 +7018,408 @@ def check_setup_config_nix_native(repo_root: Path, log_dir: Path) -> None:
         )
         == 1
     )
+
+
+def check_config_status(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    status_log_dir = work_dir / "logs"
+    state_dir = work_dir / "state"
+    policy_dir = work_dir / "policy.d"
+    topology_json = work_dir / "topology.json"
+    current_topology_json = state_dir / "current-topology.json"
+    profile_dir = work_dir / "profiles"
+    store_dir = work_dir / "store"
+    system_profile = profile_dir / "nixome-system"
+    host_system_profile = profile_dir / "system"
+    run_current_system = work_dir / "run-current-system"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (
+        bin_dir,
+        status_log_dir,
+        state_dir,
+        policy_dir,
+        profile_dir,
+        store_dir,
+    ):
+        path.mkdir(parents=True)
+
+    topology = {
+        "schema": "nixome.qubes-topology.v1",
+        "templates": {},
+        "kernels": {},
+        "domains": {
+            "config-vault": {
+                "class": "StandaloneVM",
+                "template": None,
+                "backend": {"type": "nix-closure"},
+            },
+            "work-fedora": {"class": "AppVM", "template": "fedora-44-xfce"},
+        },
+        "prefs": {},
+        "qrexec_policy": {
+            "rules": [
+                {
+                    "service": "nixome.PolicyProbe",
+                    "argument": "*",
+                    "source": "dom0",
+                    "target": "config-vault",
+                    "action": "allow",
+                }
+            ]
+        },
+    }
+    current_topology = json.loads(json.dumps(topology))
+    current_topology["domains"]["work-fedora-from-current"] = {
+        "class": "AppVM",
+        "template": "fedora-44-xfce",
+    }
+    topology_json.write_text(
+        json.dumps(topology, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    current_topology_json.write_text(
+        json.dumps(current_topology, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    (status_log_dir / "setup-config.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.setup-config.v1",
+                "status": "passed",
+                "domains_changed": 2,
+                "restart_required": True,
+                "restart_actions": [
+                    {
+                        "type": "domain-pref",
+                        "action": "restart",
+                        "domain": "config-vault",
+                        "field": "memory",
+                        "value": "1024",
+                        "reason": "domain is running; restart required for this change to fully take effect",
+                        "state": "Running",
+                    }
+                ],
+                "live_actions": [
+                    {
+                        "type": "domain-pref",
+                        "action": "set",
+                        "domain": "config-vault",
+                        "field": "memory",
+                        "value": "1024",
+                    }
+                ],
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (status_log_dir / "config-apply.json").write_text(
+        '{"schema":"nixome.config-apply.v1","status":"passed","candidate_commit":"abc123"}\n',
+        encoding="utf-8",
+    )
+    (state_dir / "current-system.json").write_text(
+        '{"schema":"nixome.system.v1","dom0":{"profile":{"message":"from-test"}}}\n',
+        encoding="utf-8",
+    )
+    (state_dir / "current-plan.json").write_text(
+        json.dumps(
+            {
+                "live_actions": [],
+                "reboot_actions": [],
+                "reboot_required": False,
+                "reboot_reasons": [],
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (state_dir / "last-apply.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.system-apply.v1",
+                "status": "passed",
+                "host_system_status": "passed",
+                "host_system_source": str(store_dir / "host-system"),
+                "host_system_switch_action": "switch",
+                "reboot_required": False,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    for filename, payload in (
+        (
+            "current-deployment.json",
+            {
+                "schema": "nixome.config-deployment.v1",
+                "status": "passed",
+                "deployment_id": "deployment-current",
+            },
+        ),
+        (
+            "last-deployment.json",
+            {
+                "schema": "nixome.config-deployment.v1",
+                "status": "failed",
+                "deployment_id": "deployment-last-attempt",
+            },
+        ),
+        (
+            "current-config-apply.json",
+            {
+                "schema": "nixome.config-apply.v1",
+                "status": "passed",
+                "deployment_id": "deployment-current",
+            },
+        ),
+        (
+            "last-config-apply.json",
+            {
+                "schema": "nixome.config-apply.v1",
+                "status": "failed",
+                "deployment_id": "deployment-last-attempt",
+            },
+        ),
+    ):
+        (state_dir / filename).write_text(
+            json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    for name in ("nixome-profile", "host-system", "old-host-system"):
+        (store_dir / name).mkdir()
+    system_profile.symlink_to(store_dir / "nixome-profile")
+    (profile_dir / "system-2-link").symlink_to(store_dir / "host-system")
+    host_system_profile.symlink_to("system-2-link")
+    run_current_system.symlink_to(store_dir / "host-system")
+    (policy_dir / "90-nixome.policy").write_text(
+        "\n".join(
+            (
+                "# Managed by Nixome setup-config.",
+                "nixome.PolicyProbe * dom0 config-vault allow",
+                "nixome.PolicyProbe * @anyvm @anyvm deny",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    _setup_fake_command_dir(
+        bin_dir,
+        {
+            "qvm-ls": """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                case "$*" in
+                  "--raw-data --fields NAME,CLASS,STATE,TEMPLATE,LABEL --no-spinner")
+                    cat <<'QVM'
+                config-vault|StandaloneVM|Running||black
+                work-fedora|AppVM|Halted|fedora-44-xfce|green
+                other|AppVM|Halted|fedora-43-xfce|red
+                QVM
+                    ;;
+                  *)
+                    printf 'unexpected qvm-ls args: %s\\n' "$*" >&2
+                    exit 2
+                    ;;
+                esac
+            """,
+        },
+    )
+    out = _run(
+        [
+            "nix",
+            "build",
+            f"{repo_root}#packages.x86_64-linux.nixome-config-status",
+            "--no-link",
+            "--print-out-paths",
+        ],
+        cwd=repo_root,
+    ).stdout.strip()
+    wrapper = Path(_physical_store_path(repo_root, out)) / "bin/nixome-config-status"
+
+    def run_status(output: Path, *, boot_topology: bool) -> dict[str, object]:
+        env = os.environ.copy()
+        env.update(
+            {
+                "PATH": f"{bin_dir}:{env['PATH']}",
+                "NIXOME_QVM_LS_BIN": str(bin_dir / "qvm-ls"),
+                "NIXOME_LOG_DIR": str(status_log_dir),
+                "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
+                "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
+                "NIXOME_CONFIG_STATUS_SYSTEM_PROFILE": str(system_profile),
+                "NIXOME_CONFIG_STATUS_HOST_SYSTEM_PROFILE": str(host_system_profile),
+                "NIXOME_CONFIG_STATUS_RUN_CURRENT_SYSTEM": str(run_current_system),
+            }
+        )
+        if boot_topology:
+            env["NIXOME_CONFIG_STATUS_BOOT_TOPOLOGY_JSON"] = str(topology_json)
+        else:
+            env["NIXOME_CONFIG_STATUS_TOPOLOGY_JSON"] = str(topology_json)
+        _run([str(wrapper)], cwd=repo_root, env=env, stdout=output)
+        return json.loads(output.read_text())
+
+    result = run_status(work_dir / "status.json", boot_topology=False)
+    assert result["schema"] == "nixome.config-status.v1"
+    assert result["status"] == "applied"
+    assert result["topology"]["present"] is True
+    assert "config-vault" in result["topology"]["domain_names"]
+    assert result["topology"]["template_names"] == []
+    assert result["topology"]["qrexec_policy_rule_count"] == 1
+    assert result["qvm"]["available"] is True
+    assert result["qvm"]["status"] == "ok"
+    assert len(result["qvm"]["domains"]) == 3
+    assert len(result["qvm"]["managed_domains"]) == 2
+    assert result["qrexec_policy"]["exists"] is True
+    assert result["qrexec_policy"]["rule_count"] == 2
+    assert result["pending_reboot"]["required"] is False
+    assert result["pending_reboot"]["actions"] == []
+    assert result["pending_reboot"]["reasons"] == []
+    host_system_target = str(store_dir / "host-system")
+    profile_target = str(store_dir / "nixome-profile")
+    assert result["host_generation"]["active"] is True
+    assert result["host_generation"]["current_source"] == host_system_target
+    assert result["host_generation"]["staged_source"] == ""
+    assert result["host_generation"]["profile"]["resolved_target"] == host_system_target
+    assert result["host_generation"]["running"]["resolved_target"] == host_system_target
+    assert result["host_generation"]["last_apply"]["source"] == host_system_target
+    assert result["host_generation"]["last_apply"]["switch_action"] == "switch"
+    assert result["host_generation"]["pending_reboot"]["required"] is False
+    pending_vm_restarts = result["pending_vm_restarts"]
+    assert pending_vm_restarts["required"] is True
+    assert len(pending_vm_restarts["actions"]) == 1
+    assert pending_vm_restarts["actions"][0]["domain"] == "config-vault"
+    assert pending_vm_restarts["domains"] == ["config-vault"]
+    assert pending_vm_restarts["reasons"] == [
+        "domain is running; restart required for this change to fully take effect"
+    ]
+    assert result["setup_source"] == "log"
+    assert result["setup"]["status"] == "passed"
+    assert len(result["setup"]["restart_actions"]) == 1
+    assert result["apply"]["status"] == "passed"
+    assert result["deployment"]["current"]["deployment_id"] == "deployment-current"
+    assert (
+        result["deployment"]["last_attempt"]["deployment_id"]
+        == "deployment-last-attempt"
+    )
+    assert result["deployment"]["current_apply"]["status"] == "passed"
+    assert result["deployment"]["last_apply_result"]["status"] == "failed"
+    system = result["system"]
+    assert system["current_system"]["dom0"]["profile"]["message"] == "from-test"
+    assert system["current_plan"]["reboot_actions"] == []
+    assert system["current_plan"]["reboot_required"] is False
+    assert system["pending_reboot"]["required"] is False
+    assert system["host_generation"]["active"] is True
+    assert system["host_generation"]["current_source"] == host_system_target
+    assert system["host_generation"]["last_apply"]["source"] == host_system_target
+    assert system["last_apply"]["host_system_status"] == "passed"
+    assert system["profile_target"] == profile_target
+    assert system["profile_resolved_target"] == profile_target
+    assert system["host_system_profile_target"] == "system-2-link"
+    assert system["host_system_profile_resolved_target"] == host_system_target
+    assert system["run_current_system_target"] == host_system_target
+    assert system["run_current_system_resolved_target"] == host_system_target
+
+    current_result = run_status(work_dir / "status-current.json", boot_topology=True)
+    assert current_result["schema"] == "nixome.config-status.v1"
+    assert current_result["topology"]["source"] == "current"
+    assert (
+        current_result["paths"]["topology"]
+        == current_result["paths"]["current_topology"]
+    )
+    assert current_result["topology"]["boot_present"] is True
+    assert current_result["topology"]["current_present"] is True
+    assert "work-fedora-from-current" in current_result["topology"]["domain_names"]
+    assert len(current_result["qvm"]["managed_domains"]) == 2
+
+    (state_dir / "current-plan.json").write_text(
+        json.dumps(
+            {
+                "live_actions": [],
+                "reboot_actions": [
+                    {
+                        "type": "dom0-nixos-system",
+                        "action": "boot",
+                        "reason": "install next dom0 boot generation",
+                    }
+                ],
+                "reboot_required": True,
+                "reboot_reasons": ["install next dom0 boot generation"],
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    run_current_system.unlink()
+    run_current_system.symlink_to(store_dir / "old-host-system")
+    reboot_result = run_status(work_dir / "status-reboot.json", boot_topology=True)
+    assert reboot_result["schema"] == "nixome.config-status.v1"
+    assert reboot_result["pending_reboot"]["required"] is True
+    assert len(reboot_result["pending_reboot"]["actions"]) == 1
+    assert reboot_result["pending_reboot"]["actions"][0]["type"] == (
+        "dom0-nixos-system"
+    )
+    assert reboot_result["pending_reboot"]["reasons"] == [
+        "install next dom0 boot generation"
+    ]
+    assert reboot_result["host_generation"]["active"] is False
+    assert reboot_result["host_generation"]["current_source"] == str(
+        store_dir / "old-host-system"
+    )
+    assert reboot_result["host_generation"]["staged_source"] == host_system_target
+    assert reboot_result["host_generation"]["pending_reboot"]["required"] is True
+    assert reboot_result["system"]["pending_reboot"]["required"] is True
+    assert len(reboot_result["system"]["pending_reboot"]["actions"]) == 1
+    assert reboot_result["system"]["host_generation"]["active"] is False
+
+    run_current_system.unlink()
+    run_current_system.symlink_to(store_dir / "host-system")
+    consumed_result = run_status(
+        work_dir / "status-reboot-consumed.json", boot_topology=True
+    )
+    assert consumed_result["schema"] == "nixome.config-status.v1"
+    assert consumed_result["pending_reboot"]["required"] is False
+    assert consumed_result["pending_reboot"]["actions"] == []
+    assert consumed_result["pending_reboot"]["reasons"] == []
+    assert consumed_result["host_generation"]["active"] is True
+    assert consumed_result["host_generation"]["current_source"] == host_system_target
+    assert consumed_result["host_generation"]["staged_source"] == ""
+    assert consumed_result["host_generation"]["pending_reboot"]["required"] is False
+    assert consumed_result["pending_vm_restarts"]["required"] is True
+    assert consumed_result["system"]["pending_reboot"]["required"] is False
+    assert consumed_result["system"]["pending_reboot"]["actions"] == []
+    assert consumed_result["system"]["pending_reboot"]["reasons"] == []
+    assert consumed_result["system"]["host_generation"]["active"] is True
+    assert consumed_result["system"]["current_plan"]["reboot_required"] is True
+    assert len(consumed_result["system"]["current_plan"]["reboot_actions"]) == 1
+
+    (status_log_dir / "setup-config.json").rename(
+        status_log_dir / "setup-config.json.saved"
+    )
+    (state_dir / "current-setup.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.setup-config.v1",
+                "status": "passed",
+                "domains_changed": 0,
+                "restart_required": False,
+                "restart_actions": [],
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    current_setup_result = run_status(
+        work_dir / "status-current-setup.json", boot_topology=True
+    )
+    assert current_setup_result["schema"] == "nixome.config-status.v1"
+    assert current_setup_result["setup_source"] == "current"
+    assert current_setup_result["paths"]["current_setup"] != ""
+    assert current_setup_result["setup"]["status"] == "passed"
+    assert current_setup_result["setup_log"] is None
+    assert current_setup_result["current_setup"]["status"] == "passed"
+    assert current_setup_result["pending_vm_restarts"]["required"] is False
+    assert current_setup_result["pending_vm_restarts"]["actions"] == []
+    assert current_setup_result["pending_vm_restarts"]["domains"] == []
+    assert current_setup_result["pending_vm_restarts"]["reasons"] == []
