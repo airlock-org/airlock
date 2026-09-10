@@ -12,7 +12,6 @@ let
   ];
 
   configNixPrivateSizeBytes = 8589934592;
-  devPrivateSizeBytes = 34359738368;
   sysNetPrivateSizeBytes = 2147483648;
 
   configRoleDefaults = {
@@ -78,25 +77,6 @@ let
       services = {
         "network-manager" = false;
       };
-    };
-  };
-
-  devRoleDefaults = {
-    guestHostName = "dev";
-    label = "green";
-    rootImageSizeMiB = 512;
-    state.persistentSize = devPrivateSizeBytes;
-    prefs = {
-      autostart = false;
-      include_in_backups = true;
-      memory = 4096;
-      maxmem = 8192;
-      vcpus = 4;
-    };
-    features = {
-      "nixome-managed" = "1";
-      "nixome-role" = "dev";
-      "nixome-dev" = "1";
     };
   };
 
@@ -168,29 +148,6 @@ let
       }) configVmRoles
     );
 
-  mkDevDomainEntry =
-    system:
-    let
-      qubeBuilders = mkNixomeQubeBuilders system;
-    in
-    qubeBuilders.mkNixNativeDomain {
-      name = "dev";
-      guestRole = "dev";
-      modules = [
-        ({ ... }: {
-          networking.hostName = devRoleDefaults.guestHostName;
-        })
-      ];
-      rootImageSizeMiB = devRoleDefaults.rootImageSizeMiB;
-      kernelName = nixomeQubesVmKernelName;
-      label = devRoleDefaults.label;
-      netvm = "sys-net";
-      prefs = devRoleDefaults.prefs;
-      features = devRoleDefaults.features;
-      services = { };
-      state = devRoleDefaults.state;
-    };
-
   mkSysNetDomainEntry =
     system:
     let
@@ -242,10 +199,8 @@ in
   inherit
     configRoleDefaults
     configVmRoles
-    devRoleDefaults
     materializeNixClosureDomain
     mkConfigDomainEntries
-    mkDevDomainEntry
     mkSysNetDomainEntry
     sysNetRoleDefaults
     ;

@@ -1753,7 +1753,6 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       dom0Cfg = flake.nixosConfigurations."vm-gui-config-dev".config;
       releaseDom0Cfg = flake.nixosConfigurations."vm-gui-config-release".config;
       nonDevDom0Cfg = flake.nixosConfigurations.test.config;
-      devCfg = flake.nixosConfigurations.nixome-domain-dev.config;
       builders = import {repo_root}/lifecycle/misc/lib/qube-template.nix {{
         nixpkgs = flake.inputs.nixpkgs;
         nixpkgsLibvirt105Source = "${{flake.inputs.nixpkgs-libvirt_10_5}}";
@@ -1767,28 +1766,27 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         system = "x86_64-linux";
         templateBuilders = builders;
       }};
-      devDomainDefinition = defaultRuntime.nixNative.domains.dev;
+      devEntry = builders.mkNixNativeDomain {{
+        name = "sample-dev";
+        guestRole = "dev";
+        modules = [
+          ({{ ... }}: {{
+            networking.hostName = "sample-dev";
+          }})
+        ];
+        features = {{
+          "nixome-role" = "dev";
+          "nixome-dev" = "1";
+        }};
+      }};
+      devCfg = devEntry.configuration.config;
+      generatedDevDomain = devEntry.domain;
       sysNetDomainDefinition = defaultRuntime.nixNative.domains.sys-net;
       stagedNixNativeDomains = defaultRuntime.nixNative.domains;
       bootstrapDomains = dom0Cfg.nixome.qubes.domains;
       releaseBootstrapDomains = releaseDom0Cfg.nixome.qubes.domains;
-      bootstrapDevDomain = bootstrapDomains.dev;
       bootstrapSysNetDomain = bootstrapDomains.sys-net;
-      bootstrapTopologyDevDomain = dom0Cfg.nixome.qubes.topology.domains.dev;
       bootstrapTopologySysNetDomain = dom0Cfg.nixome.qubes.topology.domains.sys-net;
-      generatedDevDomain = (builders.mkNixNativeDomain {{
-        name = "dev";
-        guestRole = devDomainDefinition.role;
-        modules = [ ];
-        rootImageSizeMiB = devDomainDefinition.rootImageSizeMiB or 512;
-        kernelName = devDomainDefinition.kernel or "6.12.64-1.fc41";
-        label = devDomainDefinition.label or "green";
-        netvm = devDomainDefinition.netvm or null;
-        prefs = devDomainDefinition.prefs or {{ }};
-        features = devDomainDefinition.features or {{ }};
-        services = devDomainDefinition.services or {{ }};
-        state = devDomainDefinition.state or {{ }};
-      }}).domain;
       baseCfg = (builders.mkNixNativeDomain {{
         name = "minimal-base";
         guestRole = "base";
@@ -1834,23 +1832,19 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     {{
       role = devCfg.nixome.qubeGuest.role;
       hostname = devCfg.networking.hostName;
-      staged_dev_declared_netvm = devDomainDefinition.netvm;
-      staged_dev_declared_autostart = devDomainDefinition.prefs.autostart;
+      staged_dev_declared = builtins.hasAttr "dev" stagedNixNativeDomains;
       staged_sys_net_declared = builtins.hasAttr "sys-net" stagedNixNativeDomains;
       staged_sys_net_autostart = sysNetDomainDefinition.prefs.autostart;
       staged_sys_firewall_external = !(builtins.hasAttr "sys-firewall" stagedNixNativeDomains);
       generated_dev_domain_netvm = generatedDevDomain.netvm;
+      generated_dev_domain_role_feature = generatedDevDomain.features."nixome-role";
+      generated_dev_domain_marker_feature = generatedDevDomain.features."nixome-dev";
       bootstrap_dev_domain_present = builtins.hasAttr "dev" bootstrapDomains;
       bootstrap_sys_net_present = builtins.hasAttr "sys-net" bootstrapDomains;
       bootstrap_sys_firewall_external = !(builtins.hasAttr "sys-firewall" bootstrapDomains);
-      bootstrap_dev_domain_netvm = bootstrapDevDomain.netvm;
-      bootstrap_dev_domain_autostart = bootstrapDevDomain.prefs.autostart;
-      bootstrap_dev_domain_backend = bootstrapDevDomain.backend.type;
-      bootstrap_dev_domain_role_feature = bootstrapDevDomain.features."nixome-role";
       bootstrap_sys_net_autostart = bootstrapSysNetDomain.prefs.autostart;
       bootstrap_sys_net_netvm = bootstrapSysNetDomain.netvm;
-      bootstrap_dev_topology_netvm = bootstrapTopologyDevDomain.netvm;
-      bootstrap_dev_topology_backend = bootstrapTopologyDevDomain.backend.type;
+      bootstrap_dev_topology_present = builtins.hasAttr "dev" dom0Cfg.nixome.qubes.topology.domains;
       bootstrap_sys_net_topology_autostart = bootstrapTopologySysNetDomain.prefs.autostart;
       image_dev_mode_enabled = dom0Cfg.nixome.image.devMode.enable;
       legacy_image_dev_mode_enabled = legacyDevDom0Cfg.nixome.image.devMode.enable;
@@ -1883,7 +1877,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         "nixome-qubes-smoke"
         "zellij"
       ];
-      release_bootstrap_dev_domain_netvm = releaseBootstrapDomains.dev.netvm;
+      release_bootstrap_dev_domain_present = builtins.hasAttr "dev" releaseBootstrapDomains;
       release_bootstrap_sys_net_present = builtins.hasAttr "sys-net" releaseBootstrapDomains;
       release_bootstrap_sys_net_netvm = releaseBootstrapDomains.sys-net.netvm;
       release_bootstrap_sys_net_autostart = releaseBootstrapDomains.sys-net.prefs.autostart;
@@ -1963,24 +1957,20 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     data = json.loads(role_json.read_text(encoding="utf-8"))
 
     assert data["role"] == "dev"
-    assert data["hostname"] == "dev"
-    assert data["staged_dev_declared_netvm"] == "sys-net"
-    assert data["staged_dev_declared_autostart"] is False
+    assert data["hostname"] == "sample-dev"
+    assert data["staged_dev_declared"] is False
     assert data["staged_sys_net_declared"] is True
     assert data["staged_sys_net_autostart"] is True
     assert data["staged_sys_firewall_external"] is True
-    assert data["generated_dev_domain_netvm"] == "sys-net"
-    assert data["bootstrap_dev_domain_present"] is True
+    assert data["generated_dev_domain_netvm"] is None
+    assert data["generated_dev_domain_role_feature"] == "dev"
+    assert data["generated_dev_domain_marker_feature"] == "1"
+    assert data["bootstrap_dev_domain_present"] is False
     assert data["bootstrap_sys_net_present"] is True
     assert data["bootstrap_sys_firewall_external"] is True
-    assert data["bootstrap_dev_domain_netvm"] == "sys-net"
-    assert data["bootstrap_dev_domain_autostart"] is False
-    assert data["bootstrap_dev_domain_backend"] == "nix-closure"
-    assert data["bootstrap_dev_domain_role_feature"] == "dev"
     assert data["bootstrap_sys_net_autostart"] is True
     assert data["bootstrap_sys_net_netvm"] is None
-    assert data["bootstrap_dev_topology_netvm"] == "sys-net"
-    assert data["bootstrap_dev_topology_backend"] == "nix-closure"
+    assert data["bootstrap_dev_topology_present"] is False
     assert data["bootstrap_sys_net_topology_autostart"] is True
     assert data["image_dev_mode_enabled"] is True
     assert data["legacy_image_dev_mode_enabled"] is True
@@ -1996,7 +1986,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["release_dom0_observability_enabled"] is False
     assert data["release_dom0_testing_tools_enabled"] is False
     assert data["release_dom0_dev_tools_absent"] is True
-    assert data["release_bootstrap_dev_domain_netvm"] == "sys-net"
+    assert data["release_bootstrap_dev_domain_present"] is False
     assert data["release_bootstrap_sys_net_present"] is True
     assert data["release_bootstrap_sys_net_netvm"] is None
     assert data["release_bootstrap_sys_net_autostart"] is True
@@ -2021,7 +2011,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert "nixome-dev-guest-init.service" in data["dev_qrexec_requires"]
     assert "nixome-dev-guest-init.service" in data["dev_qrexec_after"]
     assert data["dev_forbidden_rpc_absent"] is True
-    assert data["dev_allowed_submitters"] == ["dev"]
+    assert data["dev_allowed_submitters"] == []
     assert data["dev_no_secret_env"] is True
     assert data["dev_no_codex_auth_etc"] is True
     assert data["base_role"] == "base"
@@ -9075,10 +9065,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert domains["sys-net"]["netvm"] is None
     assert domains["sys-net"]["prefs"]["provides_network"] is True
     assert domains["sys-net"]["services"]["network-manager"] is True
-    assert domains["dev"]["netvm"] == "sys-net"
-    assert domains["dev"]["backend"]["type"] == "nix-closure"
-    assert domains["dev"]["features"]["nixome-role"] == "dev"
-    assert domains["dev"]["features"]["nixome-dev"] == "1"
+    assert "dev" not in domains
     assert "qubes-kernel-6.12.64-1.fc41" in kernels["6.12.64-1.fc41"]["source"]
     assert templates == {}
     assert topology["schema"] == "nixome.qubes-topology.v1"
@@ -9102,9 +9089,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         is None
     )
     assert topology["domains"]["sys-net"]["devices"]["pci"] == []
-    assert topology["domains"]["dev"]["backend"]["state"]["persistent_size"] == (
-        34359738368
-    )
+    assert "dev" not in topology["domains"]
 
     guest_init_wanted_by = _nix_eval_json(
         repo_root,
@@ -9500,10 +9485,6 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
             "nixome.Config.ArchiveCandidate * @anyvm @anyvm deny",
             "nixome.Config.ArchiveDeployment * dom0 config-vault allow",
             "nixome.Config.ArchiveDeployment * @anyvm @anyvm deny",
-            "nixome.Config.Status * dev dom0 allow",
-            "nixome.Config.Check * dev dom0 allow",
-            "nixome.Config.Apply * dev dom0 allow",
-            "nixome.Config.Rollback * dev dom0 allow",
             "nixome.Config.Status * @anyvm @anyvm deny",
             "nixome.Config.Check * @anyvm @anyvm deny",
             "nixome.Config.Apply * @anyvm @anyvm deny",
@@ -9716,9 +9697,7 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
     assert "sys-firewall" not in topology["domains"]
     assert topology["domains"]["sys-net"]["netvm"] is None
     assert topology["domains"]["sys-net"]["prefs"]["provides_network"] is True
-    assert topology["domains"]["dev"]["netvm"] == "sys-net"
-    assert topology["domains"]["dev"]["backend"]["type"] == "nix-closure"
-    assert topology["domains"]["dev"]["features"]["nixome-role"] == "dev"
+    assert "dev" not in topology["domains"]
     assert (
         topology["domains"]["config-staging"]["features"][
             "nixome-config-applied-message"

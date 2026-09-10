@@ -178,7 +178,6 @@
       inherit (bootstrapDomains)
         materializeNixClosureDomain
         mkConfigDomainEntries
-        mkDevDomainEntry
         mkSysNetDomainEntry
         ;
 
@@ -187,7 +186,6 @@
         let
           bootstrapDomainEntries = (mkConfigDomainEntries system) // {
             sys-net = mkSysNetDomainEntry system;
-            dev = mkDevDomainEntry system;
           };
         in
         builtins.mapAttrs (_name: entry: materializeNixClosureDomain entry) bootstrapDomainEntries;
@@ -479,6 +477,5 @@
       nixosConfigurations.nixome-domain-config-validator =
         (mkConfigDomainEntries "x86_64-linux").config-validator.configuration;
       nixosConfigurations.nixome-domain-sys-net = (mkSysNetDomainEntry "x86_64-linux").configuration;
-      nixosConfigurations.nixome-domain-dev = (mkDevDomainEntry "x86_64-linux").configuration;
     };
 }

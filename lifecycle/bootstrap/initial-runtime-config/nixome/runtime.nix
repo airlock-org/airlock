@@ -83,25 +83,6 @@
       ];
       state.persistentSize = 2147483648;
     };
-
-    dev = {
-      role = "dev";
-      label = "green";
-      netvm = "sys-net";
-      rootImageSizeMiB = 512;
-      prefs = {
-        autostart = false;
-        include_in_backups = true;
-        memory = 4096;
-        maxmem = 8192;
-        vcpus = 4;
-      };
-      features = {
-        "nixome-role" = "dev";
-        "nixome-dev" = "1";
-      };
-      state.persistentSize = 34359738368;
-    };
   };
 
   # Add or override raw Qubes topology entries here. These become normalized

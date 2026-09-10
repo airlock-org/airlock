@@ -82,6 +82,7 @@ in
       currentExportService = "nixome.Config.ExportCurrent";
       currentImportService = "nixome.Config.ImportCurrent";
       configInputsImportService = "nixome.Config.InputsImport";
+      allowedSubmitters = [ ];
     };
   };
 

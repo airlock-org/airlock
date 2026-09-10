@@ -687,24 +687,24 @@ in
       checkService = lib.mkOption {
         type = lib.types.str;
         default = "nixome.Config.Check";
-        description = "qrexec service used by allowed dev VMs to submit a candidate for validation only.";
+        description = "qrexec service used by allowed Qubes domains to submit a candidate for validation only.";
       };
 
       applyService = lib.mkOption {
         type = lib.types.str;
         default = "nixome.Config.Apply";
-        description = "qrexec service used by allowed dev VMs to submit a candidate for validation, archival, and activation.";
+        description = "qrexec service used by allowed Qubes domains to submit a candidate for validation, archival, and activation.";
       };
 
       rollbackService = lib.mkOption {
         type = lib.types.str;
         default = "nixome.Config.Rollback";
-        description = "qrexec service used by allowed dev VMs to request rollback to a previous validated generation.";
+        description = "qrexec service used by allowed Qubes domains to request rollback to a previous validated generation.";
       };
 
       allowedSubmitters = lib.mkOption {
         type = lib.types.listOf lib.types.str;
-        default = [ "dev" ];
+        default = [ ];
         description = "Qubes domains allowed to request Nixome config status, check, apply, and rollback through dom0.";
       };
 
