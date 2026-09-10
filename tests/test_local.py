@@ -8,6 +8,7 @@ from typing import Callable
 import pytest
 
 from local_pychecks import (
+    check_closure_volume_filtered_device,
     check_config_candidate_nix_native,
     check_config_control,
     check_config_apply_domain_references,
@@ -169,7 +170,7 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "closure-volume-filtered-device",
-        ("{root}/tests/closure-volume-filtered-device.sh",),
+        runner=check_closure_volume_filtered_device,
     ),
     LocalCheck(
         "nix-domain-storage-helper-shared",
