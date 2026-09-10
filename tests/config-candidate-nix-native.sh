@@ -10,6 +10,7 @@ TOPOLOGY_JSON="$RESULT_DIR/topology.json"
 HOSTNAME_TXT="$RESULT_DIR/hostname.txt"
 ETC_TXT="$RESULT_DIR/etc.txt"
 RUNTIME_CHECK="$RESULT_DIR/runtime-check.sh"
+RUNTIME_CHECK_SOURCE="$RESULT_DIR/runtime-check-source.txt"
 INVALID_LOG="$RESULT_DIR/invalid.log"
 
 rm -rf "$RESULT_DIR"
@@ -93,19 +94,21 @@ nix \
   --raw \
   "$WORK_DIR#nixosConfigurations.nixome-domain-nix-native-generated.config.environment.etc.\"nixome/nix-native-role\".text" \
   > "$ETC_TXT"
-nix \
+nix build \
   --extra-experimental-features nix-command \
   --extra-experimental-features flakes \
-  eval \
   --impure \
   --offline \
   --no-write-lock-file \
-  --raw \
-  "$WORK_DIR#nixosConfigurations.nixome-domain-nix-native-generated.config.environment.etc.\"qubes-rpc/nixome.NixStoreRuntimeCheck\".text" \
-  > "$RUNTIME_CHECK"
+  --no-link \
+  --print-out-paths \
+  --expr '(builtins.getFlake "path:'"$WORK_DIR"'").nixosConfigurations.nixome-domain-nix-native-generated.config.environment.etc."qubes-rpc/nixome.NixStoreRuntimeCheck".source' \
+  > "$RUNTIME_CHECK_SOURCE"
+cp "$(nixome_physical_store_path "$(cat "$RUNTIME_CHECK_SOURCE")")" "$RUNTIME_CHECK"
 
 grep -qx nix-native-generated "$HOSTNAME_TXT"
 grep -qx generated "$ETC_TXT"
+head -n 1 "$RUNTIME_CHECK" | grep -Eq '^#!'
 grep -Fq "sed -n 's|^nixome.storedev=||p'" "$RUNTIME_CHECK"
 grep -Fq 'mount_source="$(findmnt -rn -T /nix/store -o SOURCE)"' "$RUNTIME_CHECK"
 grep -Fq 'case ",$mount_options," in' "$RUNTIME_CHECK"
@@ -154,5 +157,25 @@ if nix \
   exit 1
 fi
 grep -Fq 'nixome.nixNative.domains.bad: unknown option(s): pakages' "$INVALID_LOG"
+
+cat > "$WORK_DIR/nixome/machine.nix" <<'EOF'
+{ ... }:
+{
+  nixNative.domains.bad.role = "config-staging";
+}
+EOF
+
+if nix \
+  --extra-experimental-features nix-command \
+  --extra-experimental-features flakes \
+  eval \
+  --impure \
+  --offline \
+  --no-write-lock-file \
+  --json "$WORK_DIR#nixome.topology" > /dev/null 2> "$INVALID_LOG"; then
+  printf 'invalid Nix-native domain role unexpectedly evaluated\n' >&2
+  exit 1
+fi
+grep -Fq 'nixome.nixNative.domains.bad.role: expected one of base, dev' "$INVALID_LOG"
 
 printf 'config candidate Nix-native test ok\n'

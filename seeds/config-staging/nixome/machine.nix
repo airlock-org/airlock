@@ -31,6 +31,7 @@
   # store closure image mounted at /nix/store during early boot.
   #
   # nixNative.domains.work-nix = {
+  #   role = "base";
   #   label = "green";
   #   netvm = null;
   #   packages = with pkgs; [
@@ -41,7 +42,26 @@
   #     environment.etc."nixome/domain-role".text = "work-nix\n";
   #   };
   # };
-  nixNative.domains = { };
+  nixNative.domains = {
+    dev = {
+      role = "dev";
+      label = "green";
+      netvm = "sys-firewall";
+      rootImageSizeMiB = 512;
+      prefs = {
+        autostart = false;
+        include_in_backups = true;
+        memory = 4096;
+        maxmem = 8192;
+        vcpus = 4;
+      };
+      features = {
+        "nixome-role" = "dev";
+        "nixome-dev" = "1";
+      };
+      state.persistentSize = 34359738368;
+    };
+  };
 
   # Add or override raw Qubes topology entries here. These become normalized
   # nixome.topology JSON in config-validator before dom0 applies them.

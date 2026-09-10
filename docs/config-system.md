@@ -287,6 +287,7 @@ The high-level Nix-native domain surface is:
 
 ```nix
 nixNative.domains.work = {
+  role = "base";
   label = "green";
   netvm = null;
   packages = with pkgs; [ git jq ];
@@ -300,6 +301,63 @@ image, and a normalized `backend.type = "nix-closure"` topology entry.
 The same file can declare conventional Qubes TemplateVM-backed domains with
 the generic `domains` or `topology.extraDomains` surfaces. Those remain
 first-class for Fedora, Debian, and other non-NixOS guests.
+
+## Dev VM
+
+The default staged machine declares a Nix-native `dev` domain with:
+
+```nix
+nixNative.domains.dev = {
+  role = "dev";
+  netvm = "sys-firewall";
+};
+```
+
+The `dev` role layers development tools on top of the minimal Qubes guest base.
+It includes `git`, the private-store Nix CLI wrapper, Rust and Python tooling
+used by this repository, `make`, shell/editor basics, the `nixome` VM control
+CLI, and the pinned nixpkgs `codex` package.
+
+The VM keeps `/nix/store` as the read-only activated generation identity.
+Interactive Nix commands run through `nixome-config-nix`, which stores mutable
+build state under the VM private volume instead of writing to the system store.
+
+Persistent user state is initialized at:
+
+```text
+/home/user/dev
+/home/user/.codex
+```
+
+`CODEX_HOME` is set to `/home/user/.codex`, matching Codex's documented default
+state directory. Codex authentication and configuration are mutable private VM
+state; no API keys, tokens, `auth.json`, or user config are placed in Nix
+configuration or the Nix store.
+
+The expected repository path is:
+
+```text
+/home/user/dev/nixome
+```
+
+Nixome does not bake a mutable checkout into the immutable VM closure. If that
+path already exists it is preserved. On a fresh VM, clone or move the repository
+there once, then use:
+
+```text
+cd ~/dev/nixome
+codex
+nix flake check
+make test-quick
+nixome status
+nixome check
+nixome apply
+```
+
+The `dev` VM remains an ordinary unprivileged domain. Its qrexec authority is
+the same narrow config-control path as any allowed submitter named `dev`; it
+does not receive config-staging, config-validator, config-vault, dom0 filesystem,
+or arbitrary dom0 command-execution services.
 
 Dom0 host changes are declared under:
 

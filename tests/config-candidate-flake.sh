@@ -164,6 +164,34 @@ jq -e '
     .domains[$name].features."nixome-backend" == "nix-closure" and
     .domains[$name].features."nixome-role" == $role and
     .domains[$name].services."network-manager" == false;
+  def dev_domain:
+    .domains.dev.class == "StandaloneVM" and
+    .domains.dev.template == null and
+    .domains.dev.label == "green" and
+    .domains.dev.netvm == "sys-firewall" and
+    .domains.dev.backend.type == "nix-closure" and
+    .domains.dev.backend.template == null and
+    .domains.dev.backend.system.source == null and
+    .domains.dev.backend.system.source_ref.attr == "nixosConfigurations.nixome-domain-dev.config.system.build.toplevel" and
+    .domains.dev.backend.root.mode == "qubes-root-image" and
+    .domains.dev.backend.root.source == null and
+    .domains.dev.backend.root.source_ref.attr == "packages.x86_64-linux.nixome-domain-dev-root-image" and
+    .domains.dev.backend.root.source_ref.subpath == "root.img" and
+    .domains.dev.backend.store.mode == "shared-closure" and
+    .domains.dev.backend.store.source == null and
+    .domains.dev.backend.store.source_ref.attr == "packages.x86_64-linux.nixome-domain-dev-store-closure" and
+    .domains.dev.backend.store.source_ref.subpath == "" and
+    .domains.dev.backend.store.mountpoint == "/nix/store" and
+    .domains.dev.backend.store.device == "/dev/xvde" and
+    .domains.dev.backend.store.read_only == true and
+    .domains.dev.backend.state.persistent == "dev-private" and
+    .domains.dev.backend.state.persistent_size == 34359738368 and
+    .domains.dev.prefs.memory == 4096 and
+    .domains.dev.prefs.maxmem == 8192 and
+    .domains.dev.prefs.vcpus == 4 and
+    .domains.dev.features."nixome-backend" == "nix-closure" and
+    .domains.dev.features."nixome-role" == "dev" and
+    .domains.dev.features."nixome-dev" == "1";
 
   .schema == "nixome.qubes-topology.v1" and
   .templates == {} and
@@ -180,6 +208,7 @@ jq -e '
   .domains."config-validator".prefs.memory == 2048 and
   .domains."config-validator".backend.state.persistent_size == 8589934592 and
   .domains."config-validator".features."nixome-config-validator" == "1" and
+  dev_domain and
   .qrexec_policy.rules == [
     {
       "service": "nixome.PolicyProbe",

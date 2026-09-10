@@ -11,12 +11,16 @@ let
   hasConfigVaultRole = cfg.role == "config-vault";
   hasConfigStagingRole = cfg.role == "config-staging";
   hasConfigValidatorRole = cfg.role == "config-validator";
+  hasDevRole = cfg.role == "dev";
   hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole;
-  hasConfigNixRole = hasConfigStagingRole || hasConfigValidatorRole;
+  hasPrivateNixRole = hasConfigStagingRole || hasConfigValidatorRole || hasDevRole;
+  hasSeedInputsImportRole = hasConfigStagingRole || hasConfigValidatorRole;
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
   roleGit = pkgs.gitMinimal;
+  nixomeCli = pkgs.callPackage ../pkgs/nixome-cli { };
   systemdPackage = config.systemd.package;
   configSeedInputsPublicPath = "/etc/nixome/config-seed-inputs";
+  devPersistentPaths = lib.unique (cfg.devPersistentPaths ++ [ cfg.codexHome ]);
 
   qubesGuestPath = [
     pkgs.coreutils
@@ -55,7 +59,7 @@ let
         pkgs.qubes-core-qubesdb
         pkgs.util-linux
       ]
-      ++ lib.optionals (role == "config-staging" || role == "config-validator") [
+      ++ lib.optionals (role == "config-staging" || role == "config-validator" || role == "dev") [
         configNix
         pkgs.nix
       ]
@@ -90,6 +94,39 @@ let
       roleGit
       pkgs.gnutar
       pkgs.jq
+    ];
+    dev = [
+      (lib.hiPrio configNix)
+      nixomeCli
+      pkgs.bashInteractive
+      pkgs.cacert
+      pkgs.cargo
+      pkgs.clippy
+      pkgs.codex
+      pkgs.diffutils
+      pkgs.fd
+      pkgs.file
+      pkgs.findutils
+      pkgs.gawk
+      pkgs.git
+      pkgs.gnugrep
+      pkgs.gnumake
+      pkgs.gnused
+      pkgs.gnutar
+      pkgs.gzip
+      pkgs.jq
+      pkgs.less
+      pkgs.nixfmt
+      pkgs.openssh
+      pkgs.procps
+      pkgs.python3
+      pkgs.ripgrep
+      pkgs.rustc
+      pkgs.rustfmt
+      pkgs.uv
+      pkgs.vim
+      pkgs.which
+      pkgs.xz
     ];
   };
 
@@ -1149,16 +1186,18 @@ let
   configSeedInputsImportService = pkgs.writeShellScript "nixome-config-seed-inputs-import-qrexec" ''
     set -eu
 
-    export PATH=${lib.makeBinPath [
-      pkgs.coreutils
-      pkgs.gawk
-      pkgs.gnugrep
-      pkgs.gnutar
-      pkgs.gzip
-      pkgs.jq
-      pkgs.nix
-      pkgs.util-linux
-    ]}
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.gawk
+        pkgs.gnugrep
+        pkgs.gnutar
+        pkgs.gzip
+        pkgs.jq
+        pkgs.nix
+        pkgs.util-linux
+      ]
+    }
 
     import_user=${lib.escapeShellArg cfg.user}
     target_root="''${NIXOME_CONFIG_SEED_INPUTS_PATH:-${cfg.configSeedInputsPath}}"
@@ -1802,6 +1841,94 @@ let
     exec ${configVaultArchiveDeployment}/bin/nixome-config-vault-archive-deployment
   '';
 
+  nixStoreRuntimeCheckService = pkgs.writeShellScript "nixome-nix-store-runtime-check-qrexec" ''
+    set -eu
+
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.gnugrep
+        pkgs.gnused
+        pkgs.util-linux
+      ]
+    }
+
+    system_path="$(
+      tr ' ' '\n' < /proc/cmdline |
+        sed -n 's|^nixome.system=||p' |
+        head -n 1
+    )"
+    store_device="$(
+      tr ' ' '\n' < /proc/cmdline |
+        sed -n 's|^nixome.storedev=||p' |
+        head -n 1
+    )"
+    store_format="$(
+      tr ' ' '\n' < /proc/cmdline |
+        sed -n 's|^nixome.storefmt=||p' |
+        head -n 1
+    )"
+    store_blob_device="$(
+      tr ' ' '\n' < /proc/cmdline |
+        sed -n 's|^nixome.storeblobdev=||p' |
+        head -n 1
+    )"
+    [ -n "$store_format" ] || store_format="erofs"
+
+    [ -n "$system_path" ] || {
+      echo "missing nixome.system kernel option" >&2
+      exit 1
+    }
+    [ -n "$store_device" ] || {
+      echo "missing nixome.storedev kernel option" >&2
+      exit 1
+    }
+    [ -x "$system_path/init" ] || {
+      echo "system init is not executable: $system_path/init" >&2
+      exit 1
+    }
+
+    current_system="$(readlink -f /run/current-system)"
+    [ "$current_system" = "$system_path" ] || {
+      echo "current system mismatch: $current_system != $system_path" >&2
+      exit 1
+    }
+
+    mount_source="$(findmnt -rn -T /nix/store -o SOURCE)"
+    mount_options="$(findmnt -rn -T /nix/store -o OPTIONS)"
+
+    [ "$mount_source" = "$store_device" ] || {
+      echo "/nix/store source mismatch: $mount_source != $store_device" >&2
+      exit 1
+    }
+    if [ "$store_format" = "erofs" ] && [ -n "$store_blob_device" ]; then
+      [ -b "$store_blob_device" ] || {
+        echo "store blob device is missing: $store_blob_device" >&2
+        exit 1
+      }
+    fi
+    case ",$mount_options," in
+      *,ro,*) ;;
+      *)
+        echo "/nix/store is not mounted read-only: $mount_options" >&2
+        exit 1
+        ;;
+    esac
+
+    write_probe="/nix/store/.nixome-runtime-write-probe-$$"
+    if touch "$write_probe" 2>/tmp/nixome-runtime-write-probe.err; then
+      rm -f "$write_probe"
+      echo "/nix/store accepted a write probe" >&2
+      exit 1
+    fi
+
+    printf 'system=%s\n' "$system_path"
+    printf 'store_device=%s\n' "$store_device"
+    printf 'store_format=%s\n' "$store_format"
+    printf 'store_blob_device=%s\n' "$store_blob_device"
+    printf 'store_options=%s\n' "$mount_options"
+  '';
+
   policyProbeService = pkgs.writeShellScript "nixome-policy-probe-qrexec" ''
     set -eu
 
@@ -1928,6 +2055,7 @@ in
         "config-vault"
         "config-staging"
         "config-validator"
+        "dev"
       ];
       default = "base";
       description = "Nixome role-specific userspace to place in the guest domain.";
@@ -1968,6 +2096,18 @@ in
       default = "/rw/home/${cfg.user}/nixome-config-seed-inputs";
       description = "Persistent path where dom0 imports offline config flake seed inputs.";
     };
+
+    codexHome = lib.mkOption {
+      type = lib.types.str;
+      default = "/home/${cfg.user}/.codex";
+      description = "Persistent Codex CLI state directory. This maps to CODEX_HOME.";
+    };
+
+    devPersistentPaths = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "/home/${cfg.user}/dev" ];
+      description = "Persistent user paths initialized by the development role.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -1996,11 +2136,19 @@ in
         assertion = lib.hasPrefix "/rw/" cfg.configSeedInputsPath;
         message = "nixome.qubeGuest.configSeedInputsPath should live under /rw for Qubes private storage.";
       }
+      {
+        assertion = lib.hasPrefix "/home/" cfg.codexHome;
+        message = "nixome.qubeGuest.codexHome should live under /home for Qubes private storage.";
+      }
+      {
+        assertion = lib.all (path: lib.hasPrefix "/home/" path) devPersistentPaths;
+        message = "nixome.qubeGuest.devPersistentPaths entries should live under /home for Qubes private storage.";
+      }
     ];
 
     boot.loader.grub.enable = false;
     boot.initrd.systemd.enable = lib.mkDefault true;
-    nixome.minimalGuest.nix.enable = lib.mkDefault hasConfigNixRole;
+    nixome.minimalGuest.nix.enable = lib.mkDefault hasPrivateNixRole;
     boot.initrd.availableKernelModules = [
       "xen-blkfront"
       "xen-fbfront"
@@ -2211,7 +2359,7 @@ in
       unitConfig.OnFailure = [ "nixome-qubes-rw-init-diagnostics.service" ];
     };
 
-    systemd.services.nixome-config-seed-inputs-mount = lib.mkIf hasConfigNixRole {
+    systemd.services.nixome-config-seed-inputs-mount = lib.mkIf hasSeedInputsImportRole {
       description = "Expose imported Nixome config seed inputs";
       wantedBy = [ "multi-user.target" ];
       wants = [ "nixome-qubes-rw-init.service" ];
@@ -2298,16 +2446,19 @@ in
     systemd.services.nixome-config-guest-init = lib.mkIf hasConfigRole {
       description = "Initialize Nixome config repositories in Qubes private storage";
       wantedBy = [ "multi-user.target" ];
-      wants =
-        [ "nixome-qubes-rw-init.service" ]
-        ++ lib.optionals hasConfigNixRole [ "nixome-config-seed-inputs-mount.service" ];
-      requires =
-        [ "nixome-qubes-rw-init.service" ]
-        ++ lib.optionals hasConfigNixRole [ "nixome-config-seed-inputs-mount.service" ];
+      wants = [
+        "nixome-qubes-rw-init.service"
+      ]
+      ++ lib.optionals hasSeedInputsImportRole [ "nixome-config-seed-inputs-mount.service" ];
+      requires = [
+        "nixome-qubes-rw-init.service"
+      ]
+      ++ lib.optionals hasSeedInputsImportRole [ "nixome-config-seed-inputs-mount.service" ];
       after = [
         "nixome-qubes-rw-init.service"
         "qubes-db.service"
-      ] ++ lib.optionals hasConfigNixRole [ "nixome-config-seed-inputs-mount.service" ];
+      ]
+      ++ lib.optionals hasSeedInputsImportRole [ "nixome-config-seed-inputs-mount.service" ];
       before = [ "qubes-qrexec-agent.service" ];
       path = [
         pkgs.coreutils
@@ -2363,6 +2514,40 @@ in
       unitConfig.OnFailure = [ "nixome-config-guest-init-diagnostics.service" ];
     };
 
+    systemd.services.nixome-dev-guest-init = lib.mkIf hasDevRole {
+      description = "Initialize persistent Nixome development state";
+      wantedBy = [ "multi-user.target" ];
+      wants = [ "nixome-qubes-rw-init.service" ];
+      requires = [ "nixome-qubes-rw-init.service" ];
+      after = [ "nixome-qubes-rw-init.service" ];
+      before = [ "qubes-qrexec-agent.service" ];
+      path = [
+        pkgs.coreutils
+        pkgs.util-linux
+      ];
+      script =
+        let
+          installPersistentPath =
+            path:
+            let
+              mode = if path == cfg.codexHome then "0700" else "0755";
+            in
+            ''
+              install -d -m ${mode} -o ${lib.escapeShellArg cfg.user} -g users ${lib.escapeShellArg path}
+            '';
+        in
+        ''
+          set -eu
+
+          install -d -m 0700 -o ${lib.escapeShellArg cfg.user} -g users ${lib.escapeShellArg cfg.configNixStoreRoot}
+        ''
+        + lib.concatMapStrings installPersistentPath devPersistentPaths;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+    };
+
     systemd.services.qubes-db = {
       enable = true;
       wantedBy = [ "sysinit.target" ];
@@ -2382,12 +2567,14 @@ in
       requires = [
         "nixome-qubes-rw-init.service"
       ]
-      ++ lib.optional hasConfigRole "nixome-config-guest-init.service";
+      ++ lib.optional hasConfigRole "nixome-config-guest-init.service"
+      ++ lib.optional hasDevRole "nixome-dev-guest-init.service";
       after = [
         "nixome-qubes-rw-init.service"
         "systemd-user-sessions.service"
       ]
-      ++ lib.optional hasConfigRole "nixome-config-guest-init.service";
+      ++ lib.optional hasConfigRole "nixome-config-guest-init.service"
+      ++ lib.optional hasDevRole "nixome-dev-guest-init.service";
       aliases = [ "qubes-core-agent.service" ];
       overrideStrategy = "asDropin";
       unitConfig.OnFailure = [ "nixome-qubes-qrexec-diagnostics.service" ];
@@ -2427,15 +2614,17 @@ in
           mode = "0444";
         };
 
-    environment.etc."qubes-rpc/nixome.Config.SeedInputsImport" = lib.mkIf hasConfigNixRole {
+    environment.etc."qubes-rpc/nixome.Config.SeedInputsImport" = lib.mkIf hasSeedInputsImportRole {
       source = configSeedInputsImportService;
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/nixome.Config.SeedInputsImport" = lib.mkIf hasConfigNixRole {
-      text = "force-user='root'\n";
-      mode = "0444";
-    };
+    environment.etc."qubes/rpc-config/nixome.Config.SeedInputsImport" =
+      lib.mkIf hasSeedInputsImportRole
+        {
+          text = "force-user='root'\n";
+          mode = "0444";
+        };
 
     environment.etc."qubes-rpc/nixome.Config.ArchiveCandidate" = lib.mkIf hasConfigVaultRole {
       source = configArchiveService;
@@ -2458,91 +2647,7 @@ in
     };
 
     environment.etc."qubes-rpc/nixome.NixStoreRuntimeCheck" = {
-      text = ''#!${pkgs.runtimeShell}
-        set -eu
-
-        export PATH=${lib.makeBinPath [
-          pkgs.coreutils
-          pkgs.gnugrep
-          pkgs.gnused
-          pkgs.util-linux
-        ]}
-
-        system_path="$(
-          tr ' ' '\n' < /proc/cmdline |
-            sed -n 's|^nixome.system=||p' |
-            head -n 1
-        )"
-        store_device="$(
-          tr ' ' '\n' < /proc/cmdline |
-            sed -n 's|^nixome.storedev=||p' |
-            head -n 1
-        )"
-        store_format="$(
-          tr ' ' '\n' < /proc/cmdline |
-            sed -n 's|^nixome.storefmt=||p' |
-            head -n 1
-        )"
-        store_blob_device="$(
-          tr ' ' '\n' < /proc/cmdline |
-            sed -n 's|^nixome.storeblobdev=||p' |
-            head -n 1
-        )"
-        [ -n "$store_format" ] || store_format="erofs"
-
-        [ -n "$system_path" ] || {
-          echo "missing nixome.system kernel option" >&2
-          exit 1
-        }
-        [ -n "$store_device" ] || {
-          echo "missing nixome.storedev kernel option" >&2
-          exit 1
-        }
-        [ -x "$system_path/init" ] || {
-          echo "system init is not executable: $system_path/init" >&2
-          exit 1
-        }
-
-        current_system="$(readlink -f /run/current-system)"
-        [ "$current_system" = "$system_path" ] || {
-          echo "current system mismatch: $current_system != $system_path" >&2
-          exit 1
-        }
-
-        mount_source="$(findmnt -rn -T /nix/store -o SOURCE)"
-        mount_options="$(findmnt -rn -T /nix/store -o OPTIONS)"
-
-        [ "$mount_source" = "$store_device" ] || {
-          echo "/nix/store source mismatch: $mount_source != $store_device" >&2
-          exit 1
-        }
-        if [ "$store_format" = "erofs" ] && [ -n "$store_blob_device" ]; then
-          [ -b "$store_blob_device" ] || {
-            echo "store blob device is missing: $store_blob_device" >&2
-            exit 1
-          }
-        fi
-        case ",$mount_options," in
-          *,ro,*) ;;
-          *)
-            echo "/nix/store is not mounted read-only: $mount_options" >&2
-            exit 1
-            ;;
-        esac
-
-        write_probe="/nix/store/.nixome-runtime-write-probe-$$"
-        if touch "$write_probe" 2>/tmp/nixome-runtime-write-probe.err; then
-          rm -f "$write_probe"
-          echo "/nix/store accepted a write probe" >&2
-          exit 1
-        fi
-
-        printf 'system=%s\n' "$system_path"
-        printf 'store_device=%s\n' "$store_device"
-        printf 'store_format=%s\n' "$store_format"
-        printf 'store_blob_device=%s\n' "$store_blob_device"
-        printf 'store_options=%s\n' "$mount_options"
-      '';
+      source = nixStoreRuntimeCheckService;
       mode = "0555";
     };
 
@@ -2585,7 +2690,11 @@ in
     ]
     ++ (rolePackages.${cfg.role} or [ ]);
 
-    nix.settings = lib.mkIf hasConfigNixRole {
+    environment.sessionVariables = lib.mkIf hasDevRole {
+      CODEX_HOME = cfg.codexHome;
+    };
+
+    nix.settings = lib.mkIf hasPrivateNixRole {
       allowed-users = [ cfg.user ];
       experimental-features = [
         "nix-command"

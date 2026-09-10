@@ -164,6 +164,11 @@ LOCAL_CHECKS = (
         ("{root}/tests/nixome-minimal-closure.sh",),
         (pytest.mark.nix,),
     ),
+    LocalCheck(
+        "dev-role",
+        ("{root}/tests/dev-role.sh",),
+        (pytest.mark.nix,),
+    ),
     LocalCheck("config-staging-validate", ("{root}/tests/config-staging-validate.sh",)),
     LocalCheck("qrexec-policy-path", ("{root}/tests/qrexec-policy-path.sh",)),
     LocalCheck("qube-guest-policy-probe", ("{root}/tests/qube-guest-policy-probe.sh",)),

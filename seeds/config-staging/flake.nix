@@ -127,11 +127,26 @@
           "netvm"
           "packages"
           "prefs"
+          "role"
           "services"
           "state"
           "systemd"
           "rootImageSizeMiB"
         ] (expectNixNativeAttrs path value);
+      checkNixNativeDomainRole =
+        path: definition:
+        let
+          role = definition.role or "base";
+        in
+        if
+          builtins.elem role [
+            "base"
+            "dev"
+          ]
+        then
+          role
+        else
+          throw "nixome.nixNative.${path}.role: expected one of base, dev";
       checkedNixNative =
         let
           checked = checkNixNativeKeys "" [ "domains" ] (
@@ -140,9 +155,16 @@
         in
         checked
         // {
-          domains = builtins.mapAttrs (name: value: checkNixNativeDomain "domains.${name}" value) (
-            checked.domains or { }
-          );
+          domains = builtins.mapAttrs (
+            name: value:
+            let
+              checkedDomain = checkNixNativeDomain "domains.${name}" value;
+            in
+            checkedDomain
+            // {
+              role = checkNixNativeDomainRole "domains.${name}" checkedDomain;
+            }
+          ) (checked.domains or { });
         };
       checkConfigRoleAttrs =
         path: attrs:
@@ -314,6 +336,7 @@
         name: definition:
         templateBuilders.mkNixNativeDomain {
           inherit name;
+          guestRole = definition.role;
           modules = [
             (mkGuestContentModule name definition)
           ]

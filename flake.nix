@@ -106,6 +106,7 @@
       ];
 
       configNixPrivateSizeBytes = 8589934592;
+      devPrivateSizeBytes = 34359738368;
 
       configRoleDefaults = {
         config-vault = {
@@ -173,6 +174,25 @@
         };
       };
 
+      devRoleDefaults = {
+        guestHostName = "dev";
+        label = "green";
+        rootImageSizeMiB = 512;
+        state.persistentSize = devPrivateSizeBytes;
+        prefs = {
+          autostart = false;
+          include_in_backups = true;
+          memory = 4096;
+          maxmem = 8192;
+          vcpus = 4;
+        };
+        features = {
+          "nixome-managed" = "1";
+          "nixome-role" = "dev";
+          "nixome-dev" = "1";
+        };
+      };
+
       mkConfigDomainEntries =
         system:
         let
@@ -213,6 +233,29 @@
             value = mkEntry role;
           }) configVmRoles
         );
+
+      mkDevDomainEntry =
+        system:
+        let
+          qubeBuilders = mkNixomeQubeBuilders system;
+        in
+        qubeBuilders.mkNixNativeDomain {
+          name = "dev";
+          guestRole = "dev";
+          modules = [
+            ({ ... }: {
+              networking.hostName = devRoleDefaults.guestHostName;
+            })
+          ];
+          rootImageSizeMiB = devRoleDefaults.rootImageSizeMiB;
+          kernelName = nixomeQubesVmKernelName;
+          label = devRoleDefaults.label;
+          netvm = "sys-firewall";
+          prefs = devRoleDefaults.prefs;
+          features = devRoleDefaults.features;
+          services = { };
+          state = devRoleDefaults.state;
+        };
 
       materializeNixClosureDomain =
         entry:
@@ -349,6 +392,7 @@
           nixome-config-vms-smoke = pkgs.callPackage ./pkgs/nixome-config-vms-smoke { };
           nixome-cli = pkgs.callPackage ./pkgs/nixome-cli { };
           nixome = pkgs.callPackage ./pkgs/nixome-cli { };
+          codex = pkgs.codex;
           nixome-nix-domain-storage = pkgs.callPackage ./pkgs/nixome-nix-domain-storage { };
           nixome-nix-closure-domain-smoke = pkgs.callPackage ./pkgs/nixome-nix-closure-domain-smoke { };
           nixome-qubes-storage = pkgs.python3.pkgs.callPackage ./pkgs/nixome-qubes-storage { };
@@ -394,6 +438,7 @@
         config-archive-package = self.packages.${system}.nixome-config-archive-candidate;
         config-boot-verify-package = self.packages.${system}.nixome-config-boot-verify;
         config-control-package = self.packages.${system}.nixome-config-control;
+        codex-package = self.packages.${system}.codex;
         config-seed-inputs-import-package = self.packages.${system}.nixome-config-seed-inputs-import;
         config-status-package = self.packages.${system}.nixome-config-status;
         nixome-cli-package = self.packages.${system}.nixome-cli;
@@ -473,5 +518,6 @@
         (mkConfigDomainEntries "x86_64-linux").config-staging.configuration;
       nixosConfigurations.nixome-domain-config-validator =
         (mkConfigDomainEntries "x86_64-linux").config-validator.configuration;
+      nixosConfigurations.nixome-domain-dev = (mkDevDomainEntry "x86_64-linux").configuration;
     };
 }
