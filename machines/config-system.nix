@@ -51,6 +51,7 @@ in
   nixome.qubes = {
     enable = true;
     setupConfigOnBoot.enable = true;
+    configCurrentBootstrapOnBoot.enable = true;
 
     prefs = {
       # Fresh Nixome dom0 images do not have a Fedora/Qubes VM kernel
@@ -77,6 +78,8 @@ in
       candidateValidateService = "nixome.Config.ValidateCandidate";
       archiveService = "nixome.Config.ArchiveCandidate";
       archiveDeploymentService = "nixome.Config.ArchiveDeployment";
+      currentExportService = "nixome.Config.ExportCurrent";
+      currentImportService = "nixome.Config.ImportCurrent";
       seedInputsImportService = "nixome.Config.SeedInputsImport";
     };
   };

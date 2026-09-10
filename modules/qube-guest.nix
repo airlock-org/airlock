@@ -14,7 +14,8 @@ let
   hasDevRole = cfg.role == "dev";
   hasSysNetRole = cfg.role == "sys-net";
   hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole;
-  hasPrivateNixRole = hasConfigStagingRole || hasConfigValidatorRole || hasDevRole;
+  hasPrivateNixRole =
+    hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole || hasDevRole;
   hasSeedInputsImportRole = hasConfigStagingRole || hasConfigValidatorRole;
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
   roleGit = pkgs.gitMinimal;
@@ -48,16 +49,14 @@ let
     pkgs.util-linux
   ];
 
-  networkGuestPath =
-    qubesGuestPath
-    ++ [
-      pkgs.conntrack-tools
-      pkgs.iproute2
-      pkgs.iptables
-      pkgs.networkmanager
-      pkgs.nftables
-      pkgs.procps
-    ];
+  networkGuestPath = qubesGuestPath ++ [
+    pkgs.conntrack-tools
+    pkgs.iproute2
+    pkgs.iptables
+    pkgs.networkmanager
+    pkgs.nftables
+    pkgs.procps
+  ];
 
   qubesIptablesStart = pkgs.writeShellScript "nixome-qubes-iptables-start" ''
     set -eu
@@ -120,10 +119,13 @@ let
         pkgs.qubes-core-qubesdb
         pkgs.util-linux
       ]
-      ++ lib.optionals (role == "config-staging" || role == "config-validator" || role == "dev") [
-        configNix
-        pkgs.nix
-      ]
+      ++
+        lib.optionals
+          (role == "config-vault" || role == "config-staging" || role == "config-validator" || role == "dev")
+          [
+            configNix
+            pkgs.nix
+          ]
     );
 
   rolePackages = {
@@ -140,6 +142,8 @@ let
       configVaultInit
       configVaultArchiveCandidate
       configVaultArchiveDeployment
+      configVaultExportCurrent
+      (lib.hiPrio configNix)
       pkgs.gawk
       roleGit
       pkgs.gnutar
@@ -147,6 +151,7 @@ let
     ];
     config-staging = [
       configStagingExportCandidate
+      configStagingImportCurrent
       configStagingInit
       configStagingValidate
       (lib.hiPrio configNix)
@@ -211,6 +216,88 @@ let
   configStagingSystemSchema = builtins.readFile ../lib/nixome/system.nix;
   configStagingTopologySchema = builtins.readFile ../lib/nixome/topology.nix;
   configStagingPrebuiltTemplateSources = lib.generators.toPretty { } nixomePrebuiltTemplateSources;
+  configSeedRepoPaths = [
+    "README.md"
+    "dom0-profile/bin/nixome-dom0-profile-activate"
+    "dom0-profile/share/nixome/profile.json"
+    "flake.nix"
+    "nixome/config-vms.nix"
+    "nixome/dom0-host.nix"
+    "nixome/local.nix"
+    "nixome/machine.nix"
+    "nixome/prebuilt-template-sources.nix"
+    "nixome/system.nix"
+    "nixome/system-schema.nix"
+    "nixome/topology.nix"
+  ];
+  configSeedRepoGitAddArgs = lib.escapeShellArgs configSeedRepoPaths;
+  configSeedRepoFilesScript = ''
+    write_config_seed_repo_files() {
+      mkdir -p dom0-profile/bin dom0-profile/share/nixome nixome
+      cat > README.md <<'EOF'
+    # Nixome Machine Configuration
+
+    This is the editable Nixome configuration candidate. dom0 archives a
+    validated commit into config-vault before attempting deployment.
+    EOF
+      cat > flake.nix <<'EOF'
+    ${configStagingSeedFlake}
+    EOF
+      cat > nixome/topology.nix <<'EOF'
+    ${configStagingTopologySchema}
+    EOF
+      cat > nixome/system-schema.nix <<'EOF'
+    ${configStagingSystemSchema}
+    EOF
+      cat > nixome/config-vms.nix <<'EOF'
+    ${configStagingConfigVms}
+    EOF
+      cat > nixome/dom0-host.nix <<'EOF'
+    ${configStagingDom0Host}
+    EOF
+      cat > nixome/local.nix <<'EOF'
+    ${configStagingLocal}
+    EOF
+      cat > nixome/machine.nix <<'EOF'
+    ${configStagingMachine}
+    EOF
+      cat > nixome/system.nix <<'EOF'
+    ${configStagingSystem}
+    EOF
+      cat > nixome/prebuilt-template-sources.nix <<'EOF'
+    ${configStagingPrebuiltTemplateSources}
+    EOF
+      cat > dom0-profile/bin/nixome-dom0-profile-activate <<'EOF'
+    ${configStagingDom0ProfileActivate}
+    EOF
+      cat > dom0-profile/share/nixome/profile.json <<'EOF'
+    ${configStagingDom0ProfileJson}
+    EOF
+      chmod 0755 dom0-profile/bin/nixome-dom0-profile-activate
+    }
+  '';
+  configSeedInputSubstitutionScript = ''
+    substitute_seed_inputs() {
+      seed_root="$1"
+      ${pkgs.gnused}/bin/sed -i \
+        -e "s|__NIXOME_NIXPKGS_URL__|path:$seed_root/nixpkgs|g" \
+        -e "s|__NIXPKGS_LIBVIRT_10_5_PATH__|$seed_root/nixpkgs-libvirt_10_5|g" \
+        -e "s|__NIXOME_NIXOS_QUBES_PATH__|$seed_root/nixos-qubes|g" \
+        -e "s|__NIXOME_SUPPORT_PATH__|$seed_root/nixome-support|g" \
+        flake.nix
+      for old_seed_root in \
+        /rw/nixome/config-seed-inputs \
+        /rw/home/${lib.escapeShellArg cfg.user}/.local/share/nixome/config-seed-inputs \
+        ${lib.escapeShellArg cfg.configSeedInputsPath}; do
+        ${pkgs.gnused}/bin/sed -i \
+          -e "s|path:$old_seed_root/nixpkgs|path:$seed_root/nixpkgs|g" \
+          -e "s|$old_seed_root/nixpkgs-libvirt_10_5|$seed_root/nixpkgs-libvirt_10_5|g" \
+          -e "s|$old_seed_root/nixos-qubes|$seed_root/nixos-qubes|g" \
+          -e "s|$old_seed_root/nixome-support|$seed_root/nixome-support|g" \
+          flake.nix
+      done
+    }
+  '';
   configGuestInitCommand =
     if hasConfigVaultRole then
       "${configVaultInit}/bin/nixome-config-vault-init"
@@ -253,35 +340,12 @@ let
         set -eu
 
         repo="''${NIXOME_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
-        if [ -d "$repo/.git" ]; then
-          printf 'config archive already exists: %s\n' "$repo"
-          exit 0
-        fi
-
-        mkdir -p "$repo"
-        cd "$repo"
-        ${roleGit}/bin/git init -b main
-        mkdir -p candidates deployments
-        : > candidates/.gitkeep
-        : > deployments/.gitkeep
-        cat > README.md <<'EOF'
-    # Nixome Configuration Vault
-
-    This repository archives Nixome configuration candidates and deployment
-    records written by dom0.
-    EOF
-        ${roleGit}/bin/git add README.md candidates/.gitkeep deployments/.gitkeep
-        ${roleGit}/bin/git \
-          -c user.name='Nixome Config Vault' \
-          -c user.email='nixome-config-vault@localhost' \
-          commit -m 'init nixome config archive'
-  '';
-
-  configStagingInit = pkgs.writeShellScriptBin "nixome-config-staging-init" ''
-        set -eu
-
-        repo="''${NIXOME_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
         seed_root="''${NIXOME_CONFIG_SEED_INPUTS_PATH:-${configSeedInputsPublicPath}}"
+        tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
+        trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
+
+        ${configSeedRepoFilesScript}
+        ${configSeedInputSubstitutionScript}
 
         seed_inputs_ready() {
           [ -d "$seed_root/nixpkgs" ] &&
@@ -290,179 +354,460 @@ let
             [ -d "$seed_root/nixome-support" ]
         }
 
-        substitute_seed_inputs() {
-          ${pkgs.gnused}/bin/sed -i \
-            -e "s|__NIXOME_NIXPKGS_URL__|path:$seed_root/nixpkgs|g" \
-            -e "s|__NIXPKGS_LIBVIRT_10_5_PATH__|$seed_root/nixpkgs-libvirt_10_5|g" \
-            -e "s|__NIXOME_NIXOS_QUBES_PATH__|$seed_root/nixos-qubes|g" \
-            -e "s|__NIXOME_SUPPORT_PATH__|$seed_root/nixome-support|g" \
-            flake.nix
-          for old_seed_root in \
-            /rw/nixome/config-seed-inputs \
-            /rw/home/${lib.escapeShellArg cfg.user}/.local/share/nixome/config-seed-inputs \
-            ${lib.escapeShellArg cfg.configSeedInputsPath}; do
-            ${pkgs.gnused}/bin/sed -i \
-              -e "s|path:$old_seed_root/nixpkgs|path:$seed_root/nixpkgs|g" \
-              -e "s|$old_seed_root/nixpkgs-libvirt_10_5|$seed_root/nixpkgs-libvirt_10_5|g" \
-              -e "s|$old_seed_root/nixos-qubes|$seed_root/nixos-qubes|g" \
-              -e "s|$old_seed_root/nixome-support|$seed_root/nixome-support|g" \
-              flake.nix
-          done
+        write_archive_readme() {
+          cat > README.md <<'EOF'
+    # Nixome Configuration Vault
+
+    This repository archives Nixome configuration baselines, candidates, and
+    deployment records written by dom0.
+
+    The `current` link points at the latest config snapshot that should be used
+    to initialize an editable config-staging worktree.
+    EOF
         }
 
-        seed_inputs_need_refresh() {
-          for input_file in flake.nix flake.lock; do
-            [ -f "$input_file" ] || continue
-            ${pkgs.gnugrep}/bin/grep -F '__NIXOME_NIXPKGS_URL__' "$input_file" >/dev/null 2>&1 && return 0
-            ${pkgs.gnugrep}/bin/grep -F '/rw/nixome/config-seed-inputs/' "$input_file" >/dev/null 2>&1 && return 0
-            ${pkgs.gnugrep}/bin/grep -F '/rw/home/${lib.escapeShellArg cfg.user}/.local/share/nixome/config-seed-inputs/' "$input_file" >/dev/null 2>&1 && return 0
-            ${pkgs.gnugrep}/bin/grep -F '${cfg.configSeedInputsPath}/' "$input_file" >/dev/null 2>&1 && return 0
-          done
-          return 1
+        commit_archive_if_needed() {
+          message="$1"
+          if ! ${roleGit}/bin/git diff --cached --quiet; then
+            ${roleGit}/bin/git \
+              -c user.name='Nixome Config Vault' \
+              -c user.email='nixome-config-vault@localhost' \
+              commit -m "$message"
+          fi
         }
 
-        require_clean_worktree_for_seed_update() {
-          dirty="$(${roleGit}/bin/git status --porcelain)"
-          if [ -n "$dirty" ]; then
-            printf 'config staging worktree is dirty; refusing to refresh seed input paths\n%s\n' "$dirty" >&2
+        ensure_archive_repo() {
+          mkdir -p "$repo"
+          cd "$repo"
+          if [ ! -d .git ]; then
+            ${roleGit}/bin/git init -b main
+          fi
+          mkdir -p candidates deployments
+          : > candidates/.gitkeep
+          : > deployments/.gitkeep
+          write_archive_readme
+          ${roleGit}/bin/git add README.md candidates/.gitkeep deployments/.gitkeep
+        }
+
+        set_current_link() {
+          candidate_commit="$1"
+          [ -d "candidates/$candidate_commit/snapshot" ] || {
+            printf 'current candidate snapshot is missing: %s\n' "$candidate_commit" >&2
             exit 1
-          fi
+          }
+          printf '%s\n' "$candidate_commit" > latest-current
+          ${pkgs.coreutils}/bin/ln -sfn "candidates/$candidate_commit/snapshot" current
+          ${roleGit}/bin/git add latest-current current
         }
 
-        add_seed_lock_if_ready() {
+        set_current_from_latest_deployment() {
+          [ -f latest-deployment ] || return 1
+          deployment_id="$(${pkgs.coreutils}/bin/head -n 1 latest-deployment)"
+          [ -n "$deployment_id" ] || return 1
+          [ -f "deployments/$deployment_id/deployment.json" ] || return 1
+          candidate_commit="$(${pkgs.jq}/bin/jq -r '.candidate_commit // ""' "deployments/$deployment_id/deployment.json")"
+          [ -n "$candidate_commit" ] && [ "$candidate_commit" != null ] || return 1
+          set_current_link "$candidate_commit"
+          commit_archive_if_needed "record current config from deployment $deployment_id"
+          return 0
+        }
+
+        create_initial_current() {
+          seed_repo="$tmpdir/initial-config"
+          ${pkgs.coreutils}/bin/mkdir -p "$seed_repo"
+          cd "$seed_repo"
+          write_config_seed_repo_files
+          substitute_seed_inputs "$seed_root"
+          ${roleGit}/bin/git init -b main
+          ${roleGit}/bin/git add ${configSeedRepoGitAddArgs}
+          if seed_inputs_ready; then
+            ${configNix}/bin/nixome-config-nix \
+              --extra-experimental-features nix-command \
+              --extra-experimental-features flakes \
+              flake lock \
+              --impure \
+              --offline
+          else
+            printf 'config vault seed inputs are not present yet under %s; flake.lock deferred\n' "$seed_root"
+          fi
           if [ -f flake.lock ]; then
-            printf 'config staging flake.lock already exists: %s\n' "$repo/flake.lock"
-            return 0
+            ${roleGit}/bin/git add flake.lock
           fi
+          ${roleGit}/bin/git \
+            -c user.name='Nixome Config Seed' \
+            -c user.email='nixome-config-seed@localhost' \
+            commit -m 'init nixome config candidate'
 
-          if ! seed_inputs_ready; then
-            printf 'config staging seed inputs are not present yet under %s; flake.lock deferred\n' "$seed_root"
-            return 0
+          candidate_commit="$(${roleGit}/bin/git rev-parse HEAD)"
+          archive_dir="$repo/candidates/$candidate_commit"
+          snapshot_dir="$archive_dir/snapshot"
+          ${pkgs.coreutils}/bin/mkdir -p "$archive_dir" "$snapshot_dir"
+          ${roleGit}/bin/git bundle create "$archive_dir/config.bundle" HEAD refs/heads/main >/dev/null
+          ${pkgs.jq}/bin/jq -c -n \
+            --arg schema "nixome.config-candidate.v1" \
+            --arg commit "$candidate_commit" \
+            --arg branch "main" \
+            --arg source_role "config-vault" \
+            --arg source "initial-seed" \
+            '{
+              schema: $schema,
+              commit: $commit,
+              branch: $branch,
+              source_role: $source_role,
+              source: $source
+            }' > "$archive_dir/manifest.json"
+          ${roleGit}/bin/git archive --format=tar HEAD |
+            ${pkgs.gnutar}/bin/tar -C "$snapshot_dir" -xf -
+          ${pkgs.jq}/bin/jq -c -n \
+            --arg schema "nixome.config-vault-current.v1" \
+            --arg status "current" \
+            --arg candidate_commit "$candidate_commit" \
+            --arg branch "main" \
+            --arg source "initial-seed" \
+            --arg snapshot "$archive_dir/snapshot" \
+            --arg bundle "$archive_dir/config.bundle" \
+            '{
+              schema: $schema,
+              status: $status,
+              candidate_commit: $candidate_commit,
+              branch: $branch,
+              source: $source,
+              snapshot: $snapshot,
+              bundle: $bundle
+            }' > "$archive_dir/metadata.json"
+
+          cd "$repo"
+          printf '%s\n' "$candidate_commit" > latest-candidate
+          set_current_link "$candidate_commit"
+          ${roleGit}/bin/git add "candidates/$candidate_commit" latest-candidate
+          commit_archive_if_needed "initialize current config baseline ''${candidate_commit:0:12}"
+        }
+
+        ensure_archive_repo
+        if [ -f latest-current ]; then
+          current_commit="$(${pkgs.coreutils}/bin/head -n 1 latest-current)"
+          if [ -n "$current_commit" ] && [ -d "candidates/$current_commit/snapshot" ]; then
+            set_current_link "$current_commit"
+            commit_archive_if_needed "repair current config pointer"
+            printf 'config archive current exists: %s %s\n' "$repo" "$current_commit"
+            exit 0
           fi
+        fi
+        if set_current_from_latest_deployment; then
+          printf 'config archive current restored from latest deployment: %s\n' "$repo"
+          exit 0
+        fi
+        create_initial_current
+        printf 'config archive current initialized: %s\n' "$repo"
+  '';
 
-          substitute_seed_inputs
+  configVaultExportCurrent = pkgs.writeShellScriptBin "nixome-config-vault-export-current" ''
+    set -eu
+
+    repo="''${NIXOME_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
+    tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
+    trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
+
+    ${configVaultInit}/bin/nixome-config-vault-init >/dev/null
+
+    cd "$repo"
+    candidate_commit=""
+    if [ -f latest-deployment ]; then
+      deployment_id="$(${pkgs.coreutils}/bin/head -n 1 latest-deployment)"
+      if [ -n "$deployment_id" ] && [ -f "deployments/$deployment_id/deployment.json" ]; then
+        candidate_commit="$(${pkgs.jq}/bin/jq -r '.candidate_commit // ""' "deployments/$deployment_id/deployment.json")"
+      fi
+    fi
+    if { [ -z "$candidate_commit" ] || [ "$candidate_commit" = null ]; } && [ -f latest-current ]; then
+      candidate_commit="$(${pkgs.coreutils}/bin/head -n 1 latest-current)"
+    fi
+    if { [ -z "$candidate_commit" ] || [ "$candidate_commit" = null ]; } && [ -f latest-candidate ]; then
+      candidate_commit="$(${pkgs.coreutils}/bin/head -n 1 latest-candidate)"
+    fi
+
+    case "$candidate_commit" in
+      ""|*[!0-9a-f]*)
+        printf 'invalid current config commit: %s\n' "$candidate_commit" >&2
+        exit 1
+        ;;
+    esac
+    [ -f "candidates/$candidate_commit/config.bundle" ] || {
+      printf 'current config bundle is missing: %s\n' "$candidate_commit" >&2
+      exit 1
+    }
+    [ -f "candidates/$candidate_commit/manifest.json" ] || {
+      printf 'current config manifest is missing: %s\n' "$candidate_commit" >&2
+      exit 1
+    }
+    ${pkgs.jq}/bin/jq -e \
+      --arg commit "$candidate_commit" \
+      '.schema == "nixome.config-candidate.v1" and .commit == $commit' \
+      "candidates/$candidate_commit/manifest.json" >/dev/null
+
+    ${pkgs.coreutils}/bin/cp "candidates/$candidate_commit/config.bundle" "$tmpdir/config.bundle"
+    ${pkgs.coreutils}/bin/cp "candidates/$candidate_commit/manifest.json" "$tmpdir/manifest.json"
+    exec ${pkgs.gnutar}/bin/tar -C "$tmpdir" -cf - config.bundle manifest.json
+  '';
+
+  configStagingImportCurrent = pkgs.writeShellScriptBin "nixome-config-staging-import-current" ''
+    set -eu
+
+    repo="''${NIXOME_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
+    tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
+    trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
+
+    current_tar="$tmpdir/current.tar"
+    ${pkgs.coreutils}/bin/cat > "$current_tar"
+    ${pkgs.gnutar}/bin/tar -tf "$current_tar" |
+      ${pkgs.gawk}/bin/awk '
+        $0 != "config.bundle" && $0 != "manifest.json" {
+          printf "unexpected current config tar member: %s\n", $0 > "/dev/stderr"
+          exit 1
+        }
+      '
+    ${pkgs.gnutar}/bin/tar -C "$tmpdir" -xf "$current_tar"
+
+    [ -f "$tmpdir/config.bundle" ] || {
+      printf 'current config tar is missing config.bundle\n' >&2
+      exit 1
+    }
+    [ -f "$tmpdir/manifest.json" ] || {
+      printf 'current config tar is missing manifest.json\n' >&2
+      exit 1
+    }
+
+    manifest_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/manifest.json")"
+    candidate_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/manifest.json")"
+    branch="$(${pkgs.jq}/bin/jq -r '.branch // "main"' "$tmpdir/manifest.json")"
+    [ "$manifest_schema" = "nixome.config-candidate.v1" ] || {
+      printf 'unsupported current config manifest schema: %s\n' "$manifest_schema" >&2
+      exit 1
+    }
+    case "$candidate_commit" in
+      ""|*[!0-9a-f]*)
+        printf 'invalid current config commit: %s\n' "$candidate_commit" >&2
+        exit 1
+        ;;
+    esac
+    case "$branch" in
+      ""|*[!A-Za-z0-9._/-]*)
+        printf 'invalid current config branch: %s\n' "$branch" >&2
+        exit 1
+        ;;
+    esac
+
+    verify_repo="$tmpdir/verify.git"
+    ${roleGit}/bin/git init --bare -b main "$verify_repo" >/dev/null
+    ${roleGit}/bin/git -C "$verify_repo" bundle verify "$tmpdir/config.bundle" > "$tmpdir/bundle-verify.log" 2>&1
+    bundle_commit="$(
+      ${roleGit}/bin/git -C "$verify_repo" bundle list-heads "$tmpdir/config.bundle" |
+        ${pkgs.gawk}/bin/awk 'NR == 1 { print $1 }'
+    )"
+    [ "$bundle_commit" = "$candidate_commit" ] || {
+      printf 'current config bundle commit %s does not match manifest commit %s\n' "$bundle_commit" "$candidate_commit" >&2
+      exit 1
+    }
+
+    import_status=imported
+    reason="staging initialized from config-vault current"
+    current_commit=""
+    dirty=""
+
+    clone_current_into_repo() {
+      parent="''${repo%/*}"
+      ${pkgs.coreutils}/bin/mkdir -p "$parent"
+      clone_tmp="$tmpdir/staging-clone"
+      ${roleGit}/bin/git clone "$tmpdir/config.bundle" "$clone_tmp" > "$tmpdir/git-clone.log" 2>&1
+      ${roleGit}/bin/git -C "$clone_tmp" checkout -B "$branch" "$candidate_commit" > "$tmpdir/git-checkout.log" 2>&1
+      cd "$tmpdir"
+      ${pkgs.coreutils}/bin/rm -rf "$repo"
+      ${pkgs.coreutils}/bin/mv "$clone_tmp" "$repo"
+      current_commit="$candidate_commit"
+    }
+
+    if [ -d "$repo/.git" ]; then
+      cd "$repo"
+      dirty="$(${roleGit}/bin/git status --porcelain)"
+      if ! current_commit="$(${roleGit}/bin/git rev-parse HEAD 2>/dev/null)"; then
+        if [ -n "$dirty" ]; then
+          import_status=skipped
+          reason="staging empty Git repo is dirty; refusing to overwrite"
+        else
+          clone_current_into_repo
+        fi
+      elif [ "$current_commit" = "$candidate_commit" ] && [ -z "$dirty" ]; then
+        import_status=current
+        reason="staging already matches config-vault current"
+      elif [ -n "$dirty" ]; then
+        import_status=skipped
+        reason="staging worktree is dirty; refusing to overwrite"
+      else
+        import_status=skipped
+        reason="staging already has a different committed worktree"
+      fi
+    elif [ -e "$repo" ] && [ -n "$(${pkgs.findutils}/bin/find "$repo" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)" ]; then
+      import_status=skipped
+      reason="staging path exists and is not an empty Git repository"
+    else
+      clone_current_into_repo
+    fi
+
+    ${pkgs.jq}/bin/jq -c -n \
+      --arg schema "nixome.config-staging-import-current.v1" \
+      --arg status "passed" \
+      --arg import_status "$import_status" \
+      --arg reason "$reason" \
+      --arg repo "$repo" \
+      --arg current_commit "$current_commit" \
+      --arg candidate_commit "$candidate_commit" \
+      --arg dirty "$dirty" \
+      '{
+        schema: $schema,
+        status: $status,
+        import_status: $import_status,
+        reason: $reason,
+        repo: $repo,
+        current_commit: $current_commit,
+        candidate_commit: $candidate_commit,
+        dirty: $dirty
+      }'
+  '';
+
+  configCurrentExportService = pkgs.writeShellScript "nixome-config-current-export-qrexec" ''
+    exec ${configVaultExportCurrent}/bin/nixome-config-vault-export-current
+  '';
+
+  configCurrentImportService = pkgs.writeShellScript "nixome-config-current-import-qrexec" ''
+    exec ${configStagingImportCurrent}/bin/nixome-config-staging-import-current
+  '';
+
+  configStagingInit = pkgs.writeShellScriptBin "nixome-config-staging-init" ''
+    set -eu
+
+    repo="''${NIXOME_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
+    seed_root="''${NIXOME_CONFIG_SEED_INPUTS_PATH:-${configSeedInputsPublicPath}}"
+
+    seed_inputs_ready() {
+      [ -d "$seed_root/nixpkgs" ] &&
+        [ -d "$seed_root/nixpkgs-libvirt_10_5" ] &&
+        [ -d "$seed_root/nixos-qubes" ] &&
+        [ -d "$seed_root/nixome-support" ]
+    }
+
+    ${configSeedRepoFilesScript}
+    ${configSeedInputSubstitutionScript}
+
+    seed_inputs_need_refresh() {
+      for input_file in flake.nix flake.lock; do
+        [ -f "$input_file" ] || continue
+        ${pkgs.gnugrep}/bin/grep -F '__NIXOME_NIXPKGS_URL__' "$input_file" >/dev/null 2>&1 && return 0
+        ${pkgs.gnugrep}/bin/grep -F '/rw/nixome/config-seed-inputs/' "$input_file" >/dev/null 2>&1 && return 0
+        ${pkgs.gnugrep}/bin/grep -F '/rw/home/${lib.escapeShellArg cfg.user}/.local/share/nixome/config-seed-inputs/' "$input_file" >/dev/null 2>&1 && return 0
+        ${pkgs.gnugrep}/bin/grep -F '${cfg.configSeedInputsPath}/' "$input_file" >/dev/null 2>&1 && return 0
+      done
+      return 1
+    }
+
+    require_clean_worktree_for_seed_update() {
+      dirty="$(${roleGit}/bin/git status --porcelain)"
+      if [ -n "$dirty" ]; then
+        printf 'config staging worktree is dirty; refusing to refresh seed input paths\n%s\n' "$dirty" >&2
+        exit 1
+      fi
+    }
+
+    add_seed_lock_if_ready() {
+      if [ -f flake.lock ]; then
+        printf 'config staging flake.lock already exists: %s\n' "$repo/flake.lock"
+        return 0
+      fi
+
+      if ! seed_inputs_ready; then
+        printf 'config staging seed inputs are not present yet under %s; flake.lock deferred\n' "$seed_root"
+        return 0
+      fi
+
+      substitute_seed_inputs "$seed_root"
+      ${configNix}/bin/nixome-config-nix \
+        --extra-experimental-features nix-command \
+        --extra-experimental-features flakes \
+        flake lock \
+        --impure \
+        --offline
+      ${roleGit}/bin/git add flake.nix flake.lock
+    }
+
+    if [ -d "$repo/.git" ]; then
+      cd "$repo"
+      if [ "''${NIXOME_CONFIG_REFRESH_SEED_INPUTS:-0}" = 1 ]; then
+        if ! seed_inputs_ready; then
+          printf 'config staging seed inputs are not present yet under %s; refresh deferred\n' "$seed_root"
+          printf 'config staging repo already exists: %s\n' "$repo"
+          exit 0
+        fi
+        dirty="$(${roleGit}/bin/git status --porcelain)"
+        if [ -n "$dirty" ]; then
+          printf 'config staging seed input refresh deferred because worktree is dirty\n%s\n' "$dirty"
+        else
+          substitute_seed_inputs "$seed_root"
           ${configNix}/bin/nixome-config-nix \
             --extra-experimental-features nix-command \
             --extra-experimental-features flakes \
             flake lock \
+            --recreate-lock-file \
             --impure \
             --offline
-          ${roleGit}/bin/git add flake.nix flake.lock
-        }
-
-        if [ -d "$repo/.git" ]; then
-          cd "$repo"
-          if [ "''${NIXOME_CONFIG_REFRESH_SEED_INPUTS:-0}" = 1 ]; then
-            if ! seed_inputs_ready; then
-              printf 'config staging seed inputs are not present yet under %s; refresh deferred\n' "$seed_root"
-              printf 'config staging repo already exists: %s\n' "$repo"
-              exit 0
-            fi
-            dirty="$(${roleGit}/bin/git status --porcelain)"
-            if [ -n "$dirty" ]; then
-              printf 'config staging seed input refresh deferred because worktree is dirty\n%s\n' "$dirty"
-            else
-              substitute_seed_inputs
-              ${configNix}/bin/nixome-config-nix \
-                --extra-experimental-features nix-command \
-                --extra-experimental-features flakes \
-                flake lock \
-                --recreate-lock-file \
-                --impure \
-                --offline
-              if [ -n "$(${roleGit}/bin/git status --porcelain flake.nix flake.lock)" ]; then
-                ${roleGit}/bin/git add flake.nix flake.lock
-                ${roleGit}/bin/git \
-                  -c user.name='Nixome Config Staging' \
-                  -c user.email='nixome-config-staging@localhost' \
-                  commit -m 'refresh nixome config seed inputs'
-              elif seed_inputs_need_refresh; then
-                printf 'config staging seed input paths still need refresh after lock update\n' >&2
-                exit 1
-              else
-                printf 'config staging seed input lock is current\n'
-              fi
-            fi
+          if [ -n "$(${roleGit}/bin/git status --porcelain flake.nix flake.lock)" ]; then
+            ${roleGit}/bin/git add flake.nix flake.lock
+            ${roleGit}/bin/git \
+              -c user.name='Nixome Config Staging' \
+              -c user.email='nixome-config-staging@localhost' \
+              commit -m 'refresh nixome config seed inputs'
           elif seed_inputs_need_refresh; then
-            printf 'config staging seed input refresh is required but deferred for existing repo: %s\n' "$repo"
+            printf 'config staging seed input paths still need refresh after lock update\n' >&2
+            exit 1
+          else
+            printf 'config staging seed input lock is current\n'
           fi
-          if [ ! -f flake.lock ]; then
-            require_clean_worktree_for_seed_update
-            add_seed_lock_if_ready
-            if ! ${roleGit}/bin/git diff --cached --quiet; then
-              ${roleGit}/bin/git \
-                -c user.name='Nixome Config Staging' \
-                -c user.email='nixome-config-staging@localhost' \
-                commit -m 'lock nixome config candidate inputs'
-            fi
-          fi
-          printf 'config staging repo already exists: %s\n' "$repo"
-          exit 0
         fi
-
-        mkdir -p "$repo"
-        cd "$repo"
-        ${roleGit}/bin/git init -b main
-        mkdir -p dom0-profile/bin dom0-profile/share/nixome nixome
-        cat > README.md <<'EOF'
-    # Nixome Machine Configuration
-
-    This is the editable Nixome configuration candidate. dom0 archives a
-    validated commit into config-vault before attempting deployment.
-    EOF
-        cat > flake.nix <<'EOF'
-    ${configStagingSeedFlake}
-    EOF
-        cat > nixome/topology.nix <<'EOF'
-    ${configStagingTopologySchema}
-    EOF
-        cat > nixome/system-schema.nix <<'EOF'
-    ${configStagingSystemSchema}
-    EOF
-        cat > nixome/config-vms.nix <<'EOF'
-    ${configStagingConfigVms}
-    EOF
-        cat > nixome/dom0-host.nix <<'EOF'
-    ${configStagingDom0Host}
-    EOF
-        cat > nixome/local.nix <<'EOF'
-    ${configStagingLocal}
-    EOF
-        cat > nixome/machine.nix <<'EOF'
-    ${configStagingMachine}
-    EOF
-        cat > nixome/system.nix <<'EOF'
-    ${configStagingSystem}
-    EOF
-        cat > nixome/prebuilt-template-sources.nix <<'EOF'
-    ${configStagingPrebuiltTemplateSources}
-    EOF
-        cat > dom0-profile/bin/nixome-dom0-profile-activate <<'EOF'
-    ${configStagingDom0ProfileActivate}
-    EOF
-        cat > dom0-profile/share/nixome/profile.json <<'EOF'
-    ${configStagingDom0ProfileJson}
-    EOF
-        chmod 0755 dom0-profile/bin/nixome-dom0-profile-activate
-        substitute_seed_inputs
-        ${roleGit}/bin/git add \
-          README.md \
-          dom0-profile/bin/nixome-dom0-profile-activate \
-          dom0-profile/share/nixome/profile.json \
-          flake.nix \
-          nixome/config-vms.nix \
-          nixome/dom0-host.nix \
-          nixome/local.nix \
-          nixome/machine.nix \
-          nixome/prebuilt-template-sources.nix \
-          nixome/system.nix \
-          nixome/system-schema.nix \
-          nixome/topology.nix
+      elif seed_inputs_need_refresh; then
+        printf 'config staging seed input refresh is required but deferred for existing repo: %s\n' "$repo"
+      fi
+      if [ ! -f flake.lock ]; then
+        require_clean_worktree_for_seed_update
         add_seed_lock_if_ready
-        ${roleGit}/bin/git \
-          -c user.name='Nixome Config Staging' \
-          -c user.email='nixome-config-staging@localhost' \
-          commit -m 'init nixome config candidate'
+        if ! ${roleGit}/bin/git diff --cached --quiet; then
+          ${roleGit}/bin/git \
+            -c user.name='Nixome Config Staging' \
+            -c user.email='nixome-config-staging@localhost' \
+            commit -m 'lock nixome config candidate inputs'
+        fi
+      fi
+      printf 'config staging repo already exists: %s\n' "$repo"
+      exit 0
+    fi
+
+    if [ "''${NIXOME_CONFIG_STAGING_INIT_FROM_SEED:-0}" != 1 ]; then
+      ${pkgs.coreutils}/bin/mkdir -p "$repo"
+      if [ -n "$(${pkgs.findutils}/bin/find "$repo" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)" ]; then
+        printf 'config staging path exists but is not a Git repo; waiting for config-vault current import: %s\n' "$repo"
+      else
+        printf 'config staging repo is empty; waiting for config-vault current import: %s\n' "$repo"
+      fi
+      exit 0
+    fi
+
+    mkdir -p "$repo"
+    cd "$repo"
+    ${roleGit}/bin/git init -b main
+    write_config_seed_repo_files
+    substitute_seed_inputs "$seed_root"
+    ${roleGit}/bin/git add ${configSeedRepoGitAddArgs}
+    add_seed_lock_if_ready
+    ${roleGit}/bin/git \
+      -c user.name='Nixome Config Staging' \
+      -c user.email='nixome-config-staging@localhost' \
+      commit -m 'init nixome config candidate'
   '';
 
   configStagingValidate = pkgs.writeShellScriptBin "nixome-config-staging-validate" ''
@@ -1871,12 +2216,14 @@ let
     printf '%s\n' "$deployment_id" > "$repo/latest-deployment-attempt"
     if [ "$deployment_status" = passed ]; then
       printf '%s\n' "$deployment_id" > "$repo/latest-deployment"
+      printf '%s\n' "$candidate_commit" > "$repo/latest-current"
+      ${pkgs.coreutils}/bin/ln -sfn "candidates/$candidate_commit/snapshot" "$repo/current"
     fi
 
     cd "$repo"
     ${roleGit}/bin/git add "deployments/$deployment_id" latest-deployment-attempt
     if [ "$deployment_status" = passed ]; then
-      ${roleGit}/bin/git add latest-deployment
+      ${roleGit}/bin/git add latest-deployment latest-current current
     fi
     ${roleGit}/bin/git \
       -c user.name='Nixome dom0 archive' \
@@ -2836,6 +3183,11 @@ in
       mode = "0555";
     };
 
+    environment.etc."qubes-rpc/nixome.Config.ImportCurrent" = lib.mkIf hasConfigStagingRole {
+      source = configCurrentImportService;
+      mode = "0555";
+    };
+
     environment.etc."nixome/guest-tools/nixome-config-staging-validate" =
       lib.mkIf hasConfigStagingRole
         {
@@ -2843,6 +3195,11 @@ in
         };
 
     environment.etc."qubes/rpc-config/nixome.Config.CandidateExport" = lib.mkIf hasConfigStagingRole {
+      text = "force-user='${cfg.user}'\n";
+      mode = "0444";
+    };
+
+    environment.etc."qubes/rpc-config/nixome.Config.ImportCurrent" = lib.mkIf hasConfigStagingRole {
       text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };
@@ -2887,6 +3244,16 @@ in
     };
 
     environment.etc."qubes/rpc-config/nixome.Config.ArchiveDeployment" = lib.mkIf hasConfigVaultRole {
+      text = "force-user='${cfg.user}'\n";
+      mode = "0444";
+    };
+
+    environment.etc."qubes-rpc/nixome.Config.ExportCurrent" = lib.mkIf hasConfigVaultRole {
+      source = configCurrentExportService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes/rpc-config/nixome.Config.ExportCurrent" = lib.mkIf hasConfigVaultRole {
       text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };

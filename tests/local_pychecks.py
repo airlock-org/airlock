@@ -8556,6 +8556,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
 
     assert has_package("nixome-domain-config-staging", "nixome-config-nix") is True
     assert has_package("nixome-domain-config-validator", "nixome-config-nix") is True
+    assert has_package("nixome-domain-config-vault", "nixome-config-nix") is True
     assert (
         _nix_eval_json(
             repo_root,
@@ -8585,6 +8586,8 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         == "config-validator"
     )
     for attr in (
+        'nixosConfigurations.nixome-domain-config-vault.config.environment.etc."qubes-rpc/nixome.Config.ExportCurrent".mode',
+        'nixosConfigurations.nixome-domain-config-staging.config.environment.etc."qubes-rpc/nixome.Config.ImportCurrent".mode',
         'nixosConfigurations.nixome-domain-config-validator.config.environment.etc."qubes-rpc/nixome.Config.ValidateCandidate".mode',
         'nixosConfigurations.nixome-domain-config-staging.config.environment.etc."qubes-rpc/nixome.Config.SeedInputsImport".mode',
         'nixosConfigurations.nixome-domain-config-validator.config.environment.etc."qubes-rpc/nixome.Config.SeedInputsImport".mode',
@@ -8601,6 +8604,20 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
             'nixosConfigurations.nixome-domain-config-staging.config.environment.etc."qubes/rpc-config/nixome.Config.SeedInputsImport".text',
         )
         == "force-user='root'\n"
+    )
+    assert (
+        _nix_eval_json(
+            repo_root,
+            'nixosConfigurations.nixome-domain-config-staging.config.environment.etc."qubes/rpc-config/nixome.Config.ImportCurrent".text',
+        )
+        == "force-user='user'\n"
+    )
+    assert (
+        _nix_eval_json(
+            repo_root,
+            'nixosConfigurations.nixome-domain-config-vault.config.environment.etc."qubes/rpc-config/nixome.Config.ExportCurrent".text',
+        )
+        == "force-user='user'\n"
     )
     vault_seed_rpc_present = json.loads(
         _run(
@@ -8691,6 +8708,62 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         for item in qrexec_execstart
     )
     assert has_package("vm-gui-config", "nixome-config-control") is True
+    assert has_package("vm-gui-config", "nixome-config-bootstrap-current") is True
+
+    current_bootstrap_wanted_by = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.wantedBy",
+    )
+    current_bootstrap_after = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.after",
+    )
+    current_bootstrap_wants = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.wants",
+    )
+    current_bootstrap_execstart = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.serviceConfig.ExecStart",
+    )
+    current_bootstrap_env = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.environment",
+    )
+    assert "multi-user.target" in current_bootstrap_wanted_by
+    for service in (
+        "nixome-setup-config.service",
+        "qubes-db-dom0.service",
+        "qubesd.service",
+        "qubes-qrexec-policy-daemon.service",
+    ):
+        assert service in current_bootstrap_after
+        assert service in current_bootstrap_wants
+    assert isinstance(current_bootstrap_execstart, str)
+    assert "nixome-config-bootstrap-current" in current_bootstrap_execstart
+    assert current_bootstrap_env["NIXOME_CONFIG_CURRENT_EXPORT_SERVICE"] == (
+        "nixome.Config.ExportCurrent"
+    )
+    assert current_bootstrap_env["NIXOME_CONFIG_CURRENT_IMPORT_SERVICE"] == (
+        "nixome.Config.ImportCurrent"
+    )
+    assert current_bootstrap_env["NIXOME_CONFIG_STAGING_VM"] == "config-staging"
+    assert current_bootstrap_env["NIXOME_CONFIG_VAULT_VM"] == "config-vault"
+    assert current_bootstrap_env["NIXOME_LOG_DIR"] == "/var/log/nixome"
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.restartIfChanged",
+        )
+        is False
+    )
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.stopIfChanged",
+        )
+        is False
+    )
 
     for attr, expected in (
         (
@@ -8748,8 +8821,12 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     ).read_text(encoding="utf-8")
     expected_policy = "\n".join(
         (
-            "# Managed by Nixome. Only dom0 may fetch a candidate from config-staging,",
-            "# ask config-validator to validate it, or archive it into config-vault.",
+            "# Managed by Nixome. Only dom0 may fetch config baselines/candidates,",
+            "# ask config-validator to validate them, or archive them into config-vault.",
+            "nixome.Config.ExportCurrent * dom0 config-vault allow",
+            "nixome.Config.ExportCurrent * @anyvm @anyvm deny",
+            "nixome.Config.ImportCurrent * dom0 config-staging allow",
+            "nixome.Config.ImportCurrent * @anyvm @anyvm deny",
             "nixome.Config.CandidateExport * dom0 config-staging allow",
             "nixome.Config.CandidateExport * @anyvm @anyvm deny",
             "nixome.Config.ValidateCandidate * dom0 config-validator allow",

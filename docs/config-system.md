@@ -13,14 +13,18 @@ come from a Nix flake edited inside dedicated config VMs.
 - `config-validator`, an offline closure-backed NixOS `StandaloneVM`.
 - the Qubes VM kernel used by those NixOS domains.
 - bootstrap qrexec policy for staging export, validator checks, vault archival,
-  and deployment records.
+  current-baseline sync, and deployment records.
 - a boot-time `nixome-setup-config.service` that ensures the bootstrap topology
   exists after Qubes dom0 services are up.
+- a boot-time `nixome-config-bootstrap-current.service` that asks
+  `config-vault` for the latest current config bundle and imports it into
+  `config-staging` when staging is empty or already on that commit.
 
 The bootstrap policy remains dom0/NixOS-owned in `30-nixome-config.policy`.
-Staged config cannot remove dom0's ability to fetch, validate, archive, or
-apply candidates. Additional Nixome-owned qrexec policy is declared in staged
-topology and rendered by `nixome-setup-config` to:
+Staged config cannot remove dom0's ability to fetch current baselines, fetch
+new candidates, validate, archive, or apply candidates. Additional
+Nixome-owned qrexec policy is declared in staged topology and rendered by
+`nixome-setup-config` to:
 
 ```text
 /var/lib/nixome/qubes-policy.d/90-nixome.policy
@@ -30,6 +34,22 @@ Static Qubes policy is still assembled by Nix under `/etc/qubes/policy.d`.
 Nixome prepares `/var/lib/nixome/qubes-policy.d` as the runtime combined policy
 directory, symlinks static rules into it, keeps `90-nixome.policy` mutable, and
 starts `qubes-qrexec-policy-daemon` with that runtime policy path.
+
+## First-Boot Config Baseline
+
+`config-vault` is the authoritative archive. On first boot it initializes
+`/home/user/nixome-config-vault` as a Git repository and, if no current
+deployment or baseline exists yet, creates an initial current candidate from the
+Nixome seed config embedded in the image. It records that baseline under
+`candidates/<commit>/`, writes `latest-current`, and maintains a `current`
+symlink to the selected candidate snapshot.
+
+Dom0 then runs `nixome-config-bootstrap-current.service` after
+`nixome-setup-config.service`. The service starts `config-vault` and
+`config-staging`, exports the vault's current bundle through
+`nixome.Config.ExportCurrent`, and imports it through
+`nixome.Config.ImportCurrent`. Existing dirty staging work is left untouched; an
+empty staging repo is cloned from the vault bundle.
 
 ## Domain Construction
 

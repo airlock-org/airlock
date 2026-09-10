@@ -143,6 +143,16 @@ LOCAL_CHECKS = (
         (pytest.mark.nix,),
     ),
     LocalCheck(
+        "config-bootstrap-current-package",
+        (
+            "nix",
+            "build",
+            "{root}#packages.x86_64-linux.nixome-config-bootstrap-current",
+            *NIX_BUILD_FLAGS,
+        ),
+        (pytest.mark.nix,),
+    ),
+    LocalCheck(
         "observe-package",
         (
             "nix",

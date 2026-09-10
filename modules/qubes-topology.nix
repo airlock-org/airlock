@@ -445,6 +445,7 @@ let
   setupConfig = pkgs.callPackage ../pkgs/nixome-setup-config { };
   configApply = pkgs.callPackage ../pkgs/nixome-config-apply { };
   configArchive = pkgs.callPackage ../pkgs/nixome-config-archive { };
+  configBootstrapCurrent = pkgs.callPackage ../pkgs/nixome-config-bootstrap-current { };
   configBootVerify = pkgs.callPackage ../pkgs/nixome-config-boot-verify { };
   configControl = pkgs.callPackage ../pkgs/nixome-config-control { };
   configSeedInputsImport = pkgs.callPackage ../pkgs/nixome-config-seed-inputs-import { };
@@ -467,23 +468,24 @@ let
   configControlRollbackService = pkgs.writeShellScript "nixome-config-control-rollback-qrexec" ''
     exec ${configControl}/bin/nixome-config-control rollback
   '';
-  configSubmitterAllowRules = lib.concatMapStrings (
-    source:
-    ''
-      ${access.statusService} * ${source} dom0 allow
-      ${access.checkService} * ${source} dom0 allow
-      ${access.applyService} * ${source} dom0 allow
-      ${access.rollbackService} * ${source} dom0 allow
-    ''
-  ) access.allowedSubmitters;
+  configSubmitterAllowRules = lib.concatMapStrings (source: ''
+    ${access.statusService} * ${source} dom0 allow
+    ${access.checkService} * ${source} dom0 allow
+    ${access.applyService} * ${source} dom0 allow
+    ${access.rollbackService} * ${source} dom0 allow
+  '') access.allowedSubmitters;
 
   configAccessPolicyPackage = pkgs.runCommand "nixome-config-access-policy" { } ''
         set -eu
 
         install -d "$out/etc/qubes/policy.d"
         cat > "$out/etc/qubes/policy.d/30-nixome-config.policy" <<'EOF'
-    # Managed by Nixome. Only dom0 may fetch a candidate from config-staging,
-    # ask config-validator to validate it, or archive it into config-vault.
+    # Managed by Nixome. Only dom0 may fetch config baselines/candidates,
+    # ask config-validator to validate them, or archive them into config-vault.
+    ${access.currentExportService} * dom0 ${access.vault} allow
+    ${access.currentExportService} * @anyvm @anyvm deny
+    ${access.currentImportService} * dom0 ${access.staging} allow
+    ${access.currentImportService} * @anyvm @anyvm deny
     ${access.candidateExportService} * dom0 ${access.staging} allow
     ${access.candidateExportService} * @anyvm @anyvm deny
     ${access.candidateValidateService} * dom0 ${access.validator} allow
@@ -596,11 +598,37 @@ in
       };
     };
 
+    configCurrentBootstrapOnBoot = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Run a boot-time dom0 transfer that initializes config-staging from config-vault's current baseline.";
+      };
+
+      logDir = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/log/nixome";
+        description = "Directory where the config current bootstrap unit writes JSON results and command logs.";
+      };
+    };
+
     configAccessPolicy = {
       enable = lib.mkOption {
         type = lib.types.bool;
         default = false;
         description = "Install qrexec policy for dom0-mediated config candidate archival.";
+      };
+
+      currentExportService = lib.mkOption {
+        type = lib.types.str;
+        default = "nixome.Config.ExportCurrent";
+        description = "qrexec service used by dom0 to fetch the current config baseline from config-vault.";
+      };
+
+      currentImportService = lib.mkOption {
+        type = lib.types.str;
+        default = "nixome.Config.ImportCurrent";
+        description = "qrexec service used by dom0 to import the current config baseline into config-staging.";
       };
 
       candidateExportService = lib.mkOption {
@@ -710,7 +738,17 @@ in
       ++ lib.mapAttrsToList (name: kernel: {
         assertion = kernel.source != null;
         message = "nixome.qubes.kernels.${name}.source must be set.";
-      }) cfg.kernels;
+      }) cfg.kernels
+      ++ [
+        {
+          assertion = !cfg.configCurrentBootstrapOnBoot.enable || cfg.setupConfigOnBoot.enable;
+          message = "nixome.qubes.configCurrentBootstrapOnBoot.enable requires nixome.qubes.setupConfigOnBoot.enable.";
+        }
+        {
+          assertion = !cfg.configCurrentBootstrapOnBoot.enable || cfg.configAccessPolicy.enable;
+          message = "nixome.qubes.configCurrentBootstrapOnBoot.enable requires nixome.qubes.configAccessPolicy.enable.";
+        }
+      ];
 
     nixome.qubes.topology = topologyLib.mkTopology topology;
 
@@ -719,6 +757,7 @@ in
     environment.systemPackages = [
       configApply
       configArchive
+      configBootstrapCurrent
       configBootVerify
       configControl
       configSeedInputsImport
@@ -796,5 +835,38 @@ in
         ExecStart = "${setupConfig}/bin/nixome-setup-config --apply";
       };
     };
+
+    systemd.services.nixome-config-bootstrap-current =
+      lib.mkIf cfg.configCurrentBootstrapOnBoot.enable
+        {
+          description = "Initialize config-staging from config-vault current baseline";
+          wantedBy = [ "multi-user.target" ];
+          wants = [
+            "nixome-setup-config.service"
+            "qubes-db-dom0.service"
+            "qubesd.service"
+            "qubes-qrexec-policy-daemon.service"
+          ];
+          after = [
+            "nixome-setup-config.service"
+            "qubes-db-dom0.service"
+            "qubesd.service"
+            "qubes-qrexec-policy-daemon.service"
+          ];
+          restartIfChanged = false;
+          stopIfChanged = false;
+          environment = {
+            NIXOME_LOG_DIR = cfg.configCurrentBootstrapOnBoot.logDir;
+            NIXOME_CONFIG_VAULT_VM = access.vault;
+            NIXOME_CONFIG_STAGING_VM = access.staging;
+            NIXOME_CONFIG_CURRENT_EXPORT_SERVICE = access.currentExportService;
+            NIXOME_CONFIG_CURRENT_IMPORT_SERVICE = access.currentImportService;
+          };
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = "${configBootstrapCurrent}/bin/nixome-config-bootstrap-current";
+          };
+        };
   };
 }

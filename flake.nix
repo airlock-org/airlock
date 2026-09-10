@@ -512,6 +512,7 @@
         // {
           nixome-config-apply = pkgs.callPackage ./pkgs/nixome-config-apply { };
           nixome-config-archive-candidate = pkgs.callPackage ./pkgs/nixome-config-archive { };
+          nixome-config-bootstrap-current = pkgs.callPackage ./pkgs/nixome-config-bootstrap-current { };
           nixome-config-boot-verify = pkgs.callPackage ./pkgs/nixome-config-boot-verify { };
           nixome-config-control = pkgs.callPackage ./pkgs/nixome-config-control { };
           nixome-config-seed-inputs-import = pkgs.callPackage ./pkgs/nixome-config-seed-inputs-import { };
@@ -564,6 +565,7 @@
       checks = forAllSystems (system: {
         config-apply-package = self.packages.${system}.nixome-config-apply;
         config-archive-package = self.packages.${system}.nixome-config-archive-candidate;
+        config-bootstrap-current-package = self.packages.${system}.nixome-config-bootstrap-current;
         config-boot-verify-package = self.packages.${system}.nixome-config-boot-verify;
         config-control-package = self.packages.${system}.nixome-config-control;
         codex-package = self.packages.${system}.codex;
