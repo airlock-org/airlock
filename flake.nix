@@ -502,9 +502,13 @@
             name = nixomeQubesVmKernelName;
             package = self.packages.x86_64-linux.nixome-qubes-vm-kernel;
           };
-          nixomeConfigDomains = builtins.mapAttrs (_name: entry: materializeNixClosureDomain entry) (
-            mkConfigDomainEntries "x86_64-linux"
-          );
+          nixomeConfigDomains =
+            let
+              bootstrapDomainEntries = (mkConfigDomainEntries "x86_64-linux") // {
+                dev = mkDevDomainEntry "x86_64-linux";
+              };
+            in
+            builtins.mapAttrs (_name: entry: materializeNixClosureDomain entry) bootstrapDomainEntries;
           inherit nixomeConfigSeedInputs;
         };
         modules = [

@@ -33,6 +33,9 @@ let
     templateBuilders = builders;
   };
   devDomainDefinition = defaultMachine.nixNative.domains.dev;
+  bootstrapDomains = flake.nixosConfigurations.vm-gui-config.config.nixome.qubes.domains;
+  bootstrapDevDomain = bootstrapDomains.dev;
+  bootstrapTopologyDevDomain = flake.nixosConfigurations.vm-gui-config.config.nixome.qubes.topology.domains.dev;
   generatedDevDomain = (builders.mkNixNativeDomain {
     name = "dev";
     guestRole = devDomainDefinition.role;
@@ -89,6 +92,12 @@ in
   hostname = devCfg.networking.hostName;
   staged_dev_declared_netvm = devDomainDefinition.netvm;
   generated_dev_domain_netvm = generatedDevDomain.netvm;
+  bootstrap_dev_domain_present = builtins.hasAttr "dev" bootstrapDomains;
+  bootstrap_dev_domain_netvm = bootstrapDevDomain.netvm;
+  bootstrap_dev_domain_backend = bootstrapDevDomain.backend.type;
+  bootstrap_dev_domain_role_feature = bootstrapDevDomain.features."nixome-role";
+  bootstrap_dev_topology_netvm = bootstrapTopologyDevDomain.netvm;
+  bootstrap_dev_topology_backend = bootstrapTopologyDevDomain.backend.type;
   package_names = devPackages;
   required_tools_present = lib.all (name: has name devPackages) [
     "cargo"
@@ -152,6 +161,12 @@ jq -e '
   .hostname == "dev" and
   .staged_dev_declared_netvm == "sys-firewall" and
   .generated_dev_domain_netvm == "sys-firewall" and
+  .bootstrap_dev_domain_present == true and
+  .bootstrap_dev_domain_netvm == "sys-firewall" and
+  .bootstrap_dev_domain_backend == "nix-closure" and
+  .bootstrap_dev_domain_role_feature == "dev" and
+  .bootstrap_dev_topology_netvm == "sys-firewall" and
+  .bootstrap_dev_topology_backend == "nix-closure" and
   .required_tools_present == true and
   .network_client_support_present == true and
   .private_nix_enabled == true and

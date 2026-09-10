@@ -313,6 +313,9 @@ nixNative.domains.dev = {
 };
 ```
 
+The bootstrap `vm-gui-config` topology materializes the same domain, so a fresh
+boot has `dev` available before the first self-hosted apply.
+
 The `dev` role layers development tools on top of the minimal Qubes guest base.
 It includes `git`, the private-store Nix CLI wrapper, Rust and Python tooling
 used by this repository, `make`, shell/editor basics, the `nixome` VM control

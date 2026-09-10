@@ -160,7 +160,17 @@ jq -e '
   ."config-validator".backend.store.mode == "shared-closure" and
   ."config-validator".backend.store.readOnly == true and
   ."config-validator".backend.store.device == "/dev/xvde" and
-  ."config-validator".features."nixome-role" == "config-validator"
+  ."config-validator".features."nixome-role" == "config-validator" and
+  ."dev".class == "StandaloneVM" and
+  ."dev".template == null and
+  ."dev".netvm == "sys-firewall" and
+  ."dev".backend.type == "nix-closure" and
+  ."dev".backend.store.mode == "shared-closure" and
+  ."dev".backend.store.readOnly == true and
+  ."dev".backend.store.device == "/dev/xvde" and
+  ."dev".backend.state.persistent == "dev-private" and
+  ."dev".features."nixome-role" == "dev" and
+  ."dev".features."nixome-dev" == "1"
 ' "$DOMAINS_JSON" >/dev/null
 
 jq -e '
@@ -192,6 +202,15 @@ jq -e '
   .domains."config-validator".backend.store.read_only == true and
   .domains."config-validator".backend.state.persistent_size == 8589934592 and
   .domains."config-vault".backend.state.persistent_size == null and
+  .domains."dev".class == "StandaloneVM" and
+  .domains."dev".template == null and
+  .domains."dev".netvm == "sys-firewall" and
+  .domains."dev".backend.type == "nix-closure" and
+  .domains."dev".backend.store.read_only == true and
+  .domains."dev".backend.state.persistent == "dev-private" and
+  .domains."dev".backend.state.persistent_size == 34359738368 and
+  .domains."dev".features."nixome-role" == "dev" and
+  .domains."dev".features."nixome-dev" == "1" and
   .domains."config-staging".prefs.autostart == false and
   .domains."config-staging".prefs.include_in_backups == true and
   .domains."config-validator".prefs.autostart == false and
