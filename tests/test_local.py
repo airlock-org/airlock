@@ -188,6 +188,10 @@ LOCAL_CHECKS = (
         "config-vault-deployment-archive",
         ("{root}/tests/config-vault-deployment-archive.sh",),
     ),
+    LocalCheck(
+        "config-archive-domain-references",
+        ("{root}/tests/config-archive-domain-references.sh",),
+    ),
     LocalCheck("nixome-cli", ("{root}/tests/nixome-cli.sh",), (pytest.mark.nix,)),
     LocalCheck("config-control", ("{root}/tests/config-control.sh",)),
     LocalCheck("config-boot-verify", ("{root}/tests/config-boot-verify.sh",)),
@@ -195,6 +199,10 @@ LOCAL_CHECKS = (
     LocalCheck(
         "config-apply-template-build-ref",
         ("{root}/tests/config-apply-template-build-ref.sh",),
+    ),
+    LocalCheck(
+        "config-apply-domain-references",
+        ("{root}/tests/config-apply-domain-references.sh",),
     ),
     LocalCheck(
         "config-candidate-nix-native",

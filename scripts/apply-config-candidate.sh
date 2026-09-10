@@ -28,6 +28,7 @@ NIX_DOMAIN_BUILDS_JSON="$LOG_DIR/config-apply-nix-domain-builds.json"
 NIX_DOMAIN_BUILD_LOG="$LOG_DIR/config-apply-nix-domain-builds.log"
 NIX_DOMAIN_MATERIALIZATIONS_JSON="$LOG_DIR/config-apply-nix-domain-materializations.json"
 UNSUPPORTED_DOMAIN_BACKENDS_JSON="$LOG_DIR/config-apply-unsupported-domain-backends.json"
+DOMAIN_REFERENCES_JSON="$LOG_DIR/config-apply-domain-references.json"
 DEPLOYMENT_JSON="$LOG_DIR/config-deployment.json"
 DEPLOYMENT_TAR="$LOG_DIR/config-deployment.tar"
 DEPLOYMENT_ARCHIVE_STDOUT="$LOG_DIR/config-apply-deployment-archive.stdout.log"
@@ -161,6 +162,7 @@ write_result() {
   nix_domain_builds_json="$(json_file_or_null "$NIX_DOMAIN_BUILDS_JSON")"
   nix_domain_materializations_json="$(json_file_or_null "$NIX_DOMAIN_MATERIALIZATIONS_JSON")"
   unsupported_domain_backends_json="$(json_file_or_null "$UNSUPPORTED_DOMAIN_BACKENDS_JSON")"
+  domain_references_json="$(json_file_or_null "$DOMAIN_REFERENCES_JSON")"
   deployment_json="$(json_file_or_null "$DEPLOYMENT_JSON")"
   deployment_archive_json="$(json_file_or_null "$DEPLOYMENT_ARCHIVE_JSON")"
 
@@ -194,6 +196,7 @@ write_result() {
     --arg nix_domain_build_log "$NIX_DOMAIN_BUILD_LOG" \
     --arg nix_domain_materializations "$NIX_DOMAIN_MATERIALIZATIONS_JSON" \
     --arg unsupported_domain_backends "$UNSUPPORTED_DOMAIN_BACKENDS_JSON" \
+    --arg domain_references "$DOMAIN_REFERENCES_JSON" \
     --arg deployment_record "$DEPLOYMENT_JSON" \
     --arg deployment_tar "$DEPLOYMENT_TAR" \
     --arg deployment_archive_stdout "$DEPLOYMENT_ARCHIVE_STDOUT" \
@@ -215,6 +218,7 @@ write_result() {
     --argjson nix_domain_builds_result "$nix_domain_builds_json" \
     --argjson nix_domain_materializations_result "$nix_domain_materializations_json" \
     --argjson unsupported_domain_backends_result "$unsupported_domain_backends_json" \
+    --argjson domain_references_result "$domain_references_json" \
     '{
       schema: $schema,
       status: $status,
@@ -245,6 +249,7 @@ write_result() {
       nix_domain_build_log: $nix_domain_build_log,
       nix_domain_materializations: $nix_domain_materializations,
       unsupported_domain_backends: $unsupported_domain_backends,
+      domain_references: $domain_references,
       deployment_record: $deployment_record,
       deployment_tar: $deployment_tar,
       deployment_archive_stdout: $deployment_archive_stdout,
@@ -264,6 +269,7 @@ write_result() {
       nix_domain_builds_result: $nix_domain_builds_result,
       nix_domain_materializations_result: $nix_domain_materializations_result,
       unsupported_domain_backends_result: $unsupported_domain_backends_result,
+      domain_references_result: $domain_references_result,
       deployment: $deployment,
       deployment_archive: $deployment_archive
     }' > "$RESULT_JSON"
@@ -457,6 +463,7 @@ build_deployment_tar() {
   nix_domain_builds_json="$(json_file_or_null "$NIX_DOMAIN_BUILDS_JSON")"
   nix_domain_materializations_json="$(json_file_or_null "$NIX_DOMAIN_MATERIALIZATIONS_JSON")"
   unsupported_domain_backends_json="$(json_file_or_null "$UNSUPPORTED_DOMAIN_BACKENDS_JSON")"
+  domain_references_json="$(json_file_or_null "$DOMAIN_REFERENCES_JSON")"
 
   jq -c -n \
     --arg schema "nixome.config-deployment.v1" \
@@ -483,6 +490,7 @@ build_deployment_tar() {
     --arg nix_domain_builds "nix-domain-builds.json" \
     --arg nix_domain_materializations "nix-domain-materializations.json" \
     --arg unsupported_domain_backends "unsupported-domain-backends.json" \
+    --arg domain_references "domain-references.json" \
     --arg validated_topology "validated-topology.json" \
     --arg validation "validation.json" \
     --arg manifest "manifest.json" \
@@ -493,6 +501,7 @@ build_deployment_tar() {
     --argjson nix_domain_builds_result "$nix_domain_builds_json" \
     --argjson nix_domain_materializations_result "$nix_domain_materializations_json" \
     --argjson unsupported_domain_backends_result "$unsupported_domain_backends_json" \
+    --argjson domain_references_result "$domain_references_json" \
     '{
       schema: $schema,
       status: $status,
@@ -519,6 +528,7 @@ build_deployment_tar() {
         nix_domain_builds: $nix_domain_builds,
         nix_domain_materializations: $nix_domain_materializations,
         unsupported_domain_backends: $unsupported_domain_backends,
+        domain_references: $domain_references,
         validated_topology: $validated_topology,
         validation: $validation,
         manifest: $manifest
@@ -529,7 +539,8 @@ build_deployment_tar() {
       systemd_actions: $systemd_actions_result,
       nix_domain_builds: $nix_domain_builds_result,
       nix_domain_materializations: $nix_domain_materializations_result,
-      unsupported_domain_backends: $unsupported_domain_backends_result
+      unsupported_domain_backends: $unsupported_domain_backends_result,
+      domain_references: $domain_references_result
     }' > "$DEPLOYMENT_JSON"
 
   write_result "$status" "$reason"
@@ -544,6 +555,7 @@ build_deployment_tar() {
   copy_or_empty "$NIX_DOMAIN_BUILDS_JSON" "$record_dir/nix-domain-builds.json"
   copy_or_empty "$NIX_DOMAIN_MATERIALIZATIONS_JSON" "$record_dir/nix-domain-materializations.json"
   copy_or_empty "$UNSUPPORTED_DOMAIN_BACKENDS_JSON" "$record_dir/unsupported-domain-backends.json"
+  copy_or_empty "$DOMAIN_REFERENCES_JSON" "$record_dir/domain-references.json"
   copy_or_empty "$VALIDATED_SYSTEM_JSON" "$record_dir/system.json"
   copy_or_empty "$APPLY_SYSTEM_JSON" "$record_dir/resolved-system.json"
   copy_or_empty "$SYSTEM_PLAN_JSON" "$record_dir/system-plan.json"
@@ -578,6 +590,7 @@ build_deployment_tar() {
     nix-domain-builds.json \
     nix-domain-materializations.json \
     unsupported-domain-backends.json \
+    domain-references.json \
     system.json \
     resolved-system.json \
     system-plan.json \
@@ -663,6 +676,161 @@ preflight_apply_domain_backends() {
   local topology_file="$1"
 
   write_unsupported_domain_backends_json "$topology_file"
+}
+
+write_domain_reference_report() {
+  local topology_file="$1"
+  local references_json="$2"
+  local missing_json="$3"
+  local existing_domains_file="$4"
+  local status="$5"
+  local reason="$6"
+
+  jq -c -n \
+    --arg schema "nixome.domain-references.v1" \
+    --arg status "$status" \
+    --arg reason "$reason" \
+    --arg topology "$topology_file" \
+    --slurpfile references "$references_json" \
+    --slurpfile missing "$missing_json" \
+    --rawfile existing_domains "$existing_domains_file" \
+    '{
+      schema: $schema,
+      status: $status,
+      reason: $reason,
+      topology: $topology,
+      existing_domains: ($existing_domains | split("\n") | map(select(. != ""))),
+      references: ($references[0] // []),
+      missing: ($missing[0] // [])
+    }' > "$DOMAIN_REFERENCES_JSON"
+}
+
+validate_domain_references() {
+  local topology_file="$1"
+  local references_json="$tmpdir/domain-references.json"
+  local missing_json="$tmpdir/domain-references-missing.json"
+  local existing_domains_file="$tmpdir/domain-references-existing.txt"
+  local reference_count
+  local missing_count
+
+  jq -c '
+    def ref($kind; $domain; $field; $target):
+      if $target == null or $target == "" or $target == "none" or $target == "None" then
+        empty
+      else
+        {
+          kind: $kind,
+          domain: $domain,
+          field: $field,
+          target: ($target | tostring)
+        }
+      end;
+
+    [
+      (.domains // {} | to_entries[] | .key as $domain | .value as $domain_cfg |
+        ref("netvm"; $domain; "netvm"; $domain_cfg.netvm),
+        if (($domain_cfg.backend.type // "qubes-template") == "qubes-template") then
+          ref("template"; $domain; "template"; ($domain_cfg.template // $domain_cfg.backend.template))
+        else
+          empty
+        end
+      ),
+      (.prefs // {} | to_entries[] |
+        select(.key == "clockvm"
+          or .key == "default_dispvm"
+          or .key == "default_netvm"
+          or .key == "default_template"
+          or .key == "management_dispvm"
+          or .key == "updatevm") |
+        ref("global-pref"; null; .key; .value)
+      ),
+      (.qrexec_policy.rules // [] | to_entries[] | .key as $index | .value as $rule |
+        ref("qrexec-source"; null; ("qrexec_policy.rules[" + ($index | tostring) + "].source"); $rule.source),
+        ref("qrexec-target"; null; ("qrexec_policy.rules[" + ($index | tostring) + "].target"); $rule.target)
+      )
+    ]
+    | map(select(.target != "dom0" and .target != "@anyvm"))
+  ' "$topology_file" > "$references_json"
+
+  reference_count="$(jq -r 'length' "$references_json")"
+  if [ "$reference_count" = "0" ]; then
+    : > "$existing_domains_file"
+    printf '[]\n' > "$missing_json"
+    write_domain_reference_report \
+      "$topology_file" \
+      "$references_json" \
+      "$missing_json" \
+      "$existing_domains_file" \
+      passed \
+      "topology has no domain references"
+    return 0
+  fi
+
+  if ! command -v qvm-ls >/dev/null 2>&1; then
+    : > "$existing_domains_file"
+    printf '%s\n' "$(<"$references_json")" > "$missing_json"
+    write_domain_reference_report \
+      "$topology_file" \
+      "$references_json" \
+      "$missing_json" \
+      "$existing_domains_file" \
+      failed \
+      "missing command: qvm-ls"
+    fail "missing command: qvm-ls"
+  fi
+
+  if ! qvm-ls --raw-data --fields NAME --no-spinner > "$existing_domains_file"; then
+    : > "$existing_domains_file"
+    printf '%s\n' "$(<"$references_json")" > "$missing_json"
+    write_domain_reference_report \
+      "$topology_file" \
+      "$references_json" \
+      "$missing_json" \
+      "$existing_domains_file" \
+      failed \
+      "cannot query existing Qubes domains"
+    fail "cannot query existing Qubes domains for reference validation"
+  fi
+
+  jq -c \
+    --slurpfile references "$references_json" \
+    --rawfile existing_domains "$existing_domains_file" \
+    '
+      ((.domains // {}) | keys) as $declared_domains |
+      ((.templates // {}) | keys) as $declared_templates |
+      ($existing_domains | split("\n") | map(select(. != ""))) as $existing_domains_list |
+      ($declared_domains + $declared_templates + $existing_domains_list) as $known_domains |
+      ($references[0] // [])
+      | map(select(.target as $target | ($known_domains | index($target)) == null))
+    ' "$topology_file" > "$missing_json"
+
+  missing_count="$(jq -r 'length' "$missing_json")"
+  if [ "$missing_count" != "0" ]; then
+    write_domain_reference_report \
+      "$topology_file" \
+      "$references_json" \
+      "$missing_json" \
+      "$existing_domains_file" \
+      failed \
+      "topology references missing domains"
+    jq -r '
+      .[]
+      | if .domain == null then
+          "\(.field) references missing domain \(.target)"
+        else
+          "domain \(.domain) \(.field) references missing domain \(.target)"
+        end
+    ' "$missing_json" >&2 || true
+    fail "topology references missing domains"
+  fi
+
+  write_domain_reference_report \
+    "$topology_file" \
+    "$references_json" \
+    "$missing_json" \
+    "$existing_domains_file" \
+    passed \
+    "all referenced domains are declared by the candidate or exist in Qubes"
 }
 
 safe_log_name() {
@@ -1759,13 +1927,27 @@ if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = archive ]; then
     archive_args+=(--candidate-tar "$CANDIDATE_TAR")
   fi
 
-  run_to_files_or_fail "config candidate archive" "$ARCHIVE_STDOUT" "$ARCHIVE_STDERR" \
-    env \
-      NIXOME_LOG_DIR="$LOG_DIR" \
-      NIXOME_CONFIG_STAGING_VM="$STAGING" \
-      NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-      NIXOME_CONFIG_VAULT_VM="$VAULT" \
-      "${archive_args[@]}"
+  printf '+ env NIXOME_LOG_DIR=%q NIXOME_CONFIG_STAGING_VM=%q NIXOME_CONFIG_VALIDATOR_VM=%q NIXOME_CONFIG_VAULT_VM=%q' \
+    "$LOG_DIR" \
+    "$STAGING" \
+    "$VALIDATOR" \
+    "$VAULT"
+  printf ' %q' "${archive_args[@]}"
+  printf '\n'
+
+  if ! env \
+    NIXOME_LOG_DIR="$LOG_DIR" \
+    NIXOME_CONFIG_STAGING_VM="$STAGING" \
+    NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+    NIXOME_CONFIG_VAULT_VM="$VAULT" \
+    "${archive_args[@]}" > "$ARCHIVE_STDOUT" 2> "$ARCHIVE_STDERR"; then
+    cat "$ARCHIVE_STDERR" >&2 || true
+    if [ -r "$ARCHIVE_JSON" ]; then
+      archive_failure_reason="$(jq -r '.reason // "config candidate archive failed"' "$ARCHIVE_JSON")"
+      fail "$archive_failure_reason"
+    fi
+    fail "config candidate archive failed"
+  fi
 
   [ -r "$ARCHIVE_JSON" ] || fail "archive result JSON is missing: $ARCHIVE_JSON"
 
@@ -1843,6 +2025,7 @@ if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = resolve ]; then
 
   resolve_template_sources "$topology" "$worktree" "$APPLY_TOPOLOGY_JSON"
   resolve_nix_domain_sources "$APPLY_TOPOLOGY_JSON" "$worktree" "$APPLY_TOPOLOGY_JSON"
+  validate_domain_references "$APPLY_TOPOLOGY_JSON"
   resolve_system_sources "$system_json" "$worktree" "$APPLY_SYSTEM_JSON"
 fi
 

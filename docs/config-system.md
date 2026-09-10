@@ -320,6 +320,10 @@ boot has `dev` available before the first self-hosted apply.
 Nix-native replacement for it. If a fresh test image has not created the stock
 domain yet, setup defers the `dev.netvm` assignment until `sys-firewall` exists;
 create or restore the normal QubesOS networking domain and rerun setup.
+The self-hosted `nixome check` and `nixome apply` path is stricter: after the
+validator emits a topology, dom0 verifies that referenced domains are either
+declared by the candidate or already exist in Qubes, and rejects the candidate
+before promotion or activation if a reference such as `sys-firewall` is missing.
 
 The `dev` role layers development tools on top of the minimal Qubes guest base.
 It includes `git`, the private-store Nix CLI wrapper, Rust and Python tooling

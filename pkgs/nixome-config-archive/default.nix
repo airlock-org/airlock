@@ -21,6 +21,7 @@ writeShellApplication {
     gnugrep
     gnutar
     jq
+    python3.pkgs.qubes-core-admin-client
     python3.pkgs.qubes-core-qrexec.dom0
     systemd
   ];

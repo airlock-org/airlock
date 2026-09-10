@@ -12,6 +12,7 @@ VALIDATION_JSON="$LOG_DIR/config-candidate-validation.json"
 MANIFEST_JSON="$LOG_DIR/config-candidate-manifest.json"
 TOPOLOGY_JSON="$LOG_DIR/config-candidate-topology.json"
 SYSTEM_JSON="$LOG_DIR/config-candidate-system.json"
+DOMAIN_REFERENCES_JSON="$LOG_DIR/config-candidate-domain-references.json"
 BUNDLE_VERIFY_LOG="$LOG_DIR/config-candidate-bundle-verify.log"
 VAULT_ARCHIVE_LOG="$LOG_DIR/config-vault-archive.log"
 VAULT_ARCHIVE_STDERR="$LOG_DIR/config-vault-archive.stderr.log"
@@ -98,6 +99,7 @@ write_result() {
   reason="$2"
   validation_json="$(json_file_or_null "$VALIDATION_JSON")"
   vault_archive_json="$(json_file_or_null "$VAULT_ARCHIVE_JSON")"
+  domain_references_json="$(json_file_or_null "$DOMAIN_REFERENCES_JSON")"
 
   jq -c -n \
     --arg schema "nixome.config-archive.v1" \
@@ -116,6 +118,7 @@ write_result() {
     --arg validated_candidate_tar "$VALIDATED_CANDIDATE_TAR" \
     --arg topology "$TOPOLOGY_JSON" \
     --arg system "$SYSTEM_JSON" \
+    --arg domain_references "$DOMAIN_REFERENCES_JSON" \
     --arg command_log "$COMMAND_LOG" \
     --arg export_stderr "$EXPORT_STDERR" \
     --arg validate_stderr "$VALIDATE_STDERR" \
@@ -124,6 +127,7 @@ write_result() {
     --arg vault_archive_stderr "$VAULT_ARCHIVE_STDERR" \
     --argjson validation "$validation_json" \
     --argjson vault_archive "$vault_archive_json" \
+    --argjson domain_references_result "$domain_references_json" \
     '{
       schema: $schema,
       status: $status,
@@ -141,6 +145,7 @@ write_result() {
       validated_candidate_tar: $validated_candidate_tar,
       topology: $topology,
       system: $system,
+      domain_references: $domain_references,
       command_log: $command_log,
       export_stderr: $export_stderr,
       validate_stderr: $validate_stderr,
@@ -148,6 +153,7 @@ write_result() {
       vault_archive_stderr: $vault_archive_stderr,
       vault_archive_log: $vault_archive_log,
       validation: $validation,
+      domain_references_result: $domain_references_result,
       vault_archive: $vault_archive
     }' > "$RESULT_JSON"
   result_written=1
@@ -252,6 +258,162 @@ verify_offline_vm() {
   fi
 }
 
+write_domain_reference_report() {
+  local topology_file="$1"
+  local references_json="$2"
+  local missing_json="$3"
+  local existing_domains_file="$4"
+  local status="$5"
+  local reason="$6"
+
+  jq -c -n \
+    --arg schema "nixome.domain-references.v1" \
+    --arg status "$status" \
+    --arg reason "$reason" \
+    --arg topology "$topology_file" \
+    --slurpfile references "$references_json" \
+    --slurpfile missing "$missing_json" \
+    --rawfile existing_domains "$existing_domains_file" \
+    '{
+      schema: $schema,
+      status: $status,
+      reason: $reason,
+      topology: $topology,
+      existing_domains: ($existing_domains | split("\n") | map(select(. != ""))),
+      references: ($references[0] // []),
+      missing: ($missing[0] // [])
+    }' > "$DOMAIN_REFERENCES_JSON"
+}
+
+validate_domain_references() {
+  local topology_file="$1"
+  local work_dir="$2"
+  local references_json="$work_dir/domain-references.json"
+  local missing_json="$work_dir/domain-references-missing.json"
+  local existing_domains_file="$work_dir/domain-references-existing.txt"
+  local reference_count
+  local missing_count
+
+  jq -c '
+    def ref($kind; $domain; $field; $target):
+      if $target == null or $target == "" or $target == "none" or $target == "None" then
+        empty
+      else
+        {
+          kind: $kind,
+          domain: $domain,
+          field: $field,
+          target: ($target | tostring)
+        }
+      end;
+
+    [
+      (.domains // {} | to_entries[] | .key as $domain | .value as $domain_cfg |
+        ref("netvm"; $domain; "netvm"; $domain_cfg.netvm),
+        if (($domain_cfg.backend.type // "qubes-template") == "qubes-template") then
+          ref("template"; $domain; "template"; ($domain_cfg.template // $domain_cfg.backend.template))
+        else
+          empty
+        end
+      ),
+      (.prefs // {} | to_entries[] |
+        select(.key == "clockvm"
+          or .key == "default_dispvm"
+          or .key == "default_netvm"
+          or .key == "default_template"
+          or .key == "management_dispvm"
+          or .key == "updatevm") |
+        ref("global-pref"; null; .key; .value)
+      ),
+      (.qrexec_policy.rules // [] | to_entries[] | .key as $index | .value as $rule |
+        ref("qrexec-source"; null; ("qrexec_policy.rules[" + ($index | tostring) + "].source"); $rule.source),
+        ref("qrexec-target"; null; ("qrexec_policy.rules[" + ($index | tostring) + "].target"); $rule.target)
+      )
+    ]
+    | map(select(.target != "dom0" and .target != "@anyvm"))
+  ' "$topology_file" > "$references_json"
+
+  reference_count="$(jq -r 'length' "$references_json")"
+  if [ "$reference_count" = "0" ]; then
+    : > "$existing_domains_file"
+    printf '[]\n' > "$missing_json"
+    write_domain_reference_report \
+      "$topology_file" \
+      "$references_json" \
+      "$missing_json" \
+      "$existing_domains_file" \
+      passed \
+      "topology has no domain references"
+    return 0
+  fi
+
+  if ! command -v qvm-ls >/dev/null 2>&1; then
+    : > "$existing_domains_file"
+    printf '%s\n' "$(<"$references_json")" > "$missing_json"
+    write_domain_reference_report \
+      "$topology_file" \
+      "$references_json" \
+      "$missing_json" \
+      "$existing_domains_file" \
+      failed \
+      "missing command: qvm-ls"
+    fail "missing command: qvm-ls"
+  fi
+
+  if ! qvm-ls --raw-data --fields NAME --no-spinner > "$existing_domains_file"; then
+    : > "$existing_domains_file"
+    printf '%s\n' "$(<"$references_json")" > "$missing_json"
+    write_domain_reference_report \
+      "$topology_file" \
+      "$references_json" \
+      "$missing_json" \
+      "$existing_domains_file" \
+      failed \
+      "cannot query existing Qubes domains"
+    fail "cannot query existing Qubes domains for reference validation"
+  fi
+
+  jq -c \
+    --slurpfile references "$references_json" \
+    --rawfile existing_domains "$existing_domains_file" \
+    '
+      ((.domains // {}) | keys) as $declared_domains |
+      ((.templates // {}) | keys) as $declared_templates |
+      ($existing_domains | split("\n") | map(select(. != ""))) as $existing_domains_list |
+      ($declared_domains + $declared_templates + $existing_domains_list) as $known_domains |
+      ($references[0] // [])
+      | map(select(.target as $target | ($known_domains | index($target)) == null))
+    ' "$topology_file" > "$missing_json"
+
+  missing_count="$(jq -r 'length' "$missing_json")"
+  if [ "$missing_count" != "0" ]; then
+    write_domain_reference_report \
+      "$topology_file" \
+      "$references_json" \
+      "$missing_json" \
+      "$existing_domains_file" \
+      failed \
+      "topology references missing domains"
+    jq -r '
+      .[]
+      | if .domain == null then
+          "\(.field) references missing domain \(.target)"
+        else
+          "domain \(.domain) \(.field) references missing domain \(.target)"
+        end
+    ' "$missing_json" >&2 || true
+    fail "topology references missing domains"
+  fi
+
+  write_domain_reference_report \
+    "$topology_file" \
+    "$references_json" \
+    "$missing_json" \
+    "$existing_domains_file" \
+    passed \
+    "all referenced domains are declared by the candidate or exist in Qubes"
+}
+
 verify_candidate() {
   candidate_tar="$1"
   tmpdir="$(mktemp -d)"
@@ -306,6 +468,8 @@ verify_candidate() {
     fail "candidate validation did not pass: $validation_status"
   [ "$manifest_commit" = "$validation_commit" ] ||
     fail "candidate manifest commit $manifest_commit does not match validation commit $validation_commit"
+
+  validate_domain_references "$TOPOLOGY_JSON" "$tmpdir"
 
   verify_repo="$tmpdir/verify.git"
   git init --bare -b main "$verify_repo" >/dev/null
