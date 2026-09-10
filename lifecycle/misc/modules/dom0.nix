@@ -29,10 +29,10 @@ let
     no_proxy = "127.0.0.1,localhost,::1";
     NO_PROXY = "127.0.0.1,localhost,::1";
   };
-  dom0SysNetProxyPolicyPackage = pkgs.runCommand "nixome-dom0-sys-net-proxy-policy" { } ''
+  dom0DevNetworkProxyPolicyPackage = pkgs.runCommand "nixome-dom0-network-proxy-policy" { } ''
     install -d "$out/etc/qubes/policy.d"
-    cat > "$out/etc/qubes/policy.d/35-nixome-dom0-sys-net-proxy.policy" <<'EOF'
-    # Managed by Nixome. Let dev-mode dom0 reach the updates proxy through sys-net.
+    cat > "$out/etc/qubes/policy.d/35-nixome-dom0-network-proxy.policy" <<'EOF'
+    # Managed by Nixome. Let dev-mode dom0 reach the updates proxy through its configured network qube.
     qubes.UpdatesProxy * dom0 ${devNetworkProxy.target} allow
     EOF
   '';
@@ -121,7 +121,7 @@ in
 
       target = lib.mkOption {
         type = lib.types.str;
-        default = "sys-net";
+        default = "sys-firewall";
         description = "Network qube that serves qubes.UpdatesProxy for dev-mode dom0.";
       };
 
@@ -265,11 +265,11 @@ in
     );
 
     virtualisation.qubes.packages = lib.optionals devNetworkProxy.enable [
-      dom0SysNetProxyPolicyPackage
+      dom0DevNetworkProxyPolicyPackage
     ];
 
-    systemd.sockets.nixome-dom0-sys-net-updates-proxy = lib.mkIf devNetworkProxy.enable {
-      description = "Listen for dev-mode dom0 traffic to the sys-net updates proxy";
+    systemd.sockets.nixome-dom0-updates-proxy = lib.mkIf devNetworkProxy.enable {
+      description = "Listen for dev-mode dom0 traffic to the updates proxy";
       wantedBy = [ "sockets.target" ];
       listenStreams = [ devNetworkProxyListen ];
       socketConfig = {
@@ -278,8 +278,8 @@ in
       };
     };
 
-    systemd.services."nixome-dom0-sys-net-updates-proxy@" = lib.mkIf devNetworkProxy.enable {
-      description = "Forward a dev-mode dom0 proxy connection to sys-net";
+    systemd.services."nixome-dom0-updates-proxy@" = lib.mkIf devNetworkProxy.enable {
+      description = "Forward a dev-mode dom0 proxy connection to the network qube";
       wants = [
         "nixome-start-network-providers.service"
         "qubes-qrexec-policy-daemon.service"

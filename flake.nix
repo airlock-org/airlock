@@ -178,6 +178,7 @@
       inherit (bootstrapDomains)
         materializeNixClosureDomain
         mkConfigDomainEntries
+        mkSysFirewallDomainEntry
         mkSysNetDomainEntry
         ;
 
@@ -186,6 +187,7 @@
         let
           bootstrapDomainEntries = (mkConfigDomainEntries system) // {
             sys-net = mkSysNetDomainEntry system;
+            sys-firewall = mkSysFirewallDomainEntry system;
           };
         in
         builtins.mapAttrs (_name: entry: materializeNixClosureDomain entry) bootstrapDomainEntries;
@@ -477,5 +479,7 @@
       nixosConfigurations.nixome-domain-config-validator =
         (mkConfigDomainEntries "x86_64-linux").config-validator.configuration;
       nixosConfigurations.nixome-domain-sys-net = (mkSysNetDomainEntry "x86_64-linux").configuration;
+      nixosConfigurations.nixome-domain-sys-firewall =
+        (mkSysFirewallDomainEntry "x86_64-linux").configuration;
     };
 }

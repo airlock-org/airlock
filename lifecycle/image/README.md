@@ -13,7 +13,7 @@ Development mode is a build-time image profile flag, not a runtime switch.
 
 Development images enable dom0 conveniences for nested work: the
 `/etc/nixome/dev-mode` marker, extra dom0 tools, test/observation commands,
-and a loopback HTTP(S) proxy that forwards through sys-net. Release images
+and a loopback HTTP(S) proxy that forwards through sys-firewall. Release images
 leave those dom0 conveniences disabled. The sys-net topology is the same in
 both modes.
 

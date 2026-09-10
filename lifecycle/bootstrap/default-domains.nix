@@ -108,6 +108,33 @@ let
     devices.pci = [ ];
   };
 
+  sysFirewallRoleDefaults = {
+    guestHostName = "sys-firewall";
+    label = "green";
+    rootImageSizeMiB = 512;
+    netvm = "sys-net";
+    prefs = {
+      autostart = true;
+      include_in_backups = true;
+      memory = 500;
+      maxmem = 1024;
+      provides_network = true;
+      vcpus = 1;
+    };
+    features = {
+      "nixome-managed" = "1";
+      "nixome-role" = "sys-firewall";
+      "nixome-network-provider" = "sys-firewall";
+      servicevm = "1";
+    };
+    services = {
+      "network-manager" = false;
+      "qubes-firewall" = true;
+      "qubes-network" = true;
+      "qubes-updates-proxy" = true;
+    };
+  };
+
   mkConfigDomainEntries =
     system:
     let
@@ -173,6 +200,28 @@ let
       state = sysNetRoleDefaults.state;
     };
 
+  mkSysFirewallDomainEntry =
+    system:
+    let
+      qubeBuilders = mkNixomeQubeBuilders system;
+    in
+    qubeBuilders.mkNixNativeDomain {
+      name = "sys-firewall";
+      guestRole = "sys-firewall";
+      modules = [
+        ({ ... }: {
+          networking.hostName = sysFirewallRoleDefaults.guestHostName;
+        })
+      ];
+      rootImageSizeMiB = sysFirewallRoleDefaults.rootImageSizeMiB;
+      kernelName = nixomeQubesVmKernelName;
+      label = sysFirewallRoleDefaults.label;
+      netvm = sysFirewallRoleDefaults.netvm;
+      prefs = sysFirewallRoleDefaults.prefs;
+      features = sysFirewallRoleDefaults.features;
+      services = sysFirewallRoleDefaults.services;
+    };
+
   materializeNixClosureDomain =
     entry:
     entry.domain
@@ -202,7 +251,9 @@ in
     configVmRoles
     materializeNixClosureDomain
     mkConfigDomainEntries
+    mkSysFirewallDomainEntry
     mkSysNetDomainEntry
+    sysFirewallRoleDefaults
     sysNetRoleDefaults
     ;
 }

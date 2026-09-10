@@ -19,6 +19,7 @@ trap cleanup EXIT
 provider_file="$tmpdir/providers"
 started_file="$tmpdir/started"
 failed_file="$tmpdir/failed"
+candidate_file="$tmpdir/provider-candidates"
 : > "$provider_file"
 : > "$started_file"
 : > "$failed_file"
@@ -27,13 +28,85 @@ jq -r '
   (.domains // {}) | to_entries[]
   | select((((.value.prefs // {}).provides_network) // false) == true)
   | select((((.value.prefs // {}).autostart) // false) == true)
-  | select(
-      (.value.netvm == null)
-      or (.value.netvm == "")
-      or ((.value.netvm | tostring | ascii_downcase) == "none")
-    )
   | .key
-' "$TOPOLOGY_PATH" > "$provider_file"
+' "$TOPOLOGY_PATH" > "$candidate_file"
+
+array_contains() {
+  local needle="$1"
+  shift
+  local item
+
+  for item in "$@"; do
+    [ "$item" != "$needle" ] || return 0
+  done
+
+  return 1
+}
+
+provider_local_netvm_dependency() {
+  local domain="$1"
+
+  jq -r '
+    (.domains[$name].netvm // null) as $netvm
+    | if $netvm == null then
+        ""
+      else
+        ($netvm | tostring) as $target
+        | if $target == "" or ($target | ascii_downcase) == "none" then
+            ""
+          else
+            (.domains[$target] // null) as $target_domain
+            | if $target_domain != null
+              and ((($target_domain.prefs // {}).provides_network // false) == true)
+              and ((($target_domain.prefs // {}).autostart // false) == true) then
+                $target
+              else
+                ""
+              end
+          end
+      end
+  ' --arg name "$domain" "$TOPOLOGY_PATH"
+}
+
+ordered_provider_names() {
+  local domain
+  local dependency
+  local progress
+  local -a ordered=()
+  local -a pending=()
+  local -a next_pending=()
+
+  mapfile -t pending < "$candidate_file"
+
+  while [ "${#pending[@]}" -gt 0 ]; do
+    progress=0
+    next_pending=()
+
+    for domain in "${pending[@]}"; do
+      dependency="$(provider_local_netvm_dependency "$domain")"
+      if [ -z "$dependency" ] || array_contains "$dependency" "${ordered[@]}"; then
+        ordered+=( "$domain" )
+        progress=1
+      else
+        next_pending+=( "$domain" )
+      fi
+    done
+
+    if [ "$progress" = "0" ]; then
+      local IFS=", "
+      printf 'declared autostart network-provider NetVM dependency cycle: %s\n' "${pending[*]}" >&2
+      return 1
+    fi
+
+    pending=( "${next_pending[@]}" )
+  done
+
+  if [ "${#ordered[@]}" -gt 0 ]; then
+    printf '%s\n' "${ordered[@]}"
+  fi
+}
+
+ordered_provider_names > "$provider_file"
 
 status="passed"
 {

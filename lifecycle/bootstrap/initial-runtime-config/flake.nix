@@ -143,12 +143,13 @@
           builtins.elem role [
             "base"
             "dev"
+            "sys-firewall"
             "sys-net"
           ]
         then
           role
         else
-          throw "nixome.nixNative.${path}.role: expected one of base, dev, sys-net";
+          throw "nixome.nixNative.${path}.role: expected one of base, dev, sys-firewall, sys-net";
       checkedNixNative =
         let
           checked = checkNixNativeKeys "" [ "domains" ] (

@@ -645,11 +645,12 @@ def check_start_network_providers(repo_root: Path, log_dir: Path) -> None:
     )
     assert result["schema"] == "nixome.start-network-providers.v1"
     assert result["status"] == "passed"
-    assert result["providers"] == ["sys-net", "sys-none"]
-    assert result["started_or_running"] == ["sys-net", "sys-none"]
+    assert result["providers"] == ["sys-net", "sys-firewall", "sys-none"]
+    assert result["started_or_running"] == ["sys-net", "sys-firewall", "sys-none"]
     assert result["failed"] == []
     assert qvm_start_log.read_text(encoding="utf-8").splitlines() == [
         "--skip-if-running -- sys-net",
+        "--skip-if-running -- sys-firewall",
         "--skip-if-running -- sys-none",
     ]
     command_log = (log_dir / "start-network-providers.commands.log").read_text(
@@ -660,6 +661,7 @@ def check_start_network_providers(repo_root: Path, log_dir: Path) -> None:
     ]
     assert command_lines == [
         "+ qvm-start --skip-if-running -- sys-net",
+        "+ qvm-start --skip-if-running -- sys-firewall",
         "+ qvm-start --skip-if-running -- sys-none",
     ]
 
@@ -1782,11 +1784,15 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       devCfg = devEntry.configuration.config;
       generatedDevDomain = devEntry.domain;
       sysNetDomainDefinition = defaultRuntime.nixNative.domains.sys-net;
+      sysFirewallDomainDefinition = defaultRuntime.nixNative.domains.sys-firewall;
       stagedNixNativeDomains = defaultRuntime.nixNative.domains;
       bootstrapDomains = dom0Cfg.nixome.qubes.domains;
       releaseBootstrapDomains = releaseDom0Cfg.nixome.qubes.domains;
       bootstrapSysNetDomain = bootstrapDomains.sys-net;
+      bootstrapSysFirewallDomain = bootstrapDomains.sys-firewall;
       bootstrapTopologySysNetDomain = dom0Cfg.nixome.qubes.topology.domains.sys-net;
+      bootstrapTopologySysFirewallDomain =
+        dom0Cfg.nixome.qubes.topology.domains.sys-firewall;
       baseCfg = (builders.mkNixNativeDomain {{
         name = "minimal-base";
         guestRole = "base";
@@ -1836,18 +1842,38 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       staged_sys_net_declared = builtins.hasAttr "sys-net" stagedNixNativeDomains;
       staged_sys_net_autostart = sysNetDomainDefinition.prefs.autostart;
       staged_sys_net_updates_proxy = sysNetDomainDefinition.services."qubes-updates-proxy";
-      staged_sys_firewall_external = !(builtins.hasAttr "sys-firewall" stagedNixNativeDomains);
+      staged_sys_firewall_declared = builtins.hasAttr "sys-firewall" stagedNixNativeDomains;
+      staged_sys_firewall_netvm = sysFirewallDomainDefinition.netvm;
+      staged_sys_firewall_autostart = sysFirewallDomainDefinition.prefs.autostart;
+      staged_sys_firewall_provides_network =
+        sysFirewallDomainDefinition.prefs.provides_network;
+      staged_sys_firewall_servicevm = sysFirewallDomainDefinition.features.servicevm;
+      staged_sys_firewall_updates_proxy =
+        sysFirewallDomainDefinition.services."qubes-updates-proxy";
+      staged_default_netvm = defaultRuntime.topology.extraPrefs.default_netvm;
       generated_dev_domain_netvm = generatedDevDomain.netvm;
       generated_dev_domain_role_feature = generatedDevDomain.features."nixome-role";
       generated_dev_domain_marker_feature = generatedDevDomain.features."nixome-dev";
       bootstrap_dev_domain_present = builtins.hasAttr "dev" bootstrapDomains;
       bootstrap_sys_net_present = builtins.hasAttr "sys-net" bootstrapDomains;
-      bootstrap_sys_firewall_external = !(builtins.hasAttr "sys-firewall" bootstrapDomains);
+      bootstrap_sys_firewall_present = builtins.hasAttr "sys-firewall" bootstrapDomains;
       bootstrap_sys_net_autostart = bootstrapSysNetDomain.prefs.autostart;
       bootstrap_sys_net_netvm = bootstrapSysNetDomain.netvm;
       bootstrap_sys_net_updates_proxy = bootstrapSysNetDomain.services."qubes-updates-proxy";
+      bootstrap_sys_firewall_netvm = bootstrapSysFirewallDomain.netvm;
+      bootstrap_sys_firewall_autostart = bootstrapSysFirewallDomain.prefs.autostart;
+      bootstrap_sys_firewall_provides_network =
+        bootstrapSysFirewallDomain.prefs.provides_network;
+      bootstrap_sys_firewall_servicevm = bootstrapSysFirewallDomain.features.servicevm;
+      bootstrap_sys_firewall_updates_proxy =
+        bootstrapSysFirewallDomain.services."qubes-updates-proxy";
+      bootstrap_default_netvm = dom0Cfg.nixome.qubes.prefs.default_netvm;
+      bootstrap_topology_default_netvm = dom0Cfg.nixome.qubes.topology.prefs.default_netvm;
       bootstrap_dev_topology_present = builtins.hasAttr "dev" dom0Cfg.nixome.qubes.topology.domains;
       bootstrap_sys_net_topology_autostart = bootstrapTopologySysNetDomain.prefs.autostart;
+      bootstrap_sys_firewall_topology_netvm = bootstrapTopologySysFirewallDomain.netvm;
+      bootstrap_sys_firewall_topology_autostart =
+        bootstrapTopologySysFirewallDomain.prefs.autostart;
       image_dev_mode_enabled = dom0Cfg.nixome.image.devMode.enable;
       legacy_image_dev_mode_enabled = legacyDevDom0Cfg.nixome.image.devMode.enable;
       dom0_dhcp_enabled = dom0Cfg.networking.useDHCP;
@@ -1895,6 +1921,11 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       release_bootstrap_sys_net_present = builtins.hasAttr "sys-net" releaseBootstrapDomains;
       release_bootstrap_sys_net_netvm = releaseBootstrapDomains.sys-net.netvm;
       release_bootstrap_sys_net_autostart = releaseBootstrapDomains.sys-net.prefs.autostart;
+      release_bootstrap_sys_firewall_present =
+        builtins.hasAttr "sys-firewall" releaseBootstrapDomains;
+      release_bootstrap_sys_firewall_netvm = releaseBootstrapDomains.sys-firewall.netvm;
+      release_bootstrap_sys_firewall_autostart =
+        releaseBootstrapDomains.sys-firewall.prefs.autostart;
       non_dev_image_dev_mode_enabled = nonDevDom0Cfg.nixome.image.devMode.enable;
       non_dev_dom0_dhcp_enabled = nonDevDom0Cfg.networking.useDHCP;
       non_dev_dom0_dhcpcd_no_gateway =
@@ -1980,24 +2011,39 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["staged_sys_net_declared"] is True
     assert data["staged_sys_net_autostart"] is True
     assert data["staged_sys_net_updates_proxy"] is True
-    assert data["staged_sys_firewall_external"] is True
+    assert data["staged_sys_firewall_declared"] is True
+    assert data["staged_sys_firewall_netvm"] == "sys-net"
+    assert data["staged_sys_firewall_autostart"] is True
+    assert data["staged_sys_firewall_provides_network"] is True
+    assert data["staged_sys_firewall_servicevm"] == "1"
+    assert data["staged_sys_firewall_updates_proxy"] is True
+    assert data["staged_default_netvm"] == "sys-firewall"
     assert data["generated_dev_domain_netvm"] is None
     assert data["generated_dev_domain_role_feature"] == "dev"
     assert data["generated_dev_domain_marker_feature"] == "1"
     assert data["bootstrap_dev_domain_present"] is False
     assert data["bootstrap_sys_net_present"] is True
-    assert data["bootstrap_sys_firewall_external"] is True
+    assert data["bootstrap_sys_firewall_present"] is True
     assert data["bootstrap_sys_net_autostart"] is True
     assert data["bootstrap_sys_net_netvm"] is None
     assert data["bootstrap_sys_net_updates_proxy"] is True
+    assert data["bootstrap_sys_firewall_netvm"] == "sys-net"
+    assert data["bootstrap_sys_firewall_autostart"] is True
+    assert data["bootstrap_sys_firewall_provides_network"] is True
+    assert data["bootstrap_sys_firewall_servicevm"] == "1"
+    assert data["bootstrap_sys_firewall_updates_proxy"] is True
+    assert data["bootstrap_default_netvm"] == "sys-firewall"
+    assert data["bootstrap_topology_default_netvm"] == "sys-firewall"
     assert data["bootstrap_dev_topology_present"] is False
     assert data["bootstrap_sys_net_topology_autostart"] is True
+    assert data["bootstrap_sys_firewall_topology_netvm"] == "sys-net"
+    assert data["bootstrap_sys_firewall_topology_autostart"] is True
     assert data["image_dev_mode_enabled"] is True
     assert data["legacy_image_dev_mode_enabled"] is True
     assert data["dom0_dhcp_enabled"] is True
     assert data["dom0_dhcpcd_no_gateway"] is True
     assert data["dom0_proxy_enabled"] is True
-    assert data["dom0_proxy_target"] == "sys-net"
+    assert data["dom0_proxy_target"] == "sys-firewall"
     assert data["dom0_proxy_http"] == "http://127.0.0.1:8082"
     assert data["dom0_proxy_https"] == "http://127.0.0.1:8082"
     assert data["dom0_proxy_no_proxy"] == "127.0.0.1,localhost,::1"
@@ -2020,6 +2066,9 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["release_bootstrap_sys_net_present"] is True
     assert data["release_bootstrap_sys_net_netvm"] is None
     assert data["release_bootstrap_sys_net_autostart"] is True
+    assert data["release_bootstrap_sys_firewall_present"] is True
+    assert data["release_bootstrap_sys_firewall_netvm"] == "sys-net"
+    assert data["release_bootstrap_sys_firewall_autostart"] is True
     assert data["non_dev_image_dev_mode_enabled"] is False
     assert data["non_dev_dom0_dhcp_enabled"] is False
     assert data["non_dev_dom0_dhcpcd_no_gateway"] is False
@@ -3836,10 +3885,32 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
                         "class": "StandaloneVM",
                         "template": None,
                         "label": "green",
-                        "netvm": "sys-net",
+                        "netvm": "sys-firewall",
                         "prefs": {"autostart": False},
                         "features": {},
                         "services": {},
+                    },
+                    "sys-firewall": {
+                        "class": "StandaloneVM",
+                        "template": None,
+                        "label": "green",
+                        "netvm": "sys-net",
+                        "prefs": {
+                            "autostart": True,
+                            "memory": 500,
+                            "provides_network": True,
+                        },
+                        "features": {
+                            "nixome-role": "sys-firewall",
+                            "servicevm": "1",
+                        },
+                        "services": {
+                            "network-manager": False,
+                            "qubes-firewall": True,
+                            "qubes-network": True,
+                            "qubes-updates-proxy": True,
+                        },
+                        "devices": {"pci": []},
                     },
                     "sys-net": {
                         "class": "StandaloneVM",
@@ -3855,11 +3926,12 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
                             "network-manager": True,
                             "qubes-firewall": True,
                             "qubes-network": True,
+                            "qubes-updates-proxy": True,
                         },
                         "devices": {"pci": []},
                     },
                 },
-                "prefs": {},
+                "prefs": {"default_netvm": "sys-firewall"},
                 "qrexec_policy": {"rules": []},
             },
             sort_keys=True,
@@ -3937,9 +4009,15 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
         esac
         exit 1
         """,
+        "qubes-prefs": """
+        #!/usr/bin/env bash
+        if [ "$#" -eq 1 ]; then
+          exit 1
+        fi
+        printf 'qubes-prefs %s\n' "$*" >> "$MUTATION_LOG"
+        """,
     }
     for name in (
-        "qubes-prefs",
         "qvm-template-postprocess",
         "qvm-volume",
         "qubesd-query",
@@ -3981,6 +4059,9 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     sys_net_create = command_lines.index(
         "+ qvm-create --class StandaloneVM --label red sys-net"
     )
+    sys_firewall_create = command_lines.index(
+        "+ qvm-create --class StandaloneVM --label green sys-firewall"
+    )
     config_create = command_lines.index(
         "+ qvm-create --class StandaloneVM --label gray config-staging"
     )
@@ -3991,20 +4072,26 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     sys_net_pci = command_lines.index(
         "+ qvm-device pci assign --required --port sys-net dom0:00_03.0"
     )
-    dev_netvm = command_lines.index("+ qvm-prefs dev netvm sys-net")
+    sys_firewall_netvm = command_lines.index("+ qvm-prefs sys-firewall netvm sys-net")
+    dev_netvm = command_lines.index("+ qvm-prefs dev netvm sys-firewall")
+    default_netvm = command_lines.index("+ qubes-prefs default_netvm sys-firewall")
 
+    assert sys_net_create < sys_firewall_create
     assert sys_net_create < config_create
     assert sys_net_create < dev_create
+    assert sys_firewall_create < dev_create
     assert sys_net_netvm < sys_net_pci
-    assert sys_net_pci < dev_create
+    assert sys_net_pci < sys_firewall_netvm
+    assert sys_firewall_netvm < dev_create
     assert sys_net_pci < dev_netvm
+    assert dev_netvm < default_netvm
 
     result = json.loads(
         (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
     )
     assert result["schema"] == "nixome.setup-config.v1"
     assert result["status"] == "passed"
-    assert result["domains_changed"] == 3
+    assert result["domains_changed"] == 4
     assert result["devices_changed"] == 1
 
 
@@ -9093,17 +9180,29 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     )
     assert domains["config-validator"]["backend"]["type"] == "nix-closure"
     assert domains["config-validator"]["features"]["nixome-role"] == "config-validator"
-    assert "sys-firewall" not in domains
     assert domains["sys-net"]["class"] == "StandaloneVM"
     assert domains["sys-net"]["netvm"] is None
     assert domains["sys-net"]["prefs"]["provides_network"] is True
     assert domains["sys-net"]["services"]["network-manager"] is True
     assert domains["sys-net"]["services"]["qubes-updates-proxy"] is True
+    assert domains["sys-firewall"]["class"] == "StandaloneVM"
+    assert domains["sys-firewall"]["netvm"] == "sys-net"
+    assert domains["sys-firewall"]["label"] == "green"
+    assert domains["sys-firewall"]["prefs"]["autostart"] is True
+    assert domains["sys-firewall"]["prefs"]["memory"] == 500
+    assert domains["sys-firewall"]["prefs"]["provides_network"] is True
+    assert domains["sys-firewall"]["features"]["nixome-role"] == "sys-firewall"
+    assert domains["sys-firewall"]["features"]["servicevm"] == "1"
+    assert domains["sys-firewall"]["services"]["network-manager"] is False
+    assert domains["sys-firewall"]["services"]["qubes-firewall"] is True
+    assert domains["sys-firewall"]["services"]["qubes-network"] is True
+    assert domains["sys-firewall"]["services"]["qubes-updates-proxy"] is True
     assert "dev" not in domains
     assert "qubes-kernel-6.12.64-1.fc41" in kernels["6.12.64-1.fc41"]["source"]
     assert templates == {}
     assert topology["schema"] == "nixome.qubes-topology.v1"
     assert topology["templates"] == {}
+    assert topology["prefs"]["default_netvm"] == "sys-firewall"
     assert topology["domains"]["config-vault"]["backend"]["root"]["source_ref"] is None
     assert re.search(
         r"^/nix/store/.*/root\.img$",
@@ -9123,6 +9222,9 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         is None
     )
     assert topology["domains"]["sys-net"]["devices"]["pci"] == []
+    assert topology["domains"]["sys-firewall"]["netvm"] == "sys-net"
+    assert topology["domains"]["sys-firewall"]["prefs"]["autostart"] is True
+    assert topology["domains"]["sys-firewall"]["prefs"]["provides_network"] is True
     assert "dev" not in topology["domains"]
 
     proxy_eval = json.loads(
@@ -9138,24 +9240,25 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                   flake = builtins.getFlake "path:{repo_root}";
                   dom0 = flake.nixosConfigurations.vm-gui-config.config;
                   sysNet = flake.nixosConfigurations.nixome-domain-sys-net.config;
+                  sysFirewall = flake.nixosConfigurations.nixome-domain-sys-firewall.config;
                   packageNames = cfg: map (package: package.pname or package.name or "") cfg.environment.systemPackages;
                 in
                 {{
                   dom0_proxy_enabled = dom0.nixome.dom0.devModeNetworkProxy.enable;
                   dom0_proxy_target = dom0.nixome.dom0.devModeNetworkProxy.target;
                   dom0_dhcpcd_extra_config = dom0.networking.dhcpcd.extraConfig;
-                  socket_listen = dom0.systemd.sockets.nixome-dom0-sys-net-updates-proxy.listenStreams;
-                  socket_wanted_by = dom0.systemd.sockets.nixome-dom0-sys-net-updates-proxy.wantedBy;
-                  socket_accept = dom0.systemd.sockets.nixome-dom0-sys-net-updates-proxy.socketConfig.Accept;
+                  socket_listen = dom0.systemd.sockets.nixome-dom0-updates-proxy.listenStreams;
+                  socket_wanted_by = dom0.systemd.sockets.nixome-dom0-updates-proxy.wantedBy;
+                  socket_accept = dom0.systemd.sockets.nixome-dom0-updates-proxy.socketConfig.Accept;
                   socket_bind_to_device =
-                    dom0.systemd.sockets.nixome-dom0-sys-net-updates-proxy.socketConfig.BindToDevice;
+                    dom0.systemd.sockets.nixome-dom0-updates-proxy.socketConfig.BindToDevice;
                   service_exec =
-                    dom0.systemd.services."nixome-dom0-sys-net-updates-proxy@".serviceConfig.ExecStart;
+                    dom0.systemd.services."nixome-dom0-updates-proxy@".serviceConfig.ExecStart;
                   service_stdin =
-                    dom0.systemd.services."nixome-dom0-sys-net-updates-proxy@".serviceConfig.StandardInput;
+                    dom0.systemd.services."nixome-dom0-updates-proxy@".serviceConfig.StandardInput;
                   service_stdout =
-                    dom0.systemd.services."nixome-dom0-sys-net-updates-proxy@".serviceConfig.StandardOutput;
-                  service_after = dom0.systemd.services."nixome-dom0-sys-net-updates-proxy@".after;
+                    dom0.systemd.services."nixome-dom0-updates-proxy@".serviceConfig.StandardOutput;
+                  service_after = dom0.systemd.services."nixome-dom0-updates-proxy@".after;
                   session_proxy = {{
                     http_proxy = dom0.environment.sessionVariables.http_proxy or null;
                     https_proxy = dom0.environment.sessionVariables.https_proxy or null;
@@ -9184,6 +9287,23 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                   sys_net_tinyproxy_user = sysNet.users.users.tinyproxy.isSystemUser;
                   sys_net_tinyproxy_group = sysNet.users.users.tinyproxy.group;
                   sys_net_package_names = packageNames sysNet;
+                  sys_firewall_role = sysFirewall.nixome.qubeGuest.role;
+                  sys_firewall_dhcp = sysFirewall.networking.useDHCP;
+                  sys_firewall_networkmanager = sysFirewall.networking.networkmanager.enable;
+                  sys_firewall_updates_proxy_exec =
+                    sysFirewall.systemd.services.qubes-updates-proxy.serviceConfig.ExecStart;
+                  sys_firewall_network_uplink_exec =
+                    sysFirewall.systemd.services."qubes-network-uplink@".serviceConfig.ExecStart;
+                  sys_firewall_network_uplink_stop =
+                    sysFirewall.systemd.services."qubes-network-uplink@".serviceConfig.ExecStop;
+                  sys_firewall_rpc_config_text =
+                    sysFirewall.environment.etc."qubes/rpc-config/qubes.UpdatesProxy".text;
+                  sys_firewall_rpc_service_mode =
+                    sysFirewall.environment.etc."qubes-rpc/qubes.UpdatesProxy".mode;
+                  sys_firewall_tinyproxy_user =
+                    sysFirewall.users.users.tinyproxy.isSystemUser;
+                  sys_firewall_tinyproxy_group = sysFirewall.users.users.tinyproxy.group;
+                  sys_firewall_package_names = packageNames sysFirewall;
                 }}
                 """,
             ],
@@ -9191,13 +9311,15 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         ).stdout
     )
     assert proxy_eval["dom0_proxy_enabled"] is True
-    assert proxy_eval["dom0_proxy_target"] == "sys-net"
+    assert proxy_eval["dom0_proxy_target"] == "sys-firewall"
     assert "nogateway" in proxy_eval["dom0_dhcpcd_extra_config"]
     assert proxy_eval["socket_listen"] == ["127.0.0.1:8082"]
     assert "sockets.target" in proxy_eval["socket_wanted_by"]
     assert proxy_eval["socket_accept"] is True
     assert proxy_eval["socket_bind_to_device"] == "lo"
-    assert "qrexec-client --use-stdin-socket -d sys-net" in proxy_eval["service_exec"]
+    assert (
+        "qrexec-client --use-stdin-socket -d sys-firewall" in proxy_eval["service_exec"]
+    )
     assert "DEFAULT:QUBESRPC qubes.UpdatesProxy+ dom0" in proxy_eval["service_exec"]
     assert proxy_eval["service_stdin"] == "socket"
     assert proxy_eval["service_stdout"] == "inherit"
@@ -9262,6 +9384,33 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         cwd=repo_root,
         stdout=log_dir / "sys-net-etc-lowerdir-build.log",
         stderr=log_dir / "sys-net-etc-lowerdir-build.log",
+    )
+    assert proxy_eval["sys_firewall_role"] == "sys-firewall"
+    assert proxy_eval["sys_firewall_dhcp"] is False
+    assert proxy_eval["sys_firewall_networkmanager"] is False
+    assert "tinyproxy -d -c" in proxy_eval["sys_firewall_updates_proxy_exec"]
+    assert "/bin/setup-ip add %i" in proxy_eval["sys_firewall_network_uplink_exec"]
+    assert "/bin/setup-ip remove %i" in proxy_eval["sys_firewall_network_uplink_stop"]
+    assert (
+        proxy_eval["sys_firewall_rpc_config_text"]
+        == "skip-service-descriptor=true\nexit-on-service-eof=true\n"
+    )
+    assert proxy_eval["sys_firewall_rpc_service_mode"] == "0555"
+    assert proxy_eval["sys_firewall_tinyproxy_user"] is True
+    assert proxy_eval["sys_firewall_tinyproxy_group"] == "tinyproxy"
+    assert "tinyproxy" in proxy_eval["sys_firewall_package_names"]
+    _run(
+        [
+            "nix",
+            "build",
+            "--no-link",
+            "--print-build-logs",
+            "--show-trace",
+            f"{repo_root}#nixosConfigurations.nixome-domain-sys-firewall.config.system.build.etcBasedir",
+        ],
+        cwd=repo_root,
+        stdout=log_dir / "sys-firewall-etc-lowerdir-build.log",
+        stderr=log_dir / "sys-firewall-etc-lowerdir-build.log",
     )
 
     guest_init_wanted_by = _nix_eval_json(
@@ -9676,7 +9825,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
             f"""
             let
               packages = (builtins.getFlake "git+file://{repo_root}").nixosConfigurations."vm-gui-config".config.virtualisation.qubes.packages;
-              matches = builtins.filter (package: package.name == "nixome-dom0-sys-net-proxy-policy") packages;
+              matches = builtins.filter (package: package.name == "nixome-dom0-network-proxy-policy") packages;
             in
               builtins.head matches
             """,
@@ -9687,12 +9836,12 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     ).stdout.strip()
     dom0_proxy_policy_text = (
         Path(_physical_store_path(repo_root, dom0_proxy_policy_pkg))
-        / "etc/qubes/policy.d/35-nixome-dom0-sys-net-proxy.policy"
+        / "etc/qubes/policy.d/35-nixome-dom0-network-proxy.policy"
     ).read_text(encoding="utf-8")
     assert dom0_proxy_policy_text == "\n".join(
         (
-            "# Managed by Nixome. Let dev-mode dom0 reach the updates proxy through sys-net.",
-            "qubes.UpdatesProxy * dom0 sys-net allow",
+            "# Managed by Nixome. Let dev-mode dom0 reach the updates proxy through its configured network qube.",
+            "qubes.UpdatesProxy * dom0 sys-firewall allow",
             "",
         )
     )
@@ -9897,9 +10046,13 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
     assert profile_out is not None
     assert topology["schema"] == "nixome.qubes-topology.v1"
     assert topology["templates"] == {}
-    assert "sys-firewall" not in topology["domains"]
     assert topology["domains"]["sys-net"]["netvm"] is None
     assert topology["domains"]["sys-net"]["prefs"]["provides_network"] is True
+    assert topology["domains"]["sys-firewall"]["netvm"] == "sys-net"
+    assert topology["domains"]["sys-firewall"]["prefs"]["autostart"] is True
+    assert topology["domains"]["sys-firewall"]["prefs"]["provides_network"] is True
+    assert topology["domains"]["sys-firewall"]["features"]["servicevm"] == "1"
+    assert topology["prefs"]["default_netvm"] == "sys-firewall"
     assert "dev" not in topology["domains"]
     assert (
         topology["domains"]["config-staging"]["features"][

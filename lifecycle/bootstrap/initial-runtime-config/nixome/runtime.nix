@@ -21,7 +21,7 @@
   #   backend.type = "qubes-template";
   #   template = "fedora-44-xfce";
   #   label = "green";
-  #   netvm = "sys-net";
+  #   netvm = "sys-firewall";
   # };
   #
   domains = { };
@@ -84,6 +84,31 @@
       ];
       state.persistentSize = 2147483648;
     };
+    sys-firewall = {
+      role = "sys-firewall";
+      label = "green";
+      netvm = "sys-net";
+      rootImageSizeMiB = 512;
+      prefs = {
+        autostart = true;
+        include_in_backups = true;
+        memory = 500;
+        maxmem = 1024;
+        provides_network = true;
+        vcpus = 1;
+      };
+      features = {
+        "nixome-role" = "sys-firewall";
+        "nixome-network-provider" = "sys-firewall";
+        servicevm = "1";
+      };
+      services = {
+        "network-manager" = false;
+        "qubes-firewall" = true;
+        "qubes-network" = true;
+        "qubes-updates-proxy" = true;
+      };
+    };
   };
 
   # Add or override raw Qubes topology entries here. These become normalized
@@ -93,7 +118,7 @@
   topology = {
     extraTemplates = { };
     extraKernels = { };
-    extraPrefs = { };
+    extraPrefs.default_netvm = "sys-firewall";
     extraDomains = { };
     extraQrexecRules = [ ];
   };

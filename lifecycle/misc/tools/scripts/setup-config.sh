@@ -524,6 +524,17 @@ set_global_pref() {
   record_live_action global-pref set "" "$pref" "$value"
 }
 
+is_domain_backed_global_pref() {
+  case "$1" in
+    default_dispvm|default_netvm|updatevm)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 volume_size_bytes() {
   local domain="$1"
   local volume="$2"
@@ -1788,6 +1799,9 @@ setup_qrexec_policy
 printf 'setting up global prefs\n'
 mapfile -t global_pref_names < <(jq_get '.prefs | keys[]?')
 for pref in "${global_pref_names[@]}"; do
+  if is_domain_backed_global_pref "$pref"; then
+    continue
+  fi
   value="$(json_value '.prefs[$pref]' --arg pref "$pref")"
   set_global_pref "$pref" "$value"
 done
@@ -1968,6 +1982,15 @@ mapfile -t domain_names < <(ordered_domain_names)
 for domain in "${domain_names[@]}"; do
   setup_domain "$domain"
   setup_domain_connectivity "$domain"
+done
+
+printf 'setting up domain-backed global prefs\n'
+for pref in "${global_pref_names[@]}"; do
+  if ! is_domain_backed_global_pref "$pref"; then
+    continue
+  fi
+  value="$(json_value '.prefs[$pref]' --arg pref "$pref")"
+  set_global_pref "$pref" "$value"
 done
 
 write_result passed "Qubes config setup completed"

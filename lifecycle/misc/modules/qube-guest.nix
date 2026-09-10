@@ -13,6 +13,7 @@ let
   hasConfigValidatorRole = cfg.role == "config-validator";
   hasDevRole = cfg.role == "dev";
   hasSysNetRole = cfg.role == "sys-net";
+  hasNetworkProviderRole = hasSysNetRole || cfg.role == "sys-firewall";
   hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole;
   hasPrivateNixRole =
     hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole || hasDevRole;
@@ -49,7 +50,8 @@ let
     pkgs.util-linux
   ];
 
-  networkGuestPath = qubesGuestPath ++ [
+  networkGuestPath = qubesGuestPath ++ networkProviderPackages;
+  networkProviderPackages = [
     pkgs.conntrack-tools
     pkgs.iproute2
     pkgs.iptables
@@ -85,6 +87,18 @@ let
     ConnectPort 873
 
     Filter "${qubesAgentLinux}/etc/tinyproxy/updates-blacklist"
+  '';
+
+  qubesSetupIp = pkgs.runCommand "nixome-qubes-setup-ip" { } ''
+    install -D -m 0555 ${qubesAgentLinux.src}/network/setup-ip "$out/bin/setup-ip"
+    substituteInPlace "$out/bin/setup-ip" \
+      --replace-fail "/usr/lib/qubes/init/functions" "${qubesAgentLinux}/lib/qubes/init/functions" \
+      --replace-fail "/usr/lib/qubes/qubes-setup-dnat-to-ns" "${qubesAgentLinux}/lib/qubes/qubes-setup-dnat-to-ns" \
+      --replace-fail "/usr/bin/qubesdb-read" "${pkgs.qubes-core-qubesdb}/bin/qubesdb-read" \
+      --replace-fail "/usr/bin/resolvectl" "${systemdPackage}/bin/resolvectl" \
+      --replace-fail "/usr/bin/nmcli" "${pkgs.networkmanager}/bin/nmcli" \
+      --replace-fail "/lib/systemd/systemd-sysctl" "${systemdPackage}/lib/systemd/systemd-sysctl"
+    patchShebangs "$out/bin/setup-ip"
   '';
 
   qubesIptablesStart = pkgs.writeShellScript "nixome-qubes-iptables-start" ''
@@ -159,15 +173,8 @@ let
 
   rolePackages = {
     base = [ ];
-    sys-net = [
-      pkgs.conntrack-tools
-      pkgs.iproute2
-      pkgs.iptables
-      pkgs.networkmanager
-      pkgs.nftables
-      pkgs.procps
-      pkgs.tinyproxy
-    ];
+    sys-net = networkProviderPackages;
+    sys-firewall = networkProviderPackages;
     config-vault = [
       configVaultInit
       configVaultArchiveCandidate
@@ -2503,6 +2510,7 @@ in
         "config-staging"
         "config-validator"
         "dev"
+        "sys-firewall"
         "sys-net"
       ];
       default = "base";
@@ -2628,8 +2636,8 @@ in
     };
 
     networking.hostName = lib.mkDefault "nixome-qube";
-    networking.useDHCP = lib.mkDefault (!hasSysNetRole);
-    networking.firewall.enable = lib.mkIf hasSysNetRole false;
+    networking.useDHCP = lib.mkDefault (!hasNetworkProviderRole);
+    networking.firewall.enable = lib.mkIf hasNetworkProviderRole false;
     networking.networkmanager.enable = lib.mkIf hasSysNetRole true;
     networking.networkmanager.settings = lib.mkIf hasSysNetRole {
       main.dns = "default";
@@ -2645,13 +2653,13 @@ in
     users.mutableUsers = lib.mkDefault false;
     users.allowNoPasswordLogin = lib.mkDefault true;
     users.groups.qubes = { };
-    users.groups.tinyproxy = lib.mkIf hasSysNetRole { };
+    users.groups.tinyproxy = lib.mkIf hasNetworkProviderRole { };
     users.users.${cfg.user} = {
       isNormalUser = true;
       group = "users";
       extraGroups = [ "qubes" ];
     };
-    users.users.tinyproxy = lib.mkIf hasSysNetRole {
+    users.users.tinyproxy = lib.mkIf hasNetworkProviderRole {
       isSystemUser = true;
       group = "tinyproxy";
     };
@@ -3063,7 +3071,7 @@ in
       unitConfig.ConditionPathExists = "/run/qubes-service/network-manager";
     };
 
-    systemd.services.qubes-antispoof = lib.mkIf hasSysNetRole {
+    systemd.services.qubes-antispoof = lib.mkIf hasNetworkProviderRole {
       description = "Qubes anti-spoofing firewall rules";
       before = [ "network-pre.target" ];
       requiredBy = [ "network-pre.target" ];
@@ -3075,7 +3083,7 @@ in
       };
     };
 
-    systemd.services.qubes-iptables = lib.mkIf hasSysNetRole {
+    systemd.services.qubes-iptables = lib.mkIf hasNetworkProviderRole {
       description = "Qubes base firewall settings";
       requires = [ "qubes-antispoof.service" ];
       after = [ "qubes-antispoof.service" ];
@@ -3089,7 +3097,7 @@ in
       };
     };
 
-    systemd.services.qubes-network = lib.mkIf hasSysNetRole {
+    systemd.services.qubes-network = lib.mkIf hasNetworkProviderRole {
       description = "Qubes network forwarding setup";
       wantedBy = [ "multi-user.target" ];
       wants = [
@@ -3113,7 +3121,7 @@ in
       };
     };
 
-    systemd.services.qubes-firewall = lib.mkIf hasSysNetRole {
+    systemd.services.qubes-firewall = lib.mkIf hasNetworkProviderRole {
       description = "Qubes firewall updater";
       wantedBy = [ "multi-user.target" ];
       wants = [ "qubes-iptables.service" ];
@@ -3127,7 +3135,7 @@ in
       };
     };
 
-    systemd.services.qubes-updates-proxy = lib.mkIf hasSysNetRole {
+    systemd.services.qubes-updates-proxy = lib.mkIf hasNetworkProviderRole {
       description = "Qubes updates proxy";
       wantedBy = [ "multi-user.target" ];
       after = [ "qubes-iptables.service" ];
@@ -3140,7 +3148,22 @@ in
       };
     };
 
-    systemd.services.qubes-network-uplink = lib.mkIf hasSysNetRole {
+    systemd.services."qubes-network-uplink@" = lib.mkIf hasNetworkProviderRole {
+      description = "Qubes network uplink setup";
+      after = [ "network-pre.target" ];
+      requires = [ "network-pre.target" ];
+      before = [ "network.target" ];
+      wants = [ "network.target" ];
+      path = networkGuestPath;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${qubesSetupIp}/bin/setup-ip add %i";
+        ExecStop = "${qubesSetupIp}/bin/setup-ip remove %i";
+      };
+    };
+
+    systemd.services.qubes-network-uplink = lib.mkIf hasNetworkProviderRole {
       description = "Qubes network uplink wait";
       wantedBy = [ "multi-user.target" ];
       wants = [ "network.target" ];
@@ -3206,32 +3229,32 @@ in
       mode = "0444";
     };
 
-    environment.etc."qubes/qubes-antispoof.nft" = lib.mkIf hasSysNetRole {
+    environment.etc."qubes/qubes-antispoof.nft" = lib.mkIf hasNetworkProviderRole {
       source = "${qubesAgentLinux}/etc/qubes/qubes-antispoof.nft";
       mode = "0444";
     };
 
-    environment.etc."qubes/qubes-ipv4.nft" = lib.mkIf hasSysNetRole {
+    environment.etc."qubes/qubes-ipv4.nft" = lib.mkIf hasNetworkProviderRole {
       source = "${qubesAgentLinux}/etc/qubes/qubes-ipv4.nft";
       mode = "0444";
     };
 
-    environment.etc."qubes/qubes-ipv6.nft" = lib.mkIf hasSysNetRole {
+    environment.etc."qubes/qubes-ipv6.nft" = lib.mkIf hasNetworkProviderRole {
       source = "${qubesAgentLinux}/etc/qubes/qubes-ipv6.nft";
       mode = "0444";
     };
 
-    environment.etc."qubes/qubes-ipv6-disabled.nft" = lib.mkIf hasSysNetRole {
+    environment.etc."qubes/qubes-ipv6-disabled.nft" = lib.mkIf hasNetworkProviderRole {
       source = "${qubesAgentLinux}/etc/qubes/qubes-ipv6-disabled.nft";
       mode = "0444";
     };
 
-    environment.etc."qubes-rpc/qubes.UpdatesProxy" = lib.mkIf hasSysNetRole {
+    environment.etc."qubes-rpc/qubes.UpdatesProxy" = lib.mkIf hasNetworkProviderRole {
       source = updatesProxyRpcService;
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/qubes.UpdatesProxy" = lib.mkIf hasSysNetRole {
+    environment.etc."qubes/rpc-config/qubes.UpdatesProxy" = lib.mkIf hasNetworkProviderRole {
       text = ''
         skip-service-descriptor=true
         exit-on-service-eof=true
@@ -3282,12 +3305,10 @@ in
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/nixome.Config.InputsImport" =
-      lib.mkIf hasConfigInputsImportRole
-        {
-          text = "force-user='root'\n";
-          mode = "0444";
-        };
+    environment.etc."qubes/rpc-config/nixome.Config.InputsImport" = lib.mkIf hasConfigInputsImportRole {
+      text = "force-user='root'\n";
+      mode = "0444";
+    };
 
     environment.etc."qubes-rpc/nixome.Config.ArchiveCandidate" = lib.mkIf hasConfigVaultRole {
       source = configArchiveService;
