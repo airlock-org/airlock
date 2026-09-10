@@ -8,6 +8,7 @@ from typing import Callable
 import pytest
 
 from local_pychecks import (
+    check_dev_role,
     check_host_capabilities,
     check_config_boot_verify,
     check_gc_nixome_store,
@@ -181,11 +182,7 @@ LOCAL_CHECKS = (
         ("{root}/tests/nixome-minimal-closure.sh",),
         (pytest.mark.nix,),
     ),
-    LocalCheck(
-        "dev-role",
-        ("{root}/tests/dev-role.sh",),
-        (pytest.mark.nix,),
-    ),
+    LocalCheck("dev-role", marks=(pytest.mark.nix,), runner=check_dev_role),
     LocalCheck("config-staging-validate", ("{root}/tests/config-staging-validate.sh",)),
     LocalCheck("qrexec-policy-path", runner=check_qrexec_policy_path),
     LocalCheck("qube-guest-policy-probe", runner=check_qube_guest_policy_probe),

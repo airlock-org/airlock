@@ -1557,3 +1557,247 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
+
+
+def check_dev_role(repo_root: Path, log_dir: Path) -> None:
+    shutil.rmtree(log_dir, ignore_errors=True)
+    log_dir.mkdir(parents=True)
+    role_json = log_dir / "role.json"
+
+    expr = f"""
+    let
+      flake = builtins.getFlake "path:{repo_root}";
+      lib = flake.inputs.nixpkgs.lib;
+      devCfg = flake.nixosConfigurations.nixome-domain-dev.config;
+      builders = import {repo_root}/lib/nixome/qube-template.nix {{
+        nixpkgs = flake.inputs.nixpkgs;
+        nixpkgsLibvirt105Source = "${{flake.inputs.nixpkgs-libvirt_10_5}}";
+        nixosQubesSource = "${{flake.inputs.nixos-qubes}}";
+        nixomeSupport = "{repo_root}";
+        system = "x86_64-linux";
+      }};
+      defaultMachine = import {repo_root}/seeds/config-staging/nixome/machine.nix {{
+        appliedMessage = "test";
+        pkgs = builders.pkgs;
+        system = "x86_64-linux";
+        templateBuilders = builders;
+      }};
+      devDomainDefinition = defaultMachine.nixNative.domains.dev;
+      stagedNixNativeDomains = defaultMachine.nixNative.domains;
+      bootstrapDomains = flake.nixosConfigurations.vm-gui-config.config.nixome.qubes.domains;
+      bootstrapDevDomain = bootstrapDomains.dev;
+      bootstrapTopologyDevDomain = flake.nixosConfigurations.vm-gui-config.config.nixome.qubes.topology.domains.dev;
+      generatedDevDomain = (builders.mkNixNativeDomain {{
+        name = "dev";
+        guestRole = devDomainDefinition.role;
+        modules = [ ];
+        rootImageSizeMiB = devDomainDefinition.rootImageSizeMiB or 512;
+        kernelName = devDomainDefinition.kernel or "6.12.64-1.fc41";
+        label = devDomainDefinition.label or "green";
+        netvm = devDomainDefinition.netvm or null;
+        prefs = devDomainDefinition.prefs or {{ }};
+        features = devDomainDefinition.features or {{ }};
+        services = devDomainDefinition.services or {{ }};
+        state = devDomainDefinition.state or {{ }};
+      }}).domain;
+      baseCfg = (builders.mkNixNativeDomain {{
+        name = "minimal-base";
+        guestRole = "base";
+        modules = [ ];
+      }}).configuration.config;
+      packageNames = cfg: map (package: package.pname or package.name or "") cfg.environment.systemPackages;
+      devPackages = packageNames devCfg;
+      basePackages = packageNames baseCfg;
+      has = name: values: builtins.elem name values;
+      hasAnyPrefix = prefix: values: lib.any (value: lib.hasPrefix prefix value) values;
+      etcNames = cfg: lib.attrNames cfg.environment.etc;
+      forbiddenConfigRpc = [
+        "qubes-rpc/nixome.Config.ArchiveCandidate"
+        "qubes-rpc/nixome.Config.ArchiveDeployment"
+        "qubes-rpc/nixome.Config.CandidateExport"
+        "qubes-rpc/nixome.Config.SeedInputsImport"
+        "qubes-rpc/nixome.Config.ValidateCandidate"
+        "qubes-rpc/nixome.PolicyProbe"
+      ];
+      forbiddenDevPackages = [
+        "cargo"
+        "clippy"
+        "codex"
+        "git"
+        "nixome"
+        "nixome-config-nix"
+        "rustc"
+        "rustfmt"
+        "uv"
+        "zellij"
+      ];
+      secretEnvNames = [
+        "CODEX_AUTH_TOKEN"
+        "OPENAI_API_KEY"
+        "OPENAI_API_KEY_FILE"
+      ];
+      devServiceScript = devCfg.systemd.services.nixome-dev-guest-init.script;
+    in
+    {{
+      role = devCfg.nixome.qubeGuest.role;
+      hostname = devCfg.networking.hostName;
+      staged_dev_declared_netvm = devDomainDefinition.netvm;
+      staged_sys_firewall_external = !(builtins.hasAttr "sys-firewall" stagedNixNativeDomains);
+      generated_dev_domain_netvm = generatedDevDomain.netvm;
+      bootstrap_dev_domain_present = builtins.hasAttr "dev" bootstrapDomains;
+      bootstrap_sys_firewall_external = !(builtins.hasAttr "sys-firewall" bootstrapDomains);
+      bootstrap_dev_domain_netvm = bootstrapDevDomain.netvm;
+      bootstrap_dev_domain_backend = bootstrapDevDomain.backend.type;
+      bootstrap_dev_domain_role_feature = bootstrapDevDomain.features."nixome-role";
+      bootstrap_dev_topology_netvm = bootstrapTopologyDevDomain.netvm;
+      bootstrap_dev_topology_backend = bootstrapTopologyDevDomain.backend.type;
+      package_names = devPackages;
+      required_tools_present = lib.all (name: has name devPackages) [
+        "cargo"
+        "clippy"
+        "codex"
+        "git"
+        "gnumake"
+        "jq"
+        "less"
+        "nix"
+        "nixfmt"
+        "nixome"
+        "nixome-config-nix"
+        "openssh"
+        "ripgrep"
+        "rustc"
+        "rustfmt"
+        "uv"
+        "vim"
+        "zellij"
+      ] && hasAnyPrefix "python3" devPackages;
+      network_client_support_present = lib.all (name: has name devPackages) [
+        "bind"
+        "codex"
+        "dhcpcd"
+        "git"
+        "nix"
+        "nss-cacert"
+        "openresolv"
+        "openssh"
+      ];
+      private_nix_enabled = devCfg.nixome.minimalGuest.nix.enable;
+      nix_features = devCfg.nix.settings.experimental-features;
+      nix_allowed_users = devCfg.nix.settings.allowed-users;
+      codex_home = devCfg.nixome.qubeGuest.codexHome;
+      codex_home_env = devCfg.environment.sessionVariables.CODEX_HOME or null;
+      dev_persistent_paths = devCfg.nixome.qubeGuest.devPersistentPaths;
+      dev_init_contains_dev_path = lib.hasInfix "/home/user/dev" devServiceScript;
+      dev_init_contains_codex_home = lib.hasInfix "/home/user/.codex" devServiceScript;
+      dev_init_contains_private_nix_root = lib.hasInfix "/rw/home/user/nixome-config-nix-root" devServiceScript;
+      dev_qrexec_requires = devCfg.systemd.services.qubes-qrexec-agent.requires;
+      dev_qrexec_after = devCfg.systemd.services.qubes-qrexec-agent.after;
+      dev_forbidden_rpc_absent = lib.all (name: !(has name (etcNames devCfg))) forbiddenConfigRpc;
+      dev_allowed_submitters = flake.nixosConfigurations.vm-gui-config.config.nixome.qubes.configAccessPolicy.allowedSubmitters;
+      dev_no_secret_env = lib.all (name: !(builtins.hasAttr name devCfg.environment.sessionVariables)) secretEnvNames;
+      dev_no_codex_auth_etc = lib.all (
+        name:
+        !(lib.hasInfix "auth.json" name)
+        && !(lib.hasInfix "OPENAI_API_KEY" name)
+        && !(lib.hasInfix ".codex" name)
+      ) (etcNames devCfg);
+      base_role = baseCfg.nixome.qubeGuest.role;
+      base_private_nix_enabled = baseCfg.nixome.minimalGuest.nix.enable;
+      base_dev_packages_absent = lib.all (name: !(has name basePackages)) forbiddenDevPackages;
+      base_forbidden_rpc_absent = lib.all (name: !(has name (etcNames baseCfg))) forbiddenConfigRpc;
+    }}
+    """
+    _run(["nix", "eval", "--impure", "--json", "--expr", expr], stdout=role_json)
+    data = json.loads(role_json.read_text(encoding="utf-8"))
+
+    assert data["role"] == "dev"
+    assert data["hostname"] == "dev"
+    assert data["staged_dev_declared_netvm"] == "sys-firewall"
+    assert data["staged_sys_firewall_external"] is True
+    assert data["generated_dev_domain_netvm"] == "sys-firewall"
+    assert data["bootstrap_dev_domain_present"] is True
+    assert data["bootstrap_sys_firewall_external"] is True
+    assert data["bootstrap_dev_domain_netvm"] == "sys-firewall"
+    assert data["bootstrap_dev_domain_backend"] == "nix-closure"
+    assert data["bootstrap_dev_domain_role_feature"] == "dev"
+    assert data["bootstrap_dev_topology_netvm"] == "sys-firewall"
+    assert data["bootstrap_dev_topology_backend"] == "nix-closure"
+    assert data["required_tools_present"] is True
+    assert data["network_client_support_present"] is True
+    assert data["private_nix_enabled"] is True
+    assert "nix-command" in data["nix_features"]
+    assert "flakes" in data["nix_features"]
+    assert data["nix_allowed_users"] == ["user"]
+    assert data["codex_home"] == "/home/user/.codex"
+    assert data["codex_home_env"] == "/home/user/.codex"
+    assert "/home/user/dev" in data["dev_persistent_paths"]
+    assert data["dev_init_contains_dev_path"] is True
+    assert data["dev_init_contains_codex_home"] is True
+    assert data["dev_init_contains_private_nix_root"] is True
+    assert "nixome-dev-guest-init.service" in data["dev_qrexec_requires"]
+    assert "nixome-dev-guest-init.service" in data["dev_qrexec_after"]
+    assert data["dev_forbidden_rpc_absent"] is True
+    assert data["dev_allowed_submitters"] == ["dev"]
+    assert data["dev_no_secret_env"] is True
+    assert data["dev_no_codex_auth_etc"] is True
+    assert data["base_role"] == "base"
+    assert data["base_private_nix_enabled"] is False
+    assert data["base_dev_packages_absent"] is True
+    assert data["base_forbidden_rpc_absent"] is True
+
+    codex_out = log_dir / "codex-out.txt"
+    _run(
+        [
+            "nix",
+            "build",
+            f"{repo_root}#packages.x86_64-linux.codex",
+            "--no-link",
+            "--print-build-logs",
+            "--print-out-paths",
+        ],
+        stdout=codex_out,
+    )
+    codex_path = codex_out.read_text(encoding="utf-8").splitlines()[-1]
+    codex_version = _run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; nixome_run_store_path "$2/bin/codex" --version',
+            "bash",
+            str(repo_root / "scripts/lib/nixome-env.sh"),
+            codex_path,
+        ],
+        cwd=repo_root,
+    ).stdout
+    (log_dir / "codex-version.txt").write_text(codex_version, encoding="utf-8")
+    assert re.search(r"^codex-cli [0-9]+\.[0-9]+\.[0-9]+$", codex_version)
+    codex_physical = Path(_physical_store_path(repo_root, codex_path))
+    assert not any(codex_physical.rglob("auth.json"))
+
+    zellij_out = log_dir / "zellij-out.txt"
+    _run(
+        [
+            "nix",
+            "build",
+            f"{repo_root}#packages.x86_64-linux.zellij",
+            "--no-link",
+            "--print-build-logs",
+            "--print-out-paths",
+        ],
+        stdout=zellij_out,
+    )
+    zellij_path = zellij_out.read_text(encoding="utf-8").splitlines()[-1]
+    zellij_version = _run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; nixome_run_store_path "$2/bin/zellij" --version',
+            "bash",
+            str(repo_root / "scripts/lib/nixome-env.sh"),
+            zellij_path,
+        ],
+        cwd=repo_root,
+    ).stdout
+    (log_dir / "zellij-version.txt").write_text(zellij_version, encoding="utf-8")
+    assert re.search(r"^zellij [0-9]+\.[0-9]+\.[0-9]+$", zellij_version)
