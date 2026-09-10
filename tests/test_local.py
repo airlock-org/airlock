@@ -25,6 +25,7 @@ from local_pychecks import (
     check_setup_config_empty_global_pref,
     check_setup_config_external_netvm,
     check_setup_config_pref_order,
+    check_setup_config_qrexec_policy,
     check_setup_config_runtime_path,
     check_setup_config_static,
     check_system_schema,
@@ -260,7 +261,8 @@ LOCAL_CHECKS = (
         (pytest.mark.nix,),
     ),
     LocalCheck(
-        "setup-config-qrexec-policy", ("{root}/tests/setup-config-qrexec-policy.sh",)
+        "setup-config-qrexec-policy",
+        runner=check_setup_config_qrexec_policy,
     ),
     LocalCheck(
         "setup-config-external-netvm",

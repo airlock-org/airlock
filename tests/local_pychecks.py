@@ -3347,3 +3347,166 @@ def check_setup_config_external_netvm(repo_root: Path, log_dir: Path) -> None:
         "qvm-prefs dev netvm sys-firewall"
         not in mutation_log.read_text(encoding="utf-8").splitlines()
     )
+
+
+def check_setup_config_qrexec_policy(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    setup_log_dir = work_dir / "logs"
+    policy_dir = work_dir / "policy.d"
+    policy_file = policy_dir / "90-nixome.policy"
+    state_dir = work_dir / "state"
+    capabilities = work_dir / "xen-capabilities"
+    mutation_log = work_dir / "mutations.log"
+    systemctl_log = work_dir / "systemctl.log"
+    topology = work_dir / "topology.json"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (setup_log_dir, policy_dir, state_dir):
+        path.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+    mutation_log.write_text("", encoding="utf-8")
+    systemctl_log.write_text("", encoding="utf-8")
+    topology.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.qubes-topology.v1",
+                "templates": {},
+                "kernels": {},
+                "domains": {},
+                "prefs": {},
+                "qrexec_policy": {
+                    "rules": [
+                        {
+                            "service": "nixome.PolicyProbe",
+                            "argument": "*",
+                            "source": "dom0",
+                            "target": "config-vault",
+                            "action": "allow",
+                        },
+                        {
+                            "service": "nixome.PolicyProbe",
+                            "argument": "*",
+                            "source": "@anyvm",
+                            "target": "@anyvm",
+                            "action": "deny",
+                        },
+                    ]
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    unexpected = """
+    #!/usr/bin/env bash
+    printf 'unexpected command execution: %s %s\n' "$0" "$*" >&2
+    exit 97
+    """
+    commands = {
+        name: unexpected
+        for name in (
+            "qvm-create",
+            "qvm-features",
+            "qvm-prefs",
+            "qvm-service",
+            "qvm-template-postprocess",
+            "qvm-volume",
+            "qubes-prefs",
+            "qubesd-query",
+        )
+    }
+    commands["qvm-ls"] = "#!/usr/bin/env bash\nprintf 'dom0\n'\n"
+    commands["systemctl"] = """
+    #!/usr/bin/env bash
+    case "$1" in
+      is-active)
+        exit 0
+        ;;
+      reload)
+        printf 'systemctl %s\n' "$*" >> "$SYSTEMCTL_LOG"
+        exit 1
+        ;;
+      try-restart)
+        printf 'systemctl %s\n' "$*" >> "$SYSTEMCTL_LOG"
+        exit 0
+        ;;
+    esac
+    exit 1
+    """
+    _setup_fake_command_dir(bin_dir, commands)
+    for command_name in ("cmp", "cp", "grep", "jq", "mkdir", "chmod", "rm"):
+        path = shutil.which(command_name)
+        if path is not None and not (bin_dir / command_name).exists():
+            (bin_dir / command_name).symlink_to(path)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "MUTATION_LOG": str(mutation_log),
+            "SYSTEMCTL_LOG": str(systemctl_log),
+            "NIXOME_XEN_CAPABILITIES": str(capabilities),
+            "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
+            "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
+            "NIXOME_LOG_DIR": str(setup_log_dir),
+        }
+    )
+    command = [
+        "bash",
+        str(repo_root / "scripts/setup-config.sh"),
+        "--apply",
+        "--topology",
+        str(topology),
+    ]
+    _run(
+        command,
+        cwd=repo_root,
+        env=env,
+        stdout=setup_log_dir / "first-stdout.log",
+        stderr=setup_log_dir / "first-stderr.log",
+    )
+    result = json.loads(
+        (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
+    )
+    assert result["schema"] == "nixome.setup-config.v1"
+    assert result["status"] == "passed"
+    assert result["mode"] == "apply"
+    assert result["qrexec_policy_changed"] == 1
+    assert result["qrexec_policy_file"] == str(policy_file)
+    assert policy_file.read_text(encoding="utf-8") == (
+        "# Managed by Nixome setup-config.\n"
+        "# Source: nixome.qubes.topology.qrexec_policy.\n"
+        "# Bootstrap config transport policy remains in 30-nixome-config.policy.\n"
+        "nixome.PolicyProbe * dom0 config-vault allow\n"
+        "nixome.PolicyProbe * @anyvm @anyvm deny\n"
+    )
+    systemctl_lines = systemctl_log.read_text(encoding="utf-8").splitlines()
+    assert "systemctl reload qubes-qrexec-policy-daemon.service" in systemctl_lines
+    assert "systemctl try-restart qubes-qrexec-policy-daemon.service" in systemctl_lines
+
+    systemctl_log.write_text("", encoding="utf-8")
+    _run(
+        command,
+        cwd=repo_root,
+        env=env,
+        stdout=setup_log_dir / "second-stdout.log",
+        stderr=setup_log_dir / "second-stderr.log",
+    )
+    result = json.loads(
+        (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
+    )
+    assert result["schema"] == "nixome.setup-config.v1"
+    assert result["status"] == "passed"
+    assert result["mode"] == "apply"
+    assert result["qrexec_policy_changed"] == 0
+    current = json.loads((state_dir / "current-setup.json").read_text(encoding="utf-8"))
+    assert current["schema"] == "nixome.setup-config.v1"
+    assert current["status"] == "passed"
+    assert current["qrexec_policy_changed"] == 0
+    current_topology = json.loads(
+        (state_dir / "current-topology.json").read_text(encoding="utf-8")
+    )
+    assert current_topology["schema"] == "nixome.qubes-topology.v1"
+    assert len(current_topology["qrexec_policy"]["rules"]) == 2
+    assert systemctl_log.read_text(encoding="utf-8") == ""
+    assert mutation_log.read_text(encoding="utf-8") == ""
