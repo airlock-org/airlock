@@ -168,7 +168,7 @@ jq -e '
     .domains.dev.class == "StandaloneVM" and
     .domains.dev.template == null and
     .domains.dev.label == "green" and
-    .domains.dev.netvm == "sys-firewall" and
+    .domains.dev.netvm == "sys-net" and
     .domains.dev.backend.type == "nix-closure" and
     .domains.dev.backend.template == null and
     .domains.dev.backend.system.source == null and
@@ -192,6 +192,16 @@ jq -e '
     .domains.dev.features."nixome-backend" == "nix-closure" and
     .domains.dev.features."nixome-role" == "dev" and
     .domains.dev.features."nixome-dev" == "1";
+  def sys_net_domain:
+    .domains."sys-net".class == "StandaloneVM" and
+    .domains."sys-net".template == null and
+    .domains."sys-net".label == "red" and
+    .domains."sys-net".netvm == null and
+    .domains."sys-net".prefs.provides_network == true and
+    .domains."sys-net".services."network-manager" == true and
+    .domains."sys-net".services."qubes-network" == true and
+    .domains."sys-net".services."qubes-firewall" == true and
+    .domains."sys-net".devices.pci == [];
 
   .schema == "nixome.qubes-topology.v1" and
   .templates == {} and
@@ -209,6 +219,7 @@ jq -e '
   .domains."config-validator".backend.state.persistent_size == 8589934592 and
   .domains."config-validator".features."nixome-config-validator" == "1" and
   (.domains | has("sys-firewall")) == false and
+  sys_net_domain and
   dev_domain and
   .qrexec_policy.rules == [
     {

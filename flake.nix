@@ -278,7 +278,7 @@
           rootImageSizeMiB = devRoleDefaults.rootImageSizeMiB;
           kernelName = nixomeQubesVmKernelName;
           label = devRoleDefaults.label;
-          netvm = "sys-firewall";
+          netvm = "sys-net";
           prefs = devRoleDefaults.prefs;
           features = devRoleDefaults.features;
           services = { };

@@ -162,9 +162,16 @@ jq -e '
   ."config-validator".backend.store.device == "/dev/xvde" and
   ."config-validator".features."nixome-role" == "config-validator" and
   has("sys-firewall") == false and
+  ."sys-net".class == "StandaloneVM" and
+  ."sys-net".template == null and
+  ."sys-net".netvm == null and
+  ."sys-net".prefs.provides_network == true and
+  ."sys-net".services."network-manager" == true and
+  ."sys-net".services."qubes-network" == true and
+  ."sys-net".services."qubes-firewall" == true and
   ."dev".class == "StandaloneVM" and
   ."dev".template == null and
-  ."dev".netvm == "sys-firewall" and
+  ."dev".netvm == "sys-net" and
   ."dev".backend.type == "nix-closure" and
   ."dev".backend.store.mode == "shared-closure" and
   ."dev".backend.store.readOnly == true and
@@ -204,9 +211,17 @@ jq -e '
   .domains."config-validator".backend.state.persistent_size == 8589934592 and
   .domains."config-vault".backend.state.persistent_size == null and
   (.domains | has("sys-firewall")) == false and
+  .domains."sys-net".class == "StandaloneVM" and
+  .domains."sys-net".template == null and
+  .domains."sys-net".netvm == null and
+  .domains."sys-net".prefs.provides_network == true and
+  .domains."sys-net".services."network-manager" == true and
+  .domains."sys-net".services."qubes-network" == true and
+  .domains."sys-net".services."qubes-firewall" == true and
+  .domains."sys-net".devices.pci == [] and
   .domains."dev".class == "StandaloneVM" and
   .domains."dev".template == null and
-  .domains."dev".netvm == "sys-firewall" and
+  .domains."dev".netvm == "sys-net" and
   .domains."dev".backend.type == "nix-closure" and
   .domains."dev".backend.store.read_only == true and
   .domains."dev".backend.state.persistent == "dev-private" and

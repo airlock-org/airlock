@@ -1651,9 +1651,11 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       role = devCfg.nixome.qubeGuest.role;
       hostname = devCfg.networking.hostName;
       staged_dev_declared_netvm = devDomainDefinition.netvm;
+      staged_sys_net_declared = builtins.hasAttr "sys-net" stagedNixNativeDomains;
       staged_sys_firewall_external = !(builtins.hasAttr "sys-firewall" stagedNixNativeDomains);
       generated_dev_domain_netvm = generatedDevDomain.netvm;
       bootstrap_dev_domain_present = builtins.hasAttr "dev" bootstrapDomains;
+      bootstrap_sys_net_present = builtins.hasAttr "sys-net" bootstrapDomains;
       bootstrap_sys_firewall_external = !(builtins.hasAttr "sys-firewall" bootstrapDomains);
       bootstrap_dev_domain_netvm = bootstrapDevDomain.netvm;
       bootstrap_dev_domain_backend = bootstrapDevDomain.backend.type;
@@ -1722,15 +1724,17 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
 
     assert data["role"] == "dev"
     assert data["hostname"] == "dev"
-    assert data["staged_dev_declared_netvm"] == "sys-firewall"
+    assert data["staged_dev_declared_netvm"] == "sys-net"
+    assert data["staged_sys_net_declared"] is True
     assert data["staged_sys_firewall_external"] is True
-    assert data["generated_dev_domain_netvm"] == "sys-firewall"
+    assert data["generated_dev_domain_netvm"] == "sys-net"
     assert data["bootstrap_dev_domain_present"] is True
+    assert data["bootstrap_sys_net_present"] is True
     assert data["bootstrap_sys_firewall_external"] is True
-    assert data["bootstrap_dev_domain_netvm"] == "sys-firewall"
+    assert data["bootstrap_dev_domain_netvm"] == "sys-net"
     assert data["bootstrap_dev_domain_backend"] == "nix-closure"
     assert data["bootstrap_dev_domain_role_feature"] == "dev"
-    assert data["bootstrap_dev_topology_netvm"] == "sys-firewall"
+    assert data["bootstrap_dev_topology_netvm"] == "sys-net"
     assert data["bootstrap_dev_topology_backend"] == "nix-closure"
     assert data["required_tools_present"] is True
     assert data["network_client_support_present"] is True

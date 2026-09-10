@@ -21,7 +21,7 @@
   #   backend.type = "qubes-template";
   #   template = "fedora-44-xfce";
   #   label = "green";
-  #   netvm = "sys-firewall";
+  #   netvm = "sys-net";
   # };
   #
   domains = { };
@@ -84,7 +84,7 @@
     dev = {
       role = "dev";
       label = "green";
-      netvm = "sys-firewall";
+      netvm = "sys-net";
       rootImageSizeMiB = 512;
       prefs = {
         autostart = false;
