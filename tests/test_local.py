@@ -30,6 +30,7 @@ from local_pychecks import (
     check_host_capabilities,
     check_config_boot_verify,
     check_gc_nixome_store,
+    check_nix_domain_storage_helper_shared,
     check_nix_closure_domain_volume_list,
     check_nix_closure_root_image,
     check_nixome_minimal_closure,
@@ -183,7 +184,7 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "nix-domain-storage-helper-shared",
-        ("{root}/tests/nix-domain-storage-helper-shared.sh",),
+        runner=check_nix_domain_storage_helper_shared,
     ),
     LocalCheck(
         "nix-closure-domain-volume-list",
