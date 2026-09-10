@@ -234,6 +234,10 @@ LOCAL_CHECKS = (
     LocalCheck(
         "setup-config-qrexec-policy", ("{root}/tests/setup-config-qrexec-policy.sh",)
     ),
+    LocalCheck(
+        "setup-config-external-netvm",
+        ("{root}/tests/setup-config-external-netvm.sh",),
+    ),
     LocalCheck("setup-config-idempotent", ("{root}/tests/setup-config-idempotent.sh",)),
     LocalCheck(
         "setup-config-restart-actions",

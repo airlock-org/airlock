@@ -33,6 +33,7 @@ let
     templateBuilders = builders;
   };
   devDomainDefinition = defaultMachine.nixNative.domains.dev;
+  stagedNixNativeDomains = defaultMachine.nixNative.domains;
   bootstrapDomains = flake.nixosConfigurations.vm-gui-config.config.nixome.qubes.domains;
   bootstrapDevDomain = bootstrapDomains.dev;
   bootstrapTopologyDevDomain = flake.nixosConfigurations.vm-gui-config.config.nixome.qubes.topology.domains.dev;
@@ -91,8 +92,10 @@ in
   role = devCfg.nixome.qubeGuest.role;
   hostname = devCfg.networking.hostName;
   staged_dev_declared_netvm = devDomainDefinition.netvm;
+  staged_sys_firewall_external = !(builtins.hasAttr "sys-firewall" stagedNixNativeDomains);
   generated_dev_domain_netvm = generatedDevDomain.netvm;
   bootstrap_dev_domain_present = builtins.hasAttr "dev" bootstrapDomains;
+  bootstrap_sys_firewall_external = !(builtins.hasAttr "sys-firewall" bootstrapDomains);
   bootstrap_dev_domain_netvm = bootstrapDevDomain.netvm;
   bootstrap_dev_domain_backend = bootstrapDevDomain.backend.type;
   bootstrap_dev_domain_role_feature = bootstrapDevDomain.features."nixome-role";
@@ -160,8 +163,10 @@ jq -e '
   .role == "dev" and
   .hostname == "dev" and
   .staged_dev_declared_netvm == "sys-firewall" and
+  .staged_sys_firewall_external == true and
   .generated_dev_domain_netvm == "sys-firewall" and
   .bootstrap_dev_domain_present == true and
+  .bootstrap_sys_firewall_external == true and
   .bootstrap_dev_domain_netvm == "sys-firewall" and
   .bootstrap_dev_domain_backend == "nix-closure" and
   .bootstrap_dev_domain_role_feature == "dev" and

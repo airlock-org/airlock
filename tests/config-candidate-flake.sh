@@ -208,6 +208,7 @@ jq -e '
   .domains."config-validator".prefs.memory == 2048 and
   .domains."config-validator".backend.state.persistent_size == 8589934592 and
   .domains."config-validator".features."nixome-config-validator" == "1" and
+  (.domains | has("sys-firewall")) == false and
   dev_domain and
   .qrexec_policy.rules == [
     {

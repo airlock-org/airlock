@@ -687,10 +687,9 @@ async def ensure_shared_store(args):
     if vm_running:
         fail(f"shared store source changed but domain is running: {args.domain}")
 
-    def operation():
-        if current_admission is not None:
-            return ensure_shared_store_loaded(qubes, args, current_admission)
-
+    if current_admission is not None:
+        admission = current_admission
+    else:
         admission = run_engine(
             [
                 "admit",
@@ -722,9 +721,11 @@ async def ensure_shared_store(args):
                 "false",
             ]
         )
-        return ensure_shared_store_loaded(qubes, args, admission)
 
-    return await with_qubesd_restart(True, operation)
+    return await with_qubesd_restart(
+        True,
+        lambda: ensure_shared_store_loaded(qubes, args, admission),
+    )
 
 
 async def switch_shared_store(args):

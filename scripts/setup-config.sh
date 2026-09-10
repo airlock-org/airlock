@@ -460,6 +460,36 @@ set_pref() {
   record_domain_restart_if_running "$domain" domain-pref "$pref" "$value"
 }
 
+set_netvm_pref() {
+  domain="$1"
+  netvm="$2"
+
+  case "$netvm" in
+    ""|none|None|null)
+      set_pref "$domain" netvm none
+      return
+      ;;
+  esac
+
+  if [ "$APPLY" = "1" ] && ! domain_exists "$netvm"; then
+    if jq -e --arg name "$netvm" '.domains | has($name)' "$TOPOLOGY" >/dev/null; then
+      fail "declared NetVM is missing after domain setup: $domain netvm=$netvm"
+    fi
+
+    printf 'external NetVM missing; deferring netvm assignment: %s netvm=%s\n' "$domain" "$netvm"
+    record_live_action \
+      domain-pref \
+      defer \
+      "$domain" \
+      netvm \
+      "$netvm" \
+      "external NetVM does not exist yet; create the stock Qubes domain and rerun setup-config"
+    return
+  fi
+
+  set_pref "$domain" netvm "$netvm"
+}
+
 set_global_pref() {
   pref="$1"
   value="$2"
@@ -1129,7 +1159,6 @@ setup_nix_closure_domain() {
   domain="$1"
   class="$(jq_get '.domains[$name].class // "StandaloneVM"' --arg name "$domain")"
   label="$(jq_get '.domains[$name].label // "green"' --arg name "$domain")"
-  netvm="$(json_value '.domains[$name].netvm' --arg name "$domain")"
   system_source="$(jq_get '.domains[$name].backend.system.source // ""' --arg name "$domain")"
   kernel_name="$(jq_get '.domains[$name].backend.kernel.name // ""' --arg name "$domain")"
   kernel_source="$(jq_get '.domains[$name].backend.kernel.source // ""' --arg name "$domain")"
@@ -1216,10 +1245,6 @@ setup_nix_closure_domain() {
     else
       set_pref "$domain" kernel "$kernel_name"
       ensure_nix_closure_kernelopts "$domain" "$system_source" "$store_device" "$store_filesystem" "$store_blob_device"
-    fi
-
-    if jq -e --arg name "$domain" '.domains[$name] | has("netvm")' "$TOPOLOGY" >/dev/null; then
-      set_pref "$domain" netvm "$netvm"
     fi
 
     set_feature "$domain" nixome-backend nix-closure
@@ -1425,7 +1450,6 @@ for domain in "${domain_names[@]}"; do
   class="$(jq_get '.domains[$name].class // "AppVM"' --arg name "$domain")"
   template="$(jq_get '.domains[$name].template // ""' --arg name "$domain")"
   label="$(jq_get '.domains[$name].label // "red"' --arg name "$domain")"
-  netvm="$(json_value '.domains[$name].netvm' --arg name "$domain")"
 
   if domain_exists "$domain"; then
     printf 'domain exists: %s\n' "$domain"
@@ -1442,10 +1466,6 @@ for domain in "${domain_names[@]}"; do
 
   if [ "$APPLY" = "1" ] || domain_exists "$domain"; then
     set_pref "$domain" label "$label"
-
-    if jq -e --arg name "$domain" '.domains[$name] | has("netvm")' "$TOPOLOGY" >/dev/null; then
-      set_pref "$domain" netvm "$netvm"
-    fi
 
     mapfile -t pref_names < <(domain_pref_names "$domain")
     for pref in "${pref_names[@]}"; do
@@ -1464,6 +1484,18 @@ for domain in "${domain_names[@]}"; do
       value="$(jq_get '.domains[$name].services[$service] | if . then "on" else "off" end' --arg name "$domain" --arg service "$service")"
       set_service "$domain" "$service" "$value"
     done
+  fi
+done
+
+printf 'setting up domain netvms\n'
+for domain in "${domain_names[@]}"; do
+  if ! jq -e --arg name "$domain" '.domains[$name] | has("netvm")' "$TOPOLOGY" >/dev/null; then
+    continue
+  fi
+
+  netvm="$(json_value '.domains[$name].netvm' --arg name "$domain")"
+  if [ "$APPLY" = "1" ] || domain_exists "$domain"; then
+    set_netvm_pref "$domain" "$netvm"
   fi
 done
 

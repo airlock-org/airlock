@@ -161,6 +161,7 @@ jq -e '
   ."config-validator".backend.store.readOnly == true and
   ."config-validator".backend.store.device == "/dev/xvde" and
   ."config-validator".features."nixome-role" == "config-validator" and
+  has("sys-firewall") == false and
   ."dev".class == "StandaloneVM" and
   ."dev".template == null and
   ."dev".netvm == "sys-firewall" and
@@ -202,6 +203,7 @@ jq -e '
   .domains."config-validator".backend.store.read_only == true and
   .domains."config-validator".backend.state.persistent_size == 8589934592 and
   .domains."config-vault".backend.state.persistent_size == null and
+  (.domains | has("sys-firewall")) == false and
   .domains."dev".class == "StandaloneVM" and
   .domains."dev".template == null and
   .domains."dev".netvm == "sys-firewall" and
