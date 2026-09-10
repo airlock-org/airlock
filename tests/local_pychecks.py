@@ -1577,6 +1577,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     let
       flake = builtins.getFlake "path:{repo_root}";
       lib = flake.inputs.nixpkgs.lib;
+      dom0Cfg = flake.nixosConfigurations.vm-gui-config.config;
+      nonDevDom0Cfg = flake.nixosConfigurations.test.config;
       devCfg = flake.nixosConfigurations.nixome-domain-dev.config;
       builders = import {repo_root}/lib/nixome/qube-template.nix {{
         nixpkgs = flake.inputs.nixpkgs;
@@ -1615,6 +1617,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         modules = [ ];
       }}).configuration.config;
       packageNames = cfg: map (package: package.pname or package.name or "") cfg.environment.systemPackages;
+      dom0Packages = packageNames dom0Cfg;
+      nonDevDom0Packages = packageNames nonDevDom0Cfg;
       devPackages = packageNames devCfg;
       basePackages = packageNames baseCfg;
       has = name: values: builtins.elem name values;
@@ -1662,6 +1666,31 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       bootstrap_dev_domain_role_feature = bootstrapDevDomain.features."nixome-role";
       bootstrap_dev_topology_netvm = bootstrapTopologyDevDomain.netvm;
       bootstrap_dev_topology_backend = bootstrapTopologyDevDomain.backend.type;
+      image_dev_mode_enabled = dom0Cfg.nixome.image.devMode.enable;
+      dom0_dhcp_enabled = dom0Cfg.networking.useDHCP;
+      dom0_dev_mode_marker = dom0Cfg.environment.etc."nixome/dev-mode".text;
+      dom0_observability_enabled = dom0Cfg.nixome.dom0.observability.enable;
+      dom0_testing_tools_enabled = dom0Cfg.nixome.dom0.testingTools.enable;
+      dom0_dev_tools_present = lib.all (name: has name dom0Packages) [
+        "codex"
+        "git"
+        "zellij"
+      ];
+      non_dev_image_dev_mode_enabled = nonDevDom0Cfg.nixome.image.devMode.enable;
+      non_dev_dom0_dhcp_enabled = nonDevDom0Cfg.networking.useDHCP;
+      non_dev_dom0_dev_marker_absent =
+        !(builtins.hasAttr "nixome/dev-mode" nonDevDom0Cfg.environment.etc);
+      non_dev_dom0_observability_enabled = nonDevDom0Cfg.nixome.dom0.observability.enable;
+      non_dev_dom0_testing_tools_enabled = nonDevDom0Cfg.nixome.dom0.testingTools.enable;
+      non_dev_dom0_dev_tools_absent = lib.all (name: !(has name nonDevDom0Packages)) [
+        "codex"
+        "git"
+        "nixome-observe-dom0"
+        "nixome-qube-bootstrap"
+        "nixome-qube-gui-smoke"
+        "nixome-qubes-smoke"
+        "zellij"
+      ];
       package_names = devPackages;
       required_tools_present = lib.all (name: has name devPackages) [
         "cargo"
@@ -1736,6 +1765,18 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["bootstrap_dev_domain_role_feature"] == "dev"
     assert data["bootstrap_dev_topology_netvm"] == "sys-net"
     assert data["bootstrap_dev_topology_backend"] == "nix-closure"
+    assert data["image_dev_mode_enabled"] is True
+    assert data["dom0_dhcp_enabled"] is True
+    assert data["dom0_dev_mode_marker"] == "enabled\n"
+    assert data["dom0_observability_enabled"] is True
+    assert data["dom0_testing_tools_enabled"] is True
+    assert data["dom0_dev_tools_present"] is True
+    assert data["non_dev_image_dev_mode_enabled"] is False
+    assert data["non_dev_dom0_dhcp_enabled"] is False
+    assert data["non_dev_dom0_dev_marker_absent"] is True
+    assert data["non_dev_dom0_observability_enabled"] is False
+    assert data["non_dev_dom0_testing_tools_enabled"] is False
+    assert data["non_dev_dom0_dev_tools_absent"] is True
     assert data["required_tools_present"] is True
     assert data["network_client_support_present"] is True
     assert data["private_nix_enabled"] is True

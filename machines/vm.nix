@@ -5,6 +5,10 @@
   ...
 }:
 {
+  # Development-only image flavor: installs temporary dom0 tools and leaves
+  # direct dom0 DHCP available in the throwaway nested VM.
+  nixome.image.devMode.enable = true;
+
   imports = [
     "${modulesPath}/virtualisation/disk-image.nix"
   ];
@@ -13,7 +17,6 @@
     enable = true;
     user = "nixome";
     gui.enable = lib.mkDefault false;
-    observability.enable = true;
     dom0Resources = {
       memoryMiB = 4096;
       maxMemoryMiB = 4096;
@@ -75,7 +78,6 @@
   virtualisation.diskSize = 131072;
 
   networking.hostName = lib.mkDefault "dom0";
-  networking.useDHCP = lib.mkDefault true;
 
   system.stateVersion = "26.05";
 }

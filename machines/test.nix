@@ -4,7 +4,6 @@
     enable = true;
     user = "nixome";
     gui.enable = false;
-    observability.enable = true;
   };
 
   users.users.nixome = {

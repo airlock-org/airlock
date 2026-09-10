@@ -6,11 +6,17 @@
 }:
 let
   cfg = config.nixome.dom0;
+  imageCfg = config.nixome.image;
   qubeBootstrap = pkgs.callPackage ../pkgs/nixome-qube-bootstrap { };
   qubeGuiSmoke = pkgs.callPackage ../pkgs/nixome-qube-gui-smoke { };
   qubesStorage = pkgs.python3.pkgs.callPackage ../pkgs/nixome-qubes-storage { };
   observeDom0 = pkgs.callPackage ../pkgs/nixome-observe { };
   qubesSmoke = pkgs.callPackage ../pkgs/nixome-qubes-smoke { };
+  dom0DevPackages = with pkgs; [
+    codex
+    git
+    zellij
+  ];
   xorgQubesShmoverride = pkgs.writeShellScript "X-qubes-shmoverride" ''
     export LD_PRELOAD=${pkgs.qubes-gui-daemon}/lib/qubes-gui-daemon/shmoverride.so''${LD_PRELOAD:+:$LD_PRELOAD}
     exec ${pkgs.xorg-server}/bin/X "$@"
@@ -24,6 +30,15 @@ let
   ++ lib.optional (!cfg.gui.enable) "dom0-is-gui";
 in
 {
+  options.nixome.image.devMode.enable = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = ''
+      Build this whole Nixome OS image as a development image.
+      This is a build-time image selection flag, not a runtime mode.
+    '';
+  };
+
   options.nixome.dom0 = {
     enable = lib.mkEnableOption "the Nixome Qubes-on-NixOS dom0 proof of concept";
 
@@ -40,19 +55,23 @@ in
 
     observability.enable = lib.mkOption {
       type = lib.types.bool;
-      default = true;
+      default = imageCfg.devMode.enable;
+      defaultText = lib.literalExpression "config.nixome.image.devMode.enable";
       description = ''
         Install the development-only nixome-observe-dom0 command.
         It reports Xen, systemd, and Qubes control-stack state as JSON.
+        Defaults to the image-level development mode flag.
       '';
     };
 
     testingTools.enable = lib.mkOption {
       type = lib.types.bool;
-      default = true;
+      default = imageCfg.devMode.enable;
+      defaultText = lib.literalExpression "config.nixome.image.devMode.enable";
       description = ''
         Install development-only bootstrap and smoke-test commands.
         These commands may create or modify Qubes runtime state.
+        Defaults to the image-level development mode flag.
       '';
     };
 
@@ -181,6 +200,8 @@ in
       "d /var/lib/nixome/closure-store 0700 root root - -"
     ];
 
+    networking.useDHCP = lib.mkDefault imageCfg.devMode.enable;
+
     environment.systemPackages = [
       qubesStorage
     ]
@@ -191,6 +212,13 @@ in
       qubeBootstrap
       qubeGuiSmoke
       qubesSmoke
-    ];
+    ]
+    ++ lib.optionals imageCfg.devMode.enable dom0DevPackages;
+
+    environment.etc = lib.mkIf imageCfg.devMode.enable {
+      "nixome/dev-mode".text = ''
+        enabled
+      '';
+    };
   };
 }
