@@ -13,6 +13,7 @@ from local_pychecks import (
     check_nix_closure_root_image,
     check_qrexec_policy_path,
     check_qube_guest_policy_probe,
+    check_setup_config_runtime_path,
 )
 from local_harness import run_local_command
 
@@ -156,7 +157,8 @@ LOCAL_CHECKS = (
     ),
     LocalCheck("nix-closure-root-image", runner=check_nix_closure_root_image),
     LocalCheck(
-        "setup-config-runtime-path", ("{root}/tests/setup-config-runtime-path.sh",)
+        "setup-config-runtime-path",
+        runner=check_setup_config_runtime_path,
     ),
     LocalCheck("gc-nixome-store", ("{root}/tests/gc-nixome-store.sh",)),
     LocalCheck(

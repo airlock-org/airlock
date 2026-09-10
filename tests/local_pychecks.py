@@ -89,6 +89,20 @@ def _physical_store_path(repo_root: Path, path: str) -> str:
     ).stdout.strip()
 
 
+def _physical_path_list(repo_root: Path, path_list: str) -> str:
+    return _run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; nixome_physical_path_list "$2"',
+            "bash",
+            str(repo_root / "scripts/lib/nixome-env.sh"),
+            path_list,
+        ],
+        cwd=repo_root,
+    ).stdout.strip()
+
+
 def _file_contains_word(path: Path, word: str) -> bool:
     if not path.is_file():
         return False
@@ -435,3 +449,62 @@ def check_nix_closure_root_image(repo_root: Path, log_dir: Path) -> None:
     )
     debugfs_output = (result_dir / "debugfs-nix-store.txt").read_text(encoding="utf-8")
     assert not re.search(r"/[A-Za-z0-9]{32}-", debugfs_output)
+
+
+def check_setup_config_runtime_path(repo_root: Path, log_dir: Path) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    out = _run(
+        [
+            "nix",
+            "build",
+            f"{repo_root}#packages.x86_64-linux.nixome-setup-config",
+            "--no-link",
+            "--print-out-paths",
+        ],
+        cwd=repo_root,
+    ).stdout.strip()
+    wrapper = Path(_physical_store_path(repo_root, out)) / "bin/nixome-setup-config"
+    wrapper_text = wrapper.read_text(encoding="utf-8")
+    match = re.search(r'^export PATH="(.*):\$PATH"$', wrapper_text, re.MULTILINE)
+    assert match is not None, f"could not extract runtime PATH from {wrapper}"
+
+    path_value = _physical_path_list(repo_root, match.group(1))
+    required = [
+        "awk",
+        "chmod",
+        "cmp",
+        "cp",
+        "dd",
+        "grep",
+        "jq",
+        "mkdir",
+        "mkfs.erofs",
+        "mktemp",
+        "dmsetup",
+        "losetup",
+        "qubes-prefs",
+        "qubesd-query",
+        "python3",
+        "qvm-create",
+        "qvm-features",
+        "qvm-ls",
+        "qvm-prefs",
+        "qvm-service",
+        "qvm-template-postprocess",
+        "qvm-volume",
+        "rm",
+        "runuser",
+        "sudo",
+        "systemctl",
+    ]
+    resolved = {command: shutil.which(command, path=path_value) for command in required}
+    (log_dir / "setup-config-runtime-path.commands").write_text(
+        "".join(
+            f"{command}: {path or '<missing>'}\n" for command, path in resolved.items()
+        ),
+        encoding="utf-8",
+    )
+    missing = [command for command, path in resolved.items() if path is None]
+    assert not missing, "setup-config runtime PATH is missing helper(s): " + ", ".join(
+        missing
+    )
