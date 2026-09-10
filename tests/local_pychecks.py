@@ -4105,3 +4105,208 @@ def check_config_apply_template_build_ref(repo_root: Path, log_dir: Path) -> Non
     captured_topology = json.loads(setup_capture.read_text(encoding="utf-8"))
     assert captured_topology["templates"]["test-template"]["source"] is not None
     assert captured_topology["templates"]["test-template"]["source_ref"] is None
+
+
+def check_nixome_cli(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    repo = work_dir / "repo"
+    captured_tar = work_dir / "captured-candidate.tar"
+    qrexec_log = work_dir / "qrexec.log"
+    status_json = work_dir / "status.json"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    (repo / "modules").mkdir(parents=True)
+    bin_dir.mkdir(parents=True)
+    status_json.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.config-status.v1",
+                "status": "applied",
+                "deployment": {
+                    "current": {
+                        "schema": "nixome.config-deployment.v1",
+                        "candidate_commit": "base000000000000000000000000000000000000",
+                    }
+                },
+                "host_generation": {
+                    "active": True,
+                    "current_source": "/nix/store/base-system",
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_executable(
+        bin_dir / "qrexec-client-vm",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        target="$1"
+        service="$2"
+        printf '%s %s\n' "$target" "$service" >> "$QREXEC_LOG"
+        case "$service" in
+          nixome.Config.Status)
+            cat "$STATUS_JSON"
+            ;;
+          nixome.Config.Check)
+            cat > "$CAPTURED_TAR"
+            jq -c -n --arg schema "nixome.config-archive.v1" --arg status "passed" \
+              '{schema: $schema, status: $status}'
+            ;;
+          nixome.Config.Apply)
+            cat > "$CAPTURED_TAR"
+            jq -c -n --arg schema "nixome.config-apply.v1" --arg status "passed" \
+              '{schema: $schema, status: $status}'
+            ;;
+          nixome.Config.Rollback)
+            jq -c -n --arg schema "nixome.config-rollback.v1" --arg status "passed" \
+              '{schema: $schema, status: $status}'
+            ;;
+          *)
+            printf 'unexpected service: %s\n' "$service" >&2
+            exit 2
+            ;;
+        esac
+        """,
+    )
+    _write_flake(
+        repo / "flake.nix",
+        """
+        {
+          description = "Nixome CLI test repo";
+          outputs = { self }: {
+            nixome.topology = {
+              schema = "nixome.qubes-topology.v1";
+              templates = {};
+              kernels = {};
+              domains = {};
+              prefs = {};
+              qrexec_policy.rules = [];
+            };
+          };
+        }
+        """,
+    )
+    (repo / "modules/controller.nix").write_text(
+        "initial controller\n", encoding="utf-8"
+    )
+    _git_commit_all(
+        repo,
+        "initial candidate",
+        name="Nixome CLI Test",
+        email="nixome-cli-test@localhost",
+    )
+    (repo / "modules/controller.nix").write_text(
+        "self-hosted controller change\n", encoding="utf-8"
+    )
+    _run(["git", "add", "modules/controller.nix"], cwd=repo)
+    _run(
+        [
+            "git",
+            "-c",
+            "user.name=Nixome CLI Test",
+            "-c",
+            "user.email=nixome-cli-test@localhost",
+            "commit",
+            "-m",
+            "change controller source",
+        ],
+        cwd=repo,
+    )
+    expected_commit = _run(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip()
+    expected_tree = _run(["git", "rev-parse", "HEAD^{tree}"], cwd=repo).stdout.strip()
+    nixome_out = _run(
+        [
+            "nix",
+            "build",
+            f"{repo_root}#packages.x86_64-linux.nixome-cli",
+            "--no-link",
+            "--print-out-paths",
+        ]
+    ).stdout.strip()
+    nixome_bin = Path(_physical_store_path(repo_root, nixome_out)) / "bin/nixome"
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "NIXOME_QREXEC_CLIENT": str(bin_dir / "qrexec-client-vm"),
+            "QREXEC_LOG": str(qrexec_log),
+            "STATUS_JSON": str(status_json),
+            "CAPTURED_TAR": str(captured_tar),
+        }
+    )
+
+    for subcommand, output_path, schema in (
+        ("status", work_dir / "status-output.json", "nixome.config-status.v1"),
+        ("check", work_dir / "check.json", "nixome.config-archive.v1"),
+        ("apply", work_dir / "apply.json", "nixome.config-apply.v1"),
+        ("rollback", work_dir / "rollback.json", "nixome.config-rollback.v1"),
+    ):
+        _run(
+            [str(nixome_bin), subcommand],
+            cwd=repo,
+            env=env,
+            stdout=output_path,
+        )
+        output = json.loads(output_path.read_text(encoding="utf-8"))
+        assert output["schema"] == schema
+        expected_status = "applied" if subcommand == "status" else "passed"
+        assert output["status"] == expected_status
+
+        if subcommand == "check":
+            with tarfile.open(captured_tar) as tar:
+                members = sorted(tar.getnames())
+                tar.extractall(work_dir / "candidate")
+            assert "config.bundle" in members
+            assert "manifest.json" in members
+            manifest = json.loads(
+                (work_dir / "candidate/manifest.json").read_text(encoding="utf-8")
+            )
+            assert manifest["schema"] == "nixome.config-candidate.v1"
+            assert manifest["commit"] == expected_commit
+            assert manifest["tree"] == expected_tree
+            assert manifest["branch"] == "main"
+            assert manifest["source_role"] == "dev"
+            assert manifest["transport"] == "qrexec"
+            assert manifest["base_generation"]["schema"] == "nixome.config-status.v1"
+            assert (
+                manifest["base_generation"]["deployment"]["current"]["candidate_commit"]
+                == "base000000000000000000000000000000000000"
+            )
+            assert manifest["requested_targets"] == ["nixome"]
+            _run(
+                [
+                    "git",
+                    "clone",
+                    str(work_dir / "candidate/config.bundle"),
+                    str(work_dir / "cloned"),
+                ]
+            )
+            assert (work_dir / "cloned/modules/controller.nix").read_text(
+                encoding="utf-8"
+            ).strip() == "self-hosted controller change"
+
+    with (repo / "modules/controller.nix").open("a", encoding="utf-8") as handle:
+        handle.write("dirty\n")
+    result = _run(
+        [str(nixome_bin), "check"],
+        cwd=repo,
+        env=env,
+        stdout=work_dir / "dirty.json",
+        stderr=work_dir / "dirty.stderr",
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "worktree is dirty" in (work_dir / "dirty.stderr").read_text(
+        encoding="utf-8"
+    )
+    qrexec_lines = qrexec_log.read_text(encoding="utf-8").splitlines()
+    for line in (
+        "dom0 nixome.Config.Status",
+        "dom0 nixome.Config.Check",
+        "dom0 nixome.Config.Apply",
+        "dom0 nixome.Config.Rollback",
+    ):
+        assert line in qrexec_lines
