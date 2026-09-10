@@ -2034,3 +2034,253 @@ def check_config_candidate_nix_native(repo_root: Path, log_dir: Path) -> None:
         )
         assert result.returncode != 0
         assert expected in invalid_log.read_text(encoding="utf-8")
+
+
+def check_nixome_minimal_guest(repo_root: Path, log_dir: Path) -> None:
+    shutil.rmtree(log_dir, ignore_errors=True)
+    log_dir.mkdir(parents=True)
+    result_json = log_dir / "result.json"
+    expr = f"""
+    let
+      flake = builtins.getFlake "path:{repo_root}";
+      lib = flake.inputs.nixpkgs.lib;
+      cfgs = {{
+        staging = flake.nixosConfigurations."nixome-domain-config-staging".config;
+        validator = flake.nixosConfigurations."nixome-domain-config-validator".config;
+        vault = flake.nixosConfigurations."nixome-domain-config-vault".config;
+      }};
+      cfgList = builtins.attrValues cfgs;
+      packageNames = cfg: map (package: package.pname or package.name or "") cfg.environment.systemPackages;
+      corePackageNames = cfg: map (package: package.pname or package.name or "") cfg.environment.corePackages;
+      enabledServices =
+        cfg:
+        lib.attrNames (
+          lib.filterAttrs (_name: service: service.enable or false) cfg.systemd.services
+        );
+      etcNames = cfg: lib.attrNames cfg.environment.etc;
+      has = name: values: builtins.elem name values;
+      allCfgs = pred: lib.all pred cfgList;
+      packagesAbsent =
+        names: cfg:
+        lib.all (name: !(has name (packageNames cfg))) names;
+      noSeedEtc =
+        cfg:
+        lib.all (name: !(lib.hasPrefix "nixome/config-seed-inputs/" name)) (etcNames cfg);
+    in
+    {{
+      package_names = lib.mapAttrs (_name: cfg: packageNames cfg) cfgs;
+      core_package_names = lib.mapAttrs (_name: cfg: corePackageNames cfg) cfgs;
+      enabled_services = lib.mapAttrs (_name: cfg: enabledServices cfg) cfgs;
+      service_counts = lib.mapAttrs (_name: cfg: builtins.length (enabledServices cfg)) cfgs;
+      minimal_enabled = allCfgs (cfg: cfg.nixome.minimalGuest.enable);
+      default_packages_empty = allCfgs (cfg: cfg.environment.defaultPackages == [ ]);
+      documentation_disabled = allCfgs (
+        cfg:
+        cfg.documentation.enable == false
+        && cfg.documentation.doc.enable == false
+        && cfg.documentation.info.enable == false
+        && cfg.documentation.man.enable == false
+        && cfg.documentation.nixos.enable == false
+      );
+      perlless_mechanics_enabled = allCfgs (
+        cfg:
+        cfg.system.etc.overlay.enable == true
+        && cfg.services.userborn.enable == true
+      );
+      installer_tools_disabled = allCfgs (cfg: cfg.system.disableInstallerTools);
+      no_installer_tool_packages = allCfgs (
+        packagesAbsent [
+          "nixos-build-vms"
+          "nixos-enter"
+          "nixos-generate-config"
+          "nixos-install"
+          "nixos-option"
+        ]
+      );
+      nix_cli_capability = {{
+        staging = cfgs.staging.nixome.minimalGuest.nix.enable;
+        validator = cfgs.validator.nixome.minimalGuest.nix.enable;
+        vault = cfgs.vault.nixome.minimalGuest.nix.enable;
+      }};
+      staging_has_config_nix = has "nix" (packageNames cfgs.staging) && has "nixome-config-nix" (packageNames cfgs.staging);
+      validator_has_config_nix = has "nix" (packageNames cfgs.validator) && has "nixome-config-nix" (packageNames cfgs.validator);
+      vault_has_no_config_nix = !(has "nixome-config-nix" (packageNames cfgs.vault));
+      stock_runtime_retained = allCfgs (
+        cfg:
+        (cfg.systemd.package.pname or "") == "systemd"
+        && cfg.services.dbus.enable == true
+        && cfg.networking.useDHCP == true
+      );
+      no_guest_seed_input_etc = allCfgs noSeedEtc;
+      required_qubes_services_retained = allCfgs (
+        cfg:
+        lib.all (name: has name (enabledServices cfg)) [
+          "nixome-qubes-rw-init"
+          "qubes-db"
+          "qubes-qrexec-agent"
+          "qubes-sysinit"
+        ]
+      );
+      seed_inputs_import_rpc = {{
+        staging = cfgs.staging.environment.etc ? "qubes-rpc/nixome.Config.SeedInputsImport";
+        validator = cfgs.validator.environment.etc ? "qubes-rpc/nixome.Config.SeedInputsImport";
+        vault = cfgs.vault.environment.etc ? "qubes-rpc/nixome.Config.SeedInputsImport";
+      }};
+      qubes_runtime_packages_retained = allCfgs (
+        cfg:
+        has "qubes-core-agent-linux" (packageNames cfg)
+        && has "qubes-linux-utils" (packageNames cfg)
+        && has "qubes-core-qrexec-base" (packageNames cfg)
+        && has "qubes-core-qrexec-domU" (packageNames cfg)
+      );
+    }}
+    """
+    _run(["nix", "eval", "--impure", "--json", "--expr", expr], stdout=result_json)
+    data = json.loads(result_json.read_text(encoding="utf-8"))
+    assert data["minimal_enabled"] is True
+    assert data["default_packages_empty"] is True
+    assert data["documentation_disabled"] is True
+    assert data["perlless_mechanics_enabled"] is True
+    assert data["installer_tools_disabled"] is True
+    assert data["no_installer_tool_packages"] is True
+    assert data["nix_cli_capability"] == {
+        "staging": True,
+        "validator": True,
+        "vault": False,
+    }
+    assert data["staging_has_config_nix"] is True
+    assert data["validator_has_config_nix"] is True
+    assert data["vault_has_no_config_nix"] is True
+    assert data["stock_runtime_retained"] is True
+    assert data["no_guest_seed_input_etc"] is True
+    assert data["required_qubes_services_retained"] is True
+    assert data["seed_inputs_import_rpc"] == {
+        "staging": True,
+        "validator": True,
+        "vault": False,
+    }
+    assert data["qubes_runtime_packages_retained"] is True
+
+
+def check_nixome_minimal_closure(repo_root: Path, log_dir: Path) -> None:
+    shutil.rmtree(log_dir, ignore_errors=True)
+    log_dir.mkdir(parents=True)
+    roles = ("config-staging", "config-validator", "config-vault")
+    paths = {}
+    for role in roles:
+        attr = f"{repo_root}#nixosConfigurations.nixome-domain-{role}.config.system.build.toplevel"
+        paths[role] = _run(
+            [
+                "nix",
+                "build",
+                "--no-link",
+                "--print-out-paths",
+                attr,
+                "--print-build-logs",
+                "--show-trace",
+            ]
+        ).stdout.strip()
+        closure_file = log_dir / f"closure-{role}.txt"
+        _run(["nix", "path-info", "-r", paths[role]], stdout=closure_file)
+
+    def closure(role: str) -> str:
+        return (log_dir / f"closure-{role}.txt").read_text(encoding="utf-8")
+
+    def assert_has(role: str, pattern: str, description: str) -> None:
+        assert re.search(
+            pattern, closure(role)
+        ), f"missing expected {description} in {role} closure: {pattern}"
+
+    def assert_absent(role: str, pattern: str, description: str) -> None:
+        assert not re.search(
+            pattern, closure(role)
+        ), f"unexpected {description} in {role} closure: {pattern}"
+
+    for role in roles:
+        assert_has(
+            role,
+            r"/nix/store/[[:alnum:]]+-qubes-core-qrexec-domU-".replace(
+                "[[:alnum:]]", "[A-Za-z0-9]"
+            ),
+            "qrexec domU runtime",
+        )
+        assert_has(
+            role,
+            r"/nix/store/[A-Za-z0-9]+-qubes-core-qubesdb-client-",
+            "QubesDB client",
+        )
+        assert_has(
+            role,
+            r"/nix/store/[A-Za-z0-9]+-qubes-core-qubesdb-daemon-",
+            "QubesDB daemon",
+        )
+        assert_has(
+            role,
+            r"/nix/store/[A-Za-z0-9]+-qubes-core-agent-linux-[0-9]",
+            "upstream Qubes core agent package",
+        )
+        assert_has(
+            role,
+            r"/nix/store/[A-Za-z0-9]+-python[^/]*-qubes-core-qrexec",
+            "upstream Python qrexec package",
+        )
+        assert_has(
+            role, r"/nix/store/[A-Za-z0-9]+-systemd-[0-9]", "full systemd package"
+        )
+        assert_has(
+            role,
+            r"/nix/store/[A-Za-z0-9]+-userborn-",
+            "userborn passwd/group generator",
+        )
+        assert_absent(
+            role,
+            r"/nix/store/[A-Za-z0-9]+-nixos-(build-vms|enter|generate-config|install|option)",
+            "NixOS installer/admin tooling",
+        )
+
+    for role in ("config-staging", "config-validator"):
+        assert_has(role, r"/nix/store/[A-Za-z0-9]+-nix-[0-9]", "role-specific Nix CLI")
+        assert_has(
+            role,
+            r"/nix/store/[A-Za-z0-9]+-nix-flake",
+            "role-specific nix flake support",
+        )
+        assert_has(
+            role,
+            r"/nix/store/[A-Za-z0-9]+-nixome-config-nix",
+            "role-specific Nixome Nix helper",
+        )
+    assert_absent(
+        "config-vault",
+        r"/nix/store/[A-Za-z0-9]+-nixome-config-nix",
+        "Nixome Nix helper",
+    )
+
+    role_reports = []
+    for role in roles:
+        closure_lines = closure(role).splitlines()
+        path_info = json.loads(
+            _run(
+                ["nix", "path-info", "--json-format", "1", "--json", "-S", paths[role]]
+            ).stdout
+        )
+        role_reports.append(
+            {
+                "role": role,
+                "path": paths[role],
+                "store_paths": len(closure_lines),
+                "closure_size_bytes": next(iter(path_info.values()))["closureSize"],
+            }
+        )
+    (log_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.minimal-closure-test.v1",
+                "status": "passed",
+                "roles": role_reports,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
