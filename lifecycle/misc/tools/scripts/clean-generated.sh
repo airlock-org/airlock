@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 MODE="${1:-usage}"
-source "$ROOT/lifecycle/runtime/tools/scripts/lib/nixome-env.sh"
+source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
 VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 CACHE_DIR="${NIXOME_QUBES_CACHE_DIR:-$ROOT/.nixome-cache/rpms}"

@@ -19,7 +19,7 @@ let
   hasConfigInputsImportRole = hasConfigStagingRole || hasConfigValidatorRole;
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
   roleGit = pkgs.gitMinimal;
-  nixomeCli = pkgs.callPackage ../pkgs/nixome-cli { };
+  nixomeCli = pkgs.callPackage ../../runtime/tools/pkgs/nixome-cli { };
   systemdPackage = config.systemd.package;
   configInputsPublicPath = "/etc/nixome/config-inputs";
   devPersistentPaths = lib.unique (cfg.devPersistentPaths ++ [ cfg.codexHome ]);
@@ -205,14 +205,14 @@ let
     ];
   };
 
-  initialRuntimeConfigFlake = builtins.readFile ../../../bootstrap/initial-runtime-config/flake.nix;
-  initialRuntimeConfigVms = builtins.readFile ../../../bootstrap/initial-runtime-config/nixome/config-vms.nix;
-  initialRuntimeDom0Host = builtins.readFile ../../../bootstrap/initial-runtime-config/nixome/dom0-host.nix;
-  initialRuntimeDom0ProfileActivate = builtins.readFile ../../../bootstrap/initial-runtime-config/dom0-profile/bin/nixome-dom0-profile-activate;
-  initialRuntimeDom0ProfileJson = builtins.readFile ../../../bootstrap/initial-runtime-config/dom0-profile/share/nixome/profile.json;
-  initialRuntimeLocal = builtins.readFile ../../../bootstrap/initial-runtime-config/nixome/local.nix;
-  initialRuntimeConfig = builtins.readFile ../../../bootstrap/initial-runtime-config/nixome/runtime.nix;
-  initialRuntimeSystem = builtins.readFile ../../../bootstrap/initial-runtime-config/nixome/system.nix;
+  initialRuntimeConfigFlake = builtins.readFile ../../bootstrap/initial-runtime-config/flake.nix;
+  initialRuntimeConfigVms = builtins.readFile ../../bootstrap/initial-runtime-config/nixome/config-vms.nix;
+  initialRuntimeDom0Host = builtins.readFile ../../bootstrap/initial-runtime-config/nixome/dom0-host.nix;
+  initialRuntimeDom0ProfileActivate = builtins.readFile ../../bootstrap/initial-runtime-config/dom0-profile/bin/nixome-dom0-profile-activate;
+  initialRuntimeDom0ProfileJson = builtins.readFile ../../bootstrap/initial-runtime-config/dom0-profile/share/nixome/profile.json;
+  initialRuntimeLocal = builtins.readFile ../../bootstrap/initial-runtime-config/nixome/local.nix;
+  initialRuntimeConfig = builtins.readFile ../../bootstrap/initial-runtime-config/nixome/runtime.nix;
+  initialRuntimeSystem = builtins.readFile ../../bootstrap/initial-runtime-config/nixome/system.nix;
   initialRuntimeSystemSchema = builtins.readFile ../lib/system.nix;
   initialRuntimeTopologySchema = builtins.readFile ../lib/topology.nix;
   initialRuntimePrebuiltTemplateSources = lib.generators.toPretty { } nixomePrebuiltTemplateSources;

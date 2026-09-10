@@ -4,7 +4,7 @@
   gnugrep,
   jq,
   lib,
-  nixome-config-apply ? callPackage ../nixome-config-apply { },
+  nixome-config-apply ? callPackage ../../../../runtime/tools/pkgs/nixome-config-apply { },
   nixome-config-inputs-import ? callPackage ../nixome-config-inputs-import { },
   python3,
   systemd,
@@ -31,10 +31,10 @@ let
     builtins.readFile ../../../../bootstrap/initial-runtime-config/nixome/system.nix
   );
   systemSchemaSource = builtins.toFile "nixome-system-schema.nix" (
-    builtins.readFile ../../lib/system.nix
+    builtins.readFile ../../../lib/system.nix
   );
   topologySchemaSource = builtins.toFile "nixome-topology.nix" (
-    builtins.readFile ../../lib/topology.nix
+    builtins.readFile ../../../lib/topology.nix
   );
 in
 writeShellApplication {

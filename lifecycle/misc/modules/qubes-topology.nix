@@ -442,16 +442,16 @@ let
       ;
   };
 
-  setupConfig = pkgs.callPackage ../pkgs/nixome-setup-config { };
-  configApply = pkgs.callPackage ../pkgs/nixome-config-apply { };
-  configArchive = pkgs.callPackage ../pkgs/nixome-config-archive { };
-  configBootstrapCurrent = pkgs.callPackage ../pkgs/nixome-config-bootstrap-current { };
-  configBootVerify = pkgs.callPackage ../pkgs/nixome-config-boot-verify { };
-  configControl = pkgs.callPackage ../pkgs/nixome-config-control { };
-  configInputsImport = pkgs.callPackage ../pkgs/nixome-config-inputs-import { };
-  configStatus = pkgs.callPackage ../pkgs/nixome-config-status { };
-  configVmsSmoke = pkgs.callPackage ../pkgs/nixome-config-vms-smoke { };
-  nixClosureDomainSmoke = pkgs.callPackage ../pkgs/nixome-nix-closure-domain-smoke { };
+  setupConfig = pkgs.callPackage ../tools/pkgs/nixome-setup-config { };
+  configApply = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-apply { };
+  configArchive = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-archive { };
+  configBootstrapCurrent = pkgs.callPackage ../../bootstrap/tools/pkgs/nixome-config-bootstrap-current { };
+  configBootVerify = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-boot-verify { };
+  configControl = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-control { };
+  configInputsImport = pkgs.callPackage ../tools/pkgs/nixome-config-inputs-import { };
+  configStatus = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-status { };
+  configVmsSmoke = pkgs.callPackage ../tools/pkgs/nixome-config-vms-smoke { };
+  nixClosureDomainSmoke = pkgs.callPackage ../tools/pkgs/nixome-nix-closure-domain-smoke { };
   qrexecPolicyStaticDir = "/etc/qubes/policy.d";
   qrexecPolicyRuntimeDir = "/var/lib/nixome/qubes-policy.d";
   qrexecManagedPolicyFile = "90-nixome.policy";

@@ -14,7 +14,7 @@
 }:
 let
   configArchive = callPackage ../nixome-config-archive { };
-  setupConfig = callPackage ../nixome-setup-config { };
+  setupConfig = callPackage ../../../../misc/tools/pkgs/nixome-setup-config { };
 in
 writeShellApplication {
   name = "nixome-config-apply";

@@ -75,7 +75,7 @@ def _run_store_path(repo_root: Path, store_path: str, env: dict[str, str]) -> No
             "-c",
             'source "$1"; nixome_run_store_path "$2"',
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/lib/nixome-env.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
             store_path,
         ],
         cwd=repo_root,
@@ -90,7 +90,7 @@ def _physical_store_path(repo_root: Path, path: str) -> str:
             "-c",
             'source "$1"; nixome_physical_store_path "$2"',
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/lib/nixome-env.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
             path,
         ],
         cwd=repo_root,
@@ -104,7 +104,7 @@ def _physical_path_list(repo_root: Path, path_list: str) -> str:
             "-c",
             'source "$1"; nixome_physical_path_list "$2"',
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/lib/nixome-env.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
             path_list,
         ],
         cwd=repo_root,
@@ -276,7 +276,7 @@ def check_qrexec_policy_path(repo_root: Path, log_dir: Path) -> None:
             "-c",
             'source "$1"; nixome_run_store_path "$2"',
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/lib/nixome-env.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
             helper.strip(),
         ],
         cwd=repo_root,
@@ -329,7 +329,7 @@ def check_qube_guest_policy_probe(repo_root: Path, log_dir: Path) -> None:
             "-c",
             'source "$1"; nixome_run_store_path "$2"',
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/lib/nixome-env.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
             service,
         ],
         cwd=repo_root,
@@ -356,7 +356,7 @@ def check_qube_guest_policy_probe(repo_root: Path, log_dir: Path) -> None:
             "-c",
             'source "$1"; nixome_run_store_path "$2"',
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/lib/nixome-env.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
             service,
         ],
         cwd=repo_root,
@@ -367,7 +367,7 @@ def check_qube_guest_policy_probe(repo_root: Path, log_dir: Path) -> None:
 
 
 def check_nix_closure_domain_volume_list(repo_root: Path, log_dir: Path) -> None:
-    script = repo_root / "lifecycle/runtime/tools/scripts/nix-closure-domain-smoke.sh"
+    script = repo_root / "lifecycle/misc/tools/scripts/nix-closure-domain-smoke.sh"
     work_dir = log_dir
     work_dir.mkdir(parents=True, exist_ok=True)
     volume_list = work_dir / "qvm-volume-list.txt"
@@ -541,7 +541,7 @@ def check_system_schema(repo_root: Path, log_dir: Path) -> None:
         target = work_dir / name / "nixome"
         target.mkdir(parents=True)
         shutil.copy(
-            repo_root / "lifecycle/runtime/tools/lib/system.nix",
+            repo_root / "lifecycle/misc/lib/system.nix",
             target / "system-schema.nix",
         )
 
@@ -731,7 +731,7 @@ def check_topology_schema(repo_root: Path, log_dir: Path) -> None:
     ):
         path.mkdir(parents=True)
     shutil.copy(
-        repo_root / "lifecycle/runtime/tools/lib/topology.nix",
+        repo_root / "lifecycle/misc/lib/topology.nix",
         valid_dir / "nixome/topology.nix",
     )
 
@@ -911,7 +911,7 @@ def check_topology_schema(repo_root: Path, log_dir: Path) -> None:
         case_dir = work_dir / name
         (case_dir / "nixome").mkdir(parents=True)
         shutil.copy(
-            repo_root / "lifecycle/runtime/tools/lib/topology.nix",
+            repo_root / "lifecycle/misc/lib/topology.nix",
             case_dir / "nixome/topology.nix",
         )
         _write_flake(
@@ -1257,7 +1257,7 @@ def check_gc_nixome_store(repo_root: Path, log_dir: Path) -> None:
 
     _run(
         [
-            str(repo_root / "lifecycle/runtime/tools/scripts/gc-nixome-store.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/gc-nixome-store.sh"),
             "dry-run",
         ],
         cwd=repo_root,
@@ -1298,7 +1298,7 @@ def check_gc_nixome_store(repo_root: Path, log_dir: Path) -> None:
     )
 
     _run(
-        [str(repo_root / "lifecycle/runtime/tools/scripts/gc-nixome-store.sh"), "run"],
+        [str(repo_root / "lifecycle/misc/tools/scripts/gc-nixome-store.sh"), "run"],
         cwd=repo_root,
         env=base_env,
         stdout=work_dir / "run.out",
@@ -1316,7 +1316,7 @@ def check_gc_nixome_store(repo_root: Path, log_dir: Path) -> None:
 
     auto_env = base_env | {"NIXOME_GC_AUTO_THRESHOLD_GIB": "0"}
     _run(
-        [str(repo_root / "lifecycle/runtime/tools/scripts/gc-nixome-store.sh"), "auto"],
+        [str(repo_root / "lifecycle/misc/tools/scripts/gc-nixome-store.sh"), "auto"],
         cwd=repo_root,
         env=auto_env,
         stdout=work_dir / "auto.out",
@@ -1337,7 +1337,7 @@ def check_gc_nixome_store(repo_root: Path, log_dir: Path) -> None:
     nonstandard_root = Path(f"/tmp/nixome-gc-nonstandard-{os.getpid()}")
     result = _run(
         [
-            str(repo_root / "lifecycle/runtime/tools/scripts/gc-nixome-store.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/gc-nixome-store.sh"),
             "dry-run",
         ],
         cwd=repo_root,
@@ -1364,56 +1364,56 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
 
     for rel_path in (
-        "lifecycle/runtime/tools/scripts/run-nested-gui-smoke.sh",
-        "lifecycle/runtime/tools/scripts/sync-nested-dom0-tools.sh",
-        "lifecycle/runtime/tools/scripts/sync-nested-codex-auth.sh",
-        "lifecycle/runtime/tools/scripts/run-config-boot-activation-flow.sh",
+        "lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh",
+        "lifecycle/misc/tools/scripts/sync-nested-dom0-tools.sh",
+        "lifecycle/misc/tools/scripts/sync-nested-codex-auth.sh",
+        "lifecycle/misc/tools/scripts/run-config-boot-activation-flow.sh",
         "lifecycle/runtime/tools/scripts/apply-config-candidate.sh",
-        "lifecycle/runtime/tools/scripts/nixos-config-vms-smoke.sh",
+        "lifecycle/misc/tools/scripts/nixos-config-vms-smoke.sh",
         "lifecycle/runtime/tools/scripts/config-boot-verify.sh",
-        "lifecycle/runtime/tools/scripts/resolve-vm-image-result.sh",
+        "lifecycle/misc/tools/scripts/resolve-vm-image-result.sh",
     ):
         _run(["bash", "-n", str(repo_root / rel_path)], cwd=repo_root)
 
     texts = {
         "Makefile": (repo_root / "Makefile").read_text(encoding="utf-8"),
         "run_nested": (
-            repo_root / "lifecycle/runtime/tools/scripts/run-nested-gui-smoke.sh"
+            repo_root / "lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh"
         ).read_text(encoding="utf-8"),
         "config_vms": (
-            repo_root / "lifecycle/runtime/tools/scripts/nixos-config-vms-smoke.sh"
+            repo_root / "lifecycle/misc/tools/scripts/nixos-config-vms-smoke.sh"
         ).read_text(encoding="utf-8"),
         "boot_flow": (
             repo_root
-            / "lifecycle/runtime/tools/scripts/run-config-boot-activation-flow.sh"
+            / "lifecycle/misc/tools/scripts/run-config-boot-activation-flow.sh"
         ).read_text(encoding="utf-8"),
         "run_vm": (
-            repo_root / "lifecycle/runtime/tools/scripts/run-nested-vm.sh"
+            repo_root / "lifecycle/misc/tools/scripts/run-nested-vm.sh"
         ).read_text(encoding="utf-8"),
         "test_vm": (repo_root / "tests/test_vm.py").read_text(encoding="utf-8"),
         "test_vm_staged": (repo_root / "tests/test_vm_staged.py").read_text(
             encoding="utf-8"
         ),
         "sync_tools": (
-            repo_root / "lifecycle/runtime/tools/scripts/sync-nested-dom0-tools.sh"
+            repo_root / "lifecycle/misc/tools/scripts/sync-nested-dom0-tools.sh"
         ).read_text(encoding="utf-8"),
         "sync_codex_auth": (
-            repo_root / "lifecycle/runtime/tools/scripts/sync-nested-codex-auth.sh"
+            repo_root / "lifecycle/misc/tools/scripts/sync-nested-codex-auth.sh"
         ).read_text(encoding="utf-8"),
         "config_inputs_import": (
-            repo_root / "lifecycle/runtime/tools/scripts/import-config-inputs.sh"
+            repo_root / "lifecycle/misc/tools/scripts/import-config-inputs.sh"
         ).read_text(encoding="utf-8"),
-        "qube_guest": (
-            repo_root / "lifecycle/runtime/tools/modules/qube-guest.nix"
-        ).read_text(encoding="utf-8"),
+        "qube_guest": (repo_root / "lifecycle/misc/modules/qube-guest.nix").read_text(
+            encoding="utf-8"
+        ),
         "ssh_vm": (
-            repo_root / "lifecycle/runtime/tools/scripts/ssh-nested-vm.sh"
+            repo_root / "lifecycle/misc/tools/scripts/ssh-nested-vm.sh"
         ).read_text(encoding="utf-8"),
         "apply_candidate": (
             repo_root / "lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
         ).read_text(encoding="utf-8"),
         "closure_smoke": (
-            repo_root / "lifecycle/runtime/tools/scripts/nix-closure-domain-smoke.sh"
+            repo_root / "lifecycle/misc/tools/scripts/nix-closure-domain-smoke.sh"
         ).read_text(encoding="utf-8"),
     }
 
@@ -1509,7 +1509,7 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "CONFIG_VMS_STAGING_UPDATE_LOG",
             "config-vms-config-staging-update.sh",
             "sudo -n $config_vms_env NIXOME_LOG_DIR=/var/log/nixome $config_vms_smoke_command",
-            '"$ROOT/lifecycle/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass',
+            '"$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass',
             'NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"',
         ],
         "config_vms": [
@@ -1562,7 +1562,7 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "remote nested dom0 is not a dev-mode image",
             "install -m 0600",
             "CODEX_HOME:-$HOME/.codex",
-            '"$ROOT/lifecycle/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass',
+            '"$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass',
         ],
         "config_inputs_import": [
             "store-export.nar.gz",
@@ -1578,7 +1578,7 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             'mount --bind "$physical_path" "$mountpoint_path"',
         ],
         "ssh_vm": [
-            '"$ROOT/lifecycle/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass'
+            '"$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass'
         ],
         "apply_candidate": [
             "NIXOME_SETUP_CONFIG_COMMAND",
@@ -1621,7 +1621,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       dom0Cfg = flake.nixosConfigurations.vm-gui-config.config;
       nonDevDom0Cfg = flake.nixosConfigurations.test.config;
       devCfg = flake.nixosConfigurations.nixome-domain-dev.config;
-      builders = import {repo_root}/lifecycle/runtime/tools/lib/qube-template.nix {{
+      builders = import {repo_root}/lifecycle/misc/lib/qube-template.nix {{
         nixpkgs = flake.inputs.nixpkgs;
         nixpkgsLibvirt105Source = "${{flake.inputs.nixpkgs-libvirt_10_5}}";
         nixosQubesSource = "${{flake.inputs.nixos-qubes}}";
@@ -1860,7 +1860,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
             "-c",
             'source "$1"; nixome_run_store_path "$2/bin/codex" --version',
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/lib/nixome-env.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
             codex_path,
         ],
         cwd=repo_root,
@@ -1889,7 +1889,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
             "-c",
             'source "$1"; nixome_run_store_path "$2/bin/zellij" --version',
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/lib/nixome-env.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
             zellij_path,
         ],
         cwd=repo_root,
@@ -1916,11 +1916,11 @@ def check_config_candidate_nix_native(repo_root: Path, log_dir: Path) -> None:
     ):
         shutil.copy(initial_config / name, work_dir / name)
     shutil.copy(
-        repo_root / "lifecycle/runtime/tools/lib/system.nix",
+        repo_root / "lifecycle/misc/lib/system.nix",
         work_dir / "nixome/system-schema.nix",
     )
     shutil.copy(
-        repo_root / "lifecycle/runtime/tools/lib/topology.nix",
+        repo_root / "lifecycle/misc/lib/topology.nix",
         work_dir / "nixome/topology.nix",
     )
 
@@ -2527,7 +2527,7 @@ def check_config_staging_validate(repo_root: Path, log_dir: Path) -> None:
         "-c",
         'source "$1"; nixome_run_store_path "$2"',
         "bash",
-        str(repo_root / "lifecycle/runtime/tools/scripts/lib/nixome-env.sh"),
+        str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
         validator_tool,
     ]
     _run(
@@ -2863,7 +2863,7 @@ def check_config_vault_deployment_archive(repo_root: Path, log_dir: Path) -> Non
                 "-c",
                 'source "$1"; nixome_run_store_path "$2"',
                 "bash",
-                str(repo_root / "lifecycle/runtime/tools/scripts/lib/nixome-env.sh"),
+                str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
                 archive_cmd,
             ],
             cwd=repo_root,
@@ -2994,7 +2994,7 @@ def check_setup_config_static(repo_root: Path, log_dir: Path) -> None:
     _run(
         [
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/setup-config.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
             "--plan",
             "--topology",
             str(topology),
@@ -3106,7 +3106,7 @@ def check_setup_config_empty_global_pref(repo_root: Path, log_dir: Path) -> None
     _run(
         [
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/setup-config.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
             "--apply",
             "--topology",
             str(topology),
@@ -3253,7 +3253,7 @@ def check_setup_config_pref_order(repo_root: Path, log_dir: Path) -> None:
     _run(
         [
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/setup-config.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
             "--apply",
             "--topology",
             str(topology),
@@ -3410,7 +3410,7 @@ def check_setup_config_external_netvm(repo_root: Path, log_dir: Path) -> None:
     _run(
         [
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/setup-config.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
             "--apply",
             "--topology",
             str(topology),
@@ -3545,7 +3545,7 @@ def check_setup_config_qrexec_policy(repo_root: Path, log_dir: Path) -> None:
     )
     command = [
         "bash",
-        str(repo_root / "lifecycle/runtime/tools/scripts/setup-config.sh"),
+        str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
         "--apply",
         "--topology",
         str(topology),
@@ -3771,7 +3771,7 @@ def check_setup_config_restart_actions(repo_root: Path, log_dir: Path) -> None:
     _run(
         [
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/setup-config.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
             "--apply",
             "--topology",
             str(topology),
@@ -5841,7 +5841,7 @@ def check_setup_config_idempotent(repo_root: Path, log_dir: Path) -> None:
     _run(
         [
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/setup-config.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
             "--apply",
             "--topology",
             str(topology_path),
@@ -6119,7 +6119,7 @@ def check_config_system_apply_boot(repo_root: Path, log_dir: Path) -> None:
         path.mkdir(parents=True)
     capabilities.write_text("control_d\n", encoding="utf-8")
     shutil.copy2(
-        repo_root / "lifecycle/runtime/tools/lib/system.nix",
+        repo_root / "lifecycle/misc/lib/system.nix",
         candidate_dir / "nixome/system-schema.nix",
     )
     _write_executable(
@@ -6649,7 +6649,7 @@ def check_setup_config_nix_native_running_storage(
     _run(
         [
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/setup-config.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
             "--apply",
             "--topology",
             str(topology_path),
@@ -6946,7 +6946,7 @@ def check_setup_config_nix_native(repo_root: Path, log_dir: Path) -> None:
         _run(
             [
                 "bash",
-                str(repo_root / "lifecycle/runtime/tools/scripts/setup-config.sh"),
+                str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
                 f"--{mode}",
                 "--topology",
                 str(topology_path),
@@ -8253,9 +8253,7 @@ def check_config_validator_candidate(repo_root: Path, log_dir: Path) -> None:
                     "-c",
                     'source "$1"; nixome_run_store_path "$2"',
                     "bash",
-                    str(
-                        repo_root / "lifecycle/runtime/tools/scripts/lib/nixome-env.sh"
-                    ),
+                    str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
                     validator_cmd,
                 ],
                 cwd=repo_root,
@@ -8973,11 +8971,11 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
     shutil.copy2(
-        repo_root / "lifecycle/runtime/tools/lib/system.nix",
+        repo_root / "lifecycle/misc/lib/system.nix",
         work_dir / "nixome/system-schema.nix",
     )
     shutil.copy2(
-        repo_root / "lifecycle/runtime/tools/lib/topology.nix",
+        repo_root / "lifecycle/misc/lib/topology.nix",
         work_dir / "nixome/topology.nix",
     )
 

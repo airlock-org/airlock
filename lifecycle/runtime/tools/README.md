@@ -1,7 +1,8 @@
 # Runtime Tools
 
-Shared Nix machinery and operational commands for the running system.
+Runtime-only operational commands for the running system.
 
-`lib/` and `modules/` define the schemas, builders, and NixOS modules consumed
-by image, bootstrap, and runtime workflows. `pkgs/` and `scripts/` provide the
-commands used by dom0 and config VMs.
+Keep packages and scripts here only when they are used at runtime by dom0 or
+runtime config VMs. Move bootstrap-only tools to `../../bootstrap/tools/`,
+image-only tools to `../../image/tools/`, and cross-stage or development/test
+helpers to `../../misc/tools/`.

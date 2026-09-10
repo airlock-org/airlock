@@ -35,7 +35,7 @@ def run_local_command(
     nixome_log_dir: Path,
 ) -> Path:
     # Each test gets its own mutable artifact directory, while Nix itself keeps
-    # using the shared store configured by lifecycle/runtime/tools/scripts/lib/nixome-env.sh.
+    # using the shared store configured by lifecycle/misc/tools/scripts/lib/nixome-env.sh.
     test_log_dir = nixome_log_dir / name
     test_log_dir.mkdir(parents=True, exist_ok=True)
     formatted_command = format_command(command, repo_root, test_log_dir)

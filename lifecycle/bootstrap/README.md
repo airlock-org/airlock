@@ -8,3 +8,6 @@ configuration bundled into the image.
 On first boot, `config-vault` turns `initial-runtime-config/` into the first
 authoritative current config. `config-staging` later imports that current config
 from vault when it needs an editable workspace.
+
+Bootstrap-only helper packages or scripts belong in `tools/`. Cross-stage
+helpers belong in `../misc/tools/`.

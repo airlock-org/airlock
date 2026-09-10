@@ -7,11 +7,11 @@
 let
   cfg = config.nixome.dom0;
   imageCfg = config.nixome.image;
-  qubeBootstrap = pkgs.callPackage ../pkgs/nixome-qube-bootstrap { };
-  qubeGuiSmoke = pkgs.callPackage ../pkgs/nixome-qube-gui-smoke { };
-  qubesStorage = pkgs.python3.pkgs.callPackage ../pkgs/nixome-qubes-storage { };
-  observeDom0 = pkgs.callPackage ../pkgs/nixome-observe { };
-  qubesSmoke = pkgs.callPackage ../pkgs/nixome-qubes-smoke { };
+  qubeBootstrap = pkgs.callPackage ../../bootstrap/tools/pkgs/nixome-qube-bootstrap { };
+  qubeGuiSmoke = pkgs.callPackage ../tools/pkgs/nixome-qube-gui-smoke { };
+  qubesStorage = pkgs.python3.pkgs.callPackage ../../runtime/tools/pkgs/nixome-qubes-storage { };
+  observeDom0 = pkgs.callPackage ../../runtime/tools/pkgs/nixome-observe { };
+  qubesSmoke = pkgs.callPackage ../tools/pkgs/nixome-qubes-smoke { };
   dom0DevPackages = with pkgs; [
     codex
     git

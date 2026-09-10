@@ -162,7 +162,7 @@
 
       mkNixomeQubeBuilders =
         system:
-        import ./lifecycle/runtime/tools/lib/qube-template.nix {
+        import ./lifecycle/misc/lib/qube-template.nix {
           inherit nixpkgs system;
           nixpkgsLibvirt105Source = "${nixpkgs-libvirt_10_5}";
           nixomeSupport = "${self}";
@@ -252,9 +252,9 @@
     in
     {
       lib = {
-        nixomeSystem = import ./lifecycle/runtime/tools/lib/system.nix;
-        nixomeTopology = import ./lifecycle/runtime/tools/lib/topology.nix;
-        nixomeQubeTemplate = import ./lifecycle/runtime/tools/lib/qube-template.nix;
+        nixomeSystem = import ./lifecycle/misc/lib/system.nix;
+        nixomeTopology = import ./lifecycle/misc/lib/topology.nix;
+        nixomeQubeTemplate = import ./lifecycle/misc/lib/qube-template.nix;
       };
 
       nixome.configInputs = nixomeConfigInputs;
@@ -290,23 +290,23 @@
         // {
           nixome-config-apply = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-apply { };
           nixome-config-archive-candidate = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-archive { };
-          nixome-config-bootstrap-current = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-bootstrap-current { };
+          nixome-config-bootstrap-current = pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/nixome-config-bootstrap-current { };
           nixome-config-boot-verify = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-boot-verify { };
           nixome-config-control = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-control { };
-          nixome-config-inputs-import = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-inputs-import { };
+          nixome-config-inputs-import = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-config-inputs-import { };
           nixome-config-status = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-status { };
-          nixome-config-vms-smoke = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-vms-smoke { };
+          nixome-config-vms-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-config-vms-smoke { };
           nixome-cli = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-cli { };
           nixome = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-cli { };
           codex = pkgs.codex;
           zellij = pkgs.zellij;
           nixome-nix-domain-storage = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-nix-domain-storage { };
-          nixome-nix-closure-domain-smoke = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-nix-closure-domain-smoke { };
+          nixome-nix-closure-domain-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-nix-closure-domain-smoke { };
           nixome-qubes-storage = pkgs.python3.pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-qubes-storage { };
-          nixome-qube-bootstrap = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-qube-bootstrap { };
-          nixome-qube-gui-smoke = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-qube-gui-smoke { };
-          nixome-setup-config = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-setup-config { };
-          nixome-qubes-smoke = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-qubes-smoke { };
+          nixome-qube-bootstrap = pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/nixome-qube-bootstrap { };
+          nixome-qube-gui-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-qube-gui-smoke { };
+          nixome-setup-config = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-setup-config { };
+          nixome-qubes-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-qubes-smoke { };
           nixome-observe-dom0 = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-observe { };
           nixome-qubes-vm-kernel = pkgs.repackRpmKernel {
             kernelSrc = pkgs.fetchurl {
@@ -371,8 +371,8 @@
 
           imports = [
             nixos-qubes.nixosModules.qubes
-            ./lifecycle/runtime/tools/modules/dom0.nix
-            ./lifecycle/runtime/tools/modules/qubes-topology.nix
+            ./lifecycle/misc/modules/dom0.nix
+            ./lifecycle/misc/modules/qubes-topology.nix
           ];
         };
 

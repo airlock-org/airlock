@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-source "$ROOT/lifecycle/runtime/tools/scripts/lib/nixome-env.sh"
+source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
 LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
 mkdir -p "$LOG_DIR"
 
@@ -151,7 +151,7 @@ cleanup() {
 
   case "$AUTO_GC_AFTER_RUN" in
     1|true|yes)
-      "$ROOT/lifecycle/runtime/tools/scripts/gc-nixome-store.sh" auto || true
+      "$ROOT/lifecycle/misc/tools/scripts/gc-nixome-store.sh" auto || true
       ;;
     0|false|no)
       ;;
@@ -419,7 +419,7 @@ nix_closure_env_prefix() {
 }
 
 ssh_command() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/runtime/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     ssh \
       -F /dev/null \
       -o LogLevel=ERROR \
@@ -452,7 +452,7 @@ sync_dom0_tools() {
   esac
 
   printf 'warm-sync: syncing current dom0 tools into nested VM\n'
-  if ! NIXOME_LOG_DIR="$LOG_DIR" NIXOME_NESTED_WARM_CONFIG_INPUTS_PATH="$REMOTE_WARM_CONFIG_INPUTS_PATH" "$ROOT/lifecycle/runtime/tools/scripts/sync-nested-dom0-tools.sh" > "$SYNC_DOM0_TOOLS_STDOUT" 2> "$SYNC_DOM0_TOOLS_STDERR"; then
+  if ! NIXOME_LOG_DIR="$LOG_DIR" NIXOME_NESTED_WARM_CONFIG_INPUTS_PATH="$REMOTE_WARM_CONFIG_INPUTS_PATH" "$ROOT/lifecycle/misc/tools/scripts/sync-nested-dom0-tools.sh" > "$SYNC_DOM0_TOOLS_STDOUT" 2> "$SYNC_DOM0_TOOLS_STDERR"; then
     collect_diagnostics
     cat "$SYNC_DOM0_TOOLS_STDERR" >&2 || true
     exit 1
@@ -730,7 +730,7 @@ if [ "$reuse_existing_vm" != true ]; then
     NIXOME_VM_IMAGE_ATTR="$IMAGE_ATTR" \
     NIXOME_VM_DISPLAY="$DISPLAY_MODE" \
     NIXOME_VM_SSH_PORT="$SSH_PORT" \
-    "$ROOT/lifecycle/runtime/tools/scripts/run-nested-vm.sh" > "$QEMU_LOG" 2>&1 &
+    "$ROOT/lifecycle/misc/tools/scripts/run-nested-vm.sh" > "$QEMU_LOG" 2>&1 &
   vm_pid="$!"
 
   vm_start_deadline=$((SECONDS + VM_START_WAIT_SECONDS))
