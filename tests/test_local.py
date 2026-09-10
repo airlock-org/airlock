@@ -50,6 +50,7 @@ from local_pychecks import (
     check_setup_config_restart_actions,
     check_setup_config_runtime_path,
     check_setup_config_static,
+    check_setup_config_sys_net_order,
     check_system_schema,
     check_topology_schema,
 )
@@ -299,6 +300,10 @@ LOCAL_CHECKS = (
     LocalCheck(
         "setup-config-auto-sys-net-pci",
         runner=check_setup_config_auto_sys_net_pci,
+    ),
+    LocalCheck(
+        "setup-config-sys-net-order",
+        runner=check_setup_config_sys_net_order,
     ),
     LocalCheck("setup-config-idempotent", runner=check_setup_config_idempotent),
     LocalCheck(

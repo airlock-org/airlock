@@ -3616,6 +3616,214 @@ def check_setup_config_auto_sys_net_pci(repo_root: Path, log_dir: Path) -> None:
     assert not any("dom0:00_03.0" in line for line in command_lines)
 
 
+def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    setup_log_dir = work_dir / "logs"
+    policy_dir = work_dir / "policy.d"
+    state_dir = work_dir / "state"
+    capabilities = work_dir / "xen-capabilities"
+    topology = work_dir / "topology.json"
+    mutation_log = work_dir / "mutations.log"
+    created_domains = work_dir / "created-domains"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (setup_log_dir, policy_dir, state_dir):
+        path.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+    mutation_log.write_text("", encoding="utf-8")
+    created_domains.write_text("", encoding="utf-8")
+    topology.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.qubes-topology.v1",
+                "templates": {},
+                "kernels": {},
+                "domains": {
+                    "config-staging": {
+                        "class": "StandaloneVM",
+                        "template": None,
+                        "label": "gray",
+                        "netvm": None,
+                        "prefs": {"autostart": False},
+                        "features": {},
+                        "services": {},
+                    },
+                    "dev": {
+                        "class": "StandaloneVM",
+                        "template": None,
+                        "label": "green",
+                        "netvm": "sys-net",
+                        "prefs": {"autostart": False},
+                        "features": {},
+                        "services": {},
+                    },
+                    "sys-net": {
+                        "class": "StandaloneVM",
+                        "template": None,
+                        "label": "red",
+                        "netvm": None,
+                        "prefs": {
+                            "autostart": False,
+                            "provides_network": True,
+                        },
+                        "features": {"nixome-role": "sys-net"},
+                        "services": {
+                            "network-manager": True,
+                            "qubes-firewall": True,
+                            "qubes-network": True,
+                        },
+                        "devices": {"pci": []},
+                    },
+                },
+                "prefs": {},
+                "qrexec_policy": {"rules": []},
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    commands = {
+        "qvm-ls": """
+        #!/usr/bin/env bash
+        case "$*" in
+          "--raw-data --fields NAME --no-spinner")
+            printf 'dom0\n'
+            cat "$CREATED_DOMAINS"
+            ;;
+          "--raw-data --fields NAME,STATE --no-spinner")
+            printf 'dom0|Running\n'
+            while IFS= read -r domain; do
+              [ -n "$domain" ] || continue
+              printf '%s|Halted\n' "$domain"
+            done < "$CREATED_DOMAINS"
+            ;;
+          "--raw-data --fields NAME,CLASS --no-spinner")
+            printf 'dom0|AdminVM\n'
+            while IFS= read -r domain; do
+              [ -n "$domain" ] || continue
+              printf '%s|StandaloneVM\n' "$domain"
+            done < "$CREATED_DOMAINS"
+            ;;
+          *)
+            printf 'unexpected qvm-ls args: %s\n' "$*" >&2
+            exit 1
+            ;;
+        esac
+        """,
+        "qvm-create": """
+        #!/usr/bin/env bash
+        printf 'qvm-create %s\n' "$*" >> "$MUTATION_LOG"
+        printf '%s\n' "${!#}" >> "$CREATED_DOMAINS"
+        """,
+        "qvm-device": """
+        #!/usr/bin/env bash
+        if [ "$1" = "pci" ] && [ "$2" = "list" ]; then
+          exit 0
+        fi
+        printf 'qvm-device %s\n' "$*" >> "$MUTATION_LOG"
+        """,
+        "qvm-prefs": """
+        #!/usr/bin/env bash
+        if [ "$#" -eq 2 ]; then
+          exit 1
+        fi
+        printf 'qvm-prefs %s\n' "$*" >> "$MUTATION_LOG"
+        """,
+        "qvm-features": """
+        #!/usr/bin/env bash
+        if [ "$#" -eq 2 ]; then
+          exit 1
+        fi
+        printf 'qvm-features %s\n' "$*" >> "$MUTATION_LOG"
+        """,
+        "qvm-service": """
+        #!/usr/bin/env bash
+        if [ "$#" -eq 2 ]; then
+          exit 1
+        fi
+        printf 'qvm-service %s\n' "$*" >> "$MUTATION_LOG"
+        """,
+        "systemctl": """
+        #!/usr/bin/env bash
+        case "$1" in
+          is-active|reload|try-restart)
+            exit 0
+            ;;
+        esac
+        exit 1
+        """,
+    }
+    for name in (
+        "qubes-prefs",
+        "qvm-template-postprocess",
+        "qvm-volume",
+        "qubesd-query",
+    ):
+        commands[name] = "#!/usr/bin/env bash\nexit 0\n"
+    _setup_fake_command_dir(bin_dir, commands)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "CREATED_DOMAINS": str(created_domains),
+            "MUTATION_LOG": str(mutation_log),
+            "NIXOME_DOM0_NETWORK_PCI_DEVICES": "00_02.0 00_03.0",
+            "NIXOME_DOM0_DEFAULT_ROUTE_PCI_DEVICES": "00_02.0",
+            "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
+            "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
+            "NIXOME_XEN_CAPABILITIES": str(capabilities),
+            "NIXOME_LOG_DIR": str(setup_log_dir),
+        }
+    )
+    _run(
+        [
+            "bash",
+            str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
+            "--apply",
+            "--topology",
+            str(topology),
+        ],
+        cwd=repo_root,
+        env=env,
+        stdout=setup_log_dir / "stdout.log",
+        stderr=setup_log_dir / "stderr.log",
+    )
+    command_lines = (
+        (setup_log_dir / "setup-config.commands.log")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    sys_net_create = command_lines.index(
+        "+ qvm-create --class StandaloneVM --label red sys-net"
+    )
+    config_create = command_lines.index(
+        "+ qvm-create --class StandaloneVM --label gray config-staging"
+    )
+    dev_create = command_lines.index(
+        "+ qvm-create --class StandaloneVM --label green dev"
+    )
+    sys_net_netvm = command_lines.index("+ qvm-prefs sys-net netvm none")
+    sys_net_pci = command_lines.index(
+        "+ qvm-device pci assign --required --port sys-net dom0:00_03.0"
+    )
+    dev_netvm = command_lines.index("+ qvm-prefs dev netvm sys-net")
+
+    assert sys_net_create < config_create
+    assert sys_net_create < dev_create
+    assert sys_net_netvm < sys_net_pci
+    assert sys_net_pci < dev_create
+    assert sys_net_pci < dev_netvm
+
+    result = json.loads(
+        (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
+    )
+    assert result["schema"] == "nixome.setup-config.v1"
+    assert result["status"] == "passed"
+    assert result["domains_changed"] == 3
+    assert result["devices_changed"] == 1
+
+
 def check_setup_config_qrexec_policy(repo_root: Path, log_dir: Path) -> None:
     work_dir = log_dir
     bin_dir = work_dir / "bin"

@@ -1072,6 +1072,103 @@ preflight_domain_backends() {
   fi
 }
 
+array_contains() {
+  local needle="$1"
+  shift
+  local item
+
+  for item in "$@"; do
+    [ "$item" != "$needle" ] || return 0
+  done
+
+  return 1
+}
+
+domain_local_netvm_dependency() {
+  local domain="$1"
+
+  jq_get '
+    (.domains[$name].netvm // null) as $netvm
+    | if $netvm == null then
+        ""
+      else
+        ($netvm | tostring) as $target
+        | if $target == "" or ($target | ascii_downcase) == "none" then
+            ""
+          elif (.domains | has($target)) then
+            $target
+          else
+            ""
+          end
+      end
+  ' --arg name "$domain"
+}
+
+domain_is_root_network_provider() {
+  local domain="$1"
+
+  jq -e --arg name "$domain" '
+    (.domains[$name] // null) as $domain
+    | $domain != null
+    and (($domain.prefs.provides_network // false) == true)
+    and (
+      ($domain.netvm // null) == null
+      or ($domain.netvm | tostring | ascii_downcase) == "none"
+      or ($domain.netvm | tostring) == ""
+    )
+  ' "$TOPOLOGY" >/dev/null
+}
+
+ordered_domain_names() {
+  local domain
+  local dependency
+  local progress
+  local -a ordered=()
+  local -a pending=()
+  local -a next_pending=()
+
+  mapfile -t pending < <(jq_get '.domains | keys[]')
+
+  if array_contains sys-net "${pending[@]}" &&
+    [ -z "$(domain_local_netvm_dependency sys-net)" ]; then
+    ordered+=(sys-net)
+  fi
+
+  next_pending=()
+  for domain in "${pending[@]}"; do
+    if ! array_contains "$domain" "${ordered[@]}"; then
+      next_pending+=("$domain")
+    fi
+  done
+  pending=("${next_pending[@]}")
+
+  while [ "${#pending[@]}" -gt 0 ]; do
+    progress=0
+    next_pending=()
+
+    for domain in "${pending[@]}"; do
+      dependency="$(domain_local_netvm_dependency "$domain")"
+      if [ -z "$dependency" ] || array_contains "$dependency" "${ordered[@]}"; then
+        ordered+=("$domain")
+        progress=1
+      else
+        next_pending+=("$domain")
+      fi
+    done
+
+    if [ "$progress" = "0" ]; then
+      local IFS=", "
+      fail "declared domain NetVM dependency cycle: ${pending[*]}"
+    fi
+
+    pending=("${next_pending[@]}")
+  done
+
+  if [ "${#ordered[@]}" -gt 0 ]; then
+    printf '%s\n' "${ordered[@]}"
+  fi
+}
+
 kernel_source_matches_target() {
   source="$1"
   target="$2"
@@ -1758,13 +1855,25 @@ for template in "${template_names[@]}"; do
   record_live_action template import "$template" source "$source"
 done
 
-printf 'setting up domains\n'
-mapfile -t domain_names < <(jq_get '.domains | keys[]')
-for domain in "${domain_names[@]}"; do
+setup_domain() {
+  local domain="$1"
+  local backend_type
+  local class
+  local template
+  local label
+  local pref
+  local feature
+  local service
+  local value
+  local -a create_args=()
+  local -a pref_names=()
+  local -a feature_names=()
+  local -a service_names=()
+
   backend_type="$(jq_get '.domains[$name].backend.type // "qubes-template"' --arg name "$domain")"
   if [ "$backend_type" = "nix-closure" ]; then
     setup_nix_closure_domain "$domain"
-    continue
+    return
   fi
 
   class="$(jq_get '.domains[$name].class // "AppVM"' --arg name "$domain")"
@@ -1805,25 +1914,48 @@ for domain in "${domain_names[@]}"; do
       set_service "$domain" "$service" "$value"
     done
   fi
-done
+}
 
-printf 'setting up domain devices\n'
-for domain in "${domain_names[@]}"; do
+setup_domain_devices_if_ready() {
+  local domain="$1"
+
   if [ "$APPLY" = "1" ] || [ "$PLAN" = "1" ] || domain_exists "$domain"; then
     setup_domain_devices "$domain"
   fi
-done
+}
 
-printf 'setting up domain netvms\n'
-for domain in "${domain_names[@]}"; do
+setup_domain_netvm() {
+  local domain="$1"
+  local netvm
+
   if ! jq -e --arg name "$domain" '.domains[$name] | has("netvm")' "$TOPOLOGY" >/dev/null; then
-    continue
+    return
   fi
 
   netvm="$(json_value '.domains[$name].netvm' --arg name "$domain")"
   if [ "$APPLY" = "1" ] || domain_exists "$domain"; then
     set_netvm_pref "$domain" "$netvm"
   fi
+}
+
+setup_domain_connectivity() {
+  local domain="$1"
+
+  if domain_is_root_network_provider "$domain"; then
+    setup_domain_netvm "$domain"
+    setup_domain_devices_if_ready "$domain"
+    return
+  fi
+
+  setup_domain_devices_if_ready "$domain"
+  setup_domain_netvm "$domain"
+}
+
+printf 'setting up domains\n'
+mapfile -t domain_names < <(ordered_domain_names)
+for domain in "${domain_names[@]}"; do
+  setup_domain "$domain"
+  setup_domain_connectivity "$domain"
 done
 
 write_result passed "Qubes config setup completed"
