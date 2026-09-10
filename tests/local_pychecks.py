@@ -1801,3 +1801,236 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     ).stdout
     (log_dir / "zellij-version.txt").write_text(zellij_version, encoding="utf-8")
     assert re.search(r"^zellij [0-9]+\.[0-9]+\.[0-9]+$", zellij_version)
+
+
+def check_config_candidate_nix_native(repo_root: Path, log_dir: Path) -> None:
+    result_dir = log_dir
+    work_dir = log_dir / "work"
+    shutil.rmtree(result_dir, ignore_errors=True)
+    (work_dir / "nixome").mkdir(parents=True)
+
+    seed = repo_root / "seeds/config-staging"
+    shutil.copytree(seed / "dom0-profile", work_dir / "dom0-profile")
+    for name in (
+        "flake.nix",
+        "nixome/config-vms.nix",
+        "nixome/dom0-host.nix",
+        "nixome/local.nix",
+        "nixome/prebuilt-template-sources.nix",
+        "nixome/system.nix",
+    ):
+        shutil.copy(seed / name, work_dir / name)
+    shutil.copy(
+        repo_root / "lib/nixome/system.nix", work_dir / "nixome/system-schema.nix"
+    )
+    shutil.copy(repo_root / "lib/nixome/topology.nix", work_dir / "nixome/topology.nix")
+
+    replacements = {
+        "__NIXOME_NIXPKGS_URL__": "path:"
+        + _physical_store_path(
+            repo_root,
+            _run(
+                ["nix", "eval", "--raw", f"{repo_root}#nixome.seedInputs.nixpkgs"]
+            ).stdout.strip(),
+        ),
+        "__NIXPKGS_LIBVIRT_10_5_PATH__": _physical_store_path(
+            repo_root,
+            _run(
+                [
+                    "nix",
+                    "eval",
+                    "--raw",
+                    f"{repo_root}#nixome.seedInputs.nixpkgsLibvirt105",
+                ]
+            ).stdout.strip(),
+        ),
+        "__NIXOME_NIXOS_QUBES_PATH__": _physical_store_path(
+            repo_root,
+            _run(
+                ["nix", "eval", "--raw", f"{repo_root}#nixome.seedInputs.nixosQubes"]
+            ).stdout.strip(),
+        ),
+        "__NIXOME_SUPPORT_PATH__": _physical_store_path(
+            repo_root,
+            _run(
+                ["nix", "eval", "--raw", f"{repo_root}#nixome.seedInputs.nixomeSupport"]
+            ).stdout.strip(),
+        ),
+    }
+    flake_path = work_dir / "flake.nix"
+    flake_text = flake_path.read_text(encoding="utf-8")
+    for needle, replacement in replacements.items():
+        flake_text = flake_text.replace(needle, replacement)
+    flake_path.write_text(flake_text, encoding="utf-8")
+
+    _write_flake(
+        work_dir / "nixome/machine.nix",
+        """
+        { pkgs, ... }:
+        {
+          nixNative.domains.nix-native-generated = {
+            label = "purple";
+            netvm = null;
+            hostName = "nix-native-generated";
+            packages = with pkgs; [
+              jq
+            ];
+            etc."nixome/nix-native-role".text = "generated\n";
+            prefs.memory = 1280;
+            features."nixome-role" = "nix-native-generated";
+          };
+        }
+        """,
+    )
+
+    nix_flake_flags = [
+        "nix",
+        "--extra-experimental-features",
+        "nix-command",
+        "--extra-experimental-features",
+        "flakes",
+    ]
+    _run([*nix_flake_flags, "flake", "lock", "--impure", "--offline"], cwd=work_dir)
+
+    topology_json = result_dir / "topology.json"
+    _run(
+        [
+            *nix_flake_flags,
+            "eval",
+            "--impure",
+            "--offline",
+            "--no-write-lock-file",
+            "--json",
+            f"{work_dir}#nixome.topology",
+        ],
+        stdout=topology_json,
+    )
+    hostname = _run(
+        [
+            *nix_flake_flags,
+            "eval",
+            "--impure",
+            "--offline",
+            "--no-write-lock-file",
+            "--raw",
+            f"{work_dir}#nixosConfigurations.nixome-domain-nix-native-generated.config.networking.hostName",
+        ],
+    ).stdout.strip()
+    (result_dir / "hostname.txt").write_text(hostname + "\n", encoding="utf-8")
+    etc_text = _run(
+        [
+            *nix_flake_flags,
+            "eval",
+            "--impure",
+            "--offline",
+            "--no-write-lock-file",
+            "--raw",
+            f'{work_dir}#nixosConfigurations.nixome-domain-nix-native-generated.config.environment.etc."nixome/nix-native-role".text',
+        ],
+    ).stdout.strip()
+    (result_dir / "etc.txt").write_text(etc_text + "\n", encoding="utf-8")
+
+    runtime_source = _run(
+        [
+            *nix_flake_flags,
+            "build",
+            "--impure",
+            "--offline",
+            "--no-write-lock-file",
+            "--no-link",
+            "--print-out-paths",
+            "--expr",
+            f'(builtins.getFlake "path:{work_dir}").nixosConfigurations.nixome-domain-nix-native-generated.config.environment.etc."qubes-rpc/nixome.NixStoreRuntimeCheck".source',
+        ],
+    ).stdout.strip()
+    (result_dir / "runtime-check-source.txt").write_text(
+        runtime_source + "\n", encoding="utf-8"
+    )
+    runtime_check = result_dir / "runtime-check.sh"
+    shutil.copy(Path(_physical_store_path(repo_root, runtime_source)), runtime_check)
+    runtime_text = runtime_check.read_text(encoding="utf-8")
+
+    assert hostname == "nix-native-generated"
+    assert etc_text == "generated"
+    assert runtime_text.startswith("#!")
+    for fragment in (
+        "sed -n 's|^nixome.storedev=||p'",
+        'mount_source="$(findmnt -rn -T /nix/store -o SOURCE)"',
+        'case ",$mount_options," in',
+        "*,ro,*)",
+    ):
+        assert fragment in runtime_text
+
+    topology = json.loads(topology_json.read_text(encoding="utf-8"))
+    domain = topology["domains"]["nix-native-generated"]
+    assert domain["class"] == "StandaloneVM"
+    assert domain["template"] is None
+    assert domain["label"] == "purple"
+    assert domain["netvm"] is None
+    assert domain["prefs"]["memory"] == 1280
+    assert domain["prefs"]["kernel"] == "6.12.64-1.fc41"
+    assert "init=/sbin/init" in domain["prefs"]["kernelopts"]
+    assert "nixome.system=/nix/store/" in domain["prefs"]["kernelopts"]
+    assert "nixome.storedev=/dev/xvde" in domain["prefs"]["kernelopts"]
+    assert domain["features"]["nixome-backend"] == "nix-closure"
+    assert domain["features"]["nixome-role"] == "nix-native-generated"
+    assert domain["backend"]["type"] == "nix-closure"
+    assert (
+        domain["backend"]["system"]["source_ref"]["attr"]
+        == "nixosConfigurations.nixome-domain-nix-native-generated.config.system.build.toplevel"
+    )
+    assert domain["backend"]["root"]["mode"] == "qubes-root-image"
+    assert (
+        domain["backend"]["root"]["source_ref"]["attr"]
+        == "packages.x86_64-linux.nixome-domain-nix-native-generated-root-image"
+    )
+    assert domain["backend"]["root"]["source_ref"]["subpath"] == "root.img"
+    assert domain["backend"]["store"]["mode"] == "shared-closure"
+    assert (
+        domain["backend"]["store"]["source_ref"]["attr"]
+        == "packages.x86_64-linux.nixome-domain-nix-native-generated-store-closure"
+    )
+    assert domain["backend"]["store"]["source_ref"]["subpath"] == ""
+    assert domain["backend"]["store"]["mountpoint"] == "/nix/store"
+    assert domain["backend"]["store"]["device"] == "/dev/xvde"
+    assert domain["backend"]["store"]["read_only"] is True
+
+    invalid_cases = [
+        (
+            """
+            { ... }:
+            {
+              nixNative.domains.bad.pakages = [ ];
+            }
+            """,
+            "nixome.nixNative.domains.bad: unknown option(s): pakages",
+        ),
+        (
+            """
+            { ... }:
+            {
+              nixNative.domains.bad.role = "config-staging";
+            }
+            """,
+            "nixome.nixNative.domains.bad.role: expected one of base, dev",
+        ),
+    ]
+    invalid_log = result_dir / "invalid.log"
+    for machine_expr, expected in invalid_cases:
+        _write_flake(work_dir / "nixome/machine.nix", machine_expr)
+        result = _run(
+            [
+                *nix_flake_flags,
+                "eval",
+                "--impure",
+                "--offline",
+                "--no-write-lock-file",
+                "--json",
+                f"{work_dir}#nixome.topology",
+            ],
+            stdout=result_dir / "invalid.json",
+            stderr=invalid_log,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert expected in invalid_log.read_text(encoding="utf-8")

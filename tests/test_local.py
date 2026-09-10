@@ -8,6 +8,7 @@ from typing import Callable
 import pytest
 
 from local_pychecks import (
+    check_config_candidate_nix_native,
     check_dev_role,
     check_host_capabilities,
     check_config_boot_verify,
@@ -220,8 +221,8 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "config-candidate-nix-native",
-        ("{root}/tests/config-candidate-nix-native.sh",),
-        (pytest.mark.nix,),
+        marks=(pytest.mark.nix,),
+        runner=check_config_candidate_nix_native,
     ),
     LocalCheck(
         "config-apply-nix-domain-materialization",
