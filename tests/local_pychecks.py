@@ -1351,6 +1351,7 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
     for rel_path in (
         "scripts/run-nested-gui-smoke.sh",
         "scripts/sync-nested-dom0-tools.sh",
+        "scripts/sync-nested-codex-auth.sh",
         "scripts/run-config-boot-activation-flow.sh",
         "scripts/apply-config-candidate.sh",
         "scripts/nixos-config-vms-smoke.sh",
@@ -1376,6 +1377,9 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             encoding="utf-8"
         ),
         "sync_tools": (repo_root / "scripts/sync-nested-dom0-tools.sh").read_text(
+            encoding="utf-8"
+        ),
+        "sync_codex_auth": (repo_root / "scripts/sync-nested-codex-auth.sh").read_text(
             encoding="utf-8"
         ),
         "seed_import": (repo_root / "scripts/import-config-seed-inputs.sh").read_text(
@@ -1431,6 +1435,8 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "NIXOME_VM_SKIP_BASE_BUILD=1",
             "vm-warm-start",
             "vm-warm-sync",
+            "vm-sync-codex-auth",
+            "sync-nested-codex-auth.sh",
             "vm-warm-apply",
             "vm-warm-test-config",
             "vm-parallel-prebuild-image",
@@ -1524,6 +1530,19 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "nixome-domain-$domain-store-closure",
             "PYTHONPATH=",
             "systemctl restart qubesd.service",
+        ],
+        "sync_codex_auth": [
+            "nixome.nested-codex-auth-sync.v1",
+            "LOCAL_AUTH_JSON",
+            "auth.json",
+            "NIXOME_SYNC_CODEX_CONFIG",
+            "config.toml",
+            "/etc/nixome/dev-mode",
+            "nested dom0 SSH is not reachable",
+            "remote nested dom0 is not a dev-mode image",
+            "install -m 0600",
+            "CODEX_HOME:-$HOME/.codex",
+            '"$ROOT/scripts/nixome-nix.sh" shell nixpkgs#sshpass',
         ],
         "seed_import": [
             "store-export.nar.gz",

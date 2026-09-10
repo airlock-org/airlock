@@ -354,7 +354,10 @@ Persistent user state is initialized at:
 `CODEX_HOME` is set to `/home/user/.codex`, matching Codex's documented default
 state directory. Codex authentication and configuration are mutable private VM
 state; no API keys, tokens, `auth.json`, or user config are placed in Nix
-configuration or the Nix store.
+configuration or the Nix store. For the nested dev-mode dom0 image, host Codex
+login state can be copied at runtime with `make vm-sync-codex-auth`. That helper
+refuses non-dev images and copies only `auth.json` by default; set
+`NIXOME_SYNC_CODEX_CONFIG=1` when `config.toml` should be copied too.
 
 The expected repository path is:
 
