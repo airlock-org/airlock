@@ -55,6 +55,8 @@ PYTHON_FILES := \
 	pkgs/nixome-qubes-storage/src/nixome_qubes_storage/qubes.py \
 	scripts/nix-domain-storage.py \
 	tests/conftest.py \
+	tests/local_harness.py \
+	tests/local_pychecks.py \
 	tests/test_local.py \
 	tests/test_vm.py \
 	tests/test_vm_staged.py

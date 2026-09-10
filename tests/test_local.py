@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import os
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import pytest
+
+from local_pychecks import check_host_capabilities, check_qrexec_policy_path
+from local_harness import run_local_command
 
 
 @dataclass(frozen=True)
 class LocalCheck:
     name: str
-    command: tuple[str, ...]
+    command: tuple[str, ...] = ()
     marks: tuple[pytest.MarkDecorator, ...] = ()
+    runner: Callable[[Path, Path], None] | None = None
 
 
 NIX_BUILD_FLAGS = ("--print-build-logs", "--show-trace")
@@ -170,7 +174,7 @@ LOCAL_CHECKS = (
         (pytest.mark.nix,),
     ),
     LocalCheck("config-staging-validate", ("{root}/tests/config-staging-validate.sh",)),
-    LocalCheck("qrexec-policy-path", ("{root}/tests/qrexec-policy-path.sh",)),
+    LocalCheck("qrexec-policy-path", runner=check_qrexec_policy_path),
     LocalCheck("qube-guest-policy-probe", ("{root}/tests/qube-guest-policy-probe.sh",)),
     LocalCheck("topology-schema", ("{root}/tests/topology-schema.sh",)),
     LocalCheck("system-schema", ("{root}/tests/system-schema.sh",)),
@@ -222,11 +226,7 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "host-capabilities",
-        (
-            "{root}/tests/host-capabilities.sh",
-            "--json",
-            "{log_dir}/host-capabilities.json",
-        ),
+        runner=check_host_capabilities,
     ),
     LocalCheck("setup-config-static", ("{root}/tests/setup-config-static.sh",)),
     LocalCheck(
@@ -275,28 +275,6 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     metafunc.parametrize("local_check", params)
 
 
-def format_command(
-    command: tuple[str, ...], repo_root: Path, log_dir: Path
-) -> list[str]:
-    return [arg.format(root=str(repo_root), log_dir=str(log_dir)) for arg in command]
-
-
-def write_log(path: Path, result: subprocess.CompletedProcess[str]) -> None:
-    path.write_text(
-        "".join(
-            (
-                f"$ {' '.join(result.args)}\n",
-                f"exit_code={result.returncode}\n\n",
-                "stdout:\n",
-                result.stdout,
-                "\n\nstderr:\n",
-                result.stderr,
-            )
-        ),
-        encoding="utf-8",
-    )
-
-
 def test_local_check(
     local_check: LocalCheck,
     repo_root: Path,
@@ -308,27 +286,15 @@ def test_local_check(
     ):
         pytest.skip("set NIXOME_RUN_QUBES_SMOKE=1 on a Xen dom0 target")
 
-    # Each test gets its own mutable artifact directory, while Nix itself keeps
-    # using the shared store configured by scripts/lib/nixome-env.sh.
-    test_log_dir = nixome_log_dir / local_check.name
-    test_log_dir.mkdir(parents=True, exist_ok=True)
-    command = format_command(local_check.command, repo_root, test_log_dir)
-    log_path = test_log_dir / "pytest-command.log"
-    env = os.environ.copy()
-    env["NIXOME_LOG_DIR"] = str(test_log_dir)
+    if local_check.runner is not None:
+        test_log_dir = nixome_log_dir / local_check.name
+        test_log_dir.mkdir(parents=True, exist_ok=True)
+        local_check.runner(repo_root, test_log_dir)
+        return
 
-    result = subprocess.run(
-        command,
-        cwd=repo_root,
-        env=env,
-        check=False,
-        encoding="utf-8",
-        errors="replace",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+    run_local_command(
+        name=local_check.name,
+        command=local_check.command,
+        repo_root=repo_root,
+        nixome_log_dir=nixome_log_dir,
     )
-    write_log(log_path, result)
-
-    assert (
-        result.returncode == 0
-    ), f"{local_check.name} failed with exit {result.returncode}; log: {log_path}"
