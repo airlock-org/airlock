@@ -5980,3 +5980,272 @@ def check_closure_volume_filtered_device(repo_root: Path, log_dir: Path) -> None
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = module
+
+
+def check_config_system_apply_boot(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    bin_dir = work_dir / "bin"
+    candidate_dir = work_dir / "candidate"
+    apply_log_dir = work_dir / "logs"
+    capabilities = work_dir / "xen-capabilities"
+    host_system_source = candidate_dir / "dom0-system"
+    state_dir = work_dir / "state"
+    etc_dir = work_dir / "etc"
+    system_profile = work_dir / "nixome-system-profile"
+    host_system_profile = work_dir / "host-system-profile"
+    host_current_system_link = work_dir / "current-system"
+    validated_tar = work_dir / "config-candidate-validated.tar"
+    deployment_tar_capture = work_dir / "deployment.tar"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    for path in (
+        bin_dir,
+        candidate_dir / "nixome",
+        apply_log_dir,
+        host_system_source / "bin",
+        etc_dir,
+    ):
+        path.mkdir(parents=True)
+    capabilities.write_text("control_d\n", encoding="utf-8")
+    shutil.copy2(
+        repo_root / "lib/nixome/system.nix",
+        candidate_dir / "nixome/system-schema.nix",
+    )
+    _write_executable(
+        host_system_source / "bin/switch-to-configuration",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        printf '%s\n' "$1" > "$NIXOME_SYSTEM_STATE_DIR/host-switch-action"
+        printf '%s\n' "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)" > "$NIXOME_SYSTEM_STATE_DIR/host-switch-source"
+        if [ "$1" != "boot" ]; then
+          ln -sfn "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)" "$NIXOME_HOST_CURRENT_SYSTEM_LINK"
+        fi
+        """,
+    )
+    _write_flake(
+        candidate_dir / "flake.nix",
+        """
+        {
+          outputs =
+            { self }:
+            let
+              systemSchema = import ./nixome/system-schema.nix;
+            in
+            {
+              nixome.topology = {
+                schema = "nixome.qubes-topology.v1";
+                templates = { };
+                kernels = { };
+                domains = { };
+                prefs = { };
+                qrexec_policy.rules = [ ];
+              };
+
+              nixome.system = systemSchema.mkSystem {
+                dom0.nixos.system = {
+                  source = "dom0-system";
+                  switchAction = "boot";
+                  reason = "install next dom0 boot generation";
+                };
+              };
+            };
+        }
+        """,
+    )
+    commit = _git_commit_all(
+        candidate_dir,
+        "fixture boot candidate",
+        name="Nixome Test",
+        email="nixome-test@localhost",
+    )
+    expected_host_system_source = state_dir / f"sources/{commit}/dom0.nixos.system"
+    _run(
+        [
+            "git",
+            "bundle",
+            "create",
+            str(work_dir / "config.bundle"),
+            "HEAD",
+            "refs/heads/main",
+        ],
+        cwd=candidate_dir,
+    )
+    _run(
+        ["nix", "eval", "--json", f"{candidate_dir}#nixome.topology"],
+        stdout=work_dir / "topology.json",
+    )
+    _run(
+        ["nix", "eval", "--json", f"{candidate_dir}#nixome.system"],
+        stdout=work_dir / "system.json",
+    )
+    (work_dir / "validation.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.config-validation.v1",
+                "status": "passed",
+                "commit": commit,
+                "checks": [],
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (work_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.config-candidate.v1",
+                "commit": commit,
+                "branch": "main",
+                "source_role": "config-staging",
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with tarfile.open(validated_tar, "w") as tar:
+        for member in (
+            "config.bundle",
+            "validation.json",
+            "manifest.json",
+            "topology.json",
+            "system.json",
+        ):
+            tar.add(work_dir / member, arcname=member)
+
+    _setup_fake_command_dir(
+        bin_dir,
+        {
+            "nixome-config-archive-candidate": f"""
+                #!/usr/bin/env bash
+                set -euo pipefail
+                cp {validated_tar} "$NIXOME_LOG_DIR/config-candidate-validated.tar"
+                jq -c -n \\
+                  --arg schema "nixome.config-archive.v1" \\
+                  --arg status "passed" \\
+                  --arg candidate_commit "{commit}" \\
+                  '{{
+                    schema: $schema,
+                    status: $status,
+                    candidate_commit: $candidate_commit,
+                    validation_commit: $candidate_commit,
+                    validation: {{
+                      schema: "nixome.config-validation.v1",
+                      status: "passed",
+                      commit: $candidate_commit
+                    }},
+                    vault_archive: {{
+                      schema: "nixome.config-vault-archive.v1",
+                      status: "passed",
+                      candidate_commit: $candidate_commit
+                    }}
+                  }}' > "$NIXOME_LOG_DIR/config-archive.json"
+            """,
+            "nixome-setup-config": """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                jq -c -n \
+                  --arg schema "nixome.setup-config.v1" \
+                  --arg status "passed" \
+                  '{schema: $schema, status: $status, domains_changed: 0, templates_changed: 0}' \
+                  > "$NIXOME_LOG_DIR/setup-config.json"
+            """,
+            "qrexec-client": """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                cat > "$DEPLOYMENT_TAR_CAPTURE_FIXTURE"
+                jq -c -n \
+                  --arg schema "nixome.config-vault-deployment.v1" \
+                  --arg status "passed" \
+                  --arg candidate_commit "$CANDIDATE_COMMIT_FIXTURE" \
+                  '{
+                    schema: $schema,
+                    status: $status,
+                    deployment_status: "passed",
+                    candidate_commit: $candidate_commit,
+                    vault_commit: "fixture-vault"
+                  }'
+            """,
+            "systemctl": """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                case "$1" in
+                is-active)
+                  exit 0
+                  ;;
+                esac
+                printf 'unexpected systemctl args:' >&2
+                printf ' [%s]' "$@" >&2
+                printf '\n' >&2
+                exit 1
+            """,
+        },
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{env['PATH']}",
+            "CANDIDATE_COMMIT_FIXTURE": commit,
+            "DEPLOYMENT_TAR_CAPTURE_FIXTURE": str(deployment_tar_capture),
+            "NIXOME_XEN_CAPABILITIES": str(capabilities),
+            "NIXOME_LOG_DIR": str(apply_log_dir),
+            "NIXOME_USE_HOST_NIX_STORE": "1",
+            "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
+            "NIXOME_SYSTEM_ETC_DIR": str(etc_dir),
+            "NIXOME_SYSTEM_PROFILE": str(system_profile),
+            "NIXOME_HOST_SYSTEM_PROFILE": str(host_system_profile),
+            "NIXOME_HOST_CURRENT_SYSTEM_LINK": str(host_current_system_link),
+        }
+    )
+    _run(
+        ["bash", str(repo_root / "scripts/apply-config-candidate.sh"), "--apply"],
+        cwd=repo_root,
+        env=env,
+        stdout=work_dir / "stdout.log",
+        stderr=work_dir / "stderr.log",
+    )
+
+    apply_payload = json.loads((apply_log_dir / "config-apply.json").read_text())
+    assert apply_payload["schema"] == "nixome.config-apply.v1"
+    assert apply_payload["status"] == "passed"
+    assert apply_payload["candidate_commit"] == commit
+    system_apply = apply_payload["system_apply_result"]
+    assert system_apply["status"] == "passed"
+    assert system_apply["profile_status"] == "skipped"
+    assert system_apply["host_system_status"] == "passed"
+    assert system_apply["host_system_source"] == str(expected_host_system_source)
+    assert system_apply["host_system_switch_action"] == "boot"
+    assert system_apply["host_current_system"] == ""
+    assert system_apply["reboot_required"] is True
+    assert len(system_apply["reboot_actions"]) == 1
+    assert system_apply["reboot_actions"][0]["type"] == "dom0-nixos-system"
+    assert system_apply["reboot_reasons"] == ["install next dom0 boot generation"]
+    assert apply_payload["deployment"]["status"] == "passed"
+    assert apply_payload["deployment"]["system_apply"]["status"] == "passed"
+    assert apply_payload["deployment"]["system_apply"]["reboot_required"] is True
+    assert len(apply_payload["deployment"]["system_apply"]["reboot_actions"]) == 1
+
+    last_system = json.loads((state_dir / "last-system.json").read_text())
+    assert last_system["schema"] == "nixome.system.v1"
+    assert last_system["dom0"]["nixos"]["system"]["switch_action"] == "boot"
+    assert last_system["plan"]["reboot_required"] is True
+    assert len(last_system["plan"]["reboot_actions"]) == 1
+    assert last_system["plan"]["reboot_actions"][0]["type"] == "dom0-nixos-system"
+    current_deployment = json.loads((state_dir / "current-deployment.json").read_text())
+    assert current_deployment["schema"] == "nixome.config-deployment.v1"
+    assert current_deployment["status"] == "passed"
+    assert current_deployment["system_apply"]["reboot_required"] is True
+    assert len(current_deployment["system_apply"]["reboot_actions"]) == 1
+    assert (state_dir / "current-host-system-switch-action").read_text().strip() == (
+        "boot"
+    )
+    assert (state_dir / "host-switch-action").read_text().strip() == "boot"
+    assert (state_dir / "current-host-system").read_text().strip() == str(
+        expected_host_system_source
+    )
+    assert (state_dir / "host-switch-source").read_text().strip() == str(
+        expected_host_system_source
+    )
+    assert os.readlink(host_system_profile) == str(expected_host_system_source)
+    assert not host_current_system_link.exists()
