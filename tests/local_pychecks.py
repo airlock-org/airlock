@@ -9064,3 +9064,310 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
         assert expected_error in (result_dir / f"invalid-{index}.log").read_text(
             encoding="utf-8"
         )
+
+
+def _storage_env(repo_root: Path, extra_path: str = "") -> dict[str, str]:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(repo_root / "pkgs/nixome-qubes-storage/src")
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    path_parts = [extra_path] if extra_path else []
+    if shutil.which("mkfs.erofs") is None or shutil.which("fsck.erofs") is None:
+        erofs_out = _run(
+            ["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#erofs-utils"],
+            cwd=repo_root,
+        ).stdout.splitlines()
+        for output in erofs_out:
+            physical = Path(_physical_store_path(repo_root, output))
+            if (physical / "bin/mkfs.erofs").is_file():
+                path_parts.append(str(physical / "bin"))
+                break
+    if path_parts:
+        env["PATH"] = ":".join(path_parts + [env["PATH"]])
+    return env
+
+
+def _run_storage(
+    repo_root: Path,
+    result_dir: Path,
+    name: str,
+    args: list[str],
+    *,
+    env: dict[str, str] | None = None,
+    check: bool = True,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object] | None]:
+    result = _run(
+        ["python3", "-m", "nixome_qubes_storage.cli", *args],
+        cwd=repo_root,
+        env=env or _storage_env(repo_root),
+        stdout=result_dir / f"{name}.json",
+        stderr=result_dir / f"{name}.err",
+        check=False,
+    )
+    if check and result.returncode != 0:
+        raise AssertionError(
+            f"storage command failed: {' '.join(args)}\n"
+            f"{(result_dir / f'{name}.err').read_text(encoding='utf-8')}"
+        )
+    payload = None
+    if (result_dir / f"{name}.json").stat().st_size:
+        payload = json.loads((result_dir / f"{name}.json").read_text())
+    return result, payload
+
+
+def _make_storage_object(
+    physical_store: Path, entry: str, content: str, size: int = 1024
+) -> None:
+    target = physical_store / entry / "bin/payload"
+    target.parent.mkdir(parents=True)
+    data = (content + "\n").encode("utf-8")
+    target.write_bytes((data * ((size // len(data)) + 1))[:size])
+    (physical_store / entry).chmod(0o555)
+    (physical_store / entry / "bin").chmod(0o555)
+    target.chmod(0o444)
+
+
+def _make_storage_closure(work_dir: Path, name: str, entries: list[str]) -> Path:
+    closure = work_dir / "closures" / name
+    closure.mkdir(parents=True)
+    (closure / "store-paths").write_text(
+        "".join(f"/nix/store/{entry}\n" for entry in entries), encoding="utf-8"
+    )
+    (closure / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "nixome.store-closure-manifest.v1",
+                "name": name,
+                "store_paths_file": "store-paths",
+                "read_only": True,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return closure
+
+
+def _object_segment(pool: Path, entry: str) -> str:
+    return json.loads((pool / f"objects/blob-metadata/{entry}.json").read_text())[
+        "segment_id"
+    ]
+
+
+def check_closure_store_engine(repo_root: Path, log_dir: Path) -> None:
+    result_dir = log_dir
+    work_dir = result_dir / "work"
+    if work_dir.exists():
+        _run(["chmod", "-R", "u+w", str(work_dir)], check=False)
+    shutil.rmtree(result_dir, ignore_errors=True)
+    (work_dir / "physical-store").mkdir(parents=True)
+    (work_dir / "closures").mkdir()
+    (work_dir / "bin").mkdir()
+    result_dir.mkdir(parents=True, exist_ok=True)
+    physical_store = work_dir / "physical-store"
+
+    entries = {
+        "common": "11111111111111111111111111111111-common",
+        "work1": "22222222222222222222222222222222-work-system-1",
+        "unique1": "33333333333333333333333333333333-work-unique-1",
+        "work2": "44444444444444444444444444444444-work-system-2",
+        "unique2": "55555555555555555555555555555555-work-unique-2",
+        "small_a": "dddddddddddddddddddddddddddddddd-small-a",
+        "small_b": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-small-b",
+        "small_c": "ffffffffffffffffffffffffffffffff-small-c",
+    }
+    for key, entry in entries.items():
+        _make_storage_object(
+            physical_store, entry, key, 12000 if "work" in key else 1024
+        )
+    _make_storage_closure(
+        work_dir, "work-gen1", [entries["common"], entries["work1"], entries["unique1"]]
+    )
+    _make_storage_closure(
+        work_dir, "work-gen2", [entries["common"], entries["work2"], entries["unique2"]]
+    )
+    _make_storage_closure(
+        work_dir, "fit", [entries["small_a"], entries["small_b"], entries["small_c"]]
+    )
+    fake_nix = work_dir / "bin/nix"
+    _write_executable(
+        fake_nix,
+        """
+        #!/usr/bin/env bash
+        printf '%s\n' "$@" > "$NIXOME_FAKE_NIX_LOG"
+        """,
+    )
+    verify_env = _storage_env(repo_root, str(work_dir / "bin"))
+    verify_env["NIXOME_FAKE_NIX_LOG"] = str(result_dir / "nix-verify.args")
+    _result, verify = _run_storage(
+        repo_root,
+        result_dir,
+        "verify-command",
+        [
+            "admit",
+            "--pool-root",
+            str(work_dir / "verify-pool"),
+            "--domain",
+            "verify-command",
+            "--system",
+            f"/nix/store/{entries['common']}",
+            "--closure-source",
+            str(work_dir / "closures/work-gen1"),
+            "--physical-store-root",
+            str(physical_store),
+            "--root-source",
+            "root-verify",
+            "--kernel-name",
+            "kernel-a",
+            "--verify-mode",
+            "nix-store",
+        ],
+        env=verify_env,
+    )
+    assert verify["schema"] == "nixome.closure-store.admission.v1"
+    assert verify["status"] == "passed"
+    assert verify["verification"]["mode"] == "nix-store"
+    assert "--extra-experimental-features" in verify["verification"]["command"]
+    assert "nix-command" in (result_dir / "nix-verify.args").read_text().splitlines()
+
+    fit_pool = work_dir / "fit-pool"
+    _run_storage(
+        repo_root,
+        result_dir,
+        "fit",
+        [
+            "admit",
+            "--pool-root",
+            str(fit_pool),
+            "--domain",
+            "fit",
+            "--system",
+            f"/nix/store/{entries['small_a']}",
+            "--closure-source",
+            str(work_dir / "closures/fit"),
+            "--physical-store-root",
+            str(physical_store),
+            "--root-source",
+            "root-fit",
+            "--kernel-name",
+            "kernel-a",
+            "--verify-mode",
+            "tree",
+            "--segment-target-bytes",
+            "1048576",
+        ],
+    )
+    fit_segment = _object_segment(fit_pool, entries["small_a"])
+    assert _object_segment(fit_pool, entries["small_b"]) == fit_segment
+    assert _object_segment(fit_pool, entries["small_c"]) == fit_segment
+    _result, fit_status = _run_storage(
+        repo_root, result_dir, "fit-status", ["status", "--pool-root", str(fit_pool)]
+    )
+    assert fit_status["segment_count"] == 1
+    assert fit_status["open_segment_count"] == 1
+
+    pool = work_dir / "pool"
+    _result, gen1 = _run_storage(
+        repo_root,
+        result_dir,
+        "work-gen1",
+        [
+            "admit",
+            "--pool-root",
+            str(pool),
+            "--domain",
+            "work",
+            "--system",
+            f"/nix/store/{entries['work1']}",
+            "--closure-source",
+            str(work_dir / "closures/work-gen1"),
+            "--physical-store-root",
+            str(physical_store),
+            "--root-source",
+            "root-work",
+            "--kernel-name",
+            "kernel-a",
+            "--verify-mode",
+            "tree",
+            "--segment-target-bytes",
+            "32768",
+        ],
+    )
+    _result, gen2 = _run_storage(
+        repo_root,
+        result_dir,
+        "work-gen2",
+        [
+            "admit",
+            "--pool-root",
+            str(pool),
+            "--domain",
+            "work",
+            "--system",
+            f"/nix/store/{entries['work2']}",
+            "--closure-source",
+            str(work_dir / "closures/work-gen2"),
+            "--physical-store-root",
+            str(physical_store),
+            "--root-source",
+            "root-work",
+            "--kernel-name",
+            "kernel-a",
+            "--verify-mode",
+            "tree",
+            "--segment-target-bytes",
+            "32768",
+        ],
+    )
+    assert gen1["generation"] == 1
+    assert gen2["generation"] == 2
+    assert gen2["previous_generation"] == 1
+    _result, status = _run_storage(
+        repo_root, result_dir, "status-gen2", ["status", "--pool-root", str(pool)]
+    )
+    assert status["schema"] == "nixome.closure-store.status.v1"
+    assert status["domains"]["work"]["current"] == 2
+    assert len(status["domains"]["work"]["generations"]) == 2
+    _result, rollback = _run_storage(
+        repo_root,
+        result_dir,
+        "rollback",
+        ["rollback", "--pool-root", str(pool), "--domain", "work", "--generation", "1"],
+    )
+    assert rollback["status"] == "passed"
+    assert rollback["current_generation"] == 1
+    _result, switched = _run_storage(
+        repo_root,
+        result_dir,
+        "switch",
+        ["switch", "--pool-root", str(pool), "--domain", "work", "--generation", "2"],
+    )
+    assert switched["status"] == "passed"
+    assert switched["current_generation"] == 2
+    _run_storage(
+        repo_root,
+        result_dir,
+        "retain-gen1-off",
+        [
+            "set-retention",
+            "--pool-root",
+            str(pool),
+            "--domain",
+            "work",
+            "--generation",
+            "1",
+            "--retain",
+            "false",
+        ],
+    )
+    _result, gc = _run_storage(
+        repo_root,
+        result_dir,
+        "gc",
+        ["gc", "--pool-root", str(pool), "--keep-generations", "1"],
+    )
+    assert gc["schema"] == "nixome.closure-store.gc.v1"
+    assert any(
+        item["domain"] == "work" and item["generation"] == 1
+        for item in gc["removed_generations"]
+    )
