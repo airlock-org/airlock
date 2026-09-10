@@ -15,6 +15,7 @@ from local_pychecks import (
     check_qube_guest_policy_probe,
     check_setup_config_runtime_path,
     check_system_schema,
+    check_topology_schema,
 )
 from local_harness import run_local_command
 
@@ -185,7 +186,7 @@ LOCAL_CHECKS = (
     LocalCheck("config-staging-validate", ("{root}/tests/config-staging-validate.sh",)),
     LocalCheck("qrexec-policy-path", runner=check_qrexec_policy_path),
     LocalCheck("qube-guest-policy-probe", runner=check_qube_guest_policy_probe),
-    LocalCheck("topology-schema", ("{root}/tests/topology-schema.sh",)),
+    LocalCheck("topology-schema", runner=check_topology_schema),
     LocalCheck("system-schema", runner=check_system_schema),
     LocalCheck(
         "config-candidate-flake",

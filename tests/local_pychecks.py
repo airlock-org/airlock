@@ -696,3 +696,296 @@ def check_system_schema(repo_root: Path, log_dir: Path) -> None:
         for action in boot["plan"]["reboot_actions"]
     )
     assert boot["plan"]["reboot_reasons"] == ["install next dom0 boot generation"]
+
+
+def check_topology_schema(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir / "work"
+    shutil.rmtree(log_dir, ignore_errors=True)
+    valid_dir = work_dir / "valid"
+    for path in (
+        valid_dir / "nixome",
+        valid_dir / "template-source",
+        valid_dir / "kernel-source",
+        valid_dir / "system-source",
+    ):
+        path.mkdir(parents=True)
+    shutil.copy(
+        repo_root / "lib/nixome/topology.nix", valid_dir / "nixome/topology.nix"
+    )
+
+    _write_flake(
+        valid_dir / "flake.nix",
+        """
+        {
+          description = "Nixome topology schema valid fixture";
+
+          outputs =
+            { self }:
+            let
+              topology = import ./nixome/topology.nix;
+            in
+            {
+              nixome.topology = topology.mkTopology {
+                templates."nixome-template" = {
+                  import = true;
+                  source = ./template-source;
+                };
+                templates."nixome-built-template" = {
+                  import = true;
+                  source = {
+                    build = "packages.x86_64-linux.nixome-built-template";
+                    subpath = "nixome-built-template";
+                  };
+                };
+                kernels."6.12.64-1.fc41".source = ./kernel-source;
+                prefs.default_kernel = "";
+                domains."test-qube" = {
+                  template = "nixome-template";
+                  label = "green";
+                  prefs.memory = 1024;
+                  features."nixome-role" = "test";
+                  services."network-manager" = false;
+                };
+                domains."legacy-fedora" = {
+                  backend = {
+                    type = "qubes-template";
+                    template = "nixome-template";
+                  };
+                  label = "yellow";
+                  netvm = null;
+                };
+                domains."nix-work" = {
+                  backend = {
+                    type = "nix-closure";
+                    system.source = ./system-source;
+                    kernel.name = "6.12.64-1.fc41";
+                    root.sourceRef.build = "packages.x86_64-linux.nix-work-root-image";
+                    root.sourceRef.subpath = "root.img";
+                    store.sourceRef.build = "packages.x86_64-linux.nix-work-store-closure";
+                  };
+                  label = "blue";
+                  prefs.memory = 2048;
+                };
+                qrexecPolicy.rules = [
+                  {
+                    service = "nixome.PolicyProbe";
+                    source = "dom0";
+                    target = "test-qube";
+                    action = "allow";
+                  }
+                ];
+              };
+            };
+        }
+        """,
+    )
+
+    topology_json = log_dir / "topology.json"
+    _run(
+        ["nix", "eval", "--json", f"{valid_dir}#nixome.topology"], stdout=topology_json
+    )
+    topology = json.loads(topology_json.read_text(encoding="utf-8"))
+
+    assert topology["schema"] == "nixome.qubes-topology.v1"
+    template = topology["templates"]["nixome-template"]
+    assert template["import"] is True
+    assert template["skip_start"] is True
+    assert template["source"].endswith("/template-source")
+    assert template["source_ref"] is None
+    built_template = topology["templates"]["nixome-built-template"]
+    assert built_template["import"] is True
+    assert built_template["source"] is None
+    assert built_template["source_ref"] == {
+        "type": "flake-output",
+        "attr": "packages.x86_64-linux.nixome-built-template",
+        "subpath": "nixome-built-template",
+    }
+    assert topology["kernels"]["6.12.64-1.fc41"]["source"].endswith("/kernel-source")
+
+    test_qube = topology["domains"]["test-qube"]
+    assert test_qube["class"] == "AppVM"
+    assert test_qube["template"] == "nixome-template"
+    assert test_qube["backend"]["type"] == "qubes-template"
+    assert test_qube["backend"]["template"] == "nixome-template"
+    assert test_qube["netvm"] is None
+    assert test_qube["prefs"]["autostart"] is False
+    assert test_qube["prefs"]["include_in_backups"] is False
+    assert test_qube["prefs"]["memory"] == 1024
+    assert test_qube["services"]["network-manager"] is False
+
+    legacy = topology["domains"]["legacy-fedora"]
+    assert legacy["class"] == "AppVM"
+    assert legacy["template"] == "nixome-template"
+    assert legacy["label"] == "yellow"
+    assert legacy["backend"]["type"] == "qubes-template"
+    assert legacy["backend"]["template"] == "nixome-template"
+
+    nix_work = topology["domains"]["nix-work"]
+    assert nix_work["class"] == "StandaloneVM"
+    assert nix_work["template"] is None
+    assert nix_work["label"] == "blue"
+    assert nix_work["prefs"]["memory"] == 2048
+    assert nix_work["backend"]["type"] == "nix-closure"
+    assert nix_work["backend"]["system"]["source"].endswith("/system-source")
+    assert nix_work["backend"]["system"]["source_ref"] is None
+    assert nix_work["backend"]["kernel"]["name"] == "6.12.64-1.fc41"
+    assert nix_work["backend"]["kernel"]["source"] is None
+    assert nix_work["backend"]["kernel"]["source_ref"] is None
+    assert nix_work["backend"]["initrd"]["name"] is None
+    assert nix_work["backend"]["modules"]["name"] is None
+    assert nix_work["backend"]["root"]["mode"] == "qubes-root-image"
+    assert nix_work["backend"]["root"]["source"] is None
+    assert nix_work["backend"]["root"]["source_ref"] == {
+        "type": "flake-output",
+        "attr": "packages.x86_64-linux.nix-work-root-image",
+        "subpath": "root.img",
+    }
+    assert nix_work["backend"]["root"]["read_only"] is False
+    assert nix_work["backend"]["store"]["mode"] == "shared-closure"
+    assert nix_work["backend"]["store"]["source"] is None
+    assert nix_work["backend"]["store"]["source_ref"] == {
+        "type": "flake-output",
+        "attr": "packages.x86_64-linux.nix-work-store-closure",
+        "subpath": "",
+    }
+    assert nix_work["backend"]["store"]["mountpoint"] == "/nix/store"
+    assert nix_work["backend"]["store"]["device"] == "/dev/xvde"
+    assert nix_work["backend"]["store"]["read_only"] is True
+    assert nix_work["backend"]["state"]["persistent"] == "nix-work-private"
+    assert nix_work["backend"]["state"]["volatile"] is None
+    assert topology["qrexec_policy"]["rules"] == [
+        {
+            "service": "nixome.PolicyProbe",
+            "argument": "*",
+            "source": "dom0",
+            "target": "test-qube",
+            "action": "allow",
+        },
+        {
+            "service": "nixome.PolicyProbe",
+            "argument": "*",
+            "source": "@anyvm",
+            "target": "@anyvm",
+            "action": "deny",
+        },
+    ]
+
+    def expect_failure(name: str, needle: str, config_expr: str) -> None:
+        case_dir = work_dir / name
+        (case_dir / "nixome").mkdir(parents=True)
+        shutil.copy(
+            repo_root / "lib/nixome/topology.nix", case_dir / "nixome/topology.nix"
+        )
+        _write_flake(
+            case_dir / "flake.nix",
+            f"""
+            {{
+              description = "Nixome topology schema invalid fixture";
+
+              outputs =
+                {{ self }}:
+                let
+                  topology = import ./nixome/topology.nix;
+                in
+                {{
+                  nixome.topology = topology.mkTopology {config_expr};
+                }};
+            }}
+            """,
+        )
+        log = log_dir / f"{name}.log"
+        result = _run(
+            ["nix", "eval", "--json", f"{case_dir}#nixome.topology"],
+            stdout=log_dir / f"{name}-topology.json",
+            stderr=log,
+            check=False,
+        )
+        assert result.returncode != 0, f"schema accepted invalid config: {name}"
+        assert needle in log.read_text(
+            encoding="utf-8"
+        ), f"schema failure did not mention expected text for {name}: {needle}"
+
+    invalid_cases = [
+        (
+            "missing-appvm-template",
+            "nixome.topology.domains.bad.template: must be set for AppVM domains",
+            '{ domains.bad = { label = "green"; }; }',
+        ),
+        (
+            "invalid-label",
+            "nixome.topology.domains.bad.label: expected one of",
+            '{ domains.bad = { template = "nixome-template"; label = "clear"; }; }',
+        ),
+        (
+            "unknown-option",
+            "nixome.topology.domains.bad: unknown option(s): servies",
+            '{ domains.bad = { template = "nixome-template"; servies = { }; }; }',
+        ),
+        (
+            "template-import-without-source",
+            "nixome.topology.templates.nixome-template.source: must be set when import is true",
+            '{ templates."nixome-template".import = true; }',
+        ),
+        (
+            "template-source-and-source-ref",
+            "source and sourceRef cannot both be set",
+            '{ templates."nixome-template" = { import = true; source = ./template-source; sourceRef.build = "packages.x86_64-linux.template"; }; }',
+        ),
+        (
+            "template-invalid-build-ref",
+            "invalid flake output reference",
+            '{ templates."nixome-template" = { import = true; source.build = "../bad"; }; }',
+        ),
+        (
+            "non-nixome-qrexec-service",
+            "invalid qrexec service",
+            '{ qrexecPolicy.rules = [ { service = "qubes.Filecopy"; source = "dom0"; target = "vault"; action = "allow"; } ]; }',
+        ),
+        (
+            "reserved-qrexec-service",
+            "reserved bootstrap qrexec service",
+            '{ qrexecPolicy.rules = [ { service = "nixome.Config.ArchiveCandidate"; source = "dom0"; target = "config-vault"; action = "allow"; } ]; }',
+        ),
+        (
+            "qrexec-allow-any-source",
+            "allow rules must use dom0 or a concrete source domain",
+            '{ qrexecPolicy.rules = [ { service = "nixome.PolicyProbe"; source = "@anyvm"; target = "config-vault"; action = "allow"; } ]; }',
+        ),
+        (
+            "qrexec-target-dom0",
+            "topology-managed qrexec policy cannot target dom0",
+            '{ qrexecPolicy.rules = [ { service = "nixome.PolicyProbe"; source = "config-vault"; target = "dom0"; action = "allow"; } ]; }',
+        ),
+        (
+            "nix-closure-with-template",
+            "template must not be set for nix-closure domains",
+            '{ domains.bad = { template = "nixome-template"; backend.type = "nix-closure"; }; }',
+        ),
+        (
+            "nix-closure-missing-system",
+            "nixome.topology.domains.bad.backend.system.source: must be set for nix-closure domains",
+            '{ domains.bad.backend = { type = "nix-closure"; kernel.name = "6.12.64-1.fc41"; root.sourceRef.build = "packages.x86_64-linux.bad-root"; store.sourceRef.build = "packages.x86_64-linux.bad-store"; }; }',
+        ),
+        (
+            "nix-closure-writable-store",
+            "nix-closure store views must be read-only",
+            '{ domains.bad.backend = { type = "nix-closure"; system.sourceRef.build = "nixosConfigurations.bad.config.system.build.toplevel"; kernel.name = "6.12.64-1.fc41"; root.sourceRef.build = "packages.x86_64-linux.bad-root"; store = { sourceRef.build = "packages.x86_64-linux.bad-store"; readOnly = false; }; }; }',
+        ),
+        (
+            "nix-closure-unsupported-store-device",
+            "nixome.topology.domains.bad.backend.store.device: currently must be /dev/xvde",
+            '{ domains.bad.backend = { type = "nix-closure"; system.sourceRef.build = "nixosConfigurations.bad.config.system.build.toplevel"; kernel.name = "6.12.64-1.fc41"; root.sourceRef.build = "packages.x86_64-linux.bad-root"; store = { sourceRef.build = "packages.x86_64-linux.bad-store"; device = "/dev/xvdf"; }; }; }',
+        ),
+        (
+            "nix-closure-missing-root",
+            "nixome.topology.domains.bad.backend.root.source: must be set for qubes-root-image materialization",
+            '{ domains.bad.backend = { type = "nix-closure"; system.sourceRef.build = "nixosConfigurations.bad.config.system.build.toplevel"; kernel.name = "6.12.64-1.fc41"; store.sourceRef.build = "packages.x86_64-linux.bad-store"; }; }',
+        ),
+        (
+            "nix-closure-readonly-root",
+            "qubes-root-image materialization imports a writable Qubes root volume",
+            '{ domains.bad.backend = { type = "nix-closure"; system.sourceRef.build = "nixosConfigurations.bad.config.system.build.toplevel"; kernel.name = "6.12.64-1.fc41"; root = { sourceRef.build = "packages.x86_64-linux.bad-root"; readOnly = true; }; store.sourceRef.build = "packages.x86_64-linux.bad-store"; }; }',
+        ),
+    ]
+    for name, needle, config_expr in invalid_cases:
+        expect_failure(name, needle, config_expr)
