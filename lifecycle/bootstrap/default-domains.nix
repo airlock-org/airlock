@@ -107,7 +107,7 @@ let
     netvm = null;
     state.persistentSize = sysNetPrivateSizeBytes;
     prefs = {
-      autostart = false;
+      autostart = true;
       include_in_backups = true;
       memory = 768;
       maxmem = 1024;

@@ -445,13 +445,16 @@ let
   setupConfig = pkgs.callPackage ../tools/pkgs/nixome-setup-config { };
   configApply = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-apply { };
   configArchive = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-archive { };
-  configBootstrapCurrent = pkgs.callPackage ../../bootstrap/tools/pkgs/nixome-config-bootstrap-current { };
+  configBootstrapCurrent =
+    pkgs.callPackage ../../bootstrap/tools/pkgs/nixome-config-bootstrap-current
+      { };
   configBootVerify = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-boot-verify { };
   configControl = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-control { };
   configInputsImport = pkgs.callPackage ../tools/pkgs/nixome-config-inputs-import { };
   configStatus = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-status { };
   configVmsSmoke = pkgs.callPackage ../tools/pkgs/nixome-config-vms-smoke { };
   nixClosureDomainSmoke = pkgs.callPackage ../tools/pkgs/nixome-nix-closure-domain-smoke { };
+  startNetworkProviders = pkgs.callPackage ../tools/pkgs/nixome-start-network-providers { };
   qrexecPolicyStaticDir = "/etc/qubes/policy.d";
   qrexecPolicyRuntimeDir = "/var/lib/nixome/qubes-policy.d";
   qrexecManagedPolicyFile = "90-nixome.policy";
@@ -612,6 +615,20 @@ in
       };
     };
 
+    startNetworkProvidersOnBoot = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Start declared root network-provider qubes after setup-config during dom0 boot.";
+      };
+
+      logDir = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/log/nixome";
+        description = "Directory where the network-provider start unit writes JSON results and command logs.";
+      };
+    };
+
     configAccessPolicy = {
       enable = lib.mkOption {
         type = lib.types.bool;
@@ -745,6 +762,10 @@ in
           message = "nixome.qubes.configCurrentBootstrapOnBoot.enable requires nixome.qubes.setupConfigOnBoot.enable.";
         }
         {
+          assertion = !cfg.startNetworkProvidersOnBoot.enable || cfg.setupConfigOnBoot.enable;
+          message = "nixome.qubes.startNetworkProvidersOnBoot.enable requires nixome.qubes.setupConfigOnBoot.enable.";
+        }
+        {
           assertion = !cfg.configCurrentBootstrapOnBoot.enable || cfg.configAccessPolicy.enable;
           message = "nixome.qubes.configCurrentBootstrapOnBoot.enable requires nixome.qubes.configAccessPolicy.enable.";
         }
@@ -765,6 +786,7 @@ in
       configVmsSmoke
       nixClosureDomainSmoke
       setupConfig
+      startNetworkProviders
     ];
 
     virtualisation.qubes.packages = lib.optionals cfg.configAccessPolicy.enable [
@@ -836,6 +858,34 @@ in
       };
     };
 
+    systemd.services.nixome-start-network-providers = lib.mkIf cfg.startNetworkProvidersOnBoot.enable {
+      description = "Start declared Nixome root network providers";
+      wantedBy = [ "multi-user.target" ];
+      wants = [
+        "libvirtd.service"
+        "nixome-setup-config.service"
+        "qubes-db-dom0.service"
+        "qubesd.service"
+        "qubes-qrexec-policy-daemon.service"
+      ];
+      after = [
+        "libvirtd.service"
+        "nixome-setup-config.service"
+        "qubes-db-dom0.service"
+        "qubesd.service"
+        "qubes-qrexec-policy-daemon.service"
+      ];
+      before = lib.optional cfg.configCurrentBootstrapOnBoot.enable "nixome-config-bootstrap-current.service";
+      restartIfChanged = false;
+      stopIfChanged = false;
+      environment.NIXOME_LOG_DIR = cfg.startNetworkProvidersOnBoot.logDir;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${startNetworkProviders}/bin/nixome-start-network-providers";
+      };
+    };
+
     systemd.services.nixome-config-bootstrap-current =
       lib.mkIf cfg.configCurrentBootstrapOnBoot.enable
         {
@@ -846,13 +896,15 @@ in
             "qubes-db-dom0.service"
             "qubesd.service"
             "qubes-qrexec-policy-daemon.service"
-          ];
+          ]
+          ++ lib.optional cfg.startNetworkProvidersOnBoot.enable "nixome-start-network-providers.service";
           after = [
             "nixome-setup-config.service"
             "qubes-db-dom0.service"
             "qubesd.service"
             "qubes-qrexec-policy-daemon.service"
-          ];
+          ]
+          ++ lib.optional cfg.startNetworkProvidersOnBoot.enable "nixome-start-network-providers.service";
           restartIfChanged = false;
           stopIfChanged = false;
           environment = {

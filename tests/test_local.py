@@ -51,6 +51,7 @@ from local_pychecks import (
     check_setup_config_runtime_path,
     check_setup_config_static,
     check_setup_config_sys_net_order,
+    check_start_network_providers,
     check_system_schema,
     check_topology_schema,
 )
@@ -173,6 +174,21 @@ LOCAL_CHECKS = (
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
+    ),
+    LocalCheck(
+        "start-network-providers-package",
+        (
+            "nix",
+            "build",
+            "{root}#packages.x86_64-linux.nixome-start-network-providers",
+            *NIX_BUILD_FLAGS,
+        ),
+        (pytest.mark.nix,),
+    ),
+    LocalCheck(
+        "start-network-providers",
+        runner=check_start_network_providers,
+        marks=(pytest.mark.nix,),
     ),
     LocalCheck(
         "qubes-storage-package",

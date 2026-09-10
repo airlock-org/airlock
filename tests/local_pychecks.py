@@ -546,6 +546,124 @@ def _setup_fake_command_dir(bin_dir: Path, commands: dict[str, str]) -> None:
         _write_executable(bin_dir / name, script)
 
 
+def check_start_network_providers(repo_root: Path, log_dir: Path) -> None:
+    shutil.rmtree(log_dir, ignore_errors=True)
+    log_dir.mkdir(parents=True)
+    topology = log_dir / "topology.json"
+    qvm_start = log_dir / "qvm-start"
+    qvm_start_log = log_dir / "qvm-start.log"
+    qvm_start_log.write_text("", encoding="utf-8")
+
+    out = _run(
+        [
+            "nix",
+            "build",
+            f"{repo_root}#packages.x86_64-linux.nixome-start-network-providers",
+            "--no-link",
+            "--print-out-paths",
+        ],
+        cwd=repo_root,
+    ).stdout.strip()
+    wrapper = (
+        Path(_physical_store_path(repo_root, out))
+        / "bin/nixome-start-network-providers"
+    )
+
+    topology.write_text(
+        json.dumps(
+            {
+                "schema": "nixome.qubes-topology.v1",
+                "domains": {
+                    "sys-net": {
+                        "netvm": None,
+                        "prefs": {
+                            "autostart": True,
+                            "provides_network": True,
+                        },
+                    },
+                    "sys-firewall": {
+                        "netvm": "sys-net",
+                        "prefs": {
+                            "autostart": True,
+                            "provides_network": True,
+                        },
+                    },
+                    "sys-vpn": {
+                        "netvm": None,
+                        "prefs": {
+                            "autostart": False,
+                            "provides_network": True,
+                        },
+                    },
+                    "dev": {
+                        "netvm": "sys-net",
+                        "prefs": {
+                            "autostart": True,
+                            "provides_network": False,
+                        },
+                    },
+                    "sys-none": {
+                        "netvm": "none",
+                        "prefs": {
+                            "autostart": True,
+                            "provides_network": True,
+                        },
+                    },
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_executable(
+        qvm_start,
+        """
+        #!/usr/bin/env bash
+        printf '%s\n' "$*" >> "$QVM_START_LOG"
+        """,
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "NIXOME_QUBES_TOPOLOGY": str(topology),
+            "NIXOME_QVM_START": str(qvm_start),
+            "NIXOME_LOG_DIR": str(log_dir),
+            "QVM_START_LOG": str(qvm_start_log),
+        }
+    )
+    _run(
+        [str(wrapper)],
+        cwd=repo_root,
+        env=env,
+        stdout=log_dir / "stdout.log",
+        stderr=log_dir / "stderr.log",
+    )
+
+    result = json.loads(
+        (log_dir / "start-network-providers.json").read_text(encoding="utf-8")
+    )
+    assert result["schema"] == "nixome.start-network-providers.v1"
+    assert result["status"] == "passed"
+    assert result["providers"] == ["sys-net", "sys-none"]
+    assert result["started_or_running"] == ["sys-net", "sys-none"]
+    assert result["failed"] == []
+    assert qvm_start_log.read_text(encoding="utf-8").splitlines() == [
+        "--skip-if-running -- sys-net",
+        "--skip-if-running -- sys-none",
+    ]
+    command_log = (log_dir / "start-network-providers.commands.log").read_text(
+        encoding="utf-8"
+    )
+    command_lines = [
+        line for line in command_log.splitlines() if line.startswith("+ qvm-start ")
+    ]
+    assert command_lines == [
+        "+ qvm-start --skip-if-running -- sys-net",
+        "+ qvm-start --skip-if-running -- sys-none",
+    ]
+
+
 def check_system_schema(repo_root: Path, log_dir: Path) -> None:
     work_dir = log_dir / "work"
     shutil.rmtree(work_dir, ignore_errors=True)
@@ -1650,11 +1768,14 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         templateBuilders = builders;
       }};
       devDomainDefinition = defaultRuntime.nixNative.domains.dev;
+      sysNetDomainDefinition = defaultRuntime.nixNative.domains.sys-net;
       stagedNixNativeDomains = defaultRuntime.nixNative.domains;
       bootstrapDomains = dom0Cfg.nixome.qubes.domains;
       releaseBootstrapDomains = releaseDom0Cfg.nixome.qubes.domains;
       bootstrapDevDomain = bootstrapDomains.dev;
+      bootstrapSysNetDomain = bootstrapDomains.sys-net;
       bootstrapTopologyDevDomain = dom0Cfg.nixome.qubes.topology.domains.dev;
+      bootstrapTopologySysNetDomain = dom0Cfg.nixome.qubes.topology.domains.sys-net;
       generatedDevDomain = (builders.mkNixNativeDomain {{
         name = "dev";
         guestRole = devDomainDefinition.role;
@@ -1714,17 +1835,23 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       role = devCfg.nixome.qubeGuest.role;
       hostname = devCfg.networking.hostName;
       staged_dev_declared_netvm = devDomainDefinition.netvm;
+      staged_dev_declared_autostart = devDomainDefinition.prefs.autostart;
       staged_sys_net_declared = builtins.hasAttr "sys-net" stagedNixNativeDomains;
+      staged_sys_net_autostart = sysNetDomainDefinition.prefs.autostart;
       staged_sys_firewall_external = !(builtins.hasAttr "sys-firewall" stagedNixNativeDomains);
       generated_dev_domain_netvm = generatedDevDomain.netvm;
       bootstrap_dev_domain_present = builtins.hasAttr "dev" bootstrapDomains;
       bootstrap_sys_net_present = builtins.hasAttr "sys-net" bootstrapDomains;
       bootstrap_sys_firewall_external = !(builtins.hasAttr "sys-firewall" bootstrapDomains);
       bootstrap_dev_domain_netvm = bootstrapDevDomain.netvm;
+      bootstrap_dev_domain_autostart = bootstrapDevDomain.prefs.autostart;
       bootstrap_dev_domain_backend = bootstrapDevDomain.backend.type;
       bootstrap_dev_domain_role_feature = bootstrapDevDomain.features."nixome-role";
+      bootstrap_sys_net_autostart = bootstrapSysNetDomain.prefs.autostart;
+      bootstrap_sys_net_netvm = bootstrapSysNetDomain.netvm;
       bootstrap_dev_topology_netvm = bootstrapTopologyDevDomain.netvm;
       bootstrap_dev_topology_backend = bootstrapTopologyDevDomain.backend.type;
+      bootstrap_sys_net_topology_autostart = bootstrapTopologySysNetDomain.prefs.autostart;
       image_dev_mode_enabled = dom0Cfg.nixome.image.devMode.enable;
       legacy_image_dev_mode_enabled = legacyDevDom0Cfg.nixome.image.devMode.enable;
       dom0_dhcp_enabled = dom0Cfg.networking.useDHCP;
@@ -1759,6 +1886,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       release_bootstrap_dev_domain_netvm = releaseBootstrapDomains.dev.netvm;
       release_bootstrap_sys_net_present = builtins.hasAttr "sys-net" releaseBootstrapDomains;
       release_bootstrap_sys_net_netvm = releaseBootstrapDomains.sys-net.netvm;
+      release_bootstrap_sys_net_autostart = releaseBootstrapDomains.sys-net.prefs.autostart;
       non_dev_image_dev_mode_enabled = nonDevDom0Cfg.nixome.image.devMode.enable;
       non_dev_dom0_dhcp_enabled = nonDevDom0Cfg.networking.useDHCP;
       non_dev_dom0_dev_marker_absent =
@@ -1837,17 +1965,23 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["role"] == "dev"
     assert data["hostname"] == "dev"
     assert data["staged_dev_declared_netvm"] == "sys-net"
+    assert data["staged_dev_declared_autostart"] is False
     assert data["staged_sys_net_declared"] is True
+    assert data["staged_sys_net_autostart"] is True
     assert data["staged_sys_firewall_external"] is True
     assert data["generated_dev_domain_netvm"] == "sys-net"
     assert data["bootstrap_dev_domain_present"] is True
     assert data["bootstrap_sys_net_present"] is True
     assert data["bootstrap_sys_firewall_external"] is True
     assert data["bootstrap_dev_domain_netvm"] == "sys-net"
+    assert data["bootstrap_dev_domain_autostart"] is False
     assert data["bootstrap_dev_domain_backend"] == "nix-closure"
     assert data["bootstrap_dev_domain_role_feature"] == "dev"
+    assert data["bootstrap_sys_net_autostart"] is True
+    assert data["bootstrap_sys_net_netvm"] is None
     assert data["bootstrap_dev_topology_netvm"] == "sys-net"
     assert data["bootstrap_dev_topology_backend"] == "nix-closure"
+    assert data["bootstrap_sys_net_topology_autostart"] is True
     assert data["image_dev_mode_enabled"] is True
     assert data["legacy_image_dev_mode_enabled"] is True
     assert data["dom0_dhcp_enabled"] is True
@@ -1865,6 +1999,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["release_bootstrap_dev_domain_netvm"] == "sys-net"
     assert data["release_bootstrap_sys_net_present"] is True
     assert data["release_bootstrap_sys_net_netvm"] is None
+    assert data["release_bootstrap_sys_net_autostart"] is True
     assert data["non_dev_image_dev_mode_enabled"] is False
     assert data["non_dev_dom0_dhcp_enabled"] is False
     assert data["non_dev_dom0_dev_marker_absent"] is True
@@ -9181,6 +9316,60 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     )
     assert has_package("vm-gui-config", "nixome-config-control") is True
     assert has_package("vm-gui-config", "nixome-config-bootstrap-current") is True
+    assert has_package("vm-gui-config", "nixome-start-network-providers") is True
+
+    start_network_wanted_by = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-start-network-providers.wantedBy",
+    )
+    start_network_after = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-start-network-providers.after",
+    )
+    start_network_before = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-start-network-providers.before",
+    )
+    start_network_wants = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-start-network-providers.wants",
+    )
+    start_network_execstart = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-start-network-providers.serviceConfig.ExecStart",
+    )
+    start_network_env = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-start-network-providers.environment",
+    )
+    assert "multi-user.target" in start_network_wanted_by
+    for service in (
+        "libvirtd.service",
+        "nixome-setup-config.service",
+        "qubes-db-dom0.service",
+        "qubesd.service",
+        "qubes-qrexec-policy-daemon.service",
+    ):
+        assert service in start_network_after
+        assert service in start_network_wants
+    assert "nixome-config-bootstrap-current.service" in start_network_before
+    assert isinstance(start_network_execstart, str)
+    assert "nixome-start-network-providers" in start_network_execstart
+    assert start_network_env["NIXOME_LOG_DIR"] == "/var/log/nixome"
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-start-network-providers.restartIfChanged",
+        )
+        is False
+    )
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-start-network-providers.stopIfChanged",
+        )
+        is False
+    )
 
     current_bootstrap_wanted_by = _nix_eval_json(
         repo_root,
@@ -9205,6 +9394,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert "multi-user.target" in current_bootstrap_wanted_by
     for service in (
         "nixome-setup-config.service",
+        "nixome-start-network-providers.service",
         "qubes-db-dom0.service",
         "qubesd.service",
         "qubes-qrexec-policy-daemon.service",

@@ -51,6 +51,7 @@ in
   nixome.qubes = {
     enable = true;
     setupConfigOnBoot.enable = true;
+    startNetworkProvidersOnBoot.enable = true;
     configCurrentBootstrapOnBoot.enable = true;
 
     prefs = {

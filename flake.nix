@@ -354,6 +354,9 @@
           nixome-qube-bootstrap = pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/nixome-qube-bootstrap { };
           nixome-qube-gui-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-qube-gui-smoke { };
           nixome-setup-config = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-setup-config { };
+          nixome-start-network-providers =
+            pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-start-network-providers
+              { };
           nixome-qubes-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-qubes-smoke { };
           nixome-observe-dom0 = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-observe { };
           nixome-qubes-vm-kernel = pkgs.repackRpmKernel {
@@ -413,6 +416,7 @@
         qube-bootstrap-package = self.packages.${system}.nixome-qube-bootstrap;
         qube-gui-smoke-package = self.packages.${system}.nixome-qube-gui-smoke;
         setup-config-package = self.packages.${system}.nixome-setup-config;
+        start-network-providers-package = self.packages.${system}.nixome-start-network-providers;
         observe-package = self.packages.${system}.nixome-observe-dom0;
       });
 
