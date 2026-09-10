@@ -17,7 +17,7 @@ writeShellApplication {
     systemd
   ];
 
-  text = builtins.readFile ../../tests/qubes-smoke.sh;
+  text = builtins.readFile ./src/nixome-qubes-smoke.sh;
 
   meta = {
     description = "Run the Nixome qrexec smoke test on a booted Qubes dom0";

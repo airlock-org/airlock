@@ -292,7 +292,7 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "qubes-smoke",
-        ("{root}/tests/qubes-smoke.sh",),
+        ("nix", "run", "{root}#nixome-qubes-smoke"),
         (pytest.mark.qubes, pytest.mark.slow, pytest.mark.xdist_group("qubes")),
     ),
 )

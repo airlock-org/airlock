@@ -73,9 +73,7 @@
             || keepTree "pkgs"
             || keepTree "scripts"
             || keepTree "seeds"
-            || rel == "tests"
-            || rel == "tests/qubes-gui-smoke.sh"
-            || rel == "tests/qubes-smoke.sh";
+            || rel == "tests";
         in
         lib.cleanSourceWith {
           name = "nixome-support-seed-source";
