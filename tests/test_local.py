@@ -20,6 +20,7 @@ from local_pychecks import (
     check_config_staging_validate,
     check_config_status,
     check_config_system_apply,
+    check_config_topology_eval,
     check_config_validator_candidate,
     check_config_vault_deployment_archive,
     check_dev_role,
@@ -193,8 +194,8 @@ LOCAL_CHECKS = (
     LocalCheck("gc-nixome-store", runner=check_gc_nixome_store),
     LocalCheck(
         "config-topology-eval",
-        ("{root}/tests/config-topology-eval.sh",),
-        (pytest.mark.nix,),
+        marks=(pytest.mark.nix,),
+        runner=check_config_topology_eval,
     ),
     LocalCheck(
         "nixome-minimal-guest",

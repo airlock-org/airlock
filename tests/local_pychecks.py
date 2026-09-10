@@ -8418,3 +8418,393 @@ def check_closure_store_linux_storage(repo_root: Path, log_dir: Path) -> None:
     raise AssertionError(
         "privileged closure-store-linux-storage pytest migration is not implemented"
     )
+
+
+def _nix_eval_json(repo_root: Path, attr: str, *extra: str) -> object:
+    return json.loads(
+        _run(
+            ["nix", "eval", "--json", *extra, f"{repo_root}#{attr}"], cwd=repo_root
+        ).stdout.strip()
+    )
+
+
+def _nix_eval_raw(repo_root: Path, attr: str, *extra: str) -> str:
+    return _run(
+        ["nix", "eval", "--raw", *extra, f"{repo_root}#{attr}"], cwd=repo_root
+    ).stdout
+
+
+def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
+    work_dir = log_dir
+    shutil.rmtree(work_dir, ignore_errors=True)
+    work_dir.mkdir(parents=True)
+
+    domains = _nix_eval_json(
+        repo_root, "nixosConfigurations.vm-gui-config.config.nixome.qubes.domains"
+    )
+    kernels = _nix_eval_json(
+        repo_root, "nixosConfigurations.vm-gui-config.config.nixome.qubes.kernels"
+    )
+    templates = _nix_eval_json(
+        repo_root, "nixosConfigurations.vm-gui-config.config.nixome.qubes.templates"
+    )
+    topology = _nix_eval_json(
+        repo_root, "nixosConfigurations.vm-gui-config.config.nixome.qubes.topology"
+    )
+    assert domains["config-vault"]["class"] == "StandaloneVM"
+    assert domains["config-vault"]["template"] is None
+    assert domains["config-vault"]["netvm"] is None
+    assert domains["config-vault"]["backend"]["type"] == "nix-closure"
+    assert domains["config-vault"]["backend"]["store"]["mode"] == "shared-closure"
+    assert domains["config-vault"]["backend"]["store"]["readOnly"] is True
+    assert domains["config-vault"]["features"]["nixome-role"] == "config-vault"
+    assert domains["config-staging"]["backend"]["type"] == "nix-closure"
+    assert domains["config-staging"]["features"]["nixome-role"] == "config-staging"
+    assert domains["config-staging"]["features"]["nixome-config-applied-message"] == (
+        "initial"
+    )
+    assert domains["config-validator"]["backend"]["type"] == "nix-closure"
+    assert domains["config-validator"]["features"]["nixome-role"] == "config-validator"
+    assert "sys-firewall" not in domains
+    assert domains["sys-net"]["class"] == "StandaloneVM"
+    assert domains["sys-net"]["netvm"] is None
+    assert domains["sys-net"]["prefs"]["provides_network"] is True
+    assert domains["sys-net"]["services"]["network-manager"] is True
+    assert domains["dev"]["netvm"] == "sys-net"
+    assert domains["dev"]["backend"]["type"] == "nix-closure"
+    assert domains["dev"]["features"]["nixome-role"] == "dev"
+    assert domains["dev"]["features"]["nixome-dev"] == "1"
+    assert "qubes-kernel-6.12.64-1.fc41" in kernels["6.12.64-1.fc41"]["source"]
+    assert templates == {}
+    assert topology["schema"] == "nixome.qubes-topology.v1"
+    assert topology["templates"] == {}
+    assert topology["domains"]["config-vault"]["backend"]["root"]["source_ref"] is None
+    assert re.search(
+        r"^/nix/store/.*/root\.img$",
+        topology["domains"]["config-vault"]["backend"]["root"]["source"],
+    )
+    assert topology["domains"]["config-vault"]["backend"]["store"]["read_only"] is True
+    assert (
+        topology["domains"]["config-staging"]["backend"]["state"]["persistent_size"]
+        == 8589934592
+    )
+    assert (
+        topology["domains"]["config-validator"]["backend"]["state"]["persistent_size"]
+        == 8589934592
+    )
+    assert (
+        topology["domains"]["config-vault"]["backend"]["state"]["persistent_size"]
+        is None
+    )
+    assert topology["domains"]["sys-net"]["devices"]["pci"] == []
+    assert topology["domains"]["dev"]["backend"]["state"]["persistent_size"] == (
+        34359738368
+    )
+
+    guest_init_wanted_by = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.wantedBy",
+    )
+    guest_init_after = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.after",
+    )
+    guest_init_before = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.before",
+    )
+    guest_init_script = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.script",
+    )
+    guest_qrexec_requires = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.qubes-qrexec-agent.requires",
+    )
+    guest_qrexec_after = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.qubes-qrexec-agent.after",
+    )
+    assert "multi-user.target" in guest_init_wanted_by
+    assert "nixome-qubes-rw-init.service" in guest_init_after
+    assert "qubes-db.service" in guest_init_after
+    assert "qubes-qrexec-agent.service" in guest_init_before
+    assert "HOME=/home/user" in guest_init_script
+    assert "nixome-config-nix/bin" in guest_init_script
+    assert "nixome-config-guest-init.service" in guest_qrexec_requires
+    assert "nixome-config-guest-init.service" in guest_qrexec_after
+    assert (
+        _nix_eval_raw(
+            repo_root,
+            "nixosConfigurations.nixome-domain-config-staging.config.nixome.qubeGuest.configNixStoreRoot",
+        ).strip()
+        == "/rw/home/user/nixome-config-nix-root"
+    )
+
+    def has_package(configuration: str, package_name: str) -> bool:
+        return json.loads(
+            _run(
+                [
+                    "nix",
+                    "eval",
+                    "--json",
+                    "--apply",
+                    f'packages: builtins.any (package: (package.pname or package.name or "") == "{package_name}") packages',
+                    f"{repo_root}#nixosConfigurations.{configuration}.config.environment.systemPackages",
+                ],
+                cwd=repo_root,
+            ).stdout
+        )
+
+    assert has_package("nixome-domain-config-staging", "nixome-config-nix") is True
+    assert has_package("nixome-domain-config-validator", "nixome-config-nix") is True
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.nixome-domain-config-validator.config.nixome.qubeGuest.role",
+        )
+        == "config-validator"
+    )
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.nixome-domain-config-vault.config.networking.hostName",
+        )
+        == "config-vault"
+    )
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.nixome-domain-config-staging.config.networking.hostName",
+        )
+        == "config-staging"
+    )
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.nixome-domain-config-validator.config.networking.hostName",
+        )
+        == "config-validator"
+    )
+    for attr in (
+        'nixosConfigurations.nixome-domain-config-validator.config.environment.etc."qubes-rpc/nixome.Config.ValidateCandidate".mode',
+        'nixosConfigurations.nixome-domain-config-staging.config.environment.etc."qubes-rpc/nixome.Config.SeedInputsImport".mode',
+        'nixosConfigurations.nixome-domain-config-validator.config.environment.etc."qubes-rpc/nixome.Config.SeedInputsImport".mode',
+        'nixosConfigurations.nixome-domain-config-vault.config.environment.etc."qubes-rpc/nixome.Config.ArchiveDeployment".mode',
+        'nixosConfigurations.vm-gui-config.config.environment.etc."qubes-rpc/nixome.Config.Status".mode',
+        'nixosConfigurations.vm-gui-config.config.environment.etc."qubes-rpc/nixome.Config.Check".mode',
+        'nixosConfigurations.vm-gui-config.config.environment.etc."qubes-rpc/nixome.Config.Apply".mode',
+        'nixosConfigurations.vm-gui-config.config.environment.etc."qubes-rpc/nixome.Config.Rollback".mode',
+    ):
+        assert _nix_eval_json(repo_root, attr) == "0555"
+    assert (
+        _nix_eval_json(
+            repo_root,
+            'nixosConfigurations.nixome-domain-config-staging.config.environment.etc."qubes/rpc-config/nixome.Config.SeedInputsImport".text',
+        )
+        == "force-user='root'\n"
+    )
+    vault_seed_rpc_present = json.loads(
+        _run(
+            [
+                "nix",
+                "eval",
+                "--impure",
+                "--json",
+                "--expr",
+                f"""
+                let
+                  cfg = (builtins.getFlake "path:{repo_root}").nixosConfigurations.nixome-domain-config-vault.config.environment.etc;
+                in
+                  cfg ? "qubes-rpc/nixome.Config.SeedInputsImport"
+                """,
+            ],
+            cwd=repo_root,
+        ).stdout
+    )
+    assert vault_seed_rpc_present is False
+
+    setup_wanted_by = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.wantedBy",
+    )
+    setup_after = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.after",
+    )
+    setup_wants = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.wants",
+    )
+    setup_execstart = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.serviceConfig.ExecStart",
+    )
+    setup_env = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.environment",
+    )
+    assert "multi-user.target" in setup_wanted_by
+    for service in (
+        "libvirtd.service",
+        "qubes-db-dom0.service",
+        "qubesd.service",
+        "qubes-qrexec-policy-daemon.service",
+    ):
+        assert service in setup_after
+        assert service in setup_wants
+    assert isinstance(setup_execstart, str)
+    assert "nixome-setup-config" in setup_execstart
+    assert setup_execstart.endswith(" --apply")
+    assert setup_env["NIXOME_LOG_DIR"] == "/var/log/nixome"
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.restartIfChanged",
+        )
+        is False
+    )
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config.stopIfChanged",
+        )
+        is False
+    )
+    assert "qubes-qrexec-policy-daemon.service" in _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-qubes-policy-path.before",
+    )
+    assert "nixome-qubes-policy-path.service" in _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.qubes-qrexec-policy-daemon.after",
+    )
+    assert "nixome-qubes-policy-path.service" in _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.qubes-qrexec-policy-daemon.requires",
+    )
+    qrexec_execstart = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.qubes-qrexec-policy-daemon.serviceConfig.ExecStart",
+    )
+    assert "" in qrexec_execstart
+    assert any(
+        "qrexec-policy-daemon --policy-path /var/lib/nixome/qubes-policy.d" in item
+        for item in qrexec_execstart
+    )
+    assert has_package("vm-gui-config", "nixome-config-control") is True
+
+    for attr, expected in (
+        (
+            "nixome-domain-config-vault-root-image",
+            "nixome-domain-config-vault-root-image",
+        ),
+        (
+            "nixome-domain-config-staging-root-image",
+            "nixome-domain-config-staging-root-image",
+        ),
+        (
+            "nixome-domain-config-validator-root-image",
+            "nixome-domain-config-validator-root-image",
+        ),
+        (
+            "nixome-domain-config-vault-store-closure",
+            "nixome-domain-config-vault-store-closure",
+        ),
+        (
+            "nixome-domain-config-staging-store-closure",
+            "nixome-domain-config-staging-store-closure",
+        ),
+        (
+            "nixome-domain-config-validator-store-closure",
+            "nixome-domain-config-validator-store-closure",
+        ),
+    ):
+        drv = _run(
+            ["nix", "path-info", "--derivation", f"{repo_root}#{attr}"],
+            cwd=repo_root,
+        ).stdout
+        assert expected in drv
+
+    config_access_policy_pkg = _run(
+        [
+            "nix",
+            "build",
+            "--impure",
+            "--expr",
+            f"""
+            let
+              packages = (builtins.getFlake "git+file://{repo_root}").nixosConfigurations."vm-gui-config".config.virtualisation.qubes.packages;
+              matches = builtins.filter (package: package.name == "nixome-config-access-policy") packages;
+            in
+              builtins.head matches
+            """,
+            "--no-link",
+            "--print-out-paths",
+        ],
+        cwd=repo_root,
+    ).stdout.strip()
+    policy_text = (
+        Path(_physical_store_path(repo_root, config_access_policy_pkg))
+        / "etc/qubes/policy.d/30-nixome-config.policy"
+    ).read_text(encoding="utf-8")
+    expected_policy = "\n".join(
+        (
+            "# Managed by Nixome. Only dom0 may fetch a candidate from config-staging,",
+            "# ask config-validator to validate it, or archive it into config-vault.",
+            "nixome.Config.CandidateExport * dom0 config-staging allow",
+            "nixome.Config.CandidateExport * @anyvm @anyvm deny",
+            "nixome.Config.ValidateCandidate * dom0 config-validator allow",
+            "nixome.Config.ValidateCandidate * @anyvm @anyvm deny",
+            "nixome.Config.SeedInputsImport * dom0 config-staging allow",
+            "nixome.Config.SeedInputsImport * dom0 config-validator allow",
+            "nixome.Config.SeedInputsImport * @anyvm @anyvm deny",
+            "nixome.Config.ArchiveCandidate * dom0 config-vault allow",
+            "nixome.Config.ArchiveCandidate * @anyvm @anyvm deny",
+            "nixome.Config.ArchiveDeployment * dom0 config-vault allow",
+            "nixome.Config.ArchiveDeployment * @anyvm @anyvm deny",
+            "nixome.Config.Status * dev dom0 allow",
+            "nixome.Config.Check * dev dom0 allow",
+            "nixome.Config.Apply * dev dom0 allow",
+            "nixome.Config.Rollback * dev dom0 allow",
+            "nixome.Config.Status * @anyvm @anyvm deny",
+            "nixome.Config.Check * @anyvm @anyvm deny",
+            "nixome.Config.Apply * @anyvm @anyvm deny",
+            "nixome.Config.Rollback * @anyvm @anyvm deny",
+            "",
+        )
+    )
+    assert policy_text == expected_policy
+
+    staging_init_pkg = _run(
+        [
+            "nix",
+            "build",
+            "--impure",
+            "--expr",
+            f"""
+            let
+              packages = (builtins.getFlake "git+file://{repo_root}").nixosConfigurations."nixome-domain-config-staging".config.environment.systemPackages;
+              matches = builtins.filter (package: package.name == "nixome-config-staging-init") packages;
+            in
+              builtins.head matches
+            """,
+            "--no-link",
+            "--print-out-paths",
+        ],
+        cwd=repo_root,
+    ).stdout.strip()
+    staging_init = (
+        Path(_physical_store_path(repo_root, staging_init_pkg))
+        / "bin/nixome-config-staging-init"
+    ).read_text(encoding="utf-8")
+    for expected in (
+        'seed_root="${NIXOME_CONFIG_SEED_INPUTS_PATH:-/etc/nixome/config-seed-inputs}"',
+        "s|__NIXOME_NIXPKGS_URL__|path:$seed_root/nixpkgs|g",
+        "s|__NIXPKGS_LIBVIRT_10_5_PATH__|$seed_root/nixpkgs-libvirt_10_5|g",
+        "s|__NIXOME_NIXOS_QUBES_PATH__|$seed_root/nixos-qubes|g",
+        "s|__NIXOME_SUPPORT_PATH__|$seed_root/nixome-support|g",
+    ):
+        assert expected in staging_init
+    assert "s|__NIXOME_NIXPKGS_URL__|path:/nix/store/" not in staging_init
+    assert "s|__NIXOME_SUPPORT_PATH__|/nix/store/" not in staging_init
