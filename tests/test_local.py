@@ -11,6 +11,7 @@ from local_pychecks import (
     check_closure_volume_filtered_device,
     check_closure_store_linux_storage,
     check_config_candidate_nix_native,
+    check_config_candidate_flake,
     check_config_control,
     check_config_apply_domain_references,
     check_config_apply_nix_domain_materialization,
@@ -215,8 +216,8 @@ LOCAL_CHECKS = (
     LocalCheck("system-schema", runner=check_system_schema),
     LocalCheck(
         "config-candidate-flake",
-        ("{root}/tests/config-candidate-flake.sh",),
-        (pytest.mark.nix,),
+        marks=(pytest.mark.nix,),
+        runner=check_config_candidate_flake,
     ),
     LocalCheck(
         "config-validator-candidate",

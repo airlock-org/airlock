@@ -8808,3 +8808,259 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         assert expected in staging_init
     assert "s|__NIXOME_NIXPKGS_URL__|path:/nix/store/" not in staging_init
     assert "s|__NIXOME_SUPPORT_PATH__|/nix/store/" not in staging_init
+
+
+def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
+    result_dir = log_dir
+    work_dir = result_dir / "work"
+    shutil.rmtree(result_dir, ignore_errors=True)
+    (work_dir / "nixome").mkdir(parents=True)
+    for relative in (
+        "dom0-profile",
+        "flake.nix",
+        "nixome/config-vms.nix",
+        "nixome/dom0-host.nix",
+        "nixome/local.nix",
+        "nixome/machine.nix",
+        "nixome/prebuilt-template-sources.nix",
+        "nixome/system.nix",
+    ):
+        source = repo_root / "seeds/config-staging" / relative
+        target = work_dir / relative
+        if source.is_dir():
+            shutil.copytree(source, target)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+    shutil.copy2(
+        repo_root / "lib/nixome/system.nix", work_dir / "nixome/system-schema.nix"
+    )
+    shutil.copy2(
+        repo_root / "lib/nixome/topology.nix", work_dir / "nixome/topology.nix"
+    )
+
+    replacements = {
+        "__NIXOME_NIXPKGS_URL__": "path:"
+        + _physical_store_path(
+            repo_root,
+            _run(
+                ["nix", "eval", "--raw", f"{repo_root}#nixome.seedInputs.nixpkgs"]
+            ).stdout.strip(),
+        ),
+        "__NIXPKGS_LIBVIRT_10_5_PATH__": _physical_store_path(
+            repo_root,
+            _run(
+                [
+                    "nix",
+                    "eval",
+                    "--raw",
+                    f"{repo_root}#nixome.seedInputs.nixpkgsLibvirt105",
+                ]
+            ).stdout.strip(),
+        ),
+        "__NIXOME_NIXOS_QUBES_PATH__": _physical_store_path(
+            repo_root,
+            _run(
+                ["nix", "eval", "--raw", f"{repo_root}#nixome.seedInputs.nixosQubes"]
+            ).stdout.strip(),
+        ),
+        "__NIXOME_SUPPORT_PATH__": _physical_store_path(
+            repo_root,
+            _run(
+                ["nix", "eval", "--raw", f"{repo_root}#nixome.seedInputs.nixomeSupport"]
+            ).stdout.strip(),
+        ),
+    }
+    flake_path = work_dir / "flake.nix"
+    flake_text = flake_path.read_text(encoding="utf-8")
+    for needle, replacement in replacements.items():
+        flake_text = flake_text.replace(needle, replacement)
+    flake_path.write_text(flake_text, encoding="utf-8")
+
+    nix_common = [
+        "nix",
+        "--extra-experimental-features",
+        "nix-command",
+        "--extra-experimental-features",
+        "flakes",
+    ]
+    _run([*nix_common, "flake", "lock", "--impure", "--offline"], cwd=work_dir)
+    _run(
+        [
+            *nix_common,
+            "flake",
+            "check",
+            "--impure",
+            "--offline",
+            "--no-write-lock-file",
+            str(work_dir),
+            "--no-build",
+            "--show-trace",
+        ],
+        cwd=work_dir,
+    )
+
+    def eval_work_json(attr: str) -> object:
+        return json.loads(
+            _run(
+                [
+                    *nix_common,
+                    "eval",
+                    "--impure",
+                    "--offline",
+                    "--no-write-lock-file",
+                    "--json",
+                    f"{work_dir}#{attr}",
+                ],
+                cwd=work_dir,
+            ).stdout
+        )
+
+    def eval_work_raw(attr: str) -> str:
+        return _run(
+            [
+                *nix_common,
+                "eval",
+                "--impure",
+                "--offline",
+                "--no-write-lock-file",
+                "--raw",
+                f"{work_dir}#{attr}",
+            ],
+            cwd=work_dir,
+        ).stdout
+
+    topology = eval_work_json("nixome.topology")
+    system = eval_work_json("nixome.system")
+    host_message = eval_work_raw(
+        'nixosConfigurations.nixome-dom0.config.environment.etc."nixome/inside-config-applied-message".text'
+    )
+    host_derivations = _run(
+        [
+            *nix_common,
+            "path-info",
+            "--impure",
+            "--offline",
+            "--derivation",
+            "--recursive",
+            f"{work_dir}#nixosConfigurations.nixome-dom0.config.system.build.toplevel",
+        ],
+        cwd=work_dir,
+    ).stdout
+    profile_out = _run(
+        [
+            *nix_common,
+            "build",
+            "--impure",
+            "--offline",
+            "--no-write-lock-file",
+            "--out-link",
+            str(result_dir / "dom0-profile"),
+            f"{work_dir}#packages.x86_64-linux.nixome-dom0-profile",
+        ],
+        cwd=work_dir,
+    ).stdout
+    profile_physical = Path(
+        _physical_store_path(repo_root, os.readlink(result_dir / "dom0-profile"))
+    )
+    profile_json = json.loads(
+        (profile_physical / "share/nixome/profile.json").read_text(encoding="utf-8")
+    )
+    assert profile_out is not None
+    assert topology["schema"] == "nixome.qubes-topology.v1"
+    assert topology["templates"] == {}
+    assert "sys-firewall" not in topology["domains"]
+    assert topology["domains"]["sys-net"]["netvm"] is None
+    assert topology["domains"]["sys-net"]["prefs"]["provides_network"] is True
+    assert topology["domains"]["dev"]["netvm"] == "sys-net"
+    assert topology["domains"]["dev"]["backend"]["type"] == "nix-closure"
+    assert topology["domains"]["dev"]["features"]["nixome-role"] == "dev"
+    assert (
+        topology["domains"]["config-staging"]["features"][
+            "nixome-config-applied-message"
+        ]
+        == "initial"
+    )
+    assert system["schema"] == "nixome.system.v1"
+    assert system["dom0"]["profile"]["source"] == "dom0-profile"
+    assert system["dom0"]["profile"]["activation_action"] == "run"
+    assert system["dom0"]["profile"]["message"] == "initial"
+    assert system["dom0"]["nixos"]["system"]["enable"] is True
+    assert system["dom0"]["nixos"]["system"]["switch_action"] == "switch"
+    assert system["plan"]["reboot_required"] is False
+    assert system["plan"]["reboot_actions"] == []
+    assert host_message.strip() == "initial"
+    assert not re.search(
+        r"nixome-nixos-(config-system|work)|qubes-template-nixome-nixos",
+        host_derivations,
+    )
+    assert profile_json["schema"] == "nixome.dom0-profile.v1"
+    assert profile_json["message"] == "initial"
+    assert profile_json["built_by"] == "config-staging"
+    assert (profile_physical / "bin/nixome-dom0-profile-activate").is_file()
+
+    machine_path = work_dir / "nixome/machine.nix"
+    negative_cases = [
+        (
+            "{ ... }:\n{\n  templates.definitions.nixome-nixos-bad = { };\n}\n",
+            "nixome.topology",
+            "--json",
+            "nixome.machine: unknown option(s): templates",
+        ),
+        (
+            "{ ... }:\n{\n  configVms.guests.config-stagin = { };\n}\n",
+            "nixome.configRoleConfigurations.config-staging.config.networking.hostName",
+            "--raw",
+            "nixome.configVms.guests: unknown role(s): config-stagin",
+        ),
+        (
+            '{ ... }:\n{\n  configVms.domains.config-vault.template = "old-template";\n}\n',
+            "nixome.topology",
+            "--json",
+            "nixome.configVms.domains.config-vault: unknown option(s): template",
+        ),
+        (
+            '{ ... }:\n{\n  dom0.host.apply.mode = "live";\n}\n',
+            "nixome.system",
+            "--json",
+            "nixome.dom0.host.apply.mode: expected one of auto, switch, boot",
+        ),
+        (
+            "{ ... }:\n{\n  dom0.host.apply.reason = true;\n}\n",
+            "nixome.system",
+            "--json",
+            "nixome.dom0.host.apply.reason: expected a string or path, got bool",
+        ),
+        (
+            "{ ... }:\n{\n  dom0.host.pakages = [ ];\n}\n",
+            "nixome.system",
+            "--json",
+            "nixome.dom0.host: unknown option(s): pakages",
+        ),
+        (
+            "{ ... }:\n{\n  unknowable = true;\n}\n",
+            "nixome.topology",
+            "--json",
+            "nixome.machine: unknown option(s): unknowable",
+        ),
+    ]
+    for index, (machine_text, attr, mode, expected_error) in enumerate(negative_cases):
+        machine_path.write_text(machine_text, encoding="utf-8")
+        result = _run(
+            [
+                *nix_common,
+                "eval",
+                "--impure",
+                "--offline",
+                "--no-write-lock-file",
+                mode,
+                f"{work_dir}#{attr}",
+            ],
+            cwd=work_dir,
+            stderr=result_dir / f"invalid-{index}.log",
+            check=False,
+        )
+        assert result.returncode != 0
+        assert expected_error in (result_dir / f"invalid-{index}.log").read_text(
+            encoding="utf-8"
+        )
