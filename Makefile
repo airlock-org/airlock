@@ -37,6 +37,7 @@ VM_IMAGE_ATTR ?= nixome-vm-$(VM_IMAGE_MODE_SUFFIX)-image
 VM_GUI_IMAGE_ATTR ?= nixome-vm-gui-$(VM_IMAGE_MODE_SUFFIX)-image
 VM_GUI_CONFIG_IMAGE_ATTR ?= nixome-vm-gui-config-$(VM_IMAGE_MODE_SUFFIX)-image
 VM_GUI_CONFIG_NETWORK_DEBUG_IMAGE_ATTR ?= nixome-vm-gui-config-network-debug-image
+NIXOME_VM_GDK_BACKEND ?= x11
 VM_PARALLEL_IMAGE_ATTR ?= $(VM_GUI_CONFIG_IMAGE_ATTR)
 VM_PARALLEL_IMAGE_LINK ?= $(NIXOME_RESULT_LINK_DIR)/$(VM_PARALLEL_IMAGE_ATTR)-parallel-shared-result
 VM_PARALLEL_BASELINE_ROOT ?= $(or $(NIXOME_DATA_ROOT),$(CURDIR)/.nixome)/vm-baselines
@@ -199,7 +200,7 @@ vm-gui-config-image-dry-run: ensure-generated-dirs
 	$(NIXOME_NIX) build .#$(VM_GUI_CONFIG_IMAGE_ATTR) --dry-run --show-trace
 
 vm-gui-config-run: ensure-generated-dirs gc-auto
-	NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=gtk ./lifecycle/misc/tools/scripts/run-nested-vm.sh
+	GDK_BACKEND="$(NIXOME_VM_GDK_BACKEND)" NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=gtk ./lifecycle/misc/tools/scripts/run-nested-vm.sh
 
 vm-gui-config-network-debug-image: ensure-generated-dirs gc-auto
 	$(NIXOME_NIX) build .#$(VM_GUI_CONFIG_NETWORK_DEBUG_IMAGE_ATTR) --out-link "$(NIXOME_RESULT_LINK_DIR)/$(VM_GUI_CONFIG_NETWORK_DEBUG_IMAGE_ATTR)" --print-build-logs --show-trace
