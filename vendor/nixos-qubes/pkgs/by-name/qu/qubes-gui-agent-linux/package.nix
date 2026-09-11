@@ -113,6 +113,13 @@ stdenv.mkDerivation {
     ln -sfn ../../bin/qubes-set-monitor-layout "$out/etc/qubes-rpc/qubes.SetMonitorLayout"
     ln -sfn ../../bin/qubes-start-xephyr "$out/etc/qubes-rpc/qubes.GuiVMSession"
 
+    substituteInPlace "$out/etc/X11/xorg-qubes.conf.template" \
+      --replace-fail 'Section "Module"' "Section \"Files\"
+        ModulePath \"$out/lib/xorg/modules\"
+        ModulePath \"${xorgserver}/lib/xorg/modules\"
+    EndSection
+
+    Section \"Module\""
     substituteInPlace "$out/bin/qubes-run-xorg" \
       --replace-fail '. /usr/lib/qubes/init/functions' '. ${qubes-core-agent-linux}/lib/qubes/init/functions' \
       --replace-fail /usr/lib/qubes "$out/lib/qubes" \
