@@ -21,6 +21,12 @@ let
       # short; PAM supplies the rest of the NixOS session environment.
       # Keep launcher output on the service journal instead of root's hidden
       # .xsession-errors so failed logins have accessible diagnostics.
+
+      # Draw the cursor into the desktop image sent through the outer Qubes
+      # GUI agent instead of relying on Xephyr's host cursor being forwarded.
+      substituteInPlace "$out/bin/qubes-run-xephyr" \
+        --replace-fail 'OPTIONS_XEPHYR="-no-host-grab -output DUMMY0"' \
+          'OPTIONS_XEPHYR="-sw-cursor -no-host-grab -output DUMMY0"'
     '';
   });
   guestUser = config.nixome.qubeGuest.user;
