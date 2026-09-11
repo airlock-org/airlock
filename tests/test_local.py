@@ -38,6 +38,7 @@ from local_pychecks import (
     check_nixome_cli,
     check_qrexec_policy_path,
     check_qube_guest_policy_probe,
+    check_qubes_libvirt_hvm_pirq_patch,
     check_qubes_vm_kernel_stubdomain_boot,
     check_run_nested_gui_smoke_static,
     check_setup_config_empty_global_pref,
@@ -290,6 +291,10 @@ LOCAL_CHECKS = (
     LocalCheck(
         "run-nested-gui-smoke-static",
         runner=check_run_nested_gui_smoke_static,
+    ),
+    LocalCheck(
+        "qubes-libvirt-hvm-pirq-patch",
+        runner=check_qubes_libvirt_hvm_pirq_patch,
     ),
     LocalCheck(
         "qubes-vm-kernel-stubdomain-boot",

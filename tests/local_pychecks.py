@@ -1797,6 +1797,26 @@ def check_qubes_vm_kernel_stubdomain_boot(repo_root: Path, log_dir: Path) -> Non
     )
 
 
+def check_qubes_libvirt_hvm_pirq_patch(repo_root: Path, log_dir: Path) -> None:
+    del log_dir
+    package = (
+        repo_root / "vendor/nixos-qubes/pkgs/by-name/qu/qubes-core-libvirt/package.nix"
+    )
+    patch = package.with_name("0019-libxl-enable-hvm-pirq-for-pci-passthrough.patch")
+
+    package_text = package.read_text(encoding="utf-8")
+    patch_text = patch.read_text(encoding="utf-8")
+
+    assert (
+        "patch -p1 --input ${./0019-libxl-enable-hvm-pirq-for-pci-passthrough.patch}"
+        in package_text
+    )
+    assert "#ifdef LIBXL_HAVE_HVM_PIRQ" in patch_text
+    assert "def->os.type == VIR_DOMAIN_OSTYPE_HVM" in patch_text
+    assert "d_config->num_pcidevs > 0" in patch_text
+    assert "libxl_defbool_set(&d_config->b_info.u.hvm.pirq, true);" in patch_text
+
+
 def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     shutil.rmtree(log_dir, ignore_errors=True)
     log_dir.mkdir(parents=True)
