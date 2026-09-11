@@ -53,6 +53,7 @@ in
     enable = true;
     setupConfigOnBoot.enable = true;
     startNetworkProvidersOnBoot.enable = true;
+    deferredSetupConfigOnBoot.enable = true;
     configCurrentBootstrapOnBoot.enable = !nixomeNetworkDebug;
 
     prefs = {

@@ -8,6 +8,7 @@ export PATH
 TOPOLOGY="/etc/nixome/qubes-topology.json"
 APPLY=0
 PLAN=0
+SETUP_SCOPE="all"
 LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
 RESULT_JSON="$LOG_DIR/setup-config.json"
 COMMAND_LOG="$LOG_DIR/setup-config.commands.log"
@@ -45,7 +46,7 @@ nixome_physical_store_path() {
 
 usage() {
   cat >&2 <<'EOF'
-Usage: nixome-setup-config (--plan|--apply) [--topology PATH]
+Usage: nixome-setup-config (--plan|--apply) [--topology PATH] [--boot-critical|--deferred]
 
 Set up the Qubes templates and domains declared by Nixome.
 EOF
@@ -64,6 +65,14 @@ while [ "$#" -gt 0 ]; do
       shift
       [ "$#" -gt 0 ] || usage
       TOPOLOGY="$1"
+      ;;
+    --boot-critical)
+      [ "$SETUP_SCOPE" = "all" ] || usage
+      SETUP_SCOPE="boot-critical"
+      ;;
+    --deferred)
+      [ "$SETUP_SCOPE" = "all" ] || usage
+      SETUP_SCOPE="deferred"
       ;;
     --help|-h)
       usage
@@ -262,6 +271,8 @@ write_result() {
     else
       json_string "plan"
     fi
+    printf ',"scope":'
+    json_string "$SETUP_SCOPE"
     printf ',"reason":'
     json_string "$reason"
     printf ',"topology":'
@@ -381,6 +392,11 @@ persist_setup_state() {
   esac
 
   [ "$APPLY" = "1" ] || return 0
+
+  if [ "$SETUP_SCOPE" = "boot-critical" ]; then
+    printf 'boot-critical setup state is not persisted until deferred setup completes\n'
+    return 0
+  fi
 
   mkdir -p "$SYSTEM_STATE_DIR"
   cp "$TOPOLOGY" "$SYSTEM_STATE_DIR/current-topology.json"
@@ -1248,6 +1264,65 @@ ordered_domain_names() {
   fi
 }
 
+boot_critical_domain_names() {
+  local domain
+  local dependency
+  local changed
+  local -a required=()
+
+  mapfile -t required < <(
+    jq -r '
+      (.domains // {})
+      | to_entries[]
+      | select((((.value.prefs // {}).autostart) // false) == true)
+      | .key
+    ' "$TOPOLOGY"
+  )
+
+  changed=1
+  while [ "$changed" = "1" ]; do
+    changed=0
+    for domain in "${required[@]}"; do
+      dependency="$(domain_local_netvm_dependency "$domain")"
+      if [ -n "$dependency" ] && ! array_contains "$dependency" "${required[@]}"; then
+        required+=("$dependency")
+        changed=1
+      fi
+    done
+  done
+
+  while IFS= read -r domain; do
+    if array_contains "$domain" "${required[@]}"; then
+      printf '%s\n' "$domain"
+    fi
+  done < <(ordered_domain_names)
+}
+
+selected_domain_names() {
+  local domain
+  local -a boot_critical=()
+
+  case "$SETUP_SCOPE" in
+    all)
+      ordered_domain_names
+      ;;
+    boot-critical)
+      boot_critical_domain_names
+      ;;
+    deferred)
+      mapfile -t boot_critical < <(boot_critical_domain_names)
+      while IFS= read -r domain; do
+        if ! array_contains "$domain" "${boot_critical[@]}"; then
+          printf '%s\n' "$domain"
+        fi
+      done < <(ordered_domain_names)
+      ;;
+    *)
+      fail "unsupported setup scope: $SETUP_SCOPE"
+      ;;
+  esac
+}
+
 kernel_source_matches_target() {
   source="$1"
   target="$2"
@@ -2037,7 +2112,7 @@ setup_domain_connectivity() {
 }
 
 printf 'setting up domains\n'
-mapfile -t domain_names < <(ordered_domain_names)
+mapfile -t domain_names < <(selected_domain_names)
 for domain in "${domain_names[@]}"; do
   setup_domain "$domain"
   setup_domain_connectivity "$domain"

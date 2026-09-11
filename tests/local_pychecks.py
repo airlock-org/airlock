@@ -4015,7 +4015,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
                         "label": "red",
                         "netvm": None,
                         "prefs": {
-                            "autostart": False,
+                            "autostart": True,
                             "provides_network": True,
                         },
                         "features": {"nixome-role": "sys-net"},
@@ -4145,6 +4145,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
             "bash",
             str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
             "--apply",
+            "--boot-critical",
             "--topology",
             str(topology),
         ],
@@ -4153,48 +4154,74 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
         stdout=setup_log_dir / "stdout.log",
         stderr=setup_log_dir / "stderr.log",
     )
-    command_lines = (
+    boot_command_lines = (
         (setup_log_dir / "setup-config.commands.log")
         .read_text(encoding="utf-8")
         .splitlines()
     )
-    sys_net_create = command_lines.index(
+    boot_result = json.loads(
+        (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
+    )
+    assert boot_result["scope"] == "boot-critical"
+    assert not any("config-staging" in line for line in boot_command_lines)
+    assert not any(" dev" in line for line in boot_command_lines)
+
+    _run(
+        [
+            "bash",
+            str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
+            "--apply",
+            "--deferred",
+            "--topology",
+            str(topology),
+        ],
+        cwd=repo_root,
+        env=env,
+        stdout=setup_log_dir / "deferred-stdout.log",
+        stderr=setup_log_dir / "deferred-stderr.log",
+    )
+    deferred_command_lines = (
+        (setup_log_dir / "setup-config.commands.log")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    sys_net_create = boot_command_lines.index(
         "+ qvm-create --class StandaloneVM --label red sys-net"
     )
-    sys_firewall_create = command_lines.index(
+    sys_firewall_create = boot_command_lines.index(
         "+ qvm-create --class StandaloneVM --label green sys-firewall"
     )
-    config_create = command_lines.index(
+    config_create = deferred_command_lines.index(
         "+ qvm-create --class StandaloneVM --label gray config-staging"
     )
-    dev_create = command_lines.index(
+    dev_create = deferred_command_lines.index(
         "+ qvm-create --class StandaloneVM --label green dev"
     )
-    sys_net_netvm = command_lines.index("+ qvm-prefs sys-net netvm none")
-    sys_net_pci = command_lines.index(
+    sys_net_netvm = boot_command_lines.index("+ qvm-prefs sys-net netvm none")
+    sys_net_pci = boot_command_lines.index(
         "+ qvm-device pci assign --required --port sys-net dom0:00_03.0"
     )
-    sys_firewall_netvm = command_lines.index("+ qvm-prefs sys-firewall netvm sys-net")
-    dev_netvm = command_lines.index("+ qvm-prefs dev netvm sys-firewall")
-    default_netvm = command_lines.index("+ qubes-prefs default_netvm sys-firewall")
+    sys_firewall_netvm = boot_command_lines.index(
+        "+ qvm-prefs sys-firewall netvm sys-net"
+    )
+    assert "+ qvm-prefs dev netvm sys-firewall" in deferred_command_lines
+    assert "+ qubes-prefs default_netvm sys-firewall" in boot_command_lines
 
     assert sys_net_create < sys_firewall_create
-    assert sys_net_create < config_create
-    assert sys_net_create < dev_create
-    assert sys_firewall_create < dev_create
     assert sys_net_netvm < sys_net_pci
     assert sys_net_pci < sys_firewall_netvm
-    assert sys_firewall_netvm < dev_create
-    assert sys_net_pci < dev_netvm
-    assert dev_netvm < default_netvm
+    assert config_create < dev_create
 
     result = json.loads(
         (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
     )
     assert result["schema"] == "nixome.setup-config.v1"
     assert result["status"] == "passed"
-    assert result["domains_changed"] == 4
-    assert result["devices_changed"] == 1
+    assert result["scope"] == "deferred"
+    assert boot_result["domains_changed"] == 2
+    assert boot_result["devices_changed"] == 1
+    assert result["domains_changed"] == 2
+    assert result["devices_changed"] == 0
 
 
 def check_setup_config_qrexec_policy(repo_root: Path, log_dir: Path) -> None:
@@ -9861,7 +9888,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         assert service in setup_wants
     assert isinstance(setup_execstart, str)
     assert "nixome-setup-config" in setup_execstart
-    assert setup_execstart.endswith(" --apply")
+    assert setup_execstart.endswith(" --apply --boot-critical")
     assert setup_env["NIXOME_LOG_DIR"] == "/var/log/nixome"
     assert (
         _nix_eval_json(
@@ -9936,6 +9963,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     ):
         assert service in start_network_after
         assert service in start_network_wants
+    assert "nixome-setup-config-deferred.service" in start_network_before
     assert "nixome-config-bootstrap-current.service" in start_network_before
     assert isinstance(start_network_execstart, str)
     assert "nixome-start-network-providers" in start_network_execstart
@@ -9954,6 +9982,35 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         )
         is False
     )
+
+    deferred_setup_wanted_by = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config-deferred.wantedBy",
+    )
+    deferred_setup_after = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config-deferred.after",
+    )
+    deferred_setup_wants = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config-deferred.wants",
+    )
+    deferred_setup_execstart = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-setup-config-deferred.serviceConfig.ExecStart",
+    )
+    assert "multi-user.target" in deferred_setup_wanted_by
+    for service in (
+        "nixome-setup-config.service",
+        "nixome-start-network-providers.service",
+        "qubes-db-dom0.service",
+        "qubesd.service",
+        "qubes-qrexec-policy-daemon.service",
+    ):
+        assert service in deferred_setup_after
+        assert service in deferred_setup_wants
+    assert isinstance(deferred_setup_execstart, str)
+    assert deferred_setup_execstart.endswith(" --apply --deferred")
 
     current_bootstrap_wanted_by = _nix_eval_json(
         repo_root,
@@ -9979,6 +10036,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     for service in (
         "nixome-setup-config.service",
         "nixome-start-network-providers.service",
+        "nixome-setup-config-deferred.service",
         "qubes-db-dom0.service",
         "qubesd.service",
         "qubes-qrexec-policy-daemon.service",

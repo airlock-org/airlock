@@ -629,6 +629,20 @@ in
       };
     };
 
+    deferredSetupConfigOnBoot = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Materialize non-boot-critical declared Qubes domains after network providers are started.";
+      };
+
+      logDir = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/log/nixome";
+        description = "Directory where the deferred setup-config unit writes JSON results and command logs.";
+      };
+    };
+
     configAccessPolicy = {
       enable = lib.mkOption {
         type = lib.types.bool;
@@ -766,6 +780,14 @@ in
           message = "nixome.qubes.startNetworkProvidersOnBoot.enable requires nixome.qubes.setupConfigOnBoot.enable.";
         }
         {
+          assertion = !cfg.deferredSetupConfigOnBoot.enable || cfg.setupConfigOnBoot.enable;
+          message = "nixome.qubes.deferredSetupConfigOnBoot.enable requires nixome.qubes.setupConfigOnBoot.enable.";
+        }
+        {
+          assertion = !cfg.deferredSetupConfigOnBoot.enable || cfg.startNetworkProvidersOnBoot.enable;
+          message = "nixome.qubes.deferredSetupConfigOnBoot.enable requires nixome.qubes.startNetworkProvidersOnBoot.enable.";
+        }
+        {
           assertion = !cfg.configCurrentBootstrapOnBoot.enable || cfg.configAccessPolicy.enable;
           message = "nixome.qubes.configCurrentBootstrapOnBoot.enable requires nixome.qubes.configAccessPolicy.enable.";
         }
@@ -854,7 +876,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${setupConfig}/bin/nixome-setup-config --apply";
+        ExecStart = "${setupConfig}/bin/nixome-setup-config --apply --boot-critical";
       };
     };
 
@@ -875,7 +897,9 @@ in
         "qubesd.service"
         "qubes-qrexec-policy-daemon.service"
       ];
-      before = lib.optional cfg.configCurrentBootstrapOnBoot.enable "nixome-config-bootstrap-current.service";
+      before =
+        lib.optional cfg.deferredSetupConfigOnBoot.enable "nixome-setup-config-deferred.service"
+        ++ lib.optional cfg.configCurrentBootstrapOnBoot.enable "nixome-config-bootstrap-current.service";
       restartIfChanged = false;
       stopIfChanged = false;
       environment.NIXOME_LOG_DIR = cfg.startNetworkProvidersOnBoot.logDir;
@@ -885,6 +909,38 @@ in
         ExecStart = "${startNetworkProviders}/bin/nixome-start-network-providers";
       };
     };
+
+    systemd.services.nixome-setup-config-deferred =
+      lib.mkIf cfg.deferredSetupConfigOnBoot.enable
+        {
+          description = "Set up deferred Nixome Qubes domains";
+          wantedBy = [ "multi-user.target" ];
+          wants = [
+            "libvirtd.service"
+            "nixome-setup-config.service"
+            "nixome-start-network-providers.service"
+            "qubes-db-dom0.service"
+            "qubesd.service"
+            "qubes-qrexec-policy-daemon.service"
+          ];
+          after = [
+            "libvirtd.service"
+            "nixome-setup-config.service"
+            "nixome-start-network-providers.service"
+            "qubes-db-dom0.service"
+            "qubesd.service"
+            "qubes-qrexec-policy-daemon.service"
+          ];
+          before = lib.optional cfg.configCurrentBootstrapOnBoot.enable "nixome-config-bootstrap-current.service";
+          restartIfChanged = false;
+          stopIfChanged = false;
+          environment.NIXOME_LOG_DIR = cfg.deferredSetupConfigOnBoot.logDir;
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = "${setupConfig}/bin/nixome-setup-config --apply --deferred";
+          };
+        };
 
     systemd.services.nixome-config-bootstrap-current =
       lib.mkIf cfg.configCurrentBootstrapOnBoot.enable
@@ -897,14 +953,16 @@ in
             "qubesd.service"
             "qubes-qrexec-policy-daemon.service"
           ]
-          ++ lib.optional cfg.startNetworkProvidersOnBoot.enable "nixome-start-network-providers.service";
+          ++ lib.optional cfg.startNetworkProvidersOnBoot.enable "nixome-start-network-providers.service"
+          ++ lib.optional cfg.deferredSetupConfigOnBoot.enable "nixome-setup-config-deferred.service";
           after = [
             "nixome-setup-config.service"
             "qubes-db-dom0.service"
             "qubesd.service"
             "qubes-qrexec-policy-daemon.service"
           ]
-          ++ lib.optional cfg.startNetworkProvidersOnBoot.enable "nixome-start-network-providers.service";
+          ++ lib.optional cfg.startNetworkProvidersOnBoot.enable "nixome-start-network-providers.service"
+          ++ lib.optional cfg.deferredSetupConfigOnBoot.enable "nixome-setup-config-deferred.service";
           restartIfChanged = false;
           stopIfChanged = false;
           environment = {
