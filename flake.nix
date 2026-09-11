@@ -504,12 +504,12 @@
         networkDebug = true;
       };
 
-      nixosConfigurations.nixome-domain-config-vault =
-        (mkConfigDomainEntries "x86_64-linux").config-vault.configuration;
-      nixosConfigurations.nixome-domain-config-staging =
-        (mkConfigDomainEntries "x86_64-linux").config-staging.configuration;
-      nixosConfigurations.nixome-domain-config-validator =
-        (mkConfigDomainEntries "x86_64-linux").config-validator.configuration;
+      nixosConfigurations.nixome-domain-sys-config-vault =
+        (mkConfigDomainEntries "x86_64-linux").sys-config-vault.configuration;
+      nixosConfigurations.nixome-domain-sys-config-staging =
+        (mkConfigDomainEntries "x86_64-linux").sys-config-staging.configuration;
+      nixosConfigurations.nixome-domain-sys-config-validator =
+        (mkConfigDomainEntries "x86_64-linux").sys-config-validator.configuration;
       nixosConfigurations.nixome-domain-sys-net = (mkSysNetDomainEntry "x86_64-linux").configuration;
       nixosConfigurations.nixome-domain-sys-net-network-debug =
         (networkDebugBootstrapDomains.mkSysNetDomainEntry "x86_64-linux").configuration;

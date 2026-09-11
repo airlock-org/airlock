@@ -8,17 +8,17 @@ come from a Nix flake edited inside dedicated config VMs.
 
 `lifecycle/bootstrap/config-system.nix` declares:
 
-- `config-vault`, an offline closure-backed NixOS `StandaloneVM`.
-- `config-staging`, an offline closure-backed NixOS `StandaloneVM`.
-- `config-validator`, an offline closure-backed NixOS `StandaloneVM`.
+- `sys-config-vault`, an offline closure-backed NixOS `StandaloneVM`.
+- `sys-config-staging`, an offline closure-backed NixOS `StandaloneVM`.
+- `sys-config-validator`, an offline closure-backed NixOS `StandaloneVM`.
 - the Qubes VM kernel used by those NixOS domains.
 - bootstrap qrexec policy for staging export, validator checks, vault archival,
   current-baseline sync, and deployment records.
 - a boot-time `nixome-setup-config.service` that ensures the bootstrap topology
   exists after Qubes dom0 services are up.
 - a boot-time `nixome-config-bootstrap-current.service` that asks
-  `config-vault` for the latest current config bundle and imports it into
-  `config-staging` when staging is empty or already on that commit.
+  `sys-config-vault` for the latest current config bundle and imports it into
+  `sys-config-staging` when staging is empty or already on that commit.
 
 The bootstrap policy remains dom0/NixOS-owned in `30-nixome-config.policy`.
 Staged config cannot remove dom0's ability to fetch current baselines, fetch
@@ -37,7 +37,7 @@ starts `qubes-qrexec-policy-daemon` with that runtime policy path.
 
 ## First-Boot Config Baseline
 
-`config-vault` is the authoritative archive. On first boot it initializes
+`sys-config-vault` is the authoritative archive. On first boot it initializes
 `/home/user/nixome-config-vault` as a Git repository and, if no current
 deployment or baseline exists yet, creates an initial current candidate from the
 initial runtime config embedded in the image. It records that baseline under
@@ -45,8 +45,8 @@ initial runtime config embedded in the image. It records that baseline under
 symlink to the selected candidate snapshot.
 
 Dom0 then runs `nixome-config-bootstrap-current.service` after
-`nixome-setup-config.service`. The service starts `config-vault` and
-`config-staging`, exports the vault's current bundle through
+`nixome-setup-config.service`. The service starts `sys-config-vault` and
+`sys-config-staging`, exports the vault's current bundle through
 `nixome.Config.ExportCurrent`, and imports it through
 `nixome.Config.ImportCurrent`. Existing dirty staging work is left untouched; an
 empty staging repo is cloned from the vault bundle.
@@ -251,22 +251,22 @@ make vm-nix-closure-flow
 The bootstrap config roles have fixed names and separate persistent state:
 
 ```text
-config-vault      -> config-vault-private
-config-staging    -> config-staging-private
-config-validator  -> config-validator-private
+sys-config-vault      -> config-vault-private
+sys-config-staging    -> config-staging-private
+sys-config-validator  -> config-validator-private
 ```
 
 All three default to `netvm = null`, disable `network-manager`, and use normal
 qrexec. Their security boundary is Qubes' domain boundary plus the bootstrap
 qrexec policy.
 
-`config-staging` owns the editable candidate repository:
+`sys-config-staging` owns the editable candidate repository:
 
 ```text
 /home/user/nixome-config
 ```
 
-`config-validator` validates exported candidates, evaluates
+`sys-config-validator` validates exported candidates, evaluates
 `.#nixome.topology` and `.#nixome.system`, and dry-runs referenced builds.
 Because the VM system store is read-only, config validation runs Nix through
 `nixome-config-nix`, which uses a private writable chroot store rooted at:
@@ -276,10 +276,10 @@ Because the VM system store is read-only, config validation runs Nix through
 ```
 
 That keeps `/nix/store` as the immutable system identity of the running guest
-while still allowing `config-staging` and `config-validator` to lock, evaluate,
+while still allowing `sys-config-staging` and `sys-config-validator` to lock, evaluate,
 and dry-run candidate flakes.
 
-`config-vault` owns the historical archive:
+`sys-config-vault` owns the historical archive:
 
 ```text
 /home/user/nixome-config-vault
@@ -297,7 +297,7 @@ latest-deployment-attempt
 
 ## Staged Edit Surface
 
-Inside `config-staging`, edit:
+Inside `sys-config-staging`, edit:
 
 ```text
 /home/user/nixome-config/nixome/runtime.nix
@@ -417,7 +417,7 @@ nixome apply
 
 The `dev` VM remains an ordinary unprivileged domain. Its qrexec authority is
 the same narrow config-control path as any allowed submitter named `dev`; it
-does not receive config-staging, config-validator, config-vault, dom0 filesystem,
+does not receive sys-config-staging, sys-config-validator, sys-config-vault, dom0 filesystem,
 or arbitrary dom0 command-execution services.
 
 Dom0 host changes are declared under:
@@ -445,18 +445,18 @@ closure. Dom0 builds and switches that closure only after validator approval.
 The normal flow is:
 
 ```text
-config-staging
+sys-config-staging
     exports committed candidate
         ↓
-config-validator
+sys-config-validator
     validates and evaluates topology/system
         ↓
 dom0
-    archives attempted candidate to config-vault
+    archives attempted candidate to sys-config-vault
     resolves build references
     applies topology and dom0 system plan
         ↓
-config-vault
+sys-config-vault
     records deployment result
 ```
 
@@ -487,14 +487,14 @@ dev
         ↓ qrexec
 dom0 nixome-config-control
         ↓
-config-validator / config-vault / dom0 apply or rollback
+sys-config-validator / sys-config-vault / dom0 apply or rollback
 ```
 
 The VM-facing `nixome` command submits a clean Git commit as a `config.bundle`
 plus a `nixome.config-candidate.v1` manifest. The manifest records the commit,
 tree, branch, source role, qrexec transport, requested target class, and the
 dom0 status observed by the client before submission. Dom0 and
-`config-validator` do not trust this status to decide validity; it is candidate
+`sys-config-validator` do not trust this status to decide validity; it is candidate
 identity/context only.
 
 The dom0 qrexec entry point is fixed to four operations:
@@ -513,9 +513,9 @@ candidate tar. The dev VM never receives a qrexec primitive for shell commands,
 scripts, arbitrary file writes, direct dom0 filesystem access, or direct Nix
 store writes.
 
-`nixome.Config.Check` validates in `config-validator` without archiving or
-activating. `nixome.Config.Apply` validates in `config-validator`, archives the
-validated candidate in `config-vault`, resolves build references in dom0, and
+`nixome.Config.Check` validates in `sys-config-validator` without archiving or
+activating. `nixome.Config.Apply` validates in `sys-config-validator`, archives the
+validated candidate in `sys-config-vault`, resolves build references in dom0, and
 activates only the resulting validated topology/system plan. Failed evaluation,
 build, test, or activation leaves the last current deployment record intact.
 

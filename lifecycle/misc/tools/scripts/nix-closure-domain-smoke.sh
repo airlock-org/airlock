@@ -69,12 +69,12 @@ GC_AFTER_ROLLBACK_LOG="$LOG_DIR/nix-closure-domain-gc-after-rollback.json"
 DOMAIN="${NIXOME_NIX_CLOSURE_DOMAIN:-nixome-closure-smoke}"
 PEER_DOMAIN="${NIXOME_NIX_CLOSURE_PEER_DOMAIN:-${DOMAIN}-peer}"
 APPLY_MODE="${NIXOME_NIX_CLOSURE_APPLY_MODE:-direct}"
-DIRECT_PRIMARY_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_PRIMARY_SOURCE_VM:-config-staging}"
-DIRECT_PEER_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_PEER_SOURCE_VM:-config-validator}"
-DIRECT_GEN2_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_GEN2_SOURCE_VM:-config-vault}"
-STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
-VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
+DIRECT_PRIMARY_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_PRIMARY_SOURCE_VM:-sys-config-staging}"
+DIRECT_PEER_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_PEER_SOURCE_VM:-sys-config-validator}"
+DIRECT_GEN2_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_GEN2_SOURCE_VM:-sys-config-vault}"
+STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
+VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-sys-config-validator}"
+VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
 QUBE_USER="${NIXOME_QUBE_USER:-user}"
 APPLY_MESSAGE="${NIXOME_NIX_CLOSURE_APPLY_MESSAGE:-nix-closure-smoke-$(date -u +%Y%m%dT%H%M%SZ)}"
 APPLY_MESSAGE_GEN2="${NIXOME_NIX_CLOSURE_APPLY_MESSAGE_GEN2:-$APPLY_MESSAGE-gen2}"
@@ -1522,9 +1522,9 @@ in
 
   configVms = {
     guests = {
-      config-vault = { };
-      config-staging = { };
-      config-validator = { };
+      sys-config-vault = { };
+      sys-config-staging = { };
+      sys-config-validator = { };
     };
     domains = { };
   };

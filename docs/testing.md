@@ -201,7 +201,7 @@ This is the main cold nested integration path for the current architecture. It
 starts from a fresh writable nested dom0 disk, waits for Qubes services, runs
 the setup command, and verifies:
 
-- `config-vault`, `config-staging`, and `config-validator` exist.
+- `sys-config-vault`, `sys-config-staging`, and `sys-config-validator` exist.
 - each config VM is a Qubes `StandaloneVM`.
 - each uses `backend.type = "nix-closure"`.
 - each has a separate read-only `store` volume attached at `/dev/xvde`.
@@ -209,10 +209,10 @@ the setup command, and verifies:
 - qrexec works in each config VM.
 - GUI appmenus can be synchronized for the config VMs.
 - private state under `/home/user` survives restart.
-- `config-staging` can modify and commit a candidate.
-- `config-validator` validates and evaluates the candidate.
+- `sys-config-staging` can modify and commit a candidate.
+- `sys-config-validator` validates and evaluates the candidate.
 - dom0 applies the resolved topology/system plan.
-- `config-vault` records candidate and deployment history.
+- `sys-config-vault` records candidate and deployment history.
 - generated Nixome-owned qrexec policy is active.
 - a staged Nix-native domain can be created and booted through qrexec.
 

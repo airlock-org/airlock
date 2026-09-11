@@ -25,7 +25,7 @@ writeShellApplication {
   text = builtins.readFile ../../scripts/bootstrap-config-current.sh;
 
   meta = {
-    description = "Bootstrap config-staging from the current config-vault baseline";
+    description = "Bootstrap sys-config-staging from the current sys-config-vault baseline";
     license = lib.licenses.mit;
     platforms = [ "x86_64-linux" ];
   };

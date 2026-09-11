@@ -52,9 +52,9 @@ CONFIG_APPLY_STAGE="${NIXOME_CONFIG_APPLY_STAGE:-full}"
 QREXEC_RUN_DIR="${NIXOME_QREXEC_RUN_DIR:-/var/run/qubes}"
 QREXEC_READY_WAIT_SECONDS="${NIXOME_CONFIG_QREXEC_READY_WAIT_SECONDS:-60}"
 
-STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
-VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
+STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
+VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-sys-config-validator}"
+VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
 DEPLOYMENT_ARCHIVE_SERVICE="${NIXOME_CONFIG_DEPLOYMENT_ARCHIVE_SERVICE:-nixome.Config.ArchiveDeployment}"
 APPLY=0
 CANDIDATE_TAR=""
@@ -83,8 +83,8 @@ usage() {
   cat >&2 <<'EOF'
 Usage: nixome-config-apply --apply [--staging VM] [--validator VM] [--vault VM] [--candidate-tar PATH]
 
-Validate a staged config candidate in config-validator, archive it into
-config-vault, then apply the validated candidate topology from dom0.
+Validate a staged config candidate in sys-config-validator, archive it into
+sys-config-vault, then apply the validated candidate topology from dom0.
 EOF
   exit 1
 }

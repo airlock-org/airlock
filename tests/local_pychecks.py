@@ -201,10 +201,10 @@ def check_qrexec_policy_path(repo_root: Path, log_dir: Path) -> None:
     runtime_dir.mkdir(parents=True)
 
     (static_dir / "10-static.policy").write_text(
-        "nixome.Static * dom0 config-vault allow\n", encoding="utf-8"
+        "nixome.Static * dom0 sys-config-vault allow\n", encoding="utf-8"
     )
     (static_dir / "include/example.policy").write_text(
-        "nixome.Include * dom0 config-vault allow\n", encoding="utf-8"
+        "nixome.Include * dom0 sys-config-vault allow\n", encoding="utf-8"
     )
     (static_dir / "90-nixome.policy").write_text(
         "this static managed-name file must be ignored\n", encoding="utf-8"
@@ -253,18 +253,18 @@ def check_qrexec_policy_path(repo_root: Path, log_dir: Path) -> None:
         "# Managed by Nixome setup-config.\n"
         "# Source: nixome.qubes.topology.qrexec_policy.\n"
         "# Bootstrap config transport policy remains in 30-nixome-config.policy.\n"
-        "nixome.PolicyProbe * dom0 config-vault allow\n"
+        "nixome.PolicyProbe * dom0 sys-config-vault allow\n"
         "nixome.PolicyProbe * @anyvm @anyvm deny\n",
         encoding="utf-8",
     )
     (static_dir / "20-static.policy").write_text(
-        "nixome.StaticTwo * dom0 config-vault allow\n", encoding="utf-8"
+        "nixome.StaticTwo * dom0 sys-config-vault allow\n", encoding="utf-8"
     )
     (runtime_dir / "stale.policy").write_text("stale\n", encoding="utf-8")
     _run_store_path(repo_root, helper.strip(), env)
 
     assert (
-        "nixome.PolicyProbe * dom0 config-vault allow"
+        "nixome.PolicyProbe * dom0 sys-config-vault allow"
         in (runtime_dir / "90-nixome.policy").read_text(encoding="utf-8").splitlines()
     )
     assert (runtime_dir / "20-static.policy").is_symlink()
@@ -306,7 +306,7 @@ def check_qube_guest_policy_probe(repo_root: Path, log_dir: Path) -> None:
     work_dir.mkdir(parents=True)
 
     attr = (
-        f"{repo_root}#nixosConfigurations.nixome-domain-config-vault.config."
+        f"{repo_root}#nixosConfigurations.nixome-domain-sys-config-vault.config."
         'environment.etc."qubes-rpc/nixome.PolicyProbe".source'
     )
     _run(["nix", "build", "--no-link", attr], cwd=repo_root)
@@ -320,7 +320,7 @@ def check_qube_guest_policy_probe(repo_root: Path, log_dir: Path) -> None:
         "    exit 1\n"
         "    ;;\n"
         "  /name)\n"
-        "    printf 'config-vault\\n'\n"
+        "    printf 'sys-config-vault\\n'\n"
         "    ;;\n"
         "esac\n",
         encoding="utf-8",
@@ -342,13 +342,13 @@ def check_qube_guest_policy_probe(repo_root: Path, log_dir: Path) -> None:
         env=env,
     ).stdout
     (work_dir / "from-name.log").write_text(first, encoding="utf-8")
-    assert re.search(r"^nixome-policy-probe role=config-vault user=.+$", first)
+    assert re.search(r"^nixome-policy-probe role=sys-config-vault user=.+$", first)
 
     fake_qdb.write_text(
         "#!/usr/bin/env bash\n"
         'case "$1" in\n'
         "  /features/nixome-role)\n"
-        "    printf 'config-validator\\n'\n"
+        "    printf 'sys-config-validator\\n'\n"
         "    ;;\n"
         "  /name)\n"
         "    printf 'other-name\\n'\n"
@@ -369,7 +369,7 @@ def check_qube_guest_policy_probe(repo_root: Path, log_dir: Path) -> None:
         env=env,
     ).stdout
     (work_dir / "from-feature.log").write_text(second, encoding="utf-8")
-    assert re.search(r"^nixome-policy-probe role=config-validator user=.+$", second)
+    assert re.search(r"^nixome-policy-probe role=sys-config-validator user=.+$", second)
 
 
 def check_nix_closure_domain_volume_list(repo_root: Path, log_dir: Path) -> None:
@@ -1134,17 +1134,17 @@ def check_topology_schema(repo_root: Path, log_dir: Path) -> None:
         (
             "reserved-qrexec-service",
             "reserved bootstrap qrexec service",
-            '{ qrexecPolicy.rules = [ { service = "nixome.Config.ArchiveCandidate"; source = "dom0"; target = "config-vault"; action = "allow"; } ]; }',
+            '{ qrexecPolicy.rules = [ { service = "nixome.Config.ArchiveCandidate"; source = "dom0"; target = "sys-config-vault"; action = "allow"; } ]; }',
         ),
         (
             "qrexec-allow-any-source",
             "allow rules must use dom0 or a concrete source domain",
-            '{ qrexecPolicy.rules = [ { service = "nixome.PolicyProbe"; source = "@anyvm"; target = "config-vault"; action = "allow"; } ]; }',
+            '{ qrexecPolicy.rules = [ { service = "nixome.PolicyProbe"; source = "@anyvm"; target = "sys-config-vault"; action = "allow"; } ]; }',
         ),
         (
             "qrexec-target-dom0",
             "topology-managed qrexec policy cannot target dom0",
-            '{ qrexecPolicy.rules = [ { service = "nixome.PolicyProbe"; source = "config-vault"; target = "dom0"; action = "allow"; } ]; }',
+            '{ qrexecPolicy.rules = [ { service = "nixome.PolicyProbe"; source = "sys-config-vault"; target = "dom0"; action = "allow"; } ]; }',
         ),
         (
             "nix-closure-with-template",
@@ -2455,7 +2455,7 @@ def check_config_candidate_nix_native(repo_root: Path, log_dir: Path) -> None:
             """
             { ... }:
             {
-              nixNative.domains.bad.role = "config-staging";
+              nixNative.domains.bad.role = "sys-config-staging";
             }
             """,
             "nixome.nixNative.domains.bad.role: expected one of base, dev",
@@ -2491,9 +2491,9 @@ def check_nixome_minimal_guest(repo_root: Path, log_dir: Path) -> None:
       flake = builtins.getFlake "path:{repo_root}";
       lib = flake.inputs.nixpkgs.lib;
       cfgs = {{
-        staging = flake.nixosConfigurations."nixome-domain-config-staging".config;
-        validator = flake.nixosConfigurations."nixome-domain-config-validator".config;
-        vault = flake.nixosConfigurations."nixome-domain-config-vault".config;
+        staging = flake.nixosConfigurations."nixome-domain-sys-config-staging".config;
+        validator = flake.nixosConfigurations."nixome-domain-sys-config-validator".config;
+        vault = flake.nixosConfigurations."nixome-domain-sys-config-vault".config;
       }};
       cfgList = builtins.attrValues cfgs;
       packageNames = cfg: map (package: package.pname or package.name or "") cfg.environment.systemPackages;
@@ -2611,7 +2611,7 @@ def check_nixome_minimal_guest(repo_root: Path, log_dir: Path) -> None:
 def check_nixome_minimal_closure(repo_root: Path, log_dir: Path) -> None:
     shutil.rmtree(log_dir, ignore_errors=True)
     log_dir.mkdir(parents=True)
-    roles = ("config-staging", "config-validator", "config-vault")
+    roles = ("sys-config-staging", "sys-config-validator", "sys-config-vault")
     paths = {}
     for role in roles:
         attr = f"{repo_root}#nixosConfigurations.nixome-domain-{role}.config.system.build.toplevel"
@@ -2684,7 +2684,7 @@ def check_nixome_minimal_closure(repo_root: Path, log_dir: Path) -> None:
             "NixOS installer/admin tooling",
         )
 
-    for role in ("config-vault", "config-staging", "config-validator"):
+    for role in ("sys-config-vault", "sys-config-staging", "sys-config-validator"):
         assert_has(role, r"/nix/store/[A-Za-z0-9]+-nix-[0-9]", "role-specific Nix CLI")
         assert_has(
             role,
@@ -2852,7 +2852,7 @@ def check_config_staging_validate(repo_root: Path, log_dir: Path) -> None:
             "build",
             "--no-link",
             "--print-out-paths",
-            f'{repo_root}#nixosConfigurations.nixome-domain-config-staging.config.environment.etc."nixome/guest-tools/nixome-config-staging-validate".source',
+            f'{repo_root}#nixosConfigurations.nixome-domain-sys-config-staging.config.environment.etc."nixome/guest-tools/nixome-config-staging-validate".source',
         ]
     ).stdout.strip()
     validator_tool = f"{validator_package}/bin/nixome-config-staging-validate"
@@ -3010,9 +3010,9 @@ def check_config_vault_deployment_archive(repo_root: Path, log_dir: Path) -> Non
             "deployment_id": deployment_id,
             "deployed_at": "20260907T000000Z",
             "deployed_by": "dom0",
-            "staging": "config-staging",
-            "validator": "config-validator",
-            "vault": "config-vault",
+            "staging": "sys-config-staging",
+            "validator": "sys-config-validator",
+            "vault": "sys-config-vault",
             "candidate_commit": candidate_commit,
             "artifacts": artifacts,
         },
@@ -3193,7 +3193,7 @@ def check_config_vault_deployment_archive(repo_root: Path, log_dir: Path) -> Non
             "build",
             "--no-link",
             "--print-out-paths",
-            f'{repo_root}#nixosConfigurations.nixome-domain-config-vault.config.environment.etc."qubes-rpc/nixome.Config.ArchiveDeployment".source',
+            f'{repo_root}#nixosConfigurations.nixome-domain-sys-config-vault.config.environment.etc."qubes-rpc/nixome.Config.ArchiveDeployment".source',
         ]
     ).stdout.strip()
     env = os.environ.copy()
@@ -3498,7 +3498,7 @@ def check_setup_config_pref_order(repo_root: Path, log_dir: Path) -> None:
                 "templates": {},
                 "kernels": {},
                 "domains": {
-                    "config-staging": {
+                    "sys-config-staging": {
                         "class": "AppVM",
                         "template": "fedora-44-xfce",
                         "label": "gray",
@@ -3536,17 +3536,17 @@ def check_setup_config_pref_order(repo_root: Path, log_dir: Path) -> None:
         #!/usr/bin/env bash
         if [ "$#" -eq 2 ]; then
           case "$1:$2" in
-            config-staging:label) printf 'gray\n' ;;
-            config-staging:netvm) printf 'none\n' ;;
-            config-staging:autostart) printf 'True\n' ;;
-            config-staging:memory) printf '400\n' ;;
-            config-staging:maxmem) printf '4000\n' ;;
-            config-staging:vcpus) printf '1\n' ;;
+            sys-config-staging:label) printf 'gray\n' ;;
+            sys-config-staging:netvm) printf 'none\n' ;;
+            sys-config-staging:autostart) printf 'True\n' ;;
+            sys-config-staging:memory) printf '400\n' ;;
+            sys-config-staging:maxmem) printf '4000\n' ;;
+            sys-config-staging:vcpus) printf '1\n' ;;
             *) exit 1 ;;
           esac
           exit 0
         fi
-        if [ "$#" -eq 3 ] && [ "$1" = "config-staging" ]; then
+        if [ "$#" -eq 3 ] && [ "$1" = "sys-config-staging" ]; then
           if [ "$2" = "maxmem" ] && [ ! -e "$MEMORY_SET_MARKER" ]; then
             printf 'maxmem was set before memory\n' >&2
             exit 42
@@ -3610,8 +3610,8 @@ def check_setup_config_pref_order(repo_root: Path, log_dir: Path) -> None:
         .read_text(encoding="utf-8")
         .splitlines()
     )
-    assert command_lines.index("+ qvm-prefs config-staging memory 2048") < (
-        command_lines.index("+ qvm-prefs config-staging maxmem 4096")
+    assert command_lines.index("+ qvm-prefs sys-config-staging memory 2048") < (
+        command_lines.index("+ qvm-prefs sys-config-staging maxmem 4096")
     )
     result = json.loads(
         (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
@@ -3969,7 +3969,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
                 "templates": {},
                 "kernels": {},
                 "domains": {
-                    "config-staging": {
+                    "sys-config-staging": {
                         "class": "StandaloneVM",
                         "template": None,
                         "label": "gray",
@@ -4165,7 +4165,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
         (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
     )
     assert boot_result["scope"] == "boot-critical"
-    assert not any("config-staging" in line for line in boot_command_lines)
+    assert not any("sys-config-staging" in line for line in boot_command_lines)
     assert not any(" dev" in line for line in boot_command_lines)
     assert "+ qvm-prefs sys-net guivm none" in boot_command_lines
     assert "+ qvm-prefs sys-firewall guivm none" in boot_command_lines
@@ -4196,7 +4196,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
         "+ qvm-create --class StandaloneVM --label green sys-firewall"
     )
     config_create = deferred_command_lines.index(
-        "+ qvm-create --class StandaloneVM --label gray config-staging"
+        "+ qvm-create --class StandaloneVM --label gray sys-config-staging"
     )
     dev_create = deferred_command_lines.index(
         "+ qvm-create --class StandaloneVM --label green dev"
@@ -4209,7 +4209,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
         "+ qvm-prefs sys-firewall netvm sys-net"
     )
     assert "+ qvm-prefs dev netvm sys-firewall" in deferred_command_lines
-    assert "+ qvm-prefs config-staging guivm none" in deferred_command_lines
+    assert "+ qvm-prefs sys-config-staging guivm none" in deferred_command_lines
     assert "+ qubes-prefs default_netvm sys-firewall" in boot_command_lines
 
     assert sys_net_create < sys_firewall_create
@@ -4260,7 +4260,7 @@ def check_setup_config_qrexec_policy(repo_root: Path, log_dir: Path) -> None:
                             "service": "nixome.PolicyProbe",
                             "argument": "*",
                             "source": "dom0",
-                            "target": "config-vault",
+                            "target": "sys-config-vault",
                             "action": "allow",
                         },
                         {
@@ -4357,7 +4357,7 @@ def check_setup_config_qrexec_policy(repo_root: Path, log_dir: Path) -> None:
         "# Managed by Nixome setup-config.\n"
         "# Source: nixome.qubes.topology.qrexec_policy.\n"
         "# Bootstrap config transport policy remains in 30-nixome-config.policy.\n"
-        "nixome.PolicyProbe * dom0 config-vault allow\n"
+        "nixome.PolicyProbe * dom0 sys-config-vault allow\n"
         "nixome.PolicyProbe * @anyvm @anyvm deny\n"
     )
     systemctl_lines = systemctl_log.read_text(encoding="utf-8").splitlines()
@@ -4799,7 +4799,7 @@ def check_config_apply_template_build_ref(repo_root: Path, log_dir: Path) -> Non
                 "schema": "nixome.config-candidate.v1",
                 "commit": candidate_commit,
                 "branch": "main",
-                "source_role": "config-staging",
+                "source_role": "sys-config-staging",
             },
             sort_keys=True,
         )
@@ -5730,16 +5730,16 @@ def check_config_archive_domain_references(repo_root: Path, log_dir: Path) -> No
                 "qvm-check": """
                     #!/usr/bin/env bash
                     set -euo pipefail
-                    [ "${1:-}" = "config-validator" ]
+                    [ "${1:-}" = "sys-config-validator" ]
                 """,
                 "qvm-prefs": f"""
                     #!/usr/bin/env bash
                     set -euo pipefail
                     case "${{1:-}}:${{2:-}}" in
-                      config-validator:netvm)
+                      sys-config-validator:netvm)
                         printf '\\n'
                         ;;
-                      config-validator:provides_network)
+                      sys-config-validator:provides_network)
                         printf 'False\\n'
                         ;;
                       sys-firewall:provides_network)
@@ -5767,7 +5767,7 @@ def check_config_archive_domain_references(repo_root: Path, log_dir: Path) -> No
                 "qvm-start": """
                     #!/usr/bin/env bash
                     set -euo pipefail
-                    [ "${1:-}" = "config-validator" ]
+                    [ "${1:-}" = "sys-config-validator" ]
                 """,
                 "qvm-ls": f"""
                     #!/usr/bin/env bash
@@ -5832,7 +5832,7 @@ def check_config_apply_domain_references(repo_root: Path, log_dir: Path) -> None
     work_dir.mkdir(parents=True)
     capabilities.write_text("control_d\n", encoding="utf-8")
     commit, validated_tar = _write_domain_reference_candidate(
-        work_dir, "config-staging"
+        work_dir, "sys-config-staging"
     )
 
     for case_name, sys_firewall_present, sys_net_present, status, reason in (
@@ -6213,7 +6213,7 @@ def check_config_apply_nix_domain_materialization(
                 "schema": "nixome.config-candidate.v1",
                 "commit": commit,
                 "branch": "main",
-                "source_role": "config-staging",
+                "source_role": "sys-config-staging",
             },
             sort_keys=True,
         )
@@ -6759,7 +6759,9 @@ def check_closure_volume_filtered_device(repo_root: Path, log_dir: Path) -> None
         pool_root = work_dir / "pool"
         segment_blob = pool_root / "objects/segments/000001.blob"
         segment_blob.write_bytes(b"segment")
-        blob_map = pool_root / "domains/config-vault/generations/1/store.blob-map.json"
+        blob_map = (
+            pool_root / "domains/sys-config-vault/generations/1/store.blob-map.json"
+        )
         blob_map.parent.mkdir(parents=True, exist_ok=True)
         blob_map.write_text(
             json.dumps(
@@ -6782,20 +6784,20 @@ def check_closure_volume_filtered_device(repo_root: Path, log_dir: Path) -> None
         manifest.write_text("{}", encoding="utf-8")
 
         pool = ClosurePool(name="nixome-closure", root_dir=str(pool_root))
-        vm = types.SimpleNamespace(name="config-vault")
+        vm = types.SimpleNamespace(name="sys-config-vault")
         volume = pool.init_volume(
             vm,
             {
                 "name": "store-data",
                 "pool": "nixome-closure",
-                "vid": "domains/config-vault/generations/1/store-data",
+                "vid": "domains/sys-config-vault/generations/1/store-data",
                 "size": 512,
                 "rw": False,
                 "snap_on_start": False,
                 "save_on_stop": True,
                 "source": None,
                 "revisions_to_keep": 0,
-                "domain_name": "config-vault",
+                "domain_name": "sys-config-vault",
                 "generation": "1",
                 "closure_hash": "abc",
                 "view_kind": "erofs-blob-map",
@@ -6824,7 +6826,11 @@ def check_closure_volume_filtered_device(repo_root: Path, log_dir: Path) -> None
         assert device.path == "/dev/mapper/nixome-config-vault-1-abc"
         assert os.path.realpath(device.path) != os.path.realpath(segment_blob)
         assert calls == [
-            {"root_dir": str(pool_root), "domain": "config-vault", "generation": "1"}
+            {
+                "root_dir": str(pool_root),
+                "domain": "sys-config-vault",
+                "generation": "1",
+            }
         ]
         assert "view_path" not in volume.config
 
@@ -6832,8 +6838,16 @@ def check_closure_volume_filtered_device(repo_root: Path, log_dir: Path) -> None
         device = volume.block_device()
         assert device.path == "/dev/mapper/nixome-config-vault-1-abc"
         assert calls == [
-            {"root_dir": str(pool_root), "domain": "config-vault", "generation": "1"},
-            {"root_dir": str(pool_root), "domain": "config-vault", "generation": "1"},
+            {
+                "root_dir": str(pool_root),
+                "domain": "sys-config-vault",
+                "generation": "1",
+            },
+            {
+                "root_dir": str(pool_root),
+                "domain": "sys-config-vault",
+                "generation": "1",
+            },
         ]
 
         def unsafe_attach(
@@ -6997,7 +7011,7 @@ def check_config_system_apply_boot(repo_root: Path, log_dir: Path) -> None:
                 "schema": "nixome.config-candidate.v1",
                 "commit": commit,
                 "branch": "main",
-                "source_role": "config-staging",
+                "source_role": "sys-config-staging",
             },
             sort_keys=True,
         )
@@ -7241,7 +7255,7 @@ def check_setup_config_nix_native_running_storage(
                 "templates": {},
                 "kernels": {},
                 "domains": {
-                    "config-staging": {
+                    "sys-config-staging": {
                         "class": "StandaloneVM",
                         "template": None,
                         "label": "green",
@@ -7253,7 +7267,7 @@ def check_setup_config_nix_native_running_storage(
                         },
                         "features": {
                             "nixome-managed": "1",
-                            "nixome-role": "config-staging",
+                            "nixome-role": "sys-config-staging",
                             "qrexec": "1",
                         },
                         "services": {},
@@ -7318,13 +7332,13 @@ def check_setup_config_nix_native_running_storage(
                 #!/usr/bin/env bash
                 case "$*" in
                   *"--fields NAME,STATE"*)
-                    printf 'config-staging|Running\\n'
+                    printf 'sys-config-staging|Running\\n'
                     ;;
                   *"--fields NAME,CLASS"*)
-                    printf 'config-staging|StandaloneVM\\n'
+                    printf 'sys-config-staging|StandaloneVM\\n'
                     ;;
                   *)
-                    printf 'config-staging\\n'
+                    printf 'sys-config-staging\\n'
                     ;;
                 esac
             """,
@@ -7332,13 +7346,13 @@ def check_setup_config_nix_native_running_storage(
                 #!/usr/bin/env bash
                 if [ "$#" -eq 2 ]; then
                   case "$1:$2" in
-                    config-staging:label) printf 'green\\n' ;;
-                    config-staging:netvm) printf 'none\\n' ;;
-                    config-staging:autostart) printf 'False\\n' ;;
-                    config-staging:memory) printf '1024\\n' ;;
-                    config-staging:virt_mode) printf 'pvh\\n' ;;
-                    config-staging:kernel) printf 'old-kernel\\n' ;;
-                    config-staging:kernelopts) printf 'console=hvc0 init=/sbin/init nixome.system={old_system_source} nixome.storedev=/dev/xvde nixome.storefmt=erofs nixome.storeblobdev=/dev/xvdf\\n' ;;
+                    sys-config-staging:label) printf 'green\\n' ;;
+                    sys-config-staging:netvm) printf 'none\\n' ;;
+                    sys-config-staging:autostart) printf 'False\\n' ;;
+                    sys-config-staging:memory) printf '1024\\n' ;;
+                    sys-config-staging:virt_mode) printf 'pvh\\n' ;;
+                    sys-config-staging:kernel) printf 'old-kernel\\n' ;;
+                    sys-config-staging:kernelopts) printf 'console=hvc0 init=/sbin/init nixome.system={old_system_source} nixome.storedev=/dev/xvde nixome.storefmt=erofs nixome.storeblobdev=/dev/xvdf\\n' ;;
                     *) exit 1 ;;
                   esac
                   exit 0
@@ -7349,25 +7363,25 @@ def check_setup_config_nix_native_running_storage(
                 #!/usr/bin/env bash
                 if [ "$#" -eq 2 ]; then
                   case "$1:$2" in
-                    config-staging:nixome-backend) printf 'nix-closure\\n' ;;
-                    config-staging:nixome-system-source) printf '{old_system_source}\\n' ;;
-                    config-staging:nixome-root-source) printf '{old_root_source}\\n' ;;
-                    config-staging:nixome-store-source) printf '{old_store_source}\\n' ;;
-                    config-staging:nixome-store-mode) printf 'shared-closure\\n' ;;
-                    config-staging:nixome-store-view-backend) printf 'erofs-objectmap\\n' ;;
-                    config-staging:nixome-store-generation) printf '1\\n' ;;
-                    config-staging:nixome-store-closure-hash) printf 'old-closure\\n' ;;
-                    config-staging:nixome-store-view-image) printf '/var/lib/nixome/closure-store/domains/config-staging/generations/1/store.erofs\\n' ;;
-                    config-staging:nixome-store-filesystem) printf 'erofs\\n' ;;
-                    config-staging:nixome-store-blob-map) printf '/var/lib/nixome/closure-store/domains/config-staging/generations/1/store.blob-map.json\\n' ;;
-                    config-staging:nixome-store-blob-volume) printf 'store-data\\n' ;;
-                    config-staging:nixome-store-blob-device) printf '/dev/xvdf\\n' ;;
-                    config-staging:nixome-store-mountpoint) printf '/nix/store\\n' ;;
-                    config-staging:nixome-store-device) printf '/dev/xvde\\n' ;;
-                    config-staging:nixome-store-read-only) printf 'True\\n' ;;
-                    config-staging:nixome-managed) printf '1\\n' ;;
-                    config-staging:nixome-role) printf 'config-staging\\n' ;;
-                    config-staging:qrexec) printf '1\\n' ;;
+                    sys-config-staging:nixome-backend) printf 'nix-closure\\n' ;;
+                    sys-config-staging:nixome-system-source) printf '{old_system_source}\\n' ;;
+                    sys-config-staging:nixome-root-source) printf '{old_root_source}\\n' ;;
+                    sys-config-staging:nixome-store-source) printf '{old_store_source}\\n' ;;
+                    sys-config-staging:nixome-store-mode) printf 'shared-closure\\n' ;;
+                    sys-config-staging:nixome-store-view-backend) printf 'erofs-objectmap\\n' ;;
+                    sys-config-staging:nixome-store-generation) printf '1\\n' ;;
+                    sys-config-staging:nixome-store-closure-hash) printf 'old-closure\\n' ;;
+                    sys-config-staging:nixome-store-view-image) printf '/var/lib/nixome/closure-store/domains/sys-config-staging/generations/1/store.erofs\\n' ;;
+                    sys-config-staging:nixome-store-filesystem) printf 'erofs\\n' ;;
+                    sys-config-staging:nixome-store-blob-map) printf '/var/lib/nixome/closure-store/domains/sys-config-staging/generations/1/store.blob-map.json\\n' ;;
+                    sys-config-staging:nixome-store-blob-volume) printf 'store-data\\n' ;;
+                    sys-config-staging:nixome-store-blob-device) printf '/dev/xvdf\\n' ;;
+                    sys-config-staging:nixome-store-mountpoint) printf '/nix/store\\n' ;;
+                    sys-config-staging:nixome-store-device) printf '/dev/xvde\\n' ;;
+                    sys-config-staging:nixome-store-read-only) printf 'True\\n' ;;
+                    sys-config-staging:nixome-managed) printf '1\\n' ;;
+                    sys-config-staging:nixome-role) printf 'sys-config-staging\\n' ;;
+                    sys-config-staging:qrexec) printf '1\\n' ;;
                     *) exit 1 ;;
                   esac
                   exit 0
@@ -7470,7 +7484,7 @@ def check_setup_config_nix_native_running_storage(
         assert any(
             action["type"] == expected_type
             and action["action"] == "restart"
-            and action["domain"] == "config-staging"
+            and action["domain"] == "sys-config-staging"
             and action["field"] == "source"
             and action["value"] == expected_value
             and action["state"] == "Running"
@@ -7487,9 +7501,12 @@ def check_setup_config_nix_native_running_storage(
     commands_log = (setup_log_dir / "setup-config.commands.log").read_text(
         encoding="utf-8"
     )
-    assert "+ qvm-volume import config-staging:root" not in commands_log
-    assert "+ nixome-nix-domain-storage ensure-store config-staging" not in commands_log
-    assert "+ qvm-prefs config-staging kernelopts" not in commands_log
+    assert "+ qvm-volume import sys-config-staging:root" not in commands_log
+    assert (
+        "+ nixome-nix-domain-storage ensure-store sys-config-staging"
+        not in commands_log
+    )
+    assert "+ qvm-prefs sys-config-staging kernelopts" not in commands_log
 
 
 def check_setup_config_nix_native(repo_root: Path, log_dir: Path) -> None:
@@ -7891,7 +7908,7 @@ def check_config_status(repo_root: Path, log_dir: Path) -> None:
         "templates": {},
         "kernels": {},
         "domains": {
-            "config-vault": {
+            "sys-config-vault": {
                 "class": "StandaloneVM",
                 "template": None,
                 "backend": {"type": "nix-closure"},
@@ -7905,7 +7922,7 @@ def check_config_status(repo_root: Path, log_dir: Path) -> None:
                     "service": "nixome.PolicyProbe",
                     "argument": "*",
                     "source": "dom0",
-                    "target": "config-vault",
+                    "target": "sys-config-vault",
                     "action": "allow",
                 }
             ]
@@ -7933,7 +7950,7 @@ def check_config_status(repo_root: Path, log_dir: Path) -> None:
                     {
                         "type": "domain-pref",
                         "action": "restart",
-                        "domain": "config-vault",
+                        "domain": "sys-config-vault",
                         "field": "memory",
                         "value": "1024",
                         "reason": "domain is running; restart required for this change to fully take effect",
@@ -7944,7 +7961,7 @@ def check_config_status(repo_root: Path, log_dir: Path) -> None:
                     {
                         "type": "domain-pref",
                         "action": "set",
-                        "domain": "config-vault",
+                        "domain": "sys-config-vault",
                         "field": "memory",
                         "value": "1024",
                     }
@@ -8038,7 +8055,7 @@ def check_config_status(repo_root: Path, log_dir: Path) -> None:
         "\n".join(
             (
                 "# Managed by Nixome setup-config.",
-                "nixome.PolicyProbe * dom0 config-vault allow",
+                "nixome.PolicyProbe * dom0 sys-config-vault allow",
                 "nixome.PolicyProbe * @anyvm @anyvm deny",
                 "",
             )
@@ -8054,7 +8071,7 @@ def check_config_status(repo_root: Path, log_dir: Path) -> None:
                 case "$*" in
                   "--raw-data --fields NAME,CLASS,STATE,TEMPLATE,LABEL --no-spinner")
                     cat <<'QVM'
-                config-vault|StandaloneVM|Running||black
+                sys-config-vault|StandaloneVM|Running||black
                 work-fedora|AppVM|Halted|fedora-44-xfce|green
                 other|AppVM|Halted|fedora-43-xfce|red
                 QVM
@@ -8104,7 +8121,7 @@ def check_config_status(repo_root: Path, log_dir: Path) -> None:
     assert result["schema"] == "nixome.config-status.v1"
     assert result["status"] == "applied"
     assert result["topology"]["present"] is True
-    assert "config-vault" in result["topology"]["domain_names"]
+    assert "sys-config-vault" in result["topology"]["domain_names"]
     assert result["topology"]["template_names"] == []
     assert result["topology"]["qrexec_policy_rule_count"] == 1
     assert result["qvm"]["available"] is True
@@ -8129,8 +8146,8 @@ def check_config_status(repo_root: Path, log_dir: Path) -> None:
     pending_vm_restarts = result["pending_vm_restarts"]
     assert pending_vm_restarts["required"] is True
     assert len(pending_vm_restarts["actions"]) == 1
-    assert pending_vm_restarts["actions"][0]["domain"] == "config-vault"
-    assert pending_vm_restarts["domains"] == ["config-vault"]
+    assert pending_vm_restarts["actions"][0]["domain"] == "sys-config-vault"
+    assert pending_vm_restarts["domains"] == ["sys-config-vault"]
     assert pending_vm_restarts["reasons"] == [
         "domain is running; restart required for this change to fully take effect"
     ]
@@ -8491,7 +8508,7 @@ def check_config_system_apply(repo_root: Path, log_dir: Path) -> None:
                 "schema": "nixome.config-candidate.v1",
                 "commit": commit,
                 "branch": "main",
-                "source_role": "config-staging",
+                "source_role": "sys-config-staging",
             },
         ),
     ):
@@ -9015,7 +9032,7 @@ def check_config_validator_candidate(repo_root: Path, log_dir: Path) -> None:
             "build",
             "--no-link",
             "--print-out-paths",
-            f'{repo_root}#nixosConfigurations.nixome-domain-config-validator.config.environment.etc."qubes-rpc/nixome.Config.ValidateCandidate".source',
+            f'{repo_root}#nixosConfigurations.nixome-domain-sys-config-validator.config.environment.etc."qubes-rpc/nixome.Config.ValidateCandidate".source',
         ],
         cwd=repo_root,
     ).stdout.strip()
@@ -9304,23 +9321,28 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         repo_root,
         "nixosConfigurations.vm-gui-config-network-debug.config.nixome.qubes.domains",
     )
-    assert domains["config-vault"]["class"] == "StandaloneVM"
-    assert domains["config-vault"]["template"] is None
-    assert domains["config-vault"]["netvm"] is None
-    assert domains["config-vault"]["prefs"]["guivm"] is None
-    assert domains["config-vault"]["backend"]["type"] == "nix-closure"
-    assert domains["config-vault"]["backend"]["store"]["mode"] == "shared-closure"
-    assert domains["config-vault"]["backend"]["store"]["readOnly"] is True
-    assert domains["config-vault"]["features"]["nixome-role"] == "config-vault"
-    assert domains["config-staging"]["backend"]["type"] == "nix-closure"
-    assert domains["config-staging"]["prefs"]["guivm"] is None
-    assert domains["config-staging"]["features"]["nixome-role"] == "config-staging"
-    assert domains["config-staging"]["features"]["nixome-config-applied-message"] == (
-        "initial"
+    assert domains["sys-config-vault"]["class"] == "StandaloneVM"
+    assert domains["sys-config-vault"]["template"] is None
+    assert domains["sys-config-vault"]["netvm"] is None
+    assert domains["sys-config-vault"]["prefs"]["guivm"] is None
+    assert domains["sys-config-vault"]["backend"]["type"] == "nix-closure"
+    assert domains["sys-config-vault"]["backend"]["store"]["mode"] == "shared-closure"
+    assert domains["sys-config-vault"]["backend"]["store"]["readOnly"] is True
+    assert domains["sys-config-vault"]["features"]["nixome-role"] == "sys-config-vault"
+    assert domains["sys-config-staging"]["backend"]["type"] == "nix-closure"
+    assert domains["sys-config-staging"]["prefs"]["guivm"] is None
+    assert (
+        domains["sys-config-staging"]["features"]["nixome-role"] == "sys-config-staging"
     )
-    assert domains["config-validator"]["backend"]["type"] == "nix-closure"
-    assert domains["config-validator"]["prefs"]["guivm"] is None
-    assert domains["config-validator"]["features"]["nixome-role"] == "config-validator"
+    assert domains["sys-config-staging"]["features"][
+        "nixome-config-applied-message"
+    ] == ("initial")
+    assert domains["sys-config-validator"]["backend"]["type"] == "nix-closure"
+    assert domains["sys-config-validator"]["prefs"]["guivm"] is None
+    assert (
+        domains["sys-config-validator"]["features"]["nixome-role"]
+        == "sys-config-validator"
+    )
     assert domains["sys-net"]["class"] == "StandaloneVM"
     assert domains["sys-net"]["netvm"] is None
     assert domains["sys-net"]["prefs"]["provides_network"] is True
@@ -9343,9 +9365,9 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert domains["sys-firewall"]["services"]["qubes-updates-proxy"] is True
     assert network_debug_domains["sys-net"]["prefs"]["autostart"] is True
     assert network_debug_domains["sys-firewall"]["prefs"]["autostart"] is False
-    assert network_debug_domains["config-vault"]["prefs"]["autostart"] is False
-    assert network_debug_domains["config-staging"]["prefs"]["autostart"] is False
-    assert network_debug_domains["config-validator"]["prefs"]["autostart"] is False
+    assert network_debug_domains["sys-config-vault"]["prefs"]["autostart"] is False
+    assert network_debug_domains["sys-config-staging"]["prefs"]["autostart"] is False
+    assert network_debug_domains["sys-config-validator"]["prefs"]["autostart"] is False
     assert (
         _nix_eval_json(
             repo_root,
@@ -9366,23 +9388,29 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert topology["schema"] == "nixome.qubes-topology.v1"
     assert topology["templates"] == {}
     assert topology["prefs"]["default_netvm"] == "sys-firewall"
-    assert topology["domains"]["config-vault"]["backend"]["root"]["source_ref"] is None
-    assert topology["domains"]["config-vault"]["prefs"]["guivm"] is None
+    assert (
+        topology["domains"]["sys-config-vault"]["backend"]["root"]["source_ref"] is None
+    )
+    assert topology["domains"]["sys-config-vault"]["prefs"]["guivm"] is None
     assert re.search(
         r"^/nix/store/.*/root\.img$",
-        topology["domains"]["config-vault"]["backend"]["root"]["source"],
+        topology["domains"]["sys-config-vault"]["backend"]["root"]["source"],
     )
-    assert topology["domains"]["config-vault"]["backend"]["store"]["read_only"] is True
     assert (
-        topology["domains"]["config-staging"]["backend"]["state"]["persistent_size"]
+        topology["domains"]["sys-config-vault"]["backend"]["store"]["read_only"] is True
+    )
+    assert (
+        topology["domains"]["sys-config-staging"]["backend"]["state"]["persistent_size"]
         == 8589934592
     )
     assert (
-        topology["domains"]["config-validator"]["backend"]["state"]["persistent_size"]
+        topology["domains"]["sys-config-validator"]["backend"]["state"][
+            "persistent_size"
+        ]
         == 8589934592
     )
     assert (
-        topology["domains"]["config-vault"]["backend"]["state"]["persistent_size"]
+        topology["domains"]["sys-config-vault"]["backend"]["state"]["persistent_size"]
         is None
     )
     assert topology["domains"]["sys-net"]["devices"]["pci"] == [
@@ -9732,27 +9760,27 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
 
     guest_init_wanted_by = _nix_eval_json(
         repo_root,
-        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.wantedBy",
+        "nixosConfigurations.nixome-domain-sys-config-staging.config.systemd.services.nixome-config-guest-init.wantedBy",
     )
     guest_init_after = _nix_eval_json(
         repo_root,
-        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.after",
+        "nixosConfigurations.nixome-domain-sys-config-staging.config.systemd.services.nixome-config-guest-init.after",
     )
     guest_init_before = _nix_eval_json(
         repo_root,
-        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.before",
+        "nixosConfigurations.nixome-domain-sys-config-staging.config.systemd.services.nixome-config-guest-init.before",
     )
     guest_init_script = _nix_eval_json(
         repo_root,
-        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.nixome-config-guest-init.script",
+        "nixosConfigurations.nixome-domain-sys-config-staging.config.systemd.services.nixome-config-guest-init.script",
     )
     guest_qrexec_requires = _nix_eval_json(
         repo_root,
-        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.qubes-qrexec-agent.requires",
+        "nixosConfigurations.nixome-domain-sys-config-staging.config.systemd.services.qubes-qrexec-agent.requires",
     )
     guest_qrexec_after = _nix_eval_json(
         repo_root,
-        "nixosConfigurations.nixome-domain-config-staging.config.systemd.services.qubes-qrexec-agent.after",
+        "nixosConfigurations.nixome-domain-sys-config-staging.config.systemd.services.qubes-qrexec-agent.after",
     )
     assert "multi-user.target" in guest_init_wanted_by
     assert "nixome-qubes-rw-init.service" in guest_init_after
@@ -9765,7 +9793,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert (
         _nix_eval_raw(
             repo_root,
-            "nixosConfigurations.nixome-domain-config-staging.config.nixome.qubeGuest.configNixStoreRoot",
+            "nixosConfigurations.nixome-domain-sys-config-staging.config.nixome.qubeGuest.configNixStoreRoot",
         ).strip()
         == "/rw/home/user/nixome-config-nix-root"
     )
@@ -9785,44 +9813,46 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
             ).stdout
         )
 
-    assert has_package("nixome-domain-config-staging", "nixome-config-nix") is True
-    assert has_package("nixome-domain-config-validator", "nixome-config-nix") is True
-    assert has_package("nixome-domain-config-vault", "nixome-config-nix") is True
+    assert has_package("nixome-domain-sys-config-staging", "nixome-config-nix") is True
+    assert (
+        has_package("nixome-domain-sys-config-validator", "nixome-config-nix") is True
+    )
+    assert has_package("nixome-domain-sys-config-vault", "nixome-config-nix") is True
     assert (
         _nix_eval_json(
             repo_root,
-            "nixosConfigurations.nixome-domain-config-validator.config.nixome.qubeGuest.role",
+            "nixosConfigurations.nixome-domain-sys-config-validator.config.nixome.qubeGuest.role",
         )
-        == "config-validator"
+        == "sys-config-validator"
     )
     assert (
         _nix_eval_json(
             repo_root,
-            "nixosConfigurations.nixome-domain-config-vault.config.networking.hostName",
+            "nixosConfigurations.nixome-domain-sys-config-vault.config.networking.hostName",
         )
-        == "config-vault"
+        == "sys-config-vault"
     )
     assert (
         _nix_eval_json(
             repo_root,
-            "nixosConfigurations.nixome-domain-config-staging.config.networking.hostName",
+            "nixosConfigurations.nixome-domain-sys-config-staging.config.networking.hostName",
         )
-        == "config-staging"
+        == "sys-config-staging"
     )
     assert (
         _nix_eval_json(
             repo_root,
-            "nixosConfigurations.nixome-domain-config-validator.config.networking.hostName",
+            "nixosConfigurations.nixome-domain-sys-config-validator.config.networking.hostName",
         )
-        == "config-validator"
+        == "sys-config-validator"
     )
     for attr in (
-        'nixosConfigurations.nixome-domain-config-vault.config.environment.etc."qubes-rpc/nixome.Config.ExportCurrent".mode',
-        'nixosConfigurations.nixome-domain-config-staging.config.environment.etc."qubes-rpc/nixome.Config.ImportCurrent".mode',
-        'nixosConfigurations.nixome-domain-config-validator.config.environment.etc."qubes-rpc/nixome.Config.ValidateCandidate".mode',
-        'nixosConfigurations.nixome-domain-config-staging.config.environment.etc."qubes-rpc/nixome.Config.InputsImport".mode',
-        'nixosConfigurations.nixome-domain-config-validator.config.environment.etc."qubes-rpc/nixome.Config.InputsImport".mode',
-        'nixosConfigurations.nixome-domain-config-vault.config.environment.etc."qubes-rpc/nixome.Config.ArchiveDeployment".mode',
+        'nixosConfigurations.nixome-domain-sys-config-vault.config.environment.etc."qubes-rpc/nixome.Config.ExportCurrent".mode',
+        'nixosConfigurations.nixome-domain-sys-config-staging.config.environment.etc."qubes-rpc/nixome.Config.ImportCurrent".mode',
+        'nixosConfigurations.nixome-domain-sys-config-validator.config.environment.etc."qubes-rpc/nixome.Config.ValidateCandidate".mode',
+        'nixosConfigurations.nixome-domain-sys-config-staging.config.environment.etc."qubes-rpc/nixome.Config.InputsImport".mode',
+        'nixosConfigurations.nixome-domain-sys-config-validator.config.environment.etc."qubes-rpc/nixome.Config.InputsImport".mode',
+        'nixosConfigurations.nixome-domain-sys-config-vault.config.environment.etc."qubes-rpc/nixome.Config.ArchiveDeployment".mode',
         'nixosConfigurations.vm-gui-config.config.environment.etc."qubes-rpc/nixome.Config.Status".mode',
         'nixosConfigurations.vm-gui-config.config.environment.etc."qubes-rpc/nixome.Config.Check".mode',
         'nixosConfigurations.vm-gui-config.config.environment.etc."qubes-rpc/nixome.Config.Apply".mode',
@@ -9832,21 +9862,21 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert (
         _nix_eval_json(
             repo_root,
-            'nixosConfigurations.nixome-domain-config-staging.config.environment.etc."qubes/rpc-config/nixome.Config.InputsImport".text',
+            'nixosConfigurations.nixome-domain-sys-config-staging.config.environment.etc."qubes/rpc-config/nixome.Config.InputsImport".text',
         )
         == "force-user='root'\n"
     )
     assert (
         _nix_eval_json(
             repo_root,
-            'nixosConfigurations.nixome-domain-config-staging.config.environment.etc."qubes/rpc-config/nixome.Config.ImportCurrent".text',
+            'nixosConfigurations.nixome-domain-sys-config-staging.config.environment.etc."qubes/rpc-config/nixome.Config.ImportCurrent".text',
         )
         == "force-user='user'\n"
     )
     assert (
         _nix_eval_json(
             repo_root,
-            'nixosConfigurations.nixome-domain-config-vault.config.environment.etc."qubes/rpc-config/nixome.Config.ExportCurrent".text',
+            'nixosConfigurations.nixome-domain-sys-config-vault.config.environment.etc."qubes/rpc-config/nixome.Config.ExportCurrent".text',
         )
         == "force-user='user'\n"
     )
@@ -9860,7 +9890,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                 "--expr",
                 f"""
                 let
-                  cfg = (builtins.getFlake "path:{repo_root}").nixosConfigurations.nixome-domain-config-vault.config.environment.etc;
+                  cfg = (builtins.getFlake "path:{repo_root}").nixosConfigurations.nixome-domain-sys-config-vault.config.environment.etc;
                 in
                   cfg ? "qubes-rpc/nixome.Config.InputsImport"
                 """,
@@ -10064,8 +10094,8 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert current_bootstrap_env["NIXOME_CONFIG_CURRENT_IMPORT_SERVICE"] == (
         "nixome.Config.ImportCurrent"
     )
-    assert current_bootstrap_env["NIXOME_CONFIG_STAGING_VM"] == "config-staging"
-    assert current_bootstrap_env["NIXOME_CONFIG_VAULT_VM"] == "config-vault"
+    assert current_bootstrap_env["NIXOME_CONFIG_STAGING_VM"] == "sys-config-staging"
+    assert current_bootstrap_env["NIXOME_CONFIG_VAULT_VM"] == "sys-config-vault"
     assert current_bootstrap_env["NIXOME_LOG_DIR"] == "/var/log/nixome"
     assert (
         _nix_eval_json(
@@ -10084,28 +10114,28 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
 
     for attr, expected in (
         (
-            "nixome-domain-config-vault-root-image",
-            "nixome-domain-config-vault-root-image",
+            "nixome-domain-sys-config-vault-root-image",
+            "nixome-domain-sys-config-vault-root-image",
         ),
         (
-            "nixome-domain-config-staging-root-image",
-            "nixome-domain-config-staging-root-image",
+            "nixome-domain-sys-config-staging-root-image",
+            "nixome-domain-sys-config-staging-root-image",
         ),
         (
-            "nixome-domain-config-validator-root-image",
-            "nixome-domain-config-validator-root-image",
+            "nixome-domain-sys-config-validator-root-image",
+            "nixome-domain-sys-config-validator-root-image",
         ),
         (
-            "nixome-domain-config-vault-store-closure",
-            "nixome-domain-config-vault-store-closure",
+            "nixome-domain-sys-config-vault-store-closure",
+            "nixome-domain-sys-config-vault-store-closure",
         ),
         (
-            "nixome-domain-config-staging-store-closure",
-            "nixome-domain-config-staging-store-closure",
+            "nixome-domain-sys-config-staging-store-closure",
+            "nixome-domain-sys-config-staging-store-closure",
         ),
         (
-            "nixome-domain-config-validator-store-closure",
-            "nixome-domain-config-validator-store-closure",
+            "nixome-domain-sys-config-validator-store-closure",
+            "nixome-domain-sys-config-validator-store-closure",
         ),
     ):
         drv = _run(
@@ -10139,21 +10169,21 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     expected_policy = "\n".join(
         (
             "# Managed by Nixome. Only dom0 may fetch config baselines/candidates,",
-            "# ask config-validator to validate them, or archive them into config-vault.",
-            "nixome.Config.ExportCurrent * dom0 config-vault allow",
+            "# ask sys-config-validator to validate them, or archive them into sys-config-vault.",
+            "nixome.Config.ExportCurrent * dom0 sys-config-vault allow",
             "nixome.Config.ExportCurrent * @anyvm @anyvm deny",
-            "nixome.Config.ImportCurrent * dom0 config-staging allow",
+            "nixome.Config.ImportCurrent * dom0 sys-config-staging allow",
             "nixome.Config.ImportCurrent * @anyvm @anyvm deny",
-            "nixome.Config.CandidateExport * dom0 config-staging allow",
+            "nixome.Config.CandidateExport * dom0 sys-config-staging allow",
             "nixome.Config.CandidateExport * @anyvm @anyvm deny",
-            "nixome.Config.ValidateCandidate * dom0 config-validator allow",
+            "nixome.Config.ValidateCandidate * dom0 sys-config-validator allow",
             "nixome.Config.ValidateCandidate * @anyvm @anyvm deny",
-            "nixome.Config.InputsImport * dom0 config-staging allow",
-            "nixome.Config.InputsImport * dom0 config-validator allow",
+            "nixome.Config.InputsImport * dom0 sys-config-staging allow",
+            "nixome.Config.InputsImport * dom0 sys-config-validator allow",
             "nixome.Config.InputsImport * @anyvm @anyvm deny",
-            "nixome.Config.ArchiveCandidate * dom0 config-vault allow",
+            "nixome.Config.ArchiveCandidate * dom0 sys-config-vault allow",
             "nixome.Config.ArchiveCandidate * @anyvm @anyvm deny",
-            "nixome.Config.ArchiveDeployment * dom0 config-vault allow",
+            "nixome.Config.ArchiveDeployment * dom0 sys-config-vault allow",
             "nixome.Config.ArchiveDeployment * @anyvm @anyvm deny",
             "nixome.Config.Status * @anyvm @anyvm deny",
             "nixome.Config.Check * @anyvm @anyvm deny",
@@ -10202,7 +10232,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
             "--expr",
             f"""
             let
-              packages = (builtins.getFlake "git+file://{repo_root}").nixosConfigurations."nixome-domain-config-staging".config.environment.systemPackages;
+              packages = (builtins.getFlake "git+file://{repo_root}").nixosConfigurations."nixome-domain-sys-config-staging".config.environment.systemPackages;
               matches = builtins.filter (package: package.name == "nixome-config-staging-init") packages;
             in
               builtins.head matches
@@ -10404,7 +10434,7 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
     assert topology["prefs"]["default_netvm"] == "sys-firewall"
     assert "dev" not in topology["domains"]
     assert (
-        topology["domains"]["config-staging"]["features"][
+        topology["domains"]["sys-config-staging"]["features"][
             "nixome-config-applied-message"
         ]
         == "initial"
@@ -10424,7 +10454,7 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
     )
     assert profile_json["schema"] == "nixome.dom0-profile.v1"
     assert profile_json["message"] == "initial"
-    assert profile_json["built_by"] == "config-staging"
+    assert profile_json["built_by"] == "sys-config-staging"
     assert (profile_physical / "bin/nixome-dom0-profile-activate").is_file()
 
     runtime_path = work_dir / "nixome/runtime.nix"
@@ -10437,15 +10467,15 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
         ),
         (
             "{ ... }:\n{\n  configVms.guests.config-stagin = { };\n}\n",
-            "nixome.configRoleConfigurations.config-staging.config.networking.hostName",
+            "nixome.configRoleConfigurations.sys-config-staging.config.networking.hostName",
             "--raw",
             "nixome.configVms.guests: unknown role(s): config-stagin",
         ),
         (
-            '{ ... }:\n{\n  configVms.domains.config-vault.template = "old-template";\n}\n',
+            '{ ... }:\n{\n  configVms.domains.sys-config-vault.template = "old-template";\n}\n',
             "nixome.topology",
             "--json",
-            "nixome.configVms.domains.config-vault: unknown option(s): template",
+            "nixome.configVms.domains.sys-config-vault: unknown option(s): template",
         ),
         (
             '{ ... }:\n{\n  dom0.host.apply.mode = "live";\n}\n',

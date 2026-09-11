@@ -9,9 +9,9 @@
 }:
 let
   requiredConfigDomains = [
-    "config-vault"
-    "config-staging"
-    "config-validator"
+    "sys-config-vault"
+    "sys-config-staging"
+    "sys-config-validator"
   ];
 
   missingConfigDomains = builtins.filter (
@@ -33,7 +33,7 @@ else
       {
         service = "nixome.PolicyProbe";
         source = "dom0";
-        target = "config-vault";
+        target = "sys-config-vault";
         action = "allow";
       }
     ]

@@ -23,7 +23,7 @@ integration layer for:
 - `lifecycle/`: image, bootstrap, runtime, and shared lifecycle support.
 - `lifecycle/image/`: image build profiles, overlays, and image-only tools.
 - `lifecycle/bootstrap/`: first-boot wiring and the starting runtime config bundled into an image.
-- `lifecycle/bootstrap/initial-runtime-config/`: starter runtime config that `config-vault` turns into the first current baseline.
+- `lifecycle/bootstrap/initial-runtime-config/`: starter runtime config that `sys-config-vault` turns into the first current baseline.
 - `lifecycle/bootstrap/tools/`: bootstrap-only first-boot and handoff tools.
 - `lifecycle/runtime/`: code used after bootstrap to operate the running system.
 - `lifecycle/runtime/tools/`: runtime-only operational packages and scripts.
@@ -81,10 +81,10 @@ make vm-config-boot-activate-flow
 ```
 
 Runs the config authority workflow in nested Xen/Qubes. The flow starts from a
-fresh nested dom0 disk, runs the dom0 setup command, boots `config-vault`,
-`config-staging`, and `config-validator`, proves qrexec, modifies and validates
+fresh nested dom0 disk, runs the dom0 setup command, boots `sys-config-vault`,
+`sys-config-staging`, and `sys-config-validator`, proves qrexec, modifies and validates
 a staged config, has dom0 apply the validator-approved topology/system plan,
-and records the deployment in `config-vault`.
+and records the deployment in `sys-config-vault`.
 
 `make vm-config-boot-flow` installs the validated dom0 system as the next boot
 generation instead of switching the running generation. `make
@@ -113,9 +113,9 @@ Fedora/Debian/conventional Qubes guest
 The config authority VMs are now independent closure-backed NixOS domains:
 
 ```text
-config-vault
-config-staging
-config-validator
+sys-config-vault
+sys-config-staging
+sys-config-validator
 ```
 
 Each config VM is a Qubes `StandaloneVM` with:
@@ -126,7 +126,7 @@ Each config VM is a Qubes `StandaloneVM` with:
 - private persistent state,
 - normal Qubes qrexec/policy/network controls.
 
-`config-staging` and `config-validator` run candidate Nix checks through
+`sys-config-staging` and `sys-config-validator` run candidate Nix checks through
 `nixome-config-nix`, backed by private writable state, so their own system
 `/nix/store` remains read-only.
 

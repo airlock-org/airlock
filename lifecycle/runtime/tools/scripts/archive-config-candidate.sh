@@ -19,9 +19,9 @@ VAULT_ARCHIVE_STDERR="$LOG_DIR/config-vault-archive.stderr.log"
 VAULT_ARCHIVE_JSON="$LOG_DIR/config-vault-archive.json"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 
-STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
-VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
+STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
+VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-sys-config-validator}"
+VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
 CANDIDATE_EXPORT_SERVICE="${NIXOME_CONFIG_CANDIDATE_EXPORT_SERVICE:-nixome.Config.CandidateExport}"
 CANDIDATE_VALIDATE_SERVICE="${NIXOME_CONFIG_CANDIDATE_VALIDATE_SERVICE:-nixome.Config.ValidateCandidate}"
 ARCHIVE_SERVICE="${NIXOME_CONFIG_ARCHIVE_SERVICE:-nixome.Config.ArchiveCandidate}"
@@ -37,8 +37,8 @@ usage() {
 Usage: nixome-config-archive-candidate [--staging VM] [--validator VM] [--vault VM]
        nixome-config-archive-candidate --candidate-tar PATH [--validate-only] [--validator VM] [--vault VM]
 
-Fetch a config candidate from config-staging, validate it in config-validator, and
-archive the validated candidate into config-vault before any deployment attempt.
+Fetch a config candidate from sys-config-staging, validate it in sys-config-validator, and
+archive the validated candidate into sys-config-vault before any deployment attempt.
 EOF
   exit 1
 }
@@ -714,7 +714,7 @@ run_qrexec_service_with_stdin "$VALIDATOR" "config candidate validation in $VALI
 verify_candidate "$VALIDATED_CANDIDATE_TAR"
 
 if [ "$VALIDATE_ONLY" = "1" ]; then
-  write_result passed "config candidate validated in config-validator"
+  write_result passed "config candidate validated in sys-config-validator"
   cat "$RESULT_JSON"
   exit 0
 fi
@@ -730,5 +730,5 @@ vault_commit="$(jq -r '.vault_commit' "$VAULT_ARCHIVE_JSON")"
 [ "$vault_archive_commit" = "$candidate_commit" ] ||
   fail "vault archived commit $vault_archive_commit does not match candidate commit $candidate_commit"
 
-write_result passed "config-staging candidate validated in config-validator and archived in config-vault before deployment"
+write_result passed "sys-config-staging candidate validated in sys-config-validator and archived in sys-config-vault before deployment"
 cat "$RESULT_JSON"

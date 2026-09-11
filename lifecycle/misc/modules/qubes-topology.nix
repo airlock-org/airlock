@@ -484,7 +484,7 @@ let
         install -d "$out/etc/qubes/policy.d"
         cat > "$out/etc/qubes/policy.d/30-nixome-config.policy" <<'EOF'
     # Managed by Nixome. Only dom0 may fetch config baselines/candidates,
-    # ask config-validator to validate them, or archive them into config-vault.
+    # ask sys-config-validator to validate them, or archive them into sys-config-vault.
     ${access.currentExportService} * dom0 ${access.vault} allow
     ${access.currentExportService} * @anyvm @anyvm deny
     ${access.currentImportService} * dom0 ${access.staging} allow
@@ -605,7 +605,7 @@ in
       enable = lib.mkOption {
         type = lib.types.bool;
         default = false;
-        description = "Run a boot-time dom0 transfer that initializes config-staging from config-vault's current baseline.";
+        description = "Run a boot-time dom0 transfer that initializes sys-config-staging from sys-config-vault's current baseline.";
       };
 
       logDir = lib.mkOption {
@@ -653,31 +653,31 @@ in
       currentExportService = lib.mkOption {
         type = lib.types.str;
         default = "nixome.Config.ExportCurrent";
-        description = "qrexec service used by dom0 to fetch the current config baseline from config-vault.";
+        description = "qrexec service used by dom0 to fetch the current config baseline from sys-config-vault.";
       };
 
       currentImportService = lib.mkOption {
         type = lib.types.str;
         default = "nixome.Config.ImportCurrent";
-        description = "qrexec service used by dom0 to import the current config baseline into config-staging.";
+        description = "qrexec service used by dom0 to import the current config baseline into sys-config-staging.";
       };
 
       candidateExportService = lib.mkOption {
         type = lib.types.str;
         default = "nixome.Config.CandidateExport";
-        description = "qrexec service used by dom0 to fetch a candidate from config-staging.";
+        description = "qrexec service used by dom0 to fetch a candidate from sys-config-staging.";
       };
 
       candidateValidateService = lib.mkOption {
         type = lib.types.str;
         default = "nixome.Config.ValidateCandidate";
-        description = "qrexec service used by dom0 to validate a candidate in config-validator.";
+        description = "qrexec service used by dom0 to validate a candidate in sys-config-validator.";
       };
 
       archiveService = lib.mkOption {
         type = lib.types.str;
         default = "nixome.Config.ArchiveCandidate";
-        description = "qrexec service used by dom0 to archive a candidate into config-vault.";
+        description = "qrexec service used by dom0 to archive a candidate into sys-config-vault.";
       };
 
       archiveDeploymentService = lib.mkOption {
@@ -724,19 +724,19 @@ in
 
       vault = lib.mkOption {
         type = lib.types.str;
-        default = "config-vault";
+        default = "sys-config-vault";
         description = "Qube that owns the archived configuration history.";
       };
 
       staging = lib.mkOption {
         type = lib.types.str;
-        default = "config-staging";
+        default = "sys-config-staging";
         description = "Qube that owns the editable configuration candidate.";
       };
 
       validator = lib.mkOption {
         type = lib.types.str;
-        default = "config-validator";
+        default = "sys-config-validator";
         description = "Qube that validates staged configuration candidates.";
       };
     };
@@ -945,7 +945,7 @@ in
     systemd.services.nixome-config-bootstrap-current =
       lib.mkIf cfg.configCurrentBootstrapOnBoot.enable
         {
-          description = "Initialize config-staging from config-vault current baseline";
+          description = "Initialize sys-config-staging from sys-config-vault current baseline";
           wantedBy = [ "multi-user.target" ];
           wants = [
             "nixome-setup-config.service"

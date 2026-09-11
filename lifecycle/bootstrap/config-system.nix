@@ -8,9 +8,9 @@
 }:
 let
   configRoles = [
-    "config-vault"
-    "config-staging"
-    "config-validator"
+    "sys-config-vault"
+    "sys-config-staging"
+    "sys-config-validator"
   ];
   missingConfigDomains = builtins.filter (
     role: !(builtins.hasAttr role nixomeConfigDomains)
@@ -75,9 +75,9 @@ in
 
     configAccessPolicy = {
       enable = true;
-      vault = "config-vault";
-      staging = "config-staging";
-      validator = "config-validator";
+      vault = "sys-config-vault";
+      staging = "sys-config-staging";
+      validator = "sys-config-validator";
       candidateExportService = "nixome.Config.CandidateExport";
       candidateValidateService = "nixome.Config.ValidateCandidate";
       archiveService = "nixome.Config.ArchiveCandidate";

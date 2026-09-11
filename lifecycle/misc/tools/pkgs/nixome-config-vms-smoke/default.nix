@@ -64,7 +64,7 @@ writeShellApplication {
   + builtins.readFile ../../scripts/nixos-config-vms-smoke.sh;
 
   meta = {
-    description = "Run a Nixome smoke test for config-vault, config-staging, and config-validator";
+    description = "Run a Nixome smoke test for sys-config-vault, sys-config-staging, and sys-config-validator";
     license = lib.licenses.mit;
     platforms = [ "x86_64-linux" ];
   };

@@ -7,17 +7,17 @@
 }:
 let
   configVmRoles = [
-    "config-vault"
-    "config-staging"
-    "config-validator"
+    "sys-config-vault"
+    "sys-config-staging"
+    "sys-config-validator"
   ];
 
   configNixPrivateSizeBytes = 8589934592;
   sysNetPrivateSizeBytes = 2147483648;
 
   configRoleDefaults = {
-    config-vault = {
-      guestHostName = "config-vault";
+    sys-config-vault = {
+      guestHostName = "sys-config-vault";
       label = "black";
       rootImageSizeMiB = 128;
       prefs = {
@@ -30,15 +30,15 @@ let
       };
       features = {
         "nixome-managed" = "1";
-        "nixome-role" = "config-vault";
+        "nixome-role" = "sys-config-vault";
         "nixome-config-authority" = "1";
       };
       services = {
         "network-manager" = false;
       };
     };
-    config-staging = {
-      guestHostName = "config-staging";
+    sys-config-staging = {
+      guestHostName = "sys-config-staging";
       label = "gray";
       rootImageSizeMiB = 128;
       state.persistentSize = configNixPrivateSizeBytes;
@@ -52,7 +52,7 @@ let
       };
       features = {
         "nixome-managed" = "1";
-        "nixome-role" = "config-staging";
+        "nixome-role" = "sys-config-staging";
         "nixome-config-staging" = "1";
         "nixome-config-applied-message" = "initial";
       };
@@ -60,8 +60,8 @@ let
         "network-manager" = false;
       };
     };
-    config-validator = {
-      guestHostName = "config-validator";
+    sys-config-validator = {
+      guestHostName = "sys-config-validator";
       label = "blue";
       rootImageSizeMiB = 128;
       state.persistentSize = configNixPrivateSizeBytes;
@@ -75,7 +75,7 @@ let
       };
       features = {
         "nixome-managed" = "1";
-        "nixome-role" = "config-validator";
+        "nixome-role" = "sys-config-validator";
         "nixome-config-validator" = "1";
       };
       services = {

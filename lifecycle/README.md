@@ -11,8 +11,8 @@ The important config handoff is:
 
 ```text
 image bundles bootstrap/initial-runtime-config
-config-vault creates the first current baseline from it
-config-staging imports current config from config-vault for editing
+sys-config-vault creates the first current baseline from it
+sys-config-staging imports current config from sys-config-vault for editing
 ```
 
 `runtime/tools/` contains runtime-only operational commands. If a tool is used

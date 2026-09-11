@@ -12,8 +12,8 @@ MANIFEST_JSON="$LOG_DIR/config-current-bootstrap-manifest.json"
 XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 QREXEC_RUN_DIR="${NIXOME_QREXEC_RUN_DIR:-/var/run/qubes}"
 QREXEC_READY_WAIT_SECONDS="${NIXOME_CONFIG_QREXEC_READY_WAIT_SECONDS:-120}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
-STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
+VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
+STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
 EXPORT_SERVICE="${NIXOME_CONFIG_CURRENT_EXPORT_SERVICE:-nixome.Config.ExportCurrent}"
 IMPORT_SERVICE="${NIXOME_CONFIG_CURRENT_IMPORT_SERVICE:-nixome.Config.ImportCurrent}"
 
@@ -246,4 +246,4 @@ run_qrexec_service_with_stdin "$STAGING" "$CURRENT_TAR" "$IMPORT_STDOUT" "$IMPOR
 jq -e '.schema == "nixome.config-staging-import-current.v1" and .status == "passed"' "$IMPORT_STDOUT" >/dev/null ||
   fail "staging import did not emit a passing result"
 
-write_result passed "config-vault current exported and config-staging initialized" "$candidate_commit" "$archive_bytes"
+write_result passed "sys-config-vault current exported and sys-config-staging initialized" "$candidate_commit" "$archive_bytes"

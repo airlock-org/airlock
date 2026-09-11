@@ -8,9 +8,9 @@
 }:
 let
   cfg = config.nixome.qubeGuest;
-  hasConfigVaultRole = cfg.role == "config-vault";
-  hasConfigStagingRole = cfg.role == "config-staging";
-  hasConfigValidatorRole = cfg.role == "config-validator";
+  hasConfigVaultRole = cfg.role == "sys-config-vault";
+  hasConfigStagingRole = cfg.role == "sys-config-staging";
+  hasConfigValidatorRole = cfg.role == "sys-config-validator";
   hasDevRole = cfg.role == "dev";
   hasSysNetRole = cfg.role == "sys-net";
   hasNetworkProviderRole = hasSysNetRole || cfg.role == "sys-firewall";
@@ -191,7 +191,7 @@ let
       ]
       ++
         lib.optionals
-          (role == "config-vault" || role == "config-staging" || role == "config-validator" || role == "dev")
+          (role == "sys-config-vault" || role == "sys-config-staging" || role == "sys-config-validator" || role == "dev")
           [
             configNix
             pkgs.nix
@@ -202,7 +202,7 @@ let
     base = [ ];
     sys-net = networkProviderPackages;
     sys-firewall = networkProviderPackages;
-    config-vault = [
+    sys-config-vault = [
       configVaultInit
       configVaultArchiveCandidate
       configVaultArchiveDeployment
@@ -213,7 +213,7 @@ let
       pkgs.gnutar
       pkgs.jq
     ];
-    config-staging = [
+    sys-config-staging = [
       configStagingExportCandidate
       configStagingImportCurrent
       configStagingInit
@@ -224,7 +224,7 @@ let
       pkgs.gnutar
       pkgs.jq
     ];
-    config-validator = [
+    sys-config-validator = [
       configValidatorValidateCandidate
       configValidatorInit
       (lib.hiPrio configNix)
@@ -302,7 +302,7 @@ let
     # Nixome Runtime Configuration
 
     This is the editable Nixome configuration candidate. dom0 archives a
-    validated commit into config-vault before attempting deployment.
+    validated commit into sys-config-vault before attempting deployment.
     EOF
       cat > flake.nix <<'EOF'
     ${initialRuntimeConfigFlake}
@@ -426,7 +426,7 @@ let
     deployment records written by dom0.
 
     The `current` link points at the latest config snapshot that should be used
-    to initialize an editable config-staging worktree.
+    to initialize an editable sys-config-staging worktree.
     EOF
         }
 
@@ -511,7 +511,7 @@ let
             --arg schema "nixome.config-candidate.v1" \
             --arg commit "$candidate_commit" \
             --arg branch "main" \
-            --arg source_role "config-vault" \
+            --arg source_role "sys-config-vault" \
             --arg source "initial-runtime-config" \
             '{
               schema: $schema,
@@ -673,7 +673,7 @@ let
     }
 
     import_status=imported
-    reason="staging initialized from config-vault current"
+    reason="staging initialized from sys-config-vault current"
     current_commit=""
     dirty=""
 
@@ -701,7 +701,7 @@ let
         fi
       elif [ "$current_commit" = "$candidate_commit" ] && [ -z "$dirty" ]; then
         import_status=current
-        reason="staging already matches config-vault current"
+        reason="staging already matches sys-config-vault current"
       elif [ -n "$dirty" ]; then
         import_status=skipped
         reason="staging worktree is dirty; refusing to overwrite"
@@ -854,9 +854,9 @@ let
     if [ "''${NIXOME_CONFIG_STAGING_INIT_FROM_INITIAL_CONFIG:-0}" != 1 ]; then
       ${pkgs.coreutils}/bin/mkdir -p "$repo"
       if [ -n "$(${pkgs.findutils}/bin/find "$repo" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)" ]; then
-        printf 'config staging path exists but is not a Git repo; waiting for config-vault current import: %s\n' "$repo"
+        printf 'config staging path exists but is not a Git repo; waiting for sys-config-vault current import: %s\n' "$repo"
       else
-        printf 'config staging repo is empty; waiting for config-vault current import: %s\n' "$repo"
+        printf 'config staging repo is empty; waiting for sys-config-vault current import: %s\n' "$repo"
       fi
       exit 0
     fi
@@ -1038,7 +1038,7 @@ let
       --arg schema "nixome.config-candidate.v1" \
       --arg commit "$commit" \
       --arg branch "$branch" \
-      --arg source_role "config-staging" \
+      --arg source_role "sys-config-staging" \
       '{schema: $schema, commit: $commit, branch: $branch, source_role: $source_role}' \
       > "$tmpdir/manifest.json"
 
@@ -1167,7 +1167,7 @@ let
         --arg schema "nixome.config-validation.v1" \
         --arg status "$status" \
         --arg reason "$reason" \
-        --arg validator_role "config-validator" \
+        --arg validator_role "sys-config-validator" \
         --arg commit "$candidate_commit" \
         --arg dirty "$dirty" \
         --arg manifest "$tmpdir/manifest.json" \
@@ -1829,7 +1829,7 @@ let
           XDG_CACHE_HOME=/home/${lib.escapeShellArg cfg.user}/.cache \
           NIXOME_CONFIG_INPUTS_PATH=${lib.escapeShellArg configInputsPublicPath} \
           NIXOME_CONFIG_REFRESH_INPUTS=1 \
-          PATH=${lib.escapeShellArg (roleInitPathFor "config-staging")} \
+          PATH=${lib.escapeShellArg (roleInitPathFor "sys-config-staging")} \
           ${configStagingInit}/bin/nixome-config-staging-init
       }
       if [ "$(${pkgs.coreutils}/bin/id -un)" = ${lib.escapeShellArg cfg.user} ]; then
@@ -1843,7 +1843,7 @@ let
             XDG_CACHE_HOME=/home/${lib.escapeShellArg cfg.user}/.cache \
             NIXOME_CONFIG_INPUTS_PATH=${lib.escapeShellArg configInputsPublicPath} \
             NIXOME_CONFIG_REFRESH_INPUTS=1 \
-            PATH=${lib.escapeShellArg (roleInitPathFor "config-staging")} \
+            PATH=${lib.escapeShellArg (roleInitPathFor "sys-config-staging")} \
             ${configStagingInit}/bin/nixome-config-staging-init
       fi
       [ -f ${lib.escapeShellArg cfg.configRepoPath}/flake.lock ] && locked=true
@@ -2419,15 +2419,15 @@ let
     vm_name="$("$qubesdb_read" /name 2>/dev/null || true)"
 
     case "$qdb_role" in
-      config-vault|config-staging|config-validator) role="$qdb_role" ;;
+      sys-config-vault|sys-config-staging|sys-config-validator) role="$qdb_role" ;;
       "") ;;
       *) role=base ;;
     esac
 
     case "$vm_name" in
-      config-vault) role=config-vault ;;
-      config-staging) role=config-staging ;;
-      config-validator) role=config-validator ;;
+      sys-config-vault) role=sys-config-vault ;;
+      sys-config-staging) role=sys-config-staging ;;
+      sys-config-validator) role=sys-config-validator ;;
     esac
 
     printf 'nixome-policy-probe role=%s user=%s\n' "$role" "$(${pkgs.coreutils}/bin/whoami)"
@@ -2533,9 +2533,9 @@ in
     role = lib.mkOption {
       type = lib.types.enum [
         "base"
-        "config-vault"
-        "config-staging"
-        "config-validator"
+        "sys-config-vault"
+        "sys-config-staging"
+        "sys-config-validator"
         "dev"
         "sys-firewall"
         "sys-net"
@@ -2559,19 +2559,19 @@ in
     configRepoPath = lib.mkOption {
       type = lib.types.str;
       default = "/home/${cfg.user}/nixome-config";
-      description = "Editable config repository path in the config-staging role.";
+      description = "Editable config repository path in the sys-config-staging role.";
     };
 
     configValidationPath = lib.mkOption {
       type = lib.types.str;
       default = "/home/${cfg.user}/nixome-config-validation";
-      description = "Directory for config-staging and config-validator validation results.";
+      description = "Directory for sys-config-staging and sys-config-validator validation results.";
     };
 
     configArchivePath = lib.mkOption {
       type = lib.types.str;
       default = "/home/${cfg.user}/nixome-config-vault";
-      description = "Archived candidate repository path in the config-vault role.";
+      description = "Archived candidate repository path in the sys-config-vault role.";
     };
 
     configNixStoreRoot = lib.mkOption {
@@ -2983,7 +2983,7 @@ in
         case "$qdb_role" in
           "") ;;
           "$expected_role") ;;
-          config-vault|config-staging|config-validator)
+          sys-config-vault|sys-config-staging|sys-config-validator)
             echo "nixome config guest init: QubesDB role mismatch: expected=$expected_role actual=$qdb_role vm=$vm_name" >&2
             exit 1
             ;;
@@ -2995,7 +2995,7 @@ in
 
         case "$vm_name" in
           ""|"$expected_role") ;;
-          config-vault|config-staging|config-validator)
+          sys-config-vault|sys-config-staging|sys-config-validator)
             echo "nixome config guest init: VM name mismatch: expected=$expected_role actual=$vm_name qdb_role=$qdb_role" >&2
             exit 1
             ;;

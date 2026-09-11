@@ -49,9 +49,9 @@
       localDomains = localConfig.domains or { };
       localConfigVms = localConfig.configVms or { };
       configVmRoles = [
-        "config-vault"
-        "config-staging"
-        "config-validator"
+        "sys-config-vault"
+        "sys-config-staging"
+        "sys-config-validator"
       ];
       checkConfigKeys =
         path: allowed: attrs:
@@ -358,8 +358,8 @@
       userNixNativeDomainEntries = builtins.mapAttrs mkNixNativeEntry checkedNixNative.domains;
       configNixPrivateSizeBytes = 8589934592;
       configRoleDefaults = {
-        config-vault = {
-          guestHostName = "config-vault";
+        sys-config-vault = {
+          guestHostName = "sys-config-vault";
           label = "black";
           netvm = null;
           rootImageSizeMiB = 128;
@@ -372,15 +372,15 @@
           };
           features = {
             "nixome-managed" = "1";
-            "nixome-role" = "config-vault";
+            "nixome-role" = "sys-config-vault";
             "nixome-config-authority" = "1";
           };
           services = {
             "network-manager" = false;
           };
         };
-        config-staging = {
-          guestHostName = "config-staging";
+        sys-config-staging = {
+          guestHostName = "sys-config-staging";
           label = "gray";
           netvm = null;
           rootImageSizeMiB = 128;
@@ -394,7 +394,7 @@
           };
           features = {
             "nixome-managed" = "1";
-            "nixome-role" = "config-staging";
+            "nixome-role" = "sys-config-staging";
             "nixome-config-staging" = "1";
             "nixome-config-applied-message" = appliedMessage;
           };
@@ -402,8 +402,8 @@
             "network-manager" = false;
           };
         };
-        config-validator = {
-          guestHostName = "config-validator";
+        sys-config-validator = {
+          guestHostName = "sys-config-validator";
           label = "blue";
           netvm = null;
           rootImageSizeMiB = 128;
@@ -417,7 +417,7 @@
           };
           features = {
             "nixome-managed" = "1";
-            "nixome-role" = "config-validator";
+            "nixome-role" = "sys-config-validator";
             "nixome-config-validator" = "1";
           };
           services = {
@@ -611,6 +611,7 @@
             appliedMessage
             nixomeConfigInputs
             ;
+          nixomeNetworkDebug = false;
           nixomeQubeKernel = {
             name = nixomeQubeKernelName;
             package = nixomeQubeKernel;
@@ -647,7 +648,7 @@
             jq -c -n \
               --arg schema "nixome.dom0-profile.v1" \
               --arg message "$appliedMessage" \
-              --arg built_by "config-staging" \
+              --arg built_by "sys-config-staging" \
               '{
                 schema: $schema,
                 message: $message,
@@ -711,9 +712,9 @@
 
         inherit config;
         configRoleConfigurations = {
-          config-vault = configDomainEntries.config-vault.configuration;
-          config-staging = configDomainEntries.config-staging.configuration;
-          config-validator = configDomainEntries.config-validator.configuration;
+          sys-config-vault = configDomainEntries.sys-config-vault.configuration;
+          sys-config-staging = configDomainEntries.sys-config-staging.configuration;
+          sys-config-validator = configDomainEntries.sys-config-validator.configuration;
         };
         nixNativeConfigurations = nixNativeConfigurations;
         system = runtimeSystem;

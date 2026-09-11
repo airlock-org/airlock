@@ -67,9 +67,9 @@ JOURNAL_LOG="$LOG_DIR/config-vms-journal.log"
 LIBXL_LOG="$LOG_DIR/config-vms-libxl.log"
 QVM_PREFS_LOG="$LOG_DIR/config-vms-qvm-prefs.log"
 
-STAGING="${NIXOME_CONFIG_STAGING_VM:-config-staging}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-config-vault}"
-VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-config-validator}"
+STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
+VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
+VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-sys-config-validator}"
 QUBE_USER="${NIXOME_QUBE_USER:-user}"
 DOM0_USER="${NIXOME_DOM0_USER:-${SUDO_USER:-nixome}}"
 APPLY_MESSAGE="${NIXOME_CONFIG_APPLY_MESSAGE:-smoke-applied-$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -842,7 +842,7 @@ cat > nixome/system.nix <<'SYSTEMNIXEOF'
 $INITIAL_SYSTEM_CONFIG_TEXT
 SYSTEMNIXEOF
 cat > dom0-profile/share/nixome/profile.json <<PROFILEJSONEOF
-{"schema":"nixome.dom0-profile.v1","message":"$APPLY_MESSAGE","built_by":"config-staging"}
+{"schema":"nixome.dom0-profile.v1","message":"$APPLY_MESSAGE","built_by":"sys-config-staging"}
 PROFILEJSONEOF
 cat > dom0-profile/bin/nixome-dom0-profile-activate <<'PROFILEACTIVATEEOF'
 #!/bin/sh
@@ -899,7 +899,7 @@ run_qrexec_script_or_fail \
 fi
 
 if [ "$CONFIG_VMS_SMOKE_MODE" = stage-candidate ]; then
-  finish_stage "config candidate staged in config-staging"
+  finish_stage "config candidate staged in sys-config-staging"
 fi
 
 if mode_runs_apply_candidate; then
@@ -956,7 +956,7 @@ jq -e \
     .domains[$vault].netvm == null and
     .domains[$vault].prefs.include_in_backups == true and
     .domains[$vault].features."nixome-config-authority" == "1" and
-    .domains[$vault].features."nixome-role" == "config-vault" and
+    .domains[$vault].features."nixome-role" == "sys-config-vault" and
     .domains[$vault].services."network-manager" == false and
     closure_domain($staging) and
     .domains[$staging].label == "gray" and
@@ -969,7 +969,7 @@ jq -e \
     .domains[$validator].netvm == null and
     .domains[$validator].prefs.include_in_backups == true and
     .domains[$validator].features."nixome-config-validator" == "1" and
-    .domains[$validator].features."nixome-role" == "config-validator" and
+    .domains[$validator].features."nixome-role" == "sys-config-validator" and
     closure_domain($created) and
     .domains[$created].features."nixome-created-from-config" == "1" and
     .domains[$created].features."nixome-created-from-config-message" == $apply_message
@@ -980,7 +980,7 @@ run_or_fail \
   "read generated Nixome qrexec policy" \
   "$QREXEC_POLICY_FILE_LOG" \
   cat /var/lib/nixome/qubes-policy.d/90-nixome.policy
-grep -Fx "nixome.PolicyProbe * dom0 config-vault allow" "$QREXEC_POLICY_FILE_LOG" >/dev/null ||
+grep -Fx "nixome.PolicyProbe * dom0 sys-config-vault allow" "$QREXEC_POLICY_FILE_LOG" >/dev/null ||
   fail "generated qrexec policy is missing PolicyProbe allow rule"
 grep -Fx "nixome.PolicyProbe * @anyvm @anyvm deny" "$QREXEC_POLICY_FILE_LOG" >/dev/null ||
   fail "generated qrexec policy is missing PolicyProbe deny rule"
@@ -989,7 +989,7 @@ run_or_fail \
   "run qrexec probe allowed by generated policy" \
   "$QREXEC_POLICY_PROBE_LOG" \
   qrexec-client -d "$VAULT" -T -w 120 "DEFAULT:QUBESRPC nixome.PolicyProbe+ dom0"
-grep -Fx "nixome-policy-probe role=config-vault user=$QUBE_USER" "$QREXEC_POLICY_PROBE_LOG" >/dev/null ||
+grep -Fx "nixome-policy-probe role=sys-config-vault user=$QUBE_USER" "$QREXEC_POLICY_PROBE_LOG" >/dev/null ||
   fail "generated qrexec policy probe output did not match expected value"
 
 run_or_fail \
@@ -1104,7 +1104,7 @@ jq -e \
 jq -e --arg apply_message "$APPLY_MESSAGE" '
   .schema == "nixome.dom0-profile.v1" and
   .message == $apply_message and
-  .built_by == "config-staging"
+  .built_by == "sys-config-staging"
 ' "$DOM0_SYSTEM_PROFILE_JSON_LOG" >/dev/null ||
   fail "applied dom0 profile JSON did not match expected value"
 

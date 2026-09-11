@@ -8,8 +8,8 @@
 {
   # Primary edit surface for this Nixome runtime.
   #
-  # Edit this file in config-staging, commit the change, validate it in
-  # config-validator, then ask dom0 to apply it. config-vault records the
+  # Edit this file in sys-config-staging, commit the change, validate it in
+  # sys-config-validator, then ask dom0 to apply it. sys-config-vault records the
   # candidate and deployment history.
 
   # Declare additional traditional Qubes domains here. Nixome supports the
@@ -113,7 +113,7 @@
   };
 
   # Add or override raw Qubes topology entries here. These become normalized
-  # nixome.topology JSON in config-validator before dom0 applies them.
+  # nixome.topology JSON in sys-config-validator before dom0 applies them.
   # Prefer top-level domains for normal additions; extraDomains is a low-level
   # escape hatch that overrides generated domain entries.
   topology = {
@@ -129,9 +129,9 @@
   # customizes the Qubes runtime envelope around that role.
   configVms = {
     guests = {
-      config-vault = { };
-      config-staging = { };
-      config-validator = { };
+      sys-config-vault = { };
+      sys-config-staging = { };
+      sys-config-validator = { };
     };
     domains = { };
   };
