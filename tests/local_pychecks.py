@@ -1745,6 +1745,45 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
     )
 
 
+def check_qubes_vm_kernel_stubdomain_boot(repo_root: Path, log_dir: Path) -> None:
+    del log_dir
+    repack = repo_root / "vendor/nixos-qubes/nix/repackRpmKernel.nix"
+    install = (
+        repo_root
+        / "vendor/nixos-qubes/pkgs/by-name/ni/nixos-qubes-tools/src/nixos-qubes-install-kernel-rpm"
+    )
+
+    repack_text = repack.read_text(encoding="utf-8")
+    install_text = install.read_text(encoding="utf-8")
+
+    def assert_before_mkfs(text: str, copy_tokens: tuple[str, str]) -> None:
+        mkfs_pos = text.index("mkfs.ext3")
+        for token in copy_tokens:
+            pos = text.index(token)
+            assert pos < mkfs_pos
+
+    assert "expects direct-boot artifacts at its root" in repack_text
+    assert "srcs = [" in repack_text
+    assert "kernelSrc" in repack_text
+    assert "modulesSrc" in repack_text
+    assert_before_mkfs(
+        repack_text,
+        (
+            'cp "var/lib/qubes/vm-kernels/${version}/vmlinuz" imgroot/vmlinuz',
+            'cp "var/lib/qubes/vm-kernels/${version}/initramfs" imgroot/initramfs',
+        ),
+    )
+
+    assert "expects direct-boot artifacts at its root" in install_text
+    assert_before_mkfs(
+        install_text,
+        (
+            'cp "$kerneldir/vmlinuz" "$imgroot/vmlinuz"',
+            'cp "$kerneldir/initramfs" "$imgroot/initramfs"',
+        ),
+    )
+
+
 def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     shutil.rmtree(log_dir, ignore_errors=True)
     log_dir.mkdir(parents=True)

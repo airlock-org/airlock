@@ -29,7 +29,15 @@ let
       attr
       kmod
     ];
-    unpackPhase = "rpmextract $src";
+    srcs = [
+      kernelSrc
+      modulesSrc
+    ];
+    unpackPhase = ''
+      for src in $srcs; do
+        rpmextract "$src"
+      done
+    '';
     # TODO: Shrink image after creation.
     # TODO: Use makeDiskImage for that?
     buildPhase = ''
@@ -47,9 +55,12 @@ let
       # Generate module index files (modules.dep, modules.alias, etc.)
       depmod -b depmod_base $kver
 
-      # Image must contain the version-named subdirectory, not bare files.
+      # The Linux HVM stubdomain also mounts modules.img as /tmp/boot and
+      # expects direct-boot artifacts at its root when a kernel cmdline is set.
       mkdir -p imgroot
       mv depmod_base/lib/modules/$kver imgroot/
+      cp "var/lib/qubes/vm-kernels/${version}/vmlinuz" imgroot/vmlinuz
+      cp "var/lib/qubes/vm-kernels/${version}/initramfs" imgroot/initramfs
 
       # Set SELinux labels so modules are accessible under enforcing SELinux in VMs
       find imgroot -exec setfattr -n security.selinux \
