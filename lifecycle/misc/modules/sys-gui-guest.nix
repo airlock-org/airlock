@@ -11,7 +11,16 @@ let
       # Failed transient sessions must be collected so another login can start
       # the same named unit without a manual reset-failed in the GUI domain.
       substituteInPlace "$out/bin/qubes-start-xephyr" \
-        --replace-fail '--wait' '--wait --collect'
+        --replace-fail '--wait' '--wait --collect' \
+        --replace-fail 'export DISPLAY=$DISPLAY_XEPHYR' 'export DISPLAY=$DISPLAY_XEPHYR
+      export ENV_PATH=/run/wrappers/bin:/run/current-system/sw/bin' \
+        --replace-fail '> ~/.xsession-errors 2>&1' ""
+      # qubes-gui-runuser copies PATH into a 256-byte buffer before opening
+      # PAM. systemd's Nix store PATH exceeds that limit and causes a silent
+      # exit 255. Its supported ENV_PATH override keeps this bootstrap value
+      # short; PAM supplies the rest of the NixOS session environment.
+      # Keep launcher output on the service journal instead of root's hidden
+      # .xsession-errors so failed logins have accessible diagnostics.
     '';
   });
   guestUser = config.nixome.qubeGuest.user;

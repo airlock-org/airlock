@@ -1973,6 +1973,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         sysGuiCfg.systemd.services.qubes-gui-agent.wantedBy;
       sys_gui_agent_path = sysGuiCfg.systemd.services.qubes-gui-agent.environment.PATH;
       sys_gui_pam = sysGuiCfg.security.pam.services.qubes-gui-agent.text;
+      sys_gui_session_launcher = builtins.readFile
+        sysGuiCfg.environment.etc."qubes-rpc/qubes.GuiVMSession".source;
       sys_gui_packages_present = lib.all (name: has name sysGuiPackages) [
         "qubes-gui-agent-linux"
         "qubes-gui-daemon"
@@ -2189,6 +2191,13 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert "pam_systemd.so" in data["sys_gui_pam"]
     assert "system-auth" not in data["sys_gui_pam"]
     assert "postlogin" not in data["sys_gui_pam"]
+    launcher = data["sys_gui_session_launcher"]
+    session_path = re.search(r"^export ENV_PATH=(.+)$", launcher, re.MULTILINE)
+    assert session_path is not None
+    assert len(f"PATH={session_path.group(1)}".encode()) < 256
+    assert "/run/current-system/sw/bin" in session_path.group(1).split(":")
+    assert "/run/wrappers/bin" in session_path.group(1).split(":")
+    assert "> ~/.xsession-errors" not in launcher
     assert data["sys_gui_packages_present"] is True
     assert data["sys_gui_rpc_present"] is True
     assert data["dom0_sys_gui_policy_present"] is True
