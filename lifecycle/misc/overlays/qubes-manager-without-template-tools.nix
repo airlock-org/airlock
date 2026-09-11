@@ -35,13 +35,13 @@ prev.lib.optionalAttrs (prev ? qubes-manager) {
           fi
           if [ -f "$dist_info/RECORD" ]; then
             sed -i \
-              -e '/bin\\/qubes-template-manager/d' \
-              -e '/bin\\/qvm-template-gui/d' \
-              -e '/qubesmanager\\/qvm_template_gui[.]/d' \
-              -e '/qubesmanager\\/template_manager[.]/d' \
-              -e '/qubesmanager\\/ui_qvmtemplate[.]/d' \
-              -e '/qubesmanager\\/ui_templateinstall/d' \
-              -e '/qubesmanager\\/ui_templatemanager[.]/d' \
+              -e '/bin\/qubes-template-manager/d' \
+              -e '/bin\/qvm-template-gui/d' \
+              -e '/qubesmanager\/qvm_template_gui[.]/d' \
+              -e '/qubesmanager\/template_manager[.]/d' \
+              -e '/qubesmanager\/ui_qvmtemplate[.]/d' \
+              -e '/qubesmanager\/ui_templateinstall/d' \
+              -e '/qubesmanager\/ui_templatemanager[.]/d' \
               "$dist_info/RECORD"
           fi
         fi
