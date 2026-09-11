@@ -3188,25 +3188,41 @@ in
       unitConfig.OnFailure = [ "nixome-qubes-db-diagnostics.service" ];
     };
 
-    systemd.services.qubes-qrexec-agent = {
-      enable = true;
-      wantedBy = [ "multi-user.target" ];
-      wants = [ "nixome-qubes-rw-init.service" ];
-      requires = [
-        "nixome-qubes-rw-init.service"
-      ]
-      ++ lib.optional hasConfigRole "nixome-config-guest-init.service"
-      ++ lib.optional hasDevRole "nixome-dev-guest-init.service";
-      after = [
-        "nixome-qubes-rw-init.service"
-        "systemd-user-sessions.service"
-      ]
-      ++ lib.optional hasConfigRole "nixome-config-guest-init.service"
-      ++ lib.optional hasDevRole "nixome-dev-guest-init.service";
-      aliases = [ "qubes-core-agent.service" ];
-      overrideStrategy = "asDropin";
-      unitConfig.OnFailure = [ "nixome-qubes-qrexec-diagnostics.service" ];
-    };
+    systemd.services.qubes-qrexec-agent =
+      let
+        roleInitDeps =
+          lib.optional hasConfigRole "nixome-config-guest-init.service"
+          ++ lib.optional hasDevRole "nixome-dev-guest-init.service";
+        normalAfter = [
+          "nixome-qubes-rw-init.service"
+          "systemd-user-sessions.service"
+        ]
+        ++ roleInitDeps;
+        networkProviderAfter = [
+          "xendriverdomain.service"
+          "nixome-qubes-rw-init.service"
+        ]
+        ++ roleInitDeps;
+      in
+      {
+        enable = true;
+        wantedBy = [ "multi-user.target" ];
+        wants = [ "nixome-qubes-rw-init.service" ];
+        requires = [
+          "nixome-qubes-rw-init.service"
+        ]
+        ++ roleInitDeps;
+        after = lib.mkIf (!hasNetworkProviderRole) normalAfter;
+        before = lib.optionals hasNetworkProviderRole [ "network.target" ];
+        aliases = [ "qubes-core-agent.service" ];
+        overrideStrategy = "asDropin";
+        unitConfig = {
+          OnFailure = [ "nixome-qubes-qrexec-diagnostics.service" ];
+        }
+        // lib.optionalAttrs hasNetworkProviderRole {
+          After = [ "" ] ++ networkProviderAfter;
+        };
+      };
 
     systemd.services.qubes-meminfo-writer = {
       enable = true;

@@ -9360,6 +9360,14 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                   sys_net_service_after = sysNet.systemd.services.qubes-updates-proxy.after;
                   sys_net_service_condition =
                     sysNet.systemd.services.qubes-updates-proxy.unitConfig.ConditionPathExists;
+                  sys_net_qrexec_after =
+                    sysNet.systemd.services.qubes-qrexec-agent.after;
+                  sys_net_qrexec_before =
+                    sysNet.systemd.services.qubes-qrexec-agent.before;
+                  sys_net_qrexec_unit_after =
+                    sysNet.systemd.services.qubes-qrexec-agent.unitConfig.After or [];
+                  sys_net_qrexec_unit_text =
+                    sysNet.systemd.units."qubes-qrexec-agent.service".text;
                   sys_net_rpc_config_text =
                     sysNet.environment.etc."qubes/rpc-config/qubes.UpdatesProxy".text;
                   sys_net_rpc_service_mode =
@@ -9378,6 +9386,12 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                     sysFirewall.systemd.services."qubes-network-uplink@".serviceConfig.ExecStart;
                   sys_firewall_network_uplink_stop =
                     sysFirewall.systemd.services."qubes-network-uplink@".serviceConfig.ExecStop;
+                  sys_firewall_qrexec_after =
+                    sysFirewall.systemd.services.qubes-qrexec-agent.after;
+                  sys_firewall_qrexec_before =
+                    sysFirewall.systemd.services.qubes-qrexec-agent.before;
+                  sys_firewall_qrexec_unit_after =
+                    sysFirewall.systemd.services.qubes-qrexec-agent.unitConfig.After or [];
                   sys_firewall_rpc_config_text =
                     sysFirewall.environment.etc."qubes/rpc-config/qubes.UpdatesProxy".text;
                   sys_firewall_rpc_service_mode =
@@ -9428,6 +9442,20 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         proxy_eval["sys_net_service_condition"]
         == "|/run/qubes-service/qubes-updates-proxy"
     )
+    assert proxy_eval["sys_net_qrexec_after"] == []
+    assert "network.target" in proxy_eval["sys_net_qrexec_before"]
+    assert proxy_eval["sys_net_qrexec_unit_after"][0] == ""
+    assert "xendriverdomain.service" in proxy_eval["sys_net_qrexec_unit_after"]
+    assert "nixome-qubes-rw-init.service" in proxy_eval["sys_net_qrexec_unit_after"]
+    assert (
+        "systemd-user-sessions.service" not in proxy_eval["sys_net_qrexec_unit_after"]
+    )
+    assert "\nAfter=\n" in proxy_eval["sys_net_qrexec_unit_text"]
+    assert (
+        "After=systemd-user-sessions.service"
+        not in proxy_eval["sys_net_qrexec_unit_text"]
+    )
+    assert "Before=network.target" in proxy_eval["sys_net_qrexec_unit_text"]
     assert (
         proxy_eval["sys_net_rpc_config_text"]
         == "skip-service-descriptor=true\nexit-on-service-eof=true\n"
@@ -9474,6 +9502,17 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert "tinyproxy -d -c" in proxy_eval["sys_firewall_updates_proxy_exec"]
     assert "/bin/setup-ip add %i" in proxy_eval["sys_firewall_network_uplink_exec"]
     assert "/bin/setup-ip remove %i" in proxy_eval["sys_firewall_network_uplink_stop"]
+    assert proxy_eval["sys_firewall_qrexec_after"] == []
+    assert "network.target" in proxy_eval["sys_firewall_qrexec_before"]
+    assert proxy_eval["sys_firewall_qrexec_unit_after"][0] == ""
+    assert "xendriverdomain.service" in proxy_eval["sys_firewall_qrexec_unit_after"]
+    assert (
+        "nixome-qubes-rw-init.service" in proxy_eval["sys_firewall_qrexec_unit_after"]
+    )
+    assert (
+        "systemd-user-sessions.service"
+        not in proxy_eval["sys_firewall_qrexec_unit_after"]
+    )
     assert (
         proxy_eval["sys_firewall_rpc_config_text"]
         == "skip-service-descriptor=true\nexit-on-service-eof=true\n"
