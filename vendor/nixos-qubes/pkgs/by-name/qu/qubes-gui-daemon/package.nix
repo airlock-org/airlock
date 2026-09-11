@@ -62,7 +62,9 @@ let
     postPatch = ''
       substituteInPlace gui-daemon/xside.c \
         --replace-fail '/usr/bin/qubesdb-write' '${qubes-core-qubesdb}/bin/qubesdb-write' \
-        --replace-fail '/usr/bin/setxkbmap' '${setxkbmap}/bin/setxkbmap'
+        --replace-fail '/usr/bin/setxkbmap' '${setxkbmap}/bin/setxkbmap' \
+        --replace-fail 'execv("/usr/bin/qubes-guid", restart_argv);' \
+          'execv("'"$out"'/bin/qubes-guid", restart_argv);'
     '';
 
     buildFlags = [ "all" ];
