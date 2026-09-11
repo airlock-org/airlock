@@ -1659,6 +1659,7 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "NIXOME_VM_SKIP_BASE_BUILD",
             "using existing Nixome VM base image result link",
             "NIXOME_VM_IOMMU",
+            "kernel-irqchip=split",
             "intel-iommu,intremap=on,caching-mode=on",
         ],
         "test_vm": [

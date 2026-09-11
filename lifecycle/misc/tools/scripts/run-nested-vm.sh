@@ -237,14 +237,17 @@ case "$DISPLAY_MODE" in
     ;;
 esac
 
+MACHINE="q35,accel=kvm"
 iommu_args=()
 if [ "$IOMMU" = "1" ]; then
+  MACHINE="q35,accel=kvm,kernel-irqchip=split"
   iommu_args=(-device intel-iommu,intremap=on,caching-mode=on)
 fi
 
 cat <<EOF
 starting VM
   image attr: .#$IMAGE_ATTR
+  machine: $MACHINE
   nix base: $NIX_BASE_IMAGE
   backing: $BASE_IMAGE ($BASE_FORMAT)
   disk: $RUN_DISK
@@ -267,7 +270,7 @@ EOF
 rm -f "$MONITOR_SOCKET"
 
 nixome_exec_store_path "$qemu_out/bin/qemu-system-x86_64" \
-  -machine q35,accel=kvm \
+  -machine "$MACHINE" \
   -cpu host,migratable=off \
   -smp "$SMP" \
   -m "$MEMORY" \
