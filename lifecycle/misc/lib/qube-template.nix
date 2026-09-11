@@ -539,6 +539,7 @@ let
         nativeBuildInputs = [
           pkgs.coreutils
           pkgs.e2fsprogs
+          pkgs.fakeroot
           pkgs.findutils
         ];
         preferLocalBuild = true;
@@ -585,7 +586,10 @@ let
         (cd "$root" && find . -mindepth 1 -print | sort) > "$out/root-files.txt"
 
         truncate -s ${toString rootImageSizeMiB}M "$out/root.img"
-        mkfs.ext4 -q -F -L nixroot -d "$root" "$out/root.img"
+        # As in NixOS make-ext4-fs, record root ownership in the image without
+        # requiring a privileged build. Otherwise -d preserves the build user's
+        # UID/GID, making /var user-owned and preventing safe tmpfiles setup.
+        fakeroot mkfs.ext4 -q -F -L nixroot -d "$root" "$out/root.img"
 
         cat > "$out/manifest.json" <<EOF
         {"schema":"nixome.nix-closure-root-image.v1","name":"${imageName}","image":"root.img","contains_store":false,"init":"/sbin/init","store_mountpoint":"/nix/store","store_device_default":"/dev/xvde","store_blob_device_default":"/dev/xvdf","store_formats":["erofs"]}

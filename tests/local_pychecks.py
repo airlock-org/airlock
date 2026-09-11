@@ -464,6 +464,27 @@ def check_nix_closure_root_image(repo_root: Path, log_dir: Path) -> None:
     debugfs_output = (result_dir / "debugfs-nix-store.txt").read_text(encoding="utf-8")
     assert not re.search(r"/[A-Za-z0-9]{32}-", debugfs_output)
 
+    # Inspect actual image metadata, not the staging tree: unprivileged builds
+    # must not leak their UID/GID into system directories, files, or symlinks.
+    image_paths = ["/", "/lost+found"] + [item.removeprefix(".") for item in root_files]
+    assert "/var" in image_paths
+    for index, image_path in enumerate(image_paths):
+        stat_log = result_dir / f"debugfs-inode-{index}.txt"
+        _run(
+            ["debugfs", "-R", f"stat {image_path}", str(root_image_out / "root.img")],
+            stdout=stat_log,
+            stderr=result_dir / f"debugfs-inode-{index}.stderr",
+        )
+        inode = stat_log.read_text(encoding="utf-8")
+        ownership = re.search(r"User:\s+(\d+)\s+Group:\s+(\d+)", inode)
+        assert (
+            ownership is not None
+        ), f"Missing inode metadata for {image_path}: {inode}"
+        assert ownership.groups() == (
+            "0",
+            "0",
+        ), f"{image_path} must be owned by root:root in the guest image: {inode}"
+
 
 def check_setup_config_runtime_path(repo_root: Path, log_dir: Path) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
