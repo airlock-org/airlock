@@ -274,6 +274,9 @@ let
       modules = [
         ({ ... }: {
           networking.hostName = sysGuiRoleDefaults.guestHostName;
+          # Development/bootstrap login, matching the nested image password.
+          # Real deployments supply their own NixOS password configuration.
+          users.users.user.initialPassword = "nixome";
         })
       ];
       rootImageSizeMiB = sysGuiRoleDefaults.rootImageSizeMiB;

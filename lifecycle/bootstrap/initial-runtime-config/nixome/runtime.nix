@@ -54,6 +54,8 @@
   nixNative.domains = {
     sys-gui = {
       role = "sys-gui";
+      # Initial development login. Replace with a deployment password file.
+      configuration.users.users.user.initialPassword = "nixome";
       label = "black";
       netvm = null;
       rootImageSizeMiB = 512;

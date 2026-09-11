@@ -78,11 +78,21 @@ let
     admin.property.List * sys-gui dom0 allow
     admin.property.Get * sys-gui dom0 allow
     admin.property.GetAll * sys-gui dom0 allow
+    admin.property.GetDefault * sys-gui dom0 allow
+    admin.vm.property.List * sys-gui dom0 allow
+    admin.vm.property.GetAll * sys-gui dom0 allow
+    admin.vm.property.GetDefault * sys-gui dom0 allow
     admin.label.List * sys-gui dom0 allow
     admin.pool.List * sys-gui dom0 allow
     admin.pool.Info * sys-gui dom0 allow
     admin.pool.UsageDetails * sys-gui dom0 allow
+    admin.pool.ListDrivers * sys-gui dom0 allow
     admin.vmclass.List * sys-gui dom0 allow
+    # Creation is a global API call, but only these VM classes are permitted.
+    ${lib.concatMapStringsSep "\n" (class: ''
+      admin.vm.Create.${class} * sys-gui dom0 allow
+      admin.vm.CreateInPool.${class} * sys-gui dom0 allow
+    '') [ "AppVM" "StandaloneVM" "TemplateVM" ]}
     * * sys-gui dom0 deny
 
     # VM Manager and per-VM settings. In particular there is no wildcard
@@ -115,6 +125,7 @@ let
       "admin.vm.Kill"
       "admin.vm.Pause"
       "admin.vm.Unpause"
+      "admin.vm.Remove"
     ]}
     * * sys-gui @anyvm deny
     EOF
@@ -314,6 +325,16 @@ in
     );
     services.displayManager.sessionPackages = lib.optional cfg.gui.enable sysGuiSessionPackage;
     services.displayManager.defaultSession = lib.mkIf cfg.gui.enable (lib.mkOverride 40 "sys-gui");
+    # This is a display relay. Authentication and the login UI live in sys-gui.
+    services.displayManager.autoLogin = lib.mkIf cfg.gui.enable {
+      enable = true;
+      user = cfg.user;
+    };
+    services.xserver.displayManager.lightdm = lib.mkIf cfg.gui.enable {
+      greeter.enable = false;
+      greeters.gtk.enable = false;
+      autoLogin.timeout = 0;
+    };
     systemd.services.display-manager.after = lib.optional cfg.gui.enable "nixome-setup-config.service";
     nixome.qubes.setupConfigOnBoot.statusDevice = lib.mkIf cfg.gui.enable (lib.mkDefault "/dev/tty1");
 

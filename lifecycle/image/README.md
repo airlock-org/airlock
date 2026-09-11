@@ -33,5 +33,8 @@ nix build .#nixome-vm-gui-config-release-image
 
 The historic unsuffixed image outputs remain development-mode aliases for now.
 
+See [sys-gui desktop and login](../../docs/sys-gui.md) for the guest login
+credentials, the remaining dom0 display relay, and desktop-management permissions.
+
 Image-only helper packages or scripts belong in `tools/`. Cross-stage helpers
 belong in `../misc/tools/`.
