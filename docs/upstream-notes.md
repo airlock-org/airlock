@@ -16,6 +16,8 @@ Important constraints from the NixOS module/docs:
 - Xen dom0 support is documented as available since NixOS 24.11.
 - The supported boot paths are systemd-boot, Lanzaboote with the relevant Xen
   support, or Limine.
+- Xen adds a second entry for each NixOS generation. The Xen entry is the
+  default; Nixome labels the ordinary NixOS entry `Recovery: without Xen`.
 - `boot.initrd.systemd.enable = true` is required. Legacy scripted stage 1 is
   rejected.
 - NixOS checks software/kernel requirements, but it does not check hardware

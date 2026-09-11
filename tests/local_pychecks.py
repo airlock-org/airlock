@@ -9533,6 +9533,16 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert topology["schema"] == "nixome.qubes-topology.v1"
     assert topology["templates"] == {}
     assert topology["prefs"]["default_netvm"] == "sys-firewall"
+    systemd_boot_extra_install_commands = _nix_eval_raw(
+        repo_root,
+        "nixosConfigurations.vm-gui-config.config.boot.loader.systemd-boot.extraInstallCommands",
+    )
+    assert "xenBootBuilder" in systemd_boot_extra_install_commands
+    assert "nixos-*.conf" in systemd_boot_extra_install_commands
+    assert "Recovery: without Xen" in systemd_boot_extra_install_commands
+    assert systemd_boot_extra_install_commands.index("xenBootBuilder") < (
+        systemd_boot_extra_install_commands.index("Recovery: without Xen")
+    )
     assert (
         topology["domains"]["sys-config-vault"]["backend"]["root"]["source_ref"] is None
     )

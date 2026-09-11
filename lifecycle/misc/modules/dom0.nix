@@ -274,6 +274,19 @@ in
       };
     };
 
+    # The upstream Xen builder runs first and changes loader.conf to select the
+    # matching xen-* entry. Keep the ordinary NixOS entry as an explicit
+    # recovery path rather than something that looks suitable for Qubes use.
+    boot.loader.systemd-boot.extraInstallCommands = lib.mkAfter ''
+      for entry in "$efiMountPoint"/loader/entries/nixos-*.conf; do
+        [ -f "$entry" ] || continue
+        ${pkgs.gnugrep}/bin/grep -Fq "(Recovery: without Xen)" "$entry" || \
+          ${pkgs.gnused}/bin/sed -i \
+            's/^title \(.*\)$/title \1 (Recovery: without Xen)/' \
+            "$entry"
+      done
+    '';
+
     virtualisation.libvirtd.firewallBackend = lib.mkForce cfg.libvirtFirewallBackend;
 
     systemd.services.nixome-qubes-store-init = {
