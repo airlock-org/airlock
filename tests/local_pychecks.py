@@ -2040,8 +2040,9 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       dom0_sys_gui_management_policy = lib.all (rule: lib.hasInfix rule dom0SysGuiPolicy) [
         "admin.vm.Create.AppVM * sys-gui dom0 allow"
         "admin.vm.Create.StandaloneVM * sys-gui dom0 allow"
-        "admin.vm.Start * sys-gui @anyvm allow"
-        "admin.vm.Remove * sys-gui @anyvm allow"
+        "admin.vm.property.Get * sys-gui @anyvm allow target=dom0"
+        "admin.vm.Start * sys-gui @anyvm allow target=dom0"
+        "admin.vm.Remove * sys-gui @anyvm allow target=dom0"
         "* * sys-gui dom0 deny"
         "* * sys-gui @anyvm deny"
       ] && !(lib.hasInfix "admin.*" dom0SysGuiPolicy);

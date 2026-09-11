@@ -106,7 +106,10 @@ let
 
     # VM Manager and per-VM settings. In particular there is no wildcard
     # admin permission, no policy editing, and no host device assignment.
-    ${lib.concatMapStringsSep "\n" (method: "${method} * sys-gui @anyvm allow") [
+    # Per-VM Admin API requests are addressed by their VM name, but qubesd
+    # itself runs in dom0. Redirect each explicit operation there; without the
+    # redirect Qubes Manager cannot read even a VM's qid and exits at startup.
+    ${lib.concatMapStringsSep "\n" (method: "${method} * sys-gui @anyvm allow target=dom0") [
       "admin.vm.CurrentState"
       "admin.vm.property.List"
       "admin.vm.property.Get"
