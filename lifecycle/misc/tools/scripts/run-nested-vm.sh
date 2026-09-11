@@ -281,7 +281,7 @@ nixome_exec_store_path "$qemu_out/bin/qemu-system-x86_64" \
   -vga "$VGA" \
   -device virtio-net-pci,netdev=net0 \
   -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22" \
-  -device virtio-net-pci,disable-modern=on,netdev=sysnet0 \
+  -device virtio-net-pci,disable-modern=on,vectors=0,netdev=sysnet0 \
   -netdev "user,id=sysnet0" \
   -device virtio-rng-pci \
   -monitor "unix:$MONITOR_SOCKET,server=on,wait=off" \
