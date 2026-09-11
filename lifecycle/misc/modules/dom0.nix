@@ -45,6 +45,10 @@ let
     qubes.GetImageRGBA * sys-gui @tag:guivm-sys-gui allow
     qubes.GetAppmenus * sys-gui @tag:guivm-sys-gui allow
     qubes.GetAppmenus * sys-gui @type:TemplateVM allow
+    # The display-manager session enters the GUI domain through this RPC.
+    # Keep it limited to dom0 starting the declared sys-gui domain.
+    qubes.GuiVMSession * dom0 sys-gui allow
+    qubes.GuiVMSession * @anyvm @anyvm deny
     qubes.ClipboardCopy + sys-gui @tag:guivm-sys-gui allow
     qubes.ClipboardPaste + sys-gui @tag:guivm-sys-gui allow
     qubes.SetMonitorLayout * sys-gui @tag:guivm-sys-gui allow

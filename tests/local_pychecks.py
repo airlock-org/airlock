@@ -1880,6 +1880,10 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       packageNames = cfg: map packageName cfg.environment.systemPackages;
       dom0Packages = packageNames dom0Cfg;
       dom0QubesPackages = map packageName dom0Cfg.virtualisation.qubes.packages;
+      dom0SysGuiPolicyPackage = lib.findFirst (
+        package: packageName package == "nixome-sys-gui-policy"
+      ) (throw "missing Nixome sys-gui policy package") dom0Cfg.virtualisation.qubes.packages;
+      dom0SysGuiPolicy = builtins.readFile "${{dom0SysGuiPolicyPackage}}/etc/qubes/policy.d/50-nixome-sys-gui.policy";
       legacyDevDom0Packages = packageNames legacyDevDom0Cfg;
       releaseDom0Packages = packageNames releaseDom0Cfg;
       nonDevDom0Packages = packageNames nonDevDom0Cfg;
@@ -1978,6 +1982,10 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         "qubes-rpc/qubes.WindowIconUpdater"
       ];
       dom0_sys_gui_policy_present = has "nixome-sys-gui-policy" dom0QubesPackages;
+      dom0_sys_gui_session_policy = lib.hasInfix
+        "qubes.GuiVMSession * dom0 sys-gui allow"
+        dom0SysGuiPolicy
+        && lib.hasInfix "qubes.GuiVMSession * @anyvm @anyvm deny" dom0SysGuiPolicy;
       dom0_sys_gui_session_present = lib.any (
         package: builtins.elem "sys-gui" (package.providedSessions or [ ])
       ) dom0Cfg.services.displayManager.sessionPackages;
@@ -2174,6 +2182,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["sys_gui_packages_present"] is True
     assert data["sys_gui_rpc_present"] is True
     assert data["dom0_sys_gui_policy_present"] is True
+    assert data["dom0_sys_gui_session_policy"] is True
     assert data["dom0_sys_gui_session_present"] is True
     assert data["dom0_default_session"] == "sys-gui"
     assert "nixome-setup-config.service" in data["dom0_display_manager_after"]
