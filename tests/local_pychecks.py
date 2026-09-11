@@ -9399,6 +9399,8 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                     sysNet.systemd.services.xendriverdomain.requires;
                   sys_net_xendriverdomain_runtime_directory =
                     sysNet.systemd.services.xendriverdomain.serviceConfig.RuntimeDirectory;
+                  sys_net_xendriverdomain_logs_directory =
+                    sysNet.systemd.services.xendriverdomain.serviceConfig.LogsDirectory;
                   sys_net_xendriverdomain_unit_text =
                     sysNet.systemd.units."xendriverdomain.service".text;
                   sys_net_xen_etc_source =
@@ -9504,7 +9506,9 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert "systemd-modules-load.service" in proxy_eval["sys_net_xendriverdomain_after"]
     assert "proc-xen.mount" in proxy_eval["sys_net_xendriverdomain_requires"]
     assert proxy_eval["sys_net_xendriverdomain_runtime_directory"] == "xen"
+    assert proxy_eval["sys_net_xendriverdomain_logs_directory"] == "xen"
     assert "RuntimeDirectory=xen" in proxy_eval["sys_net_xendriverdomain_unit_text"]
+    assert "LogsDirectory=xen" in proxy_eval["sys_net_xendriverdomain_unit_text"]
     assert "nixome-xen-driver-domain-etc" in proxy_eval["sys_net_xen_etc_source"]
     assert (
         proxy_eval["sys_net_rpc_config_text"]

@@ -3250,6 +3250,7 @@ in
       path = networkGuestPath;
       overrideStrategy = "asDropin";
       serviceConfig = {
+        LogsDirectory = "xen";
         RuntimeDirectory = "xen";
         RuntimeDirectoryMode = "0755";
       };
