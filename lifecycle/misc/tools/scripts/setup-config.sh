@@ -512,8 +512,18 @@ set_pref() {
   if [ "$APPLY" = "1" ]; then
     if current="$(qvm-prefs "$domain" "$pref" 2>/dev/null)"; then
       if value_matches "$value" "$current"; then
-        printf 'pref current: %s %s=%s\n' "$domain" "$pref" "$value"
-        return
+        case "$pref" in
+          guivm|netvm)
+            if domain_pref_explicitly_set "$domain" "$pref"; then
+              printf 'pref current: %s %s=%s\n' "$domain" "$pref" "$value"
+              return
+            fi
+            ;;
+          *)
+            printf 'pref current: %s %s=%s\n' "$domain" "$pref" "$value"
+            return
+            ;;
+        esac
       fi
     fi
   fi
@@ -524,35 +534,13 @@ set_pref() {
   record_domain_restart_if_running "$domain" domain-pref "$pref" "$value"
 }
 
-set_explicit_none_netvm_pref() {
-  domain="$1"
-
-  if [ "$APPLY" = "1" ]; then
-    if current="$(qvm-prefs "$domain" netvm 2>/dev/null)"; then
-      if value_matches none "$current" && domain_pref_explicitly_set "$domain" netvm; then
-        printf 'pref current: %s netvm=none\n' "$domain"
-        return
-      fi
-    fi
-  fi
-
-  run_or_plan qvm-prefs "$domain" netvm none
-  prefs_changed=$((prefs_changed + 1))
-  record_live_action domain-pref set "$domain" netvm none
-  record_domain_restart_if_running "$domain" domain-pref netvm none
-}
-
 set_netvm_pref() {
   domain="$1"
   netvm="$2"
 
   case "$netvm" in
     ""|none|None|null)
-      if domain_is_root_network_provider "$domain"; then
-        set_explicit_none_netvm_pref "$domain"
-      else
-        set_pref "$domain" netvm none
-      fi
+      set_pref "$domain" netvm none
       return
       ;;
   esac

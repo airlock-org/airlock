@@ -1981,6 +1981,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       dom0_sys_gui_session_present = lib.any (
         package: builtins.elem "sys-gui" (package.providedSessions or [ ])
       ) dom0Cfg.services.displayManager.sessionPackages;
+      dom0_default_session = dom0Cfg.services.displayManager.defaultSession;
+      dom0_display_manager_after = dom0Cfg.systemd.services.display-manager.after;
       bootstrap_default_netvm = dom0Cfg.nixome.qubes.prefs.default_netvm;
       bootstrap_topology_default_netvm = dom0Cfg.nixome.qubes.topology.prefs.default_netvm;
       bootstrap_dev_topology_present = builtins.hasAttr "dev" dom0Cfg.nixome.qubes.topology.domains;
@@ -2170,6 +2172,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["sys_gui_rpc_present"] is True
     assert data["dom0_sys_gui_policy_present"] is True
     assert data["dom0_sys_gui_session_present"] is True
+    assert data["dom0_default_session"] == "sys-gui"
+    assert "nixome-setup-config.service" in data["dom0_display_manager_after"]
     assert data["bootstrap_default_netvm"] == "sys-firewall"
     assert data["bootstrap_topology_default_netvm"] == "sys-firewall"
     assert data["bootstrap_dev_topology_present"] is False
@@ -3542,12 +3546,22 @@ def check_setup_config_pref_order(repo_root: Path, log_dir: Path) -> None:
     capabilities = work_dir / "xen-capabilities"
     mutation_log = work_dir / "mutations.log"
     memory_marker = work_dir / "memory-set"
+    qubes_xml = work_dir / "qubes.xml"
     topology = work_dir / "topology.json"
     shutil.rmtree(work_dir, ignore_errors=True)
     for path in (setup_log_dir, policy_dir, state_dir):
         path.mkdir(parents=True)
     capabilities.write_text("control_d\n", encoding="utf-8")
     mutation_log.write_text("", encoding="utf-8")
+    qubes_xml.write_text(
+        """
+        <qubes><domains><domain><properties>
+          <property name="name">sys-config-staging</property>
+          <property name="netvm"></property>
+        </properties></domain></domains></qubes>
+        """,
+        encoding="utf-8",
+    )
     topology.write_text(
         json.dumps(
             {
@@ -3643,6 +3657,7 @@ def check_setup_config_pref_order(repo_root: Path, log_dir: Path) -> None:
             "PATH": f"{bin_dir}:{env['PATH']}",
             "MEMORY_SET_MARKER": str(memory_marker),
             "MUTATION_LOG": str(mutation_log),
+            "NIXOME_QUBES_XML": str(qubes_xml),
             "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
             "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
             "NIXOME_XEN_CAPABILITIES": str(capabilities),
@@ -4067,6 +4082,23 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
                         },
                         "devices": {"pci": []},
                     },
+                    "sys-gui": {
+                        "class": "StandaloneVM",
+                        "template": None,
+                        "label": "black",
+                        "netvm": None,
+                        "prefs": {
+                            "autostart": True,
+                            "guivm": "dom0",
+                        },
+                        "features": {"nixome-role": "sys-gui"},
+                        "services": {
+                            "guivm": True,
+                            "guivm-gui-agent": True,
+                            "network-manager": False,
+                        },
+                        "devices": {"pci": []},
+                    },
                     "sys-net": {
                         "class": "StandaloneVM",
                         "template": None,
@@ -4087,7 +4119,10 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
                         "devices": {"pci": []},
                     },
                 },
-                "prefs": {"default_netvm": "sys-firewall"},
+                "prefs": {
+                    "default_guivm": "sys-gui",
+                    "default_netvm": "sys-firewall",
+                },
                 "qrexec_policy": {"rules": []},
             },
             sort_keys=True,
@@ -4140,6 +4175,10 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
         if [ "$#" -eq 2 ]; then
           if [ "$1" = "sys-net" ] && [ "$2" = "netvm" ]; then
             printf 'none\n'
+            exit 0
+          fi
+          if [ "$1" = "sys-gui" ] && [ "$2" = "guivm" ]; then
+            printf 'dom0\n'
             exit 0
           fi
           exit 1
@@ -4226,6 +4265,8 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     assert not any(" dev" in line for line in boot_command_lines)
     assert "+ qvm-prefs sys-net guivm none" in boot_command_lines
     assert "+ qvm-prefs sys-firewall guivm none" in boot_command_lines
+    assert "+ qvm-prefs sys-gui guivm dom0" in boot_command_lines
+    assert "+ qvm-prefs sys-gui netvm none" in boot_command_lines
 
     _run(
         [
@@ -4252,6 +4293,9 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     sys_firewall_create = boot_command_lines.index(
         "+ qvm-create --class StandaloneVM --label green sys-firewall"
     )
+    sys_gui_create = boot_command_lines.index(
+        "+ qvm-create --class StandaloneVM --label black sys-gui"
+    )
     config_create = deferred_command_lines.index(
         "+ qvm-create --class StandaloneVM --label gray sys-config-staging"
     )
@@ -4265,11 +4309,18 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     sys_firewall_netvm = boot_command_lines.index(
         "+ qvm-prefs sys-firewall netvm sys-net"
     )
+    sys_gui_guivm = boot_command_lines.index("+ qvm-prefs sys-gui guivm dom0")
+    sys_gui_netvm = boot_command_lines.index("+ qvm-prefs sys-gui netvm none")
+    default_guivm = boot_command_lines.index("+ qubes-prefs default_guivm sys-gui")
     assert "+ qvm-prefs dev netvm sys-firewall" in deferred_command_lines
     assert "+ qvm-prefs sys-config-staging guivm none" in deferred_command_lines
     assert "+ qubes-prefs default_netvm sys-firewall" in boot_command_lines
 
     assert sys_net_create < sys_firewall_create
+    assert sys_gui_create < sys_gui_guivm
+    assert sys_gui_create < sys_gui_netvm
+    assert sys_gui_guivm < default_guivm
+    assert sys_gui_netvm < default_guivm
     assert sys_net_netvm < sys_net_pci
     assert sys_net_pci < sys_firewall_netvm
     assert config_create < dev_create
@@ -4280,7 +4331,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     assert result["schema"] == "nixome.setup-config.v1"
     assert result["status"] == "passed"
     assert result["scope"] == "deferred"
-    assert boot_result["domains_changed"] == 2
+    assert boot_result["domains_changed"] == 3
     assert boot_result["devices_changed"] == 1
     assert result["domains_changed"] == 2
     assert result["devices_changed"] == 0
@@ -4473,8 +4524,15 @@ def check_setup_config_restart_actions(repo_root: Path, log_dir: Path) -> None:
     )
     mutation_log.write_text("", encoding="utf-8")
     qubes_xml.write_text(
-        '<qubes>\n  <properties>\n    <property name="default_kernel"></property>\n'
-        "  </properties>\n</qubes>\n",
+        """
+        <qubes>
+          <properties><property name="default_kernel"></property></properties>
+          <domains><domain><properties>
+            <property name="name">legacy-fedora-app</property>
+            <property name="netvm"></property>
+          </properties></domain></domains>
+        </qubes>
+        """,
         encoding="utf-8",
     )
     (policy_dir / "90-nixome.policy").write_text(
@@ -6544,6 +6602,10 @@ def check_setup_config_idempotent(repo_root: Path, log_dir: Path) -> None:
           <properties>
             <property name="default_kernel"></property>
           </properties>
+          <domains><domain><properties>
+            <property name="name">legacy-fedora-app</property>
+            <property name="netvm"></property>
+          </properties></domain></domains>
         </qubes>
         """,
         encoding="utf-8",
@@ -7240,6 +7302,7 @@ def check_setup_config_nix_native_running_storage(
     policy_file = policy_dir / "90-nixome.policy"
     state_dir = work_dir / "state"
     mutation_log = work_dir / "mutations.log"
+    qubes_xml = work_dir / "qubes.xml"
     old_system_source = work_dir / "old/system-source"
     old_root_source = work_dir / "old/root-source"
     old_store_source = work_dir / "old/store-source"
@@ -7294,6 +7357,15 @@ def check_setup_config_nix_native_running_storage(
             encoding="utf-8",
         )
     mutation_log.touch()
+    qubes_xml.write_text(
+        """
+        <qubes><domains><domain><properties>
+          <property name="name">sys-config-staging</property>
+          <property name="netvm"></property>
+        </properties></domain></domains></qubes>
+        """,
+        encoding="utf-8",
+    )
     policy_file.write_text(
         "\n".join(
             (
@@ -7499,6 +7571,7 @@ def check_setup_config_nix_native_running_storage(
         {
             "PATH": f"{bin_dir}:{env['PATH']}",
             "MUTATION_LOG": str(mutation_log),
+            "NIXOME_QUBES_XML": str(qubes_xml),
             "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
             "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
             "NIXOME_XEN_CAPABILITIES": str(capabilities),

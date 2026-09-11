@@ -249,6 +249,8 @@ in
       lib.mkOverride 50 xorgQubesShmoverride
     );
     services.displayManager.sessionPackages = lib.optional cfg.gui.enable sysGuiSessionPackage;
+    services.displayManager.defaultSession = lib.mkIf cfg.gui.enable (lib.mkOverride 40 "sys-gui");
+    systemd.services.display-manager.after = lib.optional cfg.gui.enable "nixome-setup-config.service";
 
     virtualisation.qubes = {
       dom0.enable = true;
