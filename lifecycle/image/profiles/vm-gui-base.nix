@@ -12,12 +12,11 @@
 
   services.xserver = {
     enable = true;
-    desktopManager.xfce.enable = true;
     displayManager.lightdm.enable = true;
   };
 
   services.displayManager = {
-    defaultSession = "xfce";
+    defaultSession = "sys-gui";
     autoLogin = {
       enable = true;
       user = "nixome";
@@ -27,7 +26,6 @@
   services.libinput.enable = true;
 
   environment.systemPackages = with pkgs; [
-    xterm
     xdotool
   ];
 

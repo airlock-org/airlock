@@ -1978,8 +1978,16 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       sys_gui_packages_present = lib.all (name: has name sysGuiPackages) [
         "qubes-gui-agent-linux"
         "qubes-gui-daemon"
+        "qubes-manager"
+        "qubes-desktop-linux-manager"
         "xfce4-session"
       ];
+      dom0_desktop_packages_absent = lib.all (name: !(has name dom0Packages)) [
+        "qubes-manager"
+        "qubes-desktop-linux-manager"
+        "qubes-artwork"
+      ];
+      dom0_xfce_enabled = dom0Cfg.services.xserver.desktopManager.xfce.enable;
       sys_gui_rpc_present = lib.all (name: builtins.hasAttr name sysGuiCfg.environment.etc) [
         "qubes-rpc/qubes.GuiVMSession"
         "qubes-rpc/qubes.SetMonitorLayout"
@@ -2199,6 +2207,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert "/run/wrappers/bin" in session_path.group(1).split(":")
     assert "> ~/.xsession-errors" not in launcher
     assert data["sys_gui_packages_present"] is True
+    assert data["dom0_desktop_packages_absent"] is True
+    assert data["dom0_xfce_enabled"] is False
     assert data["sys_gui_rpc_present"] is True
     assert data["dom0_sys_gui_policy_present"] is True
     assert data["dom0_sys_gui_session_policy"] is True

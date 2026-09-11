@@ -44,6 +44,8 @@ in
     environment.systemPackages = [
       guiAgent
       pkgs.qubes-gui-daemon
+      pkgs.qubes-manager
+      pkgs.qubes-artwork
       pkgs.python3.pkgs.qubes-core-admin-client
       pkgs.python3.pkgs.qubes-desktop-linux-common
       pkgs.python3.pkgs.qubes-desktop-linux-manager

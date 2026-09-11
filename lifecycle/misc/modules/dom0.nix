@@ -72,6 +72,51 @@ let
     admin.vm.feature.Get +internal sys-gui dom0 allow
     admin.vm.feature.Get +servicevm sys-gui dom0 allow
     admin.vm.CurrentState * sys-gui dom0 allow
+
+    # Desktop management uses the Admin API, never a dom0 shell. Reads of
+    # global metadata are explicit; host writes remain denied.
+    admin.property.List * sys-gui dom0 allow
+    admin.property.Get * sys-gui dom0 allow
+    admin.property.GetAll * sys-gui dom0 allow
+    admin.label.List * sys-gui dom0 allow
+    admin.pool.List * sys-gui dom0 allow
+    admin.pool.Info * sys-gui dom0 allow
+    admin.pool.UsageDetails * sys-gui dom0 allow
+    admin.vmclass.List * sys-gui dom0 allow
+    * * sys-gui dom0 deny
+
+    # VM Manager and per-VM settings. In particular there is no wildcard
+    # admin permission, no policy editing, and no host device assignment.
+    ${lib.concatMapStringsSep "\n" (method: "${method} * sys-gui @anyvm allow") [
+      "admin.vm.CurrentState"
+      "admin.vm.property.List"
+      "admin.vm.property.Get"
+      "admin.vm.property.GetAll"
+      "admin.vm.property.Help"
+      "admin.vm.property.GetDefault"
+      "admin.vm.property.Set"
+      "admin.vm.property.Reset"
+      "admin.vm.feature.List"
+      "admin.vm.feature.Get"
+      "admin.vm.feature.CheckWithTemplate"
+      "admin.vm.feature.CheckWithNetvm"
+      "admin.vm.feature.CheckWithAdminVM"
+      "admin.vm.feature.Set"
+      "admin.vm.feature.Remove"
+      "admin.vm.tag.List"
+      "admin.vm.volume.List"
+      "admin.vm.volume.Info"
+      "admin.vm.volume.ListSnapshots"
+      "admin.vm.volume.Resize"
+      "admin.vm.firewall.Get"
+      "admin.vm.firewall.Set"
+      "admin.vm.Start"
+      "admin.vm.Shutdown"
+      "admin.vm.Kill"
+      "admin.vm.Pause"
+      "admin.vm.Unpause"
+    ]}
+    * * sys-gui @anyvm deny
     EOF
   '';
   sysGuiSessionPackage =
@@ -101,6 +146,19 @@ let
   ++ lib.optional (!cfg.gui.enable) "dom0-is-gui";
 in
 {
+  # Upstream installs these desktop frontends for every dom0. Keep the
+  # backend/CLI packages, including desktop-linux-common's RPC helpers, but
+  # expose the graphical applications only in the GUI domain.
+  options.environment.systemPackages = lib.mkOption {
+    apply = packages: lib.filter (package:
+      !(cfg.enable && cfg.gui.enable && builtins.elem (package.pname or (lib.getName package)) [
+        "qubes-manager"
+        "qubes-desktop-linux-manager"
+        "qubes-artwork"
+      ])
+    ) packages;
+  };
+
   options.nixome.image.devMode.enable = lib.mkOption {
     type = lib.types.bool;
     default = false;
@@ -246,6 +304,8 @@ in
 
     boot.initrd.systemd.enable = lib.mkDefault true;
     time.timeZone = lib.mkDefault "UTC";
+    services.xserver.desktopManager.xfce.enable = lib.mkIf cfg.gui.enable false;
+    services.xserver.desktopManager.xterm.enable = lib.mkIf cfg.gui.enable false;
     # Qubes GUI needs shmoverride preloaded in the Xorg server. The NixOS
     # display-manager module sets xserverBin at normal priority, so this must
     # be stronger than a default while GUI support is enabled.
