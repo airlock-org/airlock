@@ -3,7 +3,6 @@
   nixomeConfigDomains ? { },
   nixomeConfigInputs ? null,
   nixomeQubeKernel ? null,
-  nixomeNetworkDebug ? false,
   ...
 }:
 let
@@ -15,6 +14,9 @@ let
   missingConfigDomains = builtins.filter (
     role: !(builtins.hasAttr role nixomeConfigDomains)
   ) configRoles;
+  autostartConfigDomains =
+    builtins.filter (role: nixomeConfigDomains.${role}.prefs.autostart or false)
+      (builtins.filter (role: lib.hasPrefix "sys-config-" role) (builtins.attrNames nixomeConfigDomains));
   haveConfigDomains = missingConfigDomains == [ ];
   haveQubeKernel = nixomeQubeKernel != null;
   haveConfigInputs = nixomeConfigInputs != null;
@@ -24,6 +26,10 @@ in
     {
       assertion = haveConfigDomains;
       message = "lifecycle/bootstrap/config-system.nix requires generated nix-closure config domains: ${builtins.concatStringsSep ", " missingConfigDomains}";
+    }
+    {
+      assertion = autostartConfigDomains == [ ];
+      message = "sys-config domains must not autostart: ${builtins.concatStringsSep ", " autostartConfigDomains}";
     }
     {
       assertion = haveQubeKernel;
@@ -54,7 +60,9 @@ in
     setupConfigOnBoot.enable = true;
     startNetworkProvidersOnBoot.enable = true;
     deferredSetupConfigOnBoot.enable = true;
-    configCurrentBootstrapOnBoot.enable = !nixomeNetworkDebug;
+    # Config VMs are created at boot but started only by an explicit config
+    # operation. The nixome-config-bootstrap-current command remains installed.
+    configCurrentBootstrapOnBoot.enable = false;
 
     prefs = {
       # Fresh Nixome dom0 images do not have a Fedora/Qubes VM kernel

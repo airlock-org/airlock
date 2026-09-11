@@ -612,7 +612,6 @@
             appliedMessage
             nixomeConfigInputs
             ;
-          nixomeNetworkDebug = false;
           nixomeQubeKernel = {
             name = nixomeQubeKernelName;
             package = nixomeQubeKernel;

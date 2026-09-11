@@ -9482,6 +9482,12 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         domains["sys-config-validator"]["features"]["nixome-role"]
         == "sys-config-validator"
     )
+    for config_domain in (
+        "sys-config-vault",
+        "sys-config-staging",
+        "sys-config-validator",
+    ):
+        assert domains[config_domain]["prefs"]["autostart"] is False
     assert domains["sys-net"]["class"] == "StandaloneVM"
     assert domains["sys-net"]["netvm"] is None
     assert domains["sys-net"]["prefs"]["provides_network"] is True
@@ -10146,7 +10152,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         assert service in start_network_after
         assert service in start_network_wants
     assert "nixome-setup-config-deferred.service" in start_network_before
-    assert "nixome-config-bootstrap-current.service" in start_network_before
+    assert "nixome-config-bootstrap-current.service" not in start_network_before
     assert isinstance(start_network_execstart, str)
     assert "nixome-start-network-providers" in start_network_execstart
     assert start_network_env["NIXOME_LOG_DIR"] == "/var/log/nixome"
@@ -10194,62 +10200,32 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert isinstance(deferred_setup_execstart, str)
     assert deferred_setup_execstart.endswith(" --apply --deferred")
 
-    current_bootstrap_wanted_by = _nix_eval_json(
-        repo_root,
-        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.wantedBy",
-    )
-    current_bootstrap_after = _nix_eval_json(
-        repo_root,
-        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.after",
-    )
-    current_bootstrap_wants = _nix_eval_json(
-        repo_root,
-        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.wants",
-    )
-    current_bootstrap_execstart = _nix_eval_json(
-        repo_root,
-        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.serviceConfig.ExecStart",
-    )
-    current_bootstrap_env = _nix_eval_json(
-        repo_root,
-        "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.environment",
-    )
-    assert "multi-user.target" in current_bootstrap_wanted_by
-    for service in (
-        "nixome-setup-config.service",
-        "nixome-start-network-providers.service",
-        "nixome-setup-config-deferred.service",
-        "qubes-db-dom0.service",
-        "qubesd.service",
-        "qubes-qrexec-policy-daemon.service",
-    ):
-        assert service in current_bootstrap_after
-        assert service in current_bootstrap_wants
-    assert isinstance(current_bootstrap_execstart, str)
-    assert "nixome-config-bootstrap-current" in current_bootstrap_execstart
-    assert current_bootstrap_env["NIXOME_CONFIG_CURRENT_EXPORT_SERVICE"] == (
-        "nixome.Config.ExportCurrent"
-    )
-    assert current_bootstrap_env["NIXOME_CONFIG_CURRENT_IMPORT_SERVICE"] == (
-        "nixome.Config.ImportCurrent"
-    )
-    assert current_bootstrap_env["NIXOME_CONFIG_STAGING_VM"] == "sys-config-staging"
-    assert current_bootstrap_env["NIXOME_CONFIG_VAULT_VM"] == "sys-config-vault"
-    assert current_bootstrap_env["NIXOME_LOG_DIR"] == "/var/log/nixome"
     assert (
         _nix_eval_json(
             repo_root,
-            "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.restartIfChanged",
+            "nixosConfigurations.vm-gui-config.config.nixome.qubes.configCurrentBootstrapOnBoot.enable",
         )
         is False
     )
-    assert (
-        _nix_eval_json(
-            repo_root,
-            "nixosConfigurations.vm-gui-config.config.systemd.services.nixome-config-bootstrap-current.stopIfChanged",
-        )
-        is False
+    current_bootstrap_service_present = json.loads(
+        _run(
+            [
+                "nix",
+                "eval",
+                "--impure",
+                "--json",
+                "--expr",
+                f"""
+                let
+                  cfg = (builtins.getFlake "path:{repo_root}").nixosConfigurations.vm-gui-config.config;
+                in
+                  cfg.systemd.services ? "nixome-config-bootstrap-current"
+                """,
+            ],
+            cwd=repo_root,
+        ).stdout
     )
+    assert current_bootstrap_service_present is False
 
     for attr, expected in (
         (

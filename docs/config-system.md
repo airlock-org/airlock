@@ -16,9 +16,10 @@ come from a Nix flake edited inside dedicated config VMs.
   current-baseline sync, and deployment records.
 - a boot-time `nixome-setup-config.service` that ensures the bootstrap topology
   exists after Qubes dom0 services are up.
-- a boot-time `nixome-config-bootstrap-current.service` that asks
+- an on-demand `nixome-config-bootstrap-current` command that asks
   `sys-config-vault` for the latest current config bundle and imports it into
-  `sys-config-staging` when staging is empty or already on that commit.
+  `sys-config-staging` when staging is empty or already on that commit. Config
+  VMs are never started automatically during dom0 boot.
 
 The bootstrap policy remains dom0/NixOS-owned in `30-nixome-config.policy`.
 Staged config cannot remove dom0's ability to fetch current baselines, fetch
@@ -37,19 +38,18 @@ starts `qubes-qrexec-policy-daemon` with that runtime policy path.
 
 ## First-Boot Config Baseline
 
-`sys-config-vault` is the authoritative archive. On first boot it initializes
-`/home/user/nixome-config-vault` as a Git repository and, if no current
+`sys-config-vault` is the authoritative archive. On its first explicit start,
+it initializes `/home/user/nixome-config-vault` as a Git repository and, if no current
 deployment or baseline exists yet, creates an initial current candidate from the
 initial runtime config embedded in the image. It records that baseline under
 `candidates/<commit>/`, writes `latest-current`, and maintains a `current`
 symlink to the selected candidate snapshot.
 
-Dom0 then runs `nixome-config-bootstrap-current.service` after
-`nixome-setup-config.service`. The service starts `sys-config-vault` and
-`sys-config-staging`, exports the vault's current bundle through
-`nixome.Config.ExportCurrent`, and imports it through
-`nixome.Config.ImportCurrent`. Existing dirty staging work is left untouched; an
-empty staging repo is cloned from the vault bundle.
+When requested explicitly, dom0 runs `nixome-config-bootstrap-current`. The
+command starts `sys-config-vault` and `sys-config-staging`, exports the vault's
+current bundle through `nixome.Config.ExportCurrent`, and imports it through
+`nixome.Config.ImportCurrent`. Existing dirty staging work is left untouched;
+an empty staging repo is cloned from the vault bundle.
 
 ## Domain Construction
 

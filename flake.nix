@@ -215,7 +215,6 @@
         };
         nixomeConfigDomains = mkBootstrapConfigDomains system networkDebug;
         inherit nixomeConfigInputs;
-        nixomeNetworkDebug = networkDebug;
       };
 
       mkVmConfiguration =
