@@ -9549,6 +9549,8 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert "xenBootBuilder" in systemd_boot_extra_install_commands
     assert "nixos-*.conf" in systemd_boot_extra_install_commands
     assert "Recovery: without Xen" in systemd_boot_extra_install_commands
+    assert '"/boot"/loader/entries/nixos-*.conf' in systemd_boot_extra_install_commands
+    assert "$efiMountPoint" not in systemd_boot_extra_install_commands
     assert systemd_boot_extra_install_commands.index("xenBootBuilder") < (
         systemd_boot_extra_install_commands.index("Recovery: without Xen")
     )

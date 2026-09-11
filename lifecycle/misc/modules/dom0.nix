@@ -282,7 +282,10 @@ in
     # matching xen-* entry. Keep the ordinary NixOS entry as an explicit
     # recovery path rather than something that looks suitable for Qubes use.
     boot.loader.systemd-boot.extraInstallCommands = lib.mkAfter ''
-      for entry in "$efiMountPoint"/loader/entries/nixos-*.conf; do
+      # extraInstallCommands is emitted as its own strict shell script, so it
+      # cannot use the efiMountPoint shell variable from systemd-boot's
+      # installer.  Interpolate the configured mount point here instead.
+      for entry in "${config.boot.loader.efi.efiSysMountPoint}"/loader/entries/nixos-*.conf; do
         [ -f "$entry" ] || continue
         ${pkgs.gnugrep}/bin/grep -Fq "(Recovery: without Xen)" "$entry" || \
           ${pkgs.gnused}/bin/sed -i \
