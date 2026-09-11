@@ -173,14 +173,20 @@
           nixosQubesSource = "${nixos-qubes}";
         };
 
-      bootstrapDomains = import ./lifecycle/bootstrap/default-domains.nix {
-        inherit
-          lib
-          mkNixomeQubeBuilders
-          nixomeConfigInputs
-          nixomeQubesVmKernelName
-          ;
-      };
+      mkBootstrapDomains =
+        networkDebug:
+        import ./lifecycle/bootstrap/default-domains.nix {
+          inherit
+            lib
+            mkNixomeQubeBuilders
+            nixomeConfigInputs
+            nixomeQubesVmKernelName
+            networkDebug
+            ;
+        };
+
+      bootstrapDomains = mkBootstrapDomains false;
+      networkDebugBootstrapDomains = mkBootstrapDomains true;
 
       inherit (bootstrapDomains)
         materializeNixClosureDomain
@@ -190,22 +196,24 @@
         ;
 
       mkBootstrapConfigDomains =
-        system:
+        system: networkDebug:
         let
+          bootstrapDomainEntriesSource = mkBootstrapDomains networkDebug;
           bootstrapDomainEntries = (mkConfigDomainEntries system) // {
-            sys-net = mkSysNetDomainEntry system;
-            sys-firewall = mkSysFirewallDomainEntry system;
+            sys-net = bootstrapDomainEntriesSource.mkSysNetDomainEntry system;
+            sys-firewall = bootstrapDomainEntriesSource.mkSysFirewallDomainEntry system;
           };
         in
         builtins.mapAttrs (_name: entry: materializeNixClosureDomain entry) bootstrapDomainEntries;
 
-      mkConfigSystemSpecialArgs = system: {
+      mkConfigSystemSpecialArgs = system: networkDebug: {
         nixomeQubeKernel = {
           name = nixomeQubesVmKernelName;
           package = self.packages.${system}.nixome-qubes-vm-kernel;
         };
-        nixomeConfigDomains = mkBootstrapConfigDomains system;
+        nixomeConfigDomains = mkBootstrapConfigDomains system networkDebug;
         inherit nixomeConfigInputs;
+        nixomeNetworkDebug = networkDebug;
       };
 
       mkVmConfiguration =
@@ -214,10 +222,11 @@
           gui ? false,
           configSystem ? false,
           devMode ? true,
+          networkDebug ? false,
         }:
         lib.nixosSystem {
           inherit system;
-          specialArgs = lib.optionalAttrs configSystem (mkConfigSystemSpecialArgs system);
+          specialArgs = lib.optionalAttrs configSystem (mkConfigSystemSpecialArgs system networkDebug);
           modules = [
             self.nixosModules.dom0
             (if gui then ./lifecycle/image/profiles/vm-gui-base.nix else ./lifecycle/image/profiles/vm-base.nix)
@@ -407,6 +416,8 @@
           nixome-vm-gui-config-release-image =
             self.nixosConfigurations."vm-gui-config-release".config.system.build.image;
           nixome-vm-gui-config-image = self.nixosConfigurations.vm-gui-config.config.system.build.image;
+          nixome-vm-gui-config-network-debug-image =
+            self.nixosConfigurations.vm-gui-config-network-debug.config.system.build.image;
           ovmf-fd = pkgs.OVMF.fd;
           qemu-kvm = pkgs.qemu_kvm;
           qemu-utils = pkgs.qemu-utils;
@@ -486,6 +497,12 @@
         devMode = false;
       };
       nixosConfigurations.vm-gui-config = self.nixosConfigurations."vm-gui-config-dev";
+      nixosConfigurations.vm-gui-config-network-debug = mkVmConfiguration {
+        gui = true;
+        configSystem = true;
+        devMode = true;
+        networkDebug = true;
+      };
 
       nixosConfigurations.nixome-domain-config-vault =
         (mkConfigDomainEntries "x86_64-linux").config-vault.configuration;
@@ -494,6 +511,8 @@
       nixosConfigurations.nixome-domain-config-validator =
         (mkConfigDomainEntries "x86_64-linux").config-validator.configuration;
       nixosConfigurations.nixome-domain-sys-net = (mkSysNetDomainEntry "x86_64-linux").configuration;
+      nixosConfigurations.nixome-domain-sys-net-network-debug =
+        (networkDebugBootstrapDomains.mkSysNetDomainEntry "x86_64-linux").configuration;
       nixosConfigurations.nixome-domain-sys-firewall =
         (mkSysFirewallDomainEntry "x86_64-linux").configuration;
     };

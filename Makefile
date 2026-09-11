@@ -36,6 +36,7 @@ endif
 VM_IMAGE_ATTR ?= nixome-vm-$(VM_IMAGE_MODE_SUFFIX)-image
 VM_GUI_IMAGE_ATTR ?= nixome-vm-gui-$(VM_IMAGE_MODE_SUFFIX)-image
 VM_GUI_CONFIG_IMAGE_ATTR ?= nixome-vm-gui-config-$(VM_IMAGE_MODE_SUFFIX)-image
+VM_GUI_CONFIG_NETWORK_DEBUG_IMAGE_ATTR ?= nixome-vm-gui-config-network-debug-image
 VM_PARALLEL_IMAGE_ATTR ?= $(VM_GUI_CONFIG_IMAGE_ATTR)
 VM_PARALLEL_IMAGE_LINK ?= $(NIXOME_RESULT_LINK_DIR)/$(VM_PARALLEL_IMAGE_ATTR)-parallel-shared-result
 VM_PARALLEL_BASELINE_ROOT ?= $(or $(NIXOME_DATA_ROOT),$(CURDIR)/.nixome)/vm-baselines
@@ -97,7 +98,7 @@ VM_SLOW_SELECTED_PARALLEL_TARGETS = $(foreach test,$(VM_SLOW_SELECTED_PARALLEL_F
 VM_SLOW_SELECTED_SERIAL_TARGETS = $(foreach test,$(VM_SLOW_SELECTED_SERIAL_FLOW_IDS),'tests/test_vm.py::test_vm_flow[$(test)]')
 VM_SLOW_SERIAL_TARGETS = $(foreach test,$(VM_SLOW_SERIAL_FLOW_IDS),'tests/test_vm.py::test_vm_flow[$(test)]')
 
-.PHONY: ensure-generated-dirs build test-quick test-warm test-slow py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-sync-codex-auth vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test-quick test-warm test-slow py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-config-network-debug-image vm-gui-config-network-debug-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-sync-codex-auth vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(NIXOME_DATA_ROOT)),)
@@ -199,6 +200,12 @@ vm-gui-config-image-dry-run: ensure-generated-dirs
 
 vm-gui-config-run: ensure-generated-dirs gc-auto
 	NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=gtk ./lifecycle/misc/tools/scripts/run-nested-vm.sh
+
+vm-gui-config-network-debug-image: ensure-generated-dirs gc-auto
+	$(NIXOME_NIX) build .#$(VM_GUI_CONFIG_NETWORK_DEBUG_IMAGE_ATTR) --out-link "$(NIXOME_RESULT_LINK_DIR)/$(VM_GUI_CONFIG_NETWORK_DEBUG_IMAGE_ATTR)" --print-build-logs --show-trace
+
+vm-gui-config-network-debug-run: ensure-generated-dirs gc-auto
+	NIXOME_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_NETWORK_DEBUG_IMAGE_ATTR)" NIXOME_VM_DISPLAY=gtk ./lifecycle/misc/tools/scripts/run-nested-vm.sh
 
 vm-gui-check: ensure-generated-dirs gc-auto
 	NIXOME_AUTO_GC_AFTER_RUN=1 NIXOME_BOOTSTRAP_QUBES=0 NIXOME_RUN_QUBES_SMOKE=0 NIXOME_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh

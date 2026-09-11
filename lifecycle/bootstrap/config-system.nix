@@ -3,6 +3,7 @@
   nixomeConfigDomains ? { },
   nixomeConfigInputs ? null,
   nixomeQubeKernel ? null,
+  nixomeNetworkDebug ? false,
   ...
 }:
 let
@@ -52,7 +53,7 @@ in
     enable = true;
     setupConfigOnBoot.enable = true;
     startNetworkProvidersOnBoot.enable = true;
-    configCurrentBootstrapOnBoot.enable = true;
+    configCurrentBootstrapOnBoot.enable = !nixomeNetworkDebug;
 
     prefs = {
       # Fresh Nixome dom0 images do not have a Fedora/Qubes VM kernel

@@ -60,6 +60,14 @@ throwaway `nixome` user with password `nixome` and loopback-only SSH
 forwarding on port `2222`.
 
 ```bash
+make vm-gui-config-network-debug-run
+```
+
+Builds and launches an isolated network-debug image. It creates the usual
+domain topology but starts only `sys-net`; NetworkManager is available for a
+manual start inside that guest.
+
+```bash
 make vm-ssh
 ```
 

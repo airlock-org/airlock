@@ -9244,6 +9244,10 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     topology = _nix_eval_json(
         repo_root, "nixosConfigurations.vm-gui-config.config.nixome.qubes.topology"
     )
+    network_debug_domains = _nix_eval_json(
+        repo_root,
+        "nixosConfigurations.vm-gui-config-network-debug.config.nixome.qubes.domains",
+    )
     assert domains["config-vault"]["class"] == "StandaloneVM"
     assert domains["config-vault"]["template"] is None
     assert domains["config-vault"]["netvm"] is None
@@ -9276,6 +9280,25 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert domains["sys-firewall"]["services"]["qubes-firewall"] is True
     assert domains["sys-firewall"]["services"]["qubes-network"] is True
     assert domains["sys-firewall"]["services"]["qubes-updates-proxy"] is True
+    assert network_debug_domains["sys-net"]["prefs"]["autostart"] is True
+    assert network_debug_domains["sys-firewall"]["prefs"]["autostart"] is False
+    assert network_debug_domains["config-vault"]["prefs"]["autostart"] is False
+    assert network_debug_domains["config-staging"]["prefs"]["autostart"] is False
+    assert network_debug_domains["config-validator"]["prefs"]["autostart"] is False
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.vm-gui-config-network-debug.config.nixome.qubes.configCurrentBootstrapOnBoot.enable",
+        )
+        is False
+    )
+    assert (
+        _nix_eval_json(
+            repo_root,
+            "nixosConfigurations.nixome-domain-sys-net-network-debug.config.systemd.services.NetworkManager.wantedBy",
+        )
+        == []
+    )
     assert "dev" not in domains
     assert "qubes-kernel-6.12.64-1.fc41" in kernels["6.12.64-1.fc41"]["source"]
     assert templates == {}

@@ -3,6 +3,7 @@
   mkNixomeQubeBuilders,
   nixomeConfigInputs,
   nixomeQubesVmKernelName,
+  networkDebug ? false,
 }:
 let
   configVmRoles = [
@@ -115,7 +116,7 @@ let
     rootImageSizeMiB = 512;
     netvm = "sys-net";
     prefs = {
-      autostart = true;
+      autostart = !networkDebug;
       include_in_backups = true;
       memory = 500;
       maxmem = 1024;
@@ -188,6 +189,9 @@ let
       modules = [
         ({ ... }: {
           networking.hostName = sysNetRoleDefaults.guestHostName;
+        }
+        // lib.optionalAttrs networkDebug {
+          systemd.services.NetworkManager.wantedBy = lib.mkForce [ ];
         })
       ];
       rootImageSizeMiB = sysNetRoleDefaults.rootImageSizeMiB;
