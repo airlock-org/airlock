@@ -24,6 +24,7 @@ POLICY_DIR="${NIXOME_QUBES_POLICY_DIR:-/var/lib/nixome/qubes-policy.d}"
 MANAGED_POLICY_FILE="${NIXOME_QUBES_MANAGED_POLICY_FILE:-90-nixome.policy}"
 MANAGED_POLICY_PATH="$POLICY_DIR/$MANAGED_POLICY_FILE"
 RENDERED_POLICY="$LOG_DIR/$MANAGED_POLICY_FILE.rendered"
+STATUS_DEVICE="${NIXOME_SETUP_CONFIG_STATUS_DEVICE:-}"
 NIX_DOMAIN_STORAGE_HELPER="${NIXOME_NIX_DOMAIN_STORAGE_HELPER:-nixome-nix-domain-storage}"
 QUBESADMIN_PYTHON="${NIXOME_QUBESADMIN_PYTHON:-python3}"
 result_written=0
@@ -320,9 +321,34 @@ write_result() {
   result_written=1
 }
 
+show_boot_status() {
+  local title="$1"
+  local line
+  shift
+
+  [ "$SETUP_SCOPE" = "boot-critical" ] || return 0
+  [ -n "$STATUS_DEVICE" ] || return 0
+  [ -w "$STATUS_DEVICE" ] || return 0
+
+  {
+    printf '\033[2J\033[H'
+    printf '\n  Nixome\n\n'
+    printf '  %s\n' "$title"
+    for line in "$@"; do
+      printf '  %s\n' "$line"
+    done
+    printf '\n'
+  } 2>/dev/null > "$STATUS_DEVICE" || true
+}
+
 fail() {
   reason="$1"
   write_result failed "$reason"
+  show_boot_status \
+    "Initial setup failed" \
+    "$reason" \
+    "Details: $COMMAND_LOG" \
+    "Recovery: switch to another virtual console and inspect the system journal."
   printf 'nixome setup-config failed: %s\n' "$reason" >&2
   exit 1
 }
@@ -346,6 +372,11 @@ write_unexpected_failure() {
 
   if [ "$rc" != "0" ] && [ "$result_written" != "1" ]; then
     write_result failed "unexpected command failure; see command_log"
+    show_boot_status \
+      "Initial setup failed" \
+      "Unexpected command failure." \
+      "Details: $COMMAND_LOG" \
+      "Recovery: switch to another virtual console and inspect the system journal."
   fi
 }
 
@@ -1831,6 +1862,8 @@ setup_nix_closure_domain() {
   fi
 }
 
+show_boot_status "Preparing Qubes topology" "This can take several minutes on first boot."
+
 [ -r "$TOPOLOGY" ] || fail "topology file is not readable: $TOPOLOGY"
 
 topology_has_nix_closure_domains() {
@@ -1917,6 +1950,8 @@ schema="$(jq_get '.schema')"
 
 preflight_domain_backends
 setup_qrexec_policy
+
+show_boot_status "Preparing system images"
 
 printf 'setting up global prefs\n'
 mapfile -t global_pref_names < <(jq_get '.prefs | keys[]?')
@@ -2102,9 +2137,12 @@ setup_domain_connectivity() {
 printf 'setting up domains\n'
 mapfile -t domain_names < <(selected_domain_names)
 for domain in "${domain_names[@]}"; do
+  show_boot_status "Materializing Qubes domain" "$domain"
   setup_domain "$domain"
   setup_domain_connectivity "$domain"
 done
+
+show_boot_status "Finalizing Qubes preferences"
 
 printf 'setting up domain-backed global prefs\n'
 for pref in "${global_pref_names[@]}"; do
@@ -2117,4 +2155,5 @@ done
 
 write_result passed "Qubes config setup completed"
 persist_setup_state
+show_boot_status "Starting sys-gui desktop"
 cat "$RESULT_JSON"

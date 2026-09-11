@@ -599,6 +599,12 @@ in
         default = "/var/log/nixome";
         description = "Directory where the boot setup-config unit writes JSON results and command logs.";
       };
+
+      statusDevice = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Optional console device where boot-critical setup displays concise progress.";
+      };
     };
 
     configCurrentBootstrapOnBoot = {
@@ -872,7 +878,12 @@ in
       ];
       restartIfChanged = false;
       stopIfChanged = false;
-      environment.NIXOME_LOG_DIR = cfg.setupConfigOnBoot.logDir;
+      environment = {
+        NIXOME_LOG_DIR = cfg.setupConfigOnBoot.logDir;
+      }
+      // lib.optionalAttrs (cfg.setupConfigOnBoot.statusDevice != null) {
+        NIXOME_SETUP_CONFIG_STATUS_DEVICE = cfg.setupConfigOnBoot.statusDevice;
+      };
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;

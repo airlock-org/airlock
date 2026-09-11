@@ -251,6 +251,7 @@ in
     services.displayManager.sessionPackages = lib.optional cfg.gui.enable sysGuiSessionPackage;
     services.displayManager.defaultSession = lib.mkIf cfg.gui.enable (lib.mkOverride 40 "sys-gui");
     systemd.services.display-manager.after = lib.optional cfg.gui.enable "nixome-setup-config.service";
+    nixome.qubes.setupConfigOnBoot.statusDevice = lib.mkIf cfg.gui.enable (lib.mkDefault "/dev/tty1");
 
     virtualisation.qubes = {
       dom0.enable = true;

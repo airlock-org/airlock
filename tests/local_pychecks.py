@@ -1983,6 +1983,9 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       ) dom0Cfg.services.displayManager.sessionPackages;
       dom0_default_session = dom0Cfg.services.displayManager.defaultSession;
       dom0_display_manager_after = dom0Cfg.systemd.services.display-manager.after;
+      dom0_bootstrap_status_device = dom0Cfg.nixome.qubes.setupConfigOnBoot.statusDevice;
+      dom0_bootstrap_status_environment =
+        dom0Cfg.systemd.services.nixome-setup-config.environment.NIXOME_SETUP_CONFIG_STATUS_DEVICE;
       bootstrap_default_netvm = dom0Cfg.nixome.qubes.prefs.default_netvm;
       bootstrap_topology_default_netvm = dom0Cfg.nixome.qubes.topology.prefs.default_netvm;
       bootstrap_dev_topology_present = builtins.hasAttr "dev" dom0Cfg.nixome.qubes.topology.domains;
@@ -2174,6 +2177,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["dom0_sys_gui_session_present"] is True
     assert data["dom0_default_session"] == "sys-gui"
     assert "nixome-setup-config.service" in data["dom0_display_manager_after"]
+    assert data["dom0_bootstrap_status_device"] == "/dev/tty1"
+    assert data["dom0_bootstrap_status_environment"] == "/dev/tty1"
     assert data["bootstrap_default_netvm"] == "sys-firewall"
     assert data["bootstrap_topology_default_netvm"] == "sys-firewall"
     assert data["bootstrap_dev_topology_present"] is False
@@ -4014,12 +4019,14 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     topology = work_dir / "topology.json"
     mutation_log = work_dir / "mutations.log"
     created_domains = work_dir / "created-domains"
+    status_device = work_dir / "bootstrap-status"
     shutil.rmtree(work_dir, ignore_errors=True)
     for path in (setup_log_dir, policy_dir, state_dir):
         path.mkdir(parents=True)
     capabilities.write_text("control_d\n", encoding="utf-8")
     mutation_log.write_text("", encoding="utf-8")
     created_domains.write_text("", encoding="utf-8")
+    status_device.write_text("", encoding="utf-8")
     qubes_xml.write_text(
         """
         <qubes>
@@ -4233,6 +4240,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
             "NIXOME_DOM0_DEFAULT_ROUTE_PCI_DEVICES": "00_02.0",
             "NIXOME_QUBES_POLICY_DIR": str(policy_dir),
             "NIXOME_QUBES_XML": str(qubes_xml),
+            "NIXOME_SETUP_CONFIG_STATUS_DEVICE": str(status_device),
             "NIXOME_SYSTEM_STATE_DIR": str(state_dir),
             "NIXOME_XEN_CAPABILITIES": str(capabilities),
             "NIXOME_LOG_DIR": str(setup_log_dir),
@@ -4267,6 +4275,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     assert "+ qvm-prefs sys-firewall guivm none" in boot_command_lines
     assert "+ qvm-prefs sys-gui guivm dom0" in boot_command_lines
     assert "+ qvm-prefs sys-gui netvm none" in boot_command_lines
+    assert "Starting sys-gui desktop" in status_device.read_text(encoding="utf-8")
 
     _run(
         [
