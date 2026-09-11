@@ -22,6 +22,7 @@ let
       rootImageSizeMiB = 128;
       prefs = {
         autostart = false;
+        guivm = null;
         include_in_backups = true;
         memory = 1024;
         maxmem = 2048;
@@ -43,6 +44,7 @@ let
       state.persistentSize = configNixPrivateSizeBytes;
       prefs = {
         autostart = false;
+        guivm = null;
         include_in_backups = true;
         memory = 2048;
         maxmem = 4096;
@@ -65,6 +67,7 @@ let
       state.persistentSize = configNixPrivateSizeBytes;
       prefs = {
         autostart = false;
+        guivm = null;
         include_in_backups = true;
         memory = 2048;
         maxmem = 4096;
@@ -89,6 +92,7 @@ let
     state.persistentSize = sysNetPrivateSizeBytes;
     prefs = {
       autostart = true;
+      guivm = null;
       include_in_backups = true;
       memory = 768;
       maxmem = 1024;
@@ -117,6 +121,7 @@ let
     netvm = "sys-net";
     prefs = {
       autostart = !networkDebug;
+      guivm = null;
       include_in_backups = true;
       memory = 500;
       maxmem = 1024;

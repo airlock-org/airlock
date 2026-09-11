@@ -3974,7 +3974,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
                         "template": None,
                         "label": "gray",
                         "netvm": None,
-                        "prefs": {"autostart": False},
+                        "prefs": {"autostart": False, "guivm": None},
                         "features": {},
                         "services": {},
                     },
@@ -3994,6 +3994,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
                         "netvm": "sys-net",
                         "prefs": {
                             "autostart": True,
+                            "guivm": None,
                             "memory": 500,
                             "provides_network": True,
                         },
@@ -4016,6 +4017,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
                         "netvm": None,
                         "prefs": {
                             "autostart": True,
+                            "guivm": None,
                             "provides_network": True,
                         },
                         "features": {"nixome-role": "sys-net"},
@@ -4165,6 +4167,8 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     assert boot_result["scope"] == "boot-critical"
     assert not any("config-staging" in line for line in boot_command_lines)
     assert not any(" dev" in line for line in boot_command_lines)
+    assert "+ qvm-prefs sys-net guivm none" in boot_command_lines
+    assert "+ qvm-prefs sys-firewall guivm none" in boot_command_lines
 
     _run(
         [
@@ -4205,6 +4209,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
         "+ qvm-prefs sys-firewall netvm sys-net"
     )
     assert "+ qvm-prefs dev netvm sys-firewall" in deferred_command_lines
+    assert "+ qvm-prefs config-staging guivm none" in deferred_command_lines
     assert "+ qubes-prefs default_netvm sys-firewall" in boot_command_lines
 
     assert sys_net_create < sys_firewall_create
@@ -9302,20 +9307,24 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert domains["config-vault"]["class"] == "StandaloneVM"
     assert domains["config-vault"]["template"] is None
     assert domains["config-vault"]["netvm"] is None
+    assert domains["config-vault"]["prefs"]["guivm"] is None
     assert domains["config-vault"]["backend"]["type"] == "nix-closure"
     assert domains["config-vault"]["backend"]["store"]["mode"] == "shared-closure"
     assert domains["config-vault"]["backend"]["store"]["readOnly"] is True
     assert domains["config-vault"]["features"]["nixome-role"] == "config-vault"
     assert domains["config-staging"]["backend"]["type"] == "nix-closure"
+    assert domains["config-staging"]["prefs"]["guivm"] is None
     assert domains["config-staging"]["features"]["nixome-role"] == "config-staging"
     assert domains["config-staging"]["features"]["nixome-config-applied-message"] == (
         "initial"
     )
     assert domains["config-validator"]["backend"]["type"] == "nix-closure"
+    assert domains["config-validator"]["prefs"]["guivm"] is None
     assert domains["config-validator"]["features"]["nixome-role"] == "config-validator"
     assert domains["sys-net"]["class"] == "StandaloneVM"
     assert domains["sys-net"]["netvm"] is None
     assert domains["sys-net"]["prefs"]["provides_network"] is True
+    assert domains["sys-net"]["prefs"]["guivm"] is None
     assert domains["sys-net"]["prefs"]["virt_mode"] == "hvm"
     assert domains["sys-net"]["services"]["network-manager"] is True
     assert domains["sys-net"]["services"]["qubes-updates-proxy"] is True
@@ -9325,6 +9334,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert domains["sys-firewall"]["prefs"]["autostart"] is True
     assert domains["sys-firewall"]["prefs"]["memory"] == 500
     assert domains["sys-firewall"]["prefs"]["provides_network"] is True
+    assert domains["sys-firewall"]["prefs"]["guivm"] is None
     assert domains["sys-firewall"]["features"]["nixome-role"] == "sys-firewall"
     assert domains["sys-firewall"]["features"]["servicevm"] == "1"
     assert domains["sys-firewall"]["services"]["network-manager"] is False
@@ -9357,6 +9367,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert topology["templates"] == {}
     assert topology["prefs"]["default_netvm"] == "sys-firewall"
     assert topology["domains"]["config-vault"]["backend"]["root"]["source_ref"] is None
+    assert topology["domains"]["config-vault"]["prefs"]["guivm"] is None
     assert re.search(
         r"^/nix/store/.*/root\.img$",
         topology["domains"]["config-vault"]["backend"]["root"]["source"],
@@ -9384,9 +9395,11 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         }
     ]
     assert topology["domains"]["sys-net"]["prefs"]["virt_mode"] == "hvm"
+    assert topology["domains"]["sys-net"]["prefs"]["guivm"] is None
     assert topology["domains"]["sys-firewall"]["netvm"] == "sys-net"
     assert topology["domains"]["sys-firewall"]["prefs"]["autostart"] is True
     assert topology["domains"]["sys-firewall"]["prefs"]["provides_network"] is True
+    assert topology["domains"]["sys-firewall"]["prefs"]["guivm"] is None
     assert "dev" not in topology["domains"]
 
     proxy_eval = json.loads(
