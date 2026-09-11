@@ -137,6 +137,7 @@
         id = "00_03.0";
         match = "port";
         mode = "required";
+        options.no-strict-reset = true;
       };
 
       nixomeSupportConfigInputSource =

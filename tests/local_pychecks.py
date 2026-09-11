@@ -1658,6 +1658,8 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
         "run_vm": [
             "NIXOME_VM_SKIP_BASE_BUILD",
             "using existing Nixome VM base image result link",
+            "NIXOME_VM_IOMMU",
+            "intel-iommu,intremap=on,caching-mode=on",
         ],
         "test_vm": [
             "NIXOME_VM_SKIP_BASE_BUILD",
@@ -9255,7 +9257,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
             "id": "00_03.0",
             "match": "port",
             "mode": "required",
-            "options": {},
+            "options": {"no-strict-reset": "True"},
         }
     ]
     assert topology["domains"]["sys-net"]["prefs"]["virt_mode"] == "hvm"

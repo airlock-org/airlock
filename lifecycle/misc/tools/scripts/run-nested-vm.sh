@@ -13,6 +13,7 @@ SSH_USER="${NIXOME_VM_SSH_USER:-nixome}"
 SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
 DISPLAY_MODE="${NIXOME_VM_DISPLAY:-none}"
 VGA="${NIXOME_VM_VGA:-std}"
+IOMMU="${NIXOME_VM_IOMMU:-1}"
 BACKUP_RETENTION="${NIXOME_VM_BACKUP_RETENTION:-1}"
 FRESH="${NIXOME_VM_FRESH:-0}"
 SKIP_BASE_BUILD="${NIXOME_VM_SKIP_BASE_BUILD:-0}"
@@ -45,6 +46,15 @@ case "$SKIP_BASE_BUILD" in
     ;;
   *)
     printf 'error: NIXOME_VM_SKIP_BASE_BUILD must be 0 or 1\n' >&2
+    exit 1
+    ;;
+esac
+
+case "$IOMMU" in
+  0 | 1)
+    ;;
+  *)
+    printf 'error: NIXOME_VM_IOMMU must be 0 or 1\n' >&2
     exit 1
     ;;
 esac
@@ -227,6 +237,11 @@ case "$DISPLAY_MODE" in
     ;;
 esac
 
+iommu_args=()
+if [ "$IOMMU" = "1" ]; then
+  iommu_args=(-device intel-iommu,intremap=on,caching-mode=on)
+fi
+
 cat <<EOF
 starting VM
   image attr: .#$IMAGE_ATTR
@@ -235,6 +250,7 @@ starting VM
   disk: $RUN_DISK
   display: $DISPLAY_MODE
   vga: $VGA
+  iommu: $IOMMU
   memory: ${MEMORY} MiB
   ssh: NIXOME_VM_SSH_PORT=$SSH_PORT $ROOT/lifecycle/misc/tools/scripts/ssh-nested-vm.sh
   dom0 NIC: QEMU user network with SSH forwarding
@@ -257,6 +273,7 @@ nixome_exec_store_path "$qemu_out/bin/qemu-system-x86_64" \
   -m "$MEMORY" \
   -drive if=pflash,format=raw,readonly=on,file="$ovmf_out/FV/OVMF_CODE.fd" \
   -drive if=pflash,format=raw,file="$OVMF_VARS" \
+  "${iommu_args[@]}" \
   -drive if=virtio,format=qcow2,file="$RUN_DISK",discard=unmap \
   -vga "$VGA" \
   -device virtio-net-pci,netdev=net0 \
