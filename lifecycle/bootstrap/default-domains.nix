@@ -142,6 +142,33 @@ let
     };
   };
 
+  sysGuiRoleDefaults = {
+    guestHostName = "sys-gui";
+    label = "black";
+    rootImageSizeMiB = 512;
+    netvm = null;
+    prefs = {
+      autostart = true;
+      guivm = "dom0";
+      include_in_backups = true;
+      memory = 2048;
+      maxmem = 4096;
+      vcpus = 2;
+    };
+    features = {
+      gui = "1";
+      "gui-allow-fullscreen" = "1";
+      "nixome-managed" = "1";
+      "nixome-role" = "sys-gui";
+      servicevm = "1";
+    };
+    services = {
+      guivm = true;
+      "guivm-gui-agent" = true;
+      "network-manager" = false;
+    };
+  };
+
   mkConfigDomainEntries =
     system:
     let
@@ -236,6 +263,28 @@ let
       services = sysFirewallRoleDefaults.services;
     };
 
+  mkSysGuiDomainEntry =
+    system:
+    let
+      qubeBuilders = mkNixomeQubeBuilders system;
+    in
+    qubeBuilders.mkNixNativeDomain {
+      name = "sys-gui";
+      guestRole = "sys-gui";
+      modules = [
+        ({ ... }: {
+          networking.hostName = sysGuiRoleDefaults.guestHostName;
+        })
+      ];
+      rootImageSizeMiB = sysGuiRoleDefaults.rootImageSizeMiB;
+      kernelName = nixomeQubesVmKernelName;
+      label = sysGuiRoleDefaults.label;
+      netvm = sysGuiRoleDefaults.netvm;
+      prefs = sysGuiRoleDefaults.prefs;
+      features = sysGuiRoleDefaults.features;
+      services = sysGuiRoleDefaults.services;
+    };
+
   materializeNixClosureDomain =
     entry:
     entry.domain
@@ -266,8 +315,10 @@ in
     materializeNixClosureDomain
     mkConfigDomainEntries
     mkSysFirewallDomainEntry
+    mkSysGuiDomainEntry
     mkSysNetDomainEntry
     sysFirewallRoleDefaults
+    sysGuiRoleDefaults
     sysNetRoleDefaults
     ;
 }

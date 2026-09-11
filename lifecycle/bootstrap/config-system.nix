@@ -60,6 +60,7 @@ in
       # Fresh Nixome dom0 images do not have a Fedora/Qubes VM kernel
       # installed. Nix-native domains set their own kernel explicitly.
       default_kernel = "";
+      default_guivm = "sys-gui";
       default_netvm = "sys-firewall";
     };
 

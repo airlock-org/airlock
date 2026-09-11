@@ -52,6 +52,31 @@
   #   };
   # };
   nixNative.domains = {
+    sys-gui = {
+      role = "sys-gui";
+      label = "black";
+      netvm = null;
+      rootImageSizeMiB = 512;
+      prefs = {
+        autostart = true;
+        guivm = "dom0";
+        include_in_backups = true;
+        memory = 2048;
+        maxmem = 4096;
+        vcpus = 2;
+      };
+      features = {
+        gui = "1";
+        "gui-allow-fullscreen" = "1";
+        "nixome-role" = "sys-gui";
+        servicevm = "1";
+      };
+      services = {
+        guivm = true;
+        "guivm-gui-agent" = true;
+        "network-manager" = false;
+      };
+    };
     sys-net = {
       role = "sys-net";
       label = "red";
@@ -119,7 +144,10 @@
   topology = {
     extraTemplates = { };
     extraKernels = { };
-    extraPrefs.default_netvm = "sys-firewall";
+    extraPrefs = {
+      default_guivm = "sys-gui";
+      default_netvm = "sys-firewall";
+    };
     extraDomains = { };
     extraQrexecRules = [ ];
   };

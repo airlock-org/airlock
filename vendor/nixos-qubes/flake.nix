@@ -98,6 +98,7 @@
                 qubes-core-vchan-xen
                 qubes-desktop-linux-kde
                 qubes-gui-common
+                qubes-gui-agent-linux
                 qubes-gui-daemon
                 qubes-linux-utils
                 qubes-manager

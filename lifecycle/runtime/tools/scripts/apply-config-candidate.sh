@@ -735,6 +735,7 @@ validate_domain_references() {
     [
       (.domains // {} | to_entries[] | .key as $domain | .value as $domain_cfg |
         ref("netvm"; $domain; "netvm"; $domain_cfg.netvm),
+        ref("guivm"; $domain; "prefs.guivm"; ($domain_cfg.prefs.guivm // null)),
         if (($domain_cfg.backend.type // "qubes-template") == "qubes-template") then
           ref("template"; $domain; "template"; ($domain_cfg.template // $domain_cfg.backend.template))
         else
@@ -753,6 +754,7 @@ validate_domain_references() {
         select(.key == "clockvm"
           or .key == "default_dispvm"
           or .key == "default_netvm"
+          or .key == "default_guivm"
           or .key == "default_template"
           or .key == "management_dispvm"
           or .key == "updatevm") |

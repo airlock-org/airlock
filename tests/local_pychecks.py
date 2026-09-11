@@ -1860,11 +1860,14 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       generatedDevDomain = devEntry.domain;
       sysNetDomainDefinition = defaultRuntime.nixNative.domains.sys-net;
       sysFirewallDomainDefinition = defaultRuntime.nixNative.domains.sys-firewall;
+      sysGuiDomainDefinition = defaultRuntime.nixNative.domains.sys-gui;
+      sysGuiCfg = flake.nixosConfigurations.nixome-domain-sys-gui.config;
       stagedNixNativeDomains = defaultRuntime.nixNative.domains;
       bootstrapDomains = dom0Cfg.nixome.qubes.domains;
       releaseBootstrapDomains = releaseDom0Cfg.nixome.qubes.domains;
       bootstrapSysNetDomain = bootstrapDomains.sys-net;
       bootstrapSysFirewallDomain = bootstrapDomains.sys-firewall;
+      bootstrapSysGuiDomain = bootstrapDomains.sys-gui;
       bootstrapTopologySysNetDomain = dom0Cfg.nixome.qubes.topology.domains.sys-net;
       bootstrapTopologySysFirewallDomain =
         dom0Cfg.nixome.qubes.topology.domains.sys-firewall;
@@ -1873,12 +1876,15 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         guestRole = "base";
         modules = [ ];
       }}).configuration.config;
-      packageNames = cfg: map (package: package.pname or package.name or "") cfg.environment.systemPackages;
+      packageName = package: package.pname or package.name or "";
+      packageNames = cfg: map packageName cfg.environment.systemPackages;
       dom0Packages = packageNames dom0Cfg;
+      dom0QubesPackages = map packageName dom0Cfg.virtualisation.qubes.packages;
       legacyDevDom0Packages = packageNames legacyDevDom0Cfg;
       releaseDom0Packages = packageNames releaseDom0Cfg;
       nonDevDom0Packages = packageNames nonDevDom0Cfg;
       devPackages = packageNames devCfg;
+      sysGuiPackages = packageNames sysGuiCfg;
       basePackages = packageNames baseCfg;
       has = name: values: builtins.elem name values;
       hasAnyPrefix = prefix: values: lib.any (value: lib.hasPrefix prefix value) values;
@@ -1926,6 +1932,14 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       staged_sys_firewall_servicevm = sysFirewallDomainDefinition.features.servicevm;
       staged_sys_firewall_updates_proxy =
         sysFirewallDomainDefinition.services."qubes-updates-proxy";
+      staged_sys_gui_declared = builtins.hasAttr "sys-gui" stagedNixNativeDomains;
+      staged_sys_gui_role = sysGuiDomainDefinition.role;
+      staged_sys_gui_netvm = sysGuiDomainDefinition.netvm;
+      staged_sys_gui_guivm = sysGuiDomainDefinition.prefs.guivm;
+      staged_sys_gui_autostart = sysGuiDomainDefinition.prefs.autostart;
+      staged_sys_gui_agent_feature = sysGuiDomainDefinition.features.gui;
+      staged_sys_gui_service = sysGuiDomainDefinition.services.guivm;
+      staged_default_guivm = defaultRuntime.topology.extraPrefs.default_guivm;
       staged_default_netvm = defaultRuntime.topology.extraPrefs.default_netvm;
       generated_dev_domain_netvm = generatedDevDomain.netvm;
       generated_dev_domain_role_feature = generatedDevDomain.features."nixome-role";
@@ -1944,6 +1958,29 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       bootstrap_sys_firewall_servicevm = bootstrapSysFirewallDomain.features.servicevm;
       bootstrap_sys_firewall_updates_proxy =
         bootstrapSysFirewallDomain.services."qubes-updates-proxy";
+      bootstrap_sys_gui_present = builtins.hasAttr "sys-gui" bootstrapDomains;
+      bootstrap_sys_gui_guivm = bootstrapSysGuiDomain.prefs.guivm;
+      bootstrap_sys_gui_autostart = bootstrapSysGuiDomain.prefs.autostart;
+      bootstrap_sys_gui_agent_feature = bootstrapSysGuiDomain.features.gui;
+      bootstrap_default_guivm = dom0Cfg.nixome.qubes.prefs.default_guivm;
+      bootstrap_topology_default_guivm = dom0Cfg.nixome.qubes.topology.prefs.default_guivm;
+      sys_gui_role_enabled = sysGuiCfg.nixome.sysGuiGuest.enable;
+      sys_gui_agent_enabled = builtins.elem "multi-user.target"
+        sysGuiCfg.systemd.services.qubes-gui-agent.wantedBy;
+      sys_gui_packages_present = lib.all (name: has name sysGuiPackages) [
+        "qubes-gui-agent-linux"
+        "qubes-gui-daemon"
+        "xfce4-session"
+      ];
+      sys_gui_rpc_present = lib.all (name: builtins.hasAttr name sysGuiCfg.environment.etc) [
+        "qubes-rpc/qubes.GuiVMSession"
+        "qubes-rpc/qubes.SetMonitorLayout"
+        "qubes-rpc/qubes.WindowIconUpdater"
+      ];
+      dom0_sys_gui_policy_present = has "nixome-sys-gui-policy" dom0QubesPackages;
+      dom0_sys_gui_session_present = lib.any (
+        package: builtins.elem "sys-gui" (package.providedSessions or [ ])
+      ) dom0Cfg.services.displayManager.sessionPackages;
       bootstrap_default_netvm = dom0Cfg.nixome.qubes.prefs.default_netvm;
       bootstrap_topology_default_netvm = dom0Cfg.nixome.qubes.topology.prefs.default_netvm;
       bootstrap_dev_topology_present = builtins.hasAttr "dev" dom0Cfg.nixome.qubes.topology.domains;
@@ -2097,6 +2134,14 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["staged_sys_firewall_provides_network"] is True
     assert data["staged_sys_firewall_servicevm"] == "1"
     assert data["staged_sys_firewall_updates_proxy"] is True
+    assert data["staged_sys_gui_declared"] is True
+    assert data["staged_sys_gui_role"] == "sys-gui"
+    assert data["staged_sys_gui_netvm"] is None
+    assert data["staged_sys_gui_guivm"] == "dom0"
+    assert data["staged_sys_gui_autostart"] is True
+    assert data["staged_sys_gui_agent_feature"] == "1"
+    assert data["staged_sys_gui_service"] is True
+    assert data["staged_default_guivm"] == "sys-gui"
     assert data["staged_default_netvm"] == "sys-firewall"
     assert data["generated_dev_domain_netvm"] is None
     assert data["generated_dev_domain_role_feature"] == "dev"
@@ -2113,6 +2158,18 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["bootstrap_sys_firewall_provides_network"] is True
     assert data["bootstrap_sys_firewall_servicevm"] == "1"
     assert data["bootstrap_sys_firewall_updates_proxy"] is True
+    assert data["bootstrap_sys_gui_present"] is True
+    assert data["bootstrap_sys_gui_guivm"] == "dom0"
+    assert data["bootstrap_sys_gui_autostart"] is True
+    assert data["bootstrap_sys_gui_agent_feature"] == "1"
+    assert data["bootstrap_default_guivm"] == "sys-gui"
+    assert data["bootstrap_topology_default_guivm"] == "sys-gui"
+    assert data["sys_gui_role_enabled"] is True
+    assert data["sys_gui_agent_enabled"] is True
+    assert data["sys_gui_packages_present"] is True
+    assert data["sys_gui_rpc_present"] is True
+    assert data["dom0_sys_gui_policy_present"] is True
+    assert data["dom0_sys_gui_session_present"] is True
     assert data["bootstrap_default_netvm"] == "sys-firewall"
     assert data["bootstrap_topology_default_netvm"] == "sys-firewall"
     assert data["bootstrap_dev_topology_present"] is False

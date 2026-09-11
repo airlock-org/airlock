@@ -13,6 +13,7 @@ let
   observeDom0 = pkgs.callPackage ../../runtime/tools/pkgs/nixome-observe { };
   qubesSmoke = pkgs.callPackage ../tools/pkgs/nixome-qubes-smoke { };
   qrexecDom0 = pkgs.python3.pkgs.qubes-core-qrexec.dom0;
+  qubesAdminClient = pkgs.python3.pkgs.qubes-core-admin-client;
   dom0DevPackages = with pkgs; [
     codex
     git
@@ -36,6 +37,53 @@ let
     qubes.UpdatesProxy * dom0 ${devNetworkProxy.target} allow
     EOF
   '';
+  sysGuiPolicyPackage = pkgs.runCommand "nixome-sys-gui-policy" { } ''
+    install -d "$out/etc/qubes/policy.d"
+    cat > "$out/etc/qubes/policy.d/50-nixome-sys-gui.policy" <<'EOF'
+    # Based on Qubes' qvm/template-gui.jinja for the hybrid sys-gui domain.
+    policy.EvalGUI +qubes.ClipboardPaste sys-gui dom0 allow
+    qubes.GetImageRGBA * sys-gui @tag:guivm-sys-gui allow
+    qubes.GetAppmenus * sys-gui @tag:guivm-sys-gui allow
+    qubes.GetAppmenus * sys-gui @type:TemplateVM allow
+    qubes.ClipboardCopy + sys-gui @tag:guivm-sys-gui allow
+    qubes.ClipboardPaste + sys-gui @tag:guivm-sys-gui allow
+    qubes.SetMonitorLayout * sys-gui @tag:guivm-sys-gui allow
+    qubes.StartApp * sys-gui @tag:guivm-sys-gui allow
+    qubes.StartApp * sys-gui @dispvm:@tag:guivm-sys-gui allow
+    qubes.SyncAppMenus * @tag:guivm-sys-gui dom0 allow target=sys-gui
+    qubes.WindowIconUpdater * @tag:guivm-sys-gui dom0 allow target=sys-gui
+    qubes.Notifications * @tag:guivm-sys-gui @default allow target=sys-gui autostart=no
+    qubes.WaitForSession * sys-gui @tag:guivm-sys-gui allow
+    admin.vm.List * sys-gui dom0 allow
+    admin.vm.List * sys-gui @tag:guivm-sys-gui allow target=dom0
+    admin.Events * sys-gui dom0 allow
+    admin.Events * sys-gui @tag:guivm-sys-gui allow target=dom0
+    admin.label.Get * sys-gui dom0 allow
+    admin.label.Index * sys-gui dom0 allow
+    admin.vm.feature.Set +keyboard-layout sys-gui sys-gui allow target=dom0
+    admin.vm.property.Get * sys-gui dom0 allow
+    admin.vm.volume.List * sys-gui dom0 allow
+    admin.vm.device.pci.Available * sys-gui dom0 allow
+    admin.vm.device.mic.Available * sys-gui dom0 allow
+    admin.vm.feature.Get +internal sys-gui dom0 allow
+    admin.vm.feature.Get +servicevm sys-gui dom0 allow
+    admin.vm.CurrentState * sys-gui dom0 allow
+    EOF
+  '';
+  sysGuiSessionPackage =
+    pkgs.runCommand "nixome-sys-gui-session"
+      {
+        passthru.providedSessions = [ "sys-gui" ];
+      }
+      ''
+        install -d "$out/share/xsessions"
+        cat > "$out/share/xsessions/sys-gui.desktop" <<EOF
+        [Desktop Entry]
+        Name=GUI Domain (sys-gui)
+        Exec=${qubesAdminClient}/bin/qubes-guivm-session sys-gui
+        Type=Application
+        EOF
+      '';
   xorgQubesShmoverride = pkgs.writeShellScript "X-qubes-shmoverride" ''
     export LD_PRELOAD=${pkgs.qubes-gui-daemon}/lib/qubes-gui-daemon/shmoverride.so''${LD_PRELOAD:+:$LD_PRELOAD}
     exec ${pkgs.xorg-server}/bin/X "$@"
@@ -200,6 +248,7 @@ in
     services.xserver.displayManager.xserverBin = lib.mkIf cfg.gui.enable (
       lib.mkOverride 50 xorgQubesShmoverride
     );
+    services.displayManager.sessionPackages = lib.optional cfg.gui.enable sysGuiSessionPackage;
 
     virtualisation.qubes = {
       dom0.enable = true;
@@ -265,9 +314,11 @@ in
       ''
     );
 
-    virtualisation.qubes.packages = lib.optionals devNetworkProxy.enable [
-      dom0DevNetworkProxyPolicyPackage
-    ];
+    virtualisation.qubes.packages =
+      lib.optionals devNetworkProxy.enable [
+        dom0DevNetworkProxyPolicyPackage
+      ]
+      ++ lib.optional cfg.gui.enable sysGuiPolicyPackage;
 
     systemd.sockets.nixome-dom0-updates-proxy = lib.mkIf devNetworkProxy.enable {
       description = "Listen for dev-mode dom0 traffic to the updates proxy";

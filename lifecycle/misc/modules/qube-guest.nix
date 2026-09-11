@@ -13,16 +13,18 @@ let
   hasConfigValidatorRole = cfg.role == "sys-config-validator";
   hasDevRole = cfg.role == "dev";
   hasSysNetRole = cfg.role == "sys-net";
+  hasSysGuiRole = cfg.role == "sys-gui";
   hasNetworkProviderRole = hasSysNetRole || cfg.role == "sys-firewall";
   hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole;
   hasPrivateNixRole =
     hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole || hasDevRole;
   hasConfigInputsImportRole = hasConfigStagingRole || hasConfigValidatorRole;
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
-  qubesDbPython = (pkgs.qubes-core-qubesdb.override {
-    withPython = true;
-    python = pkgs.python3;
-  }).pythonModule;
+  qubesDbPython =
+    (pkgs.qubes-core-qubesdb.override {
+      withPython = true;
+      python = pkgs.python3;
+    }).pythonModule;
   qubesPython = pkgs.python3.withPackages (ps: [
     ps.dbus-python
     qubesDbPython
@@ -191,7 +193,12 @@ let
       ]
       ++
         lib.optionals
-          (role == "sys-config-vault" || role == "sys-config-staging" || role == "sys-config-validator" || role == "dev")
+          (
+            role == "sys-config-vault"
+            || role == "sys-config-staging"
+            || role == "sys-config-validator"
+            || role == "dev"
+          )
           [
             configNix
             pkgs.nix
@@ -2527,6 +2534,10 @@ let
 
 in
 {
+  imports = [
+    ./sys-gui-guest.nix
+  ];
+
   options.nixome.qubeGuest = {
     enable = lib.mkEnableOption "a Nixome NixOS Qubes guest domain";
 
@@ -2538,6 +2549,7 @@ in
         "sys-config-validator"
         "dev"
         "sys-firewall"
+        "sys-gui"
         "sys-net"
       ];
       default = "base";
@@ -2600,6 +2612,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    nixome.sysGuiGuest.enable = hasSysGuiRole;
     assertions = [
       {
         assertion = cfg.user != "";
@@ -3247,11 +3260,7 @@ in
           "nixome-qubes-rw-init.service"
         ]
         ++ roleInitDeps;
-        after =
-          if hasNetworkProviderRole then
-            lib.mkForce networkProviderAfter
-          else
-            normalAfter;
+        after = if hasNetworkProviderRole then lib.mkForce networkProviderAfter else normalAfter;
         before = lib.optionals hasNetworkProviderRole [ "network.target" ];
         aliases = [ "qubes-core-agent.service" ];
         overrideStrategy = "asDropin";

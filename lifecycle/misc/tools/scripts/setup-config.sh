@@ -601,7 +601,7 @@ set_global_pref() {
 
 is_domain_backed_global_pref() {
   case "$1" in
-    default_dispvm|default_netvm|updatevm)
+    default_dispvm|default_guivm|default_netvm|updatevm)
       return 0
       ;;
     *)

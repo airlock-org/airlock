@@ -192,6 +192,7 @@
         materializeNixClosureDomain
         mkConfigDomainEntries
         mkSysFirewallDomainEntry
+        mkSysGuiDomainEntry
         mkSysNetDomainEntry
         ;
 
@@ -202,6 +203,7 @@
           bootstrapDomainEntries = (mkConfigDomainEntries system) // {
             sys-net = bootstrapDomainEntriesSource.mkSysNetDomainEntry system;
             sys-firewall = bootstrapDomainEntriesSource.mkSysFirewallDomainEntry system;
+            sys-gui = bootstrapDomainEntriesSource.mkSysGuiDomainEntry system;
           };
         in
         builtins.mapAttrs (_name: entry: materializeNixClosureDomain entry) bootstrapDomainEntries;
@@ -377,6 +379,8 @@
               { };
           nixome-qube-bootstrap = pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/nixome-qube-bootstrap { };
           nixome-qube-gui-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-qube-gui-smoke { };
+          qubes-gui-agent-linux = pkgs.qubes-gui-agent-linux;
+          qubes-gui-daemon = pkgs.qubes-gui-daemon;
           nixome-setup-config = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-setup-config { };
           nixome-start-network-providers =
             pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-start-network-providers
@@ -515,5 +519,6 @@
         (networkDebugBootstrapDomains.mkSysNetDomainEntry "x86_64-linux").configuration;
       nixosConfigurations.nixome-domain-sys-firewall =
         (mkSysFirewallDomainEntry "x86_64-linux").configuration;
+      nixosConfigurations.nixome-domain-sys-gui = (mkSysGuiDomainEntry "x86_64-linux").configuration;
     };
 }
