@@ -1670,6 +1670,7 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "NIXOME_VM_IOMMU",
             "kernel-irqchip=split",
             "intel-iommu,intremap=on,caching-mode=on",
+            "virtio-net-pci,disable-modern=on,netdev=sysnet0",
         ],
         "test_vm": [
             "NIXOME_VM_SKIP_BASE_BUILD",
@@ -1721,6 +1722,9 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "input_relative_path=",
             '${input_path#"$input_store_path"}',
             'mount --bind "$physical_path" "$mountpoint_path"',
+            "ps.dbus-python",
+            "nixome-qubes-setup-dnat-to-ns",
+            "nixome-qubes-network-proxy-setup",
         ],
         "ssh_vm": [
             '"$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass'

@@ -19,6 +19,22 @@ let
     hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole || hasDevRole;
   hasConfigInputsImportRole = hasConfigStagingRole || hasConfigValidatorRole;
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
+  qubesDbPython = (pkgs.qubes-core-qubesdb.override {
+    withPython = true;
+    python = pkgs.python3;
+  }).pythonModule;
+  qubesPython = pkgs.python3.withPackages (ps: [
+    ps.dbus-python
+    qubesDbPython
+  ]);
+  qubesDnatToNs = pkgs.writeShellScript "nixome-qubes-setup-dnat-to-ns" ''
+    exec ${qubesPython}/bin/python ${qubesAgentLinux}/lib/qubes/qubes-setup-dnat-to-ns "$@"
+  '';
+  qubesNetworkProxySetup = pkgs.runCommand "nixome-qubes-network-proxy-setup" { } ''
+    install -D -m 0555 ${qubesAgentLinux}/lib/qubes/init/network-proxy-setup.sh "$out/bin/network-proxy-setup"
+    substituteInPlace "$out/bin/network-proxy-setup" \
+      --replace-fail "${qubesAgentLinux}/lib/qubes/qubes-setup-dnat-to-ns" "${qubesDnatToNs}"
+  '';
   roleGit = pkgs.gitMinimal;
   nixomeCli = pkgs.callPackage ../../runtime/tools/pkgs/nixome-cli { };
   systemdPackage = config.systemd.package;
@@ -104,7 +120,7 @@ let
     install -D -m 0555 ${qubesAgentLinux.src}/network/setup-ip "$out/bin/setup-ip"
     substituteInPlace "$out/bin/setup-ip" \
       --replace-fail "/usr/lib/qubes/init/functions" "${qubesAgentLinux}/lib/qubes/init/functions" \
-      --replace-fail "/usr/lib/qubes/qubes-setup-dnat-to-ns" "${qubesAgentLinux}/lib/qubes/qubes-setup-dnat-to-ns" \
+      --replace-fail "/usr/lib/qubes/qubes-setup-dnat-to-ns" "${qubesDnatToNs}" \
       --replace-fail "/usr/bin/qubesdb-read" "${pkgs.qubes-core-qubesdb}/bin/qubesdb-read" \
       --replace-fail "/usr/bin/resolvectl" "${systemdPackage}/bin/resolvectl" \
       --replace-fail "/usr/bin/nmcli" "${pkgs.networkmanager}/bin/nmcli" \
@@ -138,7 +154,7 @@ let
 
     case "''${2:-}" in
       up|vpn-up|vpn-down|dhcp4-change)
-        ${qubesAgentLinux}/lib/qubes/qubes-setup-dnat-to-ns
+        ${qubesDnatToNs}
         rc="$?"
         if [ "$rc" -ne 100 ]; then
           systemctl --no-block try-restart qubes-updates-proxy.service
@@ -3135,7 +3151,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${qubesAgentLinux}/lib/qubes/init/network-proxy-setup.sh";
+        ExecStart = "${qubesNetworkProxySetup}/bin/network-proxy-setup";
         ExecStop = "${qubesAgentLinux}/lib/qubes/init/network-proxy-stop.sh";
       };
     };
