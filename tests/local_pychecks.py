@@ -1910,6 +1910,9 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       nonDevDom0Packages = packageNames nonDevDom0Cfg;
       devPackages = packageNames devCfg;
       sysGuiPackages = packageNames sysGuiCfg;
+      sysGuiManager = lib.findFirst (
+        package: packageName package == "qubes-manager"
+      ) (throw "missing sys-gui Qubes Manager") sysGuiCfg.environment.systemPackages;
       basePackages = packageNames baseCfg;
       has = name: values: builtins.elem name values;
       hasAnyPrefix = prefix: values: lib.any (value: lib.hasPrefix prefix value) values;
@@ -2010,6 +2013,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         "qubes-desktop-linux-manager"
         "xfce4-session"
       ];
+      sys_gui_template_tools_removed =
+        sysGuiManager.passthru.nixomeTemplateToolsRemoved or false;
       dom0_desktop_packages_absent = lib.all (name: !(has name dom0Packages)) [
         "qubes-manager"
         "qubes-desktop-linux-manager"
@@ -2250,6 +2255,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["dom0_greeter_enabled"] is False
     assert data["dom0_autologin"] is True
     assert data["sys_gui_packages_present"] is True
+    assert data["sys_gui_template_tools_removed"] is True
     assert data["dom0_desktop_packages_absent"] is True
     assert data["dom0_xfce_enabled"] is False
     assert data["dom0_xterm_enabled"] is False

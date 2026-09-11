@@ -39,6 +39,7 @@ let
     (import "${nixpkgs}/pkgs/top-level/by-name-overlay.nix" "${nixosQubesSource}/pkgs/by-name")
     libvirt105Overlay
     (import "${nixosQubesSource}/nix/overlay.nix")
+    (import "${nixomeSupport}/lifecycle/misc/overlays/qubes-manager-without-template-tools.nix")
   ];
 
   pkgs = import nixpkgs {
