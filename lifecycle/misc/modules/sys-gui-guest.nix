@@ -6,7 +6,14 @@
 }:
 let
   cfg = config.nixome.sysGuiGuest;
-  guiAgent = pkgs.qubes-gui-agent-linux;
+  guiAgent = pkgs.qubes-gui-agent-linux.overrideAttrs (old: {
+    postFixup = (old.postFixup or "") + ''
+      # Failed transient sessions must be collected so another login can start
+      # the same named unit without a manual reset-failed in the GUI domain.
+      substituteInPlace "$out/bin/qubes-start-xephyr" \
+        --replace-fail '--wait' '--wait --collect'
+    '';
+  });
   guestUser = config.nixome.qubeGuest.user;
 in
 {
@@ -51,14 +58,21 @@ in
         pkgs.qubes-core-agent-linux
         pkgs.qubes-core-qubesdb
         pkgs.shadow
+        pkgs.util-linux
         pkgs.systemd
       ];
+    };
+
+    # Use NixOS PAM modules and session setup. The packaged Fedora PAM file
+    # includes system-auth/postlogin, neither of which exists on NixOS.
+    security.pam.services.qubes-gui-agent = {
+      rootOK = true;
+      startSession = true;
     };
 
     environment.etc = {
       "X11/xorg-qubes.conf.template".source = "${guiAgent}/etc/X11/xorg-qubes.conf.template";
       "X11/xinit/xinitrc".source = "${guiAgent}/bin/qubes-session";
-      "pam.d/qubes-gui-agent".source = "${guiAgent}/etc/pam.d/qubes-gui-agent";
       "qubes-rpc/qubes.GuiVMSession".source = "${guiAgent}/etc/qubes-rpc/qubes.GuiVMSession";
       "qubes-rpc/qubes.SetMonitorLayout".source = "${guiAgent}/etc/qubes-rpc/qubes.SetMonitorLayout";
       "qubes-rpc/qubes.WindowIconUpdater".source =

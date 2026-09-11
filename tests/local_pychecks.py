@@ -1971,6 +1971,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       sys_gui_role_enabled = sysGuiCfg.nixome.sysGuiGuest.enable;
       sys_gui_agent_enabled = builtins.elem "multi-user.target"
         sysGuiCfg.systemd.services.qubes-gui-agent.wantedBy;
+      sys_gui_agent_path = sysGuiCfg.systemd.services.qubes-gui-agent.environment.PATH;
+      sys_gui_pam = sysGuiCfg.security.pam.services.qubes-gui-agent.text;
       sys_gui_packages_present = lib.all (name: has name sysGuiPackages) [
         "qubes-gui-agent-linux"
         "qubes-gui-daemon"
@@ -2179,6 +2181,14 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["bootstrap_topology_default_guivm"] == "sys-gui"
     assert data["sys_gui_role_enabled"] is True
     assert data["sys_gui_agent_enabled"] is True
+    agent_path = data["sys_gui_agent_path"].split(":")
+    assert any(
+        (Path(_physical_store_path(repo_root, directory)) / "runuser").is_file()
+        for directory in agent_path
+    ), "sys-gui must be able to start Xorg with runuser from its service PATH"
+    assert "pam_systemd.so" in data["sys_gui_pam"]
+    assert "system-auth" not in data["sys_gui_pam"]
+    assert "postlogin" not in data["sys_gui_pam"]
     assert data["sys_gui_packages_present"] is True
     assert data["sys_gui_rpc_present"] is True
     assert data["dom0_sys_gui_policy_present"] is True
