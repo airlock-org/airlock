@@ -1670,7 +1670,7 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "NIXOME_VM_IOMMU",
             "kernel-irqchip=split",
             "intel-iommu,intremap=on,caching-mode=on",
-            "virtio-net-pci,disable-modern=on,vectors=0,netdev=sysnet0",
+            "virtio-net-pci,disable-legacy=on,iommu_platform=on,vectors=0,netdev=sysnet0",
         ],
         "test_vm": [
             "NIXOME_VM_SKIP_BASE_BUILD",
