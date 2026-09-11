@@ -344,7 +344,7 @@ render_boot_status() {
   elapsed=$((SECONDS - boot_started_at))
   {
     # Redraw in place without clearing the whole screen between timer ticks.
-    printf '\033[H\033[K\n\033[K  Nixome | Starting your system\n\033[K\n'
+    printf '\033[H\033[K\n\033[K  Nixome | Initial setup and installation\n\033[K\n'
     for phase in 1 2 3 4; do
       marker='[ ]'
       if [ "$phase" -lt "$boot_phase" ]; then
@@ -361,12 +361,13 @@ render_boot_status() {
     printf '\033[K\n'
     case "$boot_status_state" in
       working)
-        printf '\033[K  No action needed. Setup runs automatically.\n'
-        printf '\033[K  First boot can take several minutes while VM files are prepared.\n'
-        printf '\033[K  Steps take different amounts of time; later boots reuse these files.\n'
+        printf '\033[K  No action needed. Nixome is installing its initial VM setup automatically.\n'
+        printf '\033[K  This can take several minutes on the first boot while VM files are prepared.\n'
+        printf '\033[K  This slow installation work happens once; later boots reuse the completed setup.\n'
         ;;
       complete)
-        printf '\033[K  Setup is complete. The desktop login starts next.\n'
+        printf '\033[K  Initial setup is complete. Later boots reuse this installation.\n'
+        printf '\033[K  The desktop login starts next.\n'
         printf '\033[K  Enter your account password if a login prompt appears.\n'
         ;;
       failed)
