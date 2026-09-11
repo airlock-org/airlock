@@ -187,12 +187,16 @@ let
       name = "sys-net";
       guestRole = "sys-net";
       modules = [
-        ({ ... }: {
-          networking.hostName = sysNetRoleDefaults.guestHostName;
-        }
-        // lib.optionalAttrs networkDebug {
-          systemd.services.NetworkManager.wantedBy = lib.mkForce [ ];
-        })
+        (
+          { ... }:
+          {
+            networking.hostName = sysNetRoleDefaults.guestHostName;
+          }
+          // lib.optionalAttrs networkDebug {
+            nixome.qubeGuest.allowQrexecUserSelection = true;
+            systemd.services.NetworkManager.wantedBy = lib.mkForce [ ];
+          }
+        )
       ];
       rootImageSizeMiB = sysNetRoleDefaults.rootImageSizeMiB;
       kernelName = nixomeQubesVmKernelName;

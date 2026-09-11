@@ -2534,6 +2534,12 @@ in
       description = "Primary unprivileged user in the guest domain.";
     };
 
+    allowQrexecUserSelection = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Allow callers to select the target user for qubes.VMShell qrexec requests.";
+    };
+
     configRepoPath = lib.mkOption {
       type = lib.types.str;
       default = "/home/${cfg.user}/nixome-config";
@@ -3413,7 +3419,7 @@ in
     };
 
     environment.etc."qubes/rpc-config/qubes.VMShell" = {
-      text = "force-user='${cfg.user}'\n";
+      text = lib.optionalString (!cfg.allowQrexecUserSelection) "force-user='${cfg.user}'\n";
       mode = "0444";
     };
 

@@ -9351,6 +9351,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                   flake = builtins.getFlake "path:{repo_root}";
                   dom0 = flake.nixosConfigurations.vm-gui-config.config;
                   sysNet = flake.nixosConfigurations.nixome-domain-sys-net.config;
+                  sysNetNetworkDebug = flake.nixosConfigurations.nixome-domain-sys-net-network-debug.config;
                   sysFirewall = flake.nixosConfigurations.nixome-domain-sys-firewall.config;
                   packageNames = cfg: map (package: package.pname or package.name or "") cfg.environment.systemPackages;
                   systemdPackageNames = cfg: map (package: package.pname or package.name or "") cfg.systemd.packages;
@@ -9403,6 +9404,10 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                     sysNet.systemd.units."qubes-qrexec-agent.service".text;
                   sys_net_rpc_config_text =
                     sysNet.environment.etc."qubes/rpc-config/qubes.UpdatesProxy".text;
+                  sys_net_vmshell_rpc_config_text =
+                    sysNet.environment.etc."qubes/rpc-config/qubes.VMShell".text;
+                  sys_net_network_debug_vmshell_rpc_config_text =
+                    sysNetNetworkDebug.environment.etc."qubes/rpc-config/qubes.VMShell".text;
                   sys_net_rpc_service_mode =
                     sysNet.environment.etc."qubes-rpc/qubes.UpdatesProxy".mode;
                   sys_net_rpc_service_source =
@@ -9537,6 +9542,8 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         proxy_eval["sys_net_rpc_config_text"]
         == "skip-service-descriptor=true\nexit-on-service-eof=true\n"
     )
+    assert proxy_eval["sys_net_vmshell_rpc_config_text"] == "force-user='user'\n"
+    assert proxy_eval["sys_net_network_debug_vmshell_rpc_config_text"] == ""
     assert proxy_eval["sys_net_rpc_service_mode"] == "0555"
     assert (
         "nixome-qubes-updates-proxy-rpc-service"
