@@ -2032,6 +2032,11 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         "qubes.GuiVMSession * dom0 sys-gui allow"
         dom0SysGuiPolicy
         && lib.hasInfix "qubes.GuiVMSession * @anyvm @anyvm deny" dom0SysGuiPolicy;
+      dom0_sys_gui_system_domain_visibility = lib.all (name:
+        lib.hasInfix "admin.vm.List * sys-gui ${{name}} allow target=dom0" dom0SysGuiPolicy
+        && lib.hasInfix "admin.Events * sys-gui ${{name}} allow target=dom0" dom0SysGuiPolicy
+      ) (lib.filter (name: lib.hasPrefix "sys-" name)
+        (builtins.attrNames dom0Cfg.nixome.qubes.topology.domains));
       dom0_sys_gui_management_policy = lib.all (rule: lib.hasInfix rule dom0SysGuiPolicy) [
         "admin.vm.Create.AppVM * sys-gui dom0 allow"
         "admin.vm.Create.StandaloneVM * sys-gui dom0 allow"
@@ -2262,6 +2267,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["sys_gui_rpc_present"] is True
     assert data["dom0_sys_gui_policy_present"] is True
     assert data["dom0_sys_gui_session_policy"] is True
+    assert data["dom0_sys_gui_system_domain_visibility"] is True
     assert data["dom0_sys_gui_management_policy"] is True
     assert data["dom0_sys_gui_session_present"] is True
     assert data["dom0_default_session"] == "sys-gui"

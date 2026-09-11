@@ -22,6 +22,9 @@ let
   devNetworkProxy = cfg.devModeNetworkProxy;
   devNetworkProxyListen = "${devNetworkProxy.listenAddress}:${toString devNetworkProxy.port}";
   devNetworkProxyUrl = "http://${devNetworkProxyListen}";
+  sysGuiVisibleSystemDomains = lib.filter (
+    name: lib.hasPrefix "sys-" name
+  ) (builtins.attrNames config.nixome.qubes.topology.domains);
   devNetworkProxyEnv = {
     http_proxy = devNetworkProxyUrl;
     https_proxy = devNetworkProxyUrl;
@@ -62,6 +65,12 @@ let
     admin.vm.List * sys-gui @tag:guivm-sys-gui allow target=dom0
     admin.Events * sys-gui dom0 allow
     admin.Events * sys-gui @tag:guivm-sys-gui allow target=dom0
+    # System domains do not carry the app-VM GUI tag. Make their presence and
+    # state visible to Qubes Manager without exposing every domain globally.
+    ${lib.concatMapStringsSep "\n" (domain: ''
+      admin.vm.List * sys-gui ${domain} allow target=dom0
+      admin.Events * sys-gui ${domain} allow target=dom0
+    '') sysGuiVisibleSystemDomains}
     admin.label.Get * sys-gui dom0 allow
     admin.label.Index * sys-gui dom0 allow
     admin.vm.feature.Set +keyboard-layout sys-gui sys-gui allow target=dom0
