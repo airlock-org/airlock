@@ -8,6 +8,7 @@
   pandoc,
   bash,
   patsh,
+  systemd,
 }:
 let
   inherit (python3.pkgs)
@@ -93,6 +94,8 @@ buildPythonApplication {
 
     patsh -f $out/etc/xen/scripts/vif-route-qubes -s ${builtins.storeDir}
     patsh -f $out/etc/xen/scripts/vif-qubes-nat.sh -s ${builtins.storeDir}
+    substituteInPlace $out/etc/xen/scripts/vif-route-qubes \
+      --replace-fail "/usr/lib/systemd/systemd-sysctl" "${systemd}/lib/systemd/systemd-sysctl"
 
     # Many of those needs to be remade for NixOS, I doubt they work, but it is not required for dom0
     for name in bind-dirs.sh control-printer-icon.sh functions misc-post.sh misc-post-stop.sh mount-dirs.sh \

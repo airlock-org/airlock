@@ -95,6 +95,7 @@ let
 
     postPatch = ''
       substituteInPlace systemd/qubes-qrexec-agent.service \
+        --replace-fail "After=xendriverdomain.service systemd-user-sessions.service" "After=xendriverdomain.service" \
         --replace-fail "ExecStart=/usr/lib/" "ExecStart=$out/lib/" \
         --replace-fail "modprobe" "${kmod}/bin/modprobe"
     '';

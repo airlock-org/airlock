@@ -58,8 +58,19 @@ let
     pkgs.networkmanager
     pkgs.nftables
     pkgs.procps
+    pkgs.qubes-vmm-xen
     pkgs.tinyproxy
   ];
+
+  xenDriverDomainEtc = pkgs.symlinkJoin {
+    name = "nixome-xen-driver-domain-etc";
+    paths = [
+      pkgs.qubes-vmm-xen
+      qubesAgentLinux
+      pkgs.qubes-linux-utils
+    ];
+    stripPrefix = "/etc/xen";
+  };
 
   updatesProxyRpcService = pkgs.writeShellScript "nixome-qubes-updates-proxy-rpc-service" ''
     set -euo pipefail
@@ -2625,7 +2636,8 @@ in
       "xen-gntalloc"
       "xen-gntdev"
       "xen-privcmd"
-    ];
+    ]
+    ++ lib.optional hasNetworkProviderRole "xen-netback";
     boot.kernelParams = [
       "console=hvc0"
     ];
@@ -2697,7 +2709,8 @@ in
       pkgs.qubes-core-qubesdb.daemon
       pkgs.python3.pkgs.qubes-core-qrexec.domU
       pkgs.qubes-linux-utils
-    ];
+    ]
+    ++ lib.optional hasNetworkProviderRole pkgs.qubes-vmm-xen;
 
     systemd.services.qubes-sysinit = {
       enable = true;
@@ -3212,17 +3225,35 @@ in
           "nixome-qubes-rw-init.service"
         ]
         ++ roleInitDeps;
-        after = lib.mkIf (!hasNetworkProviderRole) normalAfter;
+        after =
+          if hasNetworkProviderRole then
+            lib.mkForce networkProviderAfter
+          else
+            normalAfter;
         before = lib.optionals hasNetworkProviderRole [ "network.target" ];
         aliases = [ "qubes-core-agent.service" ];
         overrideStrategy = "asDropin";
         unitConfig = {
           OnFailure = [ "nixome-qubes-qrexec-diagnostics.service" ];
-        }
-        // lib.optionalAttrs hasNetworkProviderRole {
-          After = [ "" ] ++ networkProviderAfter;
         };
       };
+
+    systemd.services.xendriverdomain = lib.mkIf hasNetworkProviderRole {
+      enable = true;
+      wantedBy = [ "multi-user.target" ];
+      wants = [ "proc-xen.mount" ];
+      requires = [ "proc-xen.mount" ];
+      after = [
+        "proc-xen.mount"
+        "systemd-modules-load.service"
+      ];
+      path = networkGuestPath;
+      overrideStrategy = "asDropin";
+      serviceConfig = {
+        RuntimeDirectory = "xen";
+        RuntimeDirectoryMode = "0755";
+      };
+    };
 
     systemd.services.qubes-meminfo-writer = {
       enable = true;
@@ -3243,6 +3274,10 @@ in
     environment.etc."systemd/network/80-qubes-vif.link" = lib.mkIf hasSysNetRole {
       source = "${qubesAgentLinux}/lib/systemd/network/80-qubes-vif.link";
       mode = "0444";
+    };
+
+    environment.etc."xen" = lib.mkIf hasNetworkProviderRole {
+      source = xenDriverDomainEtc;
     };
 
     environment.etc."qubes/qubes-antispoof.nft" = lib.mkIf hasNetworkProviderRole {

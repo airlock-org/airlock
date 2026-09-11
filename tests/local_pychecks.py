@@ -68,15 +68,21 @@ def _run(
     return result
 
 
-def _run_store_path(repo_root: Path, store_path: str, env: dict[str, str]) -> None:
+def _run_store_path(
+    repo_root: Path,
+    store_path: str,
+    env: dict[str, str],
+    args: list[str] | None = None,
+) -> None:
     _run(
         [
             "bash",
             "-c",
-            'source "$1"; nixome_run_store_path "$2"',
+            'source "$1"; nixome_run_store_path "$2" "${@:3}"',
             "bash",
             str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
             store_path,
+            *(args or []),
         ],
         cwd=repo_root,
         env=env,
@@ -485,9 +491,7 @@ def check_setup_config_runtime_path(repo_root: Path, log_dir: Path) -> None:
     ), f"could not extract NIXOME_QUBESADMIN_PYTHON from {wrapper}"
 
     path_value = _physical_path_list(repo_root, match.group(1))
-    qubesadmin_python = _physical_store_path(
-        repo_root, qubesadmin_python_match.group(1)
-    )
+    qubesadmin_python = qubesadmin_python_match.group(1)
     required = [
         "awk",
         "chmod",
@@ -528,7 +532,12 @@ def check_setup_config_runtime_path(repo_root: Path, log_dir: Path) -> None:
     assert not missing, "setup-config runtime PATH is missing helper(s): " + ", ".join(
         missing
     )
-    _run([qubesadmin_python, "-c", "import qubesadmin"], cwd=repo_root)
+    _run_store_path(
+        repo_root,
+        qubesadmin_python,
+        os.environ.copy(),
+        ["-c", "import qubesadmin"],
+    )
 
 
 def _write_flake(path: Path, text: str) -> None:
@@ -9321,6 +9330,7 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                   sysNet = flake.nixosConfigurations.nixome-domain-sys-net.config;
                   sysFirewall = flake.nixosConfigurations.nixome-domain-sys-firewall.config;
                   packageNames = cfg: map (package: package.pname or package.name or "") cfg.environment.systemPackages;
+                  systemdPackageNames = cfg: map (package: package.pname or package.name or "") cfg.systemd.packages;
                 in
                 {{
                   dom0_proxy_enabled = dom0.nixome.dom0.devModeNetworkProxy.enable;
@@ -9377,6 +9387,22 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                   sys_net_tinyproxy_user = sysNet.users.users.tinyproxy.isSystemUser;
                   sys_net_tinyproxy_group = sysNet.users.users.tinyproxy.group;
                   sys_net_package_names = packageNames sysNet;
+                  sys_net_systemd_package_names = systemdPackageNames sysNet;
+                  sys_net_kernel_modules = sysNet.boot.kernelModules;
+                  sys_net_xendriverdomain_enable =
+                    sysNet.systemd.services.xendriverdomain.enable;
+                  sys_net_xendriverdomain_wanted_by =
+                    sysNet.systemd.services.xendriverdomain.wantedBy;
+                  sys_net_xendriverdomain_after =
+                    sysNet.systemd.services.xendriverdomain.after;
+                  sys_net_xendriverdomain_requires =
+                    sysNet.systemd.services.xendriverdomain.requires;
+                  sys_net_xendriverdomain_runtime_directory =
+                    sysNet.systemd.services.xendriverdomain.serviceConfig.RuntimeDirectory;
+                  sys_net_xendriverdomain_unit_text =
+                    sysNet.systemd.units."xendriverdomain.service".text;
+                  sys_net_xen_etc_source =
+                    toString sysNet.environment.etc."xen".source;
                   sys_firewall_role = sysFirewall.nixome.qubeGuest.role;
                   sys_firewall_dhcp = sysFirewall.networking.useDHCP;
                   sys_firewall_networkmanager = sysFirewall.networking.networkmanager.enable;
@@ -9400,6 +9426,16 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
                     sysFirewall.users.users.tinyproxy.isSystemUser;
                   sys_firewall_tinyproxy_group = sysFirewall.users.users.tinyproxy.group;
                   sys_firewall_package_names = packageNames sysFirewall;
+                  sys_firewall_systemd_package_names = systemdPackageNames sysFirewall;
+                  sys_firewall_kernel_modules = sysFirewall.boot.kernelModules;
+                  sys_firewall_xendriverdomain_enable =
+                    sysFirewall.systemd.services.xendriverdomain.enable;
+                  sys_firewall_xendriverdomain_wanted_by =
+                    sysFirewall.systemd.services.xendriverdomain.wantedBy;
+                  sys_firewall_xendriverdomain_after =
+                    sysFirewall.systemd.services.xendriverdomain.after;
+                  sys_firewall_xendriverdomain_requires =
+                    sysFirewall.systemd.services.xendriverdomain.requires;
                 }}
                 """,
             ],
@@ -9442,20 +9478,34 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         proxy_eval["sys_net_service_condition"]
         == "|/run/qubes-service/qubes-updates-proxy"
     )
-    assert proxy_eval["sys_net_qrexec_after"] == []
+    assert "xendriverdomain.service" in proxy_eval["sys_net_qrexec_after"]
+    assert "nixome-qubes-rw-init.service" in proxy_eval["sys_net_qrexec_after"]
+    assert "systemd-user-sessions.service" not in proxy_eval["sys_net_qrexec_after"]
     assert "network.target" in proxy_eval["sys_net_qrexec_before"]
-    assert proxy_eval["sys_net_qrexec_unit_after"][0] == ""
-    assert "xendriverdomain.service" in proxy_eval["sys_net_qrexec_unit_after"]
-    assert "nixome-qubes-rw-init.service" in proxy_eval["sys_net_qrexec_unit_after"]
     assert (
-        "systemd-user-sessions.service" not in proxy_eval["sys_net_qrexec_unit_after"]
+        proxy_eval["sys_net_qrexec_unit_after"].split()
+        == proxy_eval["sys_net_qrexec_after"]
     )
-    assert "\nAfter=\n" in proxy_eval["sys_net_qrexec_unit_text"]
+    assert (
+        "After=xendriverdomain.service nixome-qubes-rw-init.service"
+        in proxy_eval["sys_net_qrexec_unit_text"]
+    )
     assert (
         "After=systemd-user-sessions.service"
         not in proxy_eval["sys_net_qrexec_unit_text"]
     )
     assert "Before=network.target" in proxy_eval["sys_net_qrexec_unit_text"]
+    assert "xen-netback" in proxy_eval["sys_net_kernel_modules"]
+    assert "qubes-vmm-xen" in proxy_eval["sys_net_package_names"]
+    assert "qubes-vmm-xen" in proxy_eval["sys_net_systemd_package_names"]
+    assert proxy_eval["sys_net_xendriverdomain_enable"] is True
+    assert "multi-user.target" in proxy_eval["sys_net_xendriverdomain_wanted_by"]
+    assert "proc-xen.mount" in proxy_eval["sys_net_xendriverdomain_after"]
+    assert "systemd-modules-load.service" in proxy_eval["sys_net_xendriverdomain_after"]
+    assert "proc-xen.mount" in proxy_eval["sys_net_xendriverdomain_requires"]
+    assert proxy_eval["sys_net_xendriverdomain_runtime_directory"] == "xen"
+    assert "RuntimeDirectory=xen" in proxy_eval["sys_net_xendriverdomain_unit_text"]
+    assert "nixome-xen-driver-domain-etc" in proxy_eval["sys_net_xen_etc_source"]
     assert (
         proxy_eval["sys_net_rpc_config_text"]
         == "skip-service-descriptor=true\nexit-on-service-eof=true\n"
@@ -9483,6 +9533,47 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert proxy_eval["sys_net_tinyproxy_user"] is True
     assert proxy_eval["sys_net_tinyproxy_group"] == "tinyproxy"
     assert "tinyproxy" in proxy_eval["sys_net_package_names"]
+    sys_net_system = _run(
+        [
+            "nix",
+            "build",
+            "--no-link",
+            "--print-build-logs",
+            "--print-out-paths",
+            "--show-trace",
+            f"{repo_root}#nixosConfigurations.nixome-domain-sys-net.config.system.build.toplevel",
+        ],
+        cwd=repo_root,
+    ).stdout.strip()
+    sys_net_system_path = Path(_physical_store_path(repo_root, sys_net_system))
+    sys_net_packaged_qrexec_unit = Path(
+        os.path.realpath(
+            sys_net_system_path / "etc/systemd/system/qubes-qrexec-agent.service"
+        )
+    )
+    sys_net_packaged_qrexec_unit_text = sys_net_packaged_qrexec_unit.read_text(
+        encoding="utf-8"
+    )
+    assert "After=xendriverdomain.service\n" in sys_net_packaged_qrexec_unit_text
+    assert "systemd-user-sessions.service" not in sys_net_packaged_qrexec_unit_text
+    assert (
+        "xen-netback"
+        in (sys_net_system_path / "etc/modules-load.d/nixos.conf")
+        .read_text(encoding="utf-8")
+        .split()
+    )
+    assert (
+        sys_net_system_path / "etc/systemd/system/xendriverdomain.service"
+    ).is_file()
+    assert (
+        sys_net_system_path
+        / "etc/systemd/system/multi-user.target.wants/xendriverdomain.service"
+    ).is_symlink()
+    sys_net_vif_route_qubes = (
+        sys_net_system_path / "etc/xen/scripts/vif-route-qubes"
+    ).read_text(encoding="utf-8")
+    assert "/usr/lib/systemd/systemd-sysctl" not in sys_net_vif_route_qubes
+    assert "/lib/systemd/systemd-sysctl" in sys_net_vif_route_qubes
     _run(
         [
             "nix",
@@ -9502,17 +9593,23 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert "tinyproxy -d -c" in proxy_eval["sys_firewall_updates_proxy_exec"]
     assert "/bin/setup-ip add %i" in proxy_eval["sys_firewall_network_uplink_exec"]
     assert "/bin/setup-ip remove %i" in proxy_eval["sys_firewall_network_uplink_stop"]
-    assert proxy_eval["sys_firewall_qrexec_after"] == []
+    assert "xendriverdomain.service" in proxy_eval["sys_firewall_qrexec_after"]
+    assert "nixome-qubes-rw-init.service" in proxy_eval["sys_firewall_qrexec_after"]
+    assert (
+        "systemd-user-sessions.service" not in proxy_eval["sys_firewall_qrexec_after"]
+    )
     assert "network.target" in proxy_eval["sys_firewall_qrexec_before"]
-    assert proxy_eval["sys_firewall_qrexec_unit_after"][0] == ""
-    assert "xendriverdomain.service" in proxy_eval["sys_firewall_qrexec_unit_after"]
     assert (
-        "nixome-qubes-rw-init.service" in proxy_eval["sys_firewall_qrexec_unit_after"]
+        proxy_eval["sys_firewall_qrexec_unit_after"].split()
+        == proxy_eval["sys_firewall_qrexec_after"]
     )
-    assert (
-        "systemd-user-sessions.service"
-        not in proxy_eval["sys_firewall_qrexec_unit_after"]
-    )
+    assert "xen-netback" in proxy_eval["sys_firewall_kernel_modules"]
+    assert "qubes-vmm-xen" in proxy_eval["sys_firewall_package_names"]
+    assert "qubes-vmm-xen" in proxy_eval["sys_firewall_systemd_package_names"]
+    assert proxy_eval["sys_firewall_xendriverdomain_enable"] is True
+    assert "multi-user.target" in proxy_eval["sys_firewall_xendriverdomain_wanted_by"]
+    assert "proc-xen.mount" in proxy_eval["sys_firewall_xendriverdomain_after"]
+    assert "proc-xen.mount" in proxy_eval["sys_firewall_xendriverdomain_requires"]
     assert (
         proxy_eval["sys_firewall_rpc_config_text"]
         == "skip-service-descriptor=true\nexit-on-service-eof=true\n"
