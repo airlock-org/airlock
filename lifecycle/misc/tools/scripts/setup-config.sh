@@ -28,6 +28,12 @@ STATUS_DEVICE="${NIXOME_SETUP_CONFIG_STATUS_DEVICE:-}"
 NIX_DOMAIN_STORAGE_HELPER="${NIXOME_NIX_DOMAIN_STORAGE_HELPER:-nixome-nix-domain-storage}"
 QUBESADMIN_PYTHON="${NIXOME_QUBESADMIN_PYTHON:-python3}"
 result_written=0
+boot_status_pid=""
+boot_phase=1
+boot_status_state=working
+boot_started_at=$SECONDS
+boot_domain_index=0
+boot_domain_total=0
 
 nixome_store_uses_chroot() {
   [ "${NIXOME_USE_HOST_NIX_STORE:-0}" != "1" ] &&
@@ -321,34 +327,92 @@ write_result() {
   result_written=1
 }
 
-show_boot_status() {
+stop_boot_status() {
+  if [ -n "$boot_status_pid" ]; then
+    kill "$boot_status_pid" 2>/dev/null || true
+    wait "$boot_status_pid" 2>/dev/null || true
+    boot_status_pid=""
+  fi
+}
+
+render_boot_status() {
   local title="$1"
-  local line
+  local line phase marker elapsed
+  local -a phases=("Check system and VM configuration" "Prepare system images" "Prepare startup VMs" "Save settings and hand over to login")
   shift
 
+  elapsed=$((SECONDS - boot_started_at))
+  {
+    # Redraw in place without clearing the whole screen between timer ticks.
+    printf '\033[H\033[K\n\033[K  Nixome | Starting your system\n\033[K\n'
+    for phase in 1 2 3 4; do
+      marker='[ ]'
+      if [ "$phase" -lt "$boot_phase" ]; then
+        marker='[done]'
+      elif [ "$phase" -eq "$boot_phase" ]; then
+        if [ "$boot_status_state" = failed ]; then marker='[failed]'; else marker='[working]'; fi
+      fi
+      printf '\033[K  %-9s %s\n' "$marker" "${phases[phase - 1]}"
+    done
+    printf '\033[K\n\033[K  Elapsed: %dm %02ds' "$((elapsed / 60))" "$((elapsed % 60))"
+    if [ "$boot_phase" -le 4 ]; then printf '    Step %s of 4' "$boot_phase"; fi
+    printf '\n\033[K\n\033[K  %s\n' "$title"
+    for line in "$@"; do printf '\033[K  %s\n' "$line"; done
+    printf '\033[K\n'
+    case "$boot_status_state" in
+      working)
+        printf '\033[K  No action needed. Setup runs automatically.\n'
+        printf '\033[K  First boot can take several minutes while VM files are prepared.\n'
+        printf '\033[K  Steps take different amounts of time; later boots reuse these files.\n'
+        ;;
+      complete)
+        printf '\033[K  Setup is complete. The desktop login starts next.\n'
+        printf '\033[K  Enter your account password if a login prompt appears.\n'
+        ;;
+      failed)
+        printf '\033[K  Setup could not finish. Switch to a console with Ctrl+Alt+F2.\n'
+        printf '\033[K  Log in and inspect: sudo journalctl -b -u nixome-setup-config\n'
+        ;;
+    esac
+    printf '\033[K\n\033[K  Setup log: %s\n\033[J' "$COMMAND_LOG"
+  } 2>/dev/null > "$STATUS_DEVICE" || true
+}
+
+show_boot_status() {
   [ "$SETUP_SCOPE" = "boot-critical" ] || return 0
   [ -n "$STATUS_DEVICE" ] || return 0
   [ -w "$STATUS_DEVICE" ] || return 0
 
-  {
-    printf '\033[2J\033[H'
-    printf '\n  Nixome\n\n'
-    printf '  %s\n' "$title"
-    for line in "$@"; do
-      printf '  %s\n' "$line"
-    done
-    printf '\n'
-  } 2>/dev/null > "$STATUS_DEVICE" || true
+  stop_boot_status
+  render_boot_status "$@"
+  if [ "$boot_status_state" = working ]; then
+    (
+      # This child only renders status; it never performs setup operations.
+      trap - EXIT
+      while sleep 1; do render_boot_status "$@"; done
+    ) &
+    boot_status_pid=$!
+  fi
+}
+
+show_domain_boot_status() {
+  local domain="$1" detail="$2" purpose
+  case "$domain" in
+    sys-net) purpose="Provides network access." ;;
+    sys-firewall) purpose="Filters network traffic for your VMs." ;;
+    sys-gui) purpose="Runs your desktop and application windows." ;;
+    *) purpose="Prepares this VM for the configured system." ;;
+  esac
+  show_boot_status "VM $boot_domain_index of $boot_domain_total: $domain" \
+    "$purpose" "$detail"
 }
 
 fail() {
   reason="$1"
   write_result failed "$reason"
+  boot_status_state=failed
   show_boot_status \
-    "Initial setup failed" \
-    "$reason" \
-    "Details: $COMMAND_LOG" \
-    "Recovery: switch to another virtual console and inspect the system journal."
+    "Setup stopped" "$reason"
   printf 'nixome setup-config failed: %s\n' "$reason" >&2
   exit 1
 }
@@ -369,14 +433,13 @@ PY
 
 write_unexpected_failure() {
   rc="$?"
+  stop_boot_status
 
   if [ "$rc" != "0" ] && [ "$result_written" != "1" ]; then
     write_result failed "unexpected command failure; see command_log"
+    boot_status_state=failed
     show_boot_status \
-      "Initial setup failed" \
-      "Unexpected command failure." \
-      "Details: $COMMAND_LOG" \
-      "Recovery: switch to another virtual console and inspect the system journal."
+      "Setup stopped" "Unexpected command failure. See the setup log for details."
   fi
 }
 
@@ -1756,6 +1819,7 @@ setup_nix_closure_domain() {
 
   root_image="$(resolve_root_image_file "$root_source")"
   store_artifact="$(resolve_store_artifact "$store_source")"
+  show_domain_boot_status "$domain" "Preparing VM boot files."
   install_domain_kernel_source "$domain" "$kernel_name" "$kernel_source"
 
   if [ -z "$kernel_name" ] || [ "$kernel_name" = "null" ]; then
@@ -1773,8 +1837,10 @@ setup_nix_closure_domain() {
     record_live_action domain create "$domain" class StandaloneVM
   fi
 
+  show_domain_boot_status "$domain" "Checking and copying the VM system disk."
   install_nix_domain_root "$domain" "$root_source" "$root_image"
   ensure_state_volume_size "$domain" private "$persistent_size"
+  show_domain_boot_status "$domain" "Preparing system files and persistent storage; this may take a while."
   install_nix_domain_store \
     "$domain" \
     "$store_source" \
@@ -1862,7 +1928,7 @@ setup_nix_closure_domain() {
   fi
 }
 
-show_boot_status "Preparing Qubes topology" "This can take several minutes on first boot."
+show_boot_status "Checking the system" "Checking Xen, Qubes services, and the declared VMs."
 
 [ -r "$TOPOLOGY" ] || fail "topology file is not readable: $TOPOLOGY"
 
@@ -1951,7 +2017,8 @@ schema="$(jq_get '.schema')"
 preflight_domain_backends
 setup_qrexec_policy
 
-show_boot_status "Preparing system images"
+boot_phase=2
+show_boot_status "Preparing system images" "Checking reusable boot files and VM templates."
 
 printf 'setting up global prefs\n'
 mapfile -t global_pref_names < <(jq_get '.prefs | keys[]?')
@@ -1966,6 +2033,7 @@ done
 printf 'setting up kernels\n'
 mapfile -t kernel_names < <(jq_get '.kernels | keys[]?')
 for kernel in "${kernel_names[@]}"; do
+  show_boot_status "Preparing system images" "Checking boot image: $kernel"
   case "$kernel" in
     ""|*/*)
       fail "invalid kernel name: $kernel"
@@ -2009,6 +2077,7 @@ done
 printf 'setting up templates\n'
 mapfile -t template_names < <(jq_get '.templates | keys[]')
 for template in "${template_names[@]}"; do
+  show_boot_status "Preparing system images" "Checking and importing VM template: $template"
   source="$(jq_get '.templates[$name].source // ""' --arg name "$template")"
   source_ref_type="$(jq_get '.templates[$name].source_ref.type // ""' --arg name "$template")"
   import_template="$(jq_get '.templates[$name].import // false' --arg name "$template")"
@@ -2136,13 +2205,19 @@ setup_domain_connectivity() {
 
 printf 'setting up domains\n'
 mapfile -t domain_names < <(selected_domain_names)
+boot_phase=3
+boot_domain_total=${#domain_names[@]}
 for domain in "${domain_names[@]}"; do
-  show_boot_status "Materializing Qubes domain" "$domain"
+  boot_domain_index=$((boot_domain_index + 1))
+  show_domain_boot_status "$domain" "Checking the VM and applying its configuration."
   setup_domain "$domain"
+  show_domain_boot_status "$domain" "Configuring network connections and assigned devices."
   setup_domain_connectivity "$domain"
 done
 
-show_boot_status "Finalizing Qubes preferences"
+boot_phase=4
+show_boot_status "Saving settings" "$boot_domain_total startup VMs prepared." \
+  "Applying default VM connections and saving setup state."
 
 printf 'setting up domain-backed global prefs\n'
 for pref in "${global_pref_names[@]}"; do
@@ -2155,5 +2230,7 @@ done
 
 write_result passed "Qubes config setup completed"
 persist_setup_state
-show_boot_status "Starting sys-gui desktop"
+boot_phase=5
+boot_status_state=complete
+show_boot_status "Startup preparation complete" "$boot_domain_total startup VMs prepared."
 cat "$RESULT_JSON"

@@ -4294,7 +4294,13 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     assert "+ qvm-prefs sys-firewall guivm none" in boot_command_lines
     assert "+ qvm-prefs sys-gui guivm dom0" in boot_command_lines
     assert "+ qvm-prefs sys-gui netvm none" in boot_command_lines
-    assert "Starting sys-gui desktop" in status_device.read_text(encoding="utf-8")
+    completed_screen = status_device.read_text(encoding="utf-8")
+    assert "Startup preparation complete" in completed_screen
+    assert "3 startup VMs prepared." in completed_screen
+    assert completed_screen.count("[done]") == 4
+    assert "[working]" not in completed_screen
+    assert "Elapsed:" in completed_screen
+    assert "Enter your account password" in completed_screen
 
     _run(
         [
@@ -4310,6 +4316,8 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
         stdout=setup_log_dir / "deferred-stdout.log",
         stderr=setup_log_dir / "deferred-stderr.log",
     )
+    # Deferred setup and the stopped timer must not overwrite the handover screen.
+    assert status_device.read_text(encoding="utf-8") == completed_screen
     deferred_command_lines = (
         (setup_log_dir / "setup-config.commands.log")
         .read_text(encoding="utf-8")
