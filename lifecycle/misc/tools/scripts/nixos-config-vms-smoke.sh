@@ -33,6 +33,7 @@ STAGING_APPMENUS_LOG="$LOG_DIR/config-vms-config-staging-appmenus.log"
 VAULT_APPMENUS_LOG="$LOG_DIR/config-vms-config-vault-appmenus.log"
 VALIDATOR_APPMENUS_LOG="$LOG_DIR/config-vms-config-validator-appmenus.log"
 CONFIG_INPUTS_IMPORT_LOG="$LOG_DIR/config-vms-config-inputs-import.log"
+CONFIG_CURRENT_BOOTSTRAP_LOG="$LOG_DIR/config-vms-config-current-bootstrap.log"
 STAGING_INIT_LOG="$LOG_DIR/config-vms-config-staging-init.log"
 VALIDATOR_INIT_LOG="$LOG_DIR/config-vms-config-validator-init.log"
 STAGING_UPDATE_SCRIPT="$LOG_DIR/config-vms-config-staging-update.sh"
@@ -212,6 +213,8 @@ write_result() {
     json_file_string_or_null "$STAGING_INIT_LOG"
     printf ',"validator_init_log":'
     json_file_string_or_null "$VALIDATOR_INIT_LOG"
+    printf ',"current_config_bootstrap":'
+    json_file_value_or_null "$CONFIG_CURRENT_BOOTSTRAP_LOG"
     printf ',"staging_update_log":'
     json_file_string_or_null "$STAGING_UPDATE_LOG"
     printf ',"staging_update_script":'
@@ -555,6 +558,7 @@ for cmd in \
   journalctl \
   cat \
   date \
+  airlock-config-bootstrap-current \
   airlock-config-inputs-import \
   airlock-config-apply \
   airlock-config-status \
@@ -656,6 +660,13 @@ if mode_runs_preflight; then
   else
     printf 'config inputs import skipped by AIRLOCK_CONFIG_VMS_IMPORT_INPUTS=0\n' > "$CONFIG_INPUTS_IMPORT_LOG"
   fi
+
+  run_or_fail "bootstrap current config" "$CONFIG_CURRENT_BOOTSTRAP_LOG" \
+    env \
+      AIRLOCK_LOG_DIR="$LOG_DIR" \
+      AIRLOCK_CONFIG_VAULT_VM="$VAULT" \
+      AIRLOCK_CONFIG_STAGING_VM="$STAGING" \
+      airlock-config-bootstrap-current
 
   run_qrexec_or_fail "$STAGING" "config staging init" "$STAGING_INIT_LOG" "airlock-config-staging-init"
   run_qrexec_or_fail \

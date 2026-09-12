@@ -1717,6 +1717,8 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "grep -F 'nixNative.domains.",
             'assert_nix_closure_domain "$VAULT"',
             "full|preflight|stage-candidate|apply-candidate|post-apply",
+            "CONFIG_CURRENT_BOOTSTRAP_LOG",
+            "airlock-config-bootstrap-current",
         ],
         "run_vm": [
             "AIRLOCK_VM_SKIP_BASE_BUILD",
@@ -1794,6 +1796,9 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
         for fragment in fragments:
             assert fragment in texts[key], f"missing {fragment!r} in {key}"
 
+    assert texts["config_vms"].index('run_or_fail "bootstrap current config"') < texts[
+        "config_vms"
+    ].index('run_qrexec_or_fail "$STAGING" "config staging init"')
     assert texts["config_vms"].index(
         'run_qrexec_or_fail "$STAGING" "config staging init"'
     ) < texts["config_vms"].index(
