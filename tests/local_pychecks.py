@@ -1794,6 +1794,11 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
         for fragment in fragments:
             assert fragment in texts[key], f"missing {fragment!r} in {key}"
 
+    assert texts["config_vms"].index(
+        'run_qrexec_or_fail "$STAGING" "config staging init"'
+    ) < texts["config_vms"].index(
+        'run_qrexec_or_fail "$STAGING" "config staging repo status"'
+    )
     assert 'cat "$RESULT_JSON"' not in texts["boot_flow"]
     assert 'cat >> "$STAGING_UPDATE_SCRIPT"' not in texts["config_vms"]
     assert "systemctl stop airlock-setup-config.service" not in texts["run_nested"]

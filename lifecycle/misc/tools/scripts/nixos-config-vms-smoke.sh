@@ -657,6 +657,13 @@ if mode_runs_preflight; then
     printf 'config inputs import skipped by AIRLOCK_CONFIG_VMS_IMPORT_INPUTS=0\n' > "$CONFIG_INPUTS_IMPORT_LOG"
   fi
 
+  run_qrexec_or_fail "$STAGING" "config staging init" "$STAGING_INIT_LOG" "airlock-config-staging-init"
+  run_qrexec_or_fail \
+    "$VALIDATOR" \
+    "config validator init" \
+    "$VALIDATOR_INIT_LOG" \
+    "airlock-config-validator-init"
+
   run_qrexec_or_fail "$VAULT" "config vault repo status" "$VAULT_REPO_STATUS_LOG" \
     "cd /home/$QUBE_USER/airlock-config-vault && git status --short --branch"
   run_qrexec_or_fail "$STAGING" "config staging repo status" "$STAGING_REPO_STATUS_LOG" \
@@ -666,13 +673,6 @@ if mode_runs_preflight; then
     fail "config vault repository is not initialized cleanly"
   grep -q '^## main$' "$STAGING_REPO_STATUS_LOG" ||
     fail "config staging repository is not initialized cleanly"
-
-  run_qrexec_or_fail "$STAGING" "config staging init" "$STAGING_INIT_LOG" "airlock-config-staging-init"
-  run_qrexec_or_fail \
-    "$VALIDATOR" \
-    "config validator init" \
-    "$VALIDATOR_INIT_LOG" \
-    "airlock-config-validator-init"
 fi
 
 if [ "$CONFIG_VMS_SMOKE_MODE" = preflight ]; then
