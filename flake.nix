@@ -281,6 +281,32 @@
           );
         };
 
+      mkUsbSysGuiDomainEntry = system:
+        bootstrapDomains.mkSysGuiDomainEntryWith system {
+          personalLaunchers = false;
+          configurationName = "airlock-domain-sys-gui-usb";
+          extraModules = [ ({ lib, ... }: {
+            users.users.user.initialPassword = lib.mkForce null;
+            users.users.user.initialHashedPassword = "!";
+          }) ];
+        };
+
+      mkUsbConfiguration = system: lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          airlockQubeKernel = {
+            name = airlockQubesVmKernelName;
+            package = self.packages.${system}.airlock-qubes-vm-kernel;
+          };
+          airlockGuiDomain = materializeNixClosureDomain (mkUsbSysGuiDomainEntry system);
+        };
+        modules = [
+          self.nixosModules.dom0
+          ./lifecycle/image/profiles/usb-dev.nix
+          ./lifecycle/image/hardware/thinkpad-t14-gen3-amd.nix
+        ];
+      };
+
       mkModuleContractCheck =
         system:
         let
@@ -432,6 +458,7 @@
           airlock-domain-sys-gpu-store-closure = (mkSysGpuDomainEntry system).storeArtifact;
           airlock-vm-gpu-lab-image = self.nixosConfigurations.vm-gpu-lab.config.system.build.image;
           airlock-vm-gui-minimal-image = self.nixosConfigurations.vm-gui-minimal.config.system.build.image;
+          airlock-usb-dev-image = self.nixosConfigurations.usb-dev.config.system.build.image;
           airlock-domain-sys-gui-minimal-root-image = (mkMinimalSysGuiDomainEntry system).rootImage;
           airlock-domain-sys-gui-minimal-store-closure = (mkMinimalSysGuiDomainEntry system).storeArtifact;
           airlock-qubes-vm-kernel = pkgs.repackRpmKernel {
@@ -539,6 +566,8 @@
 
       # Minimal nested desktop harness. No physical GPU assignment and no
       # dependency on the full bootstrap/configuration VM topology.
+      nixosConfigurations.usb-dev = mkUsbConfiguration "x86_64-linux";
+
       nixosConfigurations.vm-gui-minimal = mkVmConfiguration {
         gui = true;
         guiMinimal = true;

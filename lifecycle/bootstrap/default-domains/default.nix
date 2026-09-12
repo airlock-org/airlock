@@ -127,6 +127,7 @@ let
     {
       personalLaunchers ? true,
       configurationName ? "airlock-domain-sys-gui",
+      extraModules ? [ ],
     }:
     let
       qubeBuilders = mkAirlockQubeBuilders system;
@@ -143,7 +144,7 @@ let
           # Real deployments supply their own NixOS password configuration.
           users.users.user.initialPassword = "airlock";
         })
-      ];
+      ] ++ extraModules;
       rootImageSizeMiB = sysGuiRoleDefaults.rootImageSizeMiB;
       kernelName = airlockQubesVmKernelName;
       label = sysGuiRoleDefaults.label;
