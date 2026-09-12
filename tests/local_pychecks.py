@@ -117,6 +117,33 @@ def _physical_path_list(repo_root: Path, path_list: str) -> str:
     ).stdout.strip()
 
 
+def _resolve_physical_store_path(repo_root: Path, path: Path) -> Path:
+    """Resolve a path whose symlinks may target the virtual ``/nix/store``."""
+    resolved = Path(path.anchor)
+    pending = list(path.parts[1:])
+    seen: set[Path] = set()
+
+    while pending:
+        candidate = resolved / pending.pop(0)
+        if not candidate.is_symlink():
+            resolved = candidate
+            continue
+
+        if candidate in seen:
+            raise RuntimeError(f"symlink loop while resolving {path}: {candidate}")
+        seen.add(candidate)
+
+        target = Path(os.readlink(candidate))
+        if target.is_absolute():
+            target = Path(_physical_store_path(repo_root, str(target)))
+        else:
+            target = resolved / target
+        resolved = Path(target.anchor)
+        pending = list(target.parts[1:]) + pending
+
+    return resolved
+
+
 def _file_contains_word(path: Path, word: str) -> bool:
     if not path.is_file():
         return False
@@ -9951,13 +9978,9 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         cwd=repo_root,
     ).stdout.strip()
     sys_net_system_path = Path(_physical_store_path(repo_root, sys_net_system))
-    sys_net_packaged_qrexec_unit = Path(
-        _physical_store_path(
-            repo_root,
-            os.path.realpath(
-                sys_net_system_path / "etc/systemd/system/qubes-qrexec-agent.service"
-            ),
-        )
+    sys_net_packaged_qrexec_unit = _resolve_physical_store_path(
+        repo_root,
+        sys_net_system_path / "etc/systemd/system/qubes-qrexec-agent.service",
     )
     sys_net_packaged_qrexec_unit_text = sys_net_packaged_qrexec_unit.read_text(
         encoding="utf-8"
