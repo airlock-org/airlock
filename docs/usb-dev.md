@@ -15,18 +15,21 @@ whole-disk `/dev/disk/by-id/usb-…` path. Do not use the internal NVMe. Unmount
 every partition on the selected USB. The writer rejects mounted disks,
 non-USB disks, partitions and active device-mapper holders.
 
-Write it with the serial printed by `lsblk`; the command resolves the current
-result link, calculates the image SHA-256 itself, and requires exactly one
-attached whole-disk USB with that serial:
+Provision it with the serial printed by `lsblk`; the command resolves the
+current result link, calculates the image SHA-256 itself, unmounts the selected
+USB, writes it, copies the committed repository, SSH public key and local
+Codex auth cache, syncs it, then unmounts it again:
 
 ```sh
-make usb-dev-write USB_SERIAL=25110814640207
+make usb-dev-provision USB_SERIAL=25110814640207
 ```
 
-This **erases the selected USB**, flushes the device, and does not touch
-firmware boot variables. It copies only allocated image extents by default;
-this makes a sparse seed image much quicker to flash. The selected USB must be
-fully unmounted. To use the lower-level writer with `--full-write` or
+This development shortcut deliberately selects the literal local password
+`password` and plaintext Codex auth; it is only for a physically controlled
+USB. It requires exactly one attached whole-disk USB with that serial, **erases
+it**, flushes the device, and does not touch firmware boot variables. It copies
+only allocated image extents by default; this makes a sparse seed image much
+quicker to flash. To write without personalization or use `--full-write` or
 `--verify`, run `python3 lifecycle/image/tools/usb-dev.py write --help`.
 Sparse writing leaves any prior USB bytes in filesystem blocks marked free by
 the image; use `--full-write` for an untrusted/reused USB where that

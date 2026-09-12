@@ -11,6 +11,7 @@ from pathlib import Path
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 
 MARKER = "airlock-usb-dev-v1\n"
@@ -81,7 +82,7 @@ def usb_disk(device):
     return resolved, disk
 
 
-def usb_disk_by_serial(serial):
+def usb_device_by_serial(serial):
     """Return the sole whole-disk USB by-id path with this hardware serial."""
     require(serial and serial.strip(), "Supply a non-empty USB serial.")
     matches = {}
@@ -112,10 +113,30 @@ def usb_disk_by_serial(serial):
         len(matches) == 1,
         f"Expected exactly one attached whole-disk USB with serial {serial!r}; found {len(matches)}.",
     )
-    device = str(next(iter(matches.values())))
+    return str(next(iter(matches.values())))
+
+
+def usb_disk_by_serial(serial):
+    device = usb_device_by_serial(serial)
     target, disk = usb_disk(device)
     require(disk["serial"] == serial, "USB serial changed while selecting target.")
     return device
+
+
+def unmount_usb(device):
+    """Unmount every mounted partition of the already identified target USB."""
+    root_only()
+    resolved = Path(device).resolve(strict=True)
+    disk = next((item for item in disks() if item["name"] == str(resolved)), None)
+    require(
+        disk and disk["type"] == "disk" and disk["tran"] == "usb",
+        "Target must remain a USB whole disk while unmounting it.",
+    )
+    for child in flatten([disk]):
+        if child["name"] == str(resolved) or not any(child.get("mountpoints") or []):
+            continue
+        print(f"Unmounting {child['name']}…", file=sys.stderr, flush=True)
+        run("umount", "--all-targets", child["name"])
 
 
 def result_image(result_link):
@@ -335,18 +356,58 @@ def write_image(args):
     )
 
 
-def write_latest_image(args):
-    """Write the image addressed by the latest explicit build result link."""
+def prepare_latest_write(args):
+    """Resolve the result image and selected USB without exposing store paths."""
     image = result_image(args.result_link)
     args.image = str(image)
-    args.device = usb_disk_by_serial(args.serial)
+    if args.write:
+        args.device = usb_device_by_serial(args.serial)
+        unmount_usb(args.device)
+    else:
+        args.device = usb_disk_by_serial(args.serial)
     # The SHA is calculated locally from the result link, then used by the
     # normal writer's integrity check.  This avoids users copying a changing
     # store path or a separate hash into the destructive command.
     args.calculated_sha256 = digest(image)
     args.sha256 = args.calculated_sha256
     args.confirm_serial = args.serial
+
+
+def write_latest_image(args):
+    """Write the image addressed by the latest explicit build result link."""
+    prepare_latest_write(args)
     write_image(args)
+
+
+def provision_latest_image(args):
+    """Write, personalize, sync, and unmount a USB in one explicit action."""
+    write_latest_image(args)
+    run("udevadm", "settle")
+    root = Path(tempfile.mkdtemp(prefix="airlock-usb-", dir="/run"))
+    partition = Path(f"{args.device}-part2")
+    try:
+        require(
+            partition.exists(),
+            f"Expected USB root partition did not appear: {partition}",
+        )
+        run("mount", "-o", "nosuid,nodev", str(partition), str(root))
+        personalize(
+            argparse.Namespace(
+                root=str(root),
+                repo=args.repo,
+                public_key=args.public_key,
+                auth_file=args.auth_file,
+                insecure_dev_password=args.insecure_dev_password,
+                insecure_plain_codex_auth=args.insecure_plain_codex_auth,
+            )
+        )
+        print("Flushing personalized USB filesystem…", file=sys.stderr, flush=True)
+        run("sync")
+    finally:
+        if os.path.ismount(root):
+            print("Unmounting personalized USB…", file=sys.stderr, flush=True)
+            run("umount", str(root))
+        root.rmdir()
 
 
 def checked_root(value):
@@ -633,6 +694,39 @@ def main():
         help="Read the full image back and verify its SHA-256.",
     )
     latest_writer.set_defaults(handler=write_latest_image)
+    provisioner = commands.add_parser(
+        "provision-latest",
+        help="Write and personalize the image in a build result link",
+    )
+    provisioner.add_argument(
+        "--result-link", required=True, help="Result link created by make usb-dev-image"
+    )
+    provisioner.add_argument(
+        "--serial", required=True, help="Exact stable serial of the target USB"
+    )
+    provisioner.add_argument(
+        "--repo", required=True, help="Clean committed repository to copy to the USB"
+    )
+    provisioner.add_argument(
+        "--public-key", required=True, help="One SSH public key to authorize"
+    )
+    provisioner.add_argument("--auth-file", help="Optional existing Codex auth.json")
+    provisioner.add_argument(
+        "--insecure-dev-password",
+        action="store_true",
+        help="Set the literal development password 'password' without prompting.",
+    )
+    provisioner.add_argument(
+        "--insecure-plain-codex-auth",
+        action="store_true",
+        help="Store auth.json unencrypted; requires --auth-file.",
+    )
+    provisioner.set_defaults(
+        write=True,
+        full_write=False,
+        verify=False,
+        handler=provision_latest_image,
+    )
     setup = commands.add_parser("personalize")
     setup.add_argument("--root", required=True)
     setup.add_argument("--repo", required=True)
