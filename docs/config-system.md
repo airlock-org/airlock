@@ -68,7 +68,7 @@ domains.sys-net = {
 
 These are ordinary Qubes domains. Fedora, Debian, `sys-usb`, and other
 conventional guests stay on this path unless there is a specific reason to move
-them. The bootstrap `sys-net` and `cmd-vm` domains use the Nix-native path below.
+them. The bootstrap `sys-net` and `usr-cmd` domains use the Nix-native path below.
 
 NixOS domains use the `nix-closure` backend:
 
@@ -324,24 +324,24 @@ first-class for Fedora, Debian, and other non-NixOS guests.
 
 ## Command VM
 
-The initial runtime config declares a Nix-native `cmd-vm` domain with:
+The initial runtime config declares a Nix-native `usr-cmd` domain with:
 
 ```nix
-nixNative.domains.cmd-vm = {
+nixNative.domains.usr-cmd = {
   role = "cmd";
   netvm = "sys-firewall";
 };
 ```
 
 The bootstrap `vm-gui-config` topology materializes the same domain, so a fresh
-boot has `cmd-vm` available before the first self-hosted apply.
+boot has `usr-cmd` available before the first self-hosted apply.
 
 `sys-net` is part of the Airlock bootstrap topology. It is an ordinary Qubes
 domain, but its first-boot configuration is generated from the Nix topology
 instead of being hand-created after boot. The expected command-workspace network path is:
 
 ```text
-cmd-vm -> sys-firewall -> sys-net -> physical network
+usr-cmd -> sys-firewall -> sys-net -> physical network
 ```
 
 For `sys-net`, an empty `devices.pci` list means `airlock-setup-config`
@@ -384,7 +384,7 @@ Persistent user state is initialized at:
 state directory. Codex authentication and configuration are mutable private VM
 state; no API keys, tokens, `auth.json`, or user config are placed in Nix
 configuration or the Nix store. In a nested dev-mode image, `make
-vm-sync-codex-auth` sends the host login state to `cmd-vm` through the dedicated
+vm-sync-codex-auth` sends the host login state to `usr-cmd` through the dedicated
 `airlock.CodexAuthImport` qrexec service. Dom0 does not retain the credential.
 
 Dev-mode dom0 behavior is selected at image build time. The Make image targets
@@ -414,8 +414,8 @@ airlock check
 airlock apply
 ```
 
-`cmd-vm` remains an ordinary unprivileged domain, not a `sys-*` service VM. Its
-qrexec authority is the narrow config-control path granted to `cmd-vm`; it
+`usr-cmd` remains an ordinary unprivileged domain, not a `sys-*` service VM. Its
+qrexec authority is the narrow config-control path granted to `usr-cmd`; it
 does not receive sys-config-staging, sys-config-validator, sys-config-vault, dom0 filesystem,
 or arbitrary dom0 command-execution services.
 
@@ -477,11 +477,11 @@ JSON.
 
 ## Command VM Control Path
 
-The ordinary `cmd-vm` is allowed to request narrow config
+The ordinary `usr-cmd` is allowed to request narrow config
 generation operations from dom0:
 
 ```text
-cmd-vm
+usr-cmd
     airlock status/check/apply/rollback
         ↓ qrexec
 dom0 airlock-config-control
@@ -508,7 +508,7 @@ airlock.Config.Rollback
 `Check` and `Apply` accept only the staged candidate tar shape
 `config.bundle + manifest.json`. They then call the existing
 `airlock-config-archive-candidate` and `airlock-config-apply` machinery with that
-candidate tar. `cmd-vm` never receives a qrexec primitive for shell commands,
+candidate tar. `usr-cmd` never receives a qrexec primitive for shell commands,
 scripts, arbitrary file writes, direct dom0 filesystem access, or direct Nix
 store writes.
 

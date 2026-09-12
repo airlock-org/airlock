@@ -52,7 +52,7 @@
   #   };
   # };
   nixNative.domains = {
-    cmd-vm = {
+    usr-cmd = {
       role = "cmd";
       label = "yellow";
       netvm = "sys-firewall";

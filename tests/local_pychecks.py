@@ -2079,7 +2079,7 @@ def check_cmd_role(repo_root: Path, log_dir: Path) -> None:
     {{
       role = devCfg.airlock.qubeGuest.role;
       hostname = devCfg.networking.hostName;
-      staged_dev_declared = builtins.hasAttr "cmd-vm" stagedNixNativeDomains;
+      staged_dev_declared = builtins.hasAttr "usr-cmd" stagedNixNativeDomains;
       staged_sys_net_declared = builtins.hasAttr "sys-net" stagedNixNativeDomains;
       staged_sys_net_autostart = sysNetDomainDefinition.prefs.autostart;
       staged_sys_net_virt_mode = sysNetDomainDefinition.prefs.virt_mode;
@@ -2104,7 +2104,7 @@ def check_cmd_role(repo_root: Path, log_dir: Path) -> None:
       generated_dev_domain_netvm = generatedDevDomain.netvm;
       generated_dev_domain_role_feature = generatedDevDomain.features."airlock-role";
       generated_dev_domain_marker_feature = generatedDevDomain.features."airlock-cmd";
-      bootstrap_dev_domain_present = builtins.hasAttr "cmd-vm" bootstrapDomains;
+      bootstrap_dev_domain_present = builtins.hasAttr "usr-cmd" bootstrapDomains;
       bootstrap_sys_net_present = builtins.hasAttr "sys-net" bootstrapDomains;
       bootstrap_sys_firewall_present = builtins.hasAttr "sys-firewall" bootstrapDomains;
       bootstrap_sys_net_autostart = bootstrapSysNetDomain.prefs.autostart;
@@ -2188,7 +2188,7 @@ def check_cmd_role(repo_root: Path, log_dir: Path) -> None:
         dom0Cfg.systemd.services.airlock-setup-config.environment.AIRLOCK_SETUP_CONFIG_STATUS_DEVICE;
       bootstrap_default_netvm = dom0Cfg.airlock.qubes.prefs.default_netvm;
       bootstrap_topology_default_netvm = dom0Cfg.airlock.qubes.topology.prefs.default_netvm;
-      bootstrap_dev_topology_present = builtins.hasAttr "cmd-vm" dom0Cfg.airlock.qubes.topology.domains;
+      bootstrap_dev_topology_present = builtins.hasAttr "usr-cmd" dom0Cfg.airlock.qubes.topology.domains;
       bootstrap_sys_net_topology_autostart = bootstrapTopologySysNetDomain.prefs.autostart;
       bootstrap_sys_firewall_topology_netvm = bootstrapTopologySysFirewallDomain.netvm;
       bootstrap_sys_firewall_topology_autostart =
@@ -2236,7 +2236,7 @@ def check_cmd_role(repo_root: Path, log_dir: Path) -> None:
         "airlock-qubes-smoke"
         "zellij"
       ];
-      release_bootstrap_dev_domain_present = builtins.hasAttr "cmd-vm" releaseBootstrapDomains;
+      release_bootstrap_dev_domain_present = builtins.hasAttr "usr-cmd" releaseBootstrapDomains;
       release_bootstrap_sys_net_present = builtins.hasAttr "sys-net" releaseBootstrapDomains;
       release_bootstrap_sys_net_netvm = releaseBootstrapDomains.sys-net.netvm;
       release_bootstrap_sys_net_autostart = releaseBootstrapDomains.sys-net.prefs.autostart;
@@ -2469,7 +2469,7 @@ def check_cmd_role(repo_root: Path, log_dir: Path) -> None:
     assert "airlock-cmd-guest-init.service" in data["dev_qrexec_requires"]
     assert "airlock-cmd-guest-init.service" in data["dev_qrexec_after"]
     assert data["dev_forbidden_rpc_absent"] is True
-    assert data["dev_allowed_submitters"] == ["cmd-vm"]
+    assert data["dev_allowed_submitters"] == ["usr-cmd"]
     assert data["dev_no_secret_env"] is True
     assert data["dev_no_codex_auth_etc"] is True
     assert data["base_role"] == "base"

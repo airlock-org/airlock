@@ -202,7 +202,7 @@
         let
           bootstrapDomainEntriesSource = mkBootstrapDomains networkDebug;
           bootstrapDomainEntries = (mkConfigDomainEntries system) // {
-            cmd-vm = bootstrapDomainEntriesSource.mkCmdVmDomainEntry system;
+            usr-cmd = bootstrapDomainEntriesSource.mkCmdVmDomainEntry system;
             sys-net = bootstrapDomainEntriesSource.mkSysNetDomainEntry system;
             sys-firewall = bootstrapDomainEntriesSource.mkSysFirewallDomainEntry system;
             sys-gui = bootstrapDomainEntriesSource.mkSysGuiDomainEntry system;

@@ -24,7 +24,7 @@ let
   sysNetRoleDefaults = import ./sys-net.nix { inherit sysNetPrivateSizeBytes; };
   sysFirewallRoleDefaults = import ./sys-firewall.nix { inherit networkDebug; };
   sysGuiRoleDefaults = import ./sys-gui.nix;
-  cmdVmRoleDefaults = import ./cmd-vm.nix;
+  cmdVmRoleDefaults = import ./usr-cmd.nix;
 
   mkConfigDomainEntries =
     system:
@@ -151,7 +151,7 @@ let
       qubeBuilders = mkAirlockQubeBuilders system;
     in
     qubeBuilders.mkNixNativeDomain {
-      name = "cmd-vm";
+      name = "usr-cmd";
       guestRole = "cmd";
       modules = [
         ({ ... }: {
