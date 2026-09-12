@@ -9941,7 +9941,8 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         [
             "nix",
             "build",
-            "--no-link",
+            "--out-link",
+            str(log_dir / "sys-net-system"),
             "--print-build-logs",
             "--print-out-paths",
             "--show-trace",
