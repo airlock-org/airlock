@@ -54,6 +54,11 @@ are copied. The clone has no origin; configure a suitable remote later. The
 password hash is outside Nix, readable only by root. Re-personalization refuses
 to overwrite an existing setup.
 
+For a throwaway, physically controlled developer USB only, add
+`--insecure-dev-password` to set the literal password `password` without a
+prompt. It is intentionally opt-in and must not be used for a shared or
+network-exposed system.
+
 ## Codex authentication: separate encrypted vault
 
 The raw OS itself is **not encrypted**. Codex's state lives in a 512 MiB LUKS2

@@ -286,9 +286,15 @@ def personalize(args):
     git = ("git", "-c", f"safe.directory={repo}", "-C", str(repo))
     require(not output(*git, "status", "--porcelain"), "Commit the repo before copying it.")
     commit = output(*git, "rev-parse", "HEAD")
-    password = getpass.getpass("New local dom0 + sys-gui password: ")
-    require(len(password) >= 12, "Use at least 12 characters.")
-    require(password == getpass.getpass("Confirm password: "), "Passwords differ.")
+    if args.insecure_dev_password:
+        # Explicitly opt-in development convenience. Never make this a default
+        # or put it in the reusable image.
+        password = "password"
+        print("WARNING: using the insecure literal development password for dom0 and sys-gui.", file=sys.stderr)
+    else:
+        password = getpass.getpass("New local dom0 + sys-gui password: ")
+        require(len(password) >= 12, "Use at least 12 characters.")
+        require(password == getpass.getpass("Confirm password: "), "Passwords differ.")
     password_hash = run("openssl", "passwd", "-6", "-stdin", input=password + "\n",
                         text=True, stdout=subprocess.PIPE).stdout.encode()
     del password
@@ -394,6 +400,7 @@ def main():
     setup.add_argument("--repo", required=True)
     setup.add_argument("--public-key", required=True)
     setup.add_argument("--auth-file", help="Optional existing Codex auth.json; imports it into a new encrypted vault.")
+    setup.add_argument("--insecure-dev-password", action="store_true", help="Set the literal development password 'password' without prompting.")
     setup.set_defaults(handler=personalize)
     for name in ["vault-create", "vault-unlock", "vault-lock", "auth-import"]:
         command = commands.add_parser(name)
