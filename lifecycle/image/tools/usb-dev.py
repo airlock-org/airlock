@@ -201,7 +201,9 @@ def write_image(args):
         else:
             total = sparse_extent_bytes(image)
             written = copy_sparse_image(image, destination, progress_reporter("Writing sparse extents", total))
+        print("Flushing USB device…", file=sys.stderr, flush=True)
         os.fsync(destination.fileno())
+    print("Refreshing USB partition table…", file=sys.stderr, flush=True)
     run("blockdev", "--rereadpt", str(target))
     if args.verify:
         # Verify only the image prefix; a larger USB may have unused trailing space.
