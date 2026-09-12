@@ -186,7 +186,8 @@ AIRLOCK_KEEP_VM=1 make vm-config-flow
 ```
 
 The config validator starts with 2048 MiB and can grow to 4096 MiB for NixOS
-candidate evaluation. A running warm VM retains its original outer RAM size.
+candidate evaluation. `make test-warm` uses 16384 MiB by default; override it
+with `TEST_WARM_VM_MEMORY=20480` or `AIRLOCK_VM_MEMORY=20480`. A running warm VM retains its original outer RAM size.
 After increasing `AIRLOCK_VM_MEMORY` or the launcher default, power off nested
 dom0 and wait for QEMU to exit before running `make test-warm` again:
 

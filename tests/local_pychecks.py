@@ -1718,6 +1718,8 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "vm-config-boot-activate-flow",
             "test-quick:",
             "test-warm:",
+            "TEST_WARM_VM_MEMORY ?= 16384",
+            'AIRLOCK_VM_MEMORY="$${AIRLOCK_VM_MEMORY:-$(TEST_WARM_VM_MEMORY)}"',
             "test-slow:",
             "tests/test_vm_staged.py",
             'AIRLOCK_VM_PARALLEL_LANES="$(TEST_VM_JOBS)"',

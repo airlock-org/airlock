@@ -78,6 +78,7 @@ PYTHON_FILES := \
 PYTEST_LOG_DIR = $${AIRLOCK_LOG_DIR:-.airlock-logs}
 TEST_JOBS ?= 4
 TEST_VM_JOBS ?= 2
+TEST_WARM_VM_MEMORY ?= 16384
 PYTEST_CONFIG_ARGS = -c "$(CURDIR)/pyproject.toml" --rootdir "$(CURDIR)"
 PYTEST_WORKERS = $(if $(TEST_JOBS),-n $(TEST_JOBS),)
 PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
@@ -117,7 +118,7 @@ test-quick: ensure-generated-dirs
 
 test-warm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
-	AIRLOCK_RUN_VM_TESTS=1 AIRLOCK_SKIP_GC_AUTO=1 uv run pytest $(if $(TESTS),$(VM_STAGED_PYTEST_SELECTED),tests/test_vm_staged.py) $(PYTEST_VM_STAGED_ARGS) $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
+	AIRLOCK_RUN_VM_TESTS=1 AIRLOCK_SKIP_GC_AUTO=1 AIRLOCK_VM_MEMORY="$${AIRLOCK_VM_MEMORY:-$(TEST_WARM_VM_MEMORY)}" uv run pytest $(if $(TESTS),$(VM_STAGED_PYTEST_SELECTED),tests/test_vm_staged.py) $(PYTEST_VM_STAGED_ARGS) $(PYTEST_REPORT_ARGS) $(PYTEST_VM_OUTPUT_ARGS) $(PYTEST_ARGS)
 
 test-slow: export AIRLOCK_SKIP_GC_AUTO = 1
 test-slow: $(if $(TESTS),$(if $(VM_SLOW_SELECTED_PARALLEL_FLOW_IDS),vm-parallel-prebuild-baseline,ensure-generated-dirs),vm-parallel-prebuild-baseline)
