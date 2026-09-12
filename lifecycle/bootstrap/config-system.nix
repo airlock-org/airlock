@@ -94,7 +94,7 @@ in
       currentExportService = "airlock.Config.ExportCurrent";
       currentImportService = "airlock.Config.ImportCurrent";
       configInputsImportService = "airlock.Config.InputsImport";
-      allowedSubmitters = [ ];
+      allowedSubmitters = [ "cmd-vm" ];
     };
   };
 

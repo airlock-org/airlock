@@ -52,6 +52,23 @@
   #   };
   # };
   nixNative.domains = {
+    cmd-vm = {
+      role = "cmd";
+      label = "yellow";
+      netvm = "sys-firewall";
+      rootImageSizeMiB = 1024;
+      prefs = {
+        include_in_backups = true;
+        memory = 2048;
+        maxmem = 4096;
+        vcpus = 2;
+      };
+      features = {
+        "airlock-role" = "cmd";
+      };
+      services."network-manager" = false;
+      state.persistentSize = 8589934592;
+    };
     sys-gui = {
       role = "sys-gui";
       # Initial development login. Replace with a deployment password file.

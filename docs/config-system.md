@@ -68,7 +68,7 @@ domains.sys-net = {
 
 These are ordinary Qubes domains. Fedora, Debian, `sys-usb`, and other
 conventional guests stay on this path unless there is a specific reason to move
-them. The bootstrap `sys-net` and `dev` domains use the Nix-native path below.
+them. The bootstrap `sys-net` and `cmd-vm` domains use the Nix-native path below.
 
 NixOS domains use the `nix-closure` backend:
 
@@ -322,26 +322,26 @@ The same file can declare conventional Qubes TemplateVM-backed domains with
 the generic `domains` or `topology.extraDomains` surfaces. Those remain
 first-class for Fedora, Debian, and other non-NixOS guests.
 
-## Dev VM
+## Command VM
 
-The initial runtime config declares a Nix-native `dev` domain with:
+The initial runtime config declares a Nix-native `cmd-vm` domain with:
 
 ```nix
-nixNative.domains.dev = {
-  role = "dev";
+nixNative.domains.cmd-vm = {
+  role = "cmd";
   netvm = "sys-firewall";
 };
 ```
 
 The bootstrap `vm-gui-config` topology materializes the same domain, so a fresh
-boot has `dev` available before the first self-hosted apply.
+boot has `cmd-vm` available before the first self-hosted apply.
 
 `sys-net` is part of the Airlock bootstrap topology. It is an ordinary Qubes
 domain, but its first-boot configuration is generated from the Nix topology
-instead of being hand-created after boot. The expected dev network path is:
+instead of being hand-created after boot. The expected command-workspace network path is:
 
 ```text
-dev -> sys-net -> physical network
+cmd-vm -> sys-firewall -> sys-net -> physical network
 ```
 
 For `sys-net`, an empty `devices.pci` list means `airlock-setup-config`
@@ -364,7 +364,7 @@ network paths, dom0 verifies that any external provider exists and provides
 network, and that `sys-net` has no upstream NetVM when it is used as the
 physical uplink.
 
-The `dev` role layers development tools on top of the minimal Qubes guest base.
+The `cmd` role layers development tools on top of the minimal Qubes guest base.
 It includes `git`, the private-store Nix CLI wrapper, Rust and Python tooling
 used by this repository, `make`, shell/editor basics, the `airlock` VM control
 CLI, and the pinned nixpkgs `codex` and `zellij` packages.
@@ -383,10 +383,9 @@ Persistent user state is initialized at:
 `CODEX_HOME` is set to `/home/user/.codex`, matching Codex's documented default
 state directory. Codex authentication and configuration are mutable private VM
 state; no API keys, tokens, `auth.json`, or user config are placed in Nix
-configuration or the Nix store. For the nested dev-mode dom0 image, host Codex
-login state can be copied at runtime with `make vm-sync-codex-auth`. That helper
-refuses non-dev images and copies only `auth.json` by default; set
-`AIRLOCK_SYNC_CODEX_CONFIG=1` when `config.toml` should be copied too.
+configuration or the Nix store. In a nested dev-mode image, `make
+vm-sync-codex-auth` sends the host login state to `cmd-vm` through the dedicated
+`airlock.CodexAuthImport` qrexec service. Dom0 does not retain the credential.
 
 Dev-mode dom0 behavior is selected at image build time. The Make image targets
 default to `VM_IMAGE_MODE=dev`; pass `VM_IMAGE_MODE=release` to build the same
@@ -415,8 +414,8 @@ airlock check
 airlock apply
 ```
 
-The `dev` VM remains an ordinary unprivileged domain. Its qrexec authority is
-the same narrow config-control path as any allowed submitter named `dev`; it
+`cmd-vm` remains an ordinary unprivileged domain, not a `sys-*` service VM. Its
+qrexec authority is the narrow config-control path granted to `cmd-vm`; it
 does not receive sys-config-staging, sys-config-validator, sys-config-vault, dom0 filesystem,
 or arbitrary dom0 command-execution services.
 
@@ -476,13 +475,13 @@ current deployment records, current host generation links, pending reboot
 state, pending VM restart state, and the Airlock-managed qrexec policy file as
 JSON.
 
-## Dev VM Control Path
+## Command VM Control Path
 
-An ordinary VM named `dev` is allowed, by default, to request narrow config
+The ordinary `cmd-vm` is allowed to request narrow config
 generation operations from dom0:
 
 ```text
-dev
+cmd-vm
     airlock status/check/apply/rollback
         ↓ qrexec
 dom0 airlock-config-control
@@ -509,7 +508,7 @@ airlock.Config.Rollback
 `Check` and `Apply` accept only the staged candidate tar shape
 `config.bundle + manifest.json`. They then call the existing
 `airlock-config-archive-candidate` and `airlock-config-apply` machinery with that
-candidate tar. The dev VM never receives a qrexec primitive for shell commands,
+candidate tar. `cmd-vm` never receives a qrexec primitive for shell commands,
 scripts, arbitrary file writes, direct dom0 filesystem access, or direct Nix
 store writes.
 

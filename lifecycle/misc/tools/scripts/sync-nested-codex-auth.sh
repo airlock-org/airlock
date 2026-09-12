@@ -13,7 +13,8 @@ SSH_PASSWORD="${AIRLOCK_VM_SSH_PASSWORD:-airlock}"
 LOCAL_CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 LOCAL_AUTH_JSON="${AIRLOCK_CODEX_AUTH_JSON:-$LOCAL_CODEX_HOME/auth.json}"
 LOCAL_CONFIG_TOML="${AIRLOCK_CODEX_CONFIG_TOML:-$LOCAL_CODEX_HOME/config.toml}"
-REMOTE_CODEX_HOME="${AIRLOCK_NESTED_CODEX_HOME:-/home/$SSH_USER/.codex}"
+CMD_VM="${AIRLOCK_CODEX_AUTH_VM:-cmd-vm}"
+REMOTE_CODEX_HOME="${AIRLOCK_NESTED_CODEX_HOME:-/home/user/.codex}"
 REMOTE_DEV_MODE_MARKER="${AIRLOCK_NESTED_DEV_MODE_MARKER:-/etc/airlock/dev-mode}"
 SYNC_CONFIG="${AIRLOCK_SYNC_CODEX_CONFIG:-0}"
 
@@ -34,12 +35,14 @@ write_result() {
     --arg reason "$reason" \
     --arg local_codex_home "$LOCAL_CODEX_HOME" \
     --arg remote_codex_home "$REMOTE_CODEX_HOME" \
+    --arg target_vm "$CMD_VM" \
     --argjson config_synced "$config_synced" \
     '{
       schema: $schema,
       status: $status,
       local_codex_home: $local_codex_home,
       remote_codex_home: $remote_codex_home,
+      target_vm: $target_vm,
       auth_json_synced: ($status == "passed"),
       config_toml_synced: $config_synced
     }
@@ -140,23 +143,14 @@ remote_config_tmp="/tmp/airlock-codex-config.$$.toml"
 scp_base "$tmpdir/auth.json" "$SSH_USER@127.0.0.1:$remote_auth_tmp"
 ssh_base "
   set -e
-  codex_home=$(shell_quote "$REMOTE_CODEX_HOME")
   auth_tmp=$(shell_quote "$remote_auth_tmp")
-  install -d -m 0700 \"\$codex_home\"
-  install -m 0600 \"\$auth_tmp\" \"\$codex_home/auth.json\"
+  cmd_vm=$(shell_quote "$CMD_VM")
+  sudo -n qrexec-client -d \"\$cmd_vm\" 'DEFAULT:QUBESRPC airlock.CodexAuthImport+ dom0' < \"\$auth_tmp\"
   rm -f \"\$auth_tmp\"
 "
 
 if [ "$sync_config" = true ]; then
-  scp_base "$tmpdir/config.toml" "$SSH_USER@127.0.0.1:$remote_config_tmp"
-  ssh_base "
-    set -e
-    codex_home=$(shell_quote "$REMOTE_CODEX_HOME")
-    config_tmp=$(shell_quote "$remote_config_tmp")
-    install -d -m 0700 \"\$codex_home\"
-    install -m 0600 \"\$config_tmp\" \"\$codex_home/config.toml\"
-    rm -f \"\$config_tmp\"
-  "
+  fail "config.toml sync is not implemented for cmd-vm; copy only auth.json"
 fi
 
 write_result passed "" "$sync_config"

@@ -191,6 +191,7 @@
       inherit (bootstrapDomains)
         materializeNixClosureDomain
         mkConfigDomainEntries
+        mkCmdVmDomainEntry
         mkSysFirewallDomainEntry
         mkSysGuiDomainEntry
         mkSysNetDomainEntry
@@ -201,6 +202,7 @@
         let
           bootstrapDomainEntriesSource = mkBootstrapDomains networkDebug;
           bootstrapDomainEntries = (mkConfigDomainEntries system) // {
+            cmd-vm = bootstrapDomainEntriesSource.mkCmdVmDomainEntry system;
             sys-net = bootstrapDomainEntriesSource.mkSysNetDomainEntry system;
             sys-firewall = bootstrapDomainEntriesSource.mkSysFirewallDomainEntry system;
             sys-gui = bootstrapDomainEntriesSource.mkSysGuiDomainEntry system;
@@ -362,7 +364,9 @@
             pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-config-inputs-import
               { };
           airlock-config-status = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-config-status { };
-          airlock-config-vms-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-config-vms-smoke { };
+          airlock-config-vms-smoke =
+            pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-config-vms-smoke
+              { };
           airlock-cli = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-cli { };
           airlock = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-cli { };
           codex = pkgs.codex;
@@ -376,7 +380,9 @@
           airlock-qubes-storage =
             pkgs.python3.pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-qubes-storage
               { };
-          airlock-qube-bootstrap = pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/airlock-qube-bootstrap { };
+          airlock-qube-bootstrap =
+            pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/airlock-qube-bootstrap
+              { };
           airlock-qube-gui-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-qube-gui-smoke { };
           qubes-gui-agent-linux = pkgs.qubes-gui-agent-linux;
           qubes-gui-daemon = pkgs.qubes-gui-daemon;

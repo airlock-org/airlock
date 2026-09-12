@@ -142,7 +142,7 @@
         if
           builtins.elem role [
             "base"
-            "dev"
+            "cmd"
             "sys-firewall"
             "sys-gui"
             "sys-net"
@@ -150,7 +150,7 @@
         then
           role
         else
-          throw "airlock.nixNative.${path}.role: expected one of base, dev, sys-firewall, sys-gui, sys-net";
+          throw "airlock.nixNative.${path}.role: expected one of base, cmd, sys-firewall, sys-gui, sys-net";
       checkedNixNative =
         let
           checked = checkNixNativeKeys "" [ "domains" ] (

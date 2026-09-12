@@ -11,13 +11,13 @@ let
   hasConfigVaultRole = cfg.role == "sys-config-vault";
   hasConfigStagingRole = cfg.role == "sys-config-staging";
   hasConfigValidatorRole = cfg.role == "sys-config-validator";
-  hasDevRole = cfg.role == "dev";
+  hasCmdRole = cfg.role == "cmd";
   hasSysNetRole = cfg.role == "sys-net";
   hasSysGuiRole = cfg.role == "sys-gui";
   hasNetworkProviderRole = hasSysNetRole || cfg.role == "sys-firewall";
   hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole;
   hasPrivateNixRole =
-    hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole || hasDevRole;
+    hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole || hasCmdRole;
   hasConfigInputsImportRole = hasConfigStagingRole || hasConfigValidatorRole;
   qubesAgentLinux = pkgs.qubes-core-agent-linux;
   qubesDbPython =
@@ -41,7 +41,7 @@ let
   airlockCli = pkgs.callPackage ../../runtime/tools/pkgs/airlock-cli { };
   systemdPackage = config.systemd.package;
   configInputsPublicPath = "/etc/airlock/config-inputs";
-  devPersistentPaths = lib.unique (cfg.devPersistentPaths ++ [ cfg.codexHome ]);
+  cmdPersistentPaths = lib.unique (cfg.cmdPersistentPaths ++ [ cfg.codexHome ]);
 
   qubesGuestPath = [
     pkgs.coreutils
@@ -93,6 +93,17 @@ let
   updatesProxyRpcService = pkgs.writeShellScript "airlock-qubes-updates-proxy-rpc-service" ''
     set -euo pipefail
     exec ${pkgs.socat}/bin/socat STDIO TCP:127.0.0.1:8082
+  '';
+  codexAuthImportService = pkgs.writeShellScript "airlock-codex-auth-import" ''
+    set -euo pipefail
+
+    codex_home=${lib.escapeShellArg cfg.codexHome}
+    temp="$(mktemp "''${TMPDIR:-/tmp}/airlock-codex-auth.XXXXXX")"
+    trap 'rm -f "$temp"' EXIT
+    ${pkgs.coreutils}/bin/cat > "$temp"
+    ${pkgs.jq}/bin/jq -e type "$temp" >/dev/null
+    ${pkgs.coreutils}/bin/install -d -m 0700 "$codex_home"
+    ${pkgs.coreutils}/bin/install -m 0600 "$temp" "$codex_home/auth.json"
   '';
 
   tinyproxyUpdatesConfig = pkgs.writeText "tinyproxy-updates.conf" ''
@@ -197,7 +208,7 @@ let
             role == "sys-config-vault"
             || role == "sys-config-staging"
             || role == "sys-config-validator"
-            || role == "dev"
+            || role == "cmd"
           )
           [
             configNix
@@ -240,7 +251,7 @@ let
       pkgs.gnutar
       pkgs.jq
     ];
-    dev = [
+    cmd = [
       (lib.hiPrio configNix)
       airlockCli
       pkgs.bashInteractive
@@ -2572,7 +2583,7 @@ in
         "sys-config-vault"
         "sys-config-staging"
         "sys-config-validator"
-        "dev"
+        "cmd"
         "sys-firewall"
         "sys-gui"
         "sys-net"
@@ -2629,10 +2640,10 @@ in
       description = "Persistent Codex CLI state directory. This maps to CODEX_HOME.";
     };
 
-    devPersistentPaths = lib.mkOption {
+    cmdPersistentPaths = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ "/home/${cfg.user}/dev" ];
-      description = "Persistent user paths initialized by the development role.";
+      description = "Persistent user paths initialized by the command-workspace role.";
     };
   };
 
@@ -2668,8 +2679,8 @@ in
         message = "airlock.qubeGuest.codexHome should live under /home for Qubes private storage.";
       }
       {
-        assertion = lib.all (path: lib.hasPrefix "/home/" path) devPersistentPaths;
-        message = "airlock.qubeGuest.devPersistentPaths entries should live under /home for Qubes private storage.";
+        assertion = lib.all (path: lib.hasPrefix "/home/" path) cmdPersistentPaths;
+        message = "airlock.qubeGuest.cmdPersistentPaths entries should live under /home for Qubes private storage.";
       }
     ];
 
@@ -3060,8 +3071,8 @@ in
       unitConfig.OnFailure = [ "airlock-config-guest-init-diagnostics.service" ];
     };
 
-    systemd.services.airlock-dev-guest-init = lib.mkIf hasDevRole {
-      description = "Initialize persistent Airlock development state";
+    systemd.services.airlock-cmd-guest-init = lib.mkIf hasCmdRole {
+      description = "Initialize persistent Airlock command-workspace state";
       wantedBy = [ "multi-user.target" ];
       wants = [ "airlock-qubes-rw-init.service" ];
       requires = [ "airlock-qubes-rw-init.service" ];
@@ -3087,7 +3098,7 @@ in
 
           install -d -m 0700 -o ${lib.escapeShellArg cfg.user} -g users ${lib.escapeShellArg cfg.configNixStoreRoot}
         ''
-        + lib.concatMapStrings installPersistentPath devPersistentPaths;
+        + lib.concatMapStrings installPersistentPath cmdPersistentPaths;
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -3265,7 +3276,7 @@ in
       let
         roleInitDeps =
           lib.optional hasConfigRole "airlock-config-guest-init.service"
-          ++ lib.optional hasDevRole "airlock-dev-guest-init.service";
+          ++ lib.optional hasCmdRole "airlock-cmd-guest-init.service";
         normalAfter = [
           "airlock-qubes-rw-init.service"
           "systemd-user-sessions.service"
@@ -3483,6 +3494,16 @@ in
       mode = "0444";
     };
 
+    environment.etc."qubes-rpc/airlock.CodexAuthImport" = lib.mkIf hasCmdRole {
+      source = codexAuthImportService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes/rpc-config/airlock.CodexAuthImport" = lib.mkIf hasCmdRole {
+      text = "force-user='${cfg.user}'\n";
+      mode = "0444";
+    };
+
     environment.systemPackages = [
       pkgs.qubes-core-qubesdb
       qubesAgentLinux
@@ -3492,7 +3513,7 @@ in
     ]
     ++ (rolePackages.${cfg.role} or [ ]);
 
-    environment.sessionVariables = lib.mkIf hasDevRole {
+    environment.sessionVariables = lib.mkIf hasCmdRole {
       CODEX_HOME = cfg.codexHome;
     };
 

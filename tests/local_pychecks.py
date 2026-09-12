@@ -1970,7 +1970,7 @@ def check_qubes_libvirt_hvm_pirq_patch(repo_root: Path, log_dir: Path) -> None:
     assert "libxl_defbool_set(&d_config->b_info.u.hvm.pirq, true);" in patch_text
 
 
-def check_dev_role(repo_root: Path, log_dir: Path) -> None:
+def check_cmd_role(repo_root: Path, log_dir: Path) -> None:
     shutil.rmtree(log_dir, ignore_errors=True)
     log_dir.mkdir(parents=True)
     role_json = log_dir / "role.json"
@@ -1997,16 +1997,16 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         templateBuilders = builders;
       }};
       devEntry = builders.mkNixNativeDomain {{
-        name = "sample-dev";
-        guestRole = "dev";
+        name = "sample-cmd";
+        guestRole = "cmd";
         modules = [
           ({{ ... }}: {{
-            networking.hostName = "sample-dev";
+            networking.hostName = "sample-cmd";
           }})
         ];
         features = {{
-          "airlock-role" = "dev";
-          "airlock-dev" = "1";
+          "airlock-role" = "cmd";
+          "airlock-cmd" = "1";
         }};
       }};
       devCfg = devEntry.configuration.config;
@@ -2074,12 +2074,12 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         "OPENAI_API_KEY"
         "OPENAI_API_KEY_FILE"
       ];
-      devServiceScript = devCfg.systemd.services.airlock-dev-guest-init.script;
+      devServiceScript = devCfg.systemd.services.airlock-cmd-guest-init.script;
     in
     {{
       role = devCfg.airlock.qubeGuest.role;
       hostname = devCfg.networking.hostName;
-      staged_dev_declared = builtins.hasAttr "dev" stagedNixNativeDomains;
+      staged_dev_declared = builtins.hasAttr "cmd-vm" stagedNixNativeDomains;
       staged_sys_net_declared = builtins.hasAttr "sys-net" stagedNixNativeDomains;
       staged_sys_net_autostart = sysNetDomainDefinition.prefs.autostart;
       staged_sys_net_virt_mode = sysNetDomainDefinition.prefs.virt_mode;
@@ -2103,8 +2103,8 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       staged_default_netvm = defaultRuntime.topology.extraPrefs.default_netvm;
       generated_dev_domain_netvm = generatedDevDomain.netvm;
       generated_dev_domain_role_feature = generatedDevDomain.features."airlock-role";
-      generated_dev_domain_marker_feature = generatedDevDomain.features."airlock-dev";
-      bootstrap_dev_domain_present = builtins.hasAttr "dev" bootstrapDomains;
+      generated_dev_domain_marker_feature = generatedDevDomain.features."airlock-cmd";
+      bootstrap_dev_domain_present = builtins.hasAttr "cmd-vm" bootstrapDomains;
       bootstrap_sys_net_present = builtins.hasAttr "sys-net" bootstrapDomains;
       bootstrap_sys_firewall_present = builtins.hasAttr "sys-firewall" bootstrapDomains;
       bootstrap_sys_net_autostart = bootstrapSysNetDomain.prefs.autostart;
@@ -2188,7 +2188,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         dom0Cfg.systemd.services.airlock-setup-config.environment.AIRLOCK_SETUP_CONFIG_STATUS_DEVICE;
       bootstrap_default_netvm = dom0Cfg.airlock.qubes.prefs.default_netvm;
       bootstrap_topology_default_netvm = dom0Cfg.airlock.qubes.topology.prefs.default_netvm;
-      bootstrap_dev_topology_present = builtins.hasAttr "dev" dom0Cfg.airlock.qubes.topology.domains;
+      bootstrap_dev_topology_present = builtins.hasAttr "cmd-vm" dom0Cfg.airlock.qubes.topology.domains;
       bootstrap_sys_net_topology_autostart = bootstrapTopologySysNetDomain.prefs.autostart;
       bootstrap_sys_firewall_topology_netvm = bootstrapTopologySysFirewallDomain.netvm;
       bootstrap_sys_firewall_topology_autostart =
@@ -2236,7 +2236,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
         "airlock-qubes-smoke"
         "zellij"
       ];
-      release_bootstrap_dev_domain_present = builtins.hasAttr "dev" releaseBootstrapDomains;
+      release_bootstrap_dev_domain_present = builtins.hasAttr "cmd-vm" releaseBootstrapDomains;
       release_bootstrap_sys_net_present = builtins.hasAttr "sys-net" releaseBootstrapDomains;
       release_bootstrap_sys_net_netvm = releaseBootstrapDomains.sys-net.netvm;
       release_bootstrap_sys_net_autostart = releaseBootstrapDomains.sys-net.prefs.autostart;
@@ -2302,7 +2302,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
       nix_allowed_users = devCfg.nix.settings.allowed-users;
       codex_home = devCfg.airlock.qubeGuest.codexHome;
       codex_home_env = devCfg.environment.sessionVariables.CODEX_HOME or null;
-      dev_persistent_paths = devCfg.airlock.qubeGuest.devPersistentPaths;
+      dev_persistent_paths = devCfg.airlock.qubeGuest.cmdPersistentPaths;
       dev_init_contains_dev_path = lib.hasInfix "/home/user/dev" devServiceScript;
       dev_init_contains_codex_home = lib.hasInfix "/home/user/.codex" devServiceScript;
       dev_init_contains_private_nix_root = lib.hasInfix "/rw/home/user/airlock-config-nix-root" devServiceScript;
@@ -2326,9 +2326,9 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     _run(["nix", "eval", "--impure", "--json", "--expr", expr], stdout=role_json)
     data = json.loads(role_json.read_text(encoding="utf-8"))
 
-    assert data["role"] == "dev"
-    assert data["hostname"] == "sample-dev"
-    assert data["staged_dev_declared"] is False
+    assert data["role"] == "cmd"
+    assert data["hostname"] == "sample-cmd"
+    assert data["staged_dev_declared"] is True
     assert data["staged_sys_net_declared"] is True
     assert data["staged_sys_net_autostart"] is True
     assert data["staged_sys_net_virt_mode"] == "hvm"
@@ -2349,9 +2349,9 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["staged_default_guivm"] == "sys-gui"
     assert data["staged_default_netvm"] == "sys-firewall"
     assert data["generated_dev_domain_netvm"] is None
-    assert data["generated_dev_domain_role_feature"] == "dev"
+    assert data["generated_dev_domain_role_feature"] == "cmd"
     assert data["generated_dev_domain_marker_feature"] == "1"
-    assert data["bootstrap_dev_domain_present"] is False
+    assert data["bootstrap_dev_domain_present"] is True
     assert data["bootstrap_sys_net_present"] is True
     assert data["bootstrap_sys_firewall_present"] is True
     assert data["bootstrap_sys_net_autostart"] is True
@@ -2409,7 +2409,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["dom0_bootstrap_status_environment"] == "/dev/tty1"
     assert data["bootstrap_default_netvm"] == "sys-firewall"
     assert data["bootstrap_topology_default_netvm"] == "sys-firewall"
-    assert data["bootstrap_dev_topology_present"] is False
+    assert data["bootstrap_dev_topology_present"] is True
     assert data["bootstrap_sys_net_topology_autostart"] is True
     assert data["bootstrap_sys_firewall_topology_netvm"] == "sys-net"
     assert data["bootstrap_sys_firewall_topology_autostart"] is True
@@ -2437,7 +2437,7 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["release_dom0_observability_enabled"] is False
     assert data["release_dom0_testing_tools_enabled"] is False
     assert data["release_dom0_dev_tools_absent"] is True
-    assert data["release_bootstrap_dev_domain_present"] is False
+    assert data["release_bootstrap_dev_domain_present"] is True
     assert data["release_bootstrap_sys_net_present"] is True
     assert data["release_bootstrap_sys_net_netvm"] is None
     assert data["release_bootstrap_sys_net_autostart"] is True
@@ -2466,10 +2466,10 @@ def check_dev_role(repo_root: Path, log_dir: Path) -> None:
     assert data["dev_init_contains_dev_path"] is True
     assert data["dev_init_contains_codex_home"] is True
     assert data["dev_init_contains_private_nix_root"] is True
-    assert "airlock-dev-guest-init.service" in data["dev_qrexec_requires"]
-    assert "airlock-dev-guest-init.service" in data["dev_qrexec_after"]
+    assert "airlock-cmd-guest-init.service" in data["dev_qrexec_requires"]
+    assert "airlock-cmd-guest-init.service" in data["dev_qrexec_after"]
     assert data["dev_forbidden_rpc_absent"] is True
-    assert data["dev_allowed_submitters"] == []
+    assert data["dev_allowed_submitters"] == ["cmd-vm"]
     assert data["dev_no_secret_env"] is True
     assert data["dev_no_codex_auth_etc"] is True
     assert data["base_role"] == "base"
@@ -5524,7 +5524,7 @@ def check_airlock_cli(repo_root: Path, log_dir: Path) -> None:
             assert manifest["commit"] == expected_commit
             assert manifest["tree"] == expected_tree
             assert manifest["branch"] == "main"
-            assert manifest["source_role"] == "dev"
+            assert manifest["source_role"] == "cmd"
             assert manifest["transport"] == "qrexec"
             assert manifest["base_generation"]["schema"] == "airlock.config-status.v1"
             assert (
@@ -5727,7 +5727,7 @@ def check_config_control(repo_root: Path, log_dir: Path) -> None:
                     "schema": "airlock.config-candidate.v1",
                     "commit": commit,
                     "branch": "main",
-                    "source_role": "dev",
+                    "source_role": "cmd",
                     "scenario": scenario,
                     "payload": f"touch {payload_marker}",
                 },

@@ -24,6 +24,7 @@ let
   sysNetRoleDefaults = import ./sys-net.nix { inherit sysNetPrivateSizeBytes; };
   sysFirewallRoleDefaults = import ./sys-firewall.nix { inherit networkDebug; };
   sysGuiRoleDefaults = import ./sys-gui.nix;
+  cmdVmRoleDefaults = import ./cmd-vm.nix;
 
   mkConfigDomainEntries =
     system:
@@ -144,6 +145,29 @@ let
       services = sysGuiRoleDefaults.services;
     };
 
+  mkCmdVmDomainEntry =
+    system:
+    let
+      qubeBuilders = mkAirlockQubeBuilders system;
+    in
+    qubeBuilders.mkNixNativeDomain {
+      name = "cmd-vm";
+      guestRole = "cmd";
+      modules = [
+        ({ ... }: {
+          networking.hostName = cmdVmRoleDefaults.guestHostName;
+        })
+      ];
+      rootImageSizeMiB = cmdVmRoleDefaults.rootImageSizeMiB;
+      kernelName = airlockQubesVmKernelName;
+      label = cmdVmRoleDefaults.label;
+      netvm = cmdVmRoleDefaults.netvm;
+      prefs = cmdVmRoleDefaults.prefs;
+      features = cmdVmRoleDefaults.features;
+      services = cmdVmRoleDefaults.services;
+      state = cmdVmRoleDefaults.state;
+    };
+
   materializeNixClosureDomain =
     entry:
     entry.domain
@@ -173,6 +197,7 @@ in
     configVmRoles
     materializeNixClosureDomain
     mkConfigDomainEntries
+    mkCmdVmDomainEntry
     mkSysFirewallDomainEntry
     mkSysGuiDomainEntry
     mkSysNetDomainEntry

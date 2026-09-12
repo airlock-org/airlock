@@ -79,7 +79,7 @@ candidate_tar() {
     --arg commit "$commit" \
     --arg tree "$tree" \
     --arg branch "$branch" \
-    --arg source_role "dev" \
+    --arg source_role "cmd" \
     --arg transport "qrexec" \
     --argjson base_generation "$base_generation" \
     '{
