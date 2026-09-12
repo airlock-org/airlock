@@ -625,7 +625,8 @@
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
           "${airlockSupport}/lifecycle/misc/modules/dom0.nix"
           "${airlockSupport}/lifecycle/misc/modules/qubes-topology.nix"
-          "${airlockSupport}/lifecycle/image/profiles/vm-gui-dev.nix"
+          "${airlockSupport}/lifecycle/image/profiles/vm-gui.nix"
+          "${airlockSupport}/lifecycle/image/profiles/dev-mode.nix"
           "${airlockSupport}/lifecycle/bootstrap/config-system.nix"
           {
             nixpkgs.overlays = templateBuilders.qubesOverlays;
