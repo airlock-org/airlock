@@ -22,6 +22,7 @@ from local_pychecks import (
     check_config_system_apply_boot,
     check_config_staging_validate,
     check_config_status,
+    check_config_repo_status,
     check_config_system_apply,
     check_config_topology_eval,
     check_config_validator_candidate,
@@ -72,6 +73,7 @@ NIX_BUILD_FLAGS = ("--print-build-logs", "--show-trace")
 
 
 LOCAL_CHECKS = (
+    LocalCheck("config-repo-status", runner=check_config_repo_status),
     LocalCheck(
         "flake-check-no-build",
         ("nix", "flake", "check", "{root}", "--no-build", "--show-trace"),

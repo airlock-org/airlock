@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import textwrap
 import types
 from pathlib import Path
@@ -1553,6 +1554,92 @@ def check_gc_airlock_store(repo_root: Path, log_dir: Path) -> None:
     assert "refusing nonstandard data root" in (work_dir / "nonstandard.out").read_text(
         encoding="utf-8"
     )
+
+
+def check_config_repo_status(repo_root: Path, log_dir: Path) -> None:
+    script = (
+        repo_root / "lifecycle/misc/tools/scripts/nixos-config-vms-smoke.sh"
+    ).read_text(encoding="utf-8")
+    helper = re.search(
+        r"^repo_status_is_clean_main\(\) \{\n.*?^\}", script, re.M | re.S
+    )
+    assert helper is not None
+    log_dir.mkdir(parents=True, exist_ok=True)
+    # Exercise the production predicate against real Git output, including the
+    # bundle-clone tracking state that triggered the VM preflight failure.
+    with tempfile.TemporaryDirectory(prefix="airlock-repo-status-") as tmp:
+        root = Path(tmp)
+        source = root / "source"
+        staging = root / "staging"
+
+        def git(repo: Path, *args: str) -> str:
+            return _run(
+                [
+                    "git",
+                    "-c",
+                    "user.name=Airlock Test",
+                    "-c",
+                    "user.email=airlock-test@localhost",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "-C",
+                    str(repo),
+                    *args,
+                ]
+            ).stdout
+
+        def assert_status(repo: Path, name: str, expected: bool) -> None:
+            output = log_dir / f"{name}.status"
+            output.write_text(
+                git(
+                    repo,
+                    "status",
+                    "--porcelain=v2",
+                    "--branch",
+                    "--untracked-files=all",
+                ),
+                encoding="utf-8",
+            )
+            result = _run(
+                [
+                    "bash",
+                    "-c",
+                    helper.group(0) + '\nrepo_status_is_clean_main "$1"',
+                    "bash",
+                    str(output),
+                ],
+                check=False,
+            )
+            assert (result.returncode == 0) == expected, name
+
+        source.mkdir()
+        git(source, "init", "-b", "main")
+        assert_status(source, "unborn", False)
+        tracked = source / "tracked"
+        tracked.write_text("baseline\n", encoding="utf-8")
+        git(source, "add", "tracked")
+        git(source, "commit", "-m", "baseline")
+        assert_status(source, "clean-local", True)
+        bundle = root / "config.bundle"
+        git(source, "bundle", "create", str(bundle), "HEAD", "refs/heads/main")
+        git(root, "clone", str(bundle), str(staging))
+        assert_status(staging, "clean-tracking", True)
+        lock = staging / "flake.lock"
+        lock.write_text("{}\n", encoding="utf-8")
+        assert_status(staging, "untracked", False)
+        git(staging, "add", "flake.lock")
+        assert_status(staging, "staged", False)
+        git(staging, "commit", "-m", "lock inputs")
+        assert_status(staging, "clean-ahead", True)
+        (staging / "tracked").write_text("changed\n", encoding="utf-8")
+        assert_status(staging, "modified", False)
+        (staging / "tracked").write_text("baseline\n", encoding="utf-8")
+        git(staging, "checkout", "--detach")
+        assert_status(staging, "detached", False)
+        git(staging, "checkout", "-b", "other")
+        assert_status(staging, "wrong-branch", False)
 
 
 def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:

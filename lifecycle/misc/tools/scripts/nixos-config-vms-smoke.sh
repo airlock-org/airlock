@@ -371,6 +371,16 @@ collect_diagnostics() {
     > "$CREATED_QUBE_CONSOLE_LOG" 2>&1 || true
 }
 
+repo_status_is_clean_main() {
+  # Upstream tracking and ahead/behind counts do not make a worktree dirty.
+  awk '
+    $1 == "#" && $2 == "branch.oid" && $3 != "(initial)" { committed = 1 }
+    $0 == "# branch.head main" { main = 1 }
+    $1 != "#" { dirty = 1 }
+    END { exit !(committed && main && !dirty) }
+  ' "$1"
+}
+
 run_or_fail() {
   description="$1"
   output="$2"
@@ -676,13 +686,13 @@ if mode_runs_preflight; then
     "airlock-config-validator-init"
 
   run_qrexec_or_fail "$VAULT" "config vault repo status" "$VAULT_REPO_STATUS_LOG" \
-    "cd /home/$QUBE_USER/airlock-config-vault && git status --short --branch"
+    "cd /home/$QUBE_USER/airlock-config-vault && git status --porcelain=v2 --branch --untracked-files=all"
   run_qrexec_or_fail "$STAGING" "config staging repo status" "$STAGING_REPO_STATUS_LOG" \
-    "cd /home/$QUBE_USER/airlock-config && git status --short --branch"
+    "cd /home/$QUBE_USER/airlock-config && git status --porcelain=v2 --branch --untracked-files=all"
 
-  grep -q '^## main$' "$VAULT_REPO_STATUS_LOG" ||
+  repo_status_is_clean_main "$VAULT_REPO_STATUS_LOG" ||
     fail "config vault repository is not initialized cleanly"
-  grep -q '^## main$' "$STAGING_REPO_STATUS_LOG" ||
+  repo_status_is_clean_main "$STAGING_REPO_STATUS_LOG" ||
     fail "config staging repository is not initialized cleanly"
 fi
 
