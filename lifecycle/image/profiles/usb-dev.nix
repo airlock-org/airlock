@@ -60,7 +60,9 @@
   # runtime configuration aligned with that build-time filesystem.
   fileSystems."/boot".device = lib.mkForce "/dev/disk/by-label/ESP";
   image = { baseName = "airlock-usb-dev"; format = "raw"; efiSupport = true; };
-  virtualisation.diskSize = 65536;
+  # Fits the selected nominal-64-GB USB (58.2 GiB usable) while retaining a
+  # 1-GiB ESP and roughly 55 GiB of writable root storage.
+  virtualisation.diskSize = 57344;
   system.build.image = lib.mkForce (import "${modulesPath}/../lib/make-disk-image.nix" {
     inherit config lib pkgs;
     inherit (config.image) baseName format;

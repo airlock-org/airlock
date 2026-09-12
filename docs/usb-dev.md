@@ -8,8 +8,9 @@ live ISO or an installer. XFCE remains the desktop. Normal VM targets are unchan
 Run `make usb-dev-image`. The result link is under
 `$AIRLOCK_RESULT_LINK_DIR/usb-dev-image` (or `.airlock/usb-dev-image` without a
 configured data root). Find its `.img` file; resolve it to its physical path
-in the custom store before using the writer. A 128 GB USB SSD is recommended:
-the current image reserves 64 GiB and does not automatically grow partitions.
+in the custom store before using the writer. The current image reserves 56 GiB,
+so it fits a nominal 64 GB USB with a small safety margin; 128 GB is still
+recommended for longer-lived builds. It does not automatically grow partitions.
 
 Inspect `lsblk -o NAME,TRAN,SIZE,MODEL,SERIAL,MOUNTPOINTS` and select an expendable
 whole-disk `/dev/disk/by-id/usb-…` path. Do not use the internal NVMe. Unmount
@@ -93,7 +94,7 @@ Wi-Fi settings, logs, repository and VM state persist on the **unencrypted** roo
 
 For builds on the USB, keep the custom store off the host store, for example:
 `AIRLOCK_DATA_ROOT=/home/airlock/airlock-data make usb-dev-image`.
-64 GiB can fill quickly; use the guarded `make gc-auto` with that same data root.
+56 GiB can fill quickly; use the guarded `make gc-auto` with that same data root.
 No partition growth or full-store garbage collection is done automatically.
 
 ## Evidence and next experiment
