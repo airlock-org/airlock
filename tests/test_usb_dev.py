@@ -35,6 +35,23 @@ def test_private_file_never_overwrites(usb, tmp_path):
     assert target.read_text() == "keep"
 
 
+def test_sparse_copy_writes_allocated_extents_only(usb, tmp_path):
+    image = tmp_path / "seed.img"
+    with image.open("wb") as stream:
+        stream.write(b"first")
+        stream.seek(1024 * 1024)
+        stream.write(b"last")
+    target = tmp_path / "target"
+    target.write_bytes(b"x" * (1024 * 1024 + 4))
+    with target.open("r+b", buffering=0) as destination:
+        copied = usb.copy_sparse_image(image, destination)
+    assert copied < image.stat().st_size
+    with target.open("rb") as stream:
+        assert stream.read(5) == b"first"
+        stream.seek(1024 * 1024)
+        assert stream.read(4) == b"last"
+
+
 def test_auth_cache_must_be_a_json_object(usb, tmp_path):
     valid = tmp_path / "auth.json"
     valid.write_text('{"tokens": {}}')

@@ -8,9 +8,10 @@ live ISO or an installer. XFCE remains the desktop. Normal VM targets are unchan
 Run `make usb-dev-image`. The result link is under
 `$AIRLOCK_RESULT_LINK_DIR/usb-dev-image` (or `.airlock/usb-dev-image` without a
 configured data root). Find its `.img` file; resolve it to its physical path
-in the custom store before using the writer. The current image reserves 56 GiB,
-so it fits a nominal 64 GB USB with a small safety margin; 128 GB is still
-recommended for longer-lived builds. It does not automatically grow partitions.
+in the custom store before using the writer. The current image is a 20 GiB
+seed, so it fits a nominal 64 GB USB. On its first boot, NixOS grows the root
+partition and filesystem to use the remaining USB capacity. 128 GB is still
+recommended for longer-lived builds.
 
 Inspect `lsblk -o NAME,TRAN,SIZE,MODEL,SERIAL,MOUNTPOINTS` and select an expendable
 whole-disk `/dev/disk/by-id/usb-…` path. Do not use the internal NVMe. Unmount
@@ -25,8 +26,12 @@ sha256sum /absolute/airlock-usb-dev.img
 Only after reviewing the printed model/serial/size, repeat with sudo and add
 `--write --confirm-serial EXACT_SERIAL --sha256 EXACT_HASH`. This **erases the
 selected USB**, flushes the device, and does not touch firmware boot variables.
-It checks the image hash before writing but skips a full USB read-back by
-default. Add `--verify` only when you want the slower full hash verification.
+It checks the image hash before writing, then copies only allocated image
+extents by default; this makes a sparse seed image much quicker to flash. Add
+`--full-write` to materialize zero-filled holes, or `--verify` for the slower
+full write and full hash read-back. Sparse writing leaves any prior USB bytes
+in filesystem blocks marked free by the image; use `--full-write` for an
+untrusted/reused USB where that data-remanence trade-off is unacceptable.
 An interrupted write requires re-imaging that USB. The host needs Python,
 util-linux, Git, OpenSSH, OpenSSL, cryptsetup and e2fsprogs for these tools.
 
@@ -101,8 +106,9 @@ Wi-Fi settings, logs, repository and VM state persist on the **unencrypted** roo
 
 For builds on the USB, keep the custom store off the host store, for example:
 `AIRLOCK_DATA_ROOT=/home/airlock/airlock-data make usb-dev-image`.
-56 GiB can fill quickly; use the guarded `make gc-auto` with that same data root.
-No partition growth or full-store garbage collection is done automatically.
+The first boot expands the root filesystem to the USB's available capacity.
+It can fill quickly; use the guarded `make gc-auto` with that same data root.
+No full-store garbage collection is done automatically.
 
 ## Evidence and next experiment
 

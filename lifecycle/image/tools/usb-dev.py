@@ -2,12 +2,12 @@
 """Explicit, guarded USB provisioning. No command runs implicitly at boot."""
 
 import argparse
+import errno
 import getpass
 import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import stat
 import subprocess
 import sys
@@ -16,6 +16,7 @@ import sys
 MARKER = "airlock-usb-dev-v1\n"
 MAPPER = "airlock-codex"
 UID, GID = 1000, 100
+COPY_CHUNK = 8 * 1024 * 1024
 
 
 def run(*args, **kwargs):
@@ -73,6 +74,55 @@ def digest(path):
     return result.hexdigest()
 
 
+def write_all(destination, data):
+    view = memoryview(data)
+    while view:
+        written = destination.write(view)
+        require(written, "USB write made no progress.")
+        view = view[written:]
+
+
+def copy_full_image(image, destination):
+    copied = 0
+    with image.open("rb") as source:
+        while data := source.read(COPY_CHUNK):
+            write_all(destination, data)
+            copied += len(data)
+    return copied
+
+
+def copy_sparse_image(image, destination):
+    """Copy allocated extents only; target holes remain untouched."""
+    source_fd = os.open(image, os.O_RDONLY)
+    copied = 0
+    size = image.stat().st_size
+    offset = 0
+    try:
+        while offset < size:
+            try:
+                data_offset = os.lseek(source_fd, offset, os.SEEK_DATA)
+            except OSError as error:
+                if error.errno == errno.ENXIO:
+                    break
+                if error.errno in (errno.EINVAL, errno.ENOTSUP):
+                    raise ValueError("Source filesystem does not support sparse image extents; use --full-write.")
+                raise
+            hole_offset = min(os.lseek(source_fd, data_offset, os.SEEK_HOLE), size)
+            os.lseek(source_fd, data_offset, os.SEEK_SET)
+            destination.seek(data_offset)
+            remaining = hole_offset - data_offset
+            while remaining:
+                data = os.read(source_fd, min(COPY_CHUNK, remaining))
+                require(data, "Unexpected end of sparse image extent.")
+                write_all(destination, data)
+                copied += len(data)
+                remaining -= len(data)
+            offset = hole_offset
+    finally:
+        os.close(source_fd)
+    return copied
+
+
 def write_image(args):
     image = Path(args.image).resolve(strict=True)
     require(image.is_file() and image.suffix == ".img", "Use the uncompressed raw .img file.")
@@ -86,6 +136,7 @@ def write_image(args):
                       "model": info["model"], "serial": info["serial"],
                       "bytes": info["size"], "image": str(image),
                       "image_bytes": image.stat().st_size, "write": args.write,
+                      "write_mode": "full" if args.full_write or args.verify else "sparse",
                       "full_verify": args.verify}, indent=2))
     if not args.write:
         print("Inspection only. Writing requires --write --confirm-serial SERIAL --sha256 HASH.")
@@ -97,11 +148,13 @@ def write_image(args):
     # rejects mounted/claimed devices; the fd pins the checked disk identity.
     again, latest = usb_disk(args.device)
     require(again == target and latest["serial"] == info["serial"], "USB identity changed.")
-    with image.open("rb") as source:
-        fd = os.open(target, os.O_WRONLY | os.O_EXCL)
-        with os.fdopen(fd, "wb", buffering=0) as destination:
-            shutil.copyfileobj(source, destination, 8 * 1024 * 1024)
-            os.fsync(destination.fileno())
+    fd = os.open(target, os.O_WRONLY | os.O_EXCL)
+    with os.fdopen(fd, "wb", buffering=0) as destination:
+        if args.full_write or args.verify:
+            written = copy_full_image(image, destination)
+        else:
+            written = copy_sparse_image(image, destination)
+        os.fsync(destination.fileno())
     run("blockdev", "--rereadpt", str(target))
     if args.verify:
         # Verify only the image prefix; a larger USB may have unused trailing space.
@@ -114,9 +167,9 @@ def write_image(args):
                 check.update(data)
                 remaining -= len(data)
         require(check.hexdigest() == args.sha256.lower(), "USB read-back verification failed.")
-        result = "Image written, flushed and fully verified."
+        result = f"Image fully written ({written} bytes), flushed and verified."
     else:
-        result = "Image written and flushed; full read-back verification was skipped."
+        result = f"Image {('fully' if args.full_write else 'sparsely')} written ({written} bytes) and flushed; full read-back verification was skipped."
     print(f"{result} Previous USB contents were overwritten and are not recoverable by this tool.")
 
 
@@ -280,6 +333,7 @@ def main():
     writer.add_argument("--write", action="store_true")
     writer.add_argument("--confirm-serial")
     writer.add_argument("--sha256")
+    writer.add_argument("--full-write", action="store_true", help="Materialize all zero-filled image holes on the USB.")
     writer.add_argument("--verify", action="store_true", help="Read the full image back and verify its SHA-256.")
     writer.set_defaults(handler=write_image)
     setup = commands.add_parser("personalize")

@@ -36,8 +36,8 @@ Observed over SSH on the laptop, not inferred from the desktop:
 ## Acceptance gates (not yet run)
 
 1. Build/evaluate the image and review its closure and boot entries.
-2. Select an expendable USB SSD (a nominal 64 GB device fits; 128 GB is
-   recommended for development), personalize,
+2. Select an expendable USB SSD (the 20 GiB seed fits a nominal 64 GB device;
+   first boot grows root to its capacity; 128 GB is recommended for development), personalize,
    boot via the firmware's removable-media menu. No internal installation.
 3. Confirm Xen, Qubes lifecycle, XFCE, inputs, networking and Tailscale SSH.
    Cold reboot and confirm repo, VM state and logs persist.
