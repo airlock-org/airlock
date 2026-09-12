@@ -139,9 +139,30 @@ def unmount_usb(device):
         run("umount", "--all-targets", child["name"])
 
 
-def result_image(result_link):
+def result_image(result_link, nix_root=None):
     """Find the raw USB image in the current Nix build result link."""
-    result = Path(result_link).resolve(strict=True)
+    link = Path(result_link)
+    try:
+        result = link.resolve(strict=True)
+    except FileNotFoundError:
+        # A result link records Nix's logical /nix/store output path.  When
+        # Airlock uses its isolated store, that path is physically rooted at
+        # AIRLOCK_NIX_ROOT and therefore is not visible as /nix to sudo.
+        require(
+            nix_root,
+            "Result link points outside the mounted /nix/store; supply --nix-root.",
+        )
+        target = Path(os.readlink(link))
+        require(
+            target.is_absolute() and str(target).startswith("/nix/store/"),
+            "Dangling result link is not a Nix store output.",
+        )
+        root = Path(nix_root).resolve(strict=True)
+        result = (root / target.relative_to("/")).resolve(strict=True)
+        require(
+            result.is_relative_to(root),
+            "Resolved image escaped the configured Nix root.",
+        )
     candidates = [result] if result.is_file() else list(result.glob("*.img"))
     candidates = [
         image for image in candidates if image.is_file() and image.suffix == ".img"
@@ -358,7 +379,7 @@ def write_image(args):
 
 def prepare_latest_write(args):
     """Resolve the result image and selected USB without exposing store paths."""
-    image = result_image(args.result_link)
+    image = result_image(args.result_link, args.nix_root)
     args.image = str(image)
     if args.write:
         args.device = usb_device_by_serial(args.serial)
@@ -680,6 +701,9 @@ def main():
         "--result-link", required=True, help="Result link created by make usb-dev-image"
     )
     latest_writer.add_argument(
+        "--nix-root", help="Physical root of an isolated Nix store, when used"
+    )
+    latest_writer.add_argument(
         "--serial", required=True, help="Exact stable serial of the target USB"
     )
     latest_writer.add_argument("--write", action="store_true")
@@ -700,6 +724,9 @@ def main():
     )
     provisioner.add_argument(
         "--result-link", required=True, help="Result link created by make usb-dev-image"
+    )
+    provisioner.add_argument(
+        "--nix-root", help="Physical root of an isolated Nix store, when used"
     )
     provisioner.add_argument(
         "--serial", required=True, help="Exact stable serial of the target USB"
