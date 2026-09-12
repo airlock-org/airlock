@@ -33,21 +33,26 @@ Mount the new USB's `airlock-usb` root partition at a fresh mountpoint, using it
 Do not mount by a potentially duplicated generic label. Then:
 
 ```sh
-sudo python3 lifecycle/image/tools/usb-dev.py personalize --root /mnt/airlock-usb --repo "$PWD" --public-key /absolute/id_ed25519.pub
+sudo python3 lifecycle/image/tools/usb-dev.py personalize \
+  --root /mnt/airlock-usb --repo "$PWD" --public-key /absolute/id_ed25519.pub \
+  --auth-file /absolute/path/to/auth.json
 ```
 
 This asks for a new local password for dom0 `airlock` and guest `user`, installs
 one public SSH key and clones the clean committed repository onto a writable
-`usb-dev` branch. No private keys, untracked files, hooks, build artifacts,
-remote credentials or Codex settings are copied. The clone has no origin;
-configure a suitable remote later. The password hash is outside Nix, readable
-only by root. Re-personalization refuses to overwrite an existing setup.
+`usb-dev` branch. When `--auth-file` is supplied, it also creates an encrypted
+Codex vault, imports only that cache, then locks the vault. No private keys,
+untracked files, hooks, build artifacts, remote credentials or Codex settings
+are copied. The clone has no origin; configure a suitable remote later. The
+password hash is outside Nix, readable only by root. Re-personalization refuses
+to overwrite an existing setup.
 
 ## Codex authentication: separate encrypted vault
 
 The raw OS itself is **not encrypted**. Codex's state lives in a 512 MiB LUKS2
 file vault. Its passphrase is separate from the login password and is never
-saved by the tool. Offline, before unmounting the USB:
+saved by the tool. Supplying `--auth-file` to `personalize` is the preferred
+one-step setup. To add credentials later, offline before unmounting the USB:
 
 ```sh
 sudo python3 lifecycle/image/tools/usb-dev.py vault-create --root /mnt/airlock-usb

@@ -35,6 +35,16 @@ def test_private_file_never_overwrites(usb, tmp_path):
     assert target.read_text() == "keep"
 
 
+def test_auth_cache_must_be_a_json_object(usb, tmp_path):
+    valid = tmp_path / "auth.json"
+    valid.write_text('{"tokens": {}}')
+    assert usb.read_auth_cache(valid) == b'{"tokens": {}}'
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text("[]")
+    with pytest.raises(ValueError, match="Invalid auth JSON"):
+        usb.read_auth_cache(invalid)
+
+
 def test_auth_requires_mounted_vault(usb, tmp_path):
     with pytest.raises(ValueError, match="vault is locked"):
         usb.require_vault(tmp_path)

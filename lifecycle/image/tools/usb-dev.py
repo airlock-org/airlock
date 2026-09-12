@@ -149,6 +149,14 @@ def private_file(path, data, uid=0, gid=0):
         os.fsync(stream.fileno())
 
 
+def read_auth_cache(value):
+    source = Path(value).resolve(strict=True)
+    require(source.is_file(), "Auth source must be a regular file.")
+    data = source.read_bytes()
+    require(isinstance(json.loads(data), dict), "Invalid auth JSON.")
+    return data
+
+
 def personalize(args):
     root = checked_root(args.root)
     require(root != Path("/"), "Personalize offline, before the first USB boot.")
@@ -157,6 +165,7 @@ def personalize(args):
     key_target = beneath(root, "home/airlock/.ssh/authorized_keys")
     require(not any(p.exists() for p in [password_file, repo_target, key_target]),
             "Already personalized (or interrupted); refusing to overwrite data.")
+    auth_data = read_auth_cache(args.auth_file) if args.auth_file else None
     key_source = Path(args.public_key).resolve(strict=True)
     run("ssh-keygen", "-l", "-f", str(key_source), stdout=subprocess.DEVNULL)
     key = key_source.read_bytes()
@@ -187,7 +196,19 @@ def personalize(args):
         for name in directories + files:
             os.chown(Path(current) / name, UID, GID, follow_symlinks=False)
     os.chmod(key_target.parent, 0o700)
-    print(f"Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}). No credentials copied.")
+    if auth_data is not None:
+        # Keep the cache outside the raw filesystem. vault-create opens a new
+        # LUKS2 vault and asks for its independent passphrase; always lock it
+        # again before returning from offline personalization.
+        vault(argparse.Namespace(action="vault-create", root=str(root)))
+        _, mount = vault_paths(root)
+        try:
+            private_file(mount / "auth.json", auth_data, UID, GID)
+        finally:
+            vault(argparse.Namespace(action="vault-lock", root=str(root)))
+        print(f"Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}); Codex auth is in the locked encrypted vault.")
+    else:
+        print(f"Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}). No credentials copied.")
 
 
 def vault_paths(root):
@@ -240,10 +261,7 @@ def vault(args):
     elif args.action == "auth-import":
         require_vault(mount)
         target = beneath(root, "home/airlock/.codex/auth.json")
-        source = Path(args.auth_file).resolve(strict=True)
-        require(source.is_file(), "Auth source must be a regular file.")
-        data = source.read_bytes()
-        require(isinstance(json.loads(data), dict), "Invalid auth JSON.")
+        data = read_auth_cache(args.auth_file)
         private_file(target, data, UID, GID)
         print("Auth imported into the encrypted vault; contents were not logged.")
 
@@ -262,6 +280,7 @@ def main():
     setup.add_argument("--root", required=True)
     setup.add_argument("--repo", required=True)
     setup.add_argument("--public-key", required=True)
+    setup.add_argument("--auth-file", help="Optional existing Codex auth.json; imports it into a new encrypted vault.")
     setup.set_defaults(handler=personalize)
     for name in ["vault-create", "vault-unlock", "vault-lock", "auth-import"]:
         command = commands.add_parser(name)
