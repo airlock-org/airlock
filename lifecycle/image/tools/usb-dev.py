@@ -11,12 +11,14 @@ from pathlib import Path
 import stat
 import subprocess
 import sys
+import time
 
 
 MARKER = "airlock-usb-dev-v1\n"
 MAPPER = "airlock-codex"
 UID, GID = 1000, 100
 COPY_CHUNK = 8 * 1024 * 1024
+PROGRESS_INTERVAL = 128 * 1024 * 1024
 
 
 def run(*args, **kwargs):
@@ -82,16 +84,57 @@ def write_all(destination, data):
         view = view[written:]
 
 
-def copy_full_image(image, destination):
+def progress_reporter(label, total):
+    last_bytes = -PROGRESS_INTERVAL
+    last_time = 0.0
+
+    def report(current):
+        nonlocal last_bytes, last_time
+        now = time.monotonic()
+        if current != total and current - last_bytes < PROGRESS_INTERVAL and now - last_time < 2:
+            return
+        percent = 100 if total == 0 else current * 100 // total
+        print(f"{label}: {current / 1024**3:.1f} / {total / 1024**3:.1f} GiB ({percent}%)", file=sys.stderr, flush=True)
+        last_bytes, last_time = current, now
+
+    return report
+
+
+def copy_full_image(image, destination, progress=None):
     copied = 0
     with image.open("rb") as source:
         while data := source.read(COPY_CHUNK):
             write_all(destination, data)
             copied += len(data)
+            if progress:
+                progress(copied)
     return copied
 
 
-def copy_sparse_image(image, destination):
+def sparse_extent_bytes(image):
+    source_fd = os.open(image, os.O_RDONLY)
+    total = 0
+    size = image.stat().st_size
+    offset = 0
+    try:
+        while offset < size:
+            try:
+                data_offset = os.lseek(source_fd, offset, os.SEEK_DATA)
+            except OSError as error:
+                if error.errno == errno.ENXIO:
+                    break
+                if error.errno in (errno.EINVAL, errno.ENOTSUP):
+                    raise ValueError("Source filesystem does not support sparse image extents; use --full-write.")
+                raise
+            hole_offset = min(os.lseek(source_fd, data_offset, os.SEEK_HOLE), size)
+            total += hole_offset - data_offset
+            offset = hole_offset
+    finally:
+        os.close(source_fd)
+    return total
+
+
+def copy_sparse_image(image, destination, progress=None):
     """Copy allocated extents only; target holes remain untouched."""
     source_fd = os.open(image, os.O_RDONLY)
     copied = 0
@@ -116,6 +159,8 @@ def copy_sparse_image(image, destination):
                 require(data, "Unexpected end of sparse image extent.")
                 write_all(destination, data)
                 copied += len(data)
+                if progress:
+                    progress(copied)
                 remaining -= len(data)
             offset = hole_offset
     finally:
@@ -151,21 +196,27 @@ def write_image(args):
     fd = os.open(target, os.O_WRONLY | os.O_EXCL)
     with os.fdopen(fd, "wb", buffering=0) as destination:
         if args.full_write or args.verify:
-            written = copy_full_image(image, destination)
+            total = image.stat().st_size
+            written = copy_full_image(image, destination, progress_reporter("Writing image", total))
         else:
-            written = copy_sparse_image(image, destination)
+            total = sparse_extent_bytes(image)
+            written = copy_sparse_image(image, destination, progress_reporter("Writing sparse extents", total))
         os.fsync(destination.fileno())
     run("blockdev", "--rereadpt", str(target))
     if args.verify:
         # Verify only the image prefix; a larger USB may have unused trailing space.
         check = hashlib.sha256()
         remaining = image.stat().st_size
+        verified = 0
+        progress = progress_reporter("Verifying image", remaining)
         with target.open("rb", buffering=0) as stream:
             while remaining:
                 data = stream.read(min(8 * 1024 * 1024, remaining))
                 require(data, "Unexpected end of USB during verification.")
                 check.update(data)
                 remaining -= len(data)
+                verified += len(data)
+                progress(verified)
         require(check.hexdigest() == args.sha256.lower(), "USB read-back verification failed.")
         result = f"Image fully written ({written} bytes), flushed and verified."
     else:
