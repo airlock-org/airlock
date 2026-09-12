@@ -33,6 +33,7 @@
       rawLocalConfig = import ./airlock/runtime.nix {
         inherit
           appliedMessage
+          airlockSupport
           system
           ;
         pkgs = templateBuilders.pkgs;

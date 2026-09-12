@@ -1970,6 +1970,59 @@ def check_qubes_libvirt_hvm_pirq_patch(repo_root: Path, log_dir: Path) -> None:
     assert "libxl_defbool_set(&d_config->b_info.u.hvm.pirq, true);" in patch_text
 
 
+def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
+    """Keep the personal-domain topology and canonical desktop launchers aligned."""
+    shutil.rmtree(log_dir, ignore_errors=True)
+    log_dir.mkdir(parents=True)
+
+    topology_json = log_dir / "topology.json"
+    _run(
+        [
+            "nix",
+            "eval",
+            "--json",
+            f"{repo_root}#nixosConfigurations.vm-gui-config-dev.config.airlock.qubes.topology.domains",
+        ],
+        stdout=topology_json,
+    )
+    domains = json.loads(topology_json.read_text(encoding="utf-8"))
+    home = domains["usr-home"]
+    browser = domains["usr-browser"]
+
+    assert home["netvm"] is None
+    assert home["backend"]["state"]["persistent"] == "usr-home-private"
+    assert home["features"]["menu-items"] == ""
+    assert browser["netvm"] == "sys-firewall"
+    assert browser["backend"]["state"]["persistent"] == "usr-browser-private"
+    assert browser["features"]["menu-items"] == ""
+
+    home_guest = (repo_root / "lifecycle/misc/modules/usr-home-guest.nix").read_text(
+        encoding="utf-8"
+    )
+    browser_guest = (
+        repo_root / "lifecycle/misc/modules/usr-browser-guest.nix"
+    ).read_text(encoding="utf-8")
+    sys_gui_guest = (repo_root / "lifecycle/misc/modules/sys-gui-guest.nix").read_text(
+        encoding="utf-8"
+    )
+    runtime = (
+        repo_root / "lifecycle/bootstrap/initial-runtime-config/airlock/runtime.nix"
+    ).read_text(encoding="utf-8")
+
+    assert "pkgs.nautilus" in home_guest
+    assert "pkgs.firefox" in browser_guest
+    assert "airlock.OpenUrl" in browser_guest
+    assert "qubes.StartApp+org.gnome.Nautilus" in sys_gui_guest
+    assert "qubes.StartApp+firefox" in sys_gui_guest
+    assert "--auto --service usr-home" in sys_gui_guest
+    assert "--auto --service usr-browser" in sys_gui_guest
+    assert '"inode/directory" = "org.gnome.Nautilus.desktop"' in sys_gui_guest
+    assert '"x-scheme-handler/https" = "firefox.desktop"' in sys_gui_guest
+    assert "usr-home = {" in runtime
+    assert "usr-browser = {" in runtime
+    assert 'target = "usr-browser";' in runtime
+
+
 def check_cmd_role(repo_root: Path, log_dir: Path) -> None:
     shutil.rmtree(log_dir, ignore_errors=True)
     log_dir.mkdir(parents=True)
@@ -10580,6 +10633,10 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
             "airlock.Config.ArchiveCandidate * @anyvm @anyvm deny",
             "airlock.Config.ArchiveDeployment * dom0 sys-config-vault allow",
             "airlock.Config.ArchiveDeployment * @anyvm @anyvm deny",
+            "airlock.Config.Status * usr-cmd dom0 allow",
+            "airlock.Config.Check * usr-cmd dom0 allow",
+            "airlock.Config.Apply * usr-cmd dom0 allow",
+            "airlock.Config.Rollback * usr-cmd dom0 allow",
             "airlock.Config.Status * @anyvm @anyvm deny",
             "airlock.Config.Check * @anyvm @anyvm deny",
             "airlock.Config.Apply * @anyvm @anyvm deny",

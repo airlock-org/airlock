@@ -25,6 +25,8 @@ let
   sysFirewallRoleDefaults = import ./sys-firewall.nix { inherit networkDebug; };
   sysGuiRoleDefaults = import ./sys-gui.nix;
   cmdVmRoleDefaults = import ./usr-cmd.nix;
+  homeVmRoleDefaults = import ./usr-home.nix;
+  browserVmRoleDefaults = import ./usr-browser.nix;
 
   mkConfigDomainEntries =
     system:
@@ -168,6 +170,34 @@ let
       state = cmdVmRoleDefaults.state;
     };
 
+  mkPersonalVmDomainEntry =
+    system: name: defaults: guestModule:
+    let
+      qubeBuilders = mkAirlockQubeBuilders system;
+    in
+    qubeBuilders.mkNixNativeDomain {
+      inherit name;
+      guestRole = "base";
+      modules = [
+        ({ ... }: { networking.hostName = defaults.guestHostName; })
+        guestModule
+      ];
+      rootImageSizeMiB = defaults.rootImageSizeMiB;
+      kernelName = airlockQubesVmKernelName;
+      label = defaults.label;
+      netvm = defaults.netvm;
+      prefs = defaults.prefs;
+      features = defaults.features;
+      services = defaults.services;
+      state = defaults.state;
+    };
+
+  mkHomeVmDomainEntry = system:
+    mkPersonalVmDomainEntry system "usr-home" homeVmRoleDefaults ../../misc/modules/usr-home-guest.nix;
+
+  mkBrowserVmDomainEntry = system:
+    mkPersonalVmDomainEntry system "usr-browser" browserVmRoleDefaults ../../misc/modules/usr-browser-guest.nix;
+
   materializeNixClosureDomain =
     entry:
     entry.domain
@@ -198,6 +228,8 @@ in
     materializeNixClosureDomain
     mkConfigDomainEntries
     mkCmdVmDomainEntry
+    mkHomeVmDomainEntry
+    mkBrowserVmDomainEntry
     mkSysFirewallDomainEntry
     mkSysGuiDomainEntry
     mkSysNetDomainEntry

@@ -1,5 +1,6 @@
 {
   appliedMessage,
+  airlockSupport ? "/etc/airlock/config-inputs/airlock-support",
   pkgs ? null,
   system,
   templateBuilders ? null,
@@ -52,6 +53,48 @@
   #   };
   # };
   nixNative.domains = {
+    usr-home = {
+      role = "base";
+      configuration.imports = [
+        "${airlockSupport}/lifecycle/misc/modules/usr-home-guest.nix"
+      ];
+      label = "blue";
+      netvm = null;
+      rootImageSizeMiB = 1024;
+      prefs = {
+        include_in_backups = true;
+        memory = 2048;
+        maxmem = 4096;
+        vcpus = 2;
+      };
+      features = {
+        "airlock-role" = "usr-home";
+        "menu-items" = "";
+      };
+      services."network-manager" = false;
+      state.persistentSize = 17179869184;
+    };
+    usr-browser = {
+      role = "base";
+      configuration.imports = [
+        "${airlockSupport}/lifecycle/misc/modules/usr-browser-guest.nix"
+      ];
+      label = "yellow";
+      netvm = "sys-firewall";
+      rootImageSizeMiB = 1024;
+      prefs = {
+        include_in_backups = true;
+        memory = 2048;
+        maxmem = 4096;
+        vcpus = 2;
+      };
+      features = {
+        "airlock-role" = "usr-browser";
+        "menu-items" = "";
+      };
+      services."network-manager" = false;
+      state.persistentSize = 8589934592;
+    };
     usr-cmd = {
       role = "cmd";
       label = "yellow";
@@ -168,7 +211,14 @@
       default_netvm = "sys-firewall";
     };
     extraDomains = { };
-    extraQrexecRules = [ ];
+    extraQrexecRules = [
+      {
+        service = "airlock.OpenUrl";
+        source = "sys-gui";
+        target = "usr-browser";
+        action = "allow";
+      }
+    ];
   };
 
   # Config authority VMs are fixed-name Nix-native domains. guests.<role>

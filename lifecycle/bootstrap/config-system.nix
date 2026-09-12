@@ -82,6 +82,15 @@ in
 
     domains = airlockConfigDomains;
 
+    qrexecPolicy.rules = [
+      {
+        service = "airlock.OpenUrl";
+        source = "sys-gui";
+        target = "usr-browser";
+        action = "allow";
+      }
+    ];
+
     configAccessPolicy = {
       enable = true;
       vault = "sys-config-vault";

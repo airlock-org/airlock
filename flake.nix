@@ -192,6 +192,8 @@
         materializeNixClosureDomain
         mkConfigDomainEntries
         mkCmdVmDomainEntry
+        mkHomeVmDomainEntry
+        mkBrowserVmDomainEntry
         mkSysFirewallDomainEntry
         mkSysGuiDomainEntry
         mkSysNetDomainEntry
@@ -203,6 +205,8 @@
           bootstrapDomainEntriesSource = mkBootstrapDomains networkDebug;
           bootstrapDomainEntries = (mkConfigDomainEntries system) // {
             usr-cmd = bootstrapDomainEntriesSource.mkCmdVmDomainEntry system;
+            usr-home = bootstrapDomainEntriesSource.mkHomeVmDomainEntry system;
+            usr-browser = bootstrapDomainEntriesSource.mkBrowserVmDomainEntry system;
             sys-net = bootstrapDomainEntriesSource.mkSysNetDomainEntry system;
             sys-firewall = bootstrapDomainEntriesSource.mkSysFirewallDomainEntry system;
             sys-gui = bootstrapDomainEntriesSource.mkSysGuiDomainEntry system;

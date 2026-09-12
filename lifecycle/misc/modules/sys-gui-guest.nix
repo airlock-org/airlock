@@ -8,6 +8,45 @@ let
   cfg = config.airlock.sysGuiGuest;
   guiAgent = pkgs.qubes-gui-agent-linux;
   guestUser = config.airlock.qubeGuest.user;
+  filesLauncher = pkgs.writeShellScriptBin "airlock-launch-files" ''
+    set -eu
+    exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
+      --auto --service usr-home qubes.StartApp+org.gnome.Nautilus
+  '';
+  browserLauncher = pkgs.writeShellScriptBin "airlock-launch-browser" ''
+    set -eu
+    if [ "$#" -eq 0 ]; then
+      exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
+        --auto --service usr-browser qubes.StartApp+firefox
+    fi
+    # URI activation is deliberately a separate fixed RPC, rather than a
+    # general shell capability from sys-gui into the browser domain.
+    exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
+      --auto --service usr-browser "airlock.OpenUrl+$1"
+  '';
+  filesDesktop = pkgs.makeDesktopItem {
+    name = "org.gnome.Nautilus";
+    desktopName = "Files";
+    genericName = "File Manager";
+    exec = "airlock-launch-files";
+    icon = "org.gnome.Nautilus";
+    categories = [ "GNOME" "GTK" "Utility" "FileManager" ];
+    mimeTypes = [ "inode/directory" ];
+  };
+  browserDesktop = pkgs.makeDesktopItem {
+    name = "firefox";
+    desktopName = "Firefox";
+    genericName = "Web Browser";
+    exec = "airlock-launch-browser %u";
+    icon = "firefox";
+    categories = [ "Network" "WebBrowser" ];
+    mimeTypes = [
+      "x-scheme-handler/http"
+      "x-scheme-handler/https"
+      "text/html"
+      "application/xhtml+xml"
+    ];
+  };
   # LightDM owns the inner display and authenticates the desktop user. The
   # Qubes agent still owns the outer Xorg display (:1) forwarded to dom0.
   loginXserver = pkgs.writeShellScript "airlock-gui-login-xserver" ''
@@ -79,6 +118,10 @@ in
       pkgs.xorgserver
       pkgs.xdotool
       pkgs.xterm
+      filesLauncher
+      browserLauncher
+      filesDesktop
+      browserDesktop
     ];
 
     services.udev.packages = [ guiAgent ];
@@ -157,6 +200,16 @@ in
         "${pkgs.qubes-gui-daemon}/etc/xdg/autostart/qubes-icon-receiver.desktop";
       "xdg/autostart/qubes-screen-layout-watches.desktop".source =
         "${pkgs.qubes-gui-daemon}/etc/xdg/autostart/qubes-screen-layout-watches.desktop";
+    };
+
+    # Canonical desktop IDs keep XFCE's menu, launcher search, dock and MIME
+    # defaults pointed at the two user-facing domains instead of per-VM copies.
+    xdg.mime.defaultApplications = {
+      "inode/directory" = "org.gnome.Nautilus.desktop";
+      "x-scheme-handler/http" = "firefox.desktop";
+      "x-scheme-handler/https" = "firefox.desktop";
+      "text/html" = "firefox.desktop";
+      "application/xhtml+xml" = "firefox.desktop";
     };
 
     systemd.tmpfiles.rules = [
