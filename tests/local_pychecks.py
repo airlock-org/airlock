@@ -117,7 +117,9 @@ def _physical_path_list(repo_root: Path, path_list: str) -> str:
     ).stdout.strip()
 
 
-def _resolve_physical_store_path(repo_root: Path, path: Path) -> Path:
+def _resolve_physical_store_path(
+    repo_root: Path, path: Path, *, resolve_final: bool = True
+) -> Path:
     """Resolve a path whose symlinks may target the virtual ``/nix/store``."""
     resolved = Path(path.anchor)
     pending = list(path.parts[1:])
@@ -125,7 +127,7 @@ def _resolve_physical_store_path(repo_root: Path, path: Path) -> Path:
 
     while pending:
         candidate = resolved / pending.pop(0)
-        if not candidate.is_symlink():
+        if not candidate.is_symlink() or (not resolve_final and not pending):
             resolved = candidate
             continue
 
@@ -9989,19 +9991,30 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert "systemd-user-sessions.service" not in sys_net_packaged_qrexec_unit_text
     assert (
         "xen-netback"
-        in (sys_net_system_path / "etc/modules-load.d/nixos.conf")
+        in _resolve_physical_store_path(
+            repo_root,
+            sys_net_system_path / "etc/modules-load.d/nixos.conf",
+        )
         .read_text(encoding="utf-8")
         .split()
     )
     assert (
-        sys_net_system_path / "etc/systemd/system/xendriverdomain.service"
+        _resolve_physical_store_path(
+            repo_root,
+            sys_net_system_path / "etc/systemd/system/xendriverdomain.service",
+        )
     ).is_file()
     assert (
-        sys_net_system_path
-        / "etc/systemd/system/multi-user.target.wants/xendriverdomain.service"
+        _resolve_physical_store_path(
+            repo_root,
+            sys_net_system_path
+            / "etc/systemd/system/multi-user.target.wants/xendriverdomain.service",
+            resolve_final=False,
+        )
     ).is_symlink()
-    sys_net_vif_route_qubes = (
-        sys_net_system_path / "etc/xen/scripts/vif-route-qubes"
+    sys_net_vif_route_qubes = _resolve_physical_store_path(
+        repo_root,
+        sys_net_system_path / "etc/xen/scripts/vif-route-qubes",
     ).read_text(encoding="utf-8")
     assert "/usr/lib/systemd/systemd-sysctl" not in sys_net_vif_route_qubes
     assert "/lib/systemd/systemd-sysctl" in sys_net_vif_route_qubes
@@ -10679,26 +10692,22 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
         ],
         cwd=work_dir,
     ).stdout
-    profile_out = _run(
-        [
-            *nix_common,
-            "build",
-            "--impure",
-            "--offline",
-            "--no-write-lock-file",
-            "--out-link",
-            str(result_dir / "dom0-profile"),
-            f"{work_dir}#packages.x86_64-linux.airlock-dom0-profile",
-        ],
-        cwd=work_dir,
-    ).stdout
-    profile_physical = Path(
-        _physical_store_path(repo_root, os.readlink(result_dir / "dom0-profile"))
+    profile_drv_path = eval_work_raw(
+        "packages.x86_64-linux.airlock-dom0-profile.drvPath"
     )
+    profile_derivations = json.loads(
+        _run(
+            [*nix_common, "derivation", "show", profile_drv_path],
+            cwd=work_dir,
+        ).stdout
+    )["derivations"]
+    profile_build_command = next(iter(profile_derivations.values()))["env"][
+        "buildCommand"
+    ]
+    profile_source = work_dir / "dom0-profile"
     profile_json = json.loads(
-        (profile_physical / "share/airlock/profile.json").read_text(encoding="utf-8")
+        (profile_source / "share/airlock/profile.json").read_text(encoding="utf-8")
     )
-    assert profile_out is not None
     assert topology["schema"] == "airlock.qubes-topology.v1"
     assert topology["templates"] == {}
     assert topology["domains"]["sys-net"]["netvm"] is None
@@ -10732,7 +10741,15 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
     assert profile_json["schema"] == "airlock.dom0-profile.v1"
     assert profile_json["message"] == "initial"
     assert profile_json["built_by"] == "sys-config-staging"
-    assert (profile_physical / "bin/airlock-dom0-profile-activate").is_file()
+    assert (profile_source / "bin/airlock-dom0-profile-activate").is_file()
+    for expected in (
+        'mkdir -p "$out/bin" "$out/share/airlock"',
+        '"$out/share/airlock/profile.json"',
+        '"$out/bin/airlock-dom0-profile-activate"',
+        '"airlock.dom0-profile.v1"',
+        '"sys-config-staging"',
+    ):
+        assert expected in profile_build_command
 
     runtime_path = work_dir / "airlock/runtime.nix"
     negative_cases = [
