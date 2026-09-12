@@ -66,7 +66,10 @@
   boot.growPartition = false;
   fileSystems."/".device = lib.mkForce "/dev/disk/by-label/airlock-usb";
   fileSystems."/".autoResize = lib.mkForce false;
-  fileSystems."/boot".device = lib.mkForce "/dev/disk/by-label/AIRLOCK_EFI";
+  # NixOS's disk-image builder formats its EFI partition with this label before
+  # it invokes switch-to-configuration to install systemd-boot. Keep the
+  # runtime configuration aligned with that build-time filesystem.
+  fileSystems."/boot".device = lib.mkForce "/dev/disk/by-label/ESP";
   image = { baseName = "airlock-usb-dev"; format = "raw"; efiSupport = true; };
   virtualisation.diskSize = 65536;
   system.build.image = lib.mkForce (import "${modulesPath}/../lib/make-disk-image.nix" {
@@ -76,11 +79,6 @@
     partitionTableType = "efi";
     bootSize = "1G";
     label = "airlock-usb";
-    # The pinned upstream EFI layout starts the ESP at 8 MiB. Relabel only
-    # this build artifact, avoiding a generic ESP label on physical hardware.
-    postVM = ''
-      ${pkgs.mtools}/bin/mlabel -i "$out/${config.image.baseName}.img@@8388608" ::AIRLOCK_EFI
-    '';
     contents = [ {
       source = pkgs.writeText "airlock-usb-image" "airlock-usb-dev-v1\n";
       target = "/airlock-usb-image";
