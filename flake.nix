@@ -175,7 +175,7 @@
 
       mkBootstrapDomains =
         networkDebug:
-        import ./lifecycle/bootstrap/default-domains.nix {
+        import ./lifecycle/bootstrap/default-domains {
           inherit
             lib
             mkNixomeQubeBuilders
