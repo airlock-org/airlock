@@ -1,6 +1,6 @@
 {
   imports = [
-    ./vm-gui-base.nix
+    ./vm-gui.nix
     ./dev-mode.nix
   ];
 }

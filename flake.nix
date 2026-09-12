@@ -236,7 +236,7 @@
           specialArgs = lib.optionalAttrs configSystem (mkConfigSystemSpecialArgs system networkDebug);
           modules = [
             self.nixosModules.dom0
-            (if gui then ./lifecycle/image/profiles/vm-gui-base.nix else ./lifecycle/image/profiles/vm.nix)
+            (if gui then ./lifecycle/image/profiles/vm-gui.nix else ./lifecycle/image/profiles/vm.nix)
           ]
           ++ lib.optional devMode ./lifecycle/image/profiles/dev-mode.nix
           ++ lib.optional configSystem ./lifecycle/bootstrap/config-system.nix
