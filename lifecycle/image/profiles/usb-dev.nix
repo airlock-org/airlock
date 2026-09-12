@@ -50,17 +50,6 @@
   boot.loader.systemd-boot.configurationLimit = 5;
   boot.loader.timeout = 10;
   boot.loader.efi.canTouchEfiVariables = false;
-  # Never let boot-entry wildcard ordering select the hardware experiment.
-  # Run after upstream's Xen entry builder and dom0's recovery title update.
-  boot.loader.systemd-boot.extraInstallCommands = lib.mkOrder 1700 ''
-    normal_entry="$(${pkgs.findutils}/bin/find ${config.boot.loader.efi.efiSysMountPoint}/loader/entries \
-      -maxdepth 1 -type f -name 'xen-generation-*.conf' ! -name '*specialisation*' |
-      ${pkgs.coreutils}/bin/sort -V | ${pkgs.coreutils}/bin/tail -n 1)"
-    test -n "$normal_entry"
-    normal_entry="$(${pkgs.coreutils}/bin/basename "$normal_entry")"
-    ${pkgs.gnused}/bin/sed -i "s/^default .*/default $normal_entry/" \
-      ${config.boot.loader.efi.efiSysMountPoint}/loader/loader.conf
-  '';
   boot.initrd.systemd.enable = true;
   boot.kernelParams = [ "console=tty0" "console=hvc0" ];
   boot.growPartition = false;

@@ -20,7 +20,9 @@ reserves **only** `0000:04:00.0`, not audio, USB, PSP, ACP or storage functions.
 It blacklists dom0 AMD drivers and disables the firmware framebuffer. The
 lab is specific to the inspected ThinkPad; do not select it on other hardware.
 Do not activate a specialisation with `switch-to-configuration switch`: GPU
-ownership is established during boot. Do not make the lab the saved default.
+ownership is established during boot. The upstream systemd-boot/Xen builder
+keeps the normal generation as the default; do not manually make the lab entry
+the saved default.
 
 ## Ordered experiment
 
