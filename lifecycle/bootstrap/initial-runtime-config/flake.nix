@@ -412,8 +412,9 @@
           prefs = {
             autostart = false;
             include_in_backups = true;
-            memory = 512;
-            maxmem = 1024;
+            # Keep enough room for full candidate NixOS evaluation after apply.
+            memory = 2048;
+            maxmem = 4096;
             vcpus = 2;
           };
           features = {

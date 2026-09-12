@@ -8,8 +8,9 @@
     autostart = false;
     guivm = null;
     include_in_backups = true;
-    memory = 512;
-    maxmem = 1024;
+    # Evaluating the full candidate NixOS configurations exceeds 1 GiB.
+    memory = 2048;
+    maxmem = 4096;
     vcpus = 2;
   };
   features = {

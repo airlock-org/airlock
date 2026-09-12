@@ -9727,9 +9727,10 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         assert domains[config_domain]["prefs"]["autostart"] is False
     assert domains["sys-config-vault"]["prefs"]["memory"] == 256
     assert domains["sys-config-vault"]["prefs"]["maxmem"] == 512
-    for config_domain in ("sys-config-staging", "sys-config-validator"):
-        assert domains[config_domain]["prefs"]["memory"] == 512
-        assert domains[config_domain]["prefs"]["maxmem"] == 1024
+    assert domains["sys-config-staging"]["prefs"]["memory"] == 512
+    assert domains["sys-config-staging"]["prefs"]["maxmem"] == 1024
+    assert domains["sys-config-validator"]["prefs"]["memory"] == 2048
+    assert domains["sys-config-validator"]["prefs"]["maxmem"] == 4096
     assert domains["sys-net"]["class"] == "StandaloneVM"
     assert domains["sys-net"]["netvm"] is None
     assert domains["sys-net"]["prefs"]["provides_network"] is True
@@ -10814,6 +10815,8 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
     assert topology["domains"]["sys-firewall"]["prefs"]["autostart"] is True
     assert topology["domains"]["sys-firewall"]["prefs"]["provides_network"] is True
     assert topology["domains"]["sys-firewall"]["features"]["servicevm"] == "1"
+    assert topology["domains"]["sys-config-validator"]["prefs"]["memory"] == 2048
+    assert topology["domains"]["sys-config-validator"]["prefs"]["maxmem"] == 4096
     assert topology["prefs"]["default_netvm"] == "sys-firewall"
     assert "dev" not in topology["domains"]
     assert (

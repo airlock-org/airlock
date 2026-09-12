@@ -171,7 +171,7 @@ Builds and launches the current nested GUI dom0 image. The launcher uses
 QEMU/KVM, OVMF, `-cpu host`, and a writable qcow2 overlay under the generated
 VM directory. Defaults:
 
-- 8192 MiB RAM
+- 12288 MiB RAM
 - 4 vCPUs
 - SSH forwarded on `127.0.0.1:2222`
 - user `airlock`
@@ -180,10 +180,22 @@ VM directory. Defaults:
 Useful overrides:
 
 ```bash
-AIRLOCK_VM_MEMORY=12288 AIRLOCK_VM_SMP=6 make vm-gui-config-run
+AIRLOCK_VM_MEMORY=16384 AIRLOCK_VM_SMP=6 make vm-gui-config-run
 AIRLOCK_VM_SSH_PORT=2223 make vm-gui-config-run
 AIRLOCK_KEEP_VM=1 make vm-config-flow
 ```
+
+The config validator starts with 2048 MiB and can grow to 4096 MiB for NixOS
+candidate evaluation. A running warm VM retains its original outer RAM size.
+After increasing `AIRLOCK_VM_MEMORY` or the launcher default, power off nested
+dom0 and wait for QEMU to exit before running `make test-warm` again:
+
+```bash
+./lifecycle/misc/tools/scripts/ssh-nested-vm.sh 'sudo -n systemctl poweroff'
+```
+
+The next warm start reuses the existing disk; warm-baseline applies the updated
+config-domain memory settings before validation.
 
 Connect with:
 
