@@ -3292,6 +3292,7 @@ def check_config_vault_deployment_archive(repo_root: Path, log_dir: Path) -> Non
         "nix_domain_builds": "nix-domain-builds.json",
         "nix_domain_materializations": "nix-domain-materializations.json",
         "unsupported_domain_backends": "unsupported-domain-backends.json",
+        "domain_references": "domain-references.json",
         "validated_topology": "validated-topology.json",
         "validation": "validation.json",
         "manifest": "manifest.json",
@@ -3348,6 +3349,11 @@ def check_config_vault_deployment_archive(repo_root: Path, log_dir: Path) -> Non
         "unsupported-domain-backends.json": {
             "schema": "airlock.unsupported-domain-backends.v1",
             "domains": [],
+        },
+        "domain-references.json": {
+            "schema": "airlock.domain-references.v1",
+            "status": "passed",
+            "missing": [],
         },
         "system.json": {
             "schema": "airlock.system.v1",
@@ -3469,6 +3475,7 @@ def check_config_vault_deployment_archive(repo_root: Path, log_dir: Path) -> Non
             "nix-domain-builds.json",
             "nix-domain-materializations.json",
             "unsupported-domain-backends.json",
+            "domain-references.json",
             "system.json",
             "resolved-system.json",
             "system-plan.json",
@@ -3525,6 +3532,7 @@ def check_config_vault_deployment_archive(repo_root: Path, log_dir: Path) -> Non
         "nix-domain-builds.json",
         "nix-domain-materializations.json",
         "unsupported-domain-backends.json",
+        "domain-references.json",
         "logs/host-system-activation.log",
         "logs/systemd-actions.log",
     ):

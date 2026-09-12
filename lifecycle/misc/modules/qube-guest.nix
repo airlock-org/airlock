@@ -2049,6 +2049,7 @@ let
         $0 != "nix-domain-builds.json" &&
         $0 != "nix-domain-materializations.json" &&
         $0 != "unsupported-domain-backends.json" &&
+        $0 != "domain-references.json" &&
         $0 != "system.json" &&
         $0 != "resolved-system.json" &&
         $0 != "system-plan.json" &&
@@ -2088,6 +2089,7 @@ let
       nix-domain-builds.json \
       nix-domain-materializations.json \
       unsupported-domain-backends.json \
+      domain-references.json \
       system.json \
       resolved-system.json \
       system-plan.json \
@@ -2127,6 +2129,9 @@ let
     validation_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/validation.json")"
     validation_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
     validation_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
+
+    domain_references_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/domain-references.json")"
+    domain_references_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/domain-references.json")"
 
     [ "$deployment_schema" = "airlock.config-deployment.v1" ] || {
       printf 'unsupported deployment schema: %s\n' "$deployment_schema" >&2
@@ -2187,6 +2192,14 @@ let
     }
     [ "$unsupported_domain_backends_schema" = "airlock.unsupported-domain-backends.v1" ] || {
       printf 'unsupported domain backend report schema: %s\n' "$unsupported_domain_backends_schema" >&2
+      exit 1
+    }
+    [ "$domain_references_schema" = "airlock.domain-references.v1" ] || {
+      printf 'unsupported domain references schema: %s\n' "$domain_references_schema" >&2
+      exit 1
+    }
+    [ "$domain_references_status" = passed ] || {
+      printf 'domain references did not pass: %s\n' "$domain_references_status" >&2
       exit 1
     }
     [ "$system_schema" = "airlock.system.v1" ] || {
@@ -2267,6 +2280,7 @@ let
       nix-domain-builds.json \
       nix-domain-materializations.json \
       unsupported-domain-backends.json \
+      domain-references.json \
       system.json \
       resolved-system.json \
       system-plan.json \
