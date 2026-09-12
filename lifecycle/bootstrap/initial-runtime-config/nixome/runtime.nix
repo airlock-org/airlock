@@ -63,8 +63,8 @@
         autostart = true;
         guivm = "dom0";
         include_in_backups = true;
-        memory = 2048;
-        maxmem = 4096;
+        memory = 1024;
+        maxmem = 2048;
         vcpus = 2;
       };
       features = {
@@ -87,8 +87,8 @@
       prefs = {
         autostart = true;
         include_in_backups = true;
-        memory = 768;
-        maxmem = 1024;
+        memory = 256;
+        maxmem = 512;
         provides_network = true;
         vcpus = 2;
         virt_mode = "hvm";
@@ -120,8 +120,8 @@
       prefs = {
         autostart = true;
         include_in_backups = true;
-        memory = 500;
-        maxmem = 1024;
+        memory = 256;
+        maxmem = 512;
         provides_network = true;
         vcpus = 1;
       };

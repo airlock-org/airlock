@@ -367,8 +367,8 @@
           prefs = {
             autostart = false;
             include_in_backups = true;
-            memory = 1024;
-            maxmem = 2048;
+            memory = 256;
+            maxmem = 512;
             vcpus = 1;
           };
           features = {
@@ -389,8 +389,8 @@
           prefs = {
             autostart = false;
             include_in_backups = true;
-            memory = 2048;
-            maxmem = 4096;
+            memory = 512;
+            maxmem = 1024;
             vcpus = 2;
           };
           features = {
@@ -412,8 +412,8 @@
           prefs = {
             autostart = false;
             include_in_backups = true;
-            memory = 2048;
-            maxmem = 4096;
+            memory = 512;
+            maxmem = 1024;
             vcpus = 2;
           };
           features = {

@@ -24,7 +24,7 @@ let
   devNetworkProxyUrl = "http://${devNetworkProxyListen}";
   sysGuiVisibleSystemDomains = lib.filter (
     name: lib.hasPrefix "sys-" name
-  ) (builtins.attrNames config.nixome.qubes.topology.domains);
+  ) (builtins.attrNames config.nixome.qubes.domains);
   devNetworkProxyEnv = {
     http_proxy = devNetworkProxyUrl;
     https_proxy = devNetworkProxyUrl;

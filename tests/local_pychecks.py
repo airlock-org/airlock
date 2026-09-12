@@ -9594,18 +9594,26 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
         "sys-config-validator",
     ):
         assert domains[config_domain]["prefs"]["autostart"] is False
+    assert domains["sys-config-vault"]["prefs"]["memory"] == 256
+    assert domains["sys-config-vault"]["prefs"]["maxmem"] == 512
+    for config_domain in ("sys-config-staging", "sys-config-validator"):
+        assert domains[config_domain]["prefs"]["memory"] == 512
+        assert domains[config_domain]["prefs"]["maxmem"] == 1024
     assert domains["sys-net"]["class"] == "StandaloneVM"
     assert domains["sys-net"]["netvm"] is None
     assert domains["sys-net"]["prefs"]["provides_network"] is True
     assert domains["sys-net"]["prefs"]["guivm"] is None
     assert domains["sys-net"]["prefs"]["virt_mode"] == "hvm"
+    assert domains["sys-net"]["prefs"]["memory"] == 256
+    assert domains["sys-net"]["prefs"]["maxmem"] == 512
     assert domains["sys-net"]["services"]["network-manager"] is True
     assert domains["sys-net"]["services"]["qubes-updates-proxy"] is True
     assert domains["sys-firewall"]["class"] == "StandaloneVM"
     assert domains["sys-firewall"]["netvm"] == "sys-net"
     assert domains["sys-firewall"]["label"] == "green"
     assert domains["sys-firewall"]["prefs"]["autostart"] is True
-    assert domains["sys-firewall"]["prefs"]["memory"] == 500
+    assert domains["sys-firewall"]["prefs"]["memory"] == 256
+    assert domains["sys-firewall"]["prefs"]["maxmem"] == 512
     assert domains["sys-firewall"]["prefs"]["provides_network"] is True
     assert domains["sys-firewall"]["prefs"]["guivm"] is None
     assert domains["sys-firewall"]["features"]["nixome-role"] == "sys-firewall"
@@ -9614,6 +9622,8 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     assert domains["sys-firewall"]["services"]["qubes-firewall"] is True
     assert domains["sys-firewall"]["services"]["qubes-network"] is True
     assert domains["sys-firewall"]["services"]["qubes-updates-proxy"] is True
+    assert domains["sys-gui"]["prefs"]["memory"] == 1024
+    assert domains["sys-gui"]["prefs"]["maxmem"] == 2048
     assert network_debug_domains["sys-net"]["prefs"]["autostart"] is True
     assert network_debug_domains["sys-firewall"]["prefs"]["autostart"] is False
     assert network_debug_domains["sys-config-vault"]["prefs"]["autostart"] is False

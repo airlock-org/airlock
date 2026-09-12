@@ -24,8 +24,8 @@ let
         autostart = false;
         guivm = null;
         include_in_backups = true;
-        memory = 1024;
-        maxmem = 2048;
+        memory = 256;
+        maxmem = 512;
         vcpus = 1;
       };
       features = {
@@ -46,8 +46,8 @@ let
         autostart = false;
         guivm = null;
         include_in_backups = true;
-        memory = 2048;
-        maxmem = 4096;
+        memory = 512;
+        maxmem = 1024;
         vcpus = 2;
       };
       features = {
@@ -69,8 +69,8 @@ let
         autostart = false;
         guivm = null;
         include_in_backups = true;
-        memory = 2048;
-        maxmem = 4096;
+        memory = 512;
+        maxmem = 1024;
         vcpus = 2;
       };
       features = {
@@ -94,8 +94,8 @@ let
       autostart = true;
       guivm = null;
       include_in_backups = true;
-      memory = 768;
-      maxmem = 1024;
+      memory = 256;
+      maxmem = 512;
       provides_network = true;
       vcpus = 2;
       virt_mode = "hvm";
@@ -123,8 +123,8 @@ let
       autostart = !networkDebug;
       guivm = null;
       include_in_backups = true;
-      memory = 500;
-      maxmem = 1024;
+      memory = 256;
+      maxmem = 512;
       provides_network = true;
       vcpus = 1;
     };
@@ -151,8 +151,8 @@ let
       autostart = true;
       guivm = "dom0";
       include_in_backups = true;
-      memory = 2048;
-      maxmem = 4096;
+      memory = 1024;
+      maxmem = 2048;
       vcpus = 2;
     };
     features = {
