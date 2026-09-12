@@ -37,6 +37,9 @@ VM_IMAGE_ATTR ?= airlock-vm-$(VM_IMAGE_MODE_SUFFIX)-image
 VM_GUI_IMAGE_ATTR ?= airlock-vm-gui-$(VM_IMAGE_MODE_SUFFIX)-image
 VM_GUI_CONFIG_IMAGE_ATTR ?= airlock-vm-gui-config-$(VM_IMAGE_MODE_SUFFIX)-image
 VM_GUI_CONFIG_NETWORK_DEBUG_IMAGE_ATTR ?= airlock-vm-gui-config-network-debug-image
+VM_GUI_MINIMAL_IMAGE_ATTR ?= airlock-vm-gui-minimal-image
+VM_GUI_MINIMAL_DIR ?= $(or $(AIRLOCK_DATA_ROOT),$(CURDIR)/.airlock)/vm-gui-minimal
+VM_GUI_MINIMAL_SSH_PORT ?= 2332
 AIRLOCK_VM_GDK_BACKEND ?= x11
 VM_PARALLEL_IMAGE_ATTR ?= $(VM_GUI_CONFIG_IMAGE_ATTR)
 VM_PARALLEL_IMAGE_LINK ?= $(AIRLOCK_RESULT_LINK_DIR)/$(VM_PARALLEL_IMAGE_ATTR)-parallel-shared-result
@@ -75,6 +78,7 @@ PYTHON_FILES := \
 	tests/test_vm.py \
 	tests/test_vm_staged.py \
 	tests/test_gpu.py \
+	tests/test_gui_minimal.py \
 	lifecycle/misc/tools/pkgs/airlock-gpu-probe/src/gpu-probe.py
 
 PYTEST_LOG_DIR = $${AIRLOCK_LOG_DIR:-.airlock-logs}
@@ -87,7 +91,7 @@ PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
 PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
-PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py)
+PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 VM_STAGED_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm_staged.py::test_staged_vm_step[$(test)]')
 VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow
@@ -117,6 +121,17 @@ build: ensure-generated-dirs
 test-quick: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
 	uv run pytest $(PYTEST_DEFAULT_TARGETS) $(PYTEST_SELECTED) $(PYTEST_WORKERS) $(PYTEST_DISTRIBUTION) $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
+
+.PHONY: vm-gui-minimal-image vm-gui-minimal-run vm-gui-minimal-ssh
+
+vm-gui-minimal-image: ensure-generated-dirs
+	$(AIRLOCK_NIX) build .#$(VM_GUI_MINIMAL_IMAGE_ATTR) --out-link "$(AIRLOCK_RESULT_LINK_DIR)/gui-minimal-image" --print-build-logs
+
+vm-gui-minimal-run: ensure-generated-dirs
+	AIRLOCK_VM_DIR="$(VM_GUI_MINIMAL_DIR)" AIRLOCK_VM_SSH_PORT="$(VM_GUI_MINIMAL_SSH_PORT)" AIRLOCK_VM_IMAGE_ATTR="$(VM_GUI_MINIMAL_IMAGE_ATTR)" AIRLOCK_VM_MEMORY="$${AIRLOCK_VM_MEMORY:-8192}" AIRLOCK_VM_SYSNET_NIC=0 ./lifecycle/misc/tools/scripts/run-nested-vm.sh
+
+vm-gui-minimal-ssh:
+	AIRLOCK_VM_SSH_PORT="$(VM_GUI_MINIMAL_SSH_PORT)" ./lifecycle/misc/tools/scripts/ssh-nested-vm.sh
 
 .PHONY: vm-gpu-lab-image vm-gpu-lab-run vm-gpu-lab-test
 

@@ -2,6 +2,13 @@
 
 ## Agreed hardware split
 
+`sys-gui` is the standard desktop domain and gets the only GPU on a single-GPU
+machine. `sys-gpu` is an optional, customized service for additional internal
+or external GPUs; it must not borrow the desktop GPU when its own device is
+absent. Current work focuses on the [minimal sys-gui image](sys-gui.md).
+The GPU lab below is retained as earlier opt-in groundwork, not the default
+profile or a verified physical GPU setup.
+
 The intended deployment assigns **AMD integrated graphics to `sys-gui`** and
 the **NVIDIA RTX 3090 to `sys-gpu`**. Hyprland is a future `sys-gui` experiment;
 XFCE stays in place now. AI inference is also deferred. When added, the

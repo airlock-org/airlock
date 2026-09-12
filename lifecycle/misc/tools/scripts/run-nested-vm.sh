@@ -15,6 +15,7 @@ SSH_PASSWORD="${AIRLOCK_VM_SSH_PASSWORD:-airlock}"
 DISPLAY_MODE="${AIRLOCK_VM_DISPLAY:-none}"
 VGA="${AIRLOCK_VM_VGA:-std}"
 IOMMU="${AIRLOCK_VM_IOMMU:-1}"
+SYSNET_NIC="${AIRLOCK_VM_SYSNET_NIC:-1}"
 BACKUP_RETENTION="${AIRLOCK_VM_BACKUP_RETENTION:-1}"
 FRESH="${AIRLOCK_VM_FRESH:-0}"
 SKIP_BASE_BUILD="${AIRLOCK_VM_SKIP_BASE_BUILD:-0}"
@@ -56,6 +57,15 @@ case "$IOMMU" in
     ;;
   *)
     printf 'error: AIRLOCK_VM_IOMMU must be 0 or 1\n' >&2
+    exit 1
+    ;;
+esac
+
+case "$SYSNET_NIC" in
+  0 | 1)
+    ;;
+  *)
+    printf 'error: AIRLOCK_VM_SYSNET_NIC must be 0 or 1\n' >&2
     exit 1
     ;;
 esac
@@ -245,6 +255,16 @@ if [ "$IOMMU" = "1" ]; then
   iommu_args=(-device intel-iommu,intremap=on,caching-mode=on)
 fi
 
+sysnet_args=()
+sysnet_description="disabled"
+if [ "$SYSNET_NIC" = "1" ]; then
+  sysnet_args=(
+    -device virtio-net-pci,disable-legacy=on,iommu_platform=on,vectors=0,netdev=sysnet0
+    -netdev user,id=sysnet0
+  )
+  sysnet_description="separate QEMU user network, requires a sys-net topology assignment"
+fi
+
 cat <<EOF
 starting VM
   image attr: .#$IMAGE_ATTR
@@ -258,7 +278,7 @@ starting VM
   memory: ${MEMORY} MiB
   ssh: AIRLOCK_VM_SSH_PORT=$SSH_PORT $ROOT/lifecycle/misc/tools/scripts/ssh-nested-vm.sh
   dom0 NIC: QEMU user network with SSH forwarding
-  sys-net NIC: separate QEMU user network, auto-assigned by setup-config
+  sys-net NIC: $sysnet_description
   login: $SSH_USER / $SSH_PASSWORD
   monitor: $MONITOR_SOCKET
 
@@ -282,8 +302,7 @@ airlock_exec_store_path "$qemu_out/bin/qemu-system-x86_64" \
   -vga "$VGA" \
   -device virtio-net-pci,netdev=net0 \
   -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22" \
-  -device virtio-net-pci,disable-legacy=on,iommu_platform=on,vectors=0,netdev=sysnet0 \
-  -netdev "user,id=sysnet0" \
+  "${sysnet_args[@]}" \
   -device virtio-rng-pci \
   -monitor "unix:$MONITOR_SOCKET,server=on,wait=off" \
   -no-reboot \

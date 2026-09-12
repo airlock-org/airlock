@@ -60,6 +60,18 @@ make build
 Builds `.#nixosConfigurations.test.config.system.build.toplevel`.
 
 ```bash
+make vm-gui-minimal-image
+AIRLOCK_VM_DISPLAY=gtk make vm-gui-minimal-run
+make vm-gui-minimal-ssh
+```
+
+Builds and launches a separate dom0 + `sys-gui` image with the existing hybrid
+XFCE desktop. It omits the other VM images and application launchers, uses a
+dedicated disk directory and SSH port `2332`, and does not assign physical
+GPUs. See [sys-gui baseline](docs/sys-gui.md) for scope, test credentials and
+the later AMD direct-display milestone. This new profile has not been tested.
+
+```bash
 make vm-gui-config-image
 make vm-gui-config-run
 ```

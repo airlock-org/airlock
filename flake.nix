@@ -228,6 +228,13 @@
         inherit airlockConfigInputs;
       };
 
+      mkMinimalSysGuiDomainEntry =
+        system:
+        bootstrapDomains.mkSysGuiDomainEntryWith system {
+          personalLaunchers = false;
+          configurationName = "airlock-domain-sys-gui-minimal";
+        };
+
       mkVmConfiguration =
         {
           system ? "x86_64-linux",
@@ -236,23 +243,34 @@
           devMode ? true,
           networkDebug ? false,
           gpuLab ? false,
+          guiMinimal ? false,
         }:
+        assert !guiMinimal || (gui && !configSystem && !gpuLab);
         lib.nixosSystem {
           inherit system;
-          specialArgs = lib.optionalAttrs configSystem (
-            (mkConfigSystemSpecialArgs system networkDebug)
-            // lib.optionalAttrs gpuLab {
-              airlockConfigDomains = (mkBootstrapConfigDomains system networkDebug) // {
-                sys-gpu = materializeNixClosureDomain (mkSysGpuDomainEntry system);
+          specialArgs =
+            lib.optionalAttrs configSystem (
+              (mkConfigSystemSpecialArgs system networkDebug)
+              // lib.optionalAttrs gpuLab {
+                airlockConfigDomains = (mkBootstrapConfigDomains system networkDebug) // {
+                  sys-gpu = materializeNixClosureDomain (mkSysGpuDomainEntry system);
+                };
+              }
+            )
+            // lib.optionalAttrs guiMinimal {
+              airlockQubeKernel = {
+                name = airlockQubesVmKernelName;
+                package = self.packages.${system}.airlock-qubes-vm-kernel;
               };
-            }
-          );
+              airlockGuiDomain = materializeNixClosureDomain (mkMinimalSysGuiDomainEntry system);
+            };
           modules = [
             self.nixosModules.dom0
             (if gui then ./lifecycle/image/profiles/vm-gui.nix else ./lifecycle/image/profiles/vm.nix)
           ]
           ++ lib.optional devMode ./lifecycle/image/profiles/dev-mode.nix
           ++ lib.optional configSystem ./lifecycle/bootstrap/config-system.nix
+          ++ lib.optional guiMinimal ./lifecycle/image/profiles/vm-gui-minimal.nix
           ++ lib.optional (configSystem && devMode) (
             { ... }:
             {
@@ -413,6 +431,9 @@
           airlock-domain-sys-gpu-root-image = (mkSysGpuDomainEntry system).rootImage;
           airlock-domain-sys-gpu-store-closure = (mkSysGpuDomainEntry system).storeArtifact;
           airlock-vm-gpu-lab-image = self.nixosConfigurations.vm-gpu-lab.config.system.build.image;
+          airlock-vm-gui-minimal-image = self.nixosConfigurations.vm-gui-minimal.config.system.build.image;
+          airlock-domain-sys-gui-minimal-root-image = (mkMinimalSysGuiDomainEntry system).rootImage;
+          airlock-domain-sys-gui-minimal-store-closure = (mkMinimalSysGuiDomainEntry system).storeArtifact;
           airlock-qubes-vm-kernel = pkgs.repackRpmKernel {
             kernelSrc = pkgs.fetchurl {
               url = "https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm";
@@ -515,6 +536,16 @@
         devMode = false;
       };
       nixosConfigurations.vm-gui = self.nixosConfigurations."vm-gui-dev";
+
+      # Minimal nested desktop harness. No physical GPU assignment and no
+      # dependency on the full bootstrap/configuration VM topology.
+      nixosConfigurations.vm-gui-minimal = mkVmConfiguration {
+        gui = true;
+        guiMinimal = true;
+        devMode = false;
+      };
+      nixosConfigurations.airlock-domain-sys-gui-minimal =
+        (mkMinimalSysGuiDomainEntry "x86_64-linux").configuration;
 
       nixosConfigurations."vm-gui-config-dev" = mkVmConfiguration {
         gui = true;

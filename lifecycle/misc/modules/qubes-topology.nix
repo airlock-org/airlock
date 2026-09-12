@@ -604,6 +604,15 @@ in
         description = "Run setup-config once during dom0 boot to ensure the declared Qubes topology exists.";
       };
 
+      scope = lib.mkOption {
+        type = lib.types.enum [
+          "boot-critical"
+          "all"
+        ];
+        default = "boot-critical";
+        description = "Provision boot-critical domains first, or the complete topology in a single boot unit.";
+      };
+
       logDir = lib.mkOption {
         type = lib.types.str;
         default = "/var/log/airlock";
@@ -898,7 +907,9 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${setupConfig}/bin/airlock-setup-config --apply --boot-critical";
+        ExecStart =
+          "${setupConfig}/bin/airlock-setup-config --apply"
+          + lib.optionalString (cfg.setupConfigOnBoot.scope == "boot-critical") " --boot-critical";
       };
     };
 

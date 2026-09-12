@@ -122,17 +122,23 @@ let
       services = sysFirewallRoleDefaults.services;
     };
 
-  mkSysGuiDomainEntry =
+  mkSysGuiDomainEntryWith =
     system:
+    {
+      personalLaunchers ? true,
+      configurationName ? "airlock-domain-sys-gui",
+    }:
     let
       qubeBuilders = mkAirlockQubeBuilders system;
     in
     qubeBuilders.mkNixNativeDomain {
       name = "sys-gui";
       guestRole = "sys-gui";
+      inherit configurationName;
       modules = [
         ({ ... }: {
           networking.hostName = sysGuiRoleDefaults.guestHostName;
+          airlock.sysGuiGuest.personalLaunchers.enable = personalLaunchers;
           # Development/bootstrap login, matching the nested image password.
           # Real deployments supply their own NixOS password configuration.
           users.users.user.initialPassword = "airlock";
@@ -146,6 +152,8 @@ let
       features = sysGuiRoleDefaults.features;
       services = sysGuiRoleDefaults.services;
     };
+
+  mkSysGuiDomainEntry = system: mkSysGuiDomainEntryWith system { };
 
   mkCmdVmDomainEntry =
     system:
@@ -232,6 +240,7 @@ in
     mkBrowserVmDomainEntry
     mkSysFirewallDomainEntry
     mkSysGuiDomainEntry
+    mkSysGuiDomainEntryWith
     mkSysNetDomainEntry
     sysFirewallRoleDefaults
     sysGuiRoleDefaults

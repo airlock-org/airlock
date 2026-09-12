@@ -148,6 +148,11 @@ let
 in
 {
   options.airlock.sysGuiGuest.enable = lib.mkEnableOption "the Airlock hybrid sys-gui role";
+  options.airlock.sysGuiGuest.personalLaunchers.enable = lib.mkOption {
+    type = lib.types.bool;
+    default = true;
+    description = "Install Files and Firefox launchers targeting usr-home and usr-browser.";
+  };
 
   config = lib.mkIf cfg.enable {
     boot.kernelModules = [
@@ -172,6 +177,8 @@ in
       pkgs.xorgserver
       pkgs.xdotool
       pkgs.xterm
+    ]
+    ++ lib.optionals cfg.personalLaunchers.enable [
       filesLauncher
       browserLauncher
       filesDesktop
@@ -254,19 +261,21 @@ in
         "${pkgs.qubes-gui-daemon}/etc/xdg/autostart/qubes-icon-receiver.desktop";
       "xdg/autostart/qubes-screen-layout-watches.desktop".source =
         "${pkgs.qubes-gui-daemon}/etc/xdg/autostart/qubes-screen-layout-watches.desktop";
-      "xdg/autostart/airlock-bootstrap-desktop-launchers.desktop".text = ''
-        [Desktop Entry]
-        Type=Application
-        Name=Airlock desktop bootstrap
-        Exec=${panelLaunchers}
-        OnlyShowIn=XFCE;
-        X-GNOME-Autostart-Phase=Panel
-      '';
+      "xdg/autostart/airlock-bootstrap-desktop-launchers.desktop" = lib.mkIf cfg.personalLaunchers.enable {
+        text = ''
+          [Desktop Entry]
+          Type=Application
+          Name=Airlock desktop bootstrap
+          Exec=${panelLaunchers}
+          OnlyShowIn=XFCE;
+          X-GNOME-Autostart-Phase=Panel
+        '';
+      };
     };
 
     # Canonical desktop IDs keep XFCE's menu, launcher search, dock and MIME
     # defaults pointed at the two user-facing domains instead of per-VM copies.
-    xdg.mime.defaultApplications = {
+    xdg.mime.defaultApplications = lib.mkIf cfg.personalLaunchers.enable {
       "inode/directory" = "org.gnome.Nautilus.desktop";
       "x-scheme-handler/http" = "firefox.desktop";
       "x-scheme-handler/https" = "firefox.desktop";
