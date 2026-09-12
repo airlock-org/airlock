@@ -9480,7 +9480,11 @@ def check_config_validator_candidate(repo_root: Path, log_dir: Path) -> None:
         for check in validation["checks"]
     )
     assert any(
-        check["name"] == "nix-flake-check" and check["status"] == "passed"
+        check["name"] == "nix-flake-check-no-build" and check["status"] == "passed"
+        for check in validation["checks"]
+    )
+    assert any(
+        check["name"] == "nix-flake-check" and check["status"] == "skipped"
         for check in validation["checks"]
     )
     assert topology["schema"] == "airlock.qubes-topology.v1"
@@ -9520,14 +9524,7 @@ def check_config_validator_candidate(repo_root: Path, log_dir: Path) -> None:
               ];
             };
 
-            airlock.topology = {
-              schema = "airlock.qubes-topology.v1";
-              templates = { };
-              kernels = { };
-              domains = { };
-              prefs = { };
-              qrexec_policy.rules = [ ];
-            };
+            airlock.topology = throw "failing topology fixture";
 
             airlock.system = {
               schema = "airlock.system.v1";
@@ -9624,7 +9621,7 @@ def check_config_validator_candidate(repo_root: Path, log_dir: Path) -> None:
     assert fail_validation["status"] == "failed"
     assert fail_validation["commit"] == fail_commit
     assert any(
-        check["name"] == "nix-flake-check" and check["status"] == "failed"
+        check["name"] == "nix-eval-airlock-topology" and check["status"] == "failed"
         for check in fail_validation["checks"]
     )
     assert any(

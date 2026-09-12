@@ -1068,11 +1068,20 @@ let
     set -eu
 
     validation_dir="''${AIRLOCK_CONFIG_VALIDATION_DIR:-${cfg.configValidationPath}}"
+    run_full_flake_check="''${AIRLOCK_CONFIG_VALIDATION_BUILD:-0}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
     candidate_tar="$tmpdir/candidate.tar"
     ${pkgs.coreutils}/bin/cat > "$candidate_tar"
+    case "$run_full_flake_check" in
+      0|1)
+        ;;
+      *)
+        printf 'AIRLOCK_CONFIG_VALIDATION_BUILD must be 0 or 1\n' >&2
+        exit 2
+        ;;
+    esac
     ${pkgs.gnutar}/bin/tar -tf "$candidate_tar" |
       ${pkgs.gawk}/bin/awk '
         $0 != "config.bundle" && $0 != "manifest.json" {
@@ -1534,7 +1543,7 @@ let
         mark_failed "nix flake check --no-build failed"
       fi
       ${pkgs.coreutils}/bin/cp "$local_flake_log" "$flake_log"
-      if [ "$flake_status" = passed ]; then
+      if [ "$flake_status" = passed ] && [ "$run_full_flake_check" = 1 ]; then
         if ${configNix}/bin/airlock-config-nix \
           --extra-experimental-features nix-command \
           --extra-experimental-features flakes \
@@ -1549,6 +1558,8 @@ let
           mark_failed "nix flake check failed"
         fi
         ${pkgs.coreutils}/bin/cp "$local_flake_tests_log" "$flake_tests_log"
+      elif [ "$flake_status" = passed ]; then
+        printf 'skipped offline full flake build; set AIRLOCK_CONFIG_VALIDATION_BUILD=1 when all build inputs are preloaded\n' > "$flake_tests_log"
       else
         printf 'skipped because nix flake check --no-build did not pass\n' > "$flake_tests_log"
       fi
