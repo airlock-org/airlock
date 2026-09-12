@@ -54,6 +54,7 @@
   boot.growPartition = false;
   fileSystems."/".device = lib.mkForce "/dev/disk/by-label/airlock-usb";
   fileSystems."/".autoResize = lib.mkForce false;
+  fileSystems."/boot".device = lib.mkForce "/dev/disk/by-label/AIRLOCK_EFI";
   image = { baseName = "airlock-usb-dev"; format = "raw"; efiSupport = true; };
   virtualisation.diskSize = 65536;
   system.build.image = lib.mkForce (import "${modulesPath}/../lib/make-disk-image.nix" {
@@ -63,12 +64,33 @@
     partitionTableType = "efi";
     bootSize = "1G";
     label = "airlock-usb";
+    # The pinned upstream EFI layout starts the ESP at 8 MiB. Relabel only
+    # this build artifact, avoiding a generic ESP label on physical hardware.
+    postVM = ''
+      ${pkgs.mtools}/bin/mlabel -i "$out/${config.image.baseName}.img@@8388608" ::AIRLOCK_EFI
+    '';
+    contents = [ {
+      source = pkgs.writeText "airlock-usb-image" "airlock-usb-dev-v1\n";
+      target = "/airlock-usb-image";
+    } ];
   });
 
   services.journald.extraConfig = "Storage=persistent\nSystemMaxUse=1G";
   environment.etc."airlock/usb-dev".text = "airlock-usb-dev-v1\n";
   environment.systemPackages = with pkgs; [
-    curl jq gnumake python3 cryptsetup rsync xdotool
+    curl jq gnumake python3 cryptsetup rsync xdotool e2fsprogs openssl
+    (writeShellScriptBin "airlock-usb" ''
+      export PATH=${lib.makeBinPath [ coreutils util-linux cryptsetup e2fsprogs git openssh openssl ]}:$PATH
+      exec ${python3}/bin/python3 ${../tools/usb-dev.py} "$@"
+    '')
+    (lib.hiPrio (writeShellScriptBin "codex" ''
+      if ! ${util-linux}/bin/mountpoint -q /home/airlock/.codex; then
+        echo 'Unlock the encrypted credentials first: sudo airlock-usb vault-unlock' >&2
+        exit 1
+      fi
+      export CODEX_HOME=/home/airlock/.codex
+      exec ${codex}/bin/codex "$@"
+    ''))
   ];
   systemd.tmpfiles.rules = [
     "d /var/lib/airlock/usb 0700 root root - -"

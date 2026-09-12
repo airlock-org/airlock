@@ -1,6 +1,7 @@
 # USB development track
 
-Status: implementation in progress; no builds or tests authorized for this change.
+Status: USB profile and provisioning tools implemented, unbuilt and untested.
+See [the runbook](usb-dev.md) for commands. No builds or tests authorized for this change.
 
 Scope: ThinkPad T14 Gen 3 AMD (21CFCTO1WW), persistent removable development
 system, dom0 + sys-gui only. No sys-gpu, inference or Hyprland work yet.

@@ -79,6 +79,8 @@ PYTHON_FILES := \
 	tests/test_vm_staged.py \
 	tests/test_gpu.py \
 	tests/test_gui_minimal.py \
+	tests/test_usb_dev.py \
+	lifecycle/image/tools/usb-dev.py \
 	lifecycle/misc/tools/pkgs/airlock-gpu-probe/src/gpu-probe.py
 
 PYTEST_LOG_DIR = $${AIRLOCK_LOG_DIR:-.airlock-logs}
@@ -91,7 +93,7 @@ PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
 PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
-PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py)
+PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py tests/test_usb_dev.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 VM_STAGED_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm_staged.py::test_staged_vm_step[$(test)]')
 VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow
@@ -123,6 +125,14 @@ test-quick: ensure-generated-dirs
 	uv run pytest $(PYTEST_DEFAULT_TARGETS) $(PYTEST_SELECTED) $(PYTEST_WORKERS) $(PYTEST_DISTRIBUTION) $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
 
 .PHONY: vm-gui-minimal-image vm-gui-minimal-run vm-gui-minimal-ssh
+
+.PHONY: usb-dev-image usb-dev-help
+
+usb-dev-image: ensure-generated-dirs
+	$(AIRLOCK_NIX) build .#airlock-usb-dev-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --print-build-logs
+
+usb-dev-help:
+	python3 lifecycle/image/tools/usb-dev.py --help
 
 vm-gui-minimal-image: ensure-generated-dirs
 	$(AIRLOCK_NIX) build .#$(VM_GUI_MINIMAL_IMAGE_ATTR) --out-link "$(AIRLOCK_RESULT_LINK_DIR)/gui-minimal-image" --print-build-logs
