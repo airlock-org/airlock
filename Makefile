@@ -73,7 +73,9 @@ PYTHON_FILES := \
 	tests/run_local.py \
 	tests/test_local.py \
 	tests/test_vm.py \
-	tests/test_vm_staged.py
+	tests/test_vm_staged.py \
+	tests/test_gpu.py \
+	lifecycle/misc/tools/pkgs/airlock-gpu-probe/src/gpu-probe.py
 
 PYTEST_LOG_DIR = $${AIRLOCK_LOG_DIR:-.airlock-logs}
 TEST_JOBS ?= 4
@@ -85,7 +87,7 @@ PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
 PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
-PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py)
+PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 VM_STAGED_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm_staged.py::test_staged_vm_step[$(test)]')
 VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow
@@ -115,6 +117,18 @@ build: ensure-generated-dirs
 test-quick: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
 	uv run pytest $(PYTEST_DEFAULT_TARGETS) $(PYTEST_SELECTED) $(PYTEST_WORKERS) $(PYTEST_DISTRIBUTION) $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS)
+
+.PHONY: vm-gpu-lab-image vm-gpu-lab-run vm-gpu-lab-test
+
+vm-gpu-lab-image: ensure-generated-dirs
+	$(AIRLOCK_NIX) build .#airlock-vm-gpu-lab-image --out-link "$(AIRLOCK_RESULT_LINK_DIR)/sys-gpu-lab-image" --print-build-logs
+
+vm-gpu-lab-run: ensure-generated-dirs
+	AIRLOCK_VM_DIR="$(or $(AIRLOCK_DATA_ROOT),$(CURDIR)/.airlock)/vm-gpu-lab" AIRLOCK_VM_SSH_PORT=2322 AIRLOCK_VM_IMAGE_ATTR=airlock-vm-gpu-lab-image ./lifecycle/misc/tools/scripts/run-nested-vm.sh
+
+vm-gpu-lab-test: ensure-generated-dirs
+	@mkdir -p "$(PYTEST_LOG_DIR)"
+	AIRLOCK_RUN_GPU_LAB_TESTS=1 uv run pytest tests/test_gpu.py -k lab_vm $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_LOG_DIR)/gpu-lab-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/gpu-lab-report.json" $(PYTEST_VM_OUTPUT_ARGS)
 
 test-warm: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"

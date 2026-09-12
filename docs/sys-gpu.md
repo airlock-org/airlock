@@ -1,97 +1,98 @@
-# sys-gpu direction
+# sys-gpu experiments and hardware direction
 
-Explore a standalone NixOS `sys-gpu` that owns the physical GPU and drivers,
-similar to how `sys-net` owns network hardware. Its primary purpose is AI
-compute, with inference applications running in separate NixOS qubes.
+## Agreed hardware split
 
-- AI qubes own model files, inference logic, conversations, and application APIs.
-- `sys-gpu` provides a backend for GPU operations. Model weights and working
-  tensors still reach its GPU memory; they are not hidden from the backend.
-- Keep `sys-gui` independent. Compute offloading does not imply support for
-  desktop graphics or simultaneous display use of the same GPU.
+The intended deployment assigns **AMD integrated graphics to `sys-gui`** and
+the **NVIDIA RTX 3090 to `sys-gpu`**. Hyprland is a future `sys-gui` experiment;
+XFCE stays in place now. AI inference is also deferred. When added, the
+inference engine and model storage may live inside `sys-gpu`.
 
-First prove one AI qube offloading computation to `sys-gpu`, then assess
-performance, client isolation, resource limits, and recovery before sharing it
-between qubes. Prefer existing upstream implementations and preserve Xen and
-Qubes policy. Qrexec can gate access but does not establish backend isolation.
+This supersedes the earlier proposal to make Hyprland depend on a virtual GPU
+provided by `sys-gpu`. With separate physical GPUs, Hyprland need not share the
+3090 with inference. Keep Xen, qrexec, QubesDB, qubesd, libvirt, and Qubes policy.
 
-[llama.cpp RPC](https://github.com/ggml-org/llama.cpp/blob/master/tools/rpc/README.md)
-is a possible experiment, not a chosen implementation: it is engine-specific
-and upstream labels it experimental and insecure. General CUDA access would
-require a broader GPU virtualization or API forwarding solution.
+A read-only inventory of the development host found:
 
-## Graphics and inference proposal
-
-This is a design proposal, not an implemented VM or a verified hardware setup.
-
-The discrete GPU should be persistently assigned to `sys-gpu` through Qubes
-PCI device management. Reserve it for Xen's PCI backend before a dom0 graphics
-driver binds it. Account for companion functions, IOMMU isolation, reset
-behaviour, and firmware/framebuffer use when selecting the device. Dom0 still
-administers assignment through Xen and Qubes; removing its GPU driver does
-not remove dom0's control authority.
-
-Ordinary qubes receive only explicitly allowed services. Keep `sys-gpu`
-without a NetVM or Qubes administrative privileges by default. A qrexec service
-can authorize a named client and carry a stream to a backend, but adapting an
-existing TCP protocol requires a bridge and measurement. Authorization does
-not make the backend parser safe or isolate its GPU memory between clients.
-
-| Use | Possible service boundary | Main limitation |
+| Device | PCI address | Current host driver |
 | --- | --- | --- |
-| AI application in another qube | AI qube runs inference orchestration; `sys-gpu` runs an engine-specific compute backend | llama.cpp RPC is experimental and explicitly insecure upstream; it does not provide general remote CUDA |
-| Complete inference service | `sys-gpu` runs an inference server; other qubes submit requests | Simpler interface, but moves model execution and model storage into the GPU VM, changing the original division of responsibilities |
-| Rendering or video jobs | A fixed worker in `sys-gpu` accepts jobs and returns results | The worker processes client data in the shared GPU trust domain; it does not accelerate arbitrary client applications |
-| Accelerated browsers, games, or 3D tools that remain in their own qubes | A virtual GPU frontend and a renderer/backend in `sys-gpu` | Substantial Xen/Qubes integration, buffer transport, presentation, and security work |
-| Physical desktop output | GPU-owning display domain, integrated with the Qubes GUI protocol | Changes the display boundary and does not itself accelerate applications in other qubes |
+| RTX 3090 | `0000:01:00.0` | `nvidia` |
+| RTX 3090 audio function | `0000:01:00.1` | `snd_hda_intel` |
+| AMD integrated graphics | `0000:7a:00.0` | `amdgpu` |
 
-Qubes explicitly distinguishes GPU ownership in a GUI domain from acceleration
-inside application qubes in its [GUI domain documentation](https://doc.qubes-os.org/en/latest/user/advanced-topics/gui-domain.html).
-Its [GPU acceleration tracking issue](https://github.com/QubesOS/qubes-issues/issues/8552)
-remains open when checked for this proposal. Mesa's [Venus documentation](https://docs.mesa3d.org/drivers/venus.html)
-describes an existing Vulkan virtualization building block, but does not
-establish a working Xen/Qubes service-domain integration. Treat that integration
-as a separate development milestone, preserving Xen and the Qubes GUI boundary.
+These are observations, not assignments. The lab does not unbind host drivers,
+modify the host boot configuration, or change physical display ownership.
+The target deployment still needs IOMMU/reset checks, companion-function
+selection, and matching guest kernel modules and userspace drivers. The
+current Nix-native builder boots a shared Qubes kernel; installing an NVIDIA
+NixOS package alone would not establish kernel/module compatibility.
 
-The [llama.cpp server](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)
-provides a higher-level inference API if model execution inside `sys-gpu` is
-acceptable. The RPC alternative above preserves the existing AI-qube direction
-more closely, but should initially be evaluated with disposable data and one
-client, following upstream's warning against sensitive environments.
+## Current experiment
 
-Sharing one GPU couples workloads: the backend can observe submitted data,
-clients compete for memory and execution time, and a GPU hang can interrupt
-every service. Plan admission limits and recovery before allowing multiple
-clients. Do not assume process separation provides Qubes-strength isolation
-inside `sys-gpu`, or that graphics and inference will meet latency targets
-when run concurrently.
+The separate `vm-gpu-lab` image adds an on-demand NixOS StandaloneVM named
+`sys-gpu`. Its configuration is in
+[`sys-gpu.nix`](../lifecycle/misc/experiments/sys-gpu.nix), and the guest module
+is [`sys-gpu-guest.nix`](../lifecycle/misc/modules/sys-gpu-guest.nix).
 
-## First implementation milestone
+- No physical PCI devices are assigned yet.
+- HVM mode with fixed 2048 MiB RAM prepares the domain for PCI experiments.
+- No NetVM, GUI VM, autostart, custom administrative RPC, or inference service.
+- Mesa/EGL/Vulkan diagnostic tools and `airlock-gpu-probe` are installed.
+- The normal image's domains, XFCE session, and default GUI VM are unchanged.
+- This is a bootstrap lab image. It does not add `sys-gpu` to the normal
+  initial runtime configuration; a later normal configuration deployment must
+  explicitly declare the domain before managing it through that workflow.
 
-1. Identify the GPU model, VRAM, PCI functions, isolation/reset constraints,
-   and display wiring. Decide whether graphics means physical output,
-   submitted jobs, or acceleration inside other qubes.
-2. Add the NixOS guest and domain declarations using the existing
-   `mkNixNativeDomain` and `devices.pci` interfaces, with HVM mode and fixed
-   memory suitable for the selected hardware. Configure explicit device IDs
-   and early dom0 device reservation. Keep hardware activation opt-in until
-   the assignment and recovery path are validated.
-3. Package matching guest kernel modules and userspace GPU libraries. The
-   current builder selects a shared Qubes kernel; installing a NixOS GPU
-   package alone does not establish kernel/module compatibility.
-4. Prove the physical GPU initializes in `sys-gpu`, remains unavailable to
-   dom0's graphics stack and application qubes, and survives the intended
-   shutdown/restart sequence. Keep strict reset and PCI configuration defaults
-   unless the selected hardware requires an explicitly assessed exception;
-   Qubes documents the implications of [additional PCI attach options](https://doc.qubes-os.org/en/latest/user/how-to-guides/how-to-use-pci-devices.html).
-5. Prove one explicitly allowed AI client can use the backend and an
-   unauthorized client is denied. Measure model loading, throughput, latency,
-   memory exhaustion, cancellation, and backend failure. Keep results under
-   `.airlock-logs/` and extend pytest coverage alongside `make test-quick`.
-6. Select a graphics experiment from the table, then evaluate concurrent use.
+Build and test from the GPU worktree:
 
-Keep `sys-gui` independent for the initial compute milestone. The current
-hybrid GUI still relies on dom0 for display, so it needs another display device
-or a separately designed display path when the discrete GPU is reserved for
-`sys-gpu`. Nested VM tests can cover configuration and service policy, but do
-not prove physical GPU passthrough or performance.
+```sh
+make vm-gpu-lab-image
+AIRLOCK_LOG_DIR="$PWD/.airlock-logs" make vm-gpu-lab-test
+```
+
+The pytest experiment creates a fresh, isolated nested-Xen VM directory and
+SSH port. It verifies that `sys-gpu` starts on demand, answers through qrexec,
+emits JSON diagnostics, rejects a hardware-required check without a physical
+GPU, and shuts down/restarts. The test stops only the lab QEMU process it
+created. It retains its disks and logs for inspection. Reports are written
+under `$AIRLOCK_LOG_DIR/gpu-lab-vm/`, with the retained VM path in
+`environment.json`. The normal running development VM is not reused.
+
+For interactive inspection, run `make vm-gpu-lab-run` in one terminal. It uses
+the dedicated `vm-gpu-lab` directory and SSH port 2322. Wait for
+`airlock-setup-config-deferred.service` to finish provisioning before starting
+`sys-gpu`; the domain can exist before its kernel and storage are ready.
+In another terminal:
+
+```sh
+AIRLOCK_VM_SSH_PORT=2322 ./lifecycle/misc/tools/scripts/ssh-nested-vm.sh
+sudo qvm-start sys-gpu
+sudo qvm-run --pass-io sys-gpu airlock-gpu-probe
+sudo qvm-run --pass-io sys-gpu 'airlock-gpu-probe --require-hardware'
+sudo qvm-shutdown --wait sys-gpu
+```
+
+The probe reports PCI display functions, bound drivers, DRM nodes, kernel
+version, and raw EGL/Vulkan output. A successful default invocation means the
+diagnostic report was collected. `--require-hardware` additionally requires
+successful Vulkan initialization of an integrated or discrete GPU. CPU
+renderers such as llvmpipe and virtual GPUs do not meet that requirement.
+Neither mode proves actual rendering, exclusive ownership, or cross-VM
+graphics. Those unverified properties are explicit in the JSON report.
+
+## Later experiments
+
+1. Assign the 3090 to `sys-gpu` on a suitable Xen test deployment, leaving the
+   AMD display path working. Validate reservation at boot, reset behavior,
+   guest driver compatibility, and API initialization.
+2. Render and read back a known image in `sys-gpu`, then repeat across guest
+   restarts. Physical GPU results must not be inferred from nested software
+   renderer results.
+3. Independently test Hyprland with AMD graphics in `sys-gui`, initially as an
+   optional session while retaining XFCE for recovery.
+4. Add the inference service to `sys-gpu` once hardware ownership works.
+
+Cross-VM graphics remains optional research for future accelerated clients.
+[Qubes' Rust virtual GPU backend](https://github.com/QubesOS/qubes-virtgpu-host)
+is a relevant upstream starting point, but its README describes Xen support
+as early development and explicitly excludes virtual monitors. It is not
+required for the agreed iGPU/dGPU split.

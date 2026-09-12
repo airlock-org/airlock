@@ -188,6 +188,11 @@
       bootstrapDomains = mkBootstrapDomains false;
       networkDebugBootstrapDomains = mkBootstrapDomains true;
 
+      mkSysGpuDomainEntry = import ./lifecycle/misc/experiments/sys-gpu.nix {
+        inherit mkAirlockQubeBuilders;
+        kernelName = airlockQubesVmKernelName;
+      };
+
       inherit (bootstrapDomains)
         materializeNixClosureDomain
         mkConfigDomainEntries
@@ -230,10 +235,18 @@
           configSystem ? false,
           devMode ? true,
           networkDebug ? false,
+          gpuLab ? false,
         }:
         lib.nixosSystem {
           inherit system;
-          specialArgs = lib.optionalAttrs configSystem (mkConfigSystemSpecialArgs system networkDebug);
+          specialArgs = lib.optionalAttrs configSystem (
+            (mkConfigSystemSpecialArgs system networkDebug)
+            // lib.optionalAttrs gpuLab {
+              airlockConfigDomains = (mkBootstrapConfigDomains system networkDebug) // {
+                sys-gpu = materializeNixClosureDomain (mkSysGpuDomainEntry system);
+              };
+            }
+          );
           modules = [
             self.nixosModules.dom0
             (if gui then ./lifecycle/image/profiles/vm-gui.nix else ./lifecycle/image/profiles/vm.nix)
@@ -396,6 +409,10 @@
               { };
           airlock-qubes-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-qubes-smoke { };
           airlock-observe-dom0 = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-observe { };
+          airlock-gpu-probe = pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-gpu-probe { };
+          airlock-domain-sys-gpu-root-image = (mkSysGpuDomainEntry system).rootImage;
+          airlock-domain-sys-gpu-store-closure = (mkSysGpuDomainEntry system).storeArtifact;
+          airlock-vm-gpu-lab-image = self.nixosConfigurations.vm-gpu-lab.config.system.build.image;
           airlock-qubes-vm-kernel = pkgs.repackRpmKernel {
             kernelSrc = pkgs.fetchurl {
               url = "https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm";
@@ -516,6 +533,16 @@
         devMode = true;
         networkDebug = true;
       };
+
+      # Separate development image; the normal bootstrap and XFCE session are
+      # unchanged. sys-gpu has no physical PCI assignments and starts on demand.
+      nixosConfigurations.vm-gpu-lab = mkVmConfiguration {
+        gui = true;
+        configSystem = true;
+        gpuLab = true;
+      };
+
+      nixosConfigurations.airlock-domain-sys-gpu = (mkSysGpuDomainEntry "x86_64-linux").configuration;
 
       nixosConfigurations.airlock-domain-sys-config-vault =
         (mkConfigDomainEntries "x86_64-linux").sys-config-vault.configuration;

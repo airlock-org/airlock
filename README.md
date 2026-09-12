@@ -77,6 +77,16 @@ domain topology but starts only `sys-net`; NetworkManager is available for a
 manual start inside that guest.
 
 ```bash
+make vm-gpu-lab-test
+make vm-gpu-lab-run
+```
+
+Tests or launches an isolated image with an on-demand `sys-gpu` diagnostic
+guest. XFCE stays in place and physical GPUs remain unassigned. See
+[sys-gpu experiments](docs/sys-gpu.md) for the test boundaries and the planned
+AMD iGPU → `sys-gui`, RTX 3090 → `sys-gpu` split.
+
+```bash
 make vm-ssh
 ```
 
