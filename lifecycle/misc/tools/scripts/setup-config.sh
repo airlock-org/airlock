@@ -344,7 +344,7 @@ render_boot_status() {
   elapsed=$((SECONDS - boot_started_at))
   {
     # Redraw in place without clearing the whole screen between timer ticks.
-    printf '\033[H\033[K\n\033[K  Airlock | Initial setup and installation\n\033[K\n'
+    printf '\033[H\033[K\n\033[K  Airlock | Bootstrap\n\033[K\n'
     for phase in 1 2 3 4; do
       marker='[ ]'
       if [ "$phase" -lt "$boot_phase" ]; then
@@ -361,21 +361,21 @@ render_boot_status() {
     printf '\033[K\n'
     case "$boot_status_state" in
       working)
-        printf '\033[K  No action needed. Airlock is installing its initial VM setup automatically.\n'
+        printf '\033[K  No action needed. Airlock is bootstrapping its initial domain topology automatically.\n'
         printf '\033[K  This can take several minutes on the first boot while VM files are prepared.\n'
-        printf '\033[K  This slow installation work happens once; later boots reuse the completed setup.\n'
+        printf '\033[K  Bootstrap runs once; later boots reuse the completed system.\n'
         ;;
       complete)
-        printf '\033[K  Initial setup is complete. Later boots reuse this installation.\n'
+        printf '\033[K  Bootstrap is complete. Later boots reuse the prepared system.\n'
         printf '\033[K  The desktop login starts next.\n'
         printf '\033[K  Enter your account password if a login prompt appears.\n'
         ;;
       failed)
-        printf '\033[K  Setup could not finish. Switch to a console with Ctrl+Alt+F2.\n'
+        printf '\033[K  Bootstrap could not finish. Switch to a console with Ctrl+Alt+F2.\n'
         printf '\033[K  Log in and inspect: sudo journalctl -b -u airlock-setup-config\n'
         ;;
     esac
-    printf '\033[K\n\033[K  Setup log: %s\n\033[J' "$COMMAND_LOG"
+    printf '\033[K\n\033[K  Bootstrap log: %s\n\033[J' "$COMMAND_LOG"
   } 2>/dev/null > "$STATUS_DEVICE" || true
 }
 

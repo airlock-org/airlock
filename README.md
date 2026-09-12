@@ -31,6 +31,15 @@ integration layer for:
 - `docs/`: design notes, config authority details, and test documentation.
 - `vendor/`: upstream source inputs carried locally for the POC.
 
+## Bootstrap
+
+Bootstrap prepares a fresh Airlock system through its first ready-to-use
+`sys-gui` desktop. It creates the initial Qubes topology, including the
+`sys-config-*` authority domains and user domains, establishes the first
+authoritative runtime configuration, and applies initial desktop defaults.
+Later configuration changes use the normal declarative apply path rather than
+re-running bootstrap.
+
 ## Commands
 
 ```bash

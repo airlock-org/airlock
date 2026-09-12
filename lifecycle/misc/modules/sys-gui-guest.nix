@@ -47,12 +47,15 @@ let
       "application/xhtml+xml"
     ];
   };
-  panelLaunchers = pkgs.writeShellScript "airlock-pin-desktop-launchers" ''
+  panelLaunchers = pkgs.writeShellScript "airlock-bootstrap-desktop-launchers" ''
     set -eu
 
     config_home="''${XDG_CONFIG_HOME:-$HOME/.config}"
-    marker="$config_home/airlock/desktop-launchers-v1"
-    [ -e "$marker" ] && exit 0
+    marker="$config_home/airlock/desktop-bootstrap-v1"
+    legacy_marker="$config_home/airlock/desktop-launchers-v1"
+    if [ -e "$marker" ] || [ -e "$legacy_marker" ]; then
+      exit 0
+    fi
 
     panel=""
     for _attempt in $(${pkgs.coreutils}/bin/seq 1 30); do
@@ -65,8 +68,8 @@ let
     [ -n "$panel" ] || exit 0
 
     # Recreate the panel's plugin-id array with two new launcher plugins.
-    # This is done only for a fresh Airlock user profile, preserving later
-    # panel changes in the user's persistent sys-gui home.
+    # This desktop-bootstrap action runs only for a fresh Airlock user
+    # profile, preserving later panel changes in the persistent sys-gui home.
     ids="$(${pkgs.xfconf}/bin/xfconf-query -c xfce4-panel -p "$panel/plugin-ids" 2>/dev/null |
       ${pkgs.gnugrep}/bin/grep -E '^[0-9]+$' | ${pkgs.coreutils}/bin/tr '\n' ' ' || true)"
     next=100
@@ -251,10 +254,10 @@ in
         "${pkgs.qubes-gui-daemon}/etc/xdg/autostart/qubes-icon-receiver.desktop";
       "xdg/autostart/qubes-screen-layout-watches.desktop".source =
         "${pkgs.qubes-gui-daemon}/etc/xdg/autostart/qubes-screen-layout-watches.desktop";
-      "xdg/autostart/airlock-desktop-launchers.desktop".text = ''
+      "xdg/autostart/airlock-bootstrap-desktop-launchers.desktop".text = ''
         [Desktop Entry]
         Type=Application
-        Name=Airlock desktop launchers
+        Name=Airlock desktop bootstrap
         Exec=${panelLaunchers}
         OnlyShowIn=XFCE;
         X-GNOME-Autostart-Phase=Panel
