@@ -277,6 +277,8 @@ def personalize(args):
     require(not any(p.exists() for p in [password_file, repo_target, key_target]),
             "Already personalized (or interrupted); refusing to overwrite data.")
     auth_data = read_auth_cache(args.auth_file) if args.auth_file else None
+    require(not args.insecure_plain_codex_auth or auth_data is not None,
+            "--insecure-plain-codex-auth requires --auth-file.")
     key_source = Path(args.public_key).resolve(strict=True)
     run("ssh-keygen", "-l", "-f", str(key_source), stdout=subprocess.DEVNULL)
     key = key_source.read_bytes()
@@ -314,16 +316,26 @@ def personalize(args):
             os.chown(Path(current) / name, UID, GID, follow_symlinks=False)
     os.chmod(key_target.parent, 0o700)
     if auth_data is not None:
-        # Keep the cache outside the raw filesystem. vault-create opens a new
-        # LUKS2 vault and asks for its independent passphrase; always lock it
-        # again before returning from offline personalization.
-        vault(argparse.Namespace(action="vault-create", root=str(root)))
-        _, mount = vault_paths(root)
-        try:
-            private_file(mount / "auth.json", auth_data, UID, GID)
-        finally:
-            vault(argparse.Namespace(action="vault-lock", root=str(root)))
-        print(f"Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}); Codex auth is in the locked encrypted vault.")
+        if args.insecure_plain_codex_auth:
+            codex_home = beneath(root, "home/airlock/.codex")
+            marker = beneath(root, "var/lib/airlock/usb/insecure-codex-auth")
+            require(not codex_home.exists() and not marker.exists(), "Plain Codex auth is already configured.")
+            codex_home.mkdir(mode=0o700)
+            os.chown(codex_home, UID, GID)
+            private_file(codex_home / "auth.json", auth_data, UID, GID)
+            private_file(marker, b"plaintext-codex-auth-v1\n")
+            print(f"WARNING: Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}); Codex auth is stored unencrypted.", file=sys.stderr)
+        else:
+            # Keep the cache outside the raw filesystem. vault-create opens a
+            # new LUKS2 vault and asks for its independent passphrase; always
+            # lock it again before returning from offline personalization.
+            vault(argparse.Namespace(action="vault-create", root=str(root)))
+            _, mount = vault_paths(root)
+            try:
+                private_file(mount / "auth.json", auth_data, UID, GID)
+            finally:
+                vault(argparse.Namespace(action="vault-lock", root=str(root)))
+            print(f"Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}); Codex auth is in the locked encrypted vault.")
     else:
         print(f"Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}). No credentials copied.")
 
@@ -401,6 +413,7 @@ def main():
     setup.add_argument("--public-key", required=True)
     setup.add_argument("--auth-file", help="Optional existing Codex auth.json; imports it into a new encrypted vault.")
     setup.add_argument("--insecure-dev-password", action="store_true", help="Set the literal development password 'password' without prompting.")
+    setup.add_argument("--insecure-plain-codex-auth", action="store_true", help="Store auth.json unencrypted; requires --auth-file.")
     setup.set_defaults(handler=personalize)
     for name in ["vault-create", "vault-unlock", "vault-lock", "auth-import"]:
         command = commands.add_parser(name)

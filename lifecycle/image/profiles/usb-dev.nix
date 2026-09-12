@@ -91,8 +91,9 @@
       exec ${python3}/bin/python3 ${../tools/amd-preflight.py} "$@"
     '')
     (lib.hiPrio (writeShellScriptBin "codex" ''
-      if ! ${util-linux}/bin/mountpoint -q /home/airlock/.codex; then
-        echo 'Unlock the encrypted credentials first: sudo airlock-usb vault-unlock' >&2
+      if ! ${util-linux}/bin/mountpoint -q /home/airlock/.codex \
+        && ! test -f /var/lib/airlock/usb/insecure-codex-auth; then
+        echo 'Unlock credentials with: sudo airlock-usb vault-unlock' >&2
         exit 1
       fi
       export CODEX_HOME=/home/airlock/.codex

@@ -41,29 +41,35 @@ Do not mount by a potentially duplicated generic label. Then:
 ```sh
 sudo python3 lifecycle/image/tools/usb-dev.py personalize \
   --root /mnt/airlock-usb --repo "$PWD" --public-key /absolute/id_ed25519.pub \
-  --auth-file /absolute/path/to/auth.json
+  --auth-file /absolute/path/to/auth.json \
+  --insecure-dev-password --insecure-plain-codex-auth
 ```
 
 This asks for a new local password for dom0 `airlock` and guest `user`, installs
 one public SSH key and clones the clean committed repository onto a writable
-`usb-dev` branch. When `--auth-file` is supplied, it also creates an encrypted
-Codex vault, imports only that cache, then locks the vault. No private keys,
-untracked files, hooks, build artifacts, remote credentials or Codex settings
-are copied. The clone has no origin; configure a suitable remote later. The
-password hash is outside Nix, readable only by root. Re-personalization refuses
-to overwrite an existing setup.
+`usb-dev` branch. By default, `--auth-file` creates an encrypted Codex vault,
+imports only that cache, then locks the vault. No private keys, untracked files,
+hooks, build artifacts, remote credentials or Codex settings are copied. The
+clone has no origin; configure a suitable remote later. The password hash is
+outside Nix, readable only by root. Re-personalization refuses to overwrite an
+existing setup.
 
 For a throwaway, physically controlled developer USB only, add
 `--insecure-dev-password` to set the literal password `password` without a
 prompt. It is intentionally opt-in and must not be used for a shared or
 network-exposed system.
 
+Add `--insecure-plain-codex-auth` with `--auth-file` to skip LUKS and store the
+Codex cache directly in the USB's writable root. This is also intentionally
+opt-in: anyone who obtains the USB can use those access tokens.
+
 ## Codex authentication: separate encrypted vault
 
 The raw OS itself is **not encrypted**. Codex's state lives in a 512 MiB LUKS2
 file vault. Its passphrase is separate from the login password and is never
 saved by the tool. Supplying `--auth-file` to `personalize` is the preferred
-one-step setup. To add credentials later, offline before unmounting the USB:
+one-step setup unless you deliberately select `--insecure-plain-codex-auth`.
+To add credentials later, offline before unmounting the USB:
 
 ```sh
 sudo python3 lifecycle/image/tools/usb-dev.py vault-create --root /mnt/airlock-usb
@@ -88,10 +94,12 @@ Log into XFCE as `user` with the password you chose. Dom0's local console uses
 ```sh
 nmcli --ask device wifi connect YOUR_SSID
 sudo tailscale up --hostname=airlock-usb
-sudo airlock-usb vault-unlock
 cd /home/airlock/dev/nixome
 codex
 ```
+
+When using the encrypted-vault path, run `sudo airlock-usb vault-unlock` before
+starting Codex. It is not needed for `--insecure-plain-codex-auth`.
 
 Wired Ethernet can simplify first boot. Join Tailscale interactively; no auth
 key is in the image. This is a **new Tailscale node**, not the laptop's Ubuntu
