@@ -29,13 +29,13 @@ from local_pychecks import (
     check_dev_role,
     check_host_capabilities,
     check_config_boot_verify,
-    check_gc_nixome_store,
+    check_gc_airlock_store,
     check_nix_domain_storage_helper_shared,
     check_nix_closure_domain_volume_list,
     check_nix_closure_root_image,
-    check_nixome_minimal_closure,
-    check_nixome_minimal_guest,
-    check_nixome_cli,
+    check_airlock_minimal_closure,
+    check_airlock_minimal_guest,
+    check_airlock_cli,
     check_qrexec_policy_path,
     check_qube_guest_policy_probe,
     check_qubes_libvirt_hvm_pirq_patch,
@@ -92,7 +92,7 @@ LOCAL_CHECKS = (
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-config-apply",
+            "{root}#packages.x86_64-linux.airlock-config-apply",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
@@ -102,7 +102,7 @@ LOCAL_CHECKS = (
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-config-archive-candidate",
+            "{root}#packages.x86_64-linux.airlock-config-archive-candidate",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
@@ -112,7 +112,7 @@ LOCAL_CHECKS = (
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-config-boot-verify",
+            "{root}#packages.x86_64-linux.airlock-config-boot-verify",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
@@ -122,7 +122,7 @@ LOCAL_CHECKS = (
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-config-status",
+            "{root}#packages.x86_64-linux.airlock-config-status",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
@@ -132,7 +132,7 @@ LOCAL_CHECKS = (
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-config-inputs-import",
+            "{root}#packages.x86_64-linux.airlock-config-inputs-import",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
@@ -142,7 +142,7 @@ LOCAL_CHECKS = (
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-config-vms-smoke",
+            "{root}#packages.x86_64-linux.airlock-config-vms-smoke",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
@@ -152,7 +152,7 @@ LOCAL_CHECKS = (
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-config-bootstrap-current",
+            "{root}#packages.x86_64-linux.airlock-config-bootstrap-current",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
@@ -162,7 +162,7 @@ LOCAL_CHECKS = (
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-observe-dom0",
+            "{root}#packages.x86_64-linux.airlock-observe-dom0",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
@@ -172,7 +172,7 @@ LOCAL_CHECKS = (
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-setup-config",
+            "{root}#packages.x86_64-linux.airlock-setup-config",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
@@ -182,7 +182,7 @@ LOCAL_CHECKS = (
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-start-network-providers",
+            "{root}#packages.x86_64-linux.airlock-start-network-providers",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
@@ -197,7 +197,7 @@ LOCAL_CHECKS = (
         (
             "nix",
             "build",
-            "{root}#packages.x86_64-linux.nixome-qubes-storage",
+            "{root}#packages.x86_64-linux.airlock-qubes-storage",
             *NIX_BUILD_FLAGS,
         ),
         (pytest.mark.nix,),
@@ -225,21 +225,21 @@ LOCAL_CHECKS = (
         "setup-config-runtime-path",
         runner=check_setup_config_runtime_path,
     ),
-    LocalCheck("gc-nixome-store", runner=check_gc_nixome_store),
+    LocalCheck("gc-airlock-store", runner=check_gc_airlock_store),
     LocalCheck(
         "config-topology-eval",
         marks=(pytest.mark.nix,),
         runner=check_config_topology_eval,
     ),
     LocalCheck(
-        "nixome-minimal-guest",
+        "airlock-minimal-guest",
         marks=(pytest.mark.nix,),
-        runner=check_nixome_minimal_guest,
+        runner=check_airlock_minimal_guest,
     ),
     LocalCheck(
-        "nixome-minimal-closure",
+        "airlock-minimal-closure",
         marks=(pytest.mark.nix,),
-        runner=check_nixome_minimal_closure,
+        runner=check_airlock_minimal_closure,
     ),
     LocalCheck("dev-role", marks=(pytest.mark.nix,), runner=check_dev_role),
     LocalCheck("config-staging-validate", runner=check_config_staging_validate),
@@ -265,7 +265,7 @@ LOCAL_CHECKS = (
         "config-archive-domain-references",
         runner=check_config_archive_domain_references,
     ),
-    LocalCheck("nixome-cli", marks=(pytest.mark.nix,), runner=check_nixome_cli),
+    LocalCheck("airlock-cli", marks=(pytest.mark.nix,), runner=check_airlock_cli),
     LocalCheck("config-control", runner=check_config_control),
     LocalCheck("config-boot-verify", runner=check_config_boot_verify),
     LocalCheck("config-status", runner=check_config_status),
@@ -343,7 +343,7 @@ LOCAL_CHECKS = (
     ),
     LocalCheck(
         "qubes-smoke",
-        ("nix", "run", "{root}#nixome-qubes-smoke"),
+        ("nix", "run", "{root}#airlock-qubes-smoke"),
         (pytest.mark.qubes, pytest.mark.slow, pytest.mark.xdist_group("qubes")),
     ),
 )
@@ -363,16 +363,16 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 def test_local_check(
     local_check: LocalCheck,
     repo_root: Path,
-    nixome_log_dir: Path,
+    airlock_log_dir: Path,
 ) -> None:
     if (
         local_check.name == "qubes-smoke"
-        and os.environ.get("NIXOME_RUN_QUBES_SMOKE") != "1"
+        and os.environ.get("AIRLOCK_RUN_QUBES_SMOKE") != "1"
     ):
-        pytest.skip("set NIXOME_RUN_QUBES_SMOKE=1 on a Xen dom0 target")
+        pytest.skip("set AIRLOCK_RUN_QUBES_SMOKE=1 on a Xen dom0 target")
 
     if local_check.runner is not None:
-        test_log_dir = nixome_log_dir / local_check.name
+        test_log_dir = airlock_log_dir / local_check.name
         test_log_dir.mkdir(parents=True, exist_ok=True)
         local_check.runner(repo_root, test_log_dir)
         return
@@ -381,5 +381,5 @@ def test_local_check(
         name=local_check.name,
         command=local_check.command,
         repo_root=repo_root,
-        nixome_log_dir=nixome_log_dir,
+        airlock_log_dir=airlock_log_dir,
     )

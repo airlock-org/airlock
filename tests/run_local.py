@@ -15,7 +15,7 @@ def main() -> int:
             "-c",
             'source "$1"; env -0',
             "bash",
-            str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/lib/airlock-env.sh"),
         ],
         check=False,
         stdout=subprocess.PIPE,
@@ -34,7 +34,7 @@ def main() -> int:
             "utf-8", errors="replace"
         )
 
-    log_dir = Path(env.get("NIXOME_LOG_DIR", repo_root / ".nixome-logs"))
+    log_dir = Path(env.get("AIRLOCK_LOG_DIR", repo_root / ".airlock-logs"))
     log_dir.mkdir(parents=True, exist_ok=True)
 
     args = sys.argv[1:]

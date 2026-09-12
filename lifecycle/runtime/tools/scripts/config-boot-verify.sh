@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
 RESULT_JSON="$LOG_DIR/config-boot-verify.json"
 STATUS_JSON="$LOG_DIR/config-boot-verify-status.json"
 MARKER_LOG="$LOG_DIR/config-boot-verify-marker.log"
-EXPECTED_HOST_SYSTEM_SOURCE="${NIXOME_EXPECTED_HOST_SYSTEM_SOURCE:-}"
-EXPECTED_MESSAGE="${NIXOME_EXPECTED_APPLIED_MESSAGE:-}"
+EXPECTED_HOST_SYSTEM_SOURCE="${AIRLOCK_EXPECTED_HOST_SYSTEM_SOURCE:-}"
+EXPECTED_MESSAGE="${AIRLOCK_EXPECTED_APPLIED_MESSAGE:-}"
 
 mkdir -p "$LOG_DIR"
 
@@ -51,7 +51,7 @@ write_result() {
 
   {
     printf '{'
-    printf '"schema":"nixome.config-boot-verify.v1"'
+    printf '"schema":"airlock.config-boot-verify.v1"'
     printf ',"status":'
     json_string "$status"
     printf ',"reason":'
@@ -82,8 +82,8 @@ fail() {
   exit 1
 }
 
-nixome-config-status > "$STATUS_JSON" || fail "nixome-config-status failed"
-jq -e '.schema == "nixome.config-status.v1"' "$STATUS_JSON" >/dev/null ||
+airlock-config-status > "$STATUS_JSON" || fail "airlock-config-status failed"
+jq -e '.schema == "airlock.config-status.v1"' "$STATUS_JSON" >/dev/null ||
   fail "config status JSON is invalid"
 
 if [ -z "$EXPECTED_HOST_SYSTEM_SOURCE" ]; then
@@ -106,8 +106,8 @@ pending_reboot_required="$(
 [ "$pending_reboot_required" = false ] ||
   fail "config status still reports a pending reboot"
 
-if [ -r /etc/nixome/inside-config-applied-message ]; then
-  cat /etc/nixome/inside-config-applied-message > "$MARKER_LOG"
+if [ -r /etc/airlock/inside-config-applied-message ]; then
+  cat /etc/airlock/inside-config-applied-message > "$MARKER_LOG"
 fi
 
 if [ -n "$EXPECTED_MESSAGE" ]; then

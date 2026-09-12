@@ -2,23 +2,23 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
-VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
-RESULT_LINK_DIR="${NIXOME_RESULT_LINK_DIR:-${NIXOME_DATA_ROOT:-$ROOT/.nixome}/result-links}"
-IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-dev-image}"
-MEMORY="${NIXOME_VM_MEMORY:-8192}"
-SMP="${NIXOME_VM_SMP:-4}"
-SSH_PORT="${NIXOME_VM_SSH_PORT:-2222}"
-SSH_USER="${NIXOME_VM_SSH_USER:-nixome}"
-SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
-DISPLAY_MODE="${NIXOME_VM_DISPLAY:-none}"
-VGA="${NIXOME_VM_VGA:-std}"
-IOMMU="${NIXOME_VM_IOMMU:-1}"
-BACKUP_RETENTION="${NIXOME_VM_BACKUP_RETENTION:-1}"
-FRESH="${NIXOME_VM_FRESH:-0}"
-SKIP_BASE_BUILD="${NIXOME_VM_SKIP_BASE_BUILD:-0}"
-BACKING_IMAGE="${NIXOME_VM_BACKING_IMAGE:-}"
-OVMF_VARS_TEMPLATE="${NIXOME_VM_OVMF_VARS_TEMPLATE:-}"
+source "$ROOT/lifecycle/misc/tools/scripts/lib/airlock-env.sh"
+VM_DIR="${AIRLOCK_VM_DIR:-$ROOT/.airlock-vm}"
+RESULT_LINK_DIR="${AIRLOCK_RESULT_LINK_DIR:-${AIRLOCK_DATA_ROOT:-$ROOT/.airlock}/result-links}"
+IMAGE_ATTR="${AIRLOCK_VM_IMAGE_ATTR:-airlock-vm-dev-image}"
+MEMORY="${AIRLOCK_VM_MEMORY:-8192}"
+SMP="${AIRLOCK_VM_SMP:-4}"
+SSH_PORT="${AIRLOCK_VM_SSH_PORT:-2222}"
+SSH_USER="${AIRLOCK_VM_SSH_USER:-airlock}"
+SSH_PASSWORD="${AIRLOCK_VM_SSH_PASSWORD:-airlock}"
+DISPLAY_MODE="${AIRLOCK_VM_DISPLAY:-none}"
+VGA="${AIRLOCK_VM_VGA:-std}"
+IOMMU="${AIRLOCK_VM_IOMMU:-1}"
+BACKUP_RETENTION="${AIRLOCK_VM_BACKUP_RETENTION:-1}"
+FRESH="${AIRLOCK_VM_FRESH:-0}"
+SKIP_BASE_BUILD="${AIRLOCK_VM_SKIP_BASE_BUILD:-0}"
+BACKING_IMAGE="${AIRLOCK_VM_BACKING_IMAGE:-}"
+OVMF_VARS_TEMPLATE="${AIRLOCK_VM_OVMF_VARS_TEMPLATE:-}"
 OUT_LINK="$VM_DIR/${IMAGE_ATTR}-result"
 SERIAL_LOG="$VM_DIR/serial.log"
 MONITOR_SOCKET="$VM_DIR/${IMAGE_ATTR}.monitor"
@@ -27,7 +27,7 @@ mkdir -p "$VM_DIR" "$RESULT_LINK_DIR"
 
 case "$BACKUP_RETENTION" in
   '' | *[!0-9]*)
-    printf 'error: NIXOME_VM_BACKUP_RETENTION must be a non-negative integer\n' >&2
+    printf 'error: AIRLOCK_VM_BACKUP_RETENTION must be a non-negative integer\n' >&2
     exit 1
     ;;
 esac
@@ -36,7 +36,7 @@ case "$FRESH" in
   0 | 1)
     ;;
   *)
-    printf 'error: NIXOME_VM_FRESH must be 0 or 1\n' >&2
+    printf 'error: AIRLOCK_VM_FRESH must be 0 or 1\n' >&2
     exit 1
     ;;
 esac
@@ -45,7 +45,7 @@ case "$SKIP_BASE_BUILD" in
   0 | 1)
     ;;
   *)
-    printf 'error: NIXOME_VM_SKIP_BASE_BUILD must be 0 or 1\n' >&2
+    printf 'error: AIRLOCK_VM_SKIP_BASE_BUILD must be 0 or 1\n' >&2
     exit 1
     ;;
 esac
@@ -54,7 +54,7 @@ case "$IOMMU" in
   0 | 1)
     ;;
   *)
-    printf 'error: NIXOME_VM_IOMMU must be 0 or 1\n' >&2
+    printf 'error: AIRLOCK_VM_IOMMU must be 0 or 1\n' >&2
     exit 1
     ;;
 esac
@@ -72,17 +72,17 @@ fi
 if [ "$SKIP_BASE_BUILD" = "1" ]; then
   [ -e "$OUT_LINK" ] ||
     {
-      printf 'error: NIXOME_VM_SKIP_BASE_BUILD=1 but base image result link is missing: %s\n' "$OUT_LINK" >&2
+      printf 'error: AIRLOCK_VM_SKIP_BASE_BUILD=1 but base image result link is missing: %s\n' "$OUT_LINK" >&2
       exit 1
     }
-  printf 'using existing Nixome VM base image result link: %s\n' "$OUT_LINK"
+  printf 'using existing Airlock VM base image result link: %s\n' "$OUT_LINK"
   base_image_out_physical="$(readlink -f "$OUT_LINK")"
   base_image_out="$base_image_out_physical"
 else
-  printf 'building/resolving Nixome VM base image: .#%s\n' "$IMAGE_ATTR"
+  printf 'building/resolving Airlock VM base image: .#%s\n' "$IMAGE_ATTR"
   base_image_out="$(nix build "$ROOT#$IMAGE_ATTR" --no-link --print-out-paths --print-build-logs --show-trace)"
   base_image_out="$(awk 'NF { last = $0 } END { print last }' <<< "$base_image_out")"
-  base_image_out_physical="$(nixome_physical_store_path "$base_image_out")"
+  base_image_out_physical="$(airlock_physical_store_path "$base_image_out")"
   ln -sfn "$base_image_out_physical" "$OUT_LINK"
 fi
 
@@ -111,7 +111,7 @@ NIX_BASE_IMAGE="$BASE_IMAGE"
 
 if [ -n "$BACKING_IMAGE" ]; then
   if [ ! -f "$BACKING_IMAGE" ]; then
-    printf 'error: NIXOME_VM_BACKING_IMAGE is not a file: %s\n' "$BACKING_IMAGE" >&2
+    printf 'error: AIRLOCK_VM_BACKING_IMAGE is not a file: %s\n' "$BACKING_IMAGE" >&2
     exit 1
   fi
   BASE_IMAGE="$BACKING_IMAGE"
@@ -155,7 +155,7 @@ qemu_utils_out="$(build_attr_with_result_link qemu-utils qemu-utils-result)"
 ovmf_out="$(build_attr_with_result_link ovmf-fd ovmf-fd-result)"
 
 BASE_FORMAT="$(
-  nixome_run_store_path "$qemu_utils_out/bin/qemu-img" info --output=json "$BASE_IMAGE" |
+  airlock_run_store_path "$qemu_utils_out/bin/qemu-img" info --output=json "$BASE_IMAGE" |
     sed -n 's/^[[:space:]]*"format": "\(raw\|qcow2\)",[[:space:]]*$/\1/p' |
     head -n 1
 )"
@@ -183,7 +183,7 @@ fi
 
 if [ -e "$RUN_DISK" ]; then
   current_backing="$(
-    nixome_run_store_path "$qemu_utils_out/bin/qemu-img" info --output=json "$RUN_DISK" |
+    airlock_run_store_path "$qemu_utils_out/bin/qemu-img" info --output=json "$RUN_DISK" |
       sed -n 's/^[[:space:]]*"backing-filename": "\(.*\)",[[:space:]]*$/\1/p' |
       head -n 1
   )"
@@ -198,7 +198,7 @@ fi
 
 if [ ! -e "$RUN_DISK" ]; then
   printf 'creating writable overlay: %s\n' "$RUN_DISK"
-  nixome_run_store_path "$qemu_utils_out/bin/qemu-img" create \
+  airlock_run_store_path "$qemu_utils_out/bin/qemu-img" create \
     -f qcow2 \
     -F "$BASE_FORMAT" \
     -b "$BASE_IMAGE" \
@@ -208,12 +208,12 @@ fi
 if [ ! -e "$OVMF_VARS" ]; then
   if [ -n "$OVMF_VARS_TEMPLATE" ]; then
     if [ ! -f "$OVMF_VARS_TEMPLATE" ]; then
-      printf 'error: NIXOME_VM_OVMF_VARS_TEMPLATE is not a file: %s\n' "$OVMF_VARS_TEMPLATE" >&2
+      printf 'error: AIRLOCK_VM_OVMF_VARS_TEMPLATE is not a file: %s\n' "$OVMF_VARS_TEMPLATE" >&2
       exit 1
     fi
     cp "$OVMF_VARS_TEMPLATE" "$OVMF_VARS"
   else
-    cp "$(nixome_physical_store_path "$ovmf_out")/FV/OVMF_VARS.fd" "$OVMF_VARS"
+    cp "$(airlock_physical_store_path "$ovmf_out")/FV/OVMF_VARS.fd" "$OVMF_VARS"
   fi
   chmod u+w "$OVMF_VARS"
 fi
@@ -232,7 +232,7 @@ case "$DISPLAY_MODE" in
     display_args=(-display sdl -serial "file:$SERIAL_LOG")
     ;;
   *)
-    printf 'error: unsupported NIXOME_VM_DISPLAY=%s; use none, gtk, or sdl\n' "$DISPLAY_MODE" >&2
+    printf 'error: unsupported AIRLOCK_VM_DISPLAY=%s; use none, gtk, or sdl\n' "$DISPLAY_MODE" >&2
     exit 1
     ;;
 esac
@@ -255,21 +255,21 @@ starting VM
   vga: $VGA
   iommu: $IOMMU
   memory: ${MEMORY} MiB
-  ssh: NIXOME_VM_SSH_PORT=$SSH_PORT $ROOT/lifecycle/misc/tools/scripts/ssh-nested-vm.sh
+  ssh: AIRLOCK_VM_SSH_PORT=$SSH_PORT $ROOT/lifecycle/misc/tools/scripts/ssh-nested-vm.sh
   dom0 NIC: QEMU user network with SSH forwarding
   sys-net NIC: separate QEMU user network, auto-assigned by setup-config
   login: $SSH_USER / $SSH_PASSWORD
   monitor: $MONITOR_SOCKET
 
 Inside the VM, first check:
-  nixome-observe-dom0 | jq
+  airlock-observe-dom0 | jq
   cat /proc/xen/capabilities
   systemctl status qubes-db-dom0 qubesd qubes-qrexec-policy-daemon
 EOF
 
 rm -f "$MONITOR_SOCKET"
 
-nixome_exec_store_path "$qemu_out/bin/qemu-system-x86_64" \
+airlock_exec_store_path "$qemu_out/bin/qemu-system-x86_64" \
   -machine "$MACHINE" \
   -cpu host,migratable=off \
   -smp "$SMP" \

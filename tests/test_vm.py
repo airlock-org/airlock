@@ -91,16 +91,16 @@ def vm_lane_id() -> int:
 
 
 def vm_parallel_enabled() -> bool:
-    lanes = os.environ.get("NIXOME_VM_PARALLEL_LANES", "1")
+    lanes = os.environ.get("AIRLOCK_VM_PARALLEL_LANES", "1")
     return lanes not in {"", "0", "1"}
 
 
 def vm_parallel_ssh_base_port() -> int:
-    value = os.environ.get("NIXOME_VM_PARALLEL_SSH_BASE_PORT", "2300")
+    value = os.environ.get("AIRLOCK_VM_PARALLEL_SSH_BASE_PORT", "2300")
     try:
         return int(value)
     except ValueError:
-        pytest.fail(f"NIXOME_VM_PARALLEL_SSH_BASE_PORT must be an integer: {value}")
+        pytest.fail(f"AIRLOCK_VM_PARALLEL_SSH_BASE_PORT must be an integer: {value}")
 
 
 def vm_flow_has_mark(vm_flow: VmFlow, mark_name: str) -> bool:
@@ -229,10 +229,10 @@ def write_log(path: Path, result: subprocess.CompletedProcess[str]) -> None:
 def test_vm_flow(
     vm_flow: VmFlow,
     repo_root: Path,
-    nixome_log_dir: Path,
+    airlock_log_dir: Path,
 ) -> None:
-    if os.environ.get("NIXOME_RUN_VM_TESTS") != "1":
-        pytest.skip("set NIXOME_RUN_VM_TESTS=1 to run nested VM flows")
+    if os.environ.get("AIRLOCK_RUN_VM_TESTS") != "1":
+        pytest.skip("set AIRLOCK_RUN_VM_TESTS=1 to run nested VM flows")
 
     parallel_enabled = vm_parallel_enabled()
     if vm_flow.serial and parallel_enabled:
@@ -240,38 +240,38 @@ def test_vm_flow(
 
     lane = vm_lane_id()
     if parallel_enabled:
-        flow_log_dir = nixome_log_dir / "vm-lanes" / str(lane) / vm_flow.name
+        flow_log_dir = airlock_log_dir / "vm-lanes" / str(lane) / vm_flow.name
     else:
-        flow_log_dir = nixome_log_dir / vm_flow.name
+        flow_log_dir = airlock_log_dir / vm_flow.name
     flow_log_dir.mkdir(parents=True, exist_ok=True)
     command = ["make", "-C", str(repo_root), vm_flow.make_target]
     env = os.environ.copy()
-    env["NIXOME_LOG_DIR"] = str(flow_log_dir)
+    env["AIRLOCK_LOG_DIR"] = str(flow_log_dir)
     lane_env = {
-        "NIXOME_LOG_DIR": str(flow_log_dir),
-        "NIXOME_VM_PARALLEL_LANES": os.environ.get("NIXOME_VM_PARALLEL_LANES", "1"),
+        "AIRLOCK_LOG_DIR": str(flow_log_dir),
+        "AIRLOCK_VM_PARALLEL_LANES": os.environ.get("AIRLOCK_VM_PARALLEL_LANES", "1"),
     }
     if vm_flow_has_mark(vm_flow, "warm"):
         # Warm flows intentionally keep the nested VM alive between test steps.
-        # The guarded Nixome GC must not run in the middle of that sequence.
-        env["NIXOME_SKIP_GC_AUTO"] = "1"
-        lane_env["NIXOME_SKIP_GC_AUTO"] = "1"
+        # The guarded Airlock GC must not run in the middle of that sequence.
+        env["AIRLOCK_SKIP_GC_AUTO"] = "1"
+        lane_env["AIRLOCK_SKIP_GC_AUTO"] = "1"
     if parallel_enabled:
         # VM lanes isolate mutable VM state, result links, logs, and SSH ports.
         # They intentionally share the configured Nix store/cache so expensive
         # builds are reused across workers. The lane-local image result link is
         # prepared from the Makefile prebuild so workers do not each resolve the
         # same base image with nix build.
-        data_root = Path(env["NIXOME_DATA_ROOT"])
+        data_root = Path(env["AIRLOCK_DATA_ROOT"])
         vm_dir = data_root / "vm-lanes" / str(lane)
         result_link_dir = data_root / "result-links" / "vm-lanes" / str(lane)
         vm_dir.mkdir(parents=True, exist_ok=True)
         result_link_dir.mkdir(parents=True, exist_ok=True)
         shared_image_attr = env.get(
-            "NIXOME_VM_PARALLEL_IMAGE_ATTR",
-            "nixome-vm-gui-config-dev-image",
+            "AIRLOCK_VM_PARALLEL_IMAGE_ATTR",
+            "airlock-vm-gui-config-dev-image",
         )
-        shared_image_link_value = env.get("NIXOME_VM_PARALLEL_IMAGE_LINK")
+        shared_image_link_value = env.get("AIRLOCK_VM_PARALLEL_IMAGE_LINK")
         lane_image_link = None
         if shared_image_link_value:
             lane_image_link = prepare_lane_image_result_link(
@@ -279,50 +279,54 @@ def test_vm_flow(
                 shared_image_attr,
                 Path(shared_image_link_value),
             )
-            env["NIXOME_VM_SKIP_BASE_BUILD"] = "1"
+            env["AIRLOCK_VM_SKIP_BASE_BUILD"] = "1"
         if vm_flow.name in BASELINE_BACKED_PARALLEL_FLOWS:
             # Each test lane gets its own writable qcow2 overlay, but the
             # overlay is backed by the read-only prepared baseline. The baseline
             # already ran the common boot/service/setup-config prefix, so these
             # flow targets skip that setup pass and start from the cloned state.
             baseline_disk = required_file_from_env(
-                "NIXOME_VM_PARALLEL_BASELINE_DISK",
+                "AIRLOCK_VM_PARALLEL_BASELINE_DISK",
                 "baseline-backed parallel VM tests",
             )
             baseline_ovmf_vars = required_file_from_env(
-                "NIXOME_VM_PARALLEL_BASELINE_OVMF_VARS",
+                "AIRLOCK_VM_PARALLEL_BASELINE_OVMF_VARS",
                 "baseline-backed parallel VM tests",
             )
-            env["NIXOME_VM_BACKING_IMAGE"] = str(baseline_disk)
-            env["NIXOME_VM_OVMF_VARS_TEMPLATE"] = str(baseline_ovmf_vars)
+            env["AIRLOCK_VM_BACKING_IMAGE"] = str(baseline_disk)
+            env["AIRLOCK_VM_OVMF_VARS_TEMPLATE"] = str(baseline_ovmf_vars)
             env["VM_FLOW_RUN_SETUP_CONFIG"] = "0"
-        env["NIXOME_VM_LANE"] = str(lane)
-        env["NIXOME_VM_DIR"] = str(vm_dir)
-        env["NIXOME_RESULT_LINK_DIR"] = str(result_link_dir)
+        env["AIRLOCK_VM_LANE"] = str(lane)
+        env["AIRLOCK_VM_DIR"] = str(vm_dir)
+        env["AIRLOCK_RESULT_LINK_DIR"] = str(result_link_dir)
         ssh_port = vm_parallel_ssh_base_port() + lane
-        env["NIXOME_VM_SSH_PORT"] = str(ssh_port)
-        env["NIXOME_SKIP_GC_AUTO"] = "1"
+        env["AIRLOCK_VM_SSH_PORT"] = str(ssh_port)
+        env["AIRLOCK_SKIP_GC_AUTO"] = "1"
         lane_env.update(
             {
-                "NIXOME_VM_LANE": str(lane),
-                "NIXOME_VM_DIR": str(vm_dir),
-                "NIXOME_RESULT_LINK_DIR": str(result_link_dir),
-                "NIXOME_VM_PARALLEL_SSH_BASE_PORT": os.environ.get(
-                    "NIXOME_VM_PARALLEL_SSH_BASE_PORT",
+                "AIRLOCK_VM_LANE": str(lane),
+                "AIRLOCK_VM_DIR": str(vm_dir),
+                "AIRLOCK_RESULT_LINK_DIR": str(result_link_dir),
+                "AIRLOCK_VM_PARALLEL_SSH_BASE_PORT": os.environ.get(
+                    "AIRLOCK_VM_PARALLEL_SSH_BASE_PORT",
                     "2300",
                 ),
-                "NIXOME_VM_SSH_PORT": str(ssh_port),
-                "NIXOME_SKIP_GC_AUTO": "1",
-                "NIXOME_VM_PARALLEL_IMAGE_ATTR": shared_image_attr,
-                "NIXOME_VM_PARALLEL_IMAGE_LINK": shared_image_link_value,
-                "NIXOME_VM_SKIP_BASE_BUILD": env.get("NIXOME_VM_SKIP_BASE_BUILD", "0"),
-                "NIXOME_VM_BACKING_IMAGE": env.get("NIXOME_VM_BACKING_IMAGE"),
-                "NIXOME_VM_OVMF_VARS_TEMPLATE": env.get("NIXOME_VM_OVMF_VARS_TEMPLATE"),
+                "AIRLOCK_VM_SSH_PORT": str(ssh_port),
+                "AIRLOCK_SKIP_GC_AUTO": "1",
+                "AIRLOCK_VM_PARALLEL_IMAGE_ATTR": shared_image_attr,
+                "AIRLOCK_VM_PARALLEL_IMAGE_LINK": shared_image_link_value,
+                "AIRLOCK_VM_SKIP_BASE_BUILD": env.get(
+                    "AIRLOCK_VM_SKIP_BASE_BUILD", "0"
+                ),
+                "AIRLOCK_VM_BACKING_IMAGE": env.get("AIRLOCK_VM_BACKING_IMAGE"),
+                "AIRLOCK_VM_OVMF_VARS_TEMPLATE": env.get(
+                    "AIRLOCK_VM_OVMF_VARS_TEMPLATE"
+                ),
                 "VM_FLOW_RUN_SETUP_CONFIG": env.get("VM_FLOW_RUN_SETUP_CONFIG"),
             }
         )
         if lane_image_link is not None:
-            lane_env["NIXOME_VM_IMAGE_RESULT_LINK"] = str(lane_image_link)
+            lane_env["AIRLOCK_VM_IMAGE_RESULT_LINK"] = str(lane_image_link)
     (flow_log_dir / "pytest-vm-env.json").write_text(
         json.dumps(lane_env, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

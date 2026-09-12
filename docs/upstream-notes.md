@@ -17,7 +17,7 @@ Important constraints from the NixOS module/docs:
 - The supported boot paths are systemd-boot, Lanzaboote with the relevant Xen
   support, or Limine.
 - Xen adds a second entry for each NixOS generation. The Xen entry is the
-  default; Nixome labels the ordinary NixOS entry `Recovery: without Xen`.
+  default; Airlock labels the ordinary NixOS entry `Recovery: without Xen`.
 - `boot.initrd.systemd.enable = true` is required. Legacy scripted stage 1 is
   rejected.
 - NixOS checks software/kernel requirements, but it does not check hardware
@@ -69,18 +69,18 @@ Known gaps/TODOs found in module/package comments:
 - `virtualisation.qubes.secure = true` is asserted unsupported. The full Qubes
   OS security model is not implemented in the NixOS module yet.
 - The upstream module sets `virtualisation.libvirtd.firewallBackend = "none"`,
-  but current nixpkgs accepts only `iptables` or `nftables`. Nixome forces
+  but current nixpkgs accepts only `iptables` or `nftables`. Airlock forces
   `iptables` for now because the upstream Qubes libvirt package is 10.5 and the
   upstream comment notes that it predates nftables backend support.
 - Current nixpkgs runs `pythonMetadataCheckHook` for Python modules. Upstream
   `qubes-linux-utils.imgconverter` is named `qubes-linux-utils-imgconverter`,
   while the installed Python distribution is `qubesimgconverter`. The local
-  Nixome fork sets `dontCheckPythonMetadata = true` for that subpackage; the
+  Airlock fork sets `dontCheckPythonMetadata = true` for that subpackage; the
   import check for `qubesimgconverter` remains enabled.
 - Current nixpkgs' Xen split-output install logic assumes it can derive one
   OCaml version directory with `ls $out/lib/ocaml/` before copying
   `site-lib/xsd_glue`. The Qubes-patched Xen build can make that guard true
-  while the constructed path is absent. The local Nixome fork copies the actual
+  while the constructed path is absent. The local Airlock fork copies the actual
   `xsd_glue` directories found under `$out/lib/ocaml`.
 - Dedicated `sys-net` and `sys-usb` are marked not ready for exclusive use in
   the dom0 module.
@@ -91,18 +91,18 @@ Known gaps/TODOs found in module/package comments:
   manager behavior.
 - Some GUI/Xwayland/Xorg integration is still marked FIXME.
 - Fedora template/kernel installation is still imperative in the smoke path.
-  Nixome has a development-only `nixome-qube-bootstrap` command using the
+  Airlock has a development-only `airlock-qube-bootstrap` command using the
   existing `nixos-qubes-tools` RPM import helpers.
-- Nixome now also has an initial declarative topology setup command for
+- Airlock now also has an initial declarative topology setup command for
   Nix-built template source directories and AppVM creation. It is intentionally
   narrow: import missing templates, create missing domains, and set simple
   prefs/features/services.
 
-Nixome now consumes a local source fork at `vendor/nixos-qubes`. The fork is
+Airlock now consumes a local source fork at `vendor/nixos-qubes`. The fork is
 justified by concrete compatibility fixes needed for the POC build:
 `qubes-linux-utils.imgconverter` metadata checking and Qubes-patched Xen OCaml
 split-output installation. Keep this fork narrow and upstreamable. The fork's
-`nixpkgs` input still follows Nixome's pinned `nixpkgs`; upstream's flake
+`nixpkgs` input still follows Airlock's pinned `nixpkgs`; upstream's flake
 records a developer-local `file:/home/lach/build/nixpkgs` input otherwise.
 
 ## Qubes Tests
@@ -139,7 +139,7 @@ The current `release4.3` core-admin branch inspected was:
 The `qrexec.py` integration file includes tests such as
 `test_050_qrexec_simple_eof`, `test_060_qrexec_exit_code_dom0`, qrexec service
 argument tests, socket tests, and VM-to-VM/dom0 qrexec behavior. These are the
-right upstream tests to graduate toward once Nixome can boot the control stack
+right upstream tests to graduate toward once Airlock can boot the control stack
 on a dedicated dom0 target.
 
 Qubes also uses openQA for automated installation/system testing. The docs note
@@ -166,7 +166,7 @@ What can be tested on a normal non-Xen development host:
 
 - Nix flake evaluation.
 - NixOS module contract and option assertions.
-- Lightweight package builds such as `nixome-observe-dom0`.
+- Lightweight package builds such as `airlock-observe-dom0`.
 - Host capability detection.
 - Potentially some upstream Python unit tests once packaged for that purpose.
 - A nested QEMU/KVM boot probe, if the host exposes nested VMX/SVM. This is a

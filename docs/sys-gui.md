@@ -2,8 +2,8 @@
 
 `sys-gui` owns LightDM's login screen, the XFCE desktop, Qubes Manager,
 application menus, tray widgets, notifications, and graphical settings tools.
-The bootstrap and initial runtime configurations use **user / nixome** for
-the guest login. The dom0 console account remains **nixome / nixome**.
+The bootstrap and initial runtime configurations use **user / airlock** for
+the guest login. The dom0 console account remains **airlock / airlock**.
 These are development credentials. Deployments should configure the GUI
 user through NixOS `users.users.user.hashedPasswordFile`; credentials are
 independent of dom0 and are not copied out of its shadow file.
@@ -38,6 +38,6 @@ separate display-device and input-ownership change. The AI `sys-gpu` role
 remains independent. `sys-config-*` VMs remain on demand.
 
 For a fresh development image, build and boot with
-`NIXOME_VM_FRESH=1 make vm-gui-config-run`. Verify guest login, visible cursor,
+`AIRLOCK_VM_FRESH=1 make vm-gui-config-run`. Verify guest login, visible cursor,
 VM Manager, logout/relogin, and that config VMs remain halted. Guest login
 diagnostics are in `journalctl -b -u display-manager` inside `sys-gui`.

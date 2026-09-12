@@ -1,0 +1,44 @@
+{
+  callPackage,
+  coreutils,
+  gawk,
+  git,
+  gnugrep,
+  gnutar,
+  jq,
+  lib,
+  nix,
+  python3,
+  systemd,
+  writeShellApplication,
+}:
+let
+  configArchive = callPackage ../airlock-config-archive { };
+  setupConfig = callPackage ../../../../misc/tools/pkgs/airlock-setup-config { };
+in
+writeShellApplication {
+  name = "airlock-config-apply";
+
+  runtimeInputs = [
+    configArchive
+    coreutils
+    gawk
+    git
+    gnugrep
+    gnutar
+    jq
+    nix
+    python3.pkgs.qubes-core-admin-client
+    python3.pkgs.qubes-core-qrexec.dom0
+    setupConfig
+    systemd
+  ];
+
+  text = builtins.readFile ../../scripts/apply-config-candidate.sh;
+
+  meta = {
+    description = "Apply a validator-approved Airlock config candidate from dom0";
+    license = lib.licenses.mit;
+    platforms = [ "x86_64-linux" ];
+  };
+}

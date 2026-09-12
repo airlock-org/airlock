@@ -1,13 +1,13 @@
-# Nixome
+# Airlock
 
-Nixome is a proof-of-concept path toward a Nix-native Qubes OS architecture.
+Airlock is a proof-of-concept path toward a Nix-native Qubes OS architecture.
 The first milestone is narrow: run the Qubes control stack with NixOS as Xen
 dom0 while retaining Qubes' Xen, qrexec, QubesDB, policy, libvirt, and VM
 lifecycle machinery.
 
 This repository vendors a local source fork of
 [`CertainLach/nixos-qubes`](https://github.com/CertainLach/nixos-qubes) under
-`vendor/nixos-qubes` and consumes it as a flake input. Nixome adds a thin
+`vendor/nixos-qubes` and consumes it as a flake input. Airlock adds a thin
 integration layer for:
 
 - a POC NixOS dom0 configuration,
@@ -56,7 +56,7 @@ make vm-gui-config-run
 ```
 
 Builds and launches the current nested GUI dom0 image. The nested image uses a
-throwaway `nixome` user with password `nixome` and loopback-only SSH
+throwaway `airlock` user with password `airlock` and loopback-only SSH
 forwarding on port `2222`.
 
 ```bash
@@ -127,7 +127,7 @@ Each config VM is a Qubes `StandaloneVM` with:
 - normal Qubes qrexec/policy/network controls.
 
 `sys-config-staging` and `sys-config-validator` run candidate Nix checks through
-`nixome-config-nix`, backed by private writable state, so their own system
+`airlock-config-nix`, backed by private writable state, so their own system
 `/nix/store` remains read-only.
 
 The old NixOS TemplateVM path for config domains has been removed. Generic
@@ -140,24 +140,24 @@ model and [docs/testing.md](docs/testing.md) for the test layers.
 ## Generated Data
 
 When `/run/media/user/data` is mounted, generated writable VM overlays, logs,
-temporary files, Qubes RPM/template downloads, and Nixome Nix build outputs
+temporary files, Qubes RPM/template downloads, and Airlock Nix build outputs
 default to:
 
 ```text
-/run/media/user/data/nixome/
+/run/media/user/data/airlock/
 ```
 
 Source code, Nix files, scripts, docs, and Git history stay in this repository.
-The Nixome Nix store is a chroot local store rooted at:
+The Airlock Nix store is a chroot local store rooted at:
 
 ```text
-/run/media/user/data/nixome/nix-root
+/run/media/user/data/airlock/nix-root
 ```
 
 Logical store paths still look like `/nix/store/...`; the bytes live under the
-data-disk root. If `/run/media/user/data` is not available, Nixome refuses to
-use the host `/nix/store` by default. Set `NIXOME_DATA_ROOT` to another
-data-backed path, or set `NIXOME_USE_HOST_NIX_STORE=1` for an explicit
+data-disk root. If `/run/media/user/data` is not available, Airlock refuses to
+use the host `/nix/store` by default. Set `AIRLOCK_DATA_ROOT` to another
+data-backed path, or set `AIRLOCK_USE_HOST_NIX_STORE=1` for an explicit
 one-off host-store command.
 
 Useful cleanup commands:
@@ -174,14 +174,14 @@ make clean-logs
 make clean-cache
 ```
 
-`make gc` operates only on the separate Nixome store and refuses to run against
+`make gc` operates only on the separate Airlock store and refuses to run against
 the host `/nix/store`.
 
 ## Status
 
 The nested GUI/Qubes path has proven the Qubes control services, Fedora
 TemplateVM qrexec, closure-backed NixOS domain boot, read-only store volume
-mounting, config staging/validation/promotion, Nixome-owned qrexec policy
+mounting, config staging/validation/promotion, Airlock-owned qrexec policy
 generation, and dom0 generation switching under nested Xen.
 
 Production security validation still requires a physical Xen-capable machine.

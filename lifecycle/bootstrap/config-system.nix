@@ -1,8 +1,8 @@
 {
   lib,
-  nixomeConfigDomains ? { },
-  nixomeConfigInputs ? null,
-  nixomeQubeKernel ? null,
+  airlockConfigDomains ? { },
+  airlockConfigInputs ? null,
+  airlockQubeKernel ? null,
   ...
 }:
 let
@@ -12,14 +12,14 @@ let
     "sys-config-validator"
   ];
   missingConfigDomains = builtins.filter (
-    role: !(builtins.hasAttr role nixomeConfigDomains)
+    role: !(builtins.hasAttr role airlockConfigDomains)
   ) configRoles;
   autostartConfigDomains =
-    builtins.filter (role: nixomeConfigDomains.${role}.prefs.autostart or false)
-      (builtins.filter (role: lib.hasPrefix "sys-config-" role) (builtins.attrNames nixomeConfigDomains));
+    builtins.filter (role: airlockConfigDomains.${role}.prefs.autostart or false)
+      (builtins.filter (role: lib.hasPrefix "sys-config-" role) (builtins.attrNames airlockConfigDomains));
   haveConfigDomains = missingConfigDomains == [ ];
-  haveQubeKernel = nixomeQubeKernel != null;
-  haveConfigInputs = nixomeConfigInputs != null;
+  haveQubeKernel = airlockQubeKernel != null;
+  haveConfigInputs = airlockConfigInputs != null;
 in
 {
   assertions = [
@@ -33,39 +33,39 @@ in
     }
     {
       assertion = haveQubeKernel;
-      message = "lifecycle/bootstrap/config-system.nix requires nixomeQubeKernel specialArg.";
+      message = "lifecycle/bootstrap/config-system.nix requires airlockQubeKernel specialArg.";
     }
     {
       assertion = haveConfigInputs;
-      message = "lifecycle/bootstrap/config-system.nix requires nixomeConfigInputs specialArgs.";
+      message = "lifecycle/bootstrap/config-system.nix requires airlockConfigInputs specialArgs.";
     }
   ];
 
   environment.etc = {
-    "nixome/config-inputs/nixpkgs".source =
-      if haveConfigInputs then nixomeConfigInputs.nixpkgs else null;
-    "nixome/config-inputs/nixpkgs-libvirt_10_5".source =
-      if haveConfigInputs && nixomeConfigInputs ? nixpkgsLibvirt105 then
-        nixomeConfigInputs.nixpkgsLibvirt105
+    "airlock/config-inputs/nixpkgs".source =
+      if haveConfigInputs then airlockConfigInputs.nixpkgs else null;
+    "airlock/config-inputs/nixpkgs-libvirt_10_5".source =
+      if haveConfigInputs && airlockConfigInputs ? nixpkgsLibvirt105 then
+        airlockConfigInputs.nixpkgsLibvirt105
       else
         null;
-    "nixome/config-inputs/nixos-qubes".source =
-      if haveConfigInputs then nixomeConfigInputs.nixosQubes else null;
-    "nixome/config-inputs/nixome-support".source =
-      if haveConfigInputs then nixomeConfigInputs.nixomeSupport else null;
+    "airlock/config-inputs/nixos-qubes".source =
+      if haveConfigInputs then airlockConfigInputs.nixosQubes else null;
+    "airlock/config-inputs/airlock-support".source =
+      if haveConfigInputs then airlockConfigInputs.airlockSupport else null;
   };
 
-  nixome.qubes = {
+  airlock.qubes = {
     enable = true;
     setupConfigOnBoot.enable = true;
     startNetworkProvidersOnBoot.enable = true;
     deferredSetupConfigOnBoot.enable = true;
     # Config VMs are created at boot but started only by an explicit config
-    # operation. The nixome-config-bootstrap-current command remains installed.
+    # operation. The airlock-config-bootstrap-current command remains installed.
     configCurrentBootstrapOnBoot.enable = false;
 
     prefs = {
-      # Fresh Nixome dom0 images do not have a Fedora/Qubes VM kernel
+      # Fresh Airlock dom0 images do not have a Fedora/Qubes VM kernel
       # installed. Nix-native domains set their own kernel explicitly.
       default_kernel = "";
       default_guivm = "sys-gui";
@@ -75,25 +75,25 @@ in
     templates = { };
 
     kernels = {
-      ${if haveQubeKernel then nixomeQubeKernel.name else "missing-qubes-vm-kernel"} = {
-        source = if haveQubeKernel then "${nixomeQubeKernel.package}" else null;
+      ${if haveQubeKernel then airlockQubeKernel.name else "missing-qubes-vm-kernel"} = {
+        source = if haveQubeKernel then "${airlockQubeKernel.package}" else null;
       };
     };
 
-    domains = nixomeConfigDomains;
+    domains = airlockConfigDomains;
 
     configAccessPolicy = {
       enable = true;
       vault = "sys-config-vault";
       staging = "sys-config-staging";
       validator = "sys-config-validator";
-      candidateExportService = "nixome.Config.CandidateExport";
-      candidateValidateService = "nixome.Config.ValidateCandidate";
-      archiveService = "nixome.Config.ArchiveCandidate";
-      archiveDeploymentService = "nixome.Config.ArchiveDeployment";
-      currentExportService = "nixome.Config.ExportCurrent";
-      currentImportService = "nixome.Config.ImportCurrent";
-      configInputsImportService = "nixome.Config.InputsImport";
+      candidateExportService = "airlock.Config.CandidateExport";
+      candidateValidateService = "airlock.Config.ValidateCandidate";
+      archiveService = "airlock.Config.ArchiveCandidate";
+      archiveDeploymentService = "airlock.Config.ArchiveDeployment";
+      currentExportService = "airlock.Config.ExportCurrent";
+      currentImportService = "airlock.Config.ImportCurrent";
+      configInputsImportService = "airlock.Config.InputsImport";
       allowedSubmitters = [ ];
     };
   };

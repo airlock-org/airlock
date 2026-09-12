@@ -1,8 +1,8 @@
 {
   lib,
-  mkNixomeQubeBuilders,
-  nixomeConfigInputs,
-  nixomeQubesVmKernelName,
+  mkAirlockQubeBuilders,
+  airlockConfigInputs,
+  airlockQubesVmKernelName,
   networkDebug ? false,
 }:
 let
@@ -28,7 +28,7 @@ let
   mkConfigDomainEntries =
     system:
     let
-      qubeBuilders = mkNixomeQubeBuilders system;
+      qubeBuilders = mkAirlockQubeBuilders system;
       mkGuestModule =
         role:
         let
@@ -46,11 +46,11 @@ let
         qubeBuilders.mkNixNativeDomain {
           name = role;
           guestRole = role;
-          inherit nixomeConfigInputs;
-          nixomePrebuiltTemplateSources = { };
+          inherit airlockConfigInputs;
+          airlockPrebuiltTemplateSources = { };
           modules = [ (mkGuestModule role) ];
           rootImageSizeMiB = defaults.rootImageSizeMiB;
-          kernelName = nixomeQubesVmKernelName;
+          kernelName = airlockQubesVmKernelName;
           label = defaults.label;
           netvm = null;
           prefs = defaults.prefs;
@@ -69,7 +69,7 @@ let
   mkSysNetDomainEntry =
     system:
     let
-      qubeBuilders = mkNixomeQubeBuilders system;
+      qubeBuilders = mkAirlockQubeBuilders system;
     in
     qubeBuilders.mkNixNativeDomain {
       name = "sys-net";
@@ -81,13 +81,13 @@ let
             networking.hostName = sysNetRoleDefaults.guestHostName;
           }
           // lib.optionalAttrs networkDebug {
-            nixome.qubeGuest.allowQrexecUserSelection = true;
+            airlock.qubeGuest.allowQrexecUserSelection = true;
             systemd.services.NetworkManager.wantedBy = lib.mkForce [ ];
           }
         )
       ];
       rootImageSizeMiB = sysNetRoleDefaults.rootImageSizeMiB;
-      kernelName = nixomeQubesVmKernelName;
+      kernelName = airlockQubesVmKernelName;
       label = sysNetRoleDefaults.label;
       netvm = sysNetRoleDefaults.netvm;
       prefs = sysNetRoleDefaults.prefs;
@@ -100,7 +100,7 @@ let
   mkSysFirewallDomainEntry =
     system:
     let
-      qubeBuilders = mkNixomeQubeBuilders system;
+      qubeBuilders = mkAirlockQubeBuilders system;
     in
     qubeBuilders.mkNixNativeDomain {
       name = "sys-firewall";
@@ -111,7 +111,7 @@ let
         })
       ];
       rootImageSizeMiB = sysFirewallRoleDefaults.rootImageSizeMiB;
-      kernelName = nixomeQubesVmKernelName;
+      kernelName = airlockQubesVmKernelName;
       label = sysFirewallRoleDefaults.label;
       netvm = sysFirewallRoleDefaults.netvm;
       prefs = sysFirewallRoleDefaults.prefs;
@@ -122,7 +122,7 @@ let
   mkSysGuiDomainEntry =
     system:
     let
-      qubeBuilders = mkNixomeQubeBuilders system;
+      qubeBuilders = mkAirlockQubeBuilders system;
     in
     qubeBuilders.mkNixNativeDomain {
       name = "sys-gui";
@@ -132,11 +132,11 @@ let
           networking.hostName = sysGuiRoleDefaults.guestHostName;
           # Development/bootstrap login, matching the nested image password.
           # Real deployments supply their own NixOS password configuration.
-          users.users.user.initialPassword = "nixome";
+          users.users.user.initialPassword = "airlock";
         })
       ];
       rootImageSizeMiB = sysGuiRoleDefaults.rootImageSizeMiB;
-      kernelName = nixomeQubesVmKernelName;
+      kernelName = airlockQubesVmKernelName;
       label = sysGuiRoleDefaults.label;
       netvm = sysGuiRoleDefaults.netvm;
       prefs = sysGuiRoleDefaults.prefs;

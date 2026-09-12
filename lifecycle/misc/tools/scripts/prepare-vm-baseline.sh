@@ -2,20 +2,20 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
+source "$ROOT/lifecycle/misc/tools/scripts/lib/airlock-env.sh"
 
-IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-dev-image}"
-BASELINE_DIR="${NIXOME_VM_BASELINE_DIR:-${NIXOME_DATA_ROOT:-$ROOT/.nixome}/vm-baselines/$IMAGE_ATTR-setup}"
-BASELINE_LOG_DIR="${NIXOME_VM_BASELINE_LOG_DIR:-${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}/vm-baseline}"
-BASELINE_RESULT_LINK_DIR="${NIXOME_VM_BASELINE_RESULT_LINK_DIR:-$BASELINE_DIR/result-links}"
-SHARED_IMAGE_LINK="${NIXOME_VM_SHARED_IMAGE_LINK:-$NIXOME_RESULT_LINK_DIR/${IMAGE_ATTR}-parallel-shared-result}"
-BASELINE_DISK="${NIXOME_VM_BASELINE_DISK:-$BASELINE_DIR/$IMAGE_ATTR.qcow2}"
-BASELINE_OVMF_VARS="${NIXOME_VM_BASELINE_OVMF_VARS:-$BASELINE_DIR/${IMAGE_ATTR}-OVMF_VARS.fd}"
+IMAGE_ATTR="${AIRLOCK_VM_IMAGE_ATTR:-airlock-vm-gui-config-dev-image}"
+BASELINE_DIR="${AIRLOCK_VM_BASELINE_DIR:-${AIRLOCK_DATA_ROOT:-$ROOT/.airlock}/vm-baselines/$IMAGE_ATTR-setup}"
+BASELINE_LOG_DIR="${AIRLOCK_VM_BASELINE_LOG_DIR:-${AIRLOCK_LOG_DIR:-$ROOT/.airlock-logs}/vm-baseline}"
+BASELINE_RESULT_LINK_DIR="${AIRLOCK_VM_BASELINE_RESULT_LINK_DIR:-$BASELINE_DIR/result-links}"
+SHARED_IMAGE_LINK="${AIRLOCK_VM_SHARED_IMAGE_LINK:-$AIRLOCK_RESULT_LINK_DIR/${IMAGE_ATTR}-parallel-shared-result}"
+BASELINE_DISK="${AIRLOCK_VM_BASELINE_DISK:-$BASELINE_DIR/$IMAGE_ATTR.qcow2}"
+BASELINE_OVMF_VARS="${AIRLOCK_VM_BASELINE_OVMF_VARS:-$BASELINE_DIR/${IMAGE_ATTR}-OVMF_VARS.fd}"
 BASELINE_META="$BASELINE_DIR/baseline.json"
 BASELINE_JSON="$BASELINE_LOG_DIR/vm-baseline.json"
 SETUP_CONFIG_JSON="$BASELINE_LOG_DIR/vm-gui-setup-config.json"
-FORCE="${NIXOME_VM_BASELINE_FORCE:-0}"
-SSH_PORT="${NIXOME_VM_BASELINE_SSH_PORT:-${NIXOME_VM_SSH_PORT:-2299}}"
+FORCE="${AIRLOCK_VM_BASELINE_FORCE:-0}"
+SSH_PORT="${AIRLOCK_VM_BASELINE_SSH_PORT:-${AIRLOCK_VM_SSH_PORT:-2299}}"
 
 mkdir -p "$BASELINE_DIR" "$BASELINE_LOG_DIR" "$BASELINE_RESULT_LINK_DIR"
 
@@ -27,7 +27,7 @@ case "$FORCE" in
     force=0
     ;;
   *)
-    printf 'error: NIXOME_VM_BASELINE_FORCE must be 0 or 1\n' >&2
+    printf 'error: AIRLOCK_VM_BASELINE_FORCE must be 0 or 1\n' >&2
     exit 1
     ;;
 esac
@@ -59,13 +59,13 @@ if [ "$force" = "0" ] &&
     --arg disk "$BASELINE_DISK" \
     --arg ovmf_vars "$BASELINE_OVMF_VARS" \
     '
-      .schema == "nixome.vm-baseline.v1" and
+      .schema == "airlock.vm-baseline.v1" and
       .status == "passed" and
       .image_attr == $image_attr and
       .source_image_output == $source_image_output and
       .disk == $disk and
       .ovmf_vars == $ovmf_vars and
-      .setup_config.schema == "nixome.setup-config.v1" and
+      .setup_config.schema == "airlock.setup-config.v1" and
       .setup_config.status == "passed"
     ' "$BASELINE_META" >/dev/null; then
   jq '. + {reused: true}' "$BASELINE_META" > "$BASELINE_JSON"
@@ -84,25 +84,25 @@ start_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 set +e
 env \
-  NIXOME_LOG_DIR="$BASELINE_LOG_DIR" \
-  NIXOME_VM_DIR="$BASELINE_DIR" \
-  NIXOME_RESULT_LINK_DIR="$BASELINE_RESULT_LINK_DIR" \
-  NIXOME_VM_IMAGE_ATTR="$IMAGE_ATTR" \
-  NIXOME_VM_DISPLAY="${NIXOME_VM_DISPLAY:-none}" \
-  NIXOME_VM_SSH_PORT="$SSH_PORT" \
-  NIXOME_VM_FRESH=1 \
-  NIXOME_VM_SKIP_BASE_BUILD=1 \
-  NIXOME_AUTO_GC_AFTER_RUN=0 \
-  NIXOME_SHUTDOWN_VM_ON_SUCCESS=1 \
-  NIXOME_REQUIRE_CLEAN_SHUTDOWN=1 \
-  NIXOME_BOOTSTRAP_QUBES=0 \
-  NIXOME_RUN_SETUP_CONFIG=1 \
-  NIXOME_RUN_CONFIG_INPUTS_IMPORT=0 \
-  NIXOME_RUN_CONFIG_VMS_SMOKE=0 \
-  NIXOME_RUN_CONFIG_BOOT_VERIFY=0 \
-  NIXOME_RUN_NIX_CLOSURE_SMOKE=0 \
-  NIXOME_RUN_QUBES_SMOKE=0 \
-  NIXOME_RUN_GUI_SMOKE=0 \
+  AIRLOCK_LOG_DIR="$BASELINE_LOG_DIR" \
+  AIRLOCK_VM_DIR="$BASELINE_DIR" \
+  AIRLOCK_RESULT_LINK_DIR="$BASELINE_RESULT_LINK_DIR" \
+  AIRLOCK_VM_IMAGE_ATTR="$IMAGE_ATTR" \
+  AIRLOCK_VM_DISPLAY="${AIRLOCK_VM_DISPLAY:-none}" \
+  AIRLOCK_VM_SSH_PORT="$SSH_PORT" \
+  AIRLOCK_VM_FRESH=1 \
+  AIRLOCK_VM_SKIP_BASE_BUILD=1 \
+  AIRLOCK_AUTO_GC_AFTER_RUN=0 \
+  AIRLOCK_SHUTDOWN_VM_ON_SUCCESS=1 \
+  AIRLOCK_REQUIRE_CLEAN_SHUTDOWN=1 \
+  AIRLOCK_BOOTSTRAP_QUBES=0 \
+  AIRLOCK_RUN_SETUP_CONFIG=1 \
+  AIRLOCK_RUN_CONFIG_INPUTS_IMPORT=0 \
+  AIRLOCK_RUN_CONFIG_VMS_SMOKE=0 \
+  AIRLOCK_RUN_CONFIG_BOOT_VERIFY=0 \
+  AIRLOCK_RUN_NIX_CLOSURE_SMOKE=0 \
+  AIRLOCK_RUN_QUBES_SMOKE=0 \
+  AIRLOCK_RUN_GUI_SMOKE=0 \
   "$ROOT/lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh"
 run_rc="$?"
 set -e
@@ -123,7 +123,7 @@ if [ "$run_rc" -ne 0 ]; then
     --argjson duration_seconds "$duration_seconds" \
     --argjson exit_code "$run_rc" \
     '{
-      schema: "nixome.vm-baseline.v1",
+      schema: "airlock.vm-baseline.v1",
       status: "failed",
       reason: "baseline setup run failed",
       image_attr: $image_attr,
@@ -151,7 +151,7 @@ if [ ! -f "$BASELINE_OVMF_VARS" ]; then
 fi
 
 if ! jq -e \
-  '.schema == "nixome.setup-config.v1" and .status == "passed"' \
+  '.schema == "airlock.setup-config.v1" and .status == "passed"' \
   "$SETUP_CONFIG_JSON" >/dev/null; then
   printf 'error: baseline setup-config did not pass; see %s\n' "$SETUP_CONFIG_JSON" >&2
   exit 1
@@ -170,7 +170,7 @@ jq -n \
   --argjson duration_seconds "$duration_seconds" \
   --slurpfile setup_config "$SETUP_CONFIG_JSON" \
   '{
-    schema: "nixome.vm-baseline.v1",
+    schema: "airlock.vm-baseline.v1",
     status: "passed",
     reason: "baseline setup completed",
     image_attr: $image_attr,

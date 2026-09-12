@@ -4,8 +4,8 @@
 /.ruff_cache/
 /__pycache__/
 **/__pycache__/
-/.nixome-logs/
-/.nixome-cache/
-/.nixome-vm/
-/.nixome-vm-*/
+/.airlock-logs/
+/.airlock-cache/
+/.airlock-vm/
+/.airlock-vm-*/
 /.direnv/

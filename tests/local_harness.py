@@ -32,16 +32,16 @@ def run_local_command(
     name: str,
     command: tuple[str, ...],
     repo_root: Path,
-    nixome_log_dir: Path,
+    airlock_log_dir: Path,
 ) -> Path:
     # Each test gets its own mutable artifact directory, while Nix itself keeps
-    # using the shared store configured by lifecycle/misc/tools/scripts/lib/nixome-env.sh.
-    test_log_dir = nixome_log_dir / name
+    # using the shared store configured by lifecycle/misc/tools/scripts/lib/airlock-env.sh.
+    test_log_dir = airlock_log_dir / name
     test_log_dir.mkdir(parents=True, exist_ok=True)
     formatted_command = format_command(command, repo_root, test_log_dir)
     log_path = test_log_dir / "pytest-command.log"
     env = os.environ.copy()
-    env["NIXOME_LOG_DIR"] = str(test_log_dir)
+    env["AIRLOCK_LOG_DIR"] = str(test_log_dir)
 
     result = subprocess.run(
         formatted_command,

@@ -5,7 +5,7 @@
   ...
 }:
 let
-  cfg = config.nixome.qubes;
+  cfg = config.airlock.qubes;
   access = cfg.configAccessPolicy;
   topologyLib = import ../lib/topology.nix;
   sourcePath = lib.types.oneOf [
@@ -398,7 +398,7 @@ let
     options = {
       service = lib.mkOption {
         type = lib.types.str;
-        description = "Nixome-owned qrexec service name.";
+        description = "Airlock-owned qrexec service name.";
       };
 
       argument = lib.mkOption {
@@ -428,7 +428,7 @@ let
     options.rules = lib.mkOption {
       type = lib.types.listOf qrexecPolicyRuleType;
       default = [ ];
-      description = "Nixome-owned qrexec policy rules.";
+      description = "Airlock-owned qrexec policy rules.";
     };
   };
 
@@ -442,34 +442,34 @@ let
       ;
   };
 
-  setupConfig = pkgs.callPackage ../tools/pkgs/nixome-setup-config { };
-  configApply = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-apply { };
-  configArchive = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-archive { };
+  setupConfig = pkgs.callPackage ../tools/pkgs/airlock-setup-config { };
+  configApply = pkgs.callPackage ../../runtime/tools/pkgs/airlock-config-apply { };
+  configArchive = pkgs.callPackage ../../runtime/tools/pkgs/airlock-config-archive { };
   configBootstrapCurrent =
-    pkgs.callPackage ../../bootstrap/tools/pkgs/nixome-config-bootstrap-current
+    pkgs.callPackage ../../bootstrap/tools/pkgs/airlock-config-bootstrap-current
       { };
-  configBootVerify = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-boot-verify { };
-  configControl = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-control { };
-  configInputsImport = pkgs.callPackage ../tools/pkgs/nixome-config-inputs-import { };
-  configStatus = pkgs.callPackage ../../runtime/tools/pkgs/nixome-config-status { };
-  configVmsSmoke = pkgs.callPackage ../tools/pkgs/nixome-config-vms-smoke { };
-  nixClosureDomainSmoke = pkgs.callPackage ../tools/pkgs/nixome-nix-closure-domain-smoke { };
-  startNetworkProviders = pkgs.callPackage ../tools/pkgs/nixome-start-network-providers { };
+  configBootVerify = pkgs.callPackage ../../runtime/tools/pkgs/airlock-config-boot-verify { };
+  configControl = pkgs.callPackage ../../runtime/tools/pkgs/airlock-config-control { };
+  configInputsImport = pkgs.callPackage ../tools/pkgs/airlock-config-inputs-import { };
+  configStatus = pkgs.callPackage ../../runtime/tools/pkgs/airlock-config-status { };
+  configVmsSmoke = pkgs.callPackage ../tools/pkgs/airlock-config-vms-smoke { };
+  nixClosureDomainSmoke = pkgs.callPackage ../tools/pkgs/airlock-nix-closure-domain-smoke { };
+  startNetworkProviders = pkgs.callPackage ../tools/pkgs/airlock-start-network-providers { };
   qrexecPolicyStaticDir = "/etc/qubes/policy.d";
-  qrexecPolicyRuntimeDir = "/var/lib/nixome/qubes-policy.d";
-  qrexecManagedPolicyFile = "90-nixome.policy";
+  qrexecPolicyRuntimeDir = "/var/lib/airlock/qubes-policy.d";
+  qrexecManagedPolicyFile = "90-airlock.policy";
   qrexecBase = pkgs.python3.pkgs.qubes-core-qrexec;
-  configControlStatusService = pkgs.writeShellScript "nixome-config-control-status-qrexec" ''
-    exec ${configControl}/bin/nixome-config-control status
+  configControlStatusService = pkgs.writeShellScript "airlock-config-control-status-qrexec" ''
+    exec ${configControl}/bin/airlock-config-control status
   '';
-  configControlCheckService = pkgs.writeShellScript "nixome-config-control-check-qrexec" ''
-    exec ${configControl}/bin/nixome-config-control check
+  configControlCheckService = pkgs.writeShellScript "airlock-config-control-check-qrexec" ''
+    exec ${configControl}/bin/airlock-config-control check
   '';
-  configControlApplyService = pkgs.writeShellScript "nixome-config-control-apply-qrexec" ''
-    exec ${configControl}/bin/nixome-config-control apply
+  configControlApplyService = pkgs.writeShellScript "airlock-config-control-apply-qrexec" ''
+    exec ${configControl}/bin/airlock-config-control apply
   '';
-  configControlRollbackService = pkgs.writeShellScript "nixome-config-control-rollback-qrexec" ''
-    exec ${configControl}/bin/nixome-config-control rollback
+  configControlRollbackService = pkgs.writeShellScript "airlock-config-control-rollback-qrexec" ''
+    exec ${configControl}/bin/airlock-config-control rollback
   '';
   configSubmitterAllowRules = lib.concatMapStrings (source: ''
     ${access.statusService} * ${source} dom0 allow
@@ -478,12 +478,12 @@ let
     ${access.rollbackService} * ${source} dom0 allow
   '') access.allowedSubmitters;
 
-  configAccessPolicyPackage = pkgs.runCommand "nixome-config-access-policy" { } ''
+  configAccessPolicyPackage = pkgs.runCommand "airlock-config-access-policy" { } ''
         set -eu
 
         install -d "$out/etc/qubes/policy.d"
-        cat > "$out/etc/qubes/policy.d/30-nixome-config.policy" <<'EOF'
-    # Managed by Nixome. Only dom0 may fetch config baselines/candidates,
+        cat > "$out/etc/qubes/policy.d/30-airlock-config.policy" <<'EOF'
+    # Managed by Airlock. Only dom0 may fetch config baselines/candidates,
     # ask sys-config-validator to validate them, or archive them into sys-config-vault.
     ${access.currentExportService} * dom0 ${access.vault} allow
     ${access.currentExportService} * @anyvm @anyvm deny
@@ -507,12 +507,12 @@ let
     EOF
   '';
 
-  qrexecPolicyPathScript = pkgs.writeShellScript "nixome-qubes-policy-path" ''
+  qrexecPolicyPathScript = pkgs.writeShellScript "airlock-qubes-policy-path" ''
     set -euo pipefail
 
-    static_dir="''${NIXOME_QUBES_STATIC_POLICY_DIR:-${lib.escapeShellArg qrexecPolicyStaticDir}}"
-    runtime_dir="''${NIXOME_QUBES_POLICY_DIR:-${lib.escapeShellArg qrexecPolicyRuntimeDir}}"
-    managed_file="''${NIXOME_QUBES_MANAGED_POLICY_FILE:-${lib.escapeShellArg qrexecManagedPolicyFile}}"
+    static_dir="''${AIRLOCK_QUBES_STATIC_POLICY_DIR:-${lib.escapeShellArg qrexecPolicyStaticDir}}"
+    runtime_dir="''${AIRLOCK_QUBES_POLICY_DIR:-${lib.escapeShellArg qrexecPolicyRuntimeDir}}"
+    managed_file="''${AIRLOCK_QUBES_MANAGED_POLICY_FILE:-${lib.escapeShellArg qrexecManagedPolicyFile}}"
     managed_path="$runtime_dir/$managed_file"
 
     ${pkgs.coreutils}/bin/install -d -m 0755 "$runtime_dir"
@@ -533,40 +533,40 @@ let
     fi
 
     if [ -e "$managed_path" ]; then
-      ${pkgs.gnugrep}/bin/grep -Fx "# Managed by Nixome setup-config." "$managed_path" >/dev/null || {
-        printf 'refusing unmanaged Nixome qrexec policy file: %s\n' "$managed_path" >&2
+      ${pkgs.gnugrep}/bin/grep -Fx "# Managed by Airlock setup-config." "$managed_path" >/dev/null || {
+        printf 'refusing unmanaged Airlock qrexec policy file: %s\n' "$managed_path" >&2
         exit 1
       }
     else
       ${pkgs.coreutils}/bin/cat > "$managed_path" <<'EOF'
-    # Managed by Nixome setup-config.
-    # Source: nixome.qubes.topology.qrexec_policy.
-    # Bootstrap config transport policy remains in 30-nixome-config.policy.
+    # Managed by Airlock setup-config.
+    # Source: airlock.qubes.topology.qrexec_policy.
+    # Bootstrap config transport policy remains in 30-airlock-config.policy.
     EOF
       ${pkgs.coreutils}/bin/chmod 0644 "$managed_path"
     fi
   '';
 in
 {
-  options.nixome.qubes = {
+  options.airlock.qubes = {
     enable = lib.mkEnableOption "declarative Qubes config topology setup";
 
     templates = lib.mkOption {
       type = lib.types.attrsOf templateType;
       default = { };
-      description = "TemplateVMs that Nixome can import before setting up domains.";
+      description = "TemplateVMs that Airlock can import before setting up domains.";
     };
 
     kernels = lib.mkOption {
       type = lib.types.attrsOf kernelType;
       default = { };
-      description = "Qubes VM kernels Nixome should install into dom0's VM kernel pool.";
+      description = "Qubes VM kernels Airlock should install into dom0's VM kernel pool.";
     };
 
     domains = lib.mkOption {
       type = lib.types.attrsOf domainType;
       default = { };
-      description = "Qubes domains Nixome should create and configure.";
+      description = "Qubes domains Airlock should create and configure.";
     };
 
     prefs = lib.mkOption {
@@ -578,13 +578,13 @@ in
     qrexecPolicy = lib.mkOption {
       type = qrexecPolicyType;
       default = { };
-      description = "Nixome-owned qrexec policy rendered by setup-config.";
+      description = "Airlock-owned qrexec policy rendered by setup-config.";
     };
 
     topology = lib.mkOption {
       type = lib.types.attrs;
       readOnly = true;
-      description = "Normalized Nixome Qubes topology JSON payload.";
+      description = "Normalized Airlock Qubes topology JSON payload.";
     };
 
     setupConfigOnBoot = {
@@ -596,7 +596,7 @@ in
 
       logDir = lib.mkOption {
         type = lib.types.str;
-        default = "/var/log/nixome";
+        default = "/var/log/airlock";
         description = "Directory where the boot setup-config unit writes JSON results and command logs.";
       };
 
@@ -616,7 +616,7 @@ in
 
       logDir = lib.mkOption {
         type = lib.types.str;
-        default = "/var/log/nixome";
+        default = "/var/log/airlock";
         description = "Directory where the config current bootstrap unit writes JSON results and command logs.";
       };
     };
@@ -630,7 +630,7 @@ in
 
       logDir = lib.mkOption {
         type = lib.types.str;
-        default = "/var/log/nixome";
+        default = "/var/log/airlock";
         description = "Directory where the network-provider start unit writes JSON results and command logs.";
       };
     };
@@ -644,7 +644,7 @@ in
 
       logDir = lib.mkOption {
         type = lib.types.str;
-        default = "/var/log/nixome";
+        default = "/var/log/airlock";
         description = "Directory where the deferred setup-config unit writes JSON results and command logs.";
       };
     };
@@ -658,74 +658,74 @@ in
 
       currentExportService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.ExportCurrent";
+        default = "airlock.Config.ExportCurrent";
         description = "qrexec service used by dom0 to fetch the current config baseline from sys-config-vault.";
       };
 
       currentImportService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.ImportCurrent";
+        default = "airlock.Config.ImportCurrent";
         description = "qrexec service used by dom0 to import the current config baseline into sys-config-staging.";
       };
 
       candidateExportService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.CandidateExport";
+        default = "airlock.Config.CandidateExport";
         description = "qrexec service used by dom0 to fetch a candidate from sys-config-staging.";
       };
 
       candidateValidateService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.ValidateCandidate";
+        default = "airlock.Config.ValidateCandidate";
         description = "qrexec service used by dom0 to validate a candidate in sys-config-validator.";
       };
 
       archiveService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.ArchiveCandidate";
+        default = "airlock.Config.ArchiveCandidate";
         description = "qrexec service used by dom0 to archive a candidate into sys-config-vault.";
       };
 
       archiveDeploymentService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.ArchiveDeployment";
+        default = "airlock.Config.ArchiveDeployment";
         description = "qrexec service used by dom0 to archive deployment records.";
       };
 
       configInputsImportService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.InputsImport";
+        default = "airlock.Config.InputsImport";
         description = "qrexec service used by dom0 to import offline config inputs.";
       };
 
       statusService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.Status";
-        description = "qrexec service used by allowed dev VMs to request Nixome config status from dom0.";
+        default = "airlock.Config.Status";
+        description = "qrexec service used by allowed dev VMs to request Airlock config status from dom0.";
       };
 
       checkService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.Check";
+        default = "airlock.Config.Check";
         description = "qrexec service used by allowed Qubes domains to submit a candidate for validation only.";
       };
 
       applyService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.Apply";
+        default = "airlock.Config.Apply";
         description = "qrexec service used by allowed Qubes domains to submit a candidate for validation, archival, and activation.";
       };
 
       rollbackService = lib.mkOption {
         type = lib.types.str;
-        default = "nixome.Config.Rollback";
+        default = "airlock.Config.Rollback";
         description = "qrexec service used by allowed Qubes domains to request rollback to a previous validated generation.";
       };
 
       allowedSubmitters = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        description = "Qubes domains allowed to request Nixome config status, check, apply, and rollback through dom0.";
+        description = "Qubes domains allowed to request Airlock config status, check, apply, and rollback through dom0.";
       };
 
       vault = lib.mkOption {
@@ -766,43 +766,43 @@ in
                 "AppVM";
           in
           resolvedClass != "AppVM" || domain.template != null || backendTemplate != null;
-        message = "nixome.qubes.domains.${name}.template must be set for AppVM domains.";
+        message = "airlock.qubes.domains.${name}.template must be set for AppVM domains.";
       }) cfg.domains
       ++ lib.mapAttrsToList (name: template: {
         assertion = !template.import || template.source != null || template.sourceRef != null;
-        message = "nixome.qubes.templates.${name}.source or sourceRef must be set when import is enabled.";
+        message = "airlock.qubes.templates.${name}.source or sourceRef must be set when import is enabled.";
       }) cfg.templates
       ++ lib.mapAttrsToList (name: kernel: {
         assertion = kernel.source != null;
-        message = "nixome.qubes.kernels.${name}.source must be set.";
+        message = "airlock.qubes.kernels.${name}.source must be set.";
       }) cfg.kernels
       ++ [
         {
           assertion = !cfg.configCurrentBootstrapOnBoot.enable || cfg.setupConfigOnBoot.enable;
-          message = "nixome.qubes.configCurrentBootstrapOnBoot.enable requires nixome.qubes.setupConfigOnBoot.enable.";
+          message = "airlock.qubes.configCurrentBootstrapOnBoot.enable requires airlock.qubes.setupConfigOnBoot.enable.";
         }
         {
           assertion = !cfg.startNetworkProvidersOnBoot.enable || cfg.setupConfigOnBoot.enable;
-          message = "nixome.qubes.startNetworkProvidersOnBoot.enable requires nixome.qubes.setupConfigOnBoot.enable.";
+          message = "airlock.qubes.startNetworkProvidersOnBoot.enable requires airlock.qubes.setupConfigOnBoot.enable.";
         }
         {
           assertion = !cfg.deferredSetupConfigOnBoot.enable || cfg.setupConfigOnBoot.enable;
-          message = "nixome.qubes.deferredSetupConfigOnBoot.enable requires nixome.qubes.setupConfigOnBoot.enable.";
+          message = "airlock.qubes.deferredSetupConfigOnBoot.enable requires airlock.qubes.setupConfigOnBoot.enable.";
         }
         {
           assertion = !cfg.deferredSetupConfigOnBoot.enable || cfg.startNetworkProvidersOnBoot.enable;
-          message = "nixome.qubes.deferredSetupConfigOnBoot.enable requires nixome.qubes.startNetworkProvidersOnBoot.enable.";
+          message = "airlock.qubes.deferredSetupConfigOnBoot.enable requires airlock.qubes.startNetworkProvidersOnBoot.enable.";
         }
         {
           assertion = !cfg.configCurrentBootstrapOnBoot.enable || cfg.configAccessPolicy.enable;
-          message = "nixome.qubes.configCurrentBootstrapOnBoot.enable requires nixome.qubes.configAccessPolicy.enable.";
+          message = "airlock.qubes.configCurrentBootstrapOnBoot.enable requires airlock.qubes.configAccessPolicy.enable.";
         }
       ];
 
-    nixome.qubes.topology = topologyLib.mkTopology topology;
+    airlock.qubes.topology = topologyLib.mkTopology topology;
 
-    environment.etc."nixome/qubes-topology.json".text =
-      builtins.toJSON config.nixome.qubes.topology + "\n";
+    environment.etc."airlock/qubes-topology.json".text =
+      builtins.toJSON config.airlock.qubes.topology + "\n";
     environment.systemPackages = [
       configApply
       configArchive
@@ -841,8 +841,8 @@ in
       mode = "0555";
     };
 
-    systemd.services.nixome-qubes-policy-path = {
-      description = "Prepare the mutable Nixome qrexec policy path";
+    systemd.services.airlock-qubes-policy-path = {
+      description = "Prepare the mutable Airlock qrexec policy path";
       before = [ "qubes-qrexec-policy-daemon.service" ];
       serviceConfig = {
         Type = "oneshot";
@@ -853,16 +853,16 @@ in
 
     systemd.services.qubes-qrexec-policy-daemon = {
       overrideStrategy = "asDropin";
-      requires = [ "nixome-qubes-policy-path.service" ];
-      after = [ "nixome-qubes-policy-path.service" ];
+      requires = [ "airlock-qubes-policy-path.service" ];
+      after = [ "airlock-qubes-policy-path.service" ];
       serviceConfig.ExecStart = lib.mkForce [
         ""
         "${qrexecBase}/bin/qrexec-policy-daemon --policy-path ${qrexecPolicyRuntimeDir}"
       ];
     };
 
-    systemd.services.nixome-setup-config = lib.mkIf cfg.setupConfigOnBoot.enable {
-      description = "Set up the declared Nixome Qubes topology";
+    systemd.services.airlock-setup-config = lib.mkIf cfg.setupConfigOnBoot.enable {
+      description = "Set up the declared Airlock Qubes topology";
       wantedBy = [ "multi-user.target" ];
       wants = [
         "libvirtd.service"
@@ -879,114 +879,114 @@ in
       restartIfChanged = false;
       stopIfChanged = false;
       environment = {
-        NIXOME_LOG_DIR = cfg.setupConfigOnBoot.logDir;
+        AIRLOCK_LOG_DIR = cfg.setupConfigOnBoot.logDir;
       }
       // lib.optionalAttrs (cfg.setupConfigOnBoot.statusDevice != null) {
-        NIXOME_SETUP_CONFIG_STATUS_DEVICE = cfg.setupConfigOnBoot.statusDevice;
+        AIRLOCK_SETUP_CONFIG_STATUS_DEVICE = cfg.setupConfigOnBoot.statusDevice;
       };
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${setupConfig}/bin/nixome-setup-config --apply --boot-critical";
+        ExecStart = "${setupConfig}/bin/airlock-setup-config --apply --boot-critical";
       };
     };
 
-    systemd.services.nixome-start-network-providers = lib.mkIf cfg.startNetworkProvidersOnBoot.enable {
-      description = "Start declared Nixome root network providers";
+    systemd.services.airlock-start-network-providers = lib.mkIf cfg.startNetworkProvidersOnBoot.enable {
+      description = "Start declared Airlock root network providers";
       wantedBy = [ "multi-user.target" ];
       wants = [
         "libvirtd.service"
-        "nixome-setup-config.service"
+        "airlock-setup-config.service"
         "qubes-db-dom0.service"
         "qubesd.service"
         "qubes-qrexec-policy-daemon.service"
       ];
       after = [
         "libvirtd.service"
-        "nixome-setup-config.service"
+        "airlock-setup-config.service"
         "qubes-db-dom0.service"
         "qubesd.service"
         "qubes-qrexec-policy-daemon.service"
       ];
       before =
-        lib.optional cfg.deferredSetupConfigOnBoot.enable "nixome-setup-config-deferred.service"
-        ++ lib.optional cfg.configCurrentBootstrapOnBoot.enable "nixome-config-bootstrap-current.service";
+        lib.optional cfg.deferredSetupConfigOnBoot.enable "airlock-setup-config-deferred.service"
+        ++ lib.optional cfg.configCurrentBootstrapOnBoot.enable "airlock-config-bootstrap-current.service";
       restartIfChanged = false;
       stopIfChanged = false;
-      environment.NIXOME_LOG_DIR = cfg.startNetworkProvidersOnBoot.logDir;
+      environment.AIRLOCK_LOG_DIR = cfg.startNetworkProvidersOnBoot.logDir;
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${startNetworkProviders}/bin/nixome-start-network-providers";
+        ExecStart = "${startNetworkProviders}/bin/airlock-start-network-providers";
       };
     };
 
-    systemd.services.nixome-setup-config-deferred =
+    systemd.services.airlock-setup-config-deferred =
       lib.mkIf cfg.deferredSetupConfigOnBoot.enable
         {
-          description = "Set up deferred Nixome Qubes domains";
+          description = "Set up deferred Airlock Qubes domains";
           wantedBy = [ "multi-user.target" ];
           wants = [
             "libvirtd.service"
-            "nixome-setup-config.service"
-            "nixome-start-network-providers.service"
+            "airlock-setup-config.service"
+            "airlock-start-network-providers.service"
             "qubes-db-dom0.service"
             "qubesd.service"
             "qubes-qrexec-policy-daemon.service"
           ];
           after = [
             "libvirtd.service"
-            "nixome-setup-config.service"
-            "nixome-start-network-providers.service"
+            "airlock-setup-config.service"
+            "airlock-start-network-providers.service"
             "qubes-db-dom0.service"
             "qubesd.service"
             "qubes-qrexec-policy-daemon.service"
           ];
-          before = lib.optional cfg.configCurrentBootstrapOnBoot.enable "nixome-config-bootstrap-current.service";
+          before = lib.optional cfg.configCurrentBootstrapOnBoot.enable "airlock-config-bootstrap-current.service";
           restartIfChanged = false;
           stopIfChanged = false;
-          environment.NIXOME_LOG_DIR = cfg.deferredSetupConfigOnBoot.logDir;
+          environment.AIRLOCK_LOG_DIR = cfg.deferredSetupConfigOnBoot.logDir;
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
-            ExecStart = "${setupConfig}/bin/nixome-setup-config --apply --deferred";
+            ExecStart = "${setupConfig}/bin/airlock-setup-config --apply --deferred";
           };
         };
 
-    systemd.services.nixome-config-bootstrap-current =
+    systemd.services.airlock-config-bootstrap-current =
       lib.mkIf cfg.configCurrentBootstrapOnBoot.enable
         {
           description = "Initialize sys-config-staging from sys-config-vault current baseline";
           wantedBy = [ "multi-user.target" ];
           wants = [
-            "nixome-setup-config.service"
+            "airlock-setup-config.service"
             "qubes-db-dom0.service"
             "qubesd.service"
             "qubes-qrexec-policy-daemon.service"
           ]
-          ++ lib.optional cfg.startNetworkProvidersOnBoot.enable "nixome-start-network-providers.service"
-          ++ lib.optional cfg.deferredSetupConfigOnBoot.enable "nixome-setup-config-deferred.service";
+          ++ lib.optional cfg.startNetworkProvidersOnBoot.enable "airlock-start-network-providers.service"
+          ++ lib.optional cfg.deferredSetupConfigOnBoot.enable "airlock-setup-config-deferred.service";
           after = [
-            "nixome-setup-config.service"
+            "airlock-setup-config.service"
             "qubes-db-dom0.service"
             "qubesd.service"
             "qubes-qrexec-policy-daemon.service"
           ]
-          ++ lib.optional cfg.startNetworkProvidersOnBoot.enable "nixome-start-network-providers.service"
-          ++ lib.optional cfg.deferredSetupConfigOnBoot.enable "nixome-setup-config-deferred.service";
+          ++ lib.optional cfg.startNetworkProvidersOnBoot.enable "airlock-start-network-providers.service"
+          ++ lib.optional cfg.deferredSetupConfigOnBoot.enable "airlock-setup-config-deferred.service";
           restartIfChanged = false;
           stopIfChanged = false;
           environment = {
-            NIXOME_LOG_DIR = cfg.configCurrentBootstrapOnBoot.logDir;
-            NIXOME_CONFIG_VAULT_VM = access.vault;
-            NIXOME_CONFIG_STAGING_VM = access.staging;
-            NIXOME_CONFIG_CURRENT_EXPORT_SERVICE = access.currentExportService;
-            NIXOME_CONFIG_CURRENT_IMPORT_SERVICE = access.currentImportService;
+            AIRLOCK_LOG_DIR = cfg.configCurrentBootstrapOnBoot.logDir;
+            AIRLOCK_CONFIG_VAULT_VM = access.vault;
+            AIRLOCK_CONFIG_STAGING_VM = access.staging;
+            AIRLOCK_CONFIG_CURRENT_EXPORT_SERVICE = access.currentExportService;
+            AIRLOCK_CONFIG_CURRENT_IMPORT_SERVICE = access.currentImportService;
           };
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
-            ExecStart = "${configBootstrapCurrent}/bin/nixome-config-bootstrap-current";
+            ExecStart = "${configBootstrapCurrent}/bin/airlock-config-bootstrap-current";
           };
         };
   };

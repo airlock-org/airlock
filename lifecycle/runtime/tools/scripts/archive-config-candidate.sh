@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
 RESULT_JSON="$LOG_DIR/config-archive.json"
 COMMAND_LOG="$LOG_DIR/config-archive.commands.log"
 STAGED_CANDIDATE_TAR="$LOG_DIR/config-candidate-staged.tar"
@@ -17,14 +17,14 @@ BUNDLE_VERIFY_LOG="$LOG_DIR/config-candidate-bundle-verify.log"
 VAULT_ARCHIVE_LOG="$LOG_DIR/config-vault-archive.log"
 VAULT_ARCHIVE_STDERR="$LOG_DIR/config-vault-archive.stderr.log"
 VAULT_ARCHIVE_JSON="$LOG_DIR/config-vault-archive.json"
-XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
+XEN_CAPABILITIES="${AIRLOCK_XEN_CAPABILITIES:-/proc/xen/capabilities}"
 
-STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
-VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-sys-config-validator}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
-CANDIDATE_EXPORT_SERVICE="${NIXOME_CONFIG_CANDIDATE_EXPORT_SERVICE:-nixome.Config.CandidateExport}"
-CANDIDATE_VALIDATE_SERVICE="${NIXOME_CONFIG_CANDIDATE_VALIDATE_SERVICE:-nixome.Config.ValidateCandidate}"
-ARCHIVE_SERVICE="${NIXOME_CONFIG_ARCHIVE_SERVICE:-nixome.Config.ArchiveCandidate}"
+STAGING="${AIRLOCK_CONFIG_STAGING_VM:-sys-config-staging}"
+VALIDATOR="${AIRLOCK_CONFIG_VALIDATOR_VM:-sys-config-validator}"
+VAULT="${AIRLOCK_CONFIG_VAULT_VM:-sys-config-vault}"
+CANDIDATE_EXPORT_SERVICE="${AIRLOCK_CONFIG_CANDIDATE_EXPORT_SERVICE:-airlock.Config.CandidateExport}"
+CANDIDATE_VALIDATE_SERVICE="${AIRLOCK_CONFIG_CANDIDATE_VALIDATE_SERVICE:-airlock.Config.ValidateCandidate}"
+ARCHIVE_SERVICE="${AIRLOCK_CONFIG_ARCHIVE_SERVICE:-airlock.Config.ArchiveCandidate}"
 result_written=0
 candidate_commit=""
 validation_commit=""
@@ -34,8 +34,8 @@ VALIDATE_ONLY=0
 
 usage() {
   cat >&2 <<'EOF'
-Usage: nixome-config-archive-candidate [--staging VM] [--validator VM] [--vault VM]
-       nixome-config-archive-candidate --candidate-tar PATH [--validate-only] [--validator VM] [--vault VM]
+Usage: airlock-config-archive-candidate [--staging VM] [--validator VM] [--vault VM]
+       airlock-config-archive-candidate --candidate-tar PATH [--validate-only] [--validator VM] [--vault VM]
 
 Fetch a config candidate from sys-config-staging, validate it in sys-config-validator, and
 archive the validated candidate into sys-config-vault before any deployment attempt.
@@ -102,7 +102,7 @@ write_result() {
   domain_references_json="$(json_file_or_null "$DOMAIN_REFERENCES_JSON")"
 
   jq -c -n \
-    --arg schema "nixome.config-archive.v1" \
+    --arg schema "airlock.config-archive.v1" \
     --arg status "$status" \
     --arg reason "$reason" \
     --arg staging "$STAGING" \
@@ -267,7 +267,7 @@ write_domain_reference_report() {
   local reason="$6"
 
   jq -c -n \
-    --arg schema "nixome.domain-references.v1" \
+    --arg schema "airlock.domain-references.v1" \
     --arg status "$status" \
     --arg reason "$reason" \
     --arg topology "$topology_file" \
@@ -595,14 +595,14 @@ verify_candidate() {
   cp "$tmpdir/system.json" "$SYSTEM_JSON"
 
   jq -e '
-    .schema == "nixome.qubes-topology.v1" and
+    .schema == "airlock.qubes-topology.v1" and
     (.templates | type == "object") and
     (.kernels | type == "object") and
     (.prefs | type == "object") and
     (.domains | type == "object")
   ' "$TOPOLOGY_JSON" >/dev/null || fail "evaluated candidate topology JSON is invalid"
   jq -e '
-    .schema == "nixome.system.v1" and
+    .schema == "airlock.system.v1" and
     (.dom0 | type == "object") and
     (.plan | type == "object") and
     (.plan.live_actions | type == "array") and
@@ -617,9 +617,9 @@ verify_candidate() {
   validation_status="$(jq -r '.status' "$VALIDATION_JSON")"
   validation_commit="$(jq -r '.commit' "$VALIDATION_JSON")"
 
-  [ "$manifest_schema" = "nixome.config-candidate.v1" ] ||
+  [ "$manifest_schema" = "airlock.config-candidate.v1" ] ||
     fail "unsupported candidate manifest schema: $manifest_schema"
-  [ "$validation_schema" = "nixome.config-validation.v1" ] ||
+  [ "$validation_schema" = "airlock.config-validation.v1" ] ||
     fail "unsupported validation schema: $validation_schema"
   [ "$validation_status" = "passed" ] ||
     fail "candidate validation did not pass: $validation_status"
@@ -646,7 +646,7 @@ verify_candidate() {
 
 extract_vault_archive_json() {
   awk '
-    index($0, "\"schema\":\"nixome.config-vault-archive.v1\"") { line = $0 }
+    index($0, "\"schema\":\"airlock.config-vault-archive.v1\"") { line = $0 }
     END {
       if (line != "") {
         print line

@@ -14,9 +14,9 @@
     vcpus = 1;
   };
   features = {
-    "nixome-managed" = "1";
-    "nixome-role" = "sys-firewall";
-    "nixome-network-provider" = "sys-firewall";
+    "airlock-managed" = "1";
+    "airlock-role" = "sys-firewall";
+    "airlock-network-provider" = "sys-firewall";
     servicevm = "1";
   };
   services = {

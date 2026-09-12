@@ -13,15 +13,15 @@ from typing import TextIO
 
 import pytest
 
-REMOTE_WARM_BIN_DIR = "/run/nixome-warm/bin"
-REMOTE_WARM_CONFIG_INPUTS = "/run/nixome-warm/config-inputs"
+REMOTE_WARM_BIN_DIR = "/run/airlock-warm/bin"
+REMOTE_WARM_CONFIG_INPUTS = "/run/airlock-warm/config-inputs"
 CONFIG_STAGED_MARK = pytest.mark.config_vm_staged
 WARM_EXTRA_MARK = pytest.mark.warm_extra
 
 
-def default_nixome_log_dir() -> Path:
+def default_airlock_log_dir() -> Path:
     repo_root = Path(__file__).resolve().parents[1]
-    log_dir = Path(os.environ.get("NIXOME_LOG_DIR", repo_root / ".nixome-logs"))
+    log_dir = Path(os.environ.get("AIRLOCK_LOG_DIR", repo_root / ".airlock-logs"))
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 
@@ -36,28 +36,28 @@ class StagedVmStep:
 
 def run_nested_gui_smoke_env(**overrides: str) -> dict[str, str]:
     env = {
-        "NIXOME_KEEP_VM": "1",
-        "NIXOME_REUSE_WARM_VM": "1",
-        "NIXOME_SYNC_DOM0_TOOLS": "0",
-        "NIXOME_NESTED_WARM_STOP_NIX_DOMAINS": "1",
-        "NIXOME_VM_SKIP_BASE_BUILD": "1",
-        "NIXOME_VM_IMAGE_ATTR": "nixome-vm-gui-config-dev-image",
-        "NIXOME_VM_DISPLAY": "none",
-        "NIXOME_VM_FRESH": "0",
-        "NIXOME_BOOTSTRAP_QUBES": "0",
-        "NIXOME_RUN_SETUP_CONFIG": "0",
-        "NIXOME_RUN_CONFIG_INPUTS_IMPORT": "0",
-        "NIXOME_RUN_CONFIG_VMS_SMOKE": "1",
-        "NIXOME_RUN_NIX_CLOSURE_SMOKE": "0",
-        "NIXOME_RUN_QUBES_SMOKE": "0",
-        "NIXOME_RUN_GUI_SMOKE": "0",
-        "NIXOME_CONFIG_INPUTS_SOURCE": REMOTE_WARM_CONFIG_INPUTS,
-        "NIXOME_CONFIG_VMS_SMOKE_COMMAND": (
-            f"{REMOTE_WARM_BIN_DIR}/nixome-config-vms-smoke"
+        "AIRLOCK_KEEP_VM": "1",
+        "AIRLOCK_REUSE_WARM_VM": "1",
+        "AIRLOCK_SYNC_DOM0_TOOLS": "0",
+        "AIRLOCK_NESTED_WARM_STOP_NIX_DOMAINS": "1",
+        "AIRLOCK_VM_SKIP_BASE_BUILD": "1",
+        "AIRLOCK_VM_IMAGE_ATTR": "airlock-vm-gui-config-dev-image",
+        "AIRLOCK_VM_DISPLAY": "none",
+        "AIRLOCK_VM_FRESH": "0",
+        "AIRLOCK_BOOTSTRAP_QUBES": "0",
+        "AIRLOCK_RUN_SETUP_CONFIG": "0",
+        "AIRLOCK_RUN_CONFIG_INPUTS_IMPORT": "0",
+        "AIRLOCK_RUN_CONFIG_VMS_SMOKE": "1",
+        "AIRLOCK_RUN_NIX_CLOSURE_SMOKE": "0",
+        "AIRLOCK_RUN_QUBES_SMOKE": "0",
+        "AIRLOCK_RUN_GUI_SMOKE": "0",
+        "AIRLOCK_CONFIG_INPUTS_SOURCE": REMOTE_WARM_CONFIG_INPUTS,
+        "AIRLOCK_CONFIG_VMS_SMOKE_COMMAND": (
+            f"{REMOTE_WARM_BIN_DIR}/airlock-config-vms-smoke"
         ),
-        "NIXOME_SETUP_CONFIG_COMMAND": f"{REMOTE_WARM_BIN_DIR}/nixome-setup-config",
-        "NIXOME_NIX_DOMAIN_STORAGE_HELPER": (
-            f"{REMOTE_WARM_BIN_DIR}/nixome-nix-domain-storage"
+        "AIRLOCK_SETUP_CONFIG_COMMAND": f"{REMOTE_WARM_BIN_DIR}/airlock-setup-config",
+        "AIRLOCK_NIX_DOMAIN_STORAGE_HELPER": (
+            f"{REMOTE_WARM_BIN_DIR}/airlock-nix-domain-storage"
         ),
     }
     env.update(overrides)
@@ -66,10 +66,10 @@ def run_nested_gui_smoke_env(**overrides: str) -> dict[str, str]:
 
 def run_nested_nix_closure_env(**overrides: str) -> dict[str, str]:
     return run_nested_gui_smoke_env(
-        NIXOME_RUN_CONFIG_VMS_SMOKE="0",
-        NIXOME_RUN_NIX_CLOSURE_SMOKE="1",
-        NIXOME_NIX_CLOSURE_DOMAIN_SMOKE_COMMAND=(
-            f"{REMOTE_WARM_BIN_DIR}/nixome-nix-closure-domain-smoke"
+        AIRLOCK_RUN_CONFIG_VMS_SMOKE="0",
+        AIRLOCK_RUN_NIX_CLOSURE_SMOKE="1",
+        AIRLOCK_NIX_CLOSURE_DOMAIN_SMOKE_COMMAND=(
+            f"{REMOTE_WARM_BIN_DIR}/airlock-nix-closure-domain-smoke"
         ),
         **overrides,
     )
@@ -87,23 +87,23 @@ STAGED_VM_STEPS = (
         "config-vms-preflight",
         ("{root}/lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
-            NIXOME_CONFIG_VMS_SMOKE_MODE="preflight",
-            NIXOME_CONFIG_VMS_IMPORT_INPUTS="0",
+            AIRLOCK_CONFIG_VMS_SMOKE_MODE="preflight",
+            AIRLOCK_CONFIG_VMS_IMPORT_INPUTS="0",
         ),
         (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "config-vms-stage-candidate",
         ("{root}/lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh",),
-        run_nested_gui_smoke_env(NIXOME_CONFIG_VMS_SMOKE_MODE="stage-candidate"),
+        run_nested_gui_smoke_env(AIRLOCK_CONFIG_VMS_SMOKE_MODE="stage-candidate"),
         (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "config-apply-archive",
         ("{root}/lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
-            NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
-            NIXOME_CONFIG_APPLY_STAGE="archive",
+            AIRLOCK_CONFIG_VMS_SMOKE_MODE="apply-candidate",
+            AIRLOCK_CONFIG_APPLY_STAGE="archive",
         ),
         (CONFIG_STAGED_MARK,),
     ),
@@ -111,8 +111,8 @@ STAGED_VM_STEPS = (
         "config-apply-resolve",
         ("{root}/lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
-            NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
-            NIXOME_CONFIG_APPLY_STAGE="resolve",
+            AIRLOCK_CONFIG_VMS_SMOKE_MODE="apply-candidate",
+            AIRLOCK_CONFIG_APPLY_STAGE="resolve",
         ),
         (CONFIG_STAGED_MARK,),
     ),
@@ -120,8 +120,8 @@ STAGED_VM_STEPS = (
         "config-apply-setup",
         ("{root}/lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
-            NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
-            NIXOME_CONFIG_APPLY_STAGE="setup",
+            AIRLOCK_CONFIG_VMS_SMOKE_MODE="apply-candidate",
+            AIRLOCK_CONFIG_APPLY_STAGE="setup",
         ),
         (CONFIG_STAGED_MARK,),
     ),
@@ -129,8 +129,8 @@ STAGED_VM_STEPS = (
         "config-apply-system",
         ("{root}/lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
-            NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
-            NIXOME_CONFIG_APPLY_STAGE="system",
+            AIRLOCK_CONFIG_VMS_SMOKE_MODE="apply-candidate",
+            AIRLOCK_CONFIG_APPLY_STAGE="system",
         ),
         (CONFIG_STAGED_MARK,),
     ),
@@ -138,15 +138,15 @@ STAGED_VM_STEPS = (
         "config-apply-deploy",
         ("{root}/lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh",),
         run_nested_gui_smoke_env(
-            NIXOME_CONFIG_VMS_SMOKE_MODE="apply-candidate",
-            NIXOME_CONFIG_APPLY_STAGE="deploy",
+            AIRLOCK_CONFIG_VMS_SMOKE_MODE="apply-candidate",
+            AIRLOCK_CONFIG_APPLY_STAGE="deploy",
         ),
         (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
         "config-vms-post-apply",
         ("{root}/lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh",),
-        run_nested_gui_smoke_env(NIXOME_CONFIG_VMS_SMOKE_MODE="post-apply"),
+        run_nested_gui_smoke_env(AIRLOCK_CONFIG_VMS_SMOKE_MODE="post-apply"),
         (CONFIG_STAGED_MARK,),
     ),
     StagedVmStep(
@@ -268,7 +268,7 @@ def write_log(path: Path, result: subprocess.CompletedProcess[str]) -> None:
 
 @pytest.fixture(scope="module")
 def staged_vm_state() -> Path:
-    state_dir = default_nixome_log_dir() / "vm-staged"
+    state_dir = default_airlock_log_dir() / "vm-staged"
     state_dir.mkdir(parents=True, exist_ok=True)
     failure = state_dir / "failed-step.txt"
     failure.unlink(missing_ok=True)
@@ -277,7 +277,7 @@ def staged_vm_state() -> Path:
 
 @pytest.fixture(scope="module")
 def staged_apply_message(staged_vm_state: Path) -> str:
-    configured = os.environ.get("NIXOME_CONFIG_APPLY_MESSAGE")
+    configured = os.environ.get("AIRLOCK_CONFIG_APPLY_MESSAGE")
     if configured:
         return configured
 
@@ -289,31 +289,31 @@ def staged_apply_message(staged_vm_state: Path) -> str:
 def test_staged_vm_step(
     staged_vm_step: StagedVmStep,
     repo_root: Path,
-    nixome_log_dir: Path,
+    airlock_log_dir: Path,
     staged_vm_state: Path,
     staged_apply_message: str,
 ) -> None:
-    if os.environ.get("NIXOME_RUN_VM_TESTS") != "1":
-        pytest.skip("set NIXOME_RUN_VM_TESTS=1 to run nested VM flows")
+    if os.environ.get("AIRLOCK_RUN_VM_TESTS") != "1":
+        pytest.skip("set AIRLOCK_RUN_VM_TESTS=1 to run nested VM flows")
 
     failure = staged_vm_state / "failed-step.txt"
     if failure.exists():
         failed_step = failure.read_text(encoding="utf-8").strip()
         pytest.skip(f"previous staged VM step failed: {failed_step}")
 
-    step_log_dir = nixome_log_dir / "vm-staged" / staged_vm_step.name
+    step_log_dir = airlock_log_dir / "vm-staged" / staged_vm_step.name
     step_log_dir.mkdir(parents=True, exist_ok=True)
     command = format_step_command(staged_vm_step.command, repo_root)
     env = os.environ.copy()
     env.update(staged_vm_step.env)
-    env["NIXOME_LOG_DIR"] = str(step_log_dir)
-    env["NIXOME_CONFIG_APPLY_MESSAGE"] = staged_apply_message
-    env["NIXOME_SKIP_GC_AUTO"] = "1"
+    env["AIRLOCK_LOG_DIR"] = str(step_log_dir)
+    env["AIRLOCK_CONFIG_APPLY_MESSAGE"] = staged_apply_message
+    env["AIRLOCK_SKIP_GC_AUTO"] = "1"
 
     (step_log_dir / "pytest-vm-staged-env.json").write_text(
         json.dumps(
             {
-                "NIXOME_CONFIG_APPLY_MESSAGE": staged_apply_message,
+                "AIRLOCK_CONFIG_APPLY_MESSAGE": staged_apply_message,
                 **{key: env[key] for key in sorted(staged_vm_step.env) if key in env},
             },
             indent=2,

@@ -9,9 +9,9 @@
     "${modulesPath}/virtualisation/disk-image.nix"
   ];
 
-  nixome.dom0 = {
+  airlock.dom0 = {
     enable = true;
-    user = "nixome";
+    user = "airlock";
     gui.enable = lib.mkDefault false;
     dom0Resources = {
       memoryMiB = 4096;
@@ -19,10 +19,10 @@
     };
   };
 
-  users.users.nixome = {
+  users.users.airlock = {
     isNormalUser = true;
-    description = "Nixome nested-VM test operator";
-    initialPassword = "nixome";
+    description = "Airlock nested-VM test operator";
+    initialPassword = "airlock";
     extraGroups = [
       "wheel"
       "qubes"
@@ -65,7 +65,7 @@
   ];
 
   image = {
-    baseName = lib.mkDefault "nixome-dom0-vm";
+    baseName = lib.mkDefault "airlock-dom0-vm";
     format = "qcow2";
     efiSupport = true;
   };

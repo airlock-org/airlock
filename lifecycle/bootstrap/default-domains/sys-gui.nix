@@ -14,8 +14,8 @@
   features = {
     gui = "1";
     "gui-allow-fullscreen" = "1";
-    "nixome-managed" = "1";
-    "nixome-role" = "sys-gui";
+    "airlock-managed" = "1";
+    "airlock-role" = "sys-gui";
     servicevm = "1";
   };
   services = {

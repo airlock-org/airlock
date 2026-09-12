@@ -2,10 +2,10 @@ final: prev:
 prev.lib.optionalAttrs (prev ? qubes-manager) {
   qubes-manager = prev.qubes-manager.overrideAttrs (oldAttrs: {
     passthru = (oldAttrs.passthru or { }) // {
-      nixomeTemplateToolsRemoved = true;
+      airlockTemplateToolsRemoved = true;
     };
     postInstall = (oldAttrs.postInstall or "") + ''
-      # Nixome templates are built from Nix configuration. Do not expose the
+      # Airlock templates are built from Nix configuration. Do not expose the
       # upstream template installer until that repository/RPC path is supported.
       qubes_manager_py="$out/${prev.python3.sitePackages}/qubesmanager"
 
@@ -63,7 +63,7 @@ prev.lib.optionalAttrs (prev ? qubes-manager) {
           --replace-fail "        spawn_in_background('qubes-template-manager')" \
             "        return" \
           --replace-fail "supported\\nInstall new template with Template Manager" \
-            "supported\\nInstall supported templates through Nixome config"
+            "supported\\nInstall supported templates through Airlock config"
       fi
 
       if [ -f "$qubes_manager_py/tests/test_qube_manager.py" ]; then

@@ -1,6 +1,6 @@
 # Lifecycle Layers
 
-This directory contains the Nixome lifecycle layers.
+This directory contains the Airlock lifecycle layers.
 
 - `image/`: builds the bootable artifact.
 - `bootstrap/`: first-boot wiring that makes the image manageable.

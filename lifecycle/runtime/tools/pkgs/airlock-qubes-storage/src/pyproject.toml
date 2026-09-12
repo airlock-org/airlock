@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airlock-qubes-storage"
+version = "0.1.0"
+description = "Airlock closure-backed Qubes storage adapter and immutable store engine"
+requires-python = ">=3.11"
+
+[project.scripts]
+airlock-closure-store = "airlock_qubes_storage.cli:main"
+
+[project.entry-points."qubes.storage"]
+airlock-closure = "airlock_qubes_storage.qubes:ClosurePool"

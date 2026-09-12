@@ -5,28 +5,28 @@ set -euo pipefail
 PATH="/run/wrappers/bin:$PATH"
 export PATH
 
-TOPOLOGY="/etc/nixome/qubes-topology.json"
+TOPOLOGY="/etc/airlock/qubes-topology.json"
 APPLY=0
 PLAN=0
 SETUP_SCOPE="all"
-LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
 RESULT_JSON="$LOG_DIR/setup-config.json"
 COMMAND_LOG="$LOG_DIR/setup-config.commands.log"
 LIVE_ACTIONS_JSONL="$LOG_DIR/setup-config-live-actions.jsonl"
 RESTART_ACTIONS_JSONL="$LOG_DIR/setup-config-restart-actions.jsonl"
 UNSUPPORTED_DOMAINS_JSONL="$LOG_DIR/setup-config-unsupported-domains.jsonl"
-SYSTEM_STATE_DIR="${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
-PERSIST_STATE="${NIXOME_SETUP_CONFIG_PERSIST_STATE:-1}"
-XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
-KERNEL_BASE="${NIXOME_QUBES_KERNEL_BASE:-/var/lib/qubes/vm-kernels}"
-QUBES_XML="${NIXOME_QUBES_XML:-/var/lib/qubes/qubes.xml}"
-POLICY_DIR="${NIXOME_QUBES_POLICY_DIR:-/var/lib/nixome/qubes-policy.d}"
-MANAGED_POLICY_FILE="${NIXOME_QUBES_MANAGED_POLICY_FILE:-90-nixome.policy}"
+SYSTEM_STATE_DIR="${AIRLOCK_SYSTEM_STATE_DIR:-/var/lib/airlock/system}"
+PERSIST_STATE="${AIRLOCK_SETUP_CONFIG_PERSIST_STATE:-1}"
+XEN_CAPABILITIES="${AIRLOCK_XEN_CAPABILITIES:-/proc/xen/capabilities}"
+KERNEL_BASE="${AIRLOCK_QUBES_KERNEL_BASE:-/var/lib/qubes/vm-kernels}"
+QUBES_XML="${AIRLOCK_QUBES_XML:-/var/lib/qubes/qubes.xml}"
+POLICY_DIR="${AIRLOCK_QUBES_POLICY_DIR:-/var/lib/airlock/qubes-policy.d}"
+MANAGED_POLICY_FILE="${AIRLOCK_QUBES_MANAGED_POLICY_FILE:-90-airlock.policy}"
 MANAGED_POLICY_PATH="$POLICY_DIR/$MANAGED_POLICY_FILE"
 RENDERED_POLICY="$LOG_DIR/$MANAGED_POLICY_FILE.rendered"
-STATUS_DEVICE="${NIXOME_SETUP_CONFIG_STATUS_DEVICE:-}"
-NIX_DOMAIN_STORAGE_HELPER="${NIXOME_NIX_DOMAIN_STORAGE_HELPER:-nixome-nix-domain-storage}"
-QUBESADMIN_PYTHON="${NIXOME_QUBESADMIN_PYTHON:-python3}"
+STATUS_DEVICE="${AIRLOCK_SETUP_CONFIG_STATUS_DEVICE:-}"
+NIX_DOMAIN_STORAGE_HELPER="${AIRLOCK_NIX_DOMAIN_STORAGE_HELPER:-airlock-nix-domain-storage}"
+QUBESADMIN_PYTHON="${AIRLOCK_QUBESADMIN_PYTHON:-python3}"
 result_written=0
 boot_status_pid=""
 boot_phase=1
@@ -35,17 +35,17 @@ boot_started_at=$SECONDS
 boot_domain_index=0
 boot_domain_total=0
 
-nixome_store_uses_chroot() {
-  [ "${NIXOME_USE_HOST_NIX_STORE:-0}" != "1" ] &&
-    [ -n "${NIXOME_NIX_ROOT:-}" ] &&
-    [ "$NIXOME_NIX_ROOT" != "/" ]
+airlock_store_uses_chroot() {
+  [ "${AIRLOCK_USE_HOST_NIX_STORE:-0}" != "1" ] &&
+    [ -n "${AIRLOCK_NIX_ROOT:-}" ] &&
+    [ "$AIRLOCK_NIX_ROOT" != "/" ]
 }
 
-nixome_physical_store_path() {
+airlock_physical_store_path() {
   local path="$1"
 
-  if nixome_store_uses_chroot && [ "${path#/nix/store/}" != "$path" ]; then
-    printf '%s%s\n' "$NIXOME_NIX_ROOT" "$path"
+  if airlock_store_uses_chroot && [ "${path#/nix/store/}" != "$path" ]; then
+    printf '%s%s\n' "$AIRLOCK_NIX_ROOT" "$path"
   else
     printf '%s\n' "$path"
   fi
@@ -53,9 +53,9 @@ nixome_physical_store_path() {
 
 usage() {
   cat >&2 <<'EOF'
-Usage: nixome-setup-config (--plan|--apply) [--topology PATH] [--boot-critical|--deferred]
+Usage: airlock-setup-config (--plan|--apply) [--topology PATH] [--boot-critical|--deferred]
 
-Set up the Qubes templates and domains declared by Nixome.
+Set up the Qubes templates and domains declared by Airlock.
 EOF
   exit 1
 }
@@ -269,7 +269,7 @@ write_result() {
 
   {
     printf '{'
-    printf '"schema":"nixome.setup-config.v1"'
+    printf '"schema":"airlock.setup-config.v1"'
     printf ',"status":'
     json_string "$status"
     printf ',"mode":'
@@ -344,7 +344,7 @@ render_boot_status() {
   elapsed=$((SECONDS - boot_started_at))
   {
     # Redraw in place without clearing the whole screen between timer ticks.
-    printf '\033[H\033[K\n\033[K  Nixome | Initial setup and installation\n\033[K\n'
+    printf '\033[H\033[K\n\033[K  Airlock | Initial setup and installation\n\033[K\n'
     for phase in 1 2 3 4; do
       marker='[ ]'
       if [ "$phase" -lt "$boot_phase" ]; then
@@ -361,7 +361,7 @@ render_boot_status() {
     printf '\033[K\n'
     case "$boot_status_state" in
       working)
-        printf '\033[K  No action needed. Nixome is installing its initial VM setup automatically.\n'
+        printf '\033[K  No action needed. Airlock is installing its initial VM setup automatically.\n'
         printf '\033[K  This can take several minutes on the first boot while VM files are prepared.\n'
         printf '\033[K  This slow installation work happens once; later boots reuse the completed setup.\n'
         ;;
@@ -372,7 +372,7 @@ render_boot_status() {
         ;;
       failed)
         printf '\033[K  Setup could not finish. Switch to a console with Ctrl+Alt+F2.\n'
-        printf '\033[K  Log in and inspect: sudo journalctl -b -u nixome-setup-config\n'
+        printf '\033[K  Log in and inspect: sudo journalctl -b -u airlock-setup-config\n'
         ;;
     esac
     printf '\033[K\n\033[K  Setup log: %s\n\033[J' "$COMMAND_LOG"
@@ -414,7 +414,7 @@ fail() {
   boot_status_state=failed
   show_boot_status \
     "Setup stopped" "$reason"
-  printf 'nixome setup-config failed: %s\n' "$reason" >&2
+  printf 'airlock setup-config failed: %s\n' "$reason" >&2
   exit 1
 }
 
@@ -428,7 +428,7 @@ require_qubesadmin_python() {
   if ! "$QUBESADMIN_PYTHON" - <<'PY' >/dev/null 2>&1; then
 import qubesadmin
 PY
-    fail "qubesadmin import unavailable in NIXOME_QUBESADMIN_PYTHON: $QUBESADMIN_PYTHON"
+    fail "qubesadmin import unavailable in AIRLOCK_QUBESADMIN_PYTHON: $QUBESADMIN_PYTHON"
   fi
 }
 
@@ -482,7 +482,7 @@ persist_setup_state() {
       return 0
       ;;
     *)
-      fail "unsupported NIXOME_SETUP_CONFIG_PERSIST_STATE value: $PERSIST_STATE"
+      fail "unsupported AIRLOCK_SETUP_CONFIG_PERSIST_STATE value: $PERSIST_STATE"
       ;;
   esac
 
@@ -828,8 +828,8 @@ sysfs_bdf_to_qubes_port_id() {
 }
 
 list_dom0_network_pci_devices() {
-  if [ -n "${NIXOME_DOM0_NETWORK_PCI_DEVICES:-}" ]; then
-    printf '%s\n' "$NIXOME_DOM0_NETWORK_PCI_DEVICES" | split_device_words_unique
+  if [ -n "${AIRLOCK_DOM0_NETWORK_PCI_DEVICES:-}" ]; then
+    printf '%s\n' "$AIRLOCK_DOM0_NETWORK_PCI_DEVICES" | split_device_words_unique
     return 0
   fi
 
@@ -852,8 +852,8 @@ list_dom0_default_route_pci_devices() {
   local device_path
   local bdf
 
-  if [ -n "${NIXOME_DOM0_DEFAULT_ROUTE_PCI_DEVICES:-}" ]; then
-    printf '%s\n' "$NIXOME_DOM0_DEFAULT_ROUTE_PCI_DEVICES" | split_device_words_unique
+  if [ -n "${AIRLOCK_DOM0_DEFAULT_ROUTE_PCI_DEVICES:-}" ]; then
+    printf '%s\n' "$AIRLOCK_DOM0_DEFAULT_ROUTE_PCI_DEVICES" | split_device_words_unique
     return 0
   fi
 
@@ -891,8 +891,8 @@ list_auto_sys_net_pci_devices() {
   list_dom0_network_pci_devices > "$network_devices_file"
   {
     list_dom0_default_route_pci_devices
-    if [ -n "${NIXOME_SYS_NET_PCI_EXCLUDE:-}" ]; then
-      printf '%s\n' "$NIXOME_SYS_NET_PCI_EXCLUDE" | split_device_words_unique
+    if [ -n "${AIRLOCK_SYS_NET_PCI_EXCLUDE:-}" ]; then
+      printf '%s\n' "$AIRLOCK_SYS_NET_PCI_EXCLUDE" | split_device_words_unique
     fi
   } > "$excluded_devices_file"
 
@@ -1095,7 +1095,7 @@ is_qubes_name() {
 }
 
 is_qrexec_service() {
-  [[ "$1" =~ ^nixome\.[A-Za-z0-9_.-]+$ ]]
+  [[ "$1" =~ ^airlock\.[A-Za-z0-9_.-]+$ ]]
 }
 
 is_qrexec_argument() {
@@ -1117,7 +1117,7 @@ validate_qrexec_rule() {
   is_qrexec_service "$service" ||
     fail "qrexec policy rule $index has invalid service: $service"
   case "$service" in
-    nixome.Config.CandidateExport|nixome.Config.ValidateCandidate|nixome.Config.InputsImport|nixome.Config.ArchiveCandidate|nixome.Config.ArchiveDeployment|nixome.Config.Status|nixome.Config.Check|nixome.Config.Apply|nixome.Config.Rollback)
+    airlock.Config.CandidateExport|airlock.Config.ValidateCandidate|airlock.Config.InputsImport|airlock.Config.ArchiveCandidate|airlock.Config.ArchiveDeployment|airlock.Config.Status|airlock.Config.Check|airlock.Config.Apply|airlock.Config.Rollback)
       fail "qrexec policy rule $index uses reserved bootstrap service: $service"
       ;;
   esac
@@ -1148,16 +1148,16 @@ validate_qrexec_rule() {
 policy_file_is_managed() {
   file="$1"
 
-  grep -Fx "# Managed by Nixome setup-config." "$file" >/dev/null 2>&1
+  grep -Fx "# Managed by Airlock setup-config." "$file" >/dev/null 2>&1
 }
 
 render_qrexec_policy() {
   output="$1"
 
   {
-    printf '# Managed by Nixome setup-config.\n'
-    printf '# Source: nixome.qubes.topology.qrexec_policy.\n'
-    printf '# Bootstrap config transport policy remains in 30-nixome-config.policy.\n'
+    printf '# Managed by Airlock setup-config.\n'
+    printf '# Source: airlock.qubes.topology.qrexec_policy.\n'
+    printf '# Bootstrap config transport policy remains in 30-airlock-config.policy.\n'
 
     rule_count="$(jq_get '(.qrexec_policy.rules // []) | length')"
     index=0
@@ -1186,11 +1186,11 @@ reload_qrexec_policy_daemon() {
 }
 
 setup_qrexec_policy() {
-  printf 'setting up Nixome-owned qrexec policy\n'
+  printf 'setting up Airlock-owned qrexec policy\n'
   render_qrexec_policy "$RENDERED_POLICY"
 
   if [ -e "$MANAGED_POLICY_PATH" ] && ! policy_file_is_managed "$MANAGED_POLICY_PATH"; then
-    fail "qrexec policy file exists but is not Nixome-managed: $MANAGED_POLICY_PATH"
+    fail "qrexec policy file exists but is not Airlock-managed: $MANAGED_POLICY_PATH"
   fi
 
   if [ -e "$MANAGED_POLICY_PATH" ] && cmp -s "$RENDERED_POLICY" "$MANAGED_POLICY_PATH"; then
@@ -1425,7 +1425,7 @@ kernel_is_current() {
   name="$1"
   source="$2"
   target="$KERNEL_BASE/$name"
-  marker="$target/MANAGED_BY_NIXOME"
+  marker="$target/MANAGED_BY_AIRLOCK"
 
   [ -f "$marker" ] || return 1
   grep -Fx "source=$source" "$marker" >/dev/null 2>&1 || return 1
@@ -1439,30 +1439,30 @@ mark_kernel_managed() {
 
   {
     printf 'source=%s\n' "$source"
-    printf 'schema=nixome.qubes-kernel.v1\n'
-  } > "$target/MANAGED_BY_NIXOME"
+    printf 'schema=airlock.qubes-kernel.v1\n'
+  } > "$target/MANAGED_BY_AIRLOCK"
 }
 
 install_kernel() {
   name="$1"
   source="$2"
   target="$KERNEL_BASE/$name"
-  tmp="$KERNEL_BASE/.nixome-$name.tmp"
+  tmp="$KERNEL_BASE/.airlock-$name.tmp"
 
   rm -rf "$tmp"
   mkdir -p "$tmp"
   cp -a "$source/." "$tmp/"
   {
     printf 'source=%s\n' "$source"
-    printf 'schema=nixome.qubes-kernel.v1\n'
-  } > "$tmp/MANAGED_BY_NIXOME"
+    printf 'schema=airlock.qubes-kernel.v1\n'
+  } > "$tmp/MANAGED_BY_AIRLOCK"
   rm -rf "$target"
   mv "$tmp" "$target"
 }
 
 resolve_root_image_file() {
   source="$1"
-  source_physical="$(nixome_physical_store_path "$source")"
+  source_physical="$(airlock_physical_store_path "$source")"
 
   if [ -d "$source_physical" ]; then
     [ -f "$source_physical/root.img" ] ||
@@ -1477,7 +1477,7 @@ resolve_root_image_file() {
 
 resolve_store_artifact() {
   source="$1"
-  source_physical="$(nixome_physical_store_path "$source")"
+  source_physical="$(airlock_physical_store_path "$source")"
 
   [ -d "$source_physical" ] ||
     fail "Nix-native shared closure source is not a directory: $source"
@@ -1493,7 +1493,7 @@ nix_domain_root_current() {
   root_source="$2"
 
   [ "$APPLY" = "1" ] || return 1
-  current="$(qvm-features "$domain" nixome-root-source 2>/dev/null || true)"
+  current="$(qvm-features "$domain" airlock-root-source 2>/dev/null || true)"
   [ "$current" = "$root_source" ]
 }
 
@@ -1503,8 +1503,8 @@ nix_domain_store_current() {
   store_mode="$3"
 
   [ "$APPLY" = "1" ] || return 1
-  current="$(qvm-features "$domain" nixome-store-source 2>/dev/null || true)"
-  current_mode="$(qvm-features "$domain" nixome-store-mode 2>/dev/null || true)"
+  current="$(qvm-features "$domain" airlock-store-source 2>/dev/null || true)"
+  current_mode="$(qvm-features "$domain" airlock-store-mode 2>/dev/null || true)"
   [ -n "$current_mode" ] || current_mode="shared-closure"
   [ "$current" = "$store_source" ] && [ "$current_mode" = "$store_mode" ]
 }
@@ -1514,27 +1514,27 @@ nix_domain_system_current() {
   system_source="$2"
 
   [ "$APPLY" = "1" ] || return 1
-  current="$(qvm-features "$domain" nixome-system-source 2>/dev/null || true)"
+  current="$(qvm-features "$domain" airlock-system-source 2>/dev/null || true)"
   [ "$current" = "$system_source" ]
 }
 
 is_nix_closure_boot_feature() {
   case "$1" in
-    nixome-system-source|\
-    nixome-root-source|\
-    nixome-store-source|\
-    nixome-store-mode|\
-    nixome-store-generation|\
-    nixome-store-closure-hash|\
-    nixome-store-view-image|\
-    nixome-store-view-backend|\
-    nixome-store-blob-device|\
-    nixome-store-blob-volume|\
-    nixome-store-blob-map|\
-    nixome-store-filesystem|\
-    nixome-store-mountpoint|\
-    nixome-store-device|\
-    nixome-store-read-only)
+    airlock-system-source|\
+    airlock-root-source|\
+    airlock-store-source|\
+    airlock-store-mode|\
+    airlock-store-generation|\
+    airlock-store-closure-hash|\
+    airlock-store-view-image|\
+    airlock-store-view-backend|\
+    airlock-store-blob-device|\
+    airlock-store-blob-volume|\
+    airlock-store-blob-map|\
+    airlock-store-filesystem|\
+    airlock-store-mountpoint|\
+    airlock-store-device|\
+    airlock-store-read-only)
       return 0
       ;;
     *)
@@ -1617,11 +1617,11 @@ ensure_nix_closure_kernelopts() {
     opts="$opts init=/sbin/init"
   fi
 
-  opts="$(append_kernelopt_if_missing "$opts" nixome.system "$system_source")"
-  opts="$(append_kernelopt_if_missing "$opts" nixome.storedev "$store_device")"
-  opts="$(append_kernelopt_if_missing "$opts" nixome.storefmt "$store_filesystem")"
+  opts="$(append_kernelopt_if_missing "$opts" airlock.system "$system_source")"
+  opts="$(append_kernelopt_if_missing "$opts" airlock.storedev "$store_device")"
+  opts="$(append_kernelopt_if_missing "$opts" airlock.storefmt "$store_filesystem")"
   if [ "$store_filesystem" = "erofs" ]; then
-    opts="$(append_kernelopt_if_missing "$opts" nixome.storeblobdev "$store_blob_device")"
+    opts="$(append_kernelopt_if_missing "$opts" airlock.storeblobdev "$store_blob_device")"
   fi
 
   set_pref "$domain" kernelopts "$opts"
@@ -1733,7 +1733,7 @@ install_domain_kernel_source() {
 
   [ -n "$source" ] || return 0
   if [ -z "$name" ] || [ "$name" = "null" ]; then
-    name="nixome-$domain"
+    name="airlock-$domain"
   fi
 
   case "$name" in
@@ -1742,7 +1742,7 @@ install_domain_kernel_source() {
       ;;
   esac
 
-  source_physical="$(nixome_physical_store_path "$source")"
+  source_physical="$(airlock_physical_store_path "$source")"
   [ -d "$source_physical" ] ||
     fail "Nix-native kernel source directory is missing for $domain: $source"
   [ -f "$source_physical/vmlinuz" ] ||
@@ -1754,7 +1754,7 @@ install_domain_kernel_source() {
   fi
 
   target="$KERNEL_BASE/$name"
-  if [ -d "$target" ] && [ ! -f "$target/MANAGED_BY_NIXOME" ]; then
+  if [ -d "$target" ] && [ ! -f "$target/MANAGED_BY_AIRLOCK" ]; then
     if kernel_source_matches_target "$source_physical" "$target"; then
       printf '+ adopt-kernel %q %q\n' "$name" "$source"
       if [ "$APPLY" = "1" ]; then
@@ -1765,7 +1765,7 @@ install_domain_kernel_source() {
       return 0
     fi
 
-    fail "kernel exists but is not managed by Nixome: $target"
+    fail "kernel exists but is not managed by Airlock: $target"
   fi
 
   printf '+ install-kernel %q %q\n' "$name" "$source"
@@ -1824,7 +1824,7 @@ setup_nix_closure_domain() {
   install_domain_kernel_source "$domain" "$kernel_name" "$kernel_source"
 
   if [ -z "$kernel_name" ] || [ "$kernel_name" = "null" ]; then
-    kernel_name="nixome-$domain"
+    kernel_name="airlock-$domain"
   fi
 
   if domain_exists "$domain"; then
@@ -1871,35 +1871,35 @@ setup_nix_closure_domain() {
       ensure_nix_closure_kernelopts "$domain" "$system_source" "$store_device" "$store_filesystem" "$store_blob_device"
     fi
 
-    set_feature "$domain" nixome-backend nix-closure
+    set_feature "$domain" airlock-backend nix-closure
     if [ "$nix_domain_storage_deferred" != "1" ]; then
-      set_feature "$domain" nixome-system-source "$system_source"
-      set_feature "$domain" nixome-root-source "$root_source"
-      set_feature "$domain" nixome-store-source "$store_source"
-      set_feature "$domain" nixome-store-mode "$store_mode"
-      set_feature "$domain" nixome-store-view-backend "$store_view_backend"
-      set_feature "$domain" nixome-store-filesystem "$store_filesystem"
+      set_feature "$domain" airlock-system-source "$system_source"
+      set_feature "$domain" airlock-root-source "$root_source"
+      set_feature "$domain" airlock-store-source "$store_source"
+      set_feature "$domain" airlock-store-mode "$store_mode"
+      set_feature "$domain" airlock-store-view-backend "$store_view_backend"
+      set_feature "$domain" airlock-store-filesystem "$store_filesystem"
       if [ -n "$nix_domain_store_generation" ]; then
-        set_feature "$domain" nixome-store-generation "$nix_domain_store_generation"
+        set_feature "$domain" airlock-store-generation "$nix_domain_store_generation"
       fi
       if [ -n "$nix_domain_store_closure_hash" ]; then
-        set_feature "$domain" nixome-store-closure-hash "$nix_domain_store_closure_hash"
+        set_feature "$domain" airlock-store-closure-hash "$nix_domain_store_closure_hash"
       fi
       if [ -n "$nix_domain_store_view_image" ]; then
-        set_feature "$domain" nixome-store-view-image "$nix_domain_store_view_image"
+        set_feature "$domain" airlock-store-view-image "$nix_domain_store_view_image"
       fi
       if [ -n "$nix_domain_store_blob_map" ]; then
-        set_feature "$domain" nixome-store-blob-map "$nix_domain_store_blob_map"
+        set_feature "$domain" airlock-store-blob-map "$nix_domain_store_blob_map"
       fi
       if [ -n "$nix_domain_store_blob_volume" ]; then
-        set_feature "$domain" nixome-store-blob-volume "$nix_domain_store_blob_volume"
+        set_feature "$domain" airlock-store-blob-volume "$nix_domain_store_blob_volume"
       fi
-      set_feature "$domain" nixome-store-mountpoint "$store_mountpoint"
-      set_feature "$domain" nixome-store-device "$store_device"
+      set_feature "$domain" airlock-store-mountpoint "$store_mountpoint"
+      set_feature "$domain" airlock-store-device "$store_device"
       if [ "$store_filesystem" = "erofs" ]; then
-        set_feature "$domain" nixome-store-blob-device "$store_blob_device"
+        set_feature "$domain" airlock-store-blob-device "$store_blob_device"
       fi
-      set_feature "$domain" nixome-store-read-only "True"
+      set_feature "$domain" airlock-store-read-only "True"
     fi
 
     mapfile -t pref_names < <(domain_pref_names "$domain")
@@ -1999,7 +1999,7 @@ if topology_has_auto_sys_net_pci; then
   require_command mktemp
   require_command qvm-device
   require_command readlink
-  if [ -z "${NIXOME_DOM0_NETWORK_PCI_DEVICES:-}" ]; then
+  if [ -z "${AIRLOCK_DOM0_NETWORK_PCI_DEVICES:-}" ]; then
     require_qubesadmin_python
   fi
 fi
@@ -2013,7 +2013,7 @@ systemctl is-active --quiet qubesd.service || fail "qubesd.service is not active
 systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qrexec-policy-daemon.service is not active"
 
 schema="$(jq_get '.schema')"
-[ "$schema" = "nixome.qubes-topology.v1" ] || fail "unsupported topology schema: $schema"
+[ "$schema" = "airlock.qubes-topology.v1" ] || fail "unsupported topology schema: $schema"
 
 preflight_domain_backends
 setup_qrexec_policy
@@ -2053,7 +2053,7 @@ for kernel in "${kernel_names[@]}"; do
     continue
   fi
 
-  if [ -d "$target" ] && [ ! -f "$target/MANAGED_BY_NIXOME" ]; then
+  if [ -d "$target" ] && [ ! -f "$target/MANAGED_BY_AIRLOCK" ]; then
     if kernel_source_matches_target "$source" "$target"; then
       printf '+ adopt-kernel %q %q\n' "$kernel" "$source"
       if [ "$APPLY" = "1" ]; then
@@ -2064,7 +2064,7 @@ for kernel in "${kernel_names[@]}"; do
       continue
     fi
 
-    fail "kernel exists but is not managed by Nixome: $target"
+    fail "kernel exists but is not managed by Airlock: $target"
   fi
 
   printf '+ install-kernel %q %q\n' "$kernel" "$source"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
 RESULT_JSON="$LOG_DIR/nix-closure-domain-smoke.json"
 COMMAND_LOG="$LOG_DIR/nix-closure-domain-smoke.commands.log"
 STAGING_UPDATE_SCRIPT="$LOG_DIR/nix-closure-domain-staging-update.sh"
@@ -66,29 +66,29 @@ ROLLBACK_GUEST_PROBE_LOG="$LOG_DIR/nix-closure-domain-guest-probe-after-rollback
 RETENTION_LOG="$LOG_DIR/nix-closure-domain-set-retention-gen2.json"
 GC_AFTER_ROLLBACK_LOG="$LOG_DIR/nix-closure-domain-gc-after-rollback.json"
 
-DOMAIN="${NIXOME_NIX_CLOSURE_DOMAIN:-nixome-closure-smoke}"
-PEER_DOMAIN="${NIXOME_NIX_CLOSURE_PEER_DOMAIN:-${DOMAIN}-peer}"
-APPLY_MODE="${NIXOME_NIX_CLOSURE_APPLY_MODE:-direct}"
-DIRECT_PRIMARY_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_PRIMARY_SOURCE_VM:-sys-config-staging}"
-DIRECT_PEER_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_PEER_SOURCE_VM:-sys-config-validator}"
-DIRECT_GEN2_SOURCE_VM="${NIXOME_NIX_CLOSURE_DIRECT_GEN2_SOURCE_VM:-sys-config-vault}"
-STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
-VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-sys-config-validator}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
-QUBE_USER="${NIXOME_QUBE_USER:-user}"
-APPLY_MESSAGE="${NIXOME_NIX_CLOSURE_APPLY_MESSAGE:-nix-closure-smoke-$(date -u +%Y%m%dT%H%M%SZ)}"
-APPLY_MESSAGE_GEN2="${NIXOME_NIX_CLOSURE_APPLY_MESSAGE_GEN2:-$APPLY_MESSAGE-gen2}"
-XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
-WAIT_SECONDS="${NIXOME_NIX_CLOSURE_WAIT_SECONDS:-240}"
-QREXEC_TIMEOUT_SECONDS="${NIXOME_NIX_CLOSURE_QREXEC_TIMEOUT_SECONDS:-45}"
-RUN_GUI_PROBE="${NIXOME_NIX_CLOSURE_GUI_PROBE:-0}"
-RUN_REBOOT_PROBE="${NIXOME_NIX_CLOSURE_REBOOT_PROBE:-0}"
-CONFIG_VM_TEST_MEMORY="${NIXOME_NIX_CLOSURE_CONFIG_VM_MEMORY:-512}"
-CONFIG_VM_TEST_MAXMEM="${NIXOME_NIX_CLOSURE_CONFIG_VM_MAXMEM:-512}"
-VALIDATOR_TEST_MEMORY="${NIXOME_NIX_CLOSURE_VALIDATOR_MEMORY:-1024}"
-VALIDATOR_TEST_MAXMEM="${NIXOME_NIX_CLOSURE_VALIDATOR_MAXMEM:-1024}"
-CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-0}"
-SETUP_CONFIG_COMMAND="${NIXOME_SETUP_CONFIG_COMMAND:-nixome-setup-config}"
+DOMAIN="${AIRLOCK_NIX_CLOSURE_DOMAIN:-airlock-closure-smoke}"
+PEER_DOMAIN="${AIRLOCK_NIX_CLOSURE_PEER_DOMAIN:-${DOMAIN}-peer}"
+APPLY_MODE="${AIRLOCK_NIX_CLOSURE_APPLY_MODE:-direct}"
+DIRECT_PRIMARY_SOURCE_VM="${AIRLOCK_NIX_CLOSURE_DIRECT_PRIMARY_SOURCE_VM:-sys-config-staging}"
+DIRECT_PEER_SOURCE_VM="${AIRLOCK_NIX_CLOSURE_DIRECT_PEER_SOURCE_VM:-sys-config-validator}"
+DIRECT_GEN2_SOURCE_VM="${AIRLOCK_NIX_CLOSURE_DIRECT_GEN2_SOURCE_VM:-sys-config-vault}"
+STAGING="${AIRLOCK_CONFIG_STAGING_VM:-sys-config-staging}"
+VALIDATOR="${AIRLOCK_CONFIG_VALIDATOR_VM:-sys-config-validator}"
+VAULT="${AIRLOCK_CONFIG_VAULT_VM:-sys-config-vault}"
+QUBE_USER="${AIRLOCK_QUBE_USER:-user}"
+APPLY_MESSAGE="${AIRLOCK_NIX_CLOSURE_APPLY_MESSAGE:-nix-closure-smoke-$(date -u +%Y%m%dT%H%M%SZ)}"
+APPLY_MESSAGE_GEN2="${AIRLOCK_NIX_CLOSURE_APPLY_MESSAGE_GEN2:-$APPLY_MESSAGE-gen2}"
+XEN_CAPABILITIES="${AIRLOCK_XEN_CAPABILITIES:-/proc/xen/capabilities}"
+WAIT_SECONDS="${AIRLOCK_NIX_CLOSURE_WAIT_SECONDS:-240}"
+QREXEC_TIMEOUT_SECONDS="${AIRLOCK_NIX_CLOSURE_QREXEC_TIMEOUT_SECONDS:-45}"
+RUN_GUI_PROBE="${AIRLOCK_NIX_CLOSURE_GUI_PROBE:-0}"
+RUN_REBOOT_PROBE="${AIRLOCK_NIX_CLOSURE_REBOOT_PROBE:-0}"
+CONFIG_VM_TEST_MEMORY="${AIRLOCK_NIX_CLOSURE_CONFIG_VM_MEMORY:-512}"
+CONFIG_VM_TEST_MAXMEM="${AIRLOCK_NIX_CLOSURE_CONFIG_VM_MAXMEM:-512}"
+VALIDATOR_TEST_MEMORY="${AIRLOCK_NIX_CLOSURE_VALIDATOR_MEMORY:-1024}"
+VALIDATOR_TEST_MAXMEM="${AIRLOCK_NIX_CLOSURE_VALIDATOR_MAXMEM:-1024}"
+CONFIG_APPLY_NIX_OFFLINE="${AIRLOCK_CONFIG_APPLY_NIX_OFFLINE:-0}"
+SETUP_CONFIG_COMMAND="${AIRLOCK_SETUP_CONFIG_COMMAND:-airlock-setup-config}"
 
 result_written=0
 root_source=""
@@ -105,7 +105,7 @@ store_filesystem=""
 store_blob_device=""
 store_blob_map=""
 store_blob_map_physical=""
-EXPECTED_DOMAIN_ROLE="${NIXOME_NIX_CLOSURE_EXPECTED_ROLE:-nix-closure-smoke}"
+EXPECTED_DOMAIN_ROLE="${AIRLOCK_NIX_CLOSURE_EXPECTED_ROLE:-nix-closure-smoke}"
 reboot_status="not-run"
 shutdown_start_status="not-run"
 gui_status="skipped"
@@ -148,7 +148,7 @@ write_result() {
 
   {
     printf '{'
-    printf '"schema":"nixome.nix-closure-domain-smoke.v1"'
+    printf '"schema":"airlock.nix-closure-domain-smoke.v1"'
     printf ',"status":'
     jq -Rn --arg value "$status" '$value' | tr -d '\n'
     printf ',"reason":'
@@ -331,14 +331,14 @@ collect_diagnostics() {
     -u qubes-qrexec-policy-daemon \
     > "$JOURNAL_LOG" 2>&1 || true
   tail -n 320 /var/log/libvirt/libxl/libxl-driver.log > "$LIBXL_LOG" 2>&1 || true
-  cat /var/log/nixome/config-apply-topology.json > "$APPLIED_TOPOLOGY_LOG" 2>/dev/null || true
+  cat /var/log/airlock/config-apply-topology.json > "$APPLIED_TOPOLOGY_LOG" 2>/dev/null || true
   if [ "$APPLY_MODE" = "config-flow" ]; then
-    cat /var/log/nixome/config-apply.json > "$APPLY_RESULT_JSON" 2>/dev/null || true
+    cat /var/log/airlock/config-apply.json > "$APPLY_RESULT_JSON" 2>/dev/null || true
   fi
-  cat /var/log/nixome/config-apply-nix-domain-materializations.json > "$MATERIALIZATIONS_LOG" 2>/dev/null || true
-  cat /var/log/nixome/config-apply-nix-domain-builds.json > "$BUILDS_LOG" 2>/dev/null || true
-  cat /var/log/nixome/setup-config.json > "$SETUP_LOG" 2>/dev/null || true
-  cat /var/lib/nixome/qubes-policy.d/90-nixome.policy > "$POLICY_LOG" 2>/dev/null || true
+  cat /var/log/airlock/config-apply-nix-domain-materializations.json > "$MATERIALIZATIONS_LOG" 2>/dev/null || true
+  cat /var/log/airlock/config-apply-nix-domain-builds.json > "$BUILDS_LOG" 2>/dev/null || true
+  cat /var/log/airlock/setup-config.json > "$SETUP_LOG" 2>/dev/null || true
+  cat /var/lib/airlock/qubes-policy.d/90-airlock.policy > "$POLICY_LOG" 2>/dev/null || true
 }
 
 fail() {
@@ -513,17 +513,17 @@ shutdown_vm() {
   run_or_fail "qvm-shutdown $vm" "$output" qvm-shutdown --wait "$vm"
 }
 
-nixome_store_uses_chroot() {
-  [ "${NIXOME_USE_HOST_NIX_STORE:-0}" != "1" ] &&
-    [ -n "${NIXOME_NIX_ROOT:-}" ] &&
-    [ "$NIXOME_NIX_ROOT" != "/" ]
+airlock_store_uses_chroot() {
+  [ "${AIRLOCK_USE_HOST_NIX_STORE:-0}" != "1" ] &&
+    [ -n "${AIRLOCK_NIX_ROOT:-}" ] &&
+    [ "$AIRLOCK_NIX_ROOT" != "/" ]
 }
 
-nixome_physical_store_path() {
+airlock_physical_store_path() {
   path="$1"
 
-  if nixome_store_uses_chroot && [ "${path#/nix/store/}" != "$path" ]; then
-    printf '%s%s\n' "$NIXOME_NIX_ROOT" "$path"
+  if airlock_store_uses_chroot && [ "${path#/nix/store/}" != "$path" ]; then
+    printf '%s%s\n' "$AIRLOCK_NIX_ROOT" "$path"
   else
     printf '%s\n' "$path"
   fi
@@ -548,22 +548,22 @@ feature_value_for() {
 
 store_blob_map_physical_for() {
   vm="$1"
-  blob_map="$(feature_value_for "$vm" nixome-store-blob-map)"
-  [ -n "$blob_map" ] || fail "missing nixome-store-blob-map feature for $vm"
-  nixome_physical_store_path "$blob_map"
+  blob_map="$(feature_value_for "$vm" airlock-store-blob-map)"
+  [ -n "$blob_map" ] || fail "missing airlock-store-blob-map feature for $vm"
+  airlock_physical_store_path "$blob_map"
 }
 
 store_view_backend_for() {
   vm="$1"
-  backend="$(feature_value_for "$vm" nixome-store-view-backend)"
-  [ -n "$backend" ] || fail "missing nixome-store-view-backend feature for $vm"
+  backend="$(feature_value_for "$vm" airlock-store-view-backend)"
+  [ -n "$backend" ] || fail "missing airlock-store-view-backend feature for $vm"
   printf '%s\n' "$backend"
 }
 
 store_generation_for() {
   vm="$1"
-  generation="$(feature_value_for "$vm" nixome-store-generation)"
-  [ -n "$generation" ] || fail "missing nixome-store-generation feature for $vm"
+  generation="$(feature_value_for "$vm" airlock-store-generation)"
+  [ -n "$generation" ] || fail "missing airlock-store-generation feature for $vm"
   printf '%s\n' "$generation"
 }
 
@@ -630,7 +630,7 @@ if not left_unique or not right_unique:
     raise SystemExit("expected each closure to contain at least one unique object")
 
 payload = {
-    "schema": "nixome.nix-closure-domain-sharing-proof.v1",
+    "schema": "airlock.nix-closure-domain-sharing-proof.v1",
     "status": "passed",
     "label": label,
     "left_domain": left_vm,
@@ -666,7 +666,7 @@ sharing_json_value() {
 }
 
 closure_segment_bytes_total() {
-  nixome-closure-store status | jq -r '.segment_bytes_total'
+  airlock-closure-store status | jq -r '.segment_bytes_total'
 }
 
 set_domain_generation_identity_from_switch() {
@@ -695,7 +695,7 @@ set_domain_generation_identity_from_switch() {
     printf 'selected_view_image=%s\n' "$selected_view_image"
 
     if [ -n "$selected_root" ] && [ "$selected_root" != "null" ]; then
-      selected_root_physical="$(nixome_physical_store_path "$selected_root")"
+      selected_root_physical="$(airlock_physical_store_path "$selected_root")"
       if [ -d "$selected_root_physical" ]; then
         selected_root_image="$selected_root_physical/root.img"
       else
@@ -712,29 +712,29 @@ set_domain_generation_identity_from_switch() {
       qvm-prefs "$DOMAIN" kernel "$selected_kernel"
     fi
 
-    selected_kernelopts="console=hvc0 init=/sbin/init nixome.system=$selected_system nixome.storedev=/dev/xvde nixome.storefmt=$selected_filesystem"
+    selected_kernelopts="console=hvc0 init=/sbin/init airlock.system=$selected_system airlock.storedev=/dev/xvde airlock.storefmt=$selected_filesystem"
     if [ "$selected_filesystem" = "erofs" ]; then
-      selected_kernelopts="$selected_kernelopts nixome.storeblobdev=$selected_blob_device"
+      selected_kernelopts="$selected_kernelopts airlock.storeblobdev=$selected_blob_device"
     fi
     printf '+ qvm-prefs %q kernelopts %q\n' "$DOMAIN" "$selected_kernelopts"
     qvm-prefs "$DOMAIN" kernelopts "$selected_kernelopts"
 
-    qvm-features "$DOMAIN" nixome-system-source "$selected_system"
-    qvm-features "$DOMAIN" nixome-root-source "$selected_root"
-    qvm-features "$DOMAIN" nixome-store-source "$selected_source"
-    qvm-features "$DOMAIN" nixome-store-mode shared-closure
-    qvm-features "$DOMAIN" nixome-store-view-backend "$selected_backend"
-    qvm-features "$DOMAIN" nixome-store-filesystem "$selected_filesystem"
-    qvm-features "$DOMAIN" nixome-store-generation "$selected_generation"
-    qvm-features "$DOMAIN" nixome-store-closure-hash "$selected_closure_hash"
-    qvm-features "$DOMAIN" nixome-store-view-image "$selected_view_image"
-    qvm-features "$DOMAIN" nixome-store-mountpoint /nix/store
-    qvm-features "$DOMAIN" nixome-store-device /dev/xvde
-    qvm-features "$DOMAIN" nixome-store-read-only True
+    qvm-features "$DOMAIN" airlock-system-source "$selected_system"
+    qvm-features "$DOMAIN" airlock-root-source "$selected_root"
+    qvm-features "$DOMAIN" airlock-store-source "$selected_source"
+    qvm-features "$DOMAIN" airlock-store-mode shared-closure
+    qvm-features "$DOMAIN" airlock-store-view-backend "$selected_backend"
+    qvm-features "$DOMAIN" airlock-store-filesystem "$selected_filesystem"
+    qvm-features "$DOMAIN" airlock-store-generation "$selected_generation"
+    qvm-features "$DOMAIN" airlock-store-closure-hash "$selected_closure_hash"
+    qvm-features "$DOMAIN" airlock-store-view-image "$selected_view_image"
+    qvm-features "$DOMAIN" airlock-store-mountpoint /nix/store
+    qvm-features "$DOMAIN" airlock-store-device /dev/xvde
+    qvm-features "$DOMAIN" airlock-store-read-only True
     if [ "$selected_filesystem" = "erofs" ]; then
-      qvm-features "$DOMAIN" nixome-store-blob-device "$selected_blob_device"
-      qvm-features "$DOMAIN" nixome-store-blob-volume "$selected_blob_volume"
-      qvm-features "$DOMAIN" nixome-store-blob-map "$selected_blob_map"
+      qvm-features "$DOMAIN" airlock-store-blob-device "$selected_blob_device"
+      qvm-features "$DOMAIN" airlock-store-blob-volume "$selected_blob_volume"
+      qvm-features "$DOMAIN" airlock-store-blob-map "$selected_blob_map"
     fi
   } > "$ROLLBACK_IDENTITY_LOG" 2>&1 ||
     fail "apply selected generation identity after rollback failed"
@@ -792,9 +792,9 @@ check_libvirt_filtered_devices() {
     fail "libvirt XML for $vm does not attach store metadata at xvde"
   grep -E "<target dev=['\"]xvdf['\"]" "$xml_tmp" >/dev/null ||
     fail "libvirt XML for $vm does not attach store data at xvdf"
-  grep -F "/dev/mapper/nixome-" "$xml_tmp" >/dev/null ||
-    fail "libvirt XML for $vm does not use a filtered /dev/mapper/nixome-* backing device"
-  if grep -F "/var/lib/nixome/closure-store/objects/segments/" "$xml_tmp" >/dev/null; then
+  grep -F "/dev/mapper/airlock-" "$xml_tmp" >/dev/null ||
+    fail "libvirt XML for $vm does not use a filtered /dev/mapper/airlock-* backing device"
+  if grep -F "/var/lib/airlock/closure-store/objects/segments/" "$xml_tmp" >/dev/null; then
     fail "libvirt XML for $vm exposes canonical segment backing storage"
   fi
   rm -f "$xml_tmp"
@@ -816,10 +816,10 @@ require_source_domain_artifacts() {
   vm="$1"
 
   for feature in \
-    nixome-system-source \
-    nixome-root-source \
-    nixome-store-source \
-    nixome-role; do
+    airlock-system-source \
+    airlock-root-source \
+    airlock-store-source \
+    airlock-role; do
     [ -n "$(feature_value_for "$vm" "$feature")" ] ||
       fail "source domain $vm is missing feature $feature"
   done
@@ -835,16 +835,16 @@ write_direct_topology() {
   require_source_domain_artifacts "$primary_source_vm"
   require_source_domain_artifacts "$peer_source_vm"
 
-  primary_system="$(feature_value_for "$primary_source_vm" nixome-system-source)"
-  primary_root="$(feature_value_for "$primary_source_vm" nixome-root-source)"
-  primary_store="$(feature_value_for "$primary_source_vm" nixome-store-source)"
+  primary_system="$(feature_value_for "$primary_source_vm" airlock-system-source)"
+  primary_root="$(feature_value_for "$primary_source_vm" airlock-root-source)"
+  primary_store="$(feature_value_for "$primary_source_vm" airlock-store-source)"
   primary_kernel="$(qvm-prefs "$primary_source_vm" kernel 2>/dev/null | tr -d '\n')"
-  primary_role="$(feature_value_for "$primary_source_vm" nixome-role)"
-  peer_system="$(feature_value_for "$peer_source_vm" nixome-system-source)"
-  peer_root="$(feature_value_for "$peer_source_vm" nixome-root-source)"
-  peer_store="$(feature_value_for "$peer_source_vm" nixome-store-source)"
+  primary_role="$(feature_value_for "$primary_source_vm" airlock-role)"
+  peer_system="$(feature_value_for "$peer_source_vm" airlock-system-source)"
+  peer_root="$(feature_value_for "$peer_source_vm" airlock-root-source)"
+  peer_store="$(feature_value_for "$peer_source_vm" airlock-store-source)"
   peer_kernel="$(qvm-prefs "$peer_source_vm" kernel 2>/dev/null | tr -d '\n')"
-  peer_role="$(feature_value_for "$peer_source_vm" nixome-role)"
+  peer_role="$(feature_value_for "$peer_source_vm" airlock-role)"
 
   jq -n \
     --arg domain "$DOMAIN" \
@@ -879,9 +879,9 @@ write_direct_topology() {
             virt_mode: "pvh"
           },
           features: {
-            "nixome-backend": "nix-closure",
-            "nixome-role": $role,
-            "nixome-test": "nix-closure-domain",
+            "airlock-backend": "nix-closure",
+            "airlock-role": $role,
+            "airlock-test": "nix-closure-domain",
             os: "Linux",
             qrexec: "1"
           },
@@ -938,28 +938,28 @@ write_direct_topology() {
         };
 
       {
-        schema: "nixome.qubes-topology.v1",
+        schema: "airlock.qubes-topology.v1",
         prefs: {},
         templates: {},
         kernels: {},
         qrexec_policy: {
           rules: [
             {
-              service: "nixome.NixStoreRuntimeCheck",
+              service: "airlock.NixStoreRuntimeCheck",
               argument: "*",
               source: "dom0",
               target: $domain,
               action: "allow"
             },
             {
-              service: "nixome.NixStoreRuntimeCheck",
+              service: "airlock.NixStoreRuntimeCheck",
               argument: "*",
               source: "dom0",
               target: $peer,
               action: "allow"
             },
             {
-              service: "nixome.NixStoreRuntimeCheck",
+              service: "airlock.NixStoreRuntimeCheck",
               argument: "*",
               source: "@anyvm",
               target: "@anyvm",
@@ -982,7 +982,7 @@ write_direct_apply_result() {
   setup_json="$(json_file_value_or_null "$SETUP_LOG")"
 
   jq -c -n \
-    --arg schema "nixome.config-apply.v1" \
+    --arg schema "airlock.config-apply.v1" \
     --arg status "passed" \
     --arg reason "$reason" \
     --arg domain "$DOMAIN" \
@@ -1005,29 +1005,29 @@ write_direct_apply_result() {
 }
 
 check_source_paths() {
-  root_source="$(feature_value nixome-root-source)"
-  store_source="$(feature_value nixome-store-source)"
-  store_mode="$(feature_value nixome-store-mode)"
-  store_view_backend="$(feature_value nixome-store-view-backend)"
-  store_filesystem="$(feature_value nixome-store-filesystem)"
-  store_blob_device="$(feature_value nixome-store-blob-device)"
-  store_blob_map="$(feature_value nixome-store-blob-map)"
+  root_source="$(feature_value airlock-root-source)"
+  store_source="$(feature_value airlock-store-source)"
+  store_mode="$(feature_value airlock-store-mode)"
+  store_view_backend="$(feature_value airlock-store-view-backend)"
+  store_filesystem="$(feature_value airlock-store-filesystem)"
+  store_blob_device="$(feature_value airlock-store-blob-device)"
+  store_blob_map="$(feature_value airlock-store-blob-map)"
   [ -n "$store_mode" ] || store_mode="shared-closure"
   [ -n "$store_view_backend" ] || store_view_backend="erofs-objectmap"
   [ -n "$store_filesystem" ] || store_filesystem="erofs"
-  store_view_image="$(feature_value nixome-store-view-image)"
-  system_source="$(feature_value nixome-system-source)"
-  store_device="$(feature_value nixome-store-device)"
-  root_source_physical="$(nixome_physical_store_path "$root_source")"
-  store_source_physical="$(nixome_physical_store_path "$store_source")"
-  store_view_image_physical="$(nixome_physical_store_path "$store_view_image")"
-  store_blob_map_physical="$(nixome_physical_store_path "$store_blob_map")"
+  store_view_image="$(feature_value airlock-store-view-image)"
+  system_source="$(feature_value airlock-system-source)"
+  store_device="$(feature_value airlock-store-device)"
+  root_source_physical="$(airlock_physical_store_path "$root_source")"
+  store_source_physical="$(airlock_physical_store_path "$store_source")"
+  store_view_image_physical="$(airlock_physical_store_path "$store_view_image")"
+  store_blob_map_physical="$(airlock_physical_store_path "$store_blob_map")"
 
-  [ -n "$root_source" ] || fail "missing nixome-root-source feature"
-  [ -n "$store_source" ] || fail "missing nixome-store-source feature"
-  [ -n "$store_view_image" ] || fail "missing nixome-store-view-image feature"
-  [ -n "$system_source" ] || fail "missing nixome-system-source feature"
-  [ -n "$store_device" ] || fail "missing nixome-store-device feature"
+  [ -n "$root_source" ] || fail "missing airlock-root-source feature"
+  [ -n "$store_source" ] || fail "missing airlock-store-source feature"
+  [ -n "$store_view_image" ] || fail "missing airlock-store-view-image feature"
+  [ -n "$system_source" ] || fail "missing airlock-system-source feature"
+  [ -n "$store_device" ] || fail "missing airlock-store-device feature"
   [ -f "$root_source_physical" ] || fail "root image source is missing: $root_source"
   [ "$store_mode" = "shared-closure" ] ||
     fail "unsupported store mode for $DOMAIN: $store_mode"
@@ -1041,8 +1041,8 @@ check_source_paths() {
   [ -f "$store_source_physical/manifest.json" ] ||
     fail "store closure source is missing manifest.json: $store_source/manifest.json"
   [ -f "$store_view_image_physical" ] || fail "store view image path is missing: $store_view_image"
-  [ -n "$store_blob_device" ] || fail "missing nixome-store-blob-device feature"
-  [ -n "$store_blob_map" ] || fail "missing nixome-store-blob-map feature"
+  [ -n "$store_blob_device" ] || fail "missing airlock-store-blob-device feature"
+  [ -n "$store_blob_map" ] || fail "missing airlock-store-blob-map feature"
   [ -f "$store_blob_map_physical" ] || fail "store blob map path is missing: $store_blob_map"
 }
 
@@ -1087,13 +1087,13 @@ check_store_view_contains_system() {
     chmod -R u+w "$extract_dir" 2>/dev/null || true
     rm -rf "$extract_dir"
     mkdir -p "$extract_dir"
-    nixome-closure-store attach-blob-view \
+    airlock-closure-store attach-blob-view \
       --domain "$DOMAIN" \
       --generation "$generation" \
       > "$attach_json"
     filtered_device="$(jq -r '.device' "$attach_json")"
     case "$filtered_device" in
-      /dev/mapper/nixome-*) ;;
+      /dev/mapper/airlock-*) ;;
       *) echo "unexpected filtered device: $filtered_device" >&2; exit 1 ;;
     esac
     while IFS= read -r backing_path; do
@@ -1106,7 +1106,7 @@ check_store_view_contains_system() {
     set +e
     fsck.erofs --device="$filtered_device" --extract="$extract_dir" "$store_view_image_physical"
     fsck_rc="$?"
-    nixome-closure-store detach-blob-view \
+    airlock-closure-store detach-blob-view \
       --domain "$DOMAIN" \
       --generation "$generation"
     detach_rc="$?"
@@ -1126,14 +1126,14 @@ run_runtime_service_check_for() {
   expected_store_blob_device="$5"
   output="$6"
   error_output="$7"
-  qrexec_args=(qrexec-client -d "$vm" -T -w 120 "DEFAULT:QUBESRPC nixome.NixStoreRuntimeCheck+ dom0")
+  qrexec_args=(qrexec-client -d "$vm" -T -w 120 "DEFAULT:QUBESRPC airlock.NixStoreRuntimeCheck+ dom0")
   printf '+'
   printf ' %q' "${qrexec_args[@]}"
   printf '\n'
 
   if ! "${qrexec_args[@]}" > "$output" 2> "$error_output"; then
     cat "$error_output" >&2 || true
-    fail "nixome.NixStoreRuntimeCheck qrexec service failed for $vm"
+    fail "airlock.NixStoreRuntimeCheck qrexec service failed for $vm"
   fi
 
   grep -Fx "system=$expected_system" "$output" >/dev/null ||
@@ -1171,22 +1171,22 @@ EOF
 
 system_path="$(
   tr ' ' '\n' < /proc/cmdline |
-    sed -n 's|^nixome.system=||p' |
+    sed -n 's|^airlock.system=||p' |
     head -n 1
 )"
 store_device="$(
   tr ' ' '\n' < /proc/cmdline |
-    sed -n 's|^nixome.storedev=||p' |
+    sed -n 's|^airlock.storedev=||p' |
     head -n 1
 )"
 store_format="$(
   tr ' ' '\n' < /proc/cmdline |
-    sed -n 's|^nixome.storefmt=||p' |
+    sed -n 's|^airlock.storefmt=||p' |
     head -n 1
 )"
 store_blob_device="$(
   tr ' ' '\n' < /proc/cmdline |
-    sed -n 's|^nixome.storeblobdev=||p' |
+    sed -n 's|^airlock.storeblobdev=||p' |
     head -n 1
 )"
 [ -n "$store_format" ] || store_format="erofs"
@@ -1208,8 +1208,8 @@ printf 'guest_user=%s\n' "$guest_user"
 printf 'home_dir=%s\n' "$home_dir"
 printf 'system_state=%s\n' "$(systemctl is-system-running 2>/dev/null || true)"
 printf 'qubes_name=%s\n' "$(qubesdb-read /name 2>/dev/null || true)"
-domain_role="$(cat /etc/nixome/domain-role 2>/dev/null || true)"
-applied_message="$(cat /etc/nixome/applied-message 2>/dev/null || true)"
+domain_role="$(cat /etc/airlock/domain-role 2>/dev/null || true)"
+applied_message="$(cat /etc/airlock/applied-message 2>/dev/null || true)"
 printf 'domain_role=%s\n' "$domain_role"
 printf 'applied_message=%s\n' "$applied_message"
 
@@ -1239,7 +1239,7 @@ lsblk -o NAME,RO,SIZE,FSTYPE,MOUNTPOINTS
 printf '\n== services ==\n'
 systemctl is-active qubes-db.service
 systemctl is-active qubes-qrexec-agent.service
-systemctl is-active nixome-qubes-rw-init.service
+systemctl is-active airlock-qubes-rw-init.service
 
 if [ -n "$expected_domain_role" ] && [ "$domain_role" != "$expected_domain_role" ]; then
   echo "unexpected domain role: $domain_role" >&2
@@ -1251,7 +1251,7 @@ fi
 [ -d /usr/local ]
 [ -d "$home_dir" ]
 [ -w "$home_dir" ]
-touch "$home_dir/nixome-closure-smoke-home"
+touch "$home_dir/airlock-closure-smoke-home"
 test -d /run/qubes
 test -d /var/log/qubes
 
@@ -1283,7 +1283,7 @@ test -d /rw/home
 test -d /usr/local
 test -d "$home_dir"
 test -w "$home_dir"
-test -f "$home_dir/nixome-closure-smoke-home"
+test -f "$home_dir/airlock-closure-smoke-home"
 findmnt -rn -T /nix/store -o OPTIONS | grep -E '(^|,)ro(,|$)'
 printf 'persistence_probe=passed\n'
 EOF
@@ -1336,21 +1336,21 @@ run_optional_gui_probe() {
       ;;
     0|false|no)
       gui_status="skipped"
-      printf 'GUI probe skipped by NIXOME_NIX_CLOSURE_GUI_PROBE=%s\n' "$RUN_GUI_PROBE" > "$GUI_LOG"
+      printf 'GUI probe skipped by AIRLOCK_NIX_CLOSURE_GUI_PROBE=%s\n' "$RUN_GUI_PROBE" > "$GUI_LOG"
       return 0
       ;;
     *)
-      fail "unsupported NIXOME_NIX_CLOSURE_GUI_PROBE value: $RUN_GUI_PROBE"
+      fail "unsupported AIRLOCK_NIX_CLOSURE_GUI_PROBE value: $RUN_GUI_PROBE"
       ;;
   esac
 
-  if ! command -v nixome-qube-gui-smoke >/dev/null 2>&1; then
+  if ! command -v airlock-qube-gui-smoke >/dev/null 2>&1; then
     gui_status="skipped"
-    printf 'nixome-qube-gui-smoke is not available\n' > "$GUI_LOG"
+    printf 'airlock-qube-gui-smoke is not available\n' > "$GUI_LOG"
     return 0
   fi
 
-  if NIXOME_TEST_QUBE="$DOMAIN" nixome-qube-gui-smoke > "$GUI_LOG" 2>&1; then
+  if AIRLOCK_TEST_QUBE="$DOMAIN" airlock-qube-gui-smoke > "$GUI_LOG" 2>&1; then
     gui_status="passed"
   else
     gui_status="failed"
@@ -1368,8 +1368,8 @@ for cmd in \
   grep \
   jq \
   journalctl \
-  nixome-closure-store \
-  nixome-nix-domain-storage \
+  airlock-closure-store \
+  airlock-nix-domain-storage \
   qrexec-client \
   qvm-check \
   qvm-features \
@@ -1408,12 +1408,12 @@ case "$APPLY_MODE" in
   direct|config-flow)
     ;;
   *)
-    fail "unsupported NIXOME_NIX_CLOSURE_APPLY_MODE: $APPLY_MODE"
+    fail "unsupported AIRLOCK_NIX_CLOSURE_APPLY_MODE: $APPLY_MODE"
     ;;
 esac
 
 if [ "$APPLY_MODE" = "config-flow" ]; then
-  require_command nixome-config-apply
+  require_command airlock-config-apply
 fi
 
 if ! [ -r "$XEN_CAPABILITIES" ] || ! grep -qw control_d "$XEN_CAPABILITIES"; then
@@ -1443,10 +1443,10 @@ case "$APPLY_MODE" in
     wait_for_qrexec "$VAULT" "$VAULT" "$LOG_DIR/nix-closure-domain-$VAULT-qrexec.log"
 
     run_qrexec_script_or_fail "$STAGING" "initialize $STAGING config repo" "$LOG_DIR/nix-closure-domain-staging-init.log" <(
-      printf 'set -eu\nnixome-config-staging-init\n'
+      printf 'set -eu\nairlock-config-staging-init\n'
     )
     run_qrexec_script_or_fail "$VALIDATOR" "initialize $VALIDATOR config tools" "$LOG_DIR/nix-closure-domain-validator-init.log" <(
-      printf 'set -eu\nnixome-config-validator-init\n'
+      printf 'set -eu\nairlock-config-validator-init\n'
     )
 
     {
@@ -1456,8 +1456,8 @@ case "$APPLY_MODE" in
 
     cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
-cd /home/$QUBE_USER/nixome-config
-cat > nixome/runtime.nix <<'RUNTIMENIX'
+cd /home/$QUBE_USER/airlock-config
+cat > airlock/runtime.nix <<'RUNTIMENIX'
 {
   appliedMessage,
   pkgs ? null,
@@ -1477,15 +1477,15 @@ let
       vcpus = 1;
     };
     features = {
-      "nixome-role" = role;
-      "nixome-test" = "nix-closure-domain";
+      "airlock-role" = role;
+      "airlock-test" = "nix-closure-domain";
     };
     services = {
       "network-manager" = false;
     };
     configuration = {
-      environment.etc."nixome/domain-role".text = "\${role}\\n";
-      environment.etc."nixome/applied-message".text = "\${message}\\n";
+      environment.etc."airlock/domain-role".text = "\${role}\\n";
+      environment.etc."airlock/applied-message".text = "\${message}\\n";
     };
   };
 in
@@ -1504,14 +1504,14 @@ in
     extraDomains = { };
     extraQrexecRules = [
       {
-        service = "nixome.NixStoreRuntimeCheck";
+        service = "airlock.NixStoreRuntimeCheck";
         argument = "*";
         source = "dom0";
         target = "$DOMAIN";
         action = "allow";
       }
       {
-        service = "nixome.NixStoreRuntimeCheck";
+        service = "airlock.NixStoreRuntimeCheck";
         argument = "*";
         source = "dom0";
         target = "$PEER_DOMAIN";
@@ -1543,8 +1543,8 @@ in
   system.args = { };
 }
 RUNTIMENIX
-git add nixome/runtime.nix
-git -c user.name='Nixome Closure Smoke' -c user.email='nixome-closure-smoke@localhost' \
+git add airlock/runtime.nix
+git -c user.name='Airlock Closure Smoke' -c user.email='airlock-closure-smoke@localhost' \
   commit -m 'add nix closure smoke domain'
 git status --short --branch
 EOF
@@ -1557,12 +1557,12 @@ EOF
 
     run_or_fail "apply nix-closure domain config through $VALIDATOR" "$APPLY_LOG" \
       env \
-        NIXOME_LOG_DIR="$LOG_DIR" \
-        NIXOME_CONFIG_STAGING_VM="$STAGING" \
-        NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-        NIXOME_CONFIG_VAULT_VM="$VAULT" \
-        NIXOME_CONFIG_APPLY_NIX_OFFLINE="$CONFIG_APPLY_NIX_OFFLINE" \
-      nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+        AIRLOCK_LOG_DIR="$LOG_DIR" \
+        AIRLOCK_CONFIG_STAGING_VM="$STAGING" \
+        AIRLOCK_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+        AIRLOCK_CONFIG_VAULT_VM="$VAULT" \
+        AIRLOCK_CONFIG_APPLY_NIX_OFFLINE="$CONFIG_APPLY_NIX_OFFLINE" \
+      airlock-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
     ;;
   direct)
     for source_vm in "$DIRECT_PRIMARY_SOURCE_VM" "$DIRECT_PEER_SOURCE_VM" "$DIRECT_GEN2_SOURCE_VM"; do
@@ -1578,7 +1578,7 @@ EOF
 
     write_direct_topology "$DIRECT_TOPOLOGY_LOG" "$DIRECT_PRIMARY_SOURCE_VM" "$DIRECT_PEER_SOURCE_VM"
     run_or_fail "apply direct nix-closure topology" "$APPLY_LOG" \
-      env NIXOME_LOG_DIR="$LOG_DIR" \
+      env AIRLOCK_LOG_DIR="$LOG_DIR" \
       "$SETUP_CONFIG_COMMAND" --apply --topology "$DIRECT_TOPOLOGY_LOG"
     cat "$LOG_DIR/setup-config.json" > "$SETUP_LOG" 2>/dev/null || true
     write_direct_apply_result "direct nix-closure topology setup" "$DIRECT_TOPOLOGY_LOG" "$APPLY_RESULT_JSON"
@@ -1588,7 +1588,7 @@ esac
 collect_diagnostics
 
 jq -e --arg domain "$DOMAIN" --arg peer "$PEER_DOMAIN" '
-  .schema == "nixome.config-apply.v1" and
+  .schema == "airlock.config-apply.v1" and
   .status == "passed" and
   .setup.status == "passed" and
   any(.nix_domain_materializations_result.domains[]; .domain == $domain) and
@@ -1611,12 +1611,12 @@ qvm-volume info "$PEER_DOMAIN:store" >/dev/null 2>&1 ||
 qvm_volume_list_has_volume "$PEER_DOMAIN" store ||
   fail "Qubes volume list does not include the peer store volume"
 
-grep -F "nixome.NixStoreRuntimeCheck * dom0 $DOMAIN allow" "$POLICY_LOG" >/dev/null ||
-  fail "generated qrexec policy does not allow nixome.NixStoreRuntimeCheck"
-grep -F "nixome.NixStoreRuntimeCheck * dom0 $PEER_DOMAIN allow" "$POLICY_LOG" >/dev/null ||
-  fail "generated qrexec policy does not allow nixome.NixStoreRuntimeCheck for peer"
-grep -Fx "nixome.NixStoreRuntimeCheck * @anyvm @anyvm deny" "$POLICY_LOG" >/dev/null ||
-  fail "generated qrexec policy does not deny nixome.NixStoreRuntimeCheck catch-all"
+grep -F "airlock.NixStoreRuntimeCheck * dom0 $DOMAIN allow" "$POLICY_LOG" >/dev/null ||
+  fail "generated qrexec policy does not allow airlock.NixStoreRuntimeCheck"
+grep -F "airlock.NixStoreRuntimeCheck * dom0 $PEER_DOMAIN allow" "$POLICY_LOG" >/dev/null ||
+  fail "generated qrexec policy does not allow airlock.NixStoreRuntimeCheck for peer"
+grep -Fx "airlock.NixStoreRuntimeCheck * @anyvm @anyvm deny" "$POLICY_LOG" >/dev/null ||
+  fail "generated qrexec policy does not deny airlock.NixStoreRuntimeCheck catch-all"
 
 check_source_paths
 [ "$store_view_backend" = "erofs-objectmap" ] ||
@@ -1624,15 +1624,15 @@ check_source_paths
 qvm-prefs "$DOMAIN" kernelopts > "$KERNEL_OPTS_LOG" 2>&1
 [ "$(extract_kernelopt init)" = "/sbin/init" ] ||
   fail "kernelopts do not route boot through /sbin/init"
-[ "$(extract_kernelopt nixome.system)" = "$system_source" ] ||
-  fail "kernelopts nixome.system does not match declared system"
-[ "$(extract_kernelopt nixome.storedev)" = "$store_device" ] ||
-  fail "kernelopts nixome.storedev does not match declared store device"
-[ "$(extract_kernelopt nixome.storefmt)" = "$store_filesystem" ] ||
-  fail "kernelopts nixome.storefmt does not match declared store filesystem"
+[ "$(extract_kernelopt airlock.system)" = "$system_source" ] ||
+  fail "kernelopts airlock.system does not match declared system"
+[ "$(extract_kernelopt airlock.storedev)" = "$store_device" ] ||
+  fail "kernelopts airlock.storedev does not match declared store device"
+[ "$(extract_kernelopt airlock.storefmt)" = "$store_filesystem" ] ||
+  fail "kernelopts airlock.storefmt does not match declared store filesystem"
 if [ "$store_filesystem" = "erofs" ]; then
-  [ "$(extract_kernelopt nixome.storeblobdev)" = "$store_blob_device" ] ||
-    fail "kernelopts nixome.storeblobdev does not match declared blob device"
+  [ "$(extract_kernelopt airlock.storeblobdev)" = "$store_blob_device" ] ||
+    fail "kernelopts airlock.storeblobdev does not match declared blob device"
   qvm-volume info "$DOMAIN:store-data" >/dev/null 2>&1 ||
     fail "Qubes store-data volume was not created"
   qvm_volume_list_has_volume "$DOMAIN" store-data ||
@@ -1668,10 +1668,10 @@ wait_for_qrexec "$PEER_DOMAIN" "$PEER_DOMAIN" "$LOG_DIR/nix-closure-domain-peer-
 check_libvirt_filtered_devices "$DOMAIN" "$LIBVIRT_XML_LOG"
 check_libvirt_filtered_devices "$PEER_DOMAIN" "$PEER_LIBVIRT_XML_LOG"
 run_runtime_service_check
-peer_system_source="$(feature_value_for "$PEER_DOMAIN" nixome-system-source)"
-peer_store_device="$(feature_value_for "$PEER_DOMAIN" nixome-store-device)"
-peer_store_filesystem="$(feature_value_for "$PEER_DOMAIN" nixome-store-filesystem)"
-peer_store_blob_device="$(feature_value_for "$PEER_DOMAIN" nixome-store-blob-device)"
+peer_system_source="$(feature_value_for "$PEER_DOMAIN" airlock-system-source)"
+peer_store_device="$(feature_value_for "$PEER_DOMAIN" airlock-store-device)"
+peer_store_filesystem="$(feature_value_for "$PEER_DOMAIN" airlock-store-filesystem)"
+peer_store_blob_device="$(feature_value_for "$PEER_DOMAIN" airlock-store-blob-device)"
 run_runtime_service_check_for \
   "$PEER_DOMAIN" \
   "$peer_system_source" \
@@ -1696,13 +1696,13 @@ case "$APPLY_MODE" in
   config-flow)
     cat > "$GEN2_STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
-cd /home/$QUBE_USER/nixome-config
+cd /home/$QUBE_USER/airlock-config
 sed -i \
   's|"$DOMAIN" = mkClosureDomain "nix-closure-smoke" "$APPLY_MESSAGE";|"$DOMAIN" = mkClosureDomain "nix-closure-smoke" "$APPLY_MESSAGE_GEN2";|' \
-  nixome/runtime.nix
-grep -F '"$DOMAIN" = mkClosureDomain "nix-closure-smoke" "$APPLY_MESSAGE_GEN2";' nixome/runtime.nix
-git add nixome/runtime.nix
-git -c user.name='Nixome Closure Smoke' -c user.email='nixome-closure-smoke@localhost' \
+  airlock/runtime.nix
+grep -F '"$DOMAIN" = mkClosureDomain "nix-closure-smoke" "$APPLY_MESSAGE_GEN2";' airlock/runtime.nix
+git add airlock/runtime.nix
+git -c user.name='Airlock Closure Smoke' -c user.email='airlock-closure-smoke@localhost' \
   commit -m 'update nix closure smoke domain generation'
 git status --short --branch
 EOF
@@ -1715,19 +1715,19 @@ EOF
 
     run_or_fail "apply second nix-closure domain generation through $VALIDATOR" "$GEN2_APPLY_LOG" \
       env \
-        NIXOME_LOG_DIR="$LOG_DIR" \
-        NIXOME_CONFIG_STAGING_VM="$STAGING" \
-        NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-        NIXOME_CONFIG_VAULT_VM="$VAULT" \
-        NIXOME_CONFIG_APPLY_NIX_OFFLINE="$CONFIG_APPLY_NIX_OFFLINE" \
-      nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+        AIRLOCK_LOG_DIR="$LOG_DIR" \
+        AIRLOCK_CONFIG_STAGING_VM="$STAGING" \
+        AIRLOCK_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+        AIRLOCK_CONFIG_VAULT_VM="$VAULT" \
+        AIRLOCK_CONFIG_APPLY_NIX_OFFLINE="$CONFIG_APPLY_NIX_OFFLINE" \
+      airlock-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
     cp "$LOG_DIR/config-apply.json" "$GEN2_APPLY_RESULT_JSON" 2>/dev/null || true
     ;;
   direct)
     EXPECTED_DOMAIN_ROLE=""
     write_direct_topology "$DIRECT_GEN2_TOPOLOGY_LOG" "$DIRECT_GEN2_SOURCE_VM" "$DIRECT_PEER_SOURCE_VM"
     run_or_fail "apply direct second nix-closure generation" "$GEN2_APPLY_LOG" \
-      env NIXOME_LOG_DIR="$LOG_DIR" \
+      env AIRLOCK_LOG_DIR="$LOG_DIR" \
       "$SETUP_CONFIG_COMMAND" --apply --topology "$DIRECT_GEN2_TOPOLOGY_LOG"
     cat "$LOG_DIR/setup-config.json" > "$SETUP_LOG" 2>/dev/null || true
     write_direct_apply_result \
@@ -1793,7 +1793,7 @@ run_runtime_service_check_for \
   "$PEER_RUNTIME_SERVICE_ERR"
 
 run_or_fail "read closure-store status while second generation is running" "$RUNNING_STATUS_LOG" \
-  nixome-closure-store status
+  airlock-closure-store status
 jq -e --arg domain "$DOMAIN" --argjson generation "$new_generation" '
   any(.running[]; .domain == $domain and .generation == $generation and .volume == "store") and
   any(.running[]; .domain == $domain and .generation == $generation and .volume == "store-data")
@@ -1801,7 +1801,7 @@ jq -e --arg domain "$DOMAIN" --argjson generation "$new_generation" '
   fail "closure-store running refs do not include second generation"
 
 run_or_fail "run closure-store GC while second generation is running" "$GC_RUNNING_LOG" \
-  nixome-closure-store gc --keep-generations 0
+  airlock-closure-store gc --keep-generations 0
 jq -e --arg domain "$DOMAIN" --argjson generation "$new_generation" '
   any(.running_generations[]; .domain == $domain and .generation == $generation) and
   any(.retained_generations[]; .domain == $domain and .generation == $generation) and
@@ -1812,15 +1812,15 @@ jq -e --arg domain "$DOMAIN" --argjson generation "$new_generation" '
 
 shutdown_vm "$DOMAIN" "$LOG_DIR/nix-closure-domain-rollback-pre-shutdown.log"
 run_json_or_fail "switch primary domain back to retained generation" "$ROLLBACK_SWITCH_LOG" \
-  nixome-nix-domain-storage switch-store "$DOMAIN" "$initial_generation"
+  airlock-nix-domain-storage switch-store "$DOMAIN" "$initial_generation"
 set_domain_generation_identity_from_switch "$ROLLBACK_SWITCH_LOG"
 run_or_fail "mark second generation collectible after rollback" "$RETENTION_LOG" \
-  nixome-closure-store set-retention \
+  airlock-closure-store set-retention \
     --domain "$DOMAIN" \
     --generation "$new_generation" \
     --retain false
 run_or_fail "run closure-store GC after rollback" "$GC_AFTER_ROLLBACK_LOG" \
-  nixome-closure-store gc --keep-generations 0
+  airlock-closure-store gc --keep-generations 0
 jq -e --arg domain "$DOMAIN" --argjson generation "$new_generation" --arg shared "$shared_object" '
   any(.removed_generations[]; .domain == $domain and .generation == $generation) and
   (.removed_object_blobs | index($shared)) == null
@@ -1849,7 +1849,7 @@ case "$RUN_REBOOT_PROBE" in
     reboot_status="skipped"
     ;;
   *)
-    fail "unsupported NIXOME_NIX_CLOSURE_REBOOT_PROBE value: $RUN_REBOOT_PROBE"
+    fail "unsupported AIRLOCK_NIX_CLOSURE_REBOOT_PROBE value: $RUN_REBOOT_PROBE"
     ;;
 esac
 run_shutdown_start_cycle

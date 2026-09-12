@@ -2,20 +2,20 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
+source "$ROOT/lifecycle/misc/tools/scripts/lib/airlock-env.sh"
 
-LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-$ROOT/.airlock-logs}"
 RESULT_JSON="$LOG_DIR/vm-gui-sync-codex-auth.json"
 SSH_PROBE_STDERR="$LOG_DIR/vm-gui-sync-codex-auth-ssh.stderr.log"
-SSH_PORT="${NIXOME_VM_SSH_PORT:-2222}"
-SSH_USER="${NIXOME_VM_SSH_USER:-nixome}"
-SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
+SSH_PORT="${AIRLOCK_VM_SSH_PORT:-2222}"
+SSH_USER="${AIRLOCK_VM_SSH_USER:-airlock}"
+SSH_PASSWORD="${AIRLOCK_VM_SSH_PASSWORD:-airlock}"
 LOCAL_CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-LOCAL_AUTH_JSON="${NIXOME_CODEX_AUTH_JSON:-$LOCAL_CODEX_HOME/auth.json}"
-LOCAL_CONFIG_TOML="${NIXOME_CODEX_CONFIG_TOML:-$LOCAL_CODEX_HOME/config.toml}"
-REMOTE_CODEX_HOME="${NIXOME_NESTED_CODEX_HOME:-/home/$SSH_USER/.codex}"
-REMOTE_DEV_MODE_MARKER="${NIXOME_NESTED_DEV_MODE_MARKER:-/etc/nixome/dev-mode}"
-SYNC_CONFIG="${NIXOME_SYNC_CODEX_CONFIG:-0}"
+LOCAL_AUTH_JSON="${AIRLOCK_CODEX_AUTH_JSON:-$LOCAL_CODEX_HOME/auth.json}"
+LOCAL_CONFIG_TOML="${AIRLOCK_CODEX_CONFIG_TOML:-$LOCAL_CODEX_HOME/config.toml}"
+REMOTE_CODEX_HOME="${AIRLOCK_NESTED_CODEX_HOME:-/home/$SSH_USER/.codex}"
+REMOTE_DEV_MODE_MARKER="${AIRLOCK_NESTED_DEV_MODE_MARKER:-/etc/airlock/dev-mode}"
+SYNC_CONFIG="${AIRLOCK_SYNC_CODEX_CONFIG:-0}"
 
 mkdir -p "$LOG_DIR"
 
@@ -29,7 +29,7 @@ write_result() {
   local config_synced="${3:-false}"
 
   jq -n \
-    --arg schema "nixome.nested-codex-auth-sync.v1" \
+    --arg schema "airlock.nested-codex-auth-sync.v1" \
     --arg status "$status" \
     --arg reason "$reason" \
     --arg local_codex_home "$LOCAL_CODEX_HOME" \
@@ -61,7 +61,7 @@ require_command() {
 }
 
 ssh_base() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/misc/tools/scripts/airlock-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     ssh \
       -F /dev/null \
       -o LogLevel=ERROR \
@@ -76,7 +76,7 @@ ssh_base() {
 }
 
 scp_base() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/misc/tools/scripts/airlock-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     scp \
       -F /dev/null \
       -q \
@@ -114,7 +114,7 @@ case "$SYNC_CONFIG" in
     sync_config=false
     ;;
   *)
-    fail "unsupported NIXOME_SYNC_CODEX_CONFIG value: $SYNC_CONFIG"
+    fail "unsupported AIRLOCK_SYNC_CODEX_CONFIG value: $SYNC_CONFIG"
     ;;
 esac
 
@@ -128,15 +128,15 @@ ssh_base "
   [ -f \"\$marker\" ] && grep -qx enabled \"\$marker\"
 " >/dev/null || fail "remote nested dom0 is not a dev-mode image"
 
-tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/nixome-codex-auth.XXXXXX")"
+tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/airlock-codex-auth.XXXXXX")"
 trap 'rm -rf "$tmpdir"' EXIT
 install -m 0600 "$LOCAL_AUTH_JSON" "$tmpdir/auth.json"
 if [ "$sync_config" = true ]; then
   install -m 0600 "$LOCAL_CONFIG_TOML" "$tmpdir/config.toml"
 fi
 
-remote_auth_tmp="/tmp/nixome-codex-auth.$$.json"
-remote_config_tmp="/tmp/nixome-codex-config.$$.toml"
+remote_auth_tmp="/tmp/airlock-codex-auth.$$.json"
+remote_config_tmp="/tmp/airlock-codex-config.$$.toml"
 scp_base "$tmpdir/auth.json" "$SSH_USER@127.0.0.1:$remote_auth_tmp"
 ssh_base "
   set -e

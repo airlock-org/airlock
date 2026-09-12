@@ -1,5 +1,5 @@
 {
-  description = "Nixome: Qubes control stack on NixOS Xen dom0";
+  description = "Airlock: Qubes control stack on NixOS Xen dom0";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -27,7 +27,7 @@
 
       forAllSystems = lib.genAttrs supportedSystems;
 
-      nixomeImageBuildToolsOverlay =
+      airlockImageBuildToolsOverlay =
         _final: prev:
         {
           lkl = prev.lkl.overrideAttrs (oldAttrs: {
@@ -40,7 +40,7 @@
         // lib.optionalAttrs (prev ? qubes-manager) {
           qubes-manager = prev.qubes-manager.overrideAttrs (oldAttrs: {
             postInstall = (oldAttrs.postInstall or "") + ''
-              # Nixome templates are built from Nix config. Do not expose the
+              # Airlock templates are built from Nix config. Do not expose the
               # upstream Fedora/Debian template installer in dom0 until that
               # RPC/repository path is intentionally supported.
               qubes_manager_py="$out/${prev.python3.sitePackages}/qubesmanager"
@@ -99,7 +99,7 @@
                   --replace-fail "        spawn_in_background('qubes-template-manager')" \
                     "        return" \
                   --replace-fail "supported\\nInstall new template with Template Manager" \
-                    "supported\\nInstall supported templates through Nixome config"
+                    "supported\\nInstall supported templates through Airlock config"
               fi
 
               if [ -f "$qubes_manager_py/tests/test_qube_manager.py" ]; then
@@ -119,7 +119,7 @@
           inherit system;
           overlays = [
             nixos-qubes.overlays.default
-            nixomeImageBuildToolsOverlay
+            airlockImageBuildToolsOverlay
           ];
           config.allowUnfreePredicate =
             pkg:
@@ -131,7 +131,7 @@
 
       boolString = value: if value then "true" else "false";
 
-      nixomeQubesVmKernelName = "6.12.64-1.fc41";
+      airlockQubesVmKernelName = "6.12.64-1.fc41";
       nestedDevSysNetPciAssignment = {
         backend = "dom0";
         id = "00_03.0";
@@ -140,7 +140,7 @@
         options.no-strict-reset = true;
       };
 
-      nixomeSupportConfigInputSource =
+      airlockSupportConfigInputSource =
         let
           root = toString ./.;
           keep =
@@ -152,24 +152,24 @@
             rel == "flake.nix" || rel == "flake.lock" || keepTree "lifecycle" || rel == "tests";
         in
         lib.cleanSourceWith {
-          name = "nixome-support-config-input-source";
+          name = "airlock-support-config-input-source";
           src = ./.;
           filter = keep;
         };
 
-      nixomeConfigInputs = {
+      airlockConfigInputs = {
         nixpkgs = "${nixpkgs}";
         nixpkgsLibvirt105 = "${nixpkgs-libvirt_10_5}";
         nixosQubes = "${nixos-qubes}";
-        nixomeSupport = "${nixomeSupportConfigInputSource}";
+        airlockSupport = "${airlockSupportConfigInputSource}";
       };
 
-      mkNixomeQubeBuilders =
+      mkAirlockQubeBuilders =
         system:
         import ./lifecycle/misc/lib/qube-template.nix {
           inherit nixpkgs system;
           nixpkgsLibvirt105Source = "${nixpkgs-libvirt_10_5}";
-          nixomeSupport = "${self}";
+          airlockSupport = "${self}";
           nixosQubesSource = "${nixos-qubes}";
         };
 
@@ -178,9 +178,9 @@
         import ./lifecycle/bootstrap/default-domains {
           inherit
             lib
-            mkNixomeQubeBuilders
-            nixomeConfigInputs
-            nixomeQubesVmKernelName
+            mkAirlockQubeBuilders
+            airlockConfigInputs
+            airlockQubesVmKernelName
             networkDebug
             ;
         };
@@ -209,12 +209,12 @@
         builtins.mapAttrs (_name: entry: materializeNixClosureDomain entry) bootstrapDomainEntries;
 
       mkConfigSystemSpecialArgs = system: networkDebug: {
-        nixomeQubeKernel = {
-          name = nixomeQubesVmKernelName;
-          package = self.packages.${system}.nixome-qubes-vm-kernel;
+        airlockQubeKernel = {
+          name = airlockQubesVmKernelName;
+          package = self.packages.${system}.airlock-qubes-vm-kernel;
         };
-        nixomeConfigDomains = mkBootstrapConfigDomains system networkDebug;
-        inherit nixomeConfigInputs;
+        airlockConfigDomains = mkBootstrapConfigDomains system networkDebug;
+        inherit airlockConfigInputs;
       };
 
       mkVmConfiguration =
@@ -239,7 +239,7 @@
             {
               # The nested QEMU launcher exposes the first virtio NIC for dom0
               # SSH/package access and the second virtio NIC for sys-net.
-              nixome.qubes.domains.sys-net.devices.pci = [ nestedDevSysNetPciAssignment ];
+              airlock.qubes.domains.sys-net.devices.pci = [ nestedDevSysNetPciAssignment ];
             }
           );
         };
@@ -252,12 +252,12 @@
           optOut = cfg.virtualisation.qubes.optOutRecommendedConfiguration;
           hasOptOut = name: builtins.elem name optOut;
         in
-        pkgs.runCommand "nixome-module-contract"
+        pkgs.runCommand "airlock-module-contract"
           {
             preferLocalBuild = true;
             allowSubstitutes = false;
 
-            nixomeDom0Enabled = boolString cfg.nixome.dom0.enable;
+            airlockDom0Enabled = boolString cfg.airlock.dom0.enable;
             qubesDom0Enabled = boolString cfg.virtualisation.qubes.dom0.enable;
             qubesSecure = boolString cfg.virtualisation.qubes.secure;
             xenEnabled = boolString cfg.virtualisation.xen.enable;
@@ -289,7 +289,7 @@
               fi
             }
 
-            check nixome-dom0-enabled true "$nixomeDom0Enabled"
+            check airlock-dom0-enabled true "$airlockDom0Enabled"
             check qubes-dom0-enabled true "$qubesDom0Enabled"
             check qubes-secure false "$qubesSecure"
             check xen-enabled true "$xenEnabled"
@@ -305,26 +305,26 @@
             check libvirt-package qubes-core-libvirt "$libvirtPackage"
             check libvirt-firewall-backend iptables "$libvirtFirewallBackend"
 
-            printf 'nixome module contract ok\n'
+            printf 'airlock module contract ok\n'
             touch "$out"
           '';
     in
     {
       lib = {
-        nixomeSystem = import ./lifecycle/misc/lib/system.nix;
-        nixomeTopology = import ./lifecycle/misc/lib/topology.nix;
-        nixomeQubeTemplate = import ./lifecycle/misc/lib/qube-template.nix;
+        airlockSystem = import ./lifecycle/misc/lib/system.nix;
+        airlockTopology = import ./lifecycle/misc/lib/topology.nix;
+        airlockQubeTemplate = import ./lifecycle/misc/lib/qube-template.nix;
       };
 
-      nixome.configInputs = nixomeConfigInputs;
+      airlock.configInputs = airlockConfigInputs;
 
-      overlays.nixomeImageBuildTools = nixomeImageBuildToolsOverlay;
+      overlays.airlockImageBuildTools = airlockImageBuildToolsOverlay;
 
       packages = forAllSystems (
         system:
         let
           pkgs = pkgsFor system;
-          templateBuilders = mkNixomeQubeBuilders system;
+          templateBuilders = mkAirlockQubeBuilders system;
           configDomainEntries = mkConfigDomainEntries system;
           configDomainPackages = lib.listToAttrs (
             lib.concatMap (
@@ -347,46 +347,46 @@
         in
         configDomainPackages
         // {
-          nixome-config-apply = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-apply { };
-          nixome-config-archive-candidate =
-            pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-archive
+          airlock-config-apply = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-config-apply { };
+          airlock-config-archive-candidate =
+            pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-config-archive
               { };
-          nixome-config-bootstrap-current =
-            pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/nixome-config-bootstrap-current
+          airlock-config-bootstrap-current =
+            pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/airlock-config-bootstrap-current
               { };
-          nixome-config-boot-verify =
-            pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-boot-verify
+          airlock-config-boot-verify =
+            pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-config-boot-verify
               { };
-          nixome-config-control = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-control { };
-          nixome-config-inputs-import =
-            pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-config-inputs-import
+          airlock-config-control = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-config-control { };
+          airlock-config-inputs-import =
+            pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-config-inputs-import
               { };
-          nixome-config-status = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-config-status { };
-          nixome-config-vms-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-config-vms-smoke { };
-          nixome-cli = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-cli { };
-          nixome = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-cli { };
+          airlock-config-status = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-config-status { };
+          airlock-config-vms-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-config-vms-smoke { };
+          airlock-cli = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-cli { };
+          airlock = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-cli { };
           codex = pkgs.codex;
           zellij = pkgs.zellij;
-          nixome-nix-domain-storage =
-            pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-nix-domain-storage
+          airlock-nix-domain-storage =
+            pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-nix-domain-storage
               { };
-          nixome-nix-closure-domain-smoke =
-            pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-nix-closure-domain-smoke
+          airlock-nix-closure-domain-smoke =
+            pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-nix-closure-domain-smoke
               { };
-          nixome-qubes-storage =
-            pkgs.python3.pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-qubes-storage
+          airlock-qubes-storage =
+            pkgs.python3.pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-qubes-storage
               { };
-          nixome-qube-bootstrap = pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/nixome-qube-bootstrap { };
-          nixome-qube-gui-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-qube-gui-smoke { };
+          airlock-qube-bootstrap = pkgs.callPackage ./lifecycle/bootstrap/tools/pkgs/airlock-qube-bootstrap { };
+          airlock-qube-gui-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-qube-gui-smoke { };
           qubes-gui-agent-linux = pkgs.qubes-gui-agent-linux;
           qubes-gui-daemon = pkgs.qubes-gui-daemon;
-          nixome-setup-config = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-setup-config { };
-          nixome-start-network-providers =
-            pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-start-network-providers
+          airlock-setup-config = pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-setup-config { };
+          airlock-start-network-providers =
+            pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-start-network-providers
               { };
-          nixome-qubes-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/nixome-qubes-smoke { };
-          nixome-observe-dom0 = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/nixome-observe { };
-          nixome-qubes-vm-kernel = pkgs.repackRpmKernel {
+          airlock-qubes-smoke = pkgs.callPackage ./lifecycle/misc/tools/pkgs/airlock-qubes-smoke { };
+          airlock-observe-dom0 = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-observe { };
+          airlock-qubes-vm-kernel = pkgs.repackRpmKernel {
             kernelSrc = pkgs.fetchurl {
               url = "https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm";
               hash = "sha256-nK0KbnT8hUwIZPhUgW8nSRNAbZDgjexHWfeeYDiFxsU=";
@@ -398,55 +398,55 @@
             kernelVersion = "6.12.64-1";
             fedoraVersion = "fc41";
           };
-          nixome-nix-closure-root-image-test = templateBuilders.mkNixClosureRootImage {
-            imageName = "nixome-nix-closure-root-image-test";
+          airlock-nix-closure-root-image-test = templateBuilders.mkNixClosureRootImage {
+            imageName = "airlock-nix-closure-root-image-test";
             rootImageSizeMiB = 64;
           };
-          nixome-nix-closure-store-manifest-test = templateBuilders.mkNixStoreClosureManifest {
-            name = "nixome-nix-closure-store-manifest-test";
+          airlock-nix-closure-store-manifest-test = templateBuilders.mkNixStoreClosureManifest {
+            name = "airlock-nix-closure-store-manifest-test";
             rootPaths = [
-              (pkgs.writeText "nixome-store-manifest-test-root" "nixome-store-manifest-test\n")
+              (pkgs.writeText "airlock-store-manifest-test-root" "airlock-store-manifest-test\n")
             ];
           };
-          nixome-vm-dev-image = self.nixosConfigurations."vm-dev".config.system.build.image;
-          nixome-vm-release-image = self.nixosConfigurations."vm-release".config.system.build.image;
-          nixome-vm-image = self.nixosConfigurations.vm.config.system.build.image;
-          nixome-vm-gui-dev-image = self.nixosConfigurations."vm-gui-dev".config.system.build.image;
-          nixome-vm-gui-release-image = self.nixosConfigurations."vm-gui-release".config.system.build.image;
-          nixome-vm-gui-image = self.nixosConfigurations.vm-gui.config.system.build.image;
-          nixome-vm-gui-config-dev-image =
+          airlock-vm-dev-image = self.nixosConfigurations."vm-dev".config.system.build.image;
+          airlock-vm-release-image = self.nixosConfigurations."vm-release".config.system.build.image;
+          airlock-vm-image = self.nixosConfigurations.vm.config.system.build.image;
+          airlock-vm-gui-dev-image = self.nixosConfigurations."vm-gui-dev".config.system.build.image;
+          airlock-vm-gui-release-image = self.nixosConfigurations."vm-gui-release".config.system.build.image;
+          airlock-vm-gui-image = self.nixosConfigurations.vm-gui.config.system.build.image;
+          airlock-vm-gui-config-dev-image =
             self.nixosConfigurations."vm-gui-config-dev".config.system.build.image;
-          nixome-vm-gui-config-release-image =
+          airlock-vm-gui-config-release-image =
             self.nixosConfigurations."vm-gui-config-release".config.system.build.image;
-          nixome-vm-gui-config-image = self.nixosConfigurations.vm-gui-config.config.system.build.image;
-          nixome-vm-gui-config-network-debug-image =
+          airlock-vm-gui-config-image = self.nixosConfigurations.vm-gui-config.config.system.build.image;
+          airlock-vm-gui-config-network-debug-image =
             self.nixosConfigurations.vm-gui-config-network-debug.config.system.build.image;
           ovmf-fd = pkgs.OVMF.fd;
           qemu-kvm = pkgs.qemu_kvm;
           qemu-utils = pkgs.qemu-utils;
-          default = self.packages.${system}.nixome-observe-dom0;
+          default = self.packages.${system}.airlock-observe-dom0;
         }
       );
 
       checks = forAllSystems (system: {
-        config-apply-package = self.packages.${system}.nixome-config-apply;
-        config-archive-package = self.packages.${system}.nixome-config-archive-candidate;
-        config-bootstrap-current-package = self.packages.${system}.nixome-config-bootstrap-current;
-        config-boot-verify-package = self.packages.${system}.nixome-config-boot-verify;
-        config-control-package = self.packages.${system}.nixome-config-control;
+        config-apply-package = self.packages.${system}.airlock-config-apply;
+        config-archive-package = self.packages.${system}.airlock-config-archive-candidate;
+        config-bootstrap-current-package = self.packages.${system}.airlock-config-bootstrap-current;
+        config-boot-verify-package = self.packages.${system}.airlock-config-boot-verify;
+        config-control-package = self.packages.${system}.airlock-config-control;
         codex-package = self.packages.${system}.codex;
         zellij-package = self.packages.${system}.zellij;
-        config-inputs-import-package = self.packages.${system}.nixome-config-inputs-import;
-        config-status-package = self.packages.${system}.nixome-config-status;
-        nixome-cli-package = self.packages.${system}.nixome-cli;
+        config-inputs-import-package = self.packages.${system}.airlock-config-inputs-import;
+        config-status-package = self.packages.${system}.airlock-config-status;
+        airlock-cli-package = self.packages.${system}.airlock-cli;
         module-contract = mkModuleContractCheck system;
-        config-vms-smoke-package = self.packages.${system}.nixome-config-vms-smoke;
-        nix-closure-domain-smoke-package = self.packages.${system}.nixome-nix-closure-domain-smoke;
-        qube-bootstrap-package = self.packages.${system}.nixome-qube-bootstrap;
-        qube-gui-smoke-package = self.packages.${system}.nixome-qube-gui-smoke;
-        setup-config-package = self.packages.${system}.nixome-setup-config;
-        start-network-providers-package = self.packages.${system}.nixome-start-network-providers;
-        observe-package = self.packages.${system}.nixome-observe-dom0;
+        config-vms-smoke-package = self.packages.${system}.airlock-config-vms-smoke;
+        nix-closure-domain-smoke-package = self.packages.${system}.airlock-nix-closure-domain-smoke;
+        qube-bootstrap-package = self.packages.${system}.airlock-qube-bootstrap;
+        qube-gui-smoke-package = self.packages.${system}.airlock-qube-gui-smoke;
+        setup-config-package = self.packages.${system}.airlock-setup-config;
+        start-network-providers-package = self.packages.${system}.airlock-start-network-providers;
+        observe-package = self.packages.${system}.airlock-observe-dom0;
       });
 
       formatter = forAllSystems (system: (pkgsFor system).nixfmt);
@@ -455,7 +455,7 @@
         { lib, ... }:
         {
           nixpkgs.overlays = lib.mkAfter [
-            self.overlays.nixomeImageBuildTools
+            self.overlays.airlockImageBuildTools
           ];
 
           imports = [
@@ -507,17 +507,17 @@
         networkDebug = true;
       };
 
-      nixosConfigurations.nixome-domain-sys-config-vault =
+      nixosConfigurations.airlock-domain-sys-config-vault =
         (mkConfigDomainEntries "x86_64-linux").sys-config-vault.configuration;
-      nixosConfigurations.nixome-domain-sys-config-staging =
+      nixosConfigurations.airlock-domain-sys-config-staging =
         (mkConfigDomainEntries "x86_64-linux").sys-config-staging.configuration;
-      nixosConfigurations.nixome-domain-sys-config-validator =
+      nixosConfigurations.airlock-domain-sys-config-validator =
         (mkConfigDomainEntries "x86_64-linux").sys-config-validator.configuration;
-      nixosConfigurations.nixome-domain-sys-net = (mkSysNetDomainEntry "x86_64-linux").configuration;
-      nixosConfigurations.nixome-domain-sys-net-network-debug =
+      nixosConfigurations.airlock-domain-sys-net = (mkSysNetDomainEntry "x86_64-linux").configuration;
+      nixosConfigurations.airlock-domain-sys-net-network-debug =
         (networkDebugBootstrapDomains.mkSysNetDomainEntry "x86_64-linux").configuration;
-      nixosConfigurations.nixome-domain-sys-firewall =
+      nixosConfigurations.airlock-domain-sys-firewall =
         (mkSysFirewallDomainEntry "x86_64-linux").configuration;
-      nixosConfigurations.nixome-domain-sys-gui = (mkSysGuiDomainEntry "x86_64-linux").configuration;
+      nixosConfigurations.airlock-domain-sys-gui = (mkSysGuiDomainEntry "x86_64-linux").configuration;
     };
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
 RESULT_JSON="$LOG_DIR/config-apply.json"
 COMMAND_LOG="$LOG_DIR/config-apply.commands.log"
 ARCHIVE_STDOUT="$LOG_DIR/config-apply-archive.stdout.log"
@@ -39,23 +39,23 @@ CHECKOUT_LOG="$LOG_DIR/config-apply-git-checkout.log"
 SETUP_STDOUT="$LOG_DIR/config-apply-setup.stdout.log"
 SETUP_STDERR="$LOG_DIR/config-apply-setup.stderr.log"
 SETUP_JSON="$LOG_DIR/setup-config.json"
-SETUP_CONFIG_COMMAND="${NIXOME_SETUP_CONFIG_COMMAND:-nixome-setup-config}"
-XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
-SYSTEM_STATE_DIR="${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
-SYSTEM_ETC_DIR="${NIXOME_SYSTEM_ETC_DIR:-/etc/nixome}"
-SYSTEM_PROFILE="${NIXOME_SYSTEM_PROFILE:-/nix/var/nix/profiles/nixome-system}"
-HOST_SYSTEM_PROFILE="${NIXOME_HOST_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}"
-HOST_CURRENT_SYSTEM_LINK="${NIXOME_HOST_CURRENT_SYSTEM_LINK:-/run/current-system}"
+SETUP_CONFIG_COMMAND="${AIRLOCK_SETUP_CONFIG_COMMAND:-airlock-setup-config}"
+XEN_CAPABILITIES="${AIRLOCK_XEN_CAPABILITIES:-/proc/xen/capabilities}"
+SYSTEM_STATE_DIR="${AIRLOCK_SYSTEM_STATE_DIR:-/var/lib/airlock/system}"
+SYSTEM_ETC_DIR="${AIRLOCK_SYSTEM_ETC_DIR:-/etc/airlock}"
+SYSTEM_PROFILE="${AIRLOCK_SYSTEM_PROFILE:-/nix/var/nix/profiles/airlock-system}"
+HOST_SYSTEM_PROFILE="${AIRLOCK_HOST_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}"
+HOST_CURRENT_SYSTEM_LINK="${AIRLOCK_HOST_CURRENT_SYSTEM_LINK:-/run/current-system}"
 HOST_SYSTEM_ACTIVATION_LOG="$LOG_DIR/config-system-host-activation.log"
-CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-1}"
-CONFIG_APPLY_STAGE="${NIXOME_CONFIG_APPLY_STAGE:-full}"
-QREXEC_RUN_DIR="${NIXOME_QREXEC_RUN_DIR:-/var/run/qubes}"
-QREXEC_READY_WAIT_SECONDS="${NIXOME_CONFIG_QREXEC_READY_WAIT_SECONDS:-60}"
+CONFIG_APPLY_NIX_OFFLINE="${AIRLOCK_CONFIG_APPLY_NIX_OFFLINE:-1}"
+CONFIG_APPLY_STAGE="${AIRLOCK_CONFIG_APPLY_STAGE:-full}"
+QREXEC_RUN_DIR="${AIRLOCK_QREXEC_RUN_DIR:-/var/run/qubes}"
+QREXEC_READY_WAIT_SECONDS="${AIRLOCK_CONFIG_QREXEC_READY_WAIT_SECONDS:-60}"
 
-STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
-VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-sys-config-validator}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
-DEPLOYMENT_ARCHIVE_SERVICE="${NIXOME_CONFIG_DEPLOYMENT_ARCHIVE_SERVICE:-nixome.Config.ArchiveDeployment}"
+STAGING="${AIRLOCK_CONFIG_STAGING_VM:-sys-config-staging}"
+VALIDATOR="${AIRLOCK_CONFIG_VALIDATOR_VM:-sys-config-validator}"
+VAULT="${AIRLOCK_CONFIG_VAULT_VM:-sys-config-vault}"
+DEPLOYMENT_ARCHIVE_SERVICE="${AIRLOCK_CONFIG_DEPLOYMENT_ARCHIVE_SERVICE:-airlock.Config.ArchiveDeployment}"
 APPLY=0
 CANDIDATE_TAR=""
 result_written=0
@@ -63,17 +63,17 @@ candidate_commit=""
 deployment_id=""
 tmpdir=""
 
-nixome_store_uses_chroot() {
-  [ "${NIXOME_USE_HOST_NIX_STORE:-0}" != "1" ] &&
-    [ -n "${NIXOME_NIX_ROOT:-}" ] &&
-    [ "$NIXOME_NIX_ROOT" != "/" ]
+airlock_store_uses_chroot() {
+  [ "${AIRLOCK_USE_HOST_NIX_STORE:-0}" != "1" ] &&
+    [ -n "${AIRLOCK_NIX_ROOT:-}" ] &&
+    [ "$AIRLOCK_NIX_ROOT" != "/" ]
 }
 
-nixome_physical_store_path() {
+airlock_physical_store_path() {
   local path="$1"
 
-  if nixome_store_uses_chroot && [ "${path#/nix/store/}" != "$path" ]; then
-    printf '%s%s\n' "$NIXOME_NIX_ROOT" "$path"
+  if airlock_store_uses_chroot && [ "${path#/nix/store/}" != "$path" ]; then
+    printf '%s%s\n' "$AIRLOCK_NIX_ROOT" "$path"
   else
     printf '%s\n' "$path"
   fi
@@ -81,7 +81,7 @@ nixome_physical_store_path() {
 
 usage() {
   cat >&2 <<'EOF'
-Usage: nixome-config-apply --apply [--staging VM] [--validator VM] [--vault VM] [--candidate-tar PATH]
+Usage: airlock-config-apply --apply [--staging VM] [--validator VM] [--vault VM] [--candidate-tar PATH]
 
 Validate a staged config candidate in sys-config-validator, archive it into
 sys-config-vault, then apply the validated candidate topology from dom0.
@@ -136,8 +136,8 @@ case "$CONFIG_APPLY_STAGE" in
   full|archive|resolve|setup|system|deploy)
     ;;
   *)
-    write_result failed "unsupported NIXOME_CONFIG_APPLY_STAGE: $CONFIG_APPLY_STAGE"
-    printf 'config apply failed: unsupported NIXOME_CONFIG_APPLY_STAGE: %s\n' "$CONFIG_APPLY_STAGE" >&2
+    write_result failed "unsupported AIRLOCK_CONFIG_APPLY_STAGE: $CONFIG_APPLY_STAGE"
+    printf 'config apply failed: unsupported AIRLOCK_CONFIG_APPLY_STAGE: %s\n' "$CONFIG_APPLY_STAGE" >&2
     exit 1
     ;;
 esac
@@ -167,7 +167,7 @@ write_result() {
   deployment_archive_json="$(json_file_or_null "$DEPLOYMENT_ARCHIVE_JSON")"
 
   jq -c -n \
-    --arg schema "nixome.config-apply.v1" \
+    --arg schema "airlock.config-apply.v1" \
     --arg status "$status" \
     --arg reason "$reason" \
     --arg stage "$CONFIG_APPLY_STAGE" \
@@ -338,7 +338,7 @@ nix_build_print_path() {
     0|false|no)
       ;;
     *)
-      fail "unsupported NIXOME_CONFIG_APPLY_NIX_OFFLINE value: $CONFIG_APPLY_NIX_OFFLINE"
+      fail "unsupported AIRLOCK_CONFIG_APPLY_NIX_OFFLINE value: $CONFIG_APPLY_NIX_OFFLINE"
       ;;
   esac
 
@@ -466,7 +466,7 @@ build_deployment_tar() {
   domain_references_json="$(json_file_or_null "$DOMAIN_REFERENCES_JSON")"
 
   jq -c -n \
-    --arg schema "nixome.config-deployment.v1" \
+    --arg schema "airlock.config-deployment.v1" \
     --arg status "$status" \
     --arg reason "$reason" \
     --arg deployment_id "$deployment_id" \
@@ -617,7 +617,7 @@ build_deployment_tar() {
 
 extract_deployment_archive_json() {
   awk '
-    index($0, "\"schema\":\"nixome.config-vault-deployment.v1\"") { line = $0 }
+    index($0, "\"schema\":\"airlock.config-vault-deployment.v1\"") { line = $0 }
     END {
       if (line != "") {
         print line
@@ -667,7 +667,7 @@ write_unsupported_domain_backends_json() {
   local _topology_file="$1"
 
   jq -c -n \
-    --arg schema "nixome.unsupported-domain-backends.v1" \
+    --arg schema "airlock.unsupported-domain-backends.v1" \
     '{schema: $schema, domains: []}' \
     > "$UNSUPPORTED_DOMAIN_BACKENDS_JSON"
 }
@@ -687,7 +687,7 @@ write_domain_reference_report() {
   local reason="$6"
 
   jq -c -n \
-    --arg schema "nixome.domain-references.v1" \
+    --arg schema "airlock.domain-references.v1" \
     --arg status "$status" \
     --arg reason "$reason" \
     --arg topology "$topology_file" \
@@ -997,7 +997,7 @@ safe_log_name() {
 init_template_builds_json() {
   : > "$TEMPLATE_BUILD_LOG"
   jq -c -n \
-    --arg schema "nixome.template-builds.v1" \
+    --arg schema "airlock.template-builds.v1" \
     '{schema: $schema, builds: []}' \
     > "$TEMPLATE_BUILDS_JSON"
 }
@@ -1005,14 +1005,14 @@ init_template_builds_json() {
 init_nix_domain_builds_json() {
   : > "$NIX_DOMAIN_BUILD_LOG"
   jq -c -n \
-    --arg schema "nixome.nix-domain-builds.v1" \
+    --arg schema "airlock.nix-domain-builds.v1" \
     '{schema: $schema, builds: []}' \
     > "$NIX_DOMAIN_BUILDS_JSON"
 }
 
 init_nix_domain_materializations_json() {
   jq -c -n \
-    --arg schema "nixome.nix-domain-materializations.v1" \
+    --arg schema "airlock.nix-domain-materializations.v1" \
     '{schema: $schema, domains: []}' \
     > "$NIX_DOMAIN_MATERIALIZATIONS_JSON"
 }
@@ -1136,7 +1136,7 @@ resolve_template_sources() {
     if [ -n "$subpath" ]; then
       source_path="$source_path/$subpath"
     fi
-    source_path_physical="$(nixome_physical_store_path "$source_path")"
+    source_path_physical="$(airlock_physical_store_path "$source_path")"
 
     [ -d "$source_path_physical" ] ||
       fail "built template source directory is missing for $template: $source_path"
@@ -1172,7 +1172,7 @@ resolve_template_sources() {
 init_system_builds_json() {
   : > "$SYSTEM_BUILD_LOG"
   jq -c -n \
-    --arg schema "nixome.system-builds.v1" \
+    --arg schema "airlock.system-builds.v1" \
     '{schema: $schema, builds: []}' \
     > "$SYSTEM_BUILDS_JSON"
 }
@@ -1211,7 +1211,7 @@ record_system_build() {
 init_systemd_actions_json() {
   : > "$SYSTEMD_ACTIONS_LOG"
   jq -c -n \
-    --arg schema "nixome.systemd-actions.v1" \
+    --arg schema "airlock.systemd-actions.v1" \
     '{schema: $schema, status: "skipped", reason: "no systemd live actions declared", actions: []}' \
     > "$SYSTEMD_ACTIONS_JSON"
 }
@@ -1358,7 +1358,7 @@ validate_system_source() {
   system_json="$4"
 
   if [ "$component" = "dom0.profile" ]; then
-    activation_command="$(jq -r '.dom0.profile.activation_command // "bin/nixome-dom0-profile-activate"' "$system_json")"
+    activation_command="$(jq -r '.dom0.profile.activation_command // "bin/airlock-dom0-profile-activate"' "$system_json")"
     [ -d "$source_physical" ] ||
       fail "direct dom0 profile source is not a directory: $source"
     [ -x "$source_physical/$activation_command" ] ||
@@ -1508,7 +1508,7 @@ resolve_nix_domain_sources() {
       if [ -n "$subpath" ]; then
         source_path="$source_path/$subpath"
       fi
-      source_path_physical="$(nixome_physical_store_path "$source_path")"
+      source_path_physical="$(airlock_physical_store_path "$source_path")"
       [ -e "$source_path_physical" ] ||
         fail "built Nix-native domain source is missing for $domain.$component: $source_path"
       validate_nix_domain_source "$component" "$domain" "$source_path" "$source_path_physical" "$store_mode"
@@ -1521,7 +1521,7 @@ resolve_nix_domain_sources() {
         fail "empty direct Nix-native domain source for $domain.$component"
 
       source_path="$(resolve_candidate_source_path "$domain.$component" "$worktree" "$source")"
-      source_path_physical="$(nixome_physical_store_path "$source_path")"
+      source_path_physical="$(airlock_physical_store_path "$source_path")"
       [ -e "$source_path_physical" ] ||
         fail "direct Nix-native domain source is missing for $domain.$component: $source"
 
@@ -1557,7 +1557,7 @@ resolve_nix_domain_sources() {
   done
 
   jq -c \
-    --arg schema "nixome.nix-domain-materializations.v1" \
+    --arg schema "airlock.nix-domain-materializations.v1" \
     '{
       schema: $schema,
       domains: [
@@ -1616,7 +1616,7 @@ resolve_direct_system_sources() {
     source="$(printf '%s' "$source_json" | jq -r '.source')"
     source_path="$(printf '%s' "$source_json" | jq -c '.path')"
     resolved_source="$(resolve_candidate_source_path "$component" "$worktree" "$source")"
-    resolved_source_physical="$(nixome_physical_store_path "$resolved_source")"
+    resolved_source_physical="$(airlock_physical_store_path "$resolved_source")"
     source_was_relative=0
 
     case "$source" in
@@ -1714,7 +1714,7 @@ resolve_system_sources() {
     if [ -n "$subpath" ]; then
       source_path="$source_path/$subpath"
     fi
-    source_path_physical="$(nixome_physical_store_path "$source_path")"
+    source_path_physical="$(airlock_physical_store_path "$source_path")"
 
     [ -e "$source_path_physical" ] ||
       fail "built system source is missing for $component: $source_path"
@@ -1745,7 +1745,7 @@ install_profile_link() {
 
   if [ "${profile_source#/nix/store/}" = "$profile_source" ]; then
     ln -sfn "$profile_source_physical" "$SYSTEM_PROFILE"
-  elif nixome_store_uses_chroot; then
+  elif airlock_store_uses_chroot; then
     ln -sfn "$profile_source_physical" "$SYSTEM_PROFILE"
   else
     nix-env -p "$SYSTEM_PROFILE" --set "$profile_source"
@@ -1769,7 +1769,7 @@ install_host_system_profile() {
 
   if [ "${host_system_source#/nix/store/}" = "$host_system_source" ]; then
     ln -sfn "$host_system_source_physical" "$HOST_SYSTEM_PROFILE"
-  elif nixome_store_uses_chroot; then
+  elif airlock_store_uses_chroot; then
     ln -sfn "$host_system_source_physical" "$HOST_SYSTEM_PROFILE"
   else
     nix-env -p "$HOST_SYSTEM_PROFILE" --set "$host_system_source"
@@ -1790,7 +1790,7 @@ write_system_apply_json() {
 
   systemd_actions_result="$(json_file_or_null "$SYSTEMD_ACTIONS_JSON")"
   jq -c -n \
-    --arg schema "nixome.system-apply.v1" \
+    --arg schema "airlock.system-apply.v1" \
     --arg status "$status" \
     --arg reason "$reason" \
     --arg profile_status "$profile_status" \
@@ -1911,11 +1911,11 @@ apply_system() {
   cp "$SYSTEM_PLAN_JSON" "$SYSTEM_STATE_DIR/last-plan.json"
 
   profile_source="$(jq -r '.dom0.profile.source // ""' "$system_json")"
-  profile_activation_command="$(jq -r '.dom0.profile.activation_command // "bin/nixome-dom0-profile-activate"' "$system_json")"
+  profile_activation_command="$(jq -r '.dom0.profile.activation_command // "bin/airlock-dom0-profile-activate"' "$system_json")"
   profile_activation_action="$(jq -r '.dom0.profile.activation_action // "run"' "$system_json")"
 
   if [ -n "$profile_source" ]; then
-    profile_source_physical="$(nixome_physical_store_path "$profile_source")"
+    profile_source_physical="$(airlock_physical_store_path "$profile_source")"
     activation_path="$profile_source_physical/$profile_activation_command"
     if [ ! -d "$profile_source_physical" ]; then
       finish_system_apply_failed "dom0 profile source is missing: $profile_source"
@@ -1941,11 +1941,11 @@ apply_system() {
 
     if [ "$profile_activation_action" = run ]; then
       if ! env \
-        NIXOME_SYSTEM_JSON="$system_json" \
-        NIXOME_SYSTEM_PLAN_JSON="$SYSTEM_PLAN_JSON" \
-        NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
-        NIXOME_SYSTEM_ETC_DIR="$SYSTEM_ETC_DIR" \
-        NIXOME_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
+        AIRLOCK_SYSTEM_JSON="$system_json" \
+        AIRLOCK_SYSTEM_PLAN_JSON="$SYSTEM_PLAN_JSON" \
+        AIRLOCK_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
+        AIRLOCK_SYSTEM_ETC_DIR="$SYSTEM_ETC_DIR" \
+        AIRLOCK_SYSTEM_PROFILE="$SYSTEM_PROFILE" \
         "$activation_path" > "$PROFILE_ACTIVATION_LOG" 2>&1; then
         cat "$PROFILE_ACTIVATION_LOG" >&2 || true
         finish_system_apply_failed "dom0 profile activation failed"
@@ -1978,7 +1978,7 @@ apply_system() {
         ;;
     esac
 
-    host_system_source_physical="$(nixome_physical_store_path "$host_system_source")"
+    host_system_source_physical="$(airlock_physical_store_path "$host_system_source")"
     switch_to_configuration="$host_system_source_physical/bin/switch-to-configuration"
 
     if [ ! -d "$host_system_source_physical" ]; then
@@ -2051,7 +2051,7 @@ for cmd in \
   mv \
   nix \
   nix-env \
-  nixome-config-archive-candidate \
+  airlock-config-archive-candidate \
   qrexec-client \
   readlink \
   rm \
@@ -2076,7 +2076,7 @@ systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qr
 
 if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = archive ]; then
   archive_args=(
-    nixome-config-archive-candidate
+    airlock-config-archive-candidate
     --staging "$STAGING"
     --validator "$VALIDATOR"
     --vault "$VAULT"
@@ -2085,7 +2085,7 @@ if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = archive ]; then
     archive_args+=(--candidate-tar "$CANDIDATE_TAR")
   fi
 
-  printf '+ env NIXOME_LOG_DIR=%q NIXOME_CONFIG_STAGING_VM=%q NIXOME_CONFIG_VALIDATOR_VM=%q NIXOME_CONFIG_VAULT_VM=%q' \
+  printf '+ env AIRLOCK_LOG_DIR=%q AIRLOCK_CONFIG_STAGING_VM=%q AIRLOCK_CONFIG_VALIDATOR_VM=%q AIRLOCK_CONFIG_VAULT_VM=%q' \
     "$LOG_DIR" \
     "$STAGING" \
     "$VALIDATOR" \
@@ -2094,10 +2094,10 @@ if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = archive ]; then
   printf '\n'
 
   if ! env \
-    NIXOME_LOG_DIR="$LOG_DIR" \
-    NIXOME_CONFIG_STAGING_VM="$STAGING" \
-    NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-    NIXOME_CONFIG_VAULT_VM="$VAULT" \
+    AIRLOCK_LOG_DIR="$LOG_DIR" \
+    AIRLOCK_CONFIG_STAGING_VM="$STAGING" \
+    AIRLOCK_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+    AIRLOCK_CONFIG_VAULT_VM="$VAULT" \
     "${archive_args[@]}" > "$ARCHIVE_STDOUT" 2> "$ARCHIVE_STDERR"; then
     cat "$ARCHIVE_STDERR" >&2 || true
     if [ -r "$ARCHIVE_JSON" ]; then
@@ -2152,14 +2152,14 @@ if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = resolve ]; then
   [ -r "$topology" ] || fail "validated candidate is missing evaluated topology.json"
   [ -r "$system_json" ] || fail "validated candidate is missing evaluated system.json"
   jq -e '
-    .schema == "nixome.qubes-topology.v1" and
+    .schema == "airlock.qubes-topology.v1" and
     (.templates | type == "object") and
     (.kernels | type == "object") and
     (.prefs | type == "object") and
     (.domains | type == "object")
   ' "$topology" >/dev/null || fail "validated candidate topology JSON is invalid"
   jq -e '
-    .schema == "nixome.system.v1" and
+    .schema == "airlock.system.v1" and
       (.dom0 | type == "object") and
       (.plan | type == "object") and
       (.plan.live_actions | type == "array") and
@@ -2195,11 +2195,11 @@ if [ "$CONFIG_APPLY_STAGE" = full ] || [ "$CONFIG_APPLY_STAGE" = setup ]; then
   [ -r "$APPLY_TOPOLOGY_JSON" ] ||
     fail "resolved topology JSON is missing: $APPLY_TOPOLOGY_JSON"
 
-  printf '+ env NIXOME_LOG_DIR=%q %q --apply --topology %q\n' \
+  printf '+ env AIRLOCK_LOG_DIR=%q %q --apply --topology %q\n' \
     "$LOG_DIR" \
     "$SETUP_CONFIG_COMMAND" \
     "$APPLY_TOPOLOGY_JSON"
-  if env NIXOME_LOG_DIR="$LOG_DIR" "$SETUP_CONFIG_COMMAND" --apply --topology "$APPLY_TOPOLOGY_JSON" \
+  if env AIRLOCK_LOG_DIR="$LOG_DIR" "$SETUP_CONFIG_COMMAND" --apply --topology "$APPLY_TOPOLOGY_JSON" \
     > "$SETUP_STDOUT" 2> "$SETUP_STDERR"; then
     setup_rc=0
   else

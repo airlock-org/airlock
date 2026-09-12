@@ -2,7 +2,7 @@
   nixpkgs,
   nixpkgsLibvirt105Source,
   nixosQubesSource,
-  nixomeSupport,
+  airlockSupport,
   system ? "x86_64-linux",
 }:
 let
@@ -39,7 +39,7 @@ let
     (import "${nixpkgs}/pkgs/top-level/by-name-overlay.nix" "${nixosQubesSource}/pkgs/by-name")
     libvirt105Overlay
     (import "${nixosQubesSource}/nix/overlay.nix")
-    (import "${nixomeSupport}/lifecycle/misc/overlays/qubes-manager-without-template-tools.nix")
+    (import "${airlockSupport}/lifecycle/misc/overlays/qubes-manager-without-template-tools.nix")
   ];
 
   pkgs = import nixpkgs {
@@ -71,17 +71,17 @@ let
     lib.concatStringsSep " " (
       [
         (mkQubeKernelOpts configuration)
-        "nixome.system=${configuration.config.system.build.toplevel}"
-        "nixome.storedev=${storeDevice}"
-        "nixome.storefmt=${storeFormat}"
+        "airlock.system=${configuration.config.system.build.toplevel}"
+        "airlock.storedev=${storeDevice}"
+        "airlock.storefmt=${storeFormat}"
       ]
       ++ lib.optionals (storeBlobDevice != null) [
-        "nixome.storeblobdev=${storeBlobDevice}"
+        "airlock.storeblobdev=${storeBlobDevice}"
       ]
     );
 
   mkNixClosureEarlyInit =
-    pkgs.runCommand "nixome-nix-closure-early-init"
+    pkgs.runCommand "airlock-nix-closure-early-init"
       {
         nativeBuildInputs = [ pkgs.pkgsStatic.stdenv.cc ];
         preferLocalBuild = true;
@@ -109,7 +109,7 @@ let
         static void log_errno(const char *fmt, ...) {
             va_list ap;
             va_start(ap, fmt);
-            fputs("nixome-early-init: ", stderr);
+            fputs("airlock-early-init: ", stderr);
             vfprintf(stderr, fmt, ap);
             fprintf(stderr, ": %s\n", strerror(errno));
             va_end(ap);
@@ -118,7 +118,7 @@ let
         static void log_msg(const char *fmt, ...) {
             va_list ap;
             va_start(ap, fmt);
-            fputs("nixome-early-init: ", stderr);
+            fputs("airlock-early-init: ", stderr);
             vfprintf(stderr, fmt, ap);
             fputc('\n', stderr);
             va_end(ap);
@@ -309,7 +309,7 @@ let
             if (strcmp(store_format, "erofs") == 0) {
                 if (blob_device == NULL || blob_device[0] == '\0') {
                     if (noisy) {
-                        log_msg("erofs store requires nixome.storeblobdev");
+                        log_msg("erofs store requires airlock.storeblobdev");
                     }
                     return 0;
                 }
@@ -327,7 +327,7 @@ let
                     return 0;
                 }
             } else {
-                log_msg("unsupported nixome.storefmt=%s", store_format);
+                log_msg("unsupported airlock.storefmt=%s", store_format);
                 return 0;
             }
 
@@ -375,14 +375,14 @@ let
                 return 1;
             }
 
-            read_cmdline_option("nixome.storedev", explicit_device, sizeof(explicit_device));
-            read_cmdline_option("nixome.storeblobdev", explicit_blob_device, sizeof(explicit_blob_device));
-            read_cmdline_option("nixome.storefmt", store_format, sizeof(store_format));
+            read_cmdline_option("airlock.storedev", explicit_device, sizeof(explicit_device));
+            read_cmdline_option("airlock.storeblobdev", explicit_blob_device, sizeof(explicit_blob_device));
+            read_cmdline_option("airlock.storefmt", store_format, sizeof(store_format));
             if (strcmp(store_format, "erofs") == 0) {
                 try_mount_kernel_modules();
                 try_modprobe("erofs");
             } else {
-                log_msg("unsupported nixome.storefmt=%s", store_format);
+                log_msg("unsupported airlock.storefmt=%s", store_format);
                 return 0;
             }
 
@@ -506,12 +506,12 @@ let
             mkdir_p("/home", 0755);
             mkdir_p("/usr/local", 0755);
 
-            if (!read_cmdline_option("nixome.system", system_path, sizeof(system_path))) {
-                log_msg("missing required kernel option nixome.system=/nix/store/...");
+            if (!read_cmdline_option("airlock.system", system_path, sizeof(system_path))) {
+                log_msg("missing required kernel option airlock.system=/nix/store/...");
                 return 1;
             }
             if (strncmp(system_path, "/nix/store/", 11) != 0) {
-                log_msg("nixome.system must point into /nix/store: %s", system_path);
+                log_msg("airlock.system must point into /nix/store: %s", system_path);
                 return 1;
             }
 
@@ -575,14 +575,14 @@ let
         install -m 0555 ${mkNixClosureEarlyInit}/sbin/init "$root/sbin/init"
 
         {
-          printf 'schema=nixome.nix-closure-root.v1\n'
+          printf 'schema=airlock.nix-closure-root.v1\n'
           printf 'contains_store=false\n'
           printf 'init=/sbin/init\n'
           printf 'store_mountpoint=/nix/store\n'
           printf 'store_device_default=/dev/xvde\n'
           printf 'store_blob_device_default=/dev/xvdf\n'
           printf 'store_formats=erofs\n'
-        } > "$out/MANAGED_BY_NIXOME"
+        } > "$out/MANAGED_BY_AIRLOCK"
 
         (cd "$root" && find . -mindepth 1 -print | sort) > "$out/root-files.txt"
 
@@ -593,7 +593,7 @@ let
         fakeroot mkfs.ext4 -q -F -L nixroot -d "$root" "$out/root.img"
 
         cat > "$out/manifest.json" <<EOF
-        {"schema":"nixome.nix-closure-root-image.v1","name":"${imageName}","image":"root.img","contains_store":false,"init":"/sbin/init","store_mountpoint":"/nix/store","store_device_default":"/dev/xvde","store_blob_device_default":"/dev/xvdf","store_formats":["erofs"]}
+        {"schema":"airlock.nix-closure-root-image.v1","name":"${imageName}","image":"root.img","contains_store":false,"init":"/sbin/init","store_mountpoint":"/nix/store","store_device_default":"/dev/xvde","store_blob_device_default":"/dev/xvdf","store_formats":["erofs"]}
         EOF
       '';
 
@@ -633,7 +633,7 @@ let
           --argjson root_paths '${rootPathsJson}' \
           --argjson object_count "$object_count" \
           '{
-            schema: "nixome.store-closure-manifest.v1",
+            schema: "airlock.store-closure-manifest.v1",
             name: $name,
             root_paths: $root_paths,
             store_paths_file: "store-paths",
@@ -649,11 +649,11 @@ let
       name,
       modules,
       guestRole ? "base",
-      nixomeConfigInputs ? null,
-      nixomePrebuiltTemplateSources ? { },
+      airlockConfigInputs ? null,
+      airlockPrebuiltTemplateSources ? { },
       extraSpecialArgs ? { },
       additionalRootSpace ? null,
-      configurationName ? "nixome-domain-${builtins.replaceStrings [ "." ] [ "-" ] name}",
+      configurationName ? "airlock-domain-${builtins.replaceStrings [ "." ] [ "-" ] name}",
       rootImageName ? "${configurationName}-root-image",
       storeArtifactName ? "${configurationName}-store-closure",
       kernelName ? "6.12.64-1.fc41",
@@ -673,20 +673,20 @@ let
         inherit system;
         specialArgs = {
           inherit
-            nixomeConfigInputs
-            nixomePrebuiltTemplateSources
+            airlockConfigInputs
+            airlockPrebuiltTemplateSources
             ;
         }
         // extraSpecialArgs;
         modules = [
-          "${nixomeSupport}/lifecycle/misc/modules/nixome-minimal.nix"
+          "${airlockSupport}/lifecycle/misc/modules/airlock-minimal.nix"
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
-          "${nixomeSupport}/lifecycle/misc/modules/qube-guest.nix"
+          "${airlockSupport}/lifecycle/misc/modules/qube-guest.nix"
           {
             nixpkgs.pkgs = pkgs;
-            nixome.minimalGuest.enable = true;
-            nixome.qubeGuest.enable = true;
-            nixome.qubeGuest.role = guestRole;
+            airlock.minimalGuest.enable = true;
+            airlock.qubeGuest.enable = true;
+            airlock.qubeGuest.role = guestRole;
             system.nixos.versionSuffix = lib.mkForce "";
           }
         ]
@@ -729,9 +729,9 @@ let
         virt_mode = "pvh";
       };
       defaultFeatures = {
-        "nixome-backend" = "nix-closure";
-        "nixome-managed" = "1";
-        "nixome-role" = "nix-native";
+        "airlock-backend" = "nix-closure";
+        "airlock-managed" = "1";
+        "airlock-role" = "nix-native";
         os = "Linux";
         qrexec = "1";
       };

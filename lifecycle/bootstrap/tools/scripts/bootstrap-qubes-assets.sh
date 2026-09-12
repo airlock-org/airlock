@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
 RESULT_JSON="$LOG_DIR/qubes-bootstrap.json"
 COMMAND_LOG="$LOG_DIR/qubes-bootstrap.commands.log"
 
-TEMPLATE_NAME="${NIXOME_QUBES_TEMPLATE:-fedora-43-xfce}"
-TEMPLATE_URL="${NIXOME_QUBES_TEMPLATE_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/templates-itl/rpm/qubes-template-fedora-43-xfce-4.3.0-202601041226.noarch.rpm}"
-TEMPLATE_RPM="${NIXOME_QUBES_TEMPLATE_RPM:-}"
+TEMPLATE_NAME="${AIRLOCK_QUBES_TEMPLATE:-fedora-43-xfce}"
+TEMPLATE_URL="${AIRLOCK_QUBES_TEMPLATE_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/templates-itl/rpm/qubes-template-fedora-43-xfce-4.3.0-202601041226.noarch.rpm}"
+TEMPLATE_RPM="${AIRLOCK_QUBES_TEMPLATE_RPM:-}"
 
-KERNEL_NAME="${NIXOME_QUBES_KERNEL_NAME:-6.12.64-1.fc41}"
-KERNEL_VERSION="${NIXOME_QUBES_KERNEL_VERSION:-6.12.64-1}"
-KERNEL_FEDORA="${NIXOME_QUBES_KERNEL_FEDORA:-fc41}"
-KERNEL_URL="${NIXOME_QUBES_KERNEL_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm}"
-KERNEL_MODULES_URL="${NIXOME_QUBES_KERNEL_MODULES_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-modules-6.12.64-1.qubes.fc41.x86_64.rpm}"
-KERNEL_RPM="${NIXOME_QUBES_KERNEL_RPM:-}"
-KERNEL_MODULES_RPM="${NIXOME_QUBES_KERNEL_MODULES_RPM:-}"
+KERNEL_NAME="${AIRLOCK_QUBES_KERNEL_NAME:-6.12.64-1.fc41}"
+KERNEL_VERSION="${AIRLOCK_QUBES_KERNEL_VERSION:-6.12.64-1}"
+KERNEL_FEDORA="${AIRLOCK_QUBES_KERNEL_FEDORA:-fc41}"
+KERNEL_URL="${AIRLOCK_QUBES_KERNEL_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm}"
+KERNEL_MODULES_URL="${AIRLOCK_QUBES_KERNEL_MODULES_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-modules-6.12.64-1.qubes.fc41.x86_64.rpm}"
+KERNEL_RPM="${AIRLOCK_QUBES_KERNEL_RPM:-}"
+KERNEL_MODULES_RPM="${AIRLOCK_QUBES_KERNEL_MODULES_RPM:-}"
 
-GPG_KEY_URL="${NIXOME_QUBES_GPG_KEY_URL:-https://keys.qubes-os.org/keys/qubes-release-4.3-signing-key.asc}"
-GPG_KEY="${NIXOME_QUBES_GPG_KEY:-/var/lib/nixome/qubes-release-4.3-signing-key.asc}"
-VERIFY_RPMS="${NIXOME_QUBES_VERIFY_RPMS:-1}"
+GPG_KEY_URL="${AIRLOCK_QUBES_GPG_KEY_URL:-https://keys.qubes-os.org/keys/qubes-release-4.3-signing-key.asc}"
+GPG_KEY="${AIRLOCK_QUBES_GPG_KEY:-/var/lib/airlock/qubes-release-4.3-signing-key.asc}"
+VERIFY_RPMS="${AIRLOCK_QUBES_VERIFY_RPMS:-1}"
 
-DEFAULT_DVM="${NIXOME_QUBES_DEFAULT_DVM:-default-dvm}"
-UPDATEVM="${NIXOME_QUBES_UPDATEVM:-$TEMPLATE_NAME}"
+DEFAULT_DVM="${AIRLOCK_QUBES_DEFAULT_DVM:-default-dvm}"
+UPDATEVM="${AIRLOCK_QUBES_UPDATEVM:-$TEMPLATE_NAME}"
 
 mkdir -p "$LOG_DIR"
 : > "$COMMAND_LOG"
@@ -50,7 +50,7 @@ write_result() {
 
   {
     printf '{'
-    printf '"schema":"nixome.qubes-bootstrap.v1"'
+    printf '"schema":"airlock.qubes-bootstrap.v1"'
     printf ',"status":'
     json_string "$status"
     printf ',"reason":'
@@ -170,12 +170,12 @@ if [ "$VERIFY_RPMS" = "1" ]; then
   fi
   key_arg=("$GPG_KEY")
 else
-  printf 'WARNING: RPM signature verification disabled by NIXOME_QUBES_VERIFY_RPMS=%s\n' "$VERIFY_RPMS" >&2
+  printf 'WARNING: RPM signature verification disabled by AIRLOCK_QUBES_VERIFY_RPMS=%s\n' "$VERIFY_RPMS" >&2
 fi
 
 if [ -n "$KERNEL_RPM" ] || [ -n "$KERNEL_MODULES_RPM" ]; then
-  [ -n "$KERNEL_RPM" ] || fail "NIXOME_QUBES_KERNEL_MODULES_RPM is set but NIXOME_QUBES_KERNEL_RPM is empty"
-  [ -n "$KERNEL_MODULES_RPM" ] || fail "NIXOME_QUBES_KERNEL_RPM is set but NIXOME_QUBES_KERNEL_MODULES_RPM is empty"
+  [ -n "$KERNEL_RPM" ] || fail "AIRLOCK_QUBES_KERNEL_MODULES_RPM is set but AIRLOCK_QUBES_KERNEL_RPM is empty"
+  [ -n "$KERNEL_MODULES_RPM" ] || fail "AIRLOCK_QUBES_KERNEL_RPM is set but AIRLOCK_QUBES_KERNEL_MODULES_RPM is empty"
   [ -f "$KERNEL_RPM" ] || fail "kernel RPM is missing: $KERNEL_RPM"
   [ -f "$KERNEL_MODULES_RPM" ] || fail "kernel modules RPM is missing: $KERNEL_MODULES_RPM"
 fi

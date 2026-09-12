@@ -16,9 +16,9 @@
     virt_mode = "hvm";
   };
   features = {
-    "nixome-managed" = "1";
-    "nixome-role" = "sys-net";
-    "nixome-network-provider" = "sys-net";
+    "airlock-managed" = "1";
+    "airlock-role" = "sys-net";
+    "airlock-network-provider" = "sys-net";
   };
   services = {
     "network-manager" = true;

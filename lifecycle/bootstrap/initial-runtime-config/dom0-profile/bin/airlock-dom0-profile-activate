@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+
+profile_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+state_dir="${AIRLOCK_SYSTEM_STATE_DIR:-/var/lib/airlock/system}"
+etc_dir="${AIRLOCK_SYSTEM_ETC_DIR:-/etc/airlock}"
+
+install -d -m 0755 "$state_dir" "$etc_dir"
+cp "$profile_root/share/airlock/profile.json" "$state_dir/current-profile.json"
+cp "$profile_root/share/airlock/profile.json" "$etc_dir/system-profile.json"
+
+if [ -n "${AIRLOCK_SYSTEM_JSON:-}" ]; then
+  cp "$AIRLOCK_SYSTEM_JSON" "$state_dir/current-system.json"
+fi
+if [ -n "${AIRLOCK_SYSTEM_PLAN_JSON:-}" ]; then
+  cp "$AIRLOCK_SYSTEM_PLAN_JSON" "$state_dir/current-plan.json"
+fi
+if [ -n "${AIRLOCK_SYSTEM_PROFILE:-}" ]; then
+  printf '%s\n' "$AIRLOCK_SYSTEM_PROFILE" > "$state_dir/current-profile-link"
+fi

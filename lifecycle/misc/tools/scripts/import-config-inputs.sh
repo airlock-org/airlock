@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
-SOURCE_ROOT="${NIXOME_CONFIG_INPUTS_SOURCE:-/etc/nixome/config-inputs}"
-SOURCE_MANIFEST="${NIXOME_CONFIG_INPUTS_MANIFEST:-$SOURCE_ROOT/manifest.json}"
-SERVICE="${NIXOME_CONFIG_INPUTS_IMPORT_SERVICE:-nixome.Config.InputsImport}"
-STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
-VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-sys-config-validator}"
-TIMEOUT="${NIXOME_CONFIG_INPUTS_QREXEC_TIMEOUT:-600}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
+SOURCE_ROOT="${AIRLOCK_CONFIG_INPUTS_SOURCE:-/etc/airlock/config-inputs}"
+SOURCE_MANIFEST="${AIRLOCK_CONFIG_INPUTS_MANIFEST:-$SOURCE_ROOT/manifest.json}"
+SERVICE="${AIRLOCK_CONFIG_INPUTS_IMPORT_SERVICE:-airlock.Config.InputsImport}"
+STAGING="${AIRLOCK_CONFIG_STAGING_VM:-sys-config-staging}"
+VALIDATOR="${AIRLOCK_CONFIG_VALIDATOR_VM:-sys-config-validator}"
+TIMEOUT="${AIRLOCK_CONFIG_INPUTS_QREXEC_TIMEOUT:-600}"
 RESULT_JSON="$LOG_DIR/config-inputs-import.json"
 COMMANDS_LOG="$LOG_DIR/config-inputs-import.commands.log"
 STDERR_LOG="$LOG_DIR/config-inputs-import.stderr.log"
@@ -32,7 +32,7 @@ json_string() {
 fail() {
   message="$1"
   {
-    printf '{"schema":"nixome.config-inputs-import.v1","status":"failed","reason":'
+    printf '{"schema":"airlock.config-inputs-import.v1","status":"failed","reason":'
     json_string "$message"
     printf ',"source_root":'
     json_string "$SOURCE_ROOT"
@@ -90,7 +90,7 @@ config_input_path_from_manifest() {
   name="$1"
 
   jq -er --arg name "$name" '
-    if (.schema? == "nixome.config-inputs.v1") and ((.inputs? | type) == "object") then
+    if (.schema? == "airlock.config-inputs.v1") and ((.inputs? | type) == "object") then
       .inputs[$name] // empty
     else
       (
@@ -100,8 +100,8 @@ config_input_path_from_manifest() {
           .nixpkgsLibvirt105
         elif $name == "nixos-qubes" then
           .nixosQubes
-        elif $name == "nixome-support" then
-          .nixomeSupport
+        elif $name == "airlock-support" then
+          .airlockSupport
         else
           empty
         end
@@ -110,14 +110,14 @@ config_input_path_from_manifest() {
   ' "$SOURCE_MANIFEST"
 }
 
-tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/nixome-config-inputs.XXXXXX")"
+tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/airlock-config-inputs.XXXXXX")"
 trap 'rm -rf "$tmpdir"' EXIT
 archive="$tmpdir/config-inputs.tar"
 inputs_manifest="$tmpdir/manifest.json"
 inputs_store_paths="$tmpdir/store-paths"
 inputs_store_export="$tmpdir/store-export.nar.gz"
 
-for name in nixpkgs nixpkgs-libvirt_10_5 nixos-qubes nixome-support; do
+for name in nixpkgs nixpkgs-libvirt_10_5 nixos-qubes airlock-support; do
   [ -d "$SOURCE_ROOT/$name" ] || fail "missing config input directory: $SOURCE_ROOT/$name"
   if [ -f "$SOURCE_MANIFEST" ]; then
     resolved="$(config_input_path_from_manifest "$name")" ||
@@ -136,7 +136,7 @@ cut -f3 "$tmpdir/config-inputs.tsv" | sort -u > "$inputs_store_paths"
 config_input_path_count="$(wc -l < "$inputs_store_paths" | tr -d ' ')"
 jq -Rn '
   reduce inputs as $line (
-    {schema: "nixome.config-inputs.v1", inputs: {}};
+    {schema: "airlock.config-inputs.v1", inputs: {}};
     ($line | split("\t")) as $fields
     | .inputs[$fields[0]] = $fields[1]
   )
@@ -186,7 +186,7 @@ import_vm "$STAGING"
 import_vm "$VALIDATOR"
 
 {
-  printf '{"schema":"nixome.config-inputs-import.v1","status":"passed"'
+  printf '{"schema":"airlock.config-inputs-import.v1","status":"passed"'
   printf ',"source_root":'
   json_string "$SOURCE_ROOT"
   printf ',"service":'

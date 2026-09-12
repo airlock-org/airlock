@@ -2,15 +2,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
+source "$ROOT/lifecycle/misc/tools/scripts/lib/airlock-env.sh"
 
-SSH_PORT="${NIXOME_VM_SSH_PORT:-2222}"
-SSH_USER="${NIXOME_VM_SSH_USER:-nixome}"
-SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
+SSH_PORT="${AIRLOCK_VM_SSH_PORT:-2222}"
+SSH_USER="${AIRLOCK_VM_SSH_USER:-airlock}"
+SSH_PASSWORD="${AIRLOCK_VM_SSH_PASSWORD:-airlock}"
 
 export SSHPASS="$SSH_PASSWORD"
 
-exec "$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+exec "$ROOT/lifecycle/misc/tools/scripts/airlock-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
   ssh \
     -F /dev/null \
     -o LogLevel=ERROR \

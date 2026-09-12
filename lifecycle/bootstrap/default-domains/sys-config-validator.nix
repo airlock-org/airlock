@@ -13,9 +13,9 @@
     vcpus = 2;
   };
   features = {
-    "nixome-managed" = "1";
-    "nixome-role" = "sys-config-validator";
-    "nixome-config-validator" = "1";
+    "airlock-managed" = "1";
+    "airlock-role" = "sys-config-validator";
+    "airlock-config-validator" = "1";
   };
   services."network-manager" = false;
 }

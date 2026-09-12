@@ -8,7 +8,7 @@ import sys
 
 
 def fail(message):
-    print(f"nixome-nix-domain-storage: {message}", file=sys.stderr)
+    print(f"airlock-nix-domain-storage: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
@@ -36,7 +36,7 @@ def systemctl_available():
 
 
 def qubesd_is_active():
-    forced = os.environ.get("NIXOME_NIX_DOMAIN_STORAGE_QUBESD_ACTIVE")
+    forced = os.environ.get("AIRLOCK_NIX_DOMAIN_STORAGE_QUBESD_ACTIVE")
     if forced is not None:
         return forced in ("1", "true", "yes")
     if not systemctl_available():
@@ -63,13 +63,13 @@ def run_systemctl(action):
 
 
 def shared_volume_needs_mutation(vm, source, view_backend):
-    existing_source = vm.features.get("nixome-store-source", None)
-    existing_mode = vm.features.get("nixome-store-mode", None)
-    existing_view_backend = vm.features.get("nixome-store-view-backend", None)
-    existing_generation = vm.features.get("nixome-store-generation", "")
-    existing_closure_hash = vm.features.get("nixome-store-closure-hash", "")
-    existing_view_image = vm.features.get("nixome-store-view-image", "")
-    existing_blob_map = vm.features.get("nixome-store-blob-map", "")
+    existing_source = vm.features.get("airlock-store-source", None)
+    existing_mode = vm.features.get("airlock-store-mode", None)
+    existing_view_backend = vm.features.get("airlock-store-view-backend", None)
+    existing_generation = vm.features.get("airlock-store-generation", "")
+    existing_closure_hash = vm.features.get("airlock-store-closure-hash", "")
+    existing_view_image = vm.features.get("airlock-store-view-image", "")
+    existing_blob_map = vm.features.get("airlock-store-blob-map", "")
 
     if (
         existing_source != source
@@ -134,15 +134,15 @@ def shared_volume_needs_mutation(vm, source, view_backend):
 
 
 def feature_admission_for_current_store(args, vm):
-    generation = vm.features.get("nixome-store-generation", "")
+    generation = vm.features.get("airlock-store-generation", "")
     if not generation:
         return None
 
     admission = load_generation_admission(args.pool_root, args.domain, generation)
-    expected_source = vm.features.get("nixome-store-source", "")
-    expected_hash = vm.features.get("nixome-store-closure-hash", "")
-    expected_view = vm.features.get("nixome-store-view-image", "")
-    expected_blob_map = vm.features.get("nixome-store-blob-map", "")
+    expected_source = vm.features.get("airlock-store-source", "")
+    expected_hash = vm.features.get("airlock-store-closure-hash", "")
+    expected_view = vm.features.get("airlock-store-view-image", "")
+    expected_blob_map = vm.features.get("airlock-store-blob-map", "")
 
     admission_sources = {
         source
@@ -287,7 +287,7 @@ def validate_shared_store_frontends(
     volume_names = list(vm.volumes.keys())
     frontends = qubes_boot_frontends(volume_names)
     if view_backend != "erofs-objectmap":
-        fail(f"unsupported Nixome store view backend for {domain}: {view_backend}")
+        fail(f"unsupported Airlock store view backend for {domain}: {view_backend}")
     expected = {
         "store": frontend_name(store_device),
         "store-data": frontend_name(store_blob_device),
@@ -322,9 +322,9 @@ def load_domain(qubes, domain):
 
 def run_engine(argv):
     try:
-        from nixome_qubes_storage import engine
+        from airlock_qubes_storage import engine
     except Exception as exc:
-        fail(f"cannot import Nixome closure-store engine: {exc}")
+        fail(f"cannot import Airlock closure-store engine: {exc}")
     try:
         return engine.run(argv)
     except engine.EngineError as exc:
@@ -333,9 +333,9 @@ def run_engine(argv):
 
 def load_generation_admission(pool_root, domain, generation):
     try:
-        from nixome_qubes_storage import engine
+        from airlock_qubes_storage import engine
     except Exception as exc:
-        fail(f"cannot import Nixome closure-store engine: {exc}")
+        fail(f"cannot import Airlock closure-store engine: {exc}")
 
     root = engine.ensure_pool(pool_root)
     domain = engine.safe_domain_name(domain)
@@ -392,7 +392,7 @@ async def ensure_pool(app, pool_name, pool_root):
     pool = await maybe_await(
         app.add_pool(
             name=pool_name,
-            driver="nixome-closure",
+            driver="airlock-closure",
             root_dir=pool_root,
             revisions_to_keep=0,
         )
@@ -569,7 +569,7 @@ async def ensure_shared_store_loaded(qubes, args, admission):
     )
 
     return {
-        "schema": "nixome.nix-domain-storage.v1",
+        "schema": "airlock.nix-domain-storage.v1",
         "domain": args.domain,
         "volume": "store",
         "mode": "shared-closure",
@@ -638,19 +638,19 @@ async def ensure_shared_store(args):
     app, vm = load_domain(qubes, args.domain)
     needs_mutation = shared_volume_needs_mutation(vm, args.source, args.view_backend)
     source_current = (
-        vm.features.get("nixome-store-source", None) == args.source
-        and vm.features.get("nixome-store-mode", None) == "shared-closure"
-        and vm.features.get("nixome-store-view-backend", None) == args.view_backend
+        vm.features.get("airlock-store-source", None) == args.source
+        and vm.features.get("airlock-store-mode", None) == "shared-closure"
+        and vm.features.get("airlock-store-view-backend", None) == args.view_backend
     )
     current_admission = (
         feature_admission_for_current_store(args, vm) if source_current else None
     )
     vm_running = vm.is_running()
-    generation = vm.features.get("nixome-store-generation", "")
-    closure_hash = vm.features.get("nixome-store-closure-hash", "")
-    view_backend = vm.features.get("nixome-store-view-backend", "")
+    generation = vm.features.get("airlock-store-generation", "")
+    closure_hash = vm.features.get("airlock-store-closure-hash", "")
+    view_backend = vm.features.get("airlock-store-view-backend", "")
     view_image = vm.features.get(
-        "nixome-store-view-image",
+        "airlock-store-view-image",
         getattr(vm.volumes.get("store"), "path", "") if "store" in vm.volumes else "",
     )
     store_pool = pool_name(vm.volumes["store"].pool) if "store" in vm.volumes else ""
@@ -661,7 +661,7 @@ async def ensure_shared_store(args):
         )
         app.close()
         return {
-            "schema": "nixome.nix-domain-storage.v1",
+            "schema": "airlock.nix-domain-storage.v1",
             "domain": args.domain,
             "volume": "store",
             "mode": "shared-closure",
@@ -763,7 +763,7 @@ async def ensure_store(args):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(prog="nixome-nix-domain-storage")
+    parser = argparse.ArgumentParser(prog="airlock-nix-domain-storage")
     sub = parser.add_subparsers(dest="command", required=True)
 
     ensure = sub.add_parser("ensure-store")
@@ -779,22 +779,22 @@ def build_parser():
     ensure.add_argument("--mountpoint", default="/nix/store")
     ensure.add_argument(
         "--pool-name",
-        default=os.environ.get("NIXOME_CLOSURE_STORE_POOL", "nixome-closure"),
+        default=os.environ.get("AIRLOCK_CLOSURE_STORE_POOL", "airlock-closure"),
     )
     ensure.add_argument(
         "--pool-root",
         default=os.environ.get(
-            "NIXOME_CLOSURE_STORE_ROOT", "/var/lib/nixome/closure-store"
+            "AIRLOCK_CLOSURE_STORE_ROOT", "/var/lib/airlock/closure-store"
         ),
     )
     ensure.add_argument(
         "--verify-mode",
-        default=os.environ.get("NIXOME_CLOSURE_STORE_VERIFY", "nix-store"),
+        default=os.environ.get("AIRLOCK_CLOSURE_STORE_VERIFY", "nix-store"),
     )
     ensure.add_argument(
         "--view-backend",
         choices=["erofs-objectmap"],
-        default=os.environ.get("NIXOME_CLOSURE_STORE_VIEW_BACKEND", "erofs-objectmap"),
+        default=os.environ.get("AIRLOCK_CLOSURE_STORE_VIEW_BACKEND", "erofs-objectmap"),
     )
     ensure.set_defaults(func=ensure_store)
 
@@ -806,12 +806,12 @@ def build_parser():
     switch.add_argument("--mountpoint", default="/nix/store")
     switch.add_argument(
         "--pool-name",
-        default=os.environ.get("NIXOME_CLOSURE_STORE_POOL", "nixome-closure"),
+        default=os.environ.get("AIRLOCK_CLOSURE_STORE_POOL", "airlock-closure"),
     )
     switch.add_argument(
         "--pool-root",
         default=os.environ.get(
-            "NIXOME_CLOSURE_STORE_ROOT", "/var/lib/nixome/closure-store"
+            "AIRLOCK_CLOSURE_STORE_ROOT", "/var/lib/airlock/closure-store"
         ),
     )
     switch.set_defaults(func=switch_shared_store)

@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
-CONTROL_LOG_DIR="${NIXOME_CONFIG_CONTROL_LOG_DIR:-$LOG_DIR/config-control}"
-SYSTEM_STATE_DIR="${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
-HOST_SYSTEM_PROFILE="${NIXOME_HOST_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}"
-HOST_CURRENT_SYSTEM_LINK="${NIXOME_HOST_CURRENT_SYSTEM_LINK:-/run/current-system}"
-STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
-VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-sys-config-validator}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
+CONTROL_LOG_DIR="${AIRLOCK_CONFIG_CONTROL_LOG_DIR:-$LOG_DIR/config-control}"
+SYSTEM_STATE_DIR="${AIRLOCK_SYSTEM_STATE_DIR:-/var/lib/airlock/system}"
+HOST_SYSTEM_PROFILE="${AIRLOCK_HOST_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}"
+HOST_CURRENT_SYSTEM_LINK="${AIRLOCK_HOST_CURRENT_SYSTEM_LINK:-/run/current-system}"
+STAGING="${AIRLOCK_CONFIG_STAGING_VM:-sys-config-staging}"
+VALIDATOR="${AIRLOCK_CONFIG_VALIDATOR_VM:-sys-config-validator}"
+VAULT="${AIRLOCK_CONFIG_VAULT_VM:-sys-config-vault}"
 
 operation="${1:-}"
 tmpdir=""
 
 usage() {
   cat >&2 <<'EOF'
-Usage: nixome-config-control (status|check|apply|rollback)
+Usage: airlock-config-control (status|check|apply|rollback)
 
-Dom0 qrexec entry point for narrow Nixome config generation operations.
+Dom0 qrexec entry point for narrow Airlock config generation operations.
 EOF
   exit 1
 }
@@ -36,7 +36,7 @@ json_string() {
 write_control_result() {
   local status="$1"
   local reason="$2"
-  local schema="nixome.config-control.v1"
+  local schema="airlock.config-control.v1"
 
   printf '{"schema":'
   json_string "$schema"
@@ -53,7 +53,7 @@ fail_json() {
   local reason="$1"
 
   write_control_result failed "$reason"
-  printf 'nixome config control failed: %s\n' "$reason" >&2
+  printf 'airlock config control failed: %s\n' "$reason" >&2
   exit 1
 }
 
@@ -105,11 +105,11 @@ run_check() {
   result_json="$op_log/config-archive.json"
 
   env \
-    NIXOME_LOG_DIR="$op_log" \
-    NIXOME_CONFIG_STAGING_VM="$STAGING" \
-    NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-    NIXOME_CONFIG_VAULT_VM="$VAULT" \
-    nixome-config-archive-candidate \
+    AIRLOCK_LOG_DIR="$op_log" \
+    AIRLOCK_CONFIG_STAGING_VM="$STAGING" \
+    AIRLOCK_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+    AIRLOCK_CONFIG_VAULT_VM="$VAULT" \
+    airlock-config-archive-candidate \
       --candidate-tar "$candidate_tar" \
       --validate-only \
       --staging "$STAGING" \
@@ -140,11 +140,11 @@ run_apply() {
   result_json="$op_log/config-apply.json"
 
   env \
-    NIXOME_LOG_DIR="$op_log" \
-    NIXOME_CONFIG_STAGING_VM="$STAGING" \
-    NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-    NIXOME_CONFIG_VAULT_VM="$VAULT" \
-    nixome-config-apply \
+    AIRLOCK_LOG_DIR="$op_log" \
+    AIRLOCK_CONFIG_STAGING_VM="$STAGING" \
+    AIRLOCK_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+    AIRLOCK_CONFIG_VAULT_VM="$VAULT" \
+    airlock-config-apply \
       --apply \
       --candidate-tar "$candidate_tar" \
       --staging "$STAGING" \
@@ -196,7 +196,7 @@ rollback_host_system() {
 
   if [ "$rc" != 0 ]; then
     jq -c -n \
-      --arg schema "nixome.config-rollback.v1" \
+      --arg schema "airlock.config-rollback.v1" \
       --arg status "failed" \
       --arg reason "host system profile rollback failed" \
       --arg method "$method" \
@@ -210,7 +210,7 @@ rollback_host_system() {
 
   if [ -z "$previous_target" ] || [ "$previous_target" = "$current_target" ]; then
     jq -c -n \
-      --arg schema "nixome.config-rollback.v1" \
+      --arg schema "airlock.config-rollback.v1" \
       --arg status "failed" \
       --arg reason "no previous host system generation is available" \
       --arg method "$method" \
@@ -224,7 +224,7 @@ rollback_host_system() {
 
   if [ ! -x "$previous_target/bin/switch-to-configuration" ]; then
     jq -c -n \
-      --arg schema "nixome.config-rollback.v1" \
+      --arg schema "airlock.config-rollback.v1" \
       --arg status "failed" \
       --arg reason "previous host system has no switch-to-configuration" \
       --arg method "$method" \
@@ -236,8 +236,8 @@ rollback_host_system() {
     return 1
   fi
 
-  if ! NIXOME_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
-    NIXOME_HOST_CURRENT_SYSTEM_LINK="$HOST_CURRENT_SYSTEM_LINK" \
+  if ! AIRLOCK_SYSTEM_STATE_DIR="$SYSTEM_STATE_DIR" \
+    AIRLOCK_HOST_CURRENT_SYSTEM_LINK="$HOST_CURRENT_SYSTEM_LINK" \
     "$previous_target/bin/switch-to-configuration" switch > "$switch_log" 2>&1; then
     rc="$?"
   fi
@@ -247,7 +247,7 @@ rollback_host_system() {
     printf '%s\n' "$HOST_SYSTEM_PROFILE" > "$SYSTEM_STATE_DIR/current-host-system-profile"
     printf 'switch\n' > "$SYSTEM_STATE_DIR/current-host-system-switch-action"
     jq -c -n \
-      --arg schema "nixome.config-rollback.v1" \
+      --arg schema "airlock.config-rollback.v1" \
       --arg status "passed" \
       --arg reason "rolled back host system profile to previous generation" \
       --arg method "$method" \
@@ -258,7 +258,7 @@ rollback_host_system() {
       > "$result_json"
   else
     jq -c -n \
-      --arg schema "nixome.config-rollback.v1" \
+      --arg schema "airlock.config-rollback.v1" \
       --arg status "failed" \
       --arg reason "switch-to-configuration failed for previous generation" \
       --arg method "$method" \
@@ -275,15 +275,15 @@ rollback_host_system() {
 
 case "$operation" in
   status)
-    require_command nixome-config-status
-    exec nixome-config-status
+    require_command airlock-config-status
+    exec airlock-config-status
     ;;
   check)
     require_command awk
     require_command date
     require_command jq
     require_command mktemp
-    require_command nixome-config-archive-candidate
+    require_command airlock-config-archive-candidate
     require_command tar
     read_candidate_tar
     run_check "$candidate_tar"
@@ -293,7 +293,7 @@ case "$operation" in
     require_command date
     require_command jq
     require_command mktemp
-    require_command nixome-config-apply
+    require_command airlock-config-apply
     require_command tar
     read_candidate_tar
     run_apply "$candidate_tar"

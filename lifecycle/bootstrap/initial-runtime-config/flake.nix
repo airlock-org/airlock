@@ -1,20 +1,20 @@
 {
-  description = "Nixome runtime configuration candidate";
+  description = "Airlock runtime configuration candidate";
 
-  inputs.nixpkgs.url = "__NIXOME_NIXPKGS_URL__";
+  inputs.nixpkgs.url = "__AIRLOCK_NIXPKGS_URL__";
 
   outputs =
     { self, nixpkgs }:
     let
       system = "x86_64-linux";
-      topologySchema = import ./nixome/topology.nix;
-      systemSchema = import ./nixome/system-schema.nix;
-      configVms = import ./nixome/config-vms.nix;
-      systemConfig = import ./nixome/system.nix;
+      topologySchema = import ./airlock/topology.nix;
+      systemSchema = import ./airlock/system-schema.nix;
+      configVms = import ./airlock/config-vms.nix;
+      systemConfig = import ./airlock/system.nix;
       expectRuntimeAttrs =
         path: value:
         let
-          prefix = "nixome.runtime${if path == "" then "" else ".${path}"}";
+          prefix = "airlock.runtime${if path == "" then "" else ".${path}"}";
         in
         if builtins.typeOf value == "set" then
           value
@@ -24,13 +24,13 @@
         path: allowed: attrs:
         let
           unknown = builtins.filter (name: !(builtins.elem name allowed)) (builtins.attrNames attrs);
-          prefix = "nixome.runtime${if path == "" then "" else ".${path}"}";
+          prefix = "airlock.runtime${if path == "" then "" else ".${path}"}";
         in
         if unknown == [ ] then
           attrs
         else
           throw "${prefix}: unknown option(s): ${nixpkgs.lib.concatStringsSep ", " unknown}";
-      rawLocalConfig = import ./nixome/runtime.nix {
+      rawLocalConfig = import ./airlock/runtime.nix {
         inherit
           appliedMessage
           system
@@ -57,7 +57,7 @@
         path: allowed: attrs:
         let
           unknown = builtins.filter (name: !(builtins.elem name allowed)) (builtins.attrNames attrs);
-          prefix = "nixome.configVms${if path == "" then "" else ".${path}"}";
+          prefix = "airlock.configVms${if path == "" then "" else ".${path}"}";
         in
         if unknown == [ ] then
           attrs
@@ -66,7 +66,7 @@
       expectConfigAttrs =
         path: value:
         let
-          prefix = "nixome.configVms${if path == "" then "" else ".${path}"}";
+          prefix = "airlock.configVms${if path == "" then "" else ".${path}"}";
         in
         if builtins.typeOf value == "set" then
           value
@@ -97,7 +97,7 @@
         path: allowed: attrs:
         let
           unknown = builtins.filter (name: !(builtins.elem name allowed)) (builtins.attrNames attrs);
-          prefix = "nixome.nixNative${if path == "" then "" else ".${path}"}";
+          prefix = "airlock.nixNative${if path == "" then "" else ".${path}"}";
         in
         if unknown == [ ] then
           attrs
@@ -106,7 +106,7 @@
       expectNixNativeAttrs =
         path: value:
         let
-          prefix = "nixome.nixNative${if path == "" then "" else ".${path}"}";
+          prefix = "airlock.nixNative${if path == "" then "" else ".${path}"}";
         in
         if builtins.typeOf value == "set" then
           value
@@ -150,7 +150,7 @@
         then
           role
         else
-          throw "nixome.nixNative.${path}.role: expected one of base, dev, sys-firewall, sys-gui, sys-net";
+          throw "airlock.nixNative.${path}.role: expected one of base, dev, sys-firewall, sys-gui, sys-net";
       checkedNixNative =
         let
           checked = checkNixNativeKeys "" [ "domains" ] (
@@ -178,7 +178,7 @@
         if unknown == [ ] then
           attrs
         else
-          throw "nixome.configVms.${path}: unknown role(s): ${nixpkgs.lib.concatStringsSep ", " unknown}";
+          throw "airlock.configVms.${path}: unknown role(s): ${nixpkgs.lib.concatStringsSep ", " unknown}";
       checkedConfigVms =
         let
           checked = checkConfigKeys "" [
@@ -200,7 +200,7 @@
       expectDom0Attrs =
         path: value:
         let
-          prefix = "nixome.dom0${if path == "" then "" else ".${path}"}";
+          prefix = "airlock.dom0${if path == "" then "" else ".${path}"}";
         in
         if builtins.typeOf value == "set" then
           value
@@ -210,7 +210,7 @@
         path: allowed: attrs:
         let
           unknown = builtins.filter (name: !(builtins.elem name allowed)) (builtins.attrNames attrs);
-          prefix = "nixome.dom0${if path == "" then "" else ".${path}"}";
+          prefix = "airlock.dom0${if path == "" then "" else ".${path}"}";
         in
         if unknown == [ ] then
           attrs
@@ -243,7 +243,7 @@
             "boot"
           ])
         then
-          throw "nixome.dom0.host.apply.mode: expected one of auto, switch, boot"
+          throw "airlock.dom0.host.apply.mode: expected one of auto, switch, boot"
         else
           {
             inherit mode;
@@ -255,7 +255,7 @@
                   if builtins.typeOf apply.reason == "string" || builtins.typeOf apply.reason == "path" then
                     apply.reason
                   else
-                    throw "nixome.dom0.host.apply.reason: expected a string or path, got ${builtins.typeOf apply.reason}";
+                    throw "airlock.dom0.host.apply.reason: expected a string or path, got ${builtins.typeOf apply.reason}";
               }
             else
               { }
@@ -314,14 +314,14 @@
       ++ (if localDom0Host ? configuration then [ localDom0Host.configuration ] else [ ])
       ++ (localDom0Host.modules or [ ])
       ++ (localDom0.extraModules or [ ]);
-      prebuiltTemplateSources = import ./nixome/prebuilt-template-sources.nix;
-      nixomeSupport = "__NIXOME_SUPPORT_PATH__";
-      nixosQubesSource = "__NIXOME_NIXOS_QUBES_PATH__";
+      prebuiltTemplateSources = import ./airlock/prebuilt-template-sources.nix;
+      airlockSupport = "__AIRLOCK_SUPPORT_PATH__";
+      nixosQubesSource = "__AIRLOCK_NIXOS_QUBES_PATH__";
       nixpkgsLibvirt105Source = "__NIXPKGS_LIBVIRT_10_5_PATH__";
-      templateBuilders = import "${nixomeSupport}/lifecycle/misc/lib/qube-template.nix" {
+      templateBuilders = import "${airlockSupport}/lifecycle/misc/lib/qube-template.nix" {
         inherit nixpkgs system;
         inherit
-          nixomeSupport
+          airlockSupport
           nixosQubesSource
           nixpkgsLibvirt105Source
           ;
@@ -347,7 +347,7 @@
           ++ guestExtraModules definition;
           additionalRootSpace = definition.additionalRootSpace or null;
           rootImageSizeMiB = definition.rootImageSizeMiB or 512;
-          kernelName = definition.kernel or nixomeQubeKernelName;
+          kernelName = definition.kernel or airlockQubeKernelName;
           label = definition.label or "green";
           netvm = definition.netvm or null;
           prefs = definition.prefs or { };
@@ -372,9 +372,9 @@
             vcpus = 1;
           };
           features = {
-            "nixome-managed" = "1";
-            "nixome-role" = "sys-config-vault";
-            "nixome-config-authority" = "1";
+            "airlock-managed" = "1";
+            "airlock-role" = "sys-config-vault";
+            "airlock-config-authority" = "1";
           };
           services = {
             "network-manager" = false;
@@ -394,10 +394,10 @@
             vcpus = 2;
           };
           features = {
-            "nixome-managed" = "1";
-            "nixome-role" = "sys-config-staging";
-            "nixome-config-staging" = "1";
-            "nixome-config-applied-message" = appliedMessage;
+            "airlock-managed" = "1";
+            "airlock-role" = "sys-config-staging";
+            "airlock-config-staging" = "1";
+            "airlock-config-applied-message" = appliedMessage;
           };
           services = {
             "network-manager" = false;
@@ -417,9 +417,9 @@
             vcpus = 2;
           };
           features = {
-            "nixome-managed" = "1";
-            "nixome-role" = "sys-config-validator";
-            "nixome-config-validator" = "1";
+            "airlock-managed" = "1";
+            "airlock-role" = "sys-config-validator";
+            "airlock-config-validator" = "1";
           };
           services = {
             "network-manager" = false;
@@ -446,15 +446,15 @@
           name = role;
           guestRole = role;
           inherit
-            nixomeConfigInputs
+            airlockConfigInputs
             ;
-          nixomePrebuiltTemplateSources = prebuiltTemplateSources;
+          airlockPrebuiltTemplateSources = prebuiltTemplateSources;
           modules = [
             (mkGuestContentModule defaults.guestHostName guestDefinition)
           ]
           ++ guestExtraModules guestDefinition;
           rootImageSizeMiB = defaults.rootImageSizeMiB;
-          kernelName = nixomeQubeKernelName;
+          kernelName = airlockQubeKernelName;
           label = runtime.label;
           netvm = runtime.netvm;
           prefs = runtime.prefs;
@@ -555,8 +555,8 @@
           "qubes-artwork"
           "qubes-vmm-stubdom-linux"
         ];
-      nixomeQubeKernelName = "6.12.64-1.fc41";
-      nixomeQubeKernel = pkgs.repackRpmKernel {
+      airlockQubeKernelName = "6.12.64-1.fc41";
+      airlockQubeKernel = pkgs.repackRpmKernel {
         kernelSrc = pkgs.fetchurl {
           url = "https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm";
           hash = "sha256-nK0KbnT8hUwIZPhUgW8nSRNAbZDgjexHWfeeYDiFxsU=";
@@ -568,11 +568,11 @@
         kernelVersion = "6.12.64-1";
         fedoraVersion = "fc41";
       };
-      nixomeConfigInputs = {
+      airlockConfigInputs = {
         nixpkgs = "${nixpkgs}";
         nixpkgsLibvirt105 = nixpkgsLibvirt105Source;
         nixosQubes = nixosQubesSource;
-        inherit nixomeSupport;
+        inherit airlockSupport;
       };
       mkGuestContentModule =
         defaultHostName: definition:
@@ -605,30 +605,30 @@
         definition:
         (if definition ? configuration then [ definition.configuration ] else [ ])
         ++ (definition.modules or [ ]);
-      nixomeDom0System = nixpkgs.lib.nixosSystem {
+      airlockDom0System = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
           inherit
             appliedMessage
-            nixomeConfigInputs
+            airlockConfigInputs
             ;
-          nixomeQubeKernel = {
-            name = nixomeQubeKernelName;
-            package = nixomeQubeKernel;
+          airlockQubeKernel = {
+            name = airlockQubeKernelName;
+            package = airlockQubeKernel;
           };
-          nixomeConfigDomains = materializedConfigDomains;
-          nixomePrebuiltTemplateSources = prebuiltTemplateSources;
+          airlockConfigDomains = materializedConfigDomains;
+          airlockPrebuiltTemplateSources = prebuiltTemplateSources;
         };
         modules = [
           "${nixosQubesSource}/nixos/modules/virtualisation/qubes"
-          "${nixomeSupport}/lifecycle/misc/modules/dom0.nix"
-          "${nixomeSupport}/lifecycle/misc/modules/qubes-topology.nix"
-          "${nixomeSupport}/lifecycle/image/profiles/vm-gui.nix"
-          "${nixomeSupport}/lifecycle/bootstrap/config-system.nix"
+          "${airlockSupport}/lifecycle/misc/modules/dom0.nix"
+          "${airlockSupport}/lifecycle/misc/modules/qubes-topology.nix"
+          "${airlockSupport}/lifecycle/image/profiles/vm-gui.nix"
+          "${airlockSupport}/lifecycle/bootstrap/config-system.nix"
           {
             nixpkgs.overlays = templateBuilders.qubesOverlays;
           }
-          ./nixome/dom0-host.nix
+          ./airlock/dom0-host.nix
         ]
         ++ localDom0HostModules;
       };
@@ -636,7 +636,7 @@
         let
           pkgs = templateBuilders.pkgs;
         in
-        pkgs.runCommand "nixome-dom0-profile"
+        pkgs.runCommand "airlock-dom0-profile"
           {
             nativeBuildInputs = [ pkgs.jq ];
             preferLocalBuild = true;
@@ -644,48 +644,48 @@
             appliedMessage = runtimeSystem.dom0.profile.message;
           }
           ''
-            mkdir -p "$out/bin" "$out/share/nixome"
+            mkdir -p "$out/bin" "$out/share/airlock"
             jq -c -n \
-              --arg schema "nixome.dom0-profile.v1" \
+              --arg schema "airlock.dom0-profile.v1" \
               --arg message "$appliedMessage" \
               --arg built_by "sys-config-staging" \
               '{
                 schema: $schema,
                 message: $message,
                 built_by: $built_by
-              }' > "$out/share/nixome/profile.json"
-            cat > "$out/bin/nixome-dom0-profile-activate" <<EOF
+              }' > "$out/share/airlock/profile.json"
+            cat > "$out/bin/airlock-dom0-profile-activate" <<EOF
             #!${pkgs.runtimeShell}
             set -eu
 
-            state_dir="''${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
-            etc_dir="''${NIXOME_SYSTEM_ETC_DIR:-/etc/nixome}"
+            state_dir="''${AIRLOCK_SYSTEM_STATE_DIR:-/var/lib/airlock/system}"
+            etc_dir="''${AIRLOCK_SYSTEM_ETC_DIR:-/etc/airlock}"
 
             ${pkgs.coreutils}/bin/install -d -m 0755 "\$state_dir" "\$etc_dir"
-            ${pkgs.coreutils}/bin/cp "$out/share/nixome/profile.json" "\$state_dir/current-profile.json"
-            ${pkgs.coreutils}/bin/cp "$out/share/nixome/profile.json" "\$etc_dir/system-profile.json"
+            ${pkgs.coreutils}/bin/cp "$out/share/airlock/profile.json" "\$state_dir/current-profile.json"
+            ${pkgs.coreutils}/bin/cp "$out/share/airlock/profile.json" "\$etc_dir/system-profile.json"
 
-            if [ -n "''${NIXOME_SYSTEM_JSON:-}" ]; then
-              ${pkgs.coreutils}/bin/cp "\$NIXOME_SYSTEM_JSON" "\$state_dir/current-system.json"
+            if [ -n "''${AIRLOCK_SYSTEM_JSON:-}" ]; then
+              ${pkgs.coreutils}/bin/cp "\$AIRLOCK_SYSTEM_JSON" "\$state_dir/current-system.json"
             fi
-            if [ -n "''${NIXOME_SYSTEM_PLAN_JSON:-}" ]; then
-              ${pkgs.coreutils}/bin/cp "\$NIXOME_SYSTEM_PLAN_JSON" "\$state_dir/current-plan.json"
+            if [ -n "''${AIRLOCK_SYSTEM_PLAN_JSON:-}" ]; then
+              ${pkgs.coreutils}/bin/cp "\$AIRLOCK_SYSTEM_PLAN_JSON" "\$state_dir/current-plan.json"
             fi
-            if [ -n "''${NIXOME_SYSTEM_PROFILE:-}" ]; then
-              printf '%s\n' "\$NIXOME_SYSTEM_PROFILE" > "\$state_dir/current-profile-link"
+            if [ -n "''${AIRLOCK_SYSTEM_PROFILE:-}" ]; then
+              printf '%s\n' "\$AIRLOCK_SYSTEM_PROFILE" > "\$state_dir/current-profile-link"
             fi
             EOF
-            chmod 0555 "$out/bin/nixome-dom0-profile-activate"
+            chmod 0555 "$out/bin/airlock-dom0-profile-activate"
           '';
     in
     {
       packages.${system} = nixNativePackages // {
-        nixome-dom0-profile = dom0Profile;
+        airlock-dom0-profile = dom0Profile;
       };
 
       checks.${system} = {
         topology =
-          templateBuilders.pkgs.runCommand "nixome-config-topology-check"
+          templateBuilders.pkgs.runCommand "airlock-config-topology-check"
             {
               topology = builtins.toJSON topology;
             }
@@ -693,7 +693,7 @@
               printf '%s\n' "$topology" > "$out"
             '';
         system =
-          templateBuilders.pkgs.runCommand "nixome-config-system-check"
+          templateBuilders.pkgs.runCommand "airlock-config-system-check"
             {
               system = builtins.toJSON runtimeSystem;
             }
@@ -702,9 +702,9 @@
             '';
       };
 
-      nixome = {
+      airlock = {
         metadata = {
-          schema = "nixome.config-repo.v1";
+          schema = "airlock.config-repo.v1";
           purpose = "candidate";
           topology_schema = topologySchema.schema;
           system_schema = systemSchema.schema;
@@ -722,7 +722,7 @@
       };
 
       nixosConfigurations = nixNativeConfigurations // {
-        nixome-dom0 = nixomeDom0System;
+        airlock-dom0 = airlockDom0System;
       };
     };
 }

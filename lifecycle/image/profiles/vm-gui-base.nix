@@ -8,7 +8,7 @@
     ./vm-base.nix
   ];
 
-  nixome.dom0.gui.enable = true;
+  airlock.dom0.gui.enable = true;
 
   services.xserver = {
     enable = true;
@@ -19,7 +19,7 @@
     defaultSession = "sys-gui";
     autoLogin = {
       enable = true;
-      user = "nixome";
+      user = "airlock";
     };
   };
 
@@ -29,5 +29,5 @@
     xdotool
   ];
 
-  image.baseName = "nixome-dom0-vm-gui";
+  image.baseName = "airlock-dom0-vm-gui";
 }

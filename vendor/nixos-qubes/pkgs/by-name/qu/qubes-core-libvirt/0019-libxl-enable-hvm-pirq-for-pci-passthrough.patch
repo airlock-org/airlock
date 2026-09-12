@@ -1,5 +1,5 @@
 From 1ef5e8c4b80c33d83c1ddf406000000000000000 Mon Sep 17 00:00:00 2001
-From: Nixome <noreply@nixome.local>
+From: Airlock <noreply@airlock.local>
 Date: Thu, 11 Sep 2026 12:00:00 +0100
 Subject: [PATCH] libxl: enable HVM PIRQ for PCI passthrough domains
 

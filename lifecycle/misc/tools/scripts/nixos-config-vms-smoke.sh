@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
 RESULT_JSON="$LOG_DIR/config-vms-smoke.json"
 COMMAND_LOG="$LOG_DIR/config-vms-smoke.commands.log"
 QVM_LS_LOG="$LOG_DIR/config-vms-qvm-ls.log"
@@ -67,27 +67,27 @@ JOURNAL_LOG="$LOG_DIR/config-vms-journal.log"
 LIBXL_LOG="$LOG_DIR/config-vms-libxl.log"
 QVM_PREFS_LOG="$LOG_DIR/config-vms-qvm-prefs.log"
 
-STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
-VALIDATOR="${NIXOME_CONFIG_VALIDATOR_VM:-sys-config-validator}"
-QUBE_USER="${NIXOME_QUBE_USER:-user}"
-DOM0_USER="${NIXOME_DOM0_USER:-${SUDO_USER:-nixome}}"
-APPLY_MESSAGE="${NIXOME_CONFIG_APPLY_MESSAGE:-smoke-applied-$(date -u +%Y%m%dT%H%M%SZ)}"
-CREATED_QUBE="${NIXOME_CONFIG_CREATED_QUBE:-nixome-work-from-config}"
-CONFIG_VMS_SMOKE_MODE="${NIXOME_CONFIG_VMS_SMOKE_MODE:-full}"
-CONFIG_APPLY_STAGE="${NIXOME_CONFIG_APPLY_STAGE:-full}"
-DOM0_SYSTEM_SWITCH_ACTION="${NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION:-switch}"
+STAGING="${AIRLOCK_CONFIG_STAGING_VM:-sys-config-staging}"
+VAULT="${AIRLOCK_CONFIG_VAULT_VM:-sys-config-vault}"
+VALIDATOR="${AIRLOCK_CONFIG_VALIDATOR_VM:-sys-config-validator}"
+QUBE_USER="${AIRLOCK_QUBE_USER:-user}"
+DOM0_USER="${AIRLOCK_DOM0_USER:-${SUDO_USER:-airlock}}"
+APPLY_MESSAGE="${AIRLOCK_CONFIG_APPLY_MESSAGE:-smoke-applied-$(date -u +%Y%m%dT%H%M%SZ)}"
+CREATED_QUBE="${AIRLOCK_CONFIG_CREATED_QUBE:-airlock-work-from-config}"
+CONFIG_VMS_SMOKE_MODE="${AIRLOCK_CONFIG_VMS_SMOKE_MODE:-full}"
+CONFIG_APPLY_STAGE="${AIRLOCK_CONFIG_APPLY_STAGE:-full}"
+DOM0_SYSTEM_SWITCH_ACTION="${AIRLOCK_CONFIG_DOM0_SYSTEM_SWITCH_ACTION:-switch}"
 case "$DOM0_SYSTEM_SWITCH_ACTION" in
   switch)
-    DOM0_SYSTEM_REASON="${NIXOME_CONFIG_DOM0_SYSTEM_REASON:-staged dom0 NixOS system generation}"
+    DOM0_SYSTEM_REASON="${AIRLOCK_CONFIG_DOM0_SYSTEM_REASON:-staged dom0 NixOS system generation}"
     EXPECTED_SYSTEMD_ACTIONS_STATUS="passed"
     ;;
   boot)
-    DOM0_SYSTEM_REASON="${NIXOME_CONFIG_DOM0_SYSTEM_REASON:-install next dom0 boot generation}"
+    DOM0_SYSTEM_REASON="${AIRLOCK_CONFIG_DOM0_SYSTEM_REASON:-install next dom0 boot generation}"
     EXPECTED_SYSTEMD_ACTIONS_STATUS="skipped"
     ;;
   *)
-    printf 'NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION must be switch or boot\n' >&2
+    printf 'AIRLOCK_CONFIG_DOM0_SYSTEM_SWITCH_ACTION must be switch or boot\n' >&2
     exit 1
     ;;
 esac
@@ -133,7 +133,7 @@ write_result() {
 
   {
     printf '{'
-    printf '"schema":"nixome.config-vms-smoke.v1"'
+    printf '"schema":"airlock.config-vms-smoke.v1"'
     printf ',"status":'
     json_string "$status"
     printf ',"reason":'
@@ -481,8 +481,8 @@ case "$mount_line" in
     ;;
 esac
 
-if touch /nix/store/.nixome-write-test 2>/dev/null; then
-  rm -f /nix/store/.nixome-write-test 2>/dev/null || true
+if touch /nix/store/.airlock-write-test 2>/dev/null; then
+  rm -f /nix/store/.airlock-write-test 2>/dev/null || true
   printf "/nix/store accepted a write\n" >&2
   exit 1
 fi
@@ -497,7 +497,7 @@ EOF
 check_persistent_home() {
   vm="$1"
   output="$2"
-  marker="/home/$QUBE_USER/.nixome-persistence-$vm"
+  marker="/home/$QUBE_USER/.airlock-persistence-$vm"
 
   run_qrexec_or_fail "$vm" "write persistent marker in $vm" \
     "$LOG_DIR/config-vms-$vm-persistence-write.log" \
@@ -522,11 +522,11 @@ assert_nix_closure_domain() {
     qvm-ls --raw-data --fields NAME,CLASS --no-spinner |
       awk -F"|" -v name="$vm" "\$1 == name { print \$2; found = 1 } END { exit(found ? 0 : 1) }"
     printf "backend="
-    qvm-features "$vm" nixome-backend
+    qvm-features "$vm" airlock-backend
     printf "store_device="
-    qvm-features "$vm" nixome-store-device
+    qvm-features "$vm" airlock-store-device
     printf "store_read_only="
-    qvm-features "$vm" nixome-store-read-only
+    qvm-features "$vm" airlock-store-read-only
     printf "netvm="
     qvm-prefs "$vm" netvm
   ' bash "$vm"
@@ -555,9 +555,9 @@ for cmd in \
   journalctl \
   cat \
   date \
-  nixome-config-inputs-import \
-  nixome-config-apply \
-  nixome-config-status \
+  airlock-config-inputs-import \
+  airlock-config-apply \
+  airlock-config-status \
   qrexec-client \
   readlink \
   qvm-check \
@@ -580,7 +580,7 @@ case "$CONFIG_VMS_SMOKE_MODE" in
   full|preflight|stage-candidate|apply-candidate|post-apply)
     ;;
   *)
-    fail "unsupported NIXOME_CONFIG_VMS_SMOKE_MODE: $CONFIG_VMS_SMOKE_MODE"
+    fail "unsupported AIRLOCK_CONFIG_VMS_SMOKE_MODE: $CONFIG_VMS_SMOKE_MODE"
     ;;
 esac
 
@@ -646,33 +646,33 @@ if mode_runs_preflight; then
   check_persistent_home "$STAGING" "$STAGING_PERSISTENCE_LOG"
   check_persistent_home "$VALIDATOR" "$VALIDATOR_PERSISTENCE_LOG"
 
-  if [ "${NIXOME_CONFIG_VMS_IMPORT_INPUTS:-1}" = "1" ]; then
+  if [ "${AIRLOCK_CONFIG_VMS_IMPORT_INPUTS:-1}" = "1" ]; then
     run_or_fail "import config inputs" "$CONFIG_INPUTS_IMPORT_LOG" \
       env \
-        NIXOME_LOG_DIR="$LOG_DIR" \
-        NIXOME_CONFIG_STAGING_VM="$STAGING" \
-        NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-        nixome-config-inputs-import
+        AIRLOCK_LOG_DIR="$LOG_DIR" \
+        AIRLOCK_CONFIG_STAGING_VM="$STAGING" \
+        AIRLOCK_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+        airlock-config-inputs-import
   else
-    printf 'config inputs import skipped by NIXOME_CONFIG_VMS_IMPORT_INPUTS=0\n' > "$CONFIG_INPUTS_IMPORT_LOG"
+    printf 'config inputs import skipped by AIRLOCK_CONFIG_VMS_IMPORT_INPUTS=0\n' > "$CONFIG_INPUTS_IMPORT_LOG"
   fi
 
   run_qrexec_or_fail "$VAULT" "config vault repo status" "$VAULT_REPO_STATUS_LOG" \
-    "cd /home/$QUBE_USER/nixome-config-vault && git status --short --branch"
+    "cd /home/$QUBE_USER/airlock-config-vault && git status --short --branch"
   run_qrexec_or_fail "$STAGING" "config staging repo status" "$STAGING_REPO_STATUS_LOG" \
-    "cd /home/$QUBE_USER/nixome-config && git status --short --branch"
+    "cd /home/$QUBE_USER/airlock-config && git status --short --branch"
 
   grep -q '^## main$' "$VAULT_REPO_STATUS_LOG" ||
     fail "config vault repository is not initialized cleanly"
   grep -q '^## main$' "$STAGING_REPO_STATUS_LOG" ||
     fail "config staging repository is not initialized cleanly"
 
-  run_qrexec_or_fail "$STAGING" "config staging init" "$STAGING_INIT_LOG" "nixome-config-staging-init"
+  run_qrexec_or_fail "$STAGING" "config staging init" "$STAGING_INIT_LOG" "airlock-config-staging-init"
   run_qrexec_or_fail \
     "$VALIDATOR" \
     "config validator init" \
     "$VALIDATOR_INIT_LOG" \
-    "nixome-config-validator-init"
+    "airlock-config-validator-init"
 fi
 
 if [ "$CONFIG_VMS_SMOKE_MODE" = preflight ]; then
@@ -680,41 +680,41 @@ if [ "$CONFIG_VMS_SMOKE_MODE" = preflight ]; then
 fi
 
 if mode_runs_stage_candidate; then
-if [ -z "${NIXOME_INITIAL_CONFIG_VMS:-}" ] || [ ! -r "$NIXOME_INITIAL_CONFIG_VMS" ]; then
+if [ -z "${AIRLOCK_INITIAL_CONFIG_VMS:-}" ] || [ ! -r "$AIRLOCK_INITIAL_CONFIG_VMS" ]; then
   fail "missing initial config VM helper for smoke update"
 fi
-if [ -z "${NIXOME_INITIAL_DOM0_HOST_CONFIG:-}" ] || [ ! -r "$NIXOME_INITIAL_DOM0_HOST_CONFIG" ]; then
+if [ -z "${AIRLOCK_INITIAL_DOM0_HOST_CONFIG:-}" ] || [ ! -r "$AIRLOCK_INITIAL_DOM0_HOST_CONFIG" ]; then
   fail "missing initial dom0 host config helper for smoke update"
 fi
-if [ -z "${NIXOME_INITIAL_CONFIG_FLAKE:-}" ] || [ ! -r "$NIXOME_INITIAL_CONFIG_FLAKE" ]; then
+if [ -z "${AIRLOCK_INITIAL_CONFIG_FLAKE:-}" ] || [ ! -r "$AIRLOCK_INITIAL_CONFIG_FLAKE" ]; then
   fail "missing initial config flake helper for smoke update"
 fi
-if [ -z "${NIXOME_INITIAL_LOCAL_CONFIG:-}" ] || [ ! -r "$NIXOME_INITIAL_LOCAL_CONFIG" ]; then
+if [ -z "${AIRLOCK_INITIAL_LOCAL_CONFIG:-}" ] || [ ! -r "$AIRLOCK_INITIAL_LOCAL_CONFIG" ]; then
   fail "missing initial local config helper for smoke update"
 fi
-if [ -z "${NIXOME_INITIAL_RUNTIME_CONFIG:-}" ] || [ ! -r "$NIXOME_INITIAL_RUNTIME_CONFIG" ]; then
+if [ -z "${AIRLOCK_INITIAL_RUNTIME_CONFIG:-}" ] || [ ! -r "$AIRLOCK_INITIAL_RUNTIME_CONFIG" ]; then
   fail "missing runtime config input helper for smoke update"
 fi
-if [ -z "${NIXOME_INITIAL_SYSTEM_CONFIG:-}" ] || [ ! -r "$NIXOME_INITIAL_SYSTEM_CONFIG" ]; then
+if [ -z "${AIRLOCK_INITIAL_SYSTEM_CONFIG:-}" ] || [ ! -r "$AIRLOCK_INITIAL_SYSTEM_CONFIG" ]; then
   fail "missing initial system config helper for smoke update"
 fi
-if [ -z "${NIXOME_SYSTEM_SCHEMA_SOURCE:-}" ] || [ ! -r "$NIXOME_SYSTEM_SCHEMA_SOURCE" ]; then
+if [ -z "${AIRLOCK_SYSTEM_SCHEMA_SOURCE:-}" ] || [ ! -r "$AIRLOCK_SYSTEM_SCHEMA_SOURCE" ]; then
   fail "missing system schema source helper for smoke update"
 fi
-if [ -z "${NIXOME_TOPOLOGY_SCHEMA_SOURCE:-}" ] || [ ! -r "$NIXOME_TOPOLOGY_SCHEMA_SOURCE" ]; then
+if [ -z "${AIRLOCK_TOPOLOGY_SCHEMA_SOURCE:-}" ] || [ ! -r "$AIRLOCK_TOPOLOGY_SCHEMA_SOURCE" ]; then
   fail "missing topology schema source helper for smoke update"
 fi
-INITIAL_CONFIG_VMS_TEXT="$(cat "$NIXOME_INITIAL_CONFIG_VMS")"
-INITIAL_DOM0_HOST_CONFIG_TEXT="$(cat "$NIXOME_INITIAL_DOM0_HOST_CONFIG")"
-INITIAL_CONFIG_FLAKE_TEXT="$(cat "$NIXOME_INITIAL_CONFIG_FLAKE")"
-INITIAL_LOCAL_CONFIG_TEXT="$(cat "$NIXOME_INITIAL_LOCAL_CONFIG")"
-INITIAL_SYSTEM_CONFIG_TEXT="$(cat "$NIXOME_INITIAL_SYSTEM_CONFIG")"
-SYSTEM_SCHEMA_SOURCE_TEXT="$(cat "$NIXOME_SYSTEM_SCHEMA_SOURCE")"
-TOPOLOGY_SCHEMA_SOURCE_TEXT="$(cat "$NIXOME_TOPOLOGY_SCHEMA_SOURCE")"
+INITIAL_CONFIG_VMS_TEXT="$(cat "$AIRLOCK_INITIAL_CONFIG_VMS")"
+INITIAL_DOM0_HOST_CONFIG_TEXT="$(cat "$AIRLOCK_INITIAL_DOM0_HOST_CONFIG")"
+INITIAL_CONFIG_FLAKE_TEXT="$(cat "$AIRLOCK_INITIAL_CONFIG_FLAKE")"
+INITIAL_LOCAL_CONFIG_TEXT="$(cat "$AIRLOCK_INITIAL_LOCAL_CONFIG")"
+INITIAL_SYSTEM_CONFIG_TEXT="$(cat "$AIRLOCK_INITIAL_SYSTEM_CONFIG")"
+SYSTEM_SCHEMA_SOURCE_TEXT="$(cat "$AIRLOCK_SYSTEM_SCHEMA_SOURCE")"
+TOPOLOGY_SCHEMA_SOURCE_TEXT="$(cat "$AIRLOCK_TOPOLOGY_SCHEMA_SOURCE")"
 
 cat > "$STAGING_UPDATE_SCRIPT" <<EOF
 set -eu
-cd /home/$QUBE_USER/nixome-config
+cd /home/$QUBE_USER/airlock-config
 extract_input_url() {
   name="\$1"
   awk -v input="\$name" '
@@ -734,12 +734,12 @@ extract_input_url() {
   ' flake.nix
 }
 nixpkgs_url="\$(sed -n 's/^[[:space:]]*\\(inputs\\.\\)\\{0,1\\}nixpkgs\\.url = "\\(.*\\)";$/\\2/p' flake.nix | head -n 1)"
-nixome_support_url="\$(extract_input_url nixome-support)"
+airlock_support_url="\$(extract_input_url airlock-support)"
 nixos_qubes_url="\$(extract_input_url nixos-qubes)"
-if [ -n "\$nixome_support_url" ]; then
-  nixome_support_path="\${nixome_support_url#path:}"
+if [ -n "\$airlock_support_url" ]; then
+  airlock_support_path="\${airlock_support_url#path:}"
 else
-  nixome_support_path="\$(sed -n 's/^      nixomeSupport = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
+  airlock_support_path="\$(sed -n 's/^      airlockSupport = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
 fi
 if [ -n "\$nixos_qubes_url" ]; then
   nixos_qubes_path="\${nixos_qubes_url#path:}"
@@ -747,28 +747,28 @@ else
   nixos_qubes_path="\$(sed -n 's/^      nixosQubesSource = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
 fi
 nixpkgs_libvirt_10_5_path="\$(sed -n 's/^      nixpkgsLibvirt105Source = "\\(.*\\)";$/\\1/p' flake.nix | head -n 1)"
-if [ -z "\$nixpkgs_libvirt_10_5_path" ] && [ -e /rw/home/user/nixome-config-inputs/nixpkgs-libvirt_10_5 ]; then
-  nixpkgs_libvirt_10_5_path="\$(readlink -f /rw/home/user/nixome-config-inputs/nixpkgs-libvirt_10_5)"
+if [ -z "\$nixpkgs_libvirt_10_5_path" ] && [ -e /rw/home/user/airlock-config-inputs/nixpkgs-libvirt_10_5 ]; then
+  nixpkgs_libvirt_10_5_path="\$(readlink -f /rw/home/user/airlock-config-inputs/nixpkgs-libvirt_10_5)"
 fi
 [ -n "\$nixpkgs_url" ]
 [ -n "\$nixpkgs_libvirt_10_5_path" ]
-[ -n "\$nixome_support_path" ]
+[ -n "\$airlock_support_path" ]
 [ -n "\$nixos_qubes_path" ]
-mkdir -p dom0-profile/bin dom0-profile/share/nixome nixome
-rm -f dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json
+mkdir -p dom0-profile/bin dom0-profile/share/airlock airlock
+rm -f dom0-profile/bin/airlock-dom0-profile-activate dom0-profile/share/airlock/profile.json
 cat > flake.nix <<'FLAKENIXEOF'
 $INITIAL_CONFIG_FLAKE_TEXT
 FLAKENIXEOF
-cat > nixome/config-vms.nix <<'CONFIGVMSNIXEOF'
+cat > airlock/config-vms.nix <<'CONFIGVMSNIXEOF'
 $INITIAL_CONFIG_VMS_TEXT
 CONFIGVMSNIXEOF
-cat > nixome/dom0-host.nix <<'DOM0HOSTNIXEOF'
+cat > airlock/dom0-host.nix <<'DOM0HOSTNIXEOF'
 $INITIAL_DOM0_HOST_CONFIG_TEXT
 DOM0HOSTNIXEOF
-cat > nixome/local.nix <<'LOCALNIXEOF'
+cat > airlock/local.nix <<'LOCALNIXEOF'
 ${INITIAL_LOCAL_CONFIG_TEXT}
 LOCALNIXEOF
-cat > nixome/runtime.nix <<'RUNTIMENIXEOF'
+cat > airlock/runtime.nix <<'RUNTIMENIXEOF'
 {
   appliedMessage,
   pkgs ? null,
@@ -787,16 +787,16 @@ cat > nixome/runtime.nix <<'RUNTIMENIXEOF'
       vcpus = 1;
     };
     features = {
-      "nixome-created-from-config" = "1";
-      "nixome-created-from-config-message" = "$APPLY_MESSAGE";
-      "nixome-role" = "created-from-config";
+      "airlock-created-from-config" = "1";
+      "airlock-created-from-config-message" = "$APPLY_MESSAGE";
+      "airlock-role" = "created-from-config";
     };
     services = {
       "network-manager" = false;
     };
     configuration = {
-      environment.etc."nixome/domain-role".text = "created-from-config\n";
-      environment.etc."nixome/applied-message".text = "$APPLY_MESSAGE\n";
+      environment.etc."airlock/domain-role".text = "created-from-config\n";
+      environment.etc."airlock/applied-message".text = "$APPLY_MESSAGE\n";
     };
   };
 
@@ -804,18 +804,18 @@ cat > nixome/runtime.nix <<'RUNTIMENIXEOF'
     packages = with pkgs; [
       hello
     ];
-    etc."nixome/local-dom0-extra-module".text = "$APPLY_MESSAGE-extra\n";
-    systemd.services.nixome-local-extra-module = {
-      description = "Nixome local extra module fixture";
+    etc."airlock/local-dom0-extra-module".text = "$APPLY_MESSAGE-extra\n";
+    systemd.services.airlock-local-extra-module = {
+      description = "Airlock local extra module fixture";
       serviceConfig.Type = "oneshot";
       serviceConfig.RemainAfterExit = true;
       script = ''
-        \${pkgs.coreutils}/bin/install -d -m 0755 /var/lib/nixome/system
-        printf '%s\n' "$APPLY_MESSAGE" > /var/lib/nixome/system/local-extra-module-restarted
+        \${pkgs.coreutils}/bin/install -d -m 0755 /var/lib/airlock/system
+        printf '%s\n' "$APPLY_MESSAGE" > /var/lib/airlock/system/local-extra-module-restarted
       '';
     };
     configuration = {
-      environment.etc."nixome/local-dom0-host-configuration".text = "$APPLY_MESSAGE-configuration\n";
+      environment.etc."airlock/local-dom0-host-configuration".text = "$APPLY_MESSAGE-configuration\n";
     };
   };
 
@@ -824,7 +824,7 @@ cat > nixome/runtime.nix <<'RUNTIMENIXEOF'
     dom0SystemReason = $DOM0_SYSTEM_REASON_NIX;
     extraSystemdServices =
       if $DOM0_SYSTEM_SWITCH_ACTION_NIX == "switch" then {
-        "nixome-local-extra-module" = {
+        "airlock-local-extra-module" = {
           action = "restart";
           reason = "restart local extra module fixture";
         };
@@ -832,62 +832,62 @@ cat > nixome/runtime.nix <<'RUNTIMENIXEOF'
   };
 }
 RUNTIMENIXEOF
-cat > nixome/topology.nix <<'TOPOLOGYNIXEOF'
+cat > airlock/topology.nix <<'TOPOLOGYNIXEOF'
 $TOPOLOGY_SCHEMA_SOURCE_TEXT
 TOPOLOGYNIXEOF
-cat > nixome/system-schema.nix <<'SYSTEMSCHEMANIXEOF'
+cat > airlock/system-schema.nix <<'SYSTEMSCHEMANIXEOF'
 $SYSTEM_SCHEMA_SOURCE_TEXT
 SYSTEMSCHEMANIXEOF
-cat > nixome/system.nix <<'SYSTEMNIXEOF'
+cat > airlock/system.nix <<'SYSTEMNIXEOF'
 $INITIAL_SYSTEM_CONFIG_TEXT
 SYSTEMNIXEOF
-cat > dom0-profile/share/nixome/profile.json <<PROFILEJSONEOF
-{"schema":"nixome.dom0-profile.v1","message":"$APPLY_MESSAGE","built_by":"sys-config-staging"}
+cat > dom0-profile/share/airlock/profile.json <<PROFILEJSONEOF
+{"schema":"airlock.dom0-profile.v1","message":"$APPLY_MESSAGE","built_by":"sys-config-staging"}
 PROFILEJSONEOF
-cat > dom0-profile/bin/nixome-dom0-profile-activate <<'PROFILEACTIVATEEOF'
+cat > dom0-profile/bin/airlock-dom0-profile-activate <<'PROFILEACTIVATEEOF'
 #!/bin/sh
 set -eu
 
 profile_root="\$(CDPATH= cd -- "\$(dirname -- "\$0")/.." && pwd)"
-state_dir="\${NIXOME_SYSTEM_STATE_DIR:-/var/lib/nixome/system}"
-etc_dir="\${NIXOME_SYSTEM_ETC_DIR:-/etc/nixome}"
+state_dir="\${AIRLOCK_SYSTEM_STATE_DIR:-/var/lib/airlock/system}"
+etc_dir="\${AIRLOCK_SYSTEM_ETC_DIR:-/etc/airlock}"
 
 install -d -m 0755 "\$state_dir" "\$etc_dir"
-cp "\$profile_root/share/nixome/profile.json" "\$state_dir/current-profile.json"
-cp "\$profile_root/share/nixome/profile.json" "\$etc_dir/system-profile.json"
+cp "\$profile_root/share/airlock/profile.json" "\$state_dir/current-profile.json"
+cp "\$profile_root/share/airlock/profile.json" "\$etc_dir/system-profile.json"
 
-if [ -n "\${NIXOME_SYSTEM_JSON:-}" ]; then
-  cp "\$NIXOME_SYSTEM_JSON" "\$state_dir/current-system.json"
+if [ -n "\${AIRLOCK_SYSTEM_JSON:-}" ]; then
+  cp "\$AIRLOCK_SYSTEM_JSON" "\$state_dir/current-system.json"
 fi
-if [ -n "\${NIXOME_SYSTEM_PLAN_JSON:-}" ]; then
-  cp "\$NIXOME_SYSTEM_PLAN_JSON" "\$state_dir/current-plan.json"
+if [ -n "\${AIRLOCK_SYSTEM_PLAN_JSON:-}" ]; then
+  cp "\$AIRLOCK_SYSTEM_PLAN_JSON" "\$state_dir/current-plan.json"
 fi
-if [ -n "\${NIXOME_SYSTEM_PROFILE:-}" ]; then
-  printf '%s\n' "\$NIXOME_SYSTEM_PROFILE" > "\$state_dir/current-profile-link"
+if [ -n "\${AIRLOCK_SYSTEM_PROFILE:-}" ]; then
+  printf '%s\n' "\$AIRLOCK_SYSTEM_PROFILE" > "\$state_dir/current-profile-link"
 fi
 PROFILEACTIVATEEOF
-chmod 0755 dom0-profile/bin/nixome-dom0-profile-activate
+chmod 0755 dom0-profile/bin/airlock-dom0-profile-activate
 sed -i \
-  -e "s|__NIXOME_NIXPKGS_URL__|\$nixpkgs_url|g" \
+  -e "s|__AIRLOCK_NIXPKGS_URL__|\$nixpkgs_url|g" \
   -e "s|__NIXPKGS_LIBVIRT_10_5_PATH__|\$nixpkgs_libvirt_10_5_path|g" \
-  -e "s|__NIXOME_NIXOS_QUBES_PATH__|\$nixos_qubes_path|g" \
-  -e "s|__NIXOME_SUPPORT_PATH__|\$nixome_support_path|g" \
+  -e "s|__AIRLOCK_NIXOS_QUBES_PATH__|\$nixos_qubes_path|g" \
+  -e "s|__AIRLOCK_SUPPORT_PATH__|\$airlock_support_path|g" \
   flake.nix
 sed -i 's|appliedMessage = "initial";|appliedMessage = "$APPLY_MESSAGE";|' flake.nix
 nix --extra-experimental-features nix-command --extra-experimental-features flakes flake lock --impure --offline
 grep -F 'appliedMessage = "$APPLY_MESSAGE";' flake.nix
-grep -F 'configVms = import ./nixome/config-vms.nix;' flake.nix
-grep -F 'systemConfig = import ./nixome/system.nix;' flake.nix
-grep -F 'rawLocalConfig = import ./nixome/runtime.nix {' flake.nix
-grep -F 'nixome-dom0-profile = dom0Profile;' flake.nix
+grep -F 'configVms = import ./airlock/config-vms.nix;' flake.nix
+grep -F 'systemConfig = import ./airlock/system.nix;' flake.nix
+grep -F 'rawLocalConfig = import ./airlock/runtime.nix {' flake.nix
+grep -F 'airlock-dom0-profile = dom0Profile;' flake.nix
 grep -F 'nixosConfigurations = nixNativeConfigurations // {' flake.nix
-grep -F 'nixome-dom0 = nixomeDom0System;' flake.nix
-grep -F 'nixNative.domains."$CREATED_QUBE" = {' nixome/runtime.nix
-grep -F 'dom0SystemAttr ? "nixosConfigurations.nixome-dom0.config.system.build.toplevel"' nixome/system.nix
-git add dom0-profile/bin/nixome-dom0-profile-activate dom0-profile/share/nixome/profile.json flake.lock flake.nix nixome/config-vms.nix nixome/dom0-host.nix nixome/local.nix nixome/runtime.nix nixome/prebuilt-template-sources.nix nixome/system.nix nixome/system-schema.nix nixome/topology.nix
+grep -F 'airlock-dom0 = airlockDom0System;' flake.nix
+grep -F 'nixNative.domains."$CREATED_QUBE" = {' airlock/runtime.nix
+grep -F 'dom0SystemAttr ? "nixosConfigurations.airlock-dom0.config.system.build.toplevel"' airlock/system.nix
+git add dom0-profile/bin/airlock-dom0-profile-activate dom0-profile/share/airlock/profile.json flake.lock flake.nix airlock/config-vms.nix airlock/dom0-host.nix airlock/local.nix airlock/runtime.nix airlock/prebuilt-template-sources.nix airlock/system.nix airlock/system-schema.nix airlock/topology.nix
 git \
-  -c user.name='Nixome Config Smoke' \
-  -c user.email='nixome-config-smoke@localhost' \
+  -c user.name='Airlock Config Smoke' \
+  -c user.email='airlock-config-smoke@localhost' \
   commit -m 'test runtime config changes'
 git status --short --branch
 EOF
@@ -905,13 +905,13 @@ fi
 if mode_runs_apply_candidate; then
 run_or_fail "apply config candidate from $STAGING through $VALIDATOR" "$APPLY_LOG" \
   env \
-    NIXOME_LOG_DIR="$LOG_DIR" \
-    NIXOME_CONFIG_STAGING_VM="$STAGING" \
-    NIXOME_CONFIG_VALIDATOR_VM="$VALIDATOR" \
-    NIXOME_CONFIG_VAULT_VM="$VAULT" \
-    NIXOME_CONFIG_APPLY_NIX_OFFLINE="${NIXOME_CONFIG_APPLY_NIX_OFFLINE:-0}" \
-    NIXOME_CONFIG_APPLY_STAGE="$CONFIG_APPLY_STAGE" \
-  nixome-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
+    AIRLOCK_LOG_DIR="$LOG_DIR" \
+    AIRLOCK_CONFIG_STAGING_VM="$STAGING" \
+    AIRLOCK_CONFIG_VALIDATOR_VM="$VALIDATOR" \
+    AIRLOCK_CONFIG_VAULT_VM="$VAULT" \
+    AIRLOCK_CONFIG_APPLY_NIX_OFFLINE="${AIRLOCK_CONFIG_APPLY_NIX_OFFLINE:-0}" \
+    AIRLOCK_CONFIG_APPLY_STAGE="$CONFIG_APPLY_STAGE" \
+  airlock-config-apply --apply --staging "$STAGING" --validator "$VALIDATOR" --vault "$VAULT"
 fi
 
 if [ "$CONFIG_VMS_SMOKE_MODE" = apply-candidate ]; then
@@ -921,7 +921,7 @@ fi
 run_or_fail \
   "read applied topology" \
   "$APPLIED_TOPOLOGY_LOG" \
-  cat /var/log/nixome/config-apply-topology.json
+  cat /var/log/airlock/config-apply-topology.json
 jq -e \
   --arg staging "$STAGING" \
   --arg validator "$VALIDATOR" \
@@ -947,7 +947,7 @@ jq -e \
       .domains[$name].backend.store.device == "/dev/xvde" and
       .domains[$name].backend.store.read_only == true;
 
-    .schema == "nixome.qubes-topology.v1" and
+    .schema == "airlock.qubes-topology.v1" and
     .prefs.default_kernel == "" and
     .templates == {} and
     .kernels == {} and
@@ -955,85 +955,85 @@ jq -e \
     .domains[$vault].label == "black" and
     .domains[$vault].netvm == null and
     .domains[$vault].prefs.include_in_backups == true and
-    .domains[$vault].features."nixome-config-authority" == "1" and
-    .domains[$vault].features."nixome-role" == "sys-config-vault" and
+    .domains[$vault].features."airlock-config-authority" == "1" and
+    .domains[$vault].features."airlock-role" == "sys-config-vault" and
     .domains[$vault].services."network-manager" == false and
     closure_domain($staging) and
     .domains[$staging].label == "gray" and
     .domains[$staging].netvm == null and
     .domains[$staging].prefs.include_in_backups == true and
-    .domains[$staging].features."nixome-config-staging" == "1" and
-    .domains[$staging].features."nixome-config-applied-message" == $apply_message and
+    .domains[$staging].features."airlock-config-staging" == "1" and
+    .domains[$staging].features."airlock-config-applied-message" == $apply_message and
     closure_domain($validator) and
     .domains[$validator].label == "blue" and
     .domains[$validator].netvm == null and
     .domains[$validator].prefs.include_in_backups == true and
-    .domains[$validator].features."nixome-config-validator" == "1" and
-    .domains[$validator].features."nixome-role" == "sys-config-validator" and
+    .domains[$validator].features."airlock-config-validator" == "1" and
+    .domains[$validator].features."airlock-role" == "sys-config-validator" and
     closure_domain($created) and
-    .domains[$created].features."nixome-created-from-config" == "1" and
-    .domains[$created].features."nixome-created-from-config-message" == $apply_message
+    .domains[$created].features."airlock-created-from-config" == "1" and
+    .domains[$created].features."airlock-created-from-config-message" == $apply_message
   ' "$APPLIED_TOPOLOGY_LOG" >/dev/null ||
   fail "applied topology does not define self-hosted config VMs"
 
 run_or_fail \
-  "read generated Nixome qrexec policy" \
+  "read generated Airlock qrexec policy" \
   "$QREXEC_POLICY_FILE_LOG" \
-  cat /var/lib/nixome/qubes-policy.d/90-nixome.policy
-grep -Fx "nixome.PolicyProbe * dom0 sys-config-vault allow" "$QREXEC_POLICY_FILE_LOG" >/dev/null ||
+  cat /var/lib/airlock/qubes-policy.d/90-airlock.policy
+grep -Fx "airlock.PolicyProbe * dom0 sys-config-vault allow" "$QREXEC_POLICY_FILE_LOG" >/dev/null ||
   fail "generated qrexec policy is missing PolicyProbe allow rule"
-grep -Fx "nixome.PolicyProbe * @anyvm @anyvm deny" "$QREXEC_POLICY_FILE_LOG" >/dev/null ||
+grep -Fx "airlock.PolicyProbe * @anyvm @anyvm deny" "$QREXEC_POLICY_FILE_LOG" >/dev/null ||
   fail "generated qrexec policy is missing PolicyProbe deny rule"
 
 run_or_fail \
   "run qrexec probe allowed by generated policy" \
   "$QREXEC_POLICY_PROBE_LOG" \
-  qrexec-client -d "$VAULT" -T -w 120 "DEFAULT:QUBESRPC nixome.PolicyProbe+ dom0"
-grep -Fx "nixome-policy-probe role=sys-config-vault user=$QUBE_USER" "$QREXEC_POLICY_PROBE_LOG" >/dev/null ||
+  qrexec-client -d "$VAULT" -T -w 120 "DEFAULT:QUBESRPC airlock.PolicyProbe+ dom0"
+grep -Fx "airlock-policy-probe role=sys-config-vault user=$QUBE_USER" "$QREXEC_POLICY_PROBE_LOG" >/dev/null ||
   fail "generated qrexec policy probe output did not match expected value"
 
 run_or_fail \
   "read applied dom0 system" \
   "$DOM0_SYSTEM_JSON_LOG" \
-  cat /var/lib/nixome/system/current-system.json
+  cat /var/lib/airlock/system/current-system.json
 run_or_fail \
   "read applied dom0 system plan" \
   "$DOM0_SYSTEM_PLAN_LOG" \
-  cat /var/lib/nixome/system/current-plan.json
+  cat /var/lib/airlock/system/current-plan.json
 run_or_fail \
   "read applied dom0 profile" \
   "$DOM0_SYSTEM_PROFILE_JSON_LOG" \
-  cat /var/lib/nixome/system/current-profile.json
+  cat /var/lib/airlock/system/current-profile.json
 run_or_fail \
   "read system apply result" \
   "$DOM0_SYSTEM_APPLY_LOG" \
-  cat /var/lib/nixome/system/last-apply.json
+  cat /var/lib/airlock/system/last-apply.json
 run_or_fail \
   "read system profile link" \
   "$DOM0_SYSTEM_PROFILE_LINK_LOG" \
-  readlink /nix/var/nix/profiles/nixome-system
+  readlink /nix/var/nix/profiles/airlock-system
 if [ "$DOM0_SYSTEM_SWITCH_ACTION" = "switch" ]; then
   run_or_fail \
     "read host config message" \
     "$DOM0_HOST_CONFIG_MESSAGE_LOG" \
-    cat /etc/nixome/inside-config-applied-message
+    cat /etc/airlock/inside-config-applied-message
   run_or_fail \
     "read local dom0 extra module message" \
     "$DOM0_EXTRA_MODULE_MESSAGE_LOG" \
-    cat /etc/nixome/local-dom0-extra-module
+    cat /etc/airlock/local-dom0-extra-module
   run_or_fail \
     "read local dom0 host configuration message" \
     "$DOM0_HOST_CONFIGURATION_MESSAGE_LOG" \
-    cat /etc/nixome/local-dom0-host-configuration
+    cat /etc/airlock/local-dom0-host-configuration
   run_or_fail \
     "read local dom0 extra module restart marker" \
     "$DOM0_EXTRA_MODULE_RESTARTED_LOG" \
-    cat /var/lib/nixome/system/local-extra-module-restarted
+    cat /var/lib/airlock/system/local-extra-module-restarted
 fi
 run_or_fail \
   "read systemd live action result" \
   "$DOM0_SYSTEMD_ACTIONS_LOG" \
-  cat /var/lib/nixome/system/last-systemd-actions.json
+  cat /var/lib/airlock/system/last-systemd-actions.json
 run_or_fail \
   "read host system profile link" \
   "$DOM0_HOST_SYSTEM_PROFILE_LINK_LOG" \
@@ -1048,7 +1048,7 @@ jq -e \
   --arg switch_action "$DOM0_SYSTEM_SWITCH_ACTION" \
   --arg reason "$DOM0_SYSTEM_REASON" \
   '
-  .schema == "nixome.system.v1" and
+  .schema == "airlock.system.v1" and
   .dom0.profile.message == $apply_message and
   .dom0.nixos.system.enable == true and
   (.dom0.nixos.system.source | test("^/nix/store/")) and
@@ -1058,11 +1058,11 @@ jq -e \
   any(.plan.live_actions[]; .type == "dom0-nixos-system" and .action == $switch_action) and
   (
     if $switch_action == "switch" then
-      .dom0.systemd.services."nixome-local-extra-module".action == "restart" and
+      .dom0.systemd.services."airlock-local-extra-module".action == "restart" and
       .plan.reboot_actions == [] and
       .plan.reboot_required == false and
       .plan.reboot_reasons == [] and
-      any(.plan.live_actions[]; .type == "systemd-service" and .name == "nixome-local-extra-module" and .action == "restart")
+      any(.plan.live_actions[]; .type == "systemd-service" and .name == "airlock-local-extra-module" and .action == "restart")
     else
       .dom0.systemd.services == {} and
       .plan.reboot_required == true and
@@ -1085,7 +1085,7 @@ jq -e \
   any(.live_actions[]; .type == "dom0-nixos-system" and .action == $switch_action) and
   (
     if $switch_action == "switch" then
-      any(.live_actions[]; .type == "systemd-service" and .name == "nixome-local-extra-module" and .action == "restart") and
+      any(.live_actions[]; .type == "systemd-service" and .name == "airlock-local-extra-module" and .action == "restart") and
       .reboot_actions == [] and
       .reboot_required == false and
       .reboot_reasons == []
@@ -1102,7 +1102,7 @@ jq -e \
   fail "applied dom0 system plan did not match expected value"
 
 jq -e --arg apply_message "$APPLY_MESSAGE" '
-  .schema == "nixome.dom0-profile.v1" and
+  .schema == "airlock.dom0-profile.v1" and
   .message == $apply_message and
   .built_by == "sys-config-staging"
 ' "$DOM0_SYSTEM_PROFILE_JSON_LOG" >/dev/null ||
@@ -1112,7 +1112,7 @@ jq -e \
   --arg switch_action "$DOM0_SYSTEM_SWITCH_ACTION" \
   --arg reason "$DOM0_SYSTEM_REASON" \
   '
-  .schema == "nixome.system-apply.v1" and
+  .schema == "airlock.system-apply.v1" and
   .status == "passed" and
   .profile_status == "passed" and
   .host_system_status == "passed" and
@@ -1122,7 +1122,7 @@ jq -e \
     if $switch_action == "switch" then
       .systemd_status == "passed" and
       .systemd_actions_result.status == "passed" and
-      any(.systemd_actions_result.actions[]; .name == "nixome-local-extra-module" and .action == "restart" and .status == "passed") and
+      any(.systemd_actions_result.actions[]; .name == "airlock-local-extra-module" and .action == "restart" and .status == "passed") and
       .reboot_actions == [] and
       .reboot_required == false and
       .reboot_reasons == []
@@ -1161,7 +1161,7 @@ fi
 run_or_fail \
   "read config status" \
   "$CONFIG_STATUS_LOG" \
-  nixome-config-status
+  airlock-config-status
 jq -e \
   --arg staging "$STAGING" \
   --arg vault "$VAULT" \
@@ -1174,7 +1174,7 @@ jq -e \
     def pending_vm_restart($domain; $type):
       any(.pending_vm_restarts.actions[]?; .domain == $domain and .type == $type);
 
-    .schema == "nixome.config-status.v1" and
+    .schema == "airlock.config-status.v1" and
     .status == "applied" and
     (.topology.domain_names | index($staging)) and
     (.topology.domain_names | index($vault)) and
@@ -1218,7 +1218,7 @@ jq -e \
   ' "$CONFIG_STATUS_LOG" >/dev/null ||
   fail "config status JSON did not match applied state"
 
-qvm-features "$STAGING" nixome-config-applied-message > "$APPLIED_FEATURE_LOG" 2>&1 ||
+qvm-features "$STAGING" airlock-config-applied-message > "$APPLIED_FEATURE_LOG" 2>&1 ||
   fail "applied config feature is missing"
 grep -qx "$APPLY_MESSAGE" "$APPLIED_FEATURE_LOG" ||
   fail "applied config feature did not match expected value"
@@ -1227,7 +1227,7 @@ qvm-check "$CREATED_QUBE" >/dev/null 2>&1 || fail "config-created qube is missin
 assert_nix_closure_domain "$CREATED_QUBE" "$CREATED_QUBE_BACKEND_LOG" "$CREATED_QUBE_STORE_VOLUME_LOG"
 qvm-features \
   "$CREATED_QUBE" \
-  nixome-created-from-config-message \
+  airlock-created-from-config-message \
   > "$CREATED_QUBE_FEATURE_LOG" 2>&1 ||
   fail "config-created qube feature is missing"
 grep -qx "$APPLY_MESSAGE" "$CREATED_QUBE_FEATURE_LOG" ||
@@ -1249,7 +1249,7 @@ run_qrexec_or_fail \
   "$VAULT" \
   "config vault archive tree" \
   "$VAULT_ARCHIVE_TREE_LOG" \
-  "cd /home/$QUBE_USER/nixome-config-vault &&
+  "cd /home/$QUBE_USER/airlock-config-vault &&
     cat latest-candidate &&
     find candidates -maxdepth 3 -type f | sort"
 
@@ -1257,37 +1257,37 @@ run_qrexec_or_fail \
   "$VAULT" \
   "config vault deployment tree" \
   "$VAULT_DEPLOYMENT_TREE_LOG" \
-  "cd /home/$QUBE_USER/nixome-config-vault &&
+  "cd /home/$QUBE_USER/airlock-config-vault &&
     latest=\$(cat latest-deployment) &&
     attempt=\$(cat latest-deployment-attempt) &&
     test \"\$latest\" = \"\$attempt\" &&
     test -d \"deployments/\$latest\" &&
-    jq -e '.schema == \"nixome.config-deployment.v1\" and
+    jq -e '.schema == \"airlock.config-deployment.v1\" and
       .status == \"passed\"' \"deployments/\$latest/deployment.json\" &&
-    jq -e '.schema == \"nixome.config-apply.v1\" and
+    jq -e '.schema == \"airlock.config-apply.v1\" and
       .status == \"passed\"' \"deployments/\$latest/apply.json\" &&
-    jq -e '.schema == \"nixome.setup-config.v1\" and
+    jq -e '.schema == \"airlock.setup-config.v1\" and
       .status == \"passed\"' \"deployments/\$latest/setup.json\" &&
-    jq -e '.schema == \"nixome.qubes-topology.v1\"' \"deployments/\$latest/topology.json\" &&
-    jq -e '.schema == \"nixome.systemd-actions.v1\" and
+    jq -e '.schema == \"airlock.qubes-topology.v1\"' \"deployments/\$latest/topology.json\" &&
+    jq -e '.schema == \"airlock.systemd-actions.v1\" and
       .status == \"$EXPECTED_SYSTEMD_ACTIONS_STATUS\"' \"deployments/\$latest/systemd-actions.json\" &&
     jq -e '.systemd_actions.status == \"$EXPECTED_SYSTEMD_ACTIONS_STATUS\"' \"deployments/\$latest/deployment.json\" &&
     find \"deployments/\$latest\" -maxdepth 2 -type f | sort"
 
 jq -e --arg staging "$STAGING" --arg validator "$VALIDATOR" --arg vault "$VAULT" '
-  .schema == "nixome.config-archive.v1" and
+  .schema == "airlock.config-archive.v1" and
   .status == "passed" and
   .staging == $staging and
   .validator == $validator and
   .vault == $vault and
   .candidate_commit == .validation_commit and
   .candidate_commit == .vault_archive.candidate_commit and
-  .validation.schema == "nixome.config-validation.v1" and
+  .validation.schema == "airlock.config-validation.v1" and
   .validation.status == "passed" and
-  any(.validation.checks[]; .name == "nix-eval-nixome-topology" and .status == "passed") and
-  any(.validation.checks[]; .name == "nixome-topology-json" and .status == "passed") and
-  any(.validation.checks[]; .name == "nix-eval-nixome-system" and .status == "passed") and
-  any(.validation.checks[]; .name == "nixome-system-json" and .status == "passed") and
+  any(.validation.checks[]; .name == "nix-eval-airlock-topology" and .status == "passed") and
+  any(.validation.checks[]; .name == "airlock-topology-json" and .status == "passed") and
+  any(.validation.checks[]; .name == "nix-eval-airlock-system" and .status == "passed") and
+  any(.validation.checks[]; .name == "airlock-system-json" and .status == "passed") and
   any(.validation.checks[]; .name == "nix-system-source-refs-dry-run" and .status == "passed")
 ' "$ARCHIVE_JSON" >/dev/null || fail "config archive JSON did not pass"
 
@@ -1304,21 +1304,21 @@ jq -e \
   def setup_restart_action($domain; $type):
     any(.setup.restart_actions[]?; .domain == $domain and .type == $type);
 
-  .schema == "nixome.config-apply.v1" and
+  .schema == "airlock.config-apply.v1" and
   .status == "passed" and
   .staging == $staging and
   .validator == $validator and
   .vault == $vault and
   .archive.status == "passed" and
-  .deployment.schema == "nixome.config-deployment.v1" and
+  .deployment.schema == "airlock.config-deployment.v1" and
   .deployment.status == "passed" and
-  .deployment_archive.schema == "nixome.config-vault-deployment.v1" and
+  .deployment_archive.schema == "airlock.config-vault-deployment.v1" and
   .deployment_archive.status == "passed" and
-  .system_apply_result.schema == "nixome.system-apply.v1" and
+  .system_apply_result.schema == "airlock.system-apply.v1" and
   .system_apply_result.status == "passed" and
   .system_apply_result.profile_status == "passed" and
   .system_apply_result.host_system_status == "passed" and
-  .deployment.system_apply.schema == "nixome.system-apply.v1" and
+  .deployment.system_apply.schema == "airlock.system-apply.v1" and
   .deployment.system_apply.status == "passed" and
   .deployment.system_apply.host_system_status == "passed" and
   (

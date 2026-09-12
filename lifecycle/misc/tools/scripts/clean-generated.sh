@@ -3,19 +3,19 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 MODE="${1:-usage}"
-source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
-VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
-LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
-CACHE_DIR="${NIXOME_QUBES_CACHE_DIR:-$ROOT/.nixome-cache/rpms}"
+source "$ROOT/lifecycle/misc/tools/scripts/lib/airlock-env.sh"
+VM_DIR="${AIRLOCK_VM_DIR:-$ROOT/.airlock-vm}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-$ROOT/.airlock-logs}"
+CACHE_DIR="${AIRLOCK_QUBES_CACHE_DIR:-$ROOT/.airlock-cache/rpms}"
 CACHE_ROOT="${CACHE_DIR%/rpms}"
-RESULT_LINK_DIR="${NIXOME_RESULT_LINK_DIR:-${NIXOME_DATA_ROOT:-$ROOT/.nixome}/result-links}"
+RESULT_LINK_DIR="${AIRLOCK_RESULT_LINK_DIR:-${AIRLOCK_DATA_ROOT:-$ROOT/.airlock}/result-links}"
 
 usage() {
   cat <<EOF
 usage: $0 MODE
 
 Modes:
-  disk-usage  Show generated Nixome directory sizes.
+  disk-usage  Show generated Airlock directory sizes.
   vm-disks    Remove generated overlays/out-links in the VM work directory.
   vm-workdirs Remove generated VM work directories.
   result-links Remove generated Nix result links under the data root.
@@ -62,7 +62,7 @@ clean_vm_workdirs() {
   while IFS= read -r -d '' path; do
     [ "$path" = "$VM_DIR" ] && continue
     delete_path "$path"
-  done < <(find "$ROOT" -maxdepth 1 -type d -name '.nixome-vm*' -print0)
+  done < <(find "$ROOT" -maxdepth 1 -type d -name '.airlock-vm*' -print0)
 }
 
 show_disk_usage() {
@@ -73,12 +73,12 @@ show_disk_usage() {
     "$CACHE_ROOT" \
   )
 
-  if [ -n "${NIXOME_NIX_ROOT:-}" ]; then
-    paths+=("$NIXOME_NIX_ROOT")
+  if [ -n "${AIRLOCK_NIX_ROOT:-}" ]; then
+    paths+=("$AIRLOCK_NIX_ROOT")
   fi
 
   paths+=(
-    "$ROOT"/.nixome-* \
+    "$ROOT"/.airlock-* \
     "$ROOT"/result \
     "$ROOT"/result-* \
   )

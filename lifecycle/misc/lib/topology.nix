@@ -1,5 +1,5 @@
 let
-  schema = "nixome.qubes-topology.v1";
+  schema = "airlock.qubes-topology.v1";
 
   domainClasses = [
     "AppVM"
@@ -43,11 +43,11 @@ let
   ];
 
   reservedQrexecServices = [
-    "nixome.Config.CandidateExport"
-    "nixome.Config.ValidateCandidate"
-    "nixome.Config.InputsImport"
-    "nixome.Config.ArchiveCandidate"
-    "nixome.Config.ArchiveDeployment"
+    "airlock.Config.CandidateExport"
+    "airlock.Config.ValidateCandidate"
+    "airlock.Config.InputsImport"
+    "airlock.Config.ArchiveCandidate"
+    "airlock.Config.ArchiveDeployment"
   ];
 
   attrNames = builtins.attrNames;
@@ -78,7 +78,7 @@ let
     attrs: name: default:
     if hasAttr name attrs then getAttr name attrs else default;
 
-  fail = path: message: throw "nixome.topology${if path == "" then "" else ".${path}"}: ${message}";
+  fail = path: message: throw "airlock.topology${if path == "" then "" else ".${path}"}: ${message}";
 
   expectAttrs =
     path: value:
@@ -231,8 +231,8 @@ let
     let
       service = expectStringOrPath path value;
     in
-    if match "nixome\\.[A-Za-z0-9_.-]+" service == null then
-      fail path "invalid qrexec service ${toJSON service}; expected nixome.[A-Za-z0-9_.-]+"
+    if match "airlock\\.[A-Za-z0-9_.-]+" service == null then
+      fail path "invalid qrexec service ${toJSON service}; expected airlock.[A-Za-z0-9_.-]+"
     else if elem service reservedQrexecServices then
       fail path "reserved bootstrap qrexec service ${toJSON service} cannot be managed by topology"
     else

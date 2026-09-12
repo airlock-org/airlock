@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TOPOLOGY_PATH="${NIXOME_QUBES_TOPOLOGY:-/etc/nixome/qubes-topology.json}"
-LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
-QVM_START="${NIXOME_QVM_START:-qvm-start}"
+TOPOLOGY_PATH="${AIRLOCK_QUBES_TOPOLOGY:-/etc/airlock/qubes-topology.json}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
+QVM_START="${AIRLOCK_QVM_START:-qvm-start}"
 RESULT_JSON="$LOG_DIR/start-network-providers.json"
 COMMAND_LOG="$LOG_DIR/start-network-providers.commands.log"
 
@@ -137,7 +137,7 @@ providers_json="$(file_array "$provider_file")"
 started_json="$(file_array "$started_file")"
 failed_json="$(file_array "$failed_file")"
 jq -n \
-  --arg schema "nixome.start-network-providers.v1" \
+  --arg schema "airlock.start-network-providers.v1" \
   --arg status "$status" \
   --arg topology "$TOPOLOGY_PATH" \
   --arg command_log "$COMMAND_LOG" \

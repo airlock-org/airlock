@@ -1,13 +1,13 @@
 {
   config,
   lib,
-  nixomeConfigInputs ? null,
-  nixomePrebuiltTemplateSources ? { },
+  airlockConfigInputs ? null,
+  airlockPrebuiltTemplateSources ? { },
   pkgs,
   ...
 }:
 let
-  cfg = config.nixome.qubeGuest;
+  cfg = config.airlock.qubeGuest;
   hasConfigVaultRole = cfg.role == "sys-config-vault";
   hasConfigStagingRole = cfg.role == "sys-config-staging";
   hasConfigValidatorRole = cfg.role == "sys-config-validator";
@@ -29,18 +29,18 @@ let
     ps.dbus-python
     qubesDbPython
   ]);
-  qubesDnatToNs = pkgs.writeShellScript "nixome-qubes-setup-dnat-to-ns" ''
+  qubesDnatToNs = pkgs.writeShellScript "airlock-qubes-setup-dnat-to-ns" ''
     exec ${qubesPython}/bin/python ${qubesAgentLinux}/lib/qubes/qubes-setup-dnat-to-ns "$@"
   '';
-  qubesNetworkProxySetup = pkgs.runCommand "nixome-qubes-network-proxy-setup" { } ''
+  qubesNetworkProxySetup = pkgs.runCommand "airlock-qubes-network-proxy-setup" { } ''
     install -D -m 0555 ${qubesAgentLinux}/lib/qubes/init/network-proxy-setup.sh "$out/bin/network-proxy-setup"
     substituteInPlace "$out/bin/network-proxy-setup" \
       --replace-fail "${qubesAgentLinux}/lib/qubes/qubes-setup-dnat-to-ns" "${qubesDnatToNs}"
   '';
   roleGit = pkgs.gitMinimal;
-  nixomeCli = pkgs.callPackage ../../runtime/tools/pkgs/nixome-cli { };
+  airlockCli = pkgs.callPackage ../../runtime/tools/pkgs/airlock-cli { };
   systemdPackage = config.systemd.package;
-  configInputsPublicPath = "/etc/nixome/config-inputs";
+  configInputsPublicPath = "/etc/airlock/config-inputs";
   devPersistentPaths = lib.unique (cfg.devPersistentPaths ++ [ cfg.codexHome ]);
 
   qubesGuestPath = [
@@ -81,7 +81,7 @@ let
   ];
 
   xenDriverDomainEtc = pkgs.symlinkJoin {
-    name = "nixome-xen-driver-domain-etc";
+    name = "airlock-xen-driver-domain-etc";
     paths = [
       pkgs.qubes-vmm-xen
       qubesAgentLinux
@@ -90,7 +90,7 @@ let
     stripPrefix = "/etc/xen";
   };
 
-  updatesProxyRpcService = pkgs.writeShellScript "nixome-qubes-updates-proxy-rpc-service" ''
+  updatesProxyRpcService = pkgs.writeShellScript "airlock-qubes-updates-proxy-rpc-service" ''
     set -euo pipefail
     exec ${pkgs.socat}/bin/socat STDIO TCP:127.0.0.1:8082
   '';
@@ -118,7 +118,7 @@ let
     Filter "${qubesAgentLinux}/etc/tinyproxy/updates-blacklist"
   '';
 
-  qubesSetupIp = pkgs.runCommand "nixome-qubes-setup-ip" { } ''
+  qubesSetupIp = pkgs.runCommand "airlock-qubes-setup-ip" { } ''
     install -D -m 0555 ${qubesAgentLinux.src}/network/setup-ip "$out/bin/setup-ip"
     substituteInPlace "$out/bin/setup-ip" \
       --replace-fail "/usr/lib/qubes/init/functions" "${qubesAgentLinux}/lib/qubes/init/functions" \
@@ -130,7 +130,7 @@ let
     patchShebangs "$out/bin/setup-ip"
   '';
 
-  qubesIptablesStart = pkgs.writeShellScript "nixome-qubes-iptables-start" ''
+  qubesIptablesStart = pkgs.writeShellScript "airlock-qubes-iptables-start" ''
     set -eu
 
     apply_rules() {
@@ -151,7 +151,7 @@ let
     apply_rules ipv6
   '';
 
-  qubesNetworkManagerHook = pkgs.writeShellScript "nixome-qubes-nmhook" ''
+  qubesNetworkManagerHook = pkgs.writeShellScript "airlock-qubes-nmhook" ''
     export PATH=${lib.escapeShellArg (lib.makeBinPath networkGuestPath)}:$PATH
 
     case "''${2:-}" in
@@ -167,7 +167,7 @@ let
     exit 0
   '';
 
-  qubesExternalIpHook = pkgs.writeShellScript "nixome-qubes-external-ip" ''
+  qubesExternalIpHook = pkgs.writeShellScript "airlock-qubes-external-ip" ''
     case "''${2:-}" in
       up)
         inet="$(${pkgs.iproute2}/bin/ip addr show dev "$1" | ${pkgs.gnugrep}/bin/grep inet || true)"
@@ -242,7 +242,7 @@ let
     ];
     dev = [
       (lib.hiPrio configNix)
-      nixomeCli
+      airlockCli
       pkgs.bashInteractive
       pkgs.cacert
       pkgs.cargo
@@ -277,108 +277,108 @@ let
   };
 
   initialRuntimeConfigFlake = builtins.readFile ../../bootstrap/initial-runtime-config/flake.nix;
-  initialRuntimeConfigVms = builtins.readFile ../../bootstrap/initial-runtime-config/nixome/config-vms.nix;
-  initialRuntimeDom0Host = builtins.readFile ../../bootstrap/initial-runtime-config/nixome/dom0-host.nix;
-  initialRuntimeDom0ProfileActivate = builtins.readFile ../../bootstrap/initial-runtime-config/dom0-profile/bin/nixome-dom0-profile-activate;
-  initialRuntimeDom0ProfileJson = builtins.readFile ../../bootstrap/initial-runtime-config/dom0-profile/share/nixome/profile.json;
-  initialRuntimeLocal = builtins.readFile ../../bootstrap/initial-runtime-config/nixome/local.nix;
-  initialRuntimeConfig = builtins.readFile ../../bootstrap/initial-runtime-config/nixome/runtime.nix;
-  initialRuntimeSystem = builtins.readFile ../../bootstrap/initial-runtime-config/nixome/system.nix;
+  initialRuntimeConfigVms = builtins.readFile ../../bootstrap/initial-runtime-config/airlock/config-vms.nix;
+  initialRuntimeDom0Host = builtins.readFile ../../bootstrap/initial-runtime-config/airlock/dom0-host.nix;
+  initialRuntimeDom0ProfileActivate = builtins.readFile ../../bootstrap/initial-runtime-config/dom0-profile/bin/airlock-dom0-profile-activate;
+  initialRuntimeDom0ProfileJson = builtins.readFile ../../bootstrap/initial-runtime-config/dom0-profile/share/airlock/profile.json;
+  initialRuntimeLocal = builtins.readFile ../../bootstrap/initial-runtime-config/airlock/local.nix;
+  initialRuntimeConfig = builtins.readFile ../../bootstrap/initial-runtime-config/airlock/runtime.nix;
+  initialRuntimeSystem = builtins.readFile ../../bootstrap/initial-runtime-config/airlock/system.nix;
   initialRuntimeSystemSchema = builtins.readFile ../lib/system.nix;
   initialRuntimeTopologySchema = builtins.readFile ../lib/topology.nix;
-  initialRuntimePrebuiltTemplateSources = lib.generators.toPretty { } nixomePrebuiltTemplateSources;
+  initialRuntimePrebuiltTemplateSources = lib.generators.toPretty { } airlockPrebuiltTemplateSources;
   initialRuntimeConfigRepoPaths = [
     "README.md"
-    "dom0-profile/bin/nixome-dom0-profile-activate"
-    "dom0-profile/share/nixome/profile.json"
+    "dom0-profile/bin/airlock-dom0-profile-activate"
+    "dom0-profile/share/airlock/profile.json"
     "flake.nix"
-    "nixome/config-vms.nix"
-    "nixome/dom0-host.nix"
-    "nixome/local.nix"
-    "nixome/runtime.nix"
-    "nixome/prebuilt-template-sources.nix"
-    "nixome/system.nix"
-    "nixome/system-schema.nix"
-    "nixome/topology.nix"
+    "airlock/config-vms.nix"
+    "airlock/dom0-host.nix"
+    "airlock/local.nix"
+    "airlock/runtime.nix"
+    "airlock/prebuilt-template-sources.nix"
+    "airlock/system.nix"
+    "airlock/system-schema.nix"
+    "airlock/topology.nix"
   ];
   initialRuntimeConfigRepoGitAddArgs = lib.escapeShellArgs initialRuntimeConfigRepoPaths;
   initialRuntimeConfigRepoFilesScript = ''
     write_initial_runtime_config_repo_files() {
-      mkdir -p dom0-profile/bin dom0-profile/share/nixome nixome
+      mkdir -p dom0-profile/bin dom0-profile/share/airlock airlock
       cat > README.md <<'EOF'
-    # Nixome Runtime Configuration
+    # Airlock Runtime Configuration
 
-    This is the editable Nixome configuration candidate. dom0 archives a
+    This is the editable Airlock configuration candidate. dom0 archives a
     validated commit into sys-config-vault before attempting deployment.
     EOF
       cat > flake.nix <<'EOF'
     ${initialRuntimeConfigFlake}
     EOF
-      cat > nixome/topology.nix <<'EOF'
+      cat > airlock/topology.nix <<'EOF'
     ${initialRuntimeTopologySchema}
     EOF
-      cat > nixome/system-schema.nix <<'EOF'
+      cat > airlock/system-schema.nix <<'EOF'
     ${initialRuntimeSystemSchema}
     EOF
-      cat > nixome/config-vms.nix <<'EOF'
+      cat > airlock/config-vms.nix <<'EOF'
     ${initialRuntimeConfigVms}
     EOF
-      cat > nixome/dom0-host.nix <<'EOF'
+      cat > airlock/dom0-host.nix <<'EOF'
     ${initialRuntimeDom0Host}
     EOF
-      cat > nixome/local.nix <<'EOF'
+      cat > airlock/local.nix <<'EOF'
     ${initialRuntimeLocal}
     EOF
-      cat > nixome/runtime.nix <<'EOF'
+      cat > airlock/runtime.nix <<'EOF'
     ${initialRuntimeConfig}
     EOF
-      cat > nixome/system.nix <<'EOF'
+      cat > airlock/system.nix <<'EOF'
     ${initialRuntimeSystem}
     EOF
-      cat > nixome/prebuilt-template-sources.nix <<'EOF'
+      cat > airlock/prebuilt-template-sources.nix <<'EOF'
     ${initialRuntimePrebuiltTemplateSources}
     EOF
-      cat > dom0-profile/bin/nixome-dom0-profile-activate <<'EOF'
+      cat > dom0-profile/bin/airlock-dom0-profile-activate <<'EOF'
     ${initialRuntimeDom0ProfileActivate}
     EOF
-      cat > dom0-profile/share/nixome/profile.json <<'EOF'
+      cat > dom0-profile/share/airlock/profile.json <<'EOF'
     ${initialRuntimeDom0ProfileJson}
     EOF
-      chmod 0755 dom0-profile/bin/nixome-dom0-profile-activate
+      chmod 0755 dom0-profile/bin/airlock-dom0-profile-activate
     }
   '';
   configInputPathSubstitutionScript = ''
     substitute_config_inputs() {
       config_inputs_root="$1"
       ${pkgs.gnused}/bin/sed -i \
-        -e "s|__NIXOME_NIXPKGS_URL__|path:$config_inputs_root/nixpkgs|g" \
+        -e "s|__AIRLOCK_NIXPKGS_URL__|path:$config_inputs_root/nixpkgs|g" \
         -e "s|__NIXPKGS_LIBVIRT_10_5_PATH__|$config_inputs_root/nixpkgs-libvirt_10_5|g" \
-        -e "s|__NIXOME_NIXOS_QUBES_PATH__|$config_inputs_root/nixos-qubes|g" \
-        -e "s|__NIXOME_SUPPORT_PATH__|$config_inputs_root/nixome-support|g" \
+        -e "s|__AIRLOCK_NIXOS_QUBES_PATH__|$config_inputs_root/nixos-qubes|g" \
+        -e "s|__AIRLOCK_SUPPORT_PATH__|$config_inputs_root/airlock-support|g" \
         flake.nix
       for old_config_inputs_root in \
-        /rw/nixome/config-inputs \
-        /rw/home/${lib.escapeShellArg cfg.user}/.local/share/nixome/config-inputs \
+        /rw/airlock/config-inputs \
+        /rw/home/${lib.escapeShellArg cfg.user}/.local/share/airlock/config-inputs \
         ${lib.escapeShellArg cfg.configInputsPath}; do
         ${pkgs.gnused}/bin/sed -i \
           -e "s|path:$old_config_inputs_root/nixpkgs|path:$config_inputs_root/nixpkgs|g" \
           -e "s|$old_config_inputs_root/nixpkgs-libvirt_10_5|$config_inputs_root/nixpkgs-libvirt_10_5|g" \
           -e "s|$old_config_inputs_root/nixos-qubes|$config_inputs_root/nixos-qubes|g" \
-          -e "s|$old_config_inputs_root/nixome-support|$config_inputs_root/nixome-support|g" \
+          -e "s|$old_config_inputs_root/airlock-support|$config_inputs_root/airlock-support|g" \
           flake.nix
       done
     }
   '';
   configGuestInitCommand =
     if hasConfigVaultRole then
-      "${configVaultInit}/bin/nixome-config-vault-init"
+      "${configVaultInit}/bin/airlock-config-vault-init"
     else if hasConfigStagingRole then
-      "${configStagingInit}/bin/nixome-config-staging-init"
+      "${configStagingInit}/bin/airlock-config-staging-init"
     else if hasConfigValidatorRole then
-      "${configValidatorInit}/bin/nixome-config-validator-init"
+      "${configValidatorInit}/bin/airlock-config-validator-init"
     else
       "${pkgs.coreutils}/bin/true";
-  configNixWrapper = pkgs.writeShellScript "nixome-config-nix" ''
+  configNixWrapper = pkgs.writeShellScript "airlock-config-nix" ''
     set -eu
 
     for arg in "$@"; do
@@ -389,11 +389,11 @@ let
       esac
     done
 
-    store_root="''${NIXOME_CONFIG_NIX_STORE_ROOT:-${cfg.configNixStoreRoot}}"
+    store_root="''${AIRLOCK_CONFIG_NIX_STORE_ROOT:-${cfg.configNixStoreRoot}}"
     case "$store_root" in
       /*) ;;
       *)
-        printf 'NIXOME_CONFIG_NIX_STORE_ROOT must be absolute: %s\n' "$store_root" >&2
+        printf 'AIRLOCK_CONFIG_NIX_STORE_ROOT must be absolute: %s\n' "$store_root" >&2
         exit 1
         ;;
     esac
@@ -401,17 +401,17 @@ let
     mkdir -p "$store_root"
     exec ${pkgs.nix}/bin/nix --store "$store_root" "$@"
   '';
-  configNix = pkgs.runCommand "nixome-config-nix" { } ''
+  configNix = pkgs.runCommand "airlock-config-nix" { } ''
     mkdir -p "$out/bin"
-    ln -s ${configNixWrapper} "$out/bin/nixome-config-nix"
+    ln -s ${configNixWrapper} "$out/bin/airlock-config-nix"
     ln -s ${configNixWrapper} "$out/bin/nix"
   '';
 
-  configVaultInit = pkgs.writeShellScriptBin "nixome-config-vault-init" ''
+  configVaultInit = pkgs.writeShellScriptBin "airlock-config-vault-init" ''
         set -eu
 
-        repo="''${NIXOME_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
-        config_inputs_root="''${NIXOME_CONFIG_INPUTS_PATH:-${configInputsPublicPath}}"
+        repo="''${AIRLOCK_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
+        config_inputs_root="''${AIRLOCK_CONFIG_INPUTS_PATH:-${configInputsPublicPath}}"
         tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
         trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
@@ -422,14 +422,14 @@ let
           [ -d "$config_inputs_root/nixpkgs" ] &&
             [ -d "$config_inputs_root/nixpkgs-libvirt_10_5" ] &&
             [ -d "$config_inputs_root/nixos-qubes" ] &&
-            [ -d "$config_inputs_root/nixome-support" ]
+            [ -d "$config_inputs_root/airlock-support" ]
         }
 
         write_archive_readme() {
           cat > README.md <<'EOF'
-    # Nixome Configuration Vault
+    # Airlock Configuration Vault
 
-    This repository archives Nixome configuration baselines, candidates, and
+    This repository archives Airlock configuration baselines, candidates, and
     deployment records written by dom0.
 
     The `current` link points at the latest config snapshot that should be used
@@ -441,8 +441,8 @@ let
           message="$1"
           if ! ${roleGit}/bin/git diff --cached --quiet; then
             ${roleGit}/bin/git \
-              -c user.name='Nixome Config Vault' \
-              -c user.email='nixome-config-vault@localhost' \
+              -c user.name='Airlock Config Vault' \
+              -c user.email='airlock-config-vault@localhost' \
               commit -m "$message"
           fi
         }
@@ -492,7 +492,7 @@ let
           ${roleGit}/bin/git init -b main
           ${roleGit}/bin/git add ${initialRuntimeConfigRepoGitAddArgs}
           if config_inputs_ready; then
-            ${configNix}/bin/nixome-config-nix \
+            ${configNix}/bin/airlock-config-nix \
               --extra-experimental-features nix-command \
               --extra-experimental-features flakes \
               flake lock \
@@ -505,9 +505,9 @@ let
             ${roleGit}/bin/git add flake.lock
           fi
           ${roleGit}/bin/git \
-            -c user.name='Nixome Initial Runtime Config' \
-            -c user.email='nixome-initial-runtime-config@localhost' \
-            commit -m 'init nixome config candidate'
+            -c user.name='Airlock Initial Runtime Config' \
+            -c user.email='airlock-initial-runtime-config@localhost' \
+            commit -m 'init airlock config candidate'
 
           candidate_commit="$(${roleGit}/bin/git rev-parse HEAD)"
           archive_dir="$repo/candidates/$candidate_commit"
@@ -515,7 +515,7 @@ let
           ${pkgs.coreutils}/bin/mkdir -p "$archive_dir" "$snapshot_dir"
           ${roleGit}/bin/git bundle create "$archive_dir/config.bundle" HEAD refs/heads/main >/dev/null
           ${pkgs.jq}/bin/jq -c -n \
-            --arg schema "nixome.config-candidate.v1" \
+            --arg schema "airlock.config-candidate.v1" \
             --arg commit "$candidate_commit" \
             --arg branch "main" \
             --arg source_role "sys-config-vault" \
@@ -530,7 +530,7 @@ let
           ${roleGit}/bin/git archive --format=tar HEAD |
             ${pkgs.gnutar}/bin/tar -C "$snapshot_dir" -xf -
           ${pkgs.jq}/bin/jq -c -n \
-            --arg schema "nixome.config-vault-current.v1" \
+            --arg schema "airlock.config-vault-current.v1" \
             --arg status "current" \
             --arg candidate_commit "$candidate_commit" \
             --arg branch "main" \
@@ -572,14 +572,14 @@ let
         printf 'config archive current initialized: %s\n' "$repo"
   '';
 
-  configVaultExportCurrent = pkgs.writeShellScriptBin "nixome-config-vault-export-current" ''
+  configVaultExportCurrent = pkgs.writeShellScriptBin "airlock-config-vault-export-current" ''
     set -eu
 
-    repo="''${NIXOME_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
+    repo="''${AIRLOCK_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
-    ${configVaultInit}/bin/nixome-config-vault-init >/dev/null
+    ${configVaultInit}/bin/airlock-config-vault-init >/dev/null
 
     cd "$repo"
     candidate_commit=""
@@ -612,7 +612,7 @@ let
     }
     ${pkgs.jq}/bin/jq -e \
       --arg commit "$candidate_commit" \
-      '.schema == "nixome.config-candidate.v1" and .commit == $commit' \
+      '.schema == "airlock.config-candidate.v1" and .commit == $commit' \
       "candidates/$candidate_commit/manifest.json" >/dev/null
 
     ${pkgs.coreutils}/bin/cp "candidates/$candidate_commit/config.bundle" "$tmpdir/config.bundle"
@@ -620,10 +620,10 @@ let
     exec ${pkgs.gnutar}/bin/tar -C "$tmpdir" -cf - config.bundle manifest.json
   '';
 
-  configStagingImportCurrent = pkgs.writeShellScriptBin "nixome-config-staging-import-current" ''
+  configStagingImportCurrent = pkgs.writeShellScriptBin "airlock-config-staging-import-current" ''
     set -eu
 
-    repo="''${NIXOME_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
+    repo="''${AIRLOCK_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
@@ -650,7 +650,7 @@ let
     manifest_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/manifest.json")"
     candidate_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/manifest.json")"
     branch="$(${pkgs.jq}/bin/jq -r '.branch // "main"' "$tmpdir/manifest.json")"
-    [ "$manifest_schema" = "nixome.config-candidate.v1" ] || {
+    [ "$manifest_schema" = "airlock.config-candidate.v1" ] || {
       printf 'unsupported current config manifest schema: %s\n' "$manifest_schema" >&2
       exit 1
     }
@@ -724,7 +724,7 @@ let
     fi
 
     ${pkgs.jq}/bin/jq -c -n \
-      --arg schema "nixome.config-staging-import-current.v1" \
+      --arg schema "airlock.config-staging-import-current.v1" \
       --arg status "passed" \
       --arg import_status "$import_status" \
       --arg reason "$reason" \
@@ -744,25 +744,25 @@ let
       }'
   '';
 
-  configCurrentExportService = pkgs.writeShellScript "nixome-config-current-export-qrexec" ''
-    exec ${configVaultExportCurrent}/bin/nixome-config-vault-export-current
+  configCurrentExportService = pkgs.writeShellScript "airlock-config-current-export-qrexec" ''
+    exec ${configVaultExportCurrent}/bin/airlock-config-vault-export-current
   '';
 
-  configCurrentImportService = pkgs.writeShellScript "nixome-config-current-import-qrexec" ''
-    exec ${configStagingImportCurrent}/bin/nixome-config-staging-import-current
+  configCurrentImportService = pkgs.writeShellScript "airlock-config-current-import-qrexec" ''
+    exec ${configStagingImportCurrent}/bin/airlock-config-staging-import-current
   '';
 
-  configStagingInit = pkgs.writeShellScriptBin "nixome-config-staging-init" ''
+  configStagingInit = pkgs.writeShellScriptBin "airlock-config-staging-init" ''
     set -eu
 
-    repo="''${NIXOME_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
-    config_inputs_root="''${NIXOME_CONFIG_INPUTS_PATH:-${configInputsPublicPath}}"
+    repo="''${AIRLOCK_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
+    config_inputs_root="''${AIRLOCK_CONFIG_INPUTS_PATH:-${configInputsPublicPath}}"
 
     config_inputs_ready() {
       [ -d "$config_inputs_root/nixpkgs" ] &&
         [ -d "$config_inputs_root/nixpkgs-libvirt_10_5" ] &&
         [ -d "$config_inputs_root/nixos-qubes" ] &&
-        [ -d "$config_inputs_root/nixome-support" ]
+        [ -d "$config_inputs_root/airlock-support" ]
     }
 
     ${initialRuntimeConfigRepoFilesScript}
@@ -771,9 +771,9 @@ let
     config_inputs_need_refresh() {
       for input_file in flake.nix flake.lock; do
         [ -f "$input_file" ] || continue
-        ${pkgs.gnugrep}/bin/grep -F '__NIXOME_NIXPKGS_URL__' "$input_file" >/dev/null 2>&1 && return 0
-        ${pkgs.gnugrep}/bin/grep -F '/rw/nixome/config-inputs/' "$input_file" >/dev/null 2>&1 && return 0
-        ${pkgs.gnugrep}/bin/grep -F '/rw/home/${lib.escapeShellArg cfg.user}/.local/share/nixome/config-inputs/' "$input_file" >/dev/null 2>&1 && return 0
+        ${pkgs.gnugrep}/bin/grep -F '__AIRLOCK_NIXPKGS_URL__' "$input_file" >/dev/null 2>&1 && return 0
+        ${pkgs.gnugrep}/bin/grep -F '/rw/airlock/config-inputs/' "$input_file" >/dev/null 2>&1 && return 0
+        ${pkgs.gnugrep}/bin/grep -F '/rw/home/${lib.escapeShellArg cfg.user}/.local/share/airlock/config-inputs/' "$input_file" >/dev/null 2>&1 && return 0
         ${pkgs.gnugrep}/bin/grep -F '${cfg.configInputsPath}/' "$input_file" >/dev/null 2>&1 && return 0
       done
       return 1
@@ -799,7 +799,7 @@ let
       fi
 
       substitute_config_inputs "$config_inputs_root"
-      ${configNix}/bin/nixome-config-nix \
+      ${configNix}/bin/airlock-config-nix \
         --extra-experimental-features nix-command \
         --extra-experimental-features flakes \
         flake lock \
@@ -810,7 +810,7 @@ let
 
     if [ -d "$repo/.git" ]; then
       cd "$repo"
-      if [ "''${NIXOME_CONFIG_REFRESH_INPUTS:-0}" = 1 ]; then
+      if [ "''${AIRLOCK_CONFIG_REFRESH_INPUTS:-0}" = 1 ]; then
         if ! config_inputs_ready; then
           printf 'config staging config inputs are not present yet under %s; refresh deferred\n' "$config_inputs_root"
           printf 'config staging repo already exists: %s\n' "$repo"
@@ -821,7 +821,7 @@ let
           printf 'config staging config input refresh deferred because worktree is dirty\n%s\n' "$dirty"
         else
           substitute_config_inputs "$config_inputs_root"
-          ${configNix}/bin/nixome-config-nix \
+          ${configNix}/bin/airlock-config-nix \
             --extra-experimental-features nix-command \
             --extra-experimental-features flakes \
             flake lock \
@@ -831,9 +831,9 @@ let
           if [ -n "$(${roleGit}/bin/git status --porcelain flake.nix flake.lock)" ]; then
             ${roleGit}/bin/git add flake.nix flake.lock
             ${roleGit}/bin/git \
-              -c user.name='Nixome Config Staging' \
-              -c user.email='nixome-config-staging@localhost' \
-              commit -m 'refresh nixome config inputs'
+              -c user.name='Airlock Config Staging' \
+              -c user.email='airlock-config-staging@localhost' \
+              commit -m 'refresh airlock config inputs'
           elif config_inputs_need_refresh; then
             printf 'config staging config input paths still need refresh after lock update\n' >&2
             exit 1
@@ -849,16 +849,16 @@ let
         add_config_input_lock_if_ready
         if ! ${roleGit}/bin/git diff --cached --quiet; then
           ${roleGit}/bin/git \
-            -c user.name='Nixome Config Staging' \
-            -c user.email='nixome-config-staging@localhost' \
-            commit -m 'lock nixome config candidate inputs'
+            -c user.name='Airlock Config Staging' \
+            -c user.email='airlock-config-staging@localhost' \
+            commit -m 'lock airlock config candidate inputs'
         fi
       fi
       printf 'config staging repo already exists: %s\n' "$repo"
       exit 0
     fi
 
-    if [ "''${NIXOME_CONFIG_STAGING_INIT_FROM_INITIAL_CONFIG:-0}" != 1 ]; then
+    if [ "''${AIRLOCK_CONFIG_STAGING_INIT_FROM_INITIAL_CONFIG:-0}" != 1 ]; then
       ${pkgs.coreutils}/bin/mkdir -p "$repo"
       if [ -n "$(${pkgs.findutils}/bin/find "$repo" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)" ]; then
         printf 'config staging path exists but is not a Git repo; waiting for sys-config-vault current import: %s\n' "$repo"
@@ -876,21 +876,21 @@ let
     ${roleGit}/bin/git add ${initialRuntimeConfigRepoGitAddArgs}
     add_config_input_lock_if_ready
     ${roleGit}/bin/git \
-      -c user.name='Nixome Config Staging' \
-      -c user.email='nixome-config-staging@localhost' \
-      commit -m 'init nixome config candidate'
+      -c user.name='Airlock Config Staging' \
+      -c user.email='airlock-config-staging@localhost' \
+      commit -m 'init airlock config candidate'
   '';
 
-  configStagingValidate = pkgs.writeShellScriptBin "nixome-config-staging-validate" ''
+  configStagingValidate = pkgs.writeShellScriptBin "airlock-config-staging-validate" ''
     set -eu
 
-    repo="''${NIXOME_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
-    validation_dir="''${NIXOME_CONFIG_VALIDATION_DIR:-${cfg.configValidationPath}}"
+    repo="''${AIRLOCK_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
+    validation_dir="''${AIRLOCK_CONFIG_VALIDATION_DIR:-${cfg.configValidationPath}}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
     if [ ! -d "$repo/.git" ]; then
-      printf 'missing Git repo at %s; run nixome-config-staging-init first\n' "$repo" >&2
+      printf 'missing Git repo at %s; run airlock-config-staging-init first\n' "$repo" >&2
       exit 1
     fi
 
@@ -912,7 +912,7 @@ let
       reason="$2"
 
       ${pkgs.jq}/bin/jq -c -n \
-        --arg schema "nixome.config-validation.v1" \
+        --arg schema "airlock.config-validation.v1" \
         --arg status "$status" \
         --arg reason "$reason" \
         --arg validator_role "config-staging-local" \
@@ -933,14 +933,14 @@ let
               details: $dirty
             },
             {
-              name: "nix-eval-nixome-topology",
+              name: "nix-eval-airlock-topology",
               status: "skipped",
-              attr: "nixome.topology"
+              attr: "airlock.topology"
             },
             {
-              name: "nix-eval-nixome-system",
+              name: "nix-eval-airlock-system",
               status: "skipped",
-              attr: "nixome.system"
+              attr: "airlock.system"
             },
             {
               name: "nix-flake-check-no-build",
@@ -957,14 +957,14 @@ let
       exit 1
     fi
 
-    if ! ${configStagingExportCandidate}/bin/nixome-config-staging-export-candidate > "$staged_tar" 2> "$validator_stderr"; then
+    if ! ${configStagingExportCandidate}/bin/airlock-config-staging-export-candidate > "$staged_tar" 2> "$validator_stderr"; then
       cat "$validator_stderr" >&2 || true
       write_dirty_validation failed "config staging export failed"
       exit 1
     fi
 
-    if ! NIXOME_CONFIG_VALIDATION_DIR="$validation_dir" \
-      ${configValidatorValidateCandidate}/bin/nixome-config-validator-validate-candidate \
+    if ! AIRLOCK_CONFIG_VALIDATION_DIR="$validation_dir" \
+      ${configValidatorValidateCandidate}/bin/airlock-config-validator-validate-candidate \
         < "$staged_tar" \
         > "$validated_tar" \
         2> "$validator_stderr"; then
@@ -999,13 +999,13 @@ let
         | .checks = (
             .checks
             | map(
-                if .name == "nix-eval-nixome-topology" then
+                if .name == "nix-eval-airlock-topology" then
                   .output = $topology_json
-                elif .name == "nixome-topology-json" then
+                elif .name == "airlock-topology-json" then
                   .path = $topology_json
-                elif .name == "nix-eval-nixome-system" then
+                elif .name == "nix-eval-airlock-system" then
                   .output = $system_json
-                elif .name == "nixome-system-json" then
+                elif .name == "airlock-system-json" then
                   .path = $system_json
                 else
                   .
@@ -1018,15 +1018,15 @@ let
     ${pkgs.jq}/bin/jq -e '.status == "passed"' "$result_file" >/dev/null
   '';
 
-  configStagingExportCandidate = pkgs.writeShellScriptBin "nixome-config-staging-export-candidate" ''
+  configStagingExportCandidate = pkgs.writeShellScriptBin "airlock-config-staging-export-candidate" ''
     set -eu
 
-    repo="''${NIXOME_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
+    repo="''${AIRLOCK_CONFIG_REPO_PATH:-${cfg.configRepoPath}}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
     if [ ! -d "$repo/.git" ]; then
-      printf 'missing Git repo at %s; run nixome-config-staging-init first\n' "$repo" >&2
+      printf 'missing Git repo at %s; run airlock-config-staging-init first\n' "$repo" >&2
       exit 1
     fi
 
@@ -1042,7 +1042,7 @@ let
     branch="$(${roleGit}/bin/git symbolic-ref --short HEAD)"
     ${roleGit}/bin/git bundle create "$tmpdir/config.bundle" HEAD "refs/heads/$branch" >/dev/null
     ${pkgs.jq}/bin/jq -c -n \
-      --arg schema "nixome.config-candidate.v1" \
+      --arg schema "airlock.config-candidate.v1" \
       --arg commit "$commit" \
       --arg branch "$branch" \
       --arg source_role "sys-config-staging" \
@@ -1052,22 +1052,22 @@ let
     exec ${pkgs.gnutar}/bin/tar -C "$tmpdir" -cf - config.bundle manifest.json
   '';
 
-  configCandidateExportService = pkgs.writeShellScript "nixome-config-candidate-export-qrexec" ''
-    exec ${configStagingExportCandidate}/bin/nixome-config-staging-export-candidate
+  configCandidateExportService = pkgs.writeShellScript "airlock-config-candidate-export-qrexec" ''
+    exec ${configStagingExportCandidate}/bin/airlock-config-staging-export-candidate
   '';
 
-  configValidatorInit = pkgs.writeShellScriptBin "nixome-config-validator-init" ''
+  configValidatorInit = pkgs.writeShellScriptBin "airlock-config-validator-init" ''
     set -eu
 
-    validation_dir="''${NIXOME_CONFIG_VALIDATION_DIR:-${cfg.configValidationPath}}"
+    validation_dir="''${AIRLOCK_CONFIG_VALIDATION_DIR:-${cfg.configValidationPath}}"
     mkdir -p "$validation_dir/logs"
     printf 'config validator workspace ready: %s\n' "$validation_dir"
   '';
 
-  configValidatorValidateCandidate = pkgs.writeShellScriptBin "nixome-config-validator-validate-candidate" ''
+  configValidatorValidateCandidate = pkgs.writeShellScriptBin "airlock-config-validator-validate-candidate" ''
     set -eu
 
-    validation_dir="''${NIXOME_CONFIG_VALIDATION_DIR:-${cfg.configValidationPath}}"
+    validation_dir="''${AIRLOCK_CONFIG_VALIDATION_DIR:-${cfg.configValidationPath}}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
@@ -1093,7 +1093,7 @@ let
 
     manifest_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/manifest.json")"
     manifest_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/manifest.json")"
-    [ "$manifest_schema" = "nixome.config-candidate.v1" ] || {
+    [ "$manifest_schema" = "airlock.config-candidate.v1" ] || {
       printf 'unsupported candidate manifest schema: %s\n' "$manifest_schema" >&2
       exit 1
     }
@@ -1171,7 +1171,7 @@ let
       flake_tests_status="''${18}"
 
       ${pkgs.jq}/bin/jq -c -n \
-        --arg schema "nixome.config-validation.v1" \
+        --arg schema "airlock.config-validation.v1" \
         --arg status "$status" \
         --arg reason "$reason" \
         --arg validator_role "sys-config-validator" \
@@ -1226,14 +1226,14 @@ let
               details: $dirty
             },
             {
-              name: "nix-eval-nixome-topology",
+              name: "nix-eval-airlock-topology",
               status: $topology_eval_status,
-              attr: "nixome.topology",
+              attr: "airlock.topology",
               output: $topology_path,
               log: $topology_eval_log
             },
             {
-              name: "nixome-topology-json",
+              name: "airlock-topology-json",
               status: $topology_status,
               path: $topology_path,
               log: $topology_log
@@ -1244,14 +1244,14 @@ let
               log: $template_refs_log
             },
             {
-              name: "nix-eval-nixome-system",
+              name: "nix-eval-airlock-system",
               status: $system_eval_status,
-              attr: "nixome.system",
+              attr: "airlock.system",
               output: $system_path,
               log: $system_eval_log
             },
             {
-              name: "nixome-system-json",
+              name: "airlock-system-json",
               status: $system_status,
               path: $system_path,
               log: $system_log
@@ -1360,7 +1360,7 @@ let
           name="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.name')"
           attr="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.ref.attr')"
           printf 'checking %s=%s attr=%s\n' "$kind" "$name" "$attr" >> "$log"
-          ${configNix}/bin/nixome-config-nix \
+          ${configNix}/bin/airlock-config-nix \
             --extra-experimental-features nix-command \
             --extra-experimental-features flakes \
             build \
@@ -1447,7 +1447,7 @@ let
             name="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.name')"
             attr="$(printf '%s' "$ref_json" | ${pkgs.jq}/bin/jq -r '.ref.attr')"
             printf 'checking system=%s attr=%s\n' "$name" "$attr" >> "$log"
-            ${configNix}/bin/nixome-config-nix \
+            ${configNix}/bin/airlock-config-nix \
               --extra-experimental-features nix-command \
               --extra-experimental-features flakes \
               build \
@@ -1499,7 +1499,7 @@ let
               printf 'direct dom0 profile source is not a directory: %s\n' "$source" >> "$log"
               exit 1
             }
-            [ -n "$activation_command" ] || activation_command="bin/nixome-dom0-profile-activate"
+            [ -n "$activation_command" ] || activation_command="bin/airlock-dom0-profile-activate"
             [ -x "$resolved/$activation_command" ] || {
               printf 'direct dom0 profile activation command is missing or not executable: %s/%s\n' "$source" "$activation_command" >> "$log"
               exit 1
@@ -1520,7 +1520,7 @@ let
     }
 
     if [ -f flake.nix ]; then
-      if ${configNix}/bin/nixome-config-nix \
+      if ${configNix}/bin/airlock-config-nix \
         --extra-experimental-features nix-command \
         --extra-experimental-features flakes \
         flake check \
@@ -1535,7 +1535,7 @@ let
       fi
       ${pkgs.coreutils}/bin/cp "$local_flake_log" "$flake_log"
       if [ "$flake_status" = passed ]; then
-        if ${configNix}/bin/nixome-config-nix \
+        if ${configNix}/bin/airlock-config-nix \
           --extra-experimental-features nix-command \
           --extra-experimental-features flakes \
           flake check \
@@ -1553,7 +1553,7 @@ let
         printf 'skipped because nix flake check --no-build did not pass\n' > "$flake_tests_log"
       fi
     else
-      printf 'no flake.nix present; cannot evaluate nixome.topology\n' > "$flake_log"
+      printf 'no flake.nix present; cannot evaluate airlock.topology\n' > "$flake_log"
       printf 'no flake.nix present; cannot run nix flake check\n' > "$flake_tests_log"
       flake_status=failed
       flake_tests_status=failed
@@ -1561,28 +1561,28 @@ let
     fi
 
     if [ -f flake.nix ]; then
-      if ${configNix}/bin/nixome-config-nix \
+      if ${configNix}/bin/airlock-config-nix \
         --extra-experimental-features nix-command \
         --extra-experimental-features flakes \
         eval \
         --impure \
         --offline \
         --no-write-lock-file \
-        .#nixome.topology --json > "$generated_topology" 2> "$local_topology_eval_log"; then
+        .#airlock.topology --json > "$generated_topology" 2> "$local_topology_eval_log"; then
         topology_eval_status=passed
       else
         topology_eval_status=failed
         : > "$generated_topology"
-        mark_failed "nix eval .#nixome.topology failed"
+        mark_failed "nix eval .#airlock.topology failed"
       fi
       ${pkgs.coreutils}/bin/cp "$local_topology_eval_log" "$topology_eval_log"
     else
-      printf 'no flake.nix present; cannot evaluate nixome.topology\n' > "$topology_eval_log"
+      printf 'no flake.nix present; cannot evaluate airlock.topology\n' > "$topology_eval_log"
     fi
 
     if [ "$topology_eval_status" = passed ]; then
       if ${pkgs.jq}/bin/jq -e '
-        .schema == "nixome.qubes-topology.v1" and
+        .schema == "airlock.qubes-topology.v1" and
         (.templates | type == "object") and
         (.kernels | type == "object") and
         (.prefs | type == "object") and
@@ -1593,7 +1593,7 @@ let
         topology_status=passed
       else
           topology_status=failed
-          mark_failed "evaluated nixome.topology JSON validation failed"
+          mark_failed "evaluated airlock.topology JSON validation failed"
         fi
         ${pkgs.coreutils}/bin/cp "$local_topology_log" "$topology_log"
 
@@ -1605,29 +1605,29 @@ let
         fi
         ${pkgs.coreutils}/bin/cp "$local_template_refs_log" "$template_refs_log"
       else
-        printf 'skipped because nix eval .#nixome.topology did not pass\n' > "$topology_log"
-        printf 'skipped because nix eval .#nixome.topology did not pass\n' > "$template_refs_log"
+        printf 'skipped because nix eval .#airlock.topology did not pass\n' > "$topology_log"
+        printf 'skipped because nix eval .#airlock.topology did not pass\n' > "$template_refs_log"
       fi
 
-      if ${configNix}/bin/nixome-config-nix \
+      if ${configNix}/bin/airlock-config-nix \
         --extra-experimental-features nix-command \
         --extra-experimental-features flakes \
         eval \
         --impure \
         --offline \
         --no-write-lock-file \
-        .#nixome.system --json > "$generated_system" 2> "$local_system_eval_log"; then
+        .#airlock.system --json > "$generated_system" 2> "$local_system_eval_log"; then
         system_eval_status=passed
       else
         system_eval_status=failed
         : > "$generated_system"
-        mark_failed "nix eval .#nixome.system failed"
+        mark_failed "nix eval .#airlock.system failed"
       fi
       ${pkgs.coreutils}/bin/cp "$local_system_eval_log" "$system_eval_log"
 
       if [ "$system_eval_status" = passed ]; then
         if ${pkgs.jq}/bin/jq -e '
-          .schema == "nixome.system.v1" and
+          .schema == "airlock.system.v1" and
           (.dom0 | type == "object") and
           (.plan | type == "object") and
           (.plan.live_actions | type == "array") and
@@ -1638,7 +1638,7 @@ let
           system_status=passed
         else
           system_status=failed
-          mark_failed "evaluated nixome.system JSON validation failed"
+          mark_failed "evaluated airlock.system JSON validation failed"
         fi
         ${pkgs.coreutils}/bin/cp "$local_system_log" "$system_log"
 
@@ -1650,8 +1650,8 @@ let
         fi
         ${pkgs.coreutils}/bin/cp "$local_system_refs_log" "$system_refs_log"
       else
-        printf 'skipped because nix eval .#nixome.system did not pass\n' > "$system_log"
-        printf 'skipped because nix eval .#nixome.system did not pass\n' > "$system_refs_log"
+        printf 'skipped because nix eval .#airlock.system did not pass\n' > "$system_log"
+        printf 'skipped because nix eval .#airlock.system did not pass\n' > "$system_refs_log"
       fi
 
     write_validation "$status" "$reason" "$topology_eval_status" "$topology_status" "topology.json" "$topology_eval_log" "$topology_log" "$template_refs_status" "$template_refs_log" "$system_eval_status" "$system_status" "system.json" "$system_eval_log" "$system_log" "$system_refs_status" "$system_refs_log" "$flake_status" "$flake_tests_status"
@@ -1665,11 +1665,11 @@ let
     exec ${pkgs.gnutar}/bin/tar -C "$tmpdir" -cf - config.bundle validation.json manifest.json topology.json system.json
   '';
 
-  configCandidateValidateService = pkgs.writeShellScript "nixome-config-candidate-validate-qrexec" ''
-    exec ${configValidatorValidateCandidate}/bin/nixome-config-validator-validate-candidate
+  configCandidateValidateService = pkgs.writeShellScript "airlock-config-candidate-validate-qrexec" ''
+    exec ${configValidatorValidateCandidate}/bin/airlock-config-validator-validate-candidate
   '';
 
-  configInputsImportService = pkgs.writeShellScript "nixome-config-inputs-import-qrexec" ''
+  configInputsImportService = pkgs.writeShellScript "airlock-config-inputs-import-qrexec" ''
     set -eu
 
     export PATH=${
@@ -1686,20 +1686,20 @@ let
     }
 
     import_user=${lib.escapeShellArg cfg.user}
-    target_root="''${NIXOME_CONFIG_INPUTS_PATH:-${cfg.configInputsPath}}"
-    store_root="''${NIXOME_CONFIG_NIX_STORE_ROOT:-${cfg.configNixStoreRoot}}"
+    target_root="''${AIRLOCK_CONFIG_INPUTS_PATH:-${cfg.configInputsPath}}"
+    store_root="''${AIRLOCK_CONFIG_NIX_STORE_ROOT:-${cfg.configNixStoreRoot}}"
     public_root=${lib.escapeShellArg configInputsPublicPath}
     case "$target_root" in
       /rw/*) ;;
       *)
-        printf 'NIXOME_CONFIG_INPUTS_PATH must live under /rw: %s\n' "$target_root" >&2
+        printf 'AIRLOCK_CONFIG_INPUTS_PATH must live under /rw: %s\n' "$target_root" >&2
         exit 1
         ;;
     esac
     case "$store_root" in
       /*) ;;
       *)
-        printf 'NIXOME_CONFIG_NIX_STORE_ROOT must be absolute: %s\n' "$store_root" >&2
+        printf 'AIRLOCK_CONFIG_NIX_STORE_ROOT must be absolute: %s\n' "$store_root" >&2
         exit 1
         ;;
     esac
@@ -1725,7 +1725,7 @@ let
       jq -r '.inputs | to_entries[] | [.key, .value] | @tsv' "$target_root/manifest.json" |
         while IFS="$(printf '\t')" read -r name input_path; do
           case "$name" in
-            nixpkgs|nixpkgs-libvirt_10_5|nixos-qubes|nixome-support) ;;
+            nixpkgs|nixpkgs-libvirt_10_5|nixos-qubes|airlock-support) ;;
             *)
               printf 'invalid config input name: %s\n' "$name" >&2
               exit 1
@@ -1789,9 +1789,9 @@ let
     }
 
     jq -e '
-      .schema == "nixome.config-inputs.v1" and
+      .schema == "airlock.config-inputs.v1" and
       (.inputs | keys | sort) == [
-        "nixome-support",
+        "airlock-support",
         "nixos-qubes",
         "nixpkgs",
         "nixpkgs-libvirt_10_5"
@@ -1834,10 +1834,10 @@ let
           USER=${lib.escapeShellArg cfg.user} \
           LOGNAME=${lib.escapeShellArg cfg.user} \
           XDG_CACHE_HOME=/home/${lib.escapeShellArg cfg.user}/.cache \
-          NIXOME_CONFIG_INPUTS_PATH=${lib.escapeShellArg configInputsPublicPath} \
-          NIXOME_CONFIG_REFRESH_INPUTS=1 \
+          AIRLOCK_CONFIG_INPUTS_PATH=${lib.escapeShellArg configInputsPublicPath} \
+          AIRLOCK_CONFIG_REFRESH_INPUTS=1 \
           PATH=${lib.escapeShellArg (roleInitPathFor "sys-config-staging")} \
-          ${configStagingInit}/bin/nixome-config-staging-init
+          ${configStagingInit}/bin/airlock-config-staging-init
       }
       if [ "$(${pkgs.coreutils}/bin/id -un)" = ${lib.escapeShellArg cfg.user} ]; then
         run_staging_init
@@ -1848,23 +1848,23 @@ let
             USER=${lib.escapeShellArg cfg.user} \
             LOGNAME=${lib.escapeShellArg cfg.user} \
             XDG_CACHE_HOME=/home/${lib.escapeShellArg cfg.user}/.cache \
-            NIXOME_CONFIG_INPUTS_PATH=${lib.escapeShellArg configInputsPublicPath} \
-            NIXOME_CONFIG_REFRESH_INPUTS=1 \
+            AIRLOCK_CONFIG_INPUTS_PATH=${lib.escapeShellArg configInputsPublicPath} \
+            AIRLOCK_CONFIG_REFRESH_INPUTS=1 \
             PATH=${lib.escapeShellArg (roleInitPathFor "sys-config-staging")} \
-            ${configStagingInit}/bin/nixome-config-staging-init
+            ${configStagingInit}/bin/airlock-config-staging-init
       fi
       [ -f ${lib.escapeShellArg cfg.configRepoPath}/flake.lock ] && locked=true
     ''}
 
-    printf '{"schema":"nixome.config-inputs-import.v1","status":"passed","path":"%s","flake_lock":%s}\n' \
+    printf '{"schema":"airlock.config-inputs-import.v1","status":"passed","path":"%s","flake_lock":%s}\n' \
       "$target_root" \
       "$locked"
   '';
 
-  configVaultArchiveCandidate = pkgs.writeShellScriptBin "nixome-config-vault-archive-candidate" ''
+  configVaultArchiveCandidate = pkgs.writeShellScriptBin "airlock-config-vault-archive-candidate" ''
     set -eu
 
-    repo="''${NIXOME_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
+    repo="''${AIRLOCK_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
@@ -1906,15 +1906,15 @@ let
     validation_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
     validation_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
     system_schema="$(${pkgs.jq}/bin/jq -r '.schema' "$tmpdir/system.json")"
-    [ "$manifest_schema" = "nixome.config-candidate.v1" ] || {
+    [ "$manifest_schema" = "airlock.config-candidate.v1" ] || {
       printf 'unsupported candidate manifest schema: %s\n' "$manifest_schema" >&2
       exit 1
     }
-    [ "$validation_schema" = "nixome.config-validation.v1" ] || {
+    [ "$validation_schema" = "airlock.config-validation.v1" ] || {
       printf 'unsupported validation schema: %s\n' "$validation_schema" >&2
       exit 1
     }
-    [ "$system_schema" = "nixome.system.v1" ] || {
+    [ "$system_schema" = "airlock.system.v1" ] || {
       printf 'unsupported system schema: %s\n' "$system_schema" >&2
       exit 1
     }
@@ -1949,7 +1949,7 @@ let
     ${pkgs.coreutils}/bin/rm -rf "$snapshot_tmp/.git"
 
     if [ ! -d "$repo/.git" ]; then
-      ${configVaultInit}/bin/nixome-config-vault-init >/dev/null
+      ${configVaultInit}/bin/airlock-config-vault-init >/dev/null
     fi
 
     archive_dir="$repo/candidates/$candidate_commit"
@@ -1966,7 +1966,7 @@ let
     ${pkgs.coreutils}/bin/rm -rf "$snapshot_dir"
     ${pkgs.coreutils}/bin/cp -a "$snapshot_tmp" "$snapshot_dir"
     ${pkgs.jq}/bin/jq -c -n \
-      --arg schema "nixome.config-candidate-archive-record.v1" \
+      --arg schema "airlock.config-candidate-archive-record.v1" \
       --arg candidate_commit "$candidate_commit" \
       --arg manifest_schema "$manifest_schema" \
       --arg validation_schema "$validation_schema" \
@@ -1993,15 +1993,15 @@ let
     archive_status=current
     if ! ${roleGit}/bin/git diff --cached --quiet; then
       ${roleGit}/bin/git \
-        -c user.name='Nixome dom0 archive' \
-        -c user.email='nixome-dom0@localhost' \
+        -c user.name='Airlock dom0 archive' \
+        -c user.email='airlock-dom0@localhost' \
         commit -m "archive candidate ''${candidate_commit:0:12}" >/dev/null
       archive_status=archived
     fi
 
     vault_commit="$(${roleGit}/bin/git rev-parse HEAD)"
     ${pkgs.jq}/bin/jq -c -n \
-      --arg schema "nixome.config-vault-archive.v1" \
+      --arg schema "airlock.config-vault-archive.v1" \
       --arg status "passed" \
       --arg archive_status "$archive_status" \
       --arg candidate_commit "$candidate_commit" \
@@ -2017,10 +2017,10 @@ let
       }'
   '';
 
-  configVaultArchiveDeployment = pkgs.writeShellScriptBin "nixome-config-vault-archive-deployment" ''
+  configVaultArchiveDeployment = pkgs.writeShellScriptBin "airlock-config-vault-archive-deployment" ''
     set -eu
 
-    repo="''${NIXOME_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
+    repo="''${AIRLOCK_CONFIG_ARCHIVE_PATH:-${cfg.configArchivePath}}"
     tmpdir="$(${pkgs.coreutils}/bin/mktemp -d)"
     trap '${pkgs.coreutils}/bin/rm -rf "$tmpdir"' EXIT
 
@@ -2117,7 +2117,7 @@ let
     validation_status="$(${pkgs.jq}/bin/jq -r '.status' "$tmpdir/validation.json")"
     validation_commit="$(${pkgs.jq}/bin/jq -r '.commit' "$tmpdir/validation.json")"
 
-    [ "$deployment_schema" = "nixome.config-deployment.v1" ] || {
+    [ "$deployment_schema" = "airlock.config-deployment.v1" ] || {
       printf 'unsupported deployment schema: %s\n' "$deployment_schema" >&2
       exit 1
     }
@@ -2138,11 +2138,11 @@ let
       printf 'deployment record is missing candidate_commit\n' >&2
       exit 1
     }
-    [ "$apply_schema" = "nixome.config-apply.v1" ] || {
+    [ "$apply_schema" = "airlock.config-apply.v1" ] || {
       printf 'unsupported apply schema: %s\n' "$apply_schema" >&2
       exit 1
     }
-    [ "$archive_schema" = "nixome.config-archive.v1" ] || {
+    [ "$archive_schema" = "airlock.config-archive.v1" ] || {
       printf 'unsupported archive schema: %s\n' "$archive_schema" >&2
       exit 1
     }
@@ -2150,43 +2150,43 @@ let
       printf 'candidate archive did not pass: %s\n' "$archive_status" >&2
       exit 1
     }
-    [ "$setup_schema" = "nixome.setup-config.v1" ] || {
+    [ "$setup_schema" = "airlock.setup-config.v1" ] || {
       printf 'unsupported setup schema: %s\n' "$setup_schema" >&2
       exit 1
     }
-    [ "$topology_schema" = "nixome.qubes-topology.v1" ] || {
+    [ "$topology_schema" = "airlock.qubes-topology.v1" ] || {
       printf 'unsupported topology schema: %s\n' "$topology_schema" >&2
       exit 1
     }
-    [ "$validated_topology_schema" = "nixome.qubes-topology.v1" ] || {
+    [ "$validated_topology_schema" = "airlock.qubes-topology.v1" ] || {
       printf 'unsupported validated topology schema: %s\n' "$validated_topology_schema" >&2
       exit 1
     }
-    [ "$template_builds_schema" = "nixome.template-builds.v1" ] || {
+    [ "$template_builds_schema" = "airlock.template-builds.v1" ] || {
       printf 'unsupported template builds schema: %s\n' "$template_builds_schema" >&2
       exit 1
     }
-    [ "$nix_domain_builds_schema" = "nixome.nix-domain-builds.v1" ] || {
+    [ "$nix_domain_builds_schema" = "airlock.nix-domain-builds.v1" ] || {
       printf 'unsupported Nix-native domain builds schema: %s\n' "$nix_domain_builds_schema" >&2
       exit 1
     }
-    [ "$nix_domain_materializations_schema" = "nixome.nix-domain-materializations.v1" ] || {
+    [ "$nix_domain_materializations_schema" = "airlock.nix-domain-materializations.v1" ] || {
       printf 'unsupported Nix-native domain materializations schema: %s\n' "$nix_domain_materializations_schema" >&2
       exit 1
     }
-    [ "$unsupported_domain_backends_schema" = "nixome.unsupported-domain-backends.v1" ] || {
+    [ "$unsupported_domain_backends_schema" = "airlock.unsupported-domain-backends.v1" ] || {
       printf 'unsupported domain backend report schema: %s\n' "$unsupported_domain_backends_schema" >&2
       exit 1
     }
-    [ "$system_schema" = "nixome.system.v1" ] || {
+    [ "$system_schema" = "airlock.system.v1" ] || {
       printf 'unsupported system schema: %s\n' "$system_schema" >&2
       exit 1
     }
-    [ "$resolved_system_schema" = "nixome.system.v1" ] || {
+    [ "$resolved_system_schema" = "airlock.system.v1" ] || {
       printf 'unsupported resolved system schema: %s\n' "$resolved_system_schema" >&2
       exit 1
     }
-    [ "$system_apply_schema" = "nixome.system-apply.v1" ] || {
+    [ "$system_apply_schema" = "airlock.system-apply.v1" ] || {
       printf 'unsupported system apply schema: %s\n' "$system_apply_schema" >&2
       exit 1
     }
@@ -2194,15 +2194,15 @@ let
       printf 'system apply did not pass: %s\n' "$system_apply_status" >&2
       exit 1
     }
-    [ "$system_builds_schema" = "nixome.system-builds.v1" ] || {
+    [ "$system_builds_schema" = "airlock.system-builds.v1" ] || {
       printf 'unsupported system builds schema: %s\n' "$system_builds_schema" >&2
       exit 1
     }
-    [ "$systemd_actions_schema" = "nixome.systemd-actions.v1" ] || {
+    [ "$systemd_actions_schema" = "airlock.systemd-actions.v1" ] || {
       printf 'unsupported systemd actions schema: %s\n' "$systemd_actions_schema" >&2
       exit 1
     }
-    [ "$validation_schema" = "nixome.config-validation.v1" ] || {
+    [ "$validation_schema" = "airlock.config-validation.v1" ] || {
       printf 'unsupported validation schema: %s\n' "$validation_schema" >&2
       exit 1
     }
@@ -2230,7 +2230,7 @@ let
     }
 
     if [ ! -d "$repo/.git" ]; then
-      ${configVaultInit}/bin/nixome-config-vault-init >/dev/null
+      ${configVaultInit}/bin/airlock-config-vault-init >/dev/null
     fi
 
     [ -d "$repo/candidates/$candidate_commit" ] || {
@@ -2297,13 +2297,13 @@ let
       ${roleGit}/bin/git add latest-deployment latest-current current
     fi
     ${roleGit}/bin/git \
-      -c user.name='Nixome dom0 archive' \
-      -c user.email='nixome-dom0@localhost' \
+      -c user.name='Airlock dom0 archive' \
+      -c user.email='airlock-dom0@localhost' \
       commit -m "record deployment $deployment_id" >/dev/null
 
     vault_commit="$(${roleGit}/bin/git rev-parse HEAD)"
     ${pkgs.jq}/bin/jq -c -n \
-      --arg schema "nixome.config-vault-deployment.v1" \
+      --arg schema "airlock.config-vault-deployment.v1" \
       --arg status "passed" \
       --arg deployment_status "$deployment_status" \
       --arg deployment_id "$deployment_id" \
@@ -2321,15 +2321,15 @@ let
       }'
   '';
 
-  configArchiveService = pkgs.writeShellScript "nixome-config-archive-candidate-qrexec" ''
-    exec ${configVaultArchiveCandidate}/bin/nixome-config-vault-archive-candidate
+  configArchiveService = pkgs.writeShellScript "airlock-config-archive-candidate-qrexec" ''
+    exec ${configVaultArchiveCandidate}/bin/airlock-config-vault-archive-candidate
   '';
 
-  configDeploymentArchiveService = pkgs.writeShellScript "nixome-config-archive-deployment-qrexec" ''
-    exec ${configVaultArchiveDeployment}/bin/nixome-config-vault-archive-deployment
+  configDeploymentArchiveService = pkgs.writeShellScript "airlock-config-archive-deployment-qrexec" ''
+    exec ${configVaultArchiveDeployment}/bin/airlock-config-vault-archive-deployment
   '';
 
-  nixStoreRuntimeCheckService = pkgs.writeShellScript "nixome-nix-store-runtime-check-qrexec" ''
+  nixStoreRuntimeCheckService = pkgs.writeShellScript "airlock-nix-store-runtime-check-qrexec" ''
     set -eu
 
     export PATH=${
@@ -2343,32 +2343,32 @@ let
 
     system_path="$(
       tr ' ' '\n' < /proc/cmdline |
-        sed -n 's|^nixome.system=||p' |
+        sed -n 's|^airlock.system=||p' |
         head -n 1
     )"
     store_device="$(
       tr ' ' '\n' < /proc/cmdline |
-        sed -n 's|^nixome.storedev=||p' |
+        sed -n 's|^airlock.storedev=||p' |
         head -n 1
     )"
     store_format="$(
       tr ' ' '\n' < /proc/cmdline |
-        sed -n 's|^nixome.storefmt=||p' |
+        sed -n 's|^airlock.storefmt=||p' |
         head -n 1
     )"
     store_blob_device="$(
       tr ' ' '\n' < /proc/cmdline |
-        sed -n 's|^nixome.storeblobdev=||p' |
+        sed -n 's|^airlock.storeblobdev=||p' |
         head -n 1
     )"
     [ -n "$store_format" ] || store_format="erofs"
 
     [ -n "$system_path" ] || {
-      echo "missing nixome.system kernel option" >&2
+      echo "missing airlock.system kernel option" >&2
       exit 1
     }
     [ -n "$store_device" ] || {
-      echo "missing nixome.storedev kernel option" >&2
+      echo "missing airlock.storedev kernel option" >&2
       exit 1
     }
     [ -x "$system_path/init" ] || {
@@ -2403,8 +2403,8 @@ let
         ;;
     esac
 
-    write_probe="/nix/store/.nixome-runtime-write-probe-$$"
-    if touch "$write_probe" 2>/tmp/nixome-runtime-write-probe.err; then
+    write_probe="/nix/store/.airlock-runtime-write-probe-$$"
+    if touch "$write_probe" 2>/tmp/airlock-runtime-write-probe.err; then
       rm -f "$write_probe"
       echo "/nix/store accepted a write probe" >&2
       exit 1
@@ -2417,12 +2417,12 @@ let
     printf 'store_options=%s\n' "$mount_options"
   '';
 
-  policyProbeService = pkgs.writeShellScript "nixome-policy-probe-qrexec" ''
+  policyProbeService = pkgs.writeShellScript "airlock-policy-probe-qrexec" ''
     set -eu
 
     role=${lib.escapeShellArg cfg.role}
-    qubesdb_read="''${NIXOME_QUBESDB_READ:-${pkgs.qubes-core-qubesdb}/bin/qubesdb-read}"
-    qdb_role="$("$qubesdb_read" /features/nixome-role 2>/dev/null || true)"
+    qubesdb_read="''${AIRLOCK_QUBESDB_READ:-${pkgs.qubes-core-qubesdb}/bin/qubesdb-read}"
+    qdb_role="$("$qubesdb_read" /features/airlock-role 2>/dev/null || true)"
     vm_name="$("$qubesdb_read" /name 2>/dev/null || true)"
 
     case "$qdb_role" in
@@ -2437,15 +2437,15 @@ let
       sys-config-validator) role=sys-config-validator ;;
     esac
 
-    printf 'nixome-policy-probe role=%s user=%s\n' "$role" "$(${pkgs.coreutils}/bin/whoami)"
+    printf 'airlock-policy-probe role=%s user=%s\n' "$role" "$(${pkgs.coreutils}/bin/whoami)"
   '';
 
-  vmShellService = pkgs.writeShellScript "nixome-qubes-vmshell" ''
+  vmShellService = pkgs.writeShellScript "airlock-qubes-vmshell" ''
     export PATH=/run/current-system/sw/bin:/run/wrappers/bin:/bin:/usr/bin
     exec ${pkgs.runtimeShell}
   '';
 
-  getAppmenusService = pkgs.writeShellScript "nixome-qubes-get-appmenus" ''
+  getAppmenusService = pkgs.writeShellScript "airlock-qubes-get-appmenus" ''
     # Keep this close to upstream qubes.GetAppmenus, but use NixOS paths.
     if [ -r /etc/profile ]; then
       # shellcheck disable=SC1091
@@ -2538,8 +2538,8 @@ in
     ./sys-gui-guest.nix
   ];
 
-  options.nixome.qubeGuest = {
-    enable = lib.mkEnableOption "a Nixome NixOS Qubes guest domain";
+  options.airlock.qubeGuest = {
+    enable = lib.mkEnableOption "a Airlock NixOS Qubes guest domain";
 
     role = lib.mkOption {
       type = lib.types.enum [
@@ -2553,7 +2553,7 @@ in
         "sys-net"
       ];
       default = "base";
-      description = "Nixome role-specific userspace to place in the guest domain.";
+      description = "Airlock role-specific userspace to place in the guest domain.";
     };
 
     user = lib.mkOption {
@@ -2570,31 +2570,31 @@ in
 
     configRepoPath = lib.mkOption {
       type = lib.types.str;
-      default = "/home/${cfg.user}/nixome-config";
+      default = "/home/${cfg.user}/airlock-config";
       description = "Editable config repository path in the sys-config-staging role.";
     };
 
     configValidationPath = lib.mkOption {
       type = lib.types.str;
-      default = "/home/${cfg.user}/nixome-config-validation";
+      default = "/home/${cfg.user}/airlock-config-validation";
       description = "Directory for sys-config-staging and sys-config-validator validation results.";
     };
 
     configArchivePath = lib.mkOption {
       type = lib.types.str;
-      default = "/home/${cfg.user}/nixome-config-vault";
+      default = "/home/${cfg.user}/airlock-config-vault";
       description = "Archived candidate repository path in the sys-config-vault role.";
     };
 
     configNixStoreRoot = lib.mkOption {
       type = lib.types.str;
-      default = "/rw/home/${cfg.user}/nixome-config-nix-root";
+      default = "/rw/home/${cfg.user}/airlock-config-nix-root";
       description = "Private writable chroot Nix store root for config validation in read-only-store guests.";
     };
 
     configInputsPath = lib.mkOption {
       type = lib.types.str;
-      default = "/rw/home/${cfg.user}/nixome-config-inputs";
+      default = "/rw/home/${cfg.user}/airlock-config-inputs";
       description = "Persistent path where dom0 imports offline config flake config inputs.";
     };
 
@@ -2612,45 +2612,45 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    nixome.sysGuiGuest.enable = hasSysGuiRole;
+    airlock.sysGuiGuest.enable = hasSysGuiRole;
     assertions = [
       {
         assertion = cfg.user != "";
-        message = "nixome.qubeGuest.user must not be empty.";
+        message = "airlock.qubeGuest.user must not be empty.";
       }
       {
         assertion = lib.hasPrefix "/home/" cfg.configRepoPath;
-        message = "nixome.qubeGuest.configRepoPath should live under /home for Qubes private storage.";
+        message = "airlock.qubeGuest.configRepoPath should live under /home for Qubes private storage.";
       }
       {
         assertion = lib.hasPrefix "/home/" cfg.configValidationPath;
-        message = "nixome.qubeGuest.configValidationPath should live under /home for Qubes private storage.";
+        message = "airlock.qubeGuest.configValidationPath should live under /home for Qubes private storage.";
       }
       {
         assertion = lib.hasPrefix "/home/" cfg.configArchivePath;
-        message = "nixome.qubeGuest.configArchivePath should live under /home for Qubes private storage.";
+        message = "airlock.qubeGuest.configArchivePath should live under /home for Qubes private storage.";
       }
       {
         assertion = lib.hasPrefix "/rw/" cfg.configNixStoreRoot;
-        message = "nixome.qubeGuest.configNixStoreRoot should live under /rw for Qubes private storage.";
+        message = "airlock.qubeGuest.configNixStoreRoot should live under /rw for Qubes private storage.";
       }
       {
         assertion = lib.hasPrefix "/rw/" cfg.configInputsPath;
-        message = "nixome.qubeGuest.configInputsPath should live under /rw for Qubes private storage.";
+        message = "airlock.qubeGuest.configInputsPath should live under /rw for Qubes private storage.";
       }
       {
         assertion = lib.hasPrefix "/home/" cfg.codexHome;
-        message = "nixome.qubeGuest.codexHome should live under /home for Qubes private storage.";
+        message = "airlock.qubeGuest.codexHome should live under /home for Qubes private storage.";
       }
       {
         assertion = lib.all (path: lib.hasPrefix "/home/" path) devPersistentPaths;
-        message = "nixome.qubeGuest.devPersistentPaths entries should live under /home for Qubes private storage.";
+        message = "airlock.qubeGuest.devPersistentPaths entries should live under /home for Qubes private storage.";
       }
     ];
 
     boot.loader.grub.enable = false;
     boot.initrd.systemd.enable = lib.mkDefault true;
-    nixome.minimalGuest.nix.enable = lib.mkDefault hasPrivateNixRole;
+    airlock.minimalGuest.nix.enable = lib.mkDefault hasPrivateNixRole;
     boot.initrd.availableKernelModules = [
       "xen-blkfront"
       "xen-fbfront"
@@ -2682,7 +2682,7 @@ in
       fsType = "ext4";
     };
 
-    networking.hostName = lib.mkDefault "nixome-qube";
+    networking.hostName = lib.mkDefault "airlock-qube";
     networking.useDHCP = lib.mkDefault (!hasNetworkProviderRole);
     networking.firewall.enable = lib.mkIf hasNetworkProviderRole false;
     networking.networkmanager.enable = lib.mkIf hasSysNetRole true;
@@ -2722,7 +2722,7 @@ in
       pkgs.qubes-linux-utils
     ];
 
-    systemd.tmpfiles.settings."10-nixome-qubes-guest" = {
+    systemd.tmpfiles.settings."10-airlock-qubes-guest" = {
       "/run/qubes".d = {
         user = "root";
         group = "qubes";
@@ -2765,17 +2765,17 @@ in
       unitConfig.DefaultDependencies = false;
     };
 
-    systemd.services.nixome-qubes-db-diagnostics = {
+    systemd.services.airlock-qubes-db-diagnostics = {
       description = "Print QubesDB guest diagnostics to the console";
       path = guestDiagnosticsPath;
       script = ''
         set +e
-        echo "nixome guest diagnostics: qubes-db.service failed"
+        echo "airlock guest diagnostics: qubes-db.service failed"
         systemctl --no-pager status qubes-db.service
         journalctl -b --no-pager -u qubes-db.service -n 120
-        echo "nixome guest diagnostics: Xen device nodes"
+        echo "airlock guest diagnostics: Xen device nodes"
         ls -l /dev/xen /proc/xen
-        echo "nixome guest diagnostics: loaded Xen modules"
+        echo "airlock guest diagnostics: loaded Xen modules"
         lsmod | grep -E '(^xen|evtchn|gnt|privcmd)'
       '';
       serviceConfig = {
@@ -2785,15 +2785,15 @@ in
       };
     };
 
-    systemd.services.nixome-qubes-qrexec-diagnostics = {
+    systemd.services.airlock-qubes-qrexec-diagnostics = {
       description = "Print qrexec guest diagnostics to the console";
       path = guestDiagnosticsPath;
       script = ''
         set +e
-        echo "nixome guest diagnostics: qubes-qrexec-agent.service failed"
+        echo "airlock guest diagnostics: qubes-qrexec-agent.service failed"
         systemctl --no-pager status qubes-qrexec-agent.service
         journalctl -b --no-pager -u qubes-qrexec-agent.service -n 120
-        echo "nixome guest diagnostics: QubesDB service state"
+        echo "airlock guest diagnostics: QubesDB service state"
         systemctl --no-pager status qubes-db.service
       '';
       serviceConfig = {
@@ -2803,18 +2803,18 @@ in
       };
     };
 
-    systemd.services.nixome-qubes-rw-init-diagnostics = {
+    systemd.services.airlock-qubes-rw-init-diagnostics = {
       description = "Print Qubes private storage diagnostics to the console";
       path = guestDiagnosticsPath;
       script = ''
         set +e
-        echo "nixome guest diagnostics: nixome-qubes-rw-init.service failed"
-        systemctl --no-pager status nixome-qubes-rw-init.service
-        journalctl -b --no-pager -u nixome-qubes-rw-init.service -n 120
-        echo "nixome guest diagnostics: filesystem state"
+        echo "airlock guest diagnostics: airlock-qubes-rw-init.service failed"
+        systemctl --no-pager status airlock-qubes-rw-init.service
+        journalctl -b --no-pager -u airlock-qubes-rw-init.service -n 120
+        echo "airlock guest diagnostics: filesystem state"
         ls -ld /rw /home /usr/local /var /var/run /run/qubes /var/lib /var/lib/qubes
         findmnt / /rw /home /usr/local
-        echo "nixome guest diagnostics: block devices"
+        echo "airlock guest diagnostics: block devices"
         lsblk -o NAME,MAJ:MIN,SIZE,FSTYPE,MOUNTPOINTS
         blkid /dev/xvdb
       '';
@@ -2825,7 +2825,7 @@ in
       };
     };
 
-    systemd.services.nixome-qubes-rw-init = {
+    systemd.services.airlock-qubes-rw-init = {
       description = "Initialize Qubes private storage mounts for NixOS guests";
       wantedBy = [ "multi-user.target" ];
       wants = [ "dev-xvdb.device" ];
@@ -2877,17 +2877,17 @@ in
         Type = "oneshot";
         RemainAfterExit = true;
       };
-      unitConfig.OnFailure = [ "nixome-qubes-rw-init-diagnostics.service" ];
+      unitConfig.OnFailure = [ "airlock-qubes-rw-init-diagnostics.service" ];
     };
 
-    systemd.services.nixome-config-inputs-mount = lib.mkIf hasConfigInputsImportRole {
-      description = "Expose imported Nixome config inputs";
+    systemd.services.airlock-config-inputs-mount = lib.mkIf hasConfigInputsImportRole {
+      description = "Expose imported Airlock config inputs";
       wantedBy = [ "multi-user.target" ];
-      wants = [ "nixome-qubes-rw-init.service" ];
-      requires = [ "nixome-qubes-rw-init.service" ];
-      after = [ "nixome-qubes-rw-init.service" ];
+      wants = [ "airlock-qubes-rw-init.service" ];
+      requires = [ "airlock-qubes-rw-init.service" ];
+      after = [ "airlock-qubes-rw-init.service" ];
       before = [
-        "nixome-config-guest-init.service"
+        "airlock-config-guest-init.service"
         "qubes-qrexec-agent.service"
       ];
       path = [
@@ -2910,7 +2910,7 @@ in
         jq -r '.inputs | to_entries[] | [.key, .value] | @tsv' "$manifest" |
           while IFS="$(printf '\t')" read -r name input_path; do
             case "$name" in
-              nixpkgs|nixpkgs-libvirt_10_5|nixos-qubes|nixome-support) ;;
+              nixpkgs|nixpkgs-libvirt_10_5|nixos-qubes|airlock-support) ;;
               *)
                 printf 'invalid config input name: %s\n' "$name" >&2
                 exit 1
@@ -2940,21 +2940,21 @@ in
       };
     };
 
-    systemd.services.nixome-config-guest-init-diagnostics = lib.mkIf hasConfigRole {
-      description = "Print Nixome config guest diagnostics to the console";
+    systemd.services.airlock-config-guest-init-diagnostics = lib.mkIf hasConfigRole {
+      description = "Print Airlock config guest diagnostics to the console";
       path = guestDiagnosticsPath;
       script = ''
         set +e
-        echo "nixome guest diagnostics: nixome-config-guest-init.service failed"
-        systemctl --no-pager status nixome-config-guest-init.service
-        journalctl -b --no-pager -u nixome-config-guest-init.service -n 160
-        echo "nixome guest diagnostics: Qubes identity"
+        echo "airlock guest diagnostics: airlock-config-guest-init.service failed"
+        systemctl --no-pager status airlock-config-guest-init.service
+        journalctl -b --no-pager -u airlock-config-guest-init.service -n 160
+        echo "airlock guest diagnostics: Qubes identity"
         qubesdb-read /name
-        qubesdb-read /features/nixome-role
-        echo "nixome guest diagnostics: filesystem state"
+        qubesdb-read /features/airlock-role
+        echo "airlock guest diagnostics: filesystem state"
         findmnt / /rw /home /nix /nix/store
         ls -ld /rw /rw/home /home /home/${cfg.user} /nix /nix/store
-        echo "nixome guest diagnostics: config paths"
+        echo "airlock guest diagnostics: config paths"
         find /home/${cfg.user} -maxdepth 3 -mindepth 1 -print
       '';
       serviceConfig = {
@@ -2964,22 +2964,22 @@ in
       };
     };
 
-    systemd.services.nixome-config-guest-init = lib.mkIf hasConfigRole {
-      description = "Initialize Nixome config repositories in Qubes private storage";
+    systemd.services.airlock-config-guest-init = lib.mkIf hasConfigRole {
+      description = "Initialize Airlock config repositories in Qubes private storage";
       wantedBy = [ "multi-user.target" ];
       wants = [
-        "nixome-qubes-rw-init.service"
+        "airlock-qubes-rw-init.service"
       ]
-      ++ lib.optionals hasConfigInputsImportRole [ "nixome-config-inputs-mount.service" ];
+      ++ lib.optionals hasConfigInputsImportRole [ "airlock-config-inputs-mount.service" ];
       requires = [
-        "nixome-qubes-rw-init.service"
+        "airlock-qubes-rw-init.service"
       ]
-      ++ lib.optionals hasConfigInputsImportRole [ "nixome-config-inputs-mount.service" ];
+      ++ lib.optionals hasConfigInputsImportRole [ "airlock-config-inputs-mount.service" ];
       after = [
-        "nixome-qubes-rw-init.service"
+        "airlock-qubes-rw-init.service"
         "qubes-db.service"
       ]
-      ++ lib.optionals hasConfigInputsImportRole [ "nixome-config-inputs-mount.service" ];
+      ++ lib.optionals hasConfigInputsImportRole [ "airlock-config-inputs-mount.service" ];
       before = [ "qubes-qrexec-agent.service" ];
       path = [
         pkgs.coreutils
@@ -2991,17 +2991,17 @@ in
 
         expected_role=${lib.escapeShellArg cfg.role}
         vm_name="$(qubesdb-read /name 2>/dev/null || true)"
-        qdb_role="$(qubesdb-read /features/nixome-role 2>/dev/null || true)"
+        qdb_role="$(qubesdb-read /features/airlock-role 2>/dev/null || true)"
 
         case "$qdb_role" in
           "") ;;
           "$expected_role") ;;
           sys-config-vault|sys-config-staging|sys-config-validator)
-            echo "nixome config guest init: QubesDB role mismatch: expected=$expected_role actual=$qdb_role vm=$vm_name" >&2
+            echo "airlock config guest init: QubesDB role mismatch: expected=$expected_role actual=$qdb_role vm=$vm_name" >&2
             exit 1
             ;;
           *)
-            echo "nixome config guest init: unsupported QubesDB role: expected=$expected_role actual=$qdb_role vm=$vm_name" >&2
+            echo "airlock config guest init: unsupported QubesDB role: expected=$expected_role actual=$qdb_role vm=$vm_name" >&2
             exit 1
             ;;
         esac
@@ -3009,7 +3009,7 @@ in
         case "$vm_name" in
           ""|"$expected_role") ;;
           sys-config-vault|sys-config-staging|sys-config-validator)
-            echo "nixome config guest init: VM name mismatch: expected=$expected_role actual=$vm_name qdb_role=$qdb_role" >&2
+            echo "airlock config guest init: VM name mismatch: expected=$expected_role actual=$vm_name qdb_role=$qdb_role" >&2
             exit 1
             ;;
           *) ;;
@@ -3032,15 +3032,15 @@ in
         Type = "oneshot";
         RemainAfterExit = true;
       };
-      unitConfig.OnFailure = [ "nixome-config-guest-init-diagnostics.service" ];
+      unitConfig.OnFailure = [ "airlock-config-guest-init-diagnostics.service" ];
     };
 
-    systemd.services.nixome-dev-guest-init = lib.mkIf hasDevRole {
-      description = "Initialize persistent Nixome development state";
+    systemd.services.airlock-dev-guest-init = lib.mkIf hasDevRole {
+      description = "Initialize persistent Airlock development state";
       wantedBy = [ "multi-user.target" ];
-      wants = [ "nixome-qubes-rw-init.service" ];
-      requires = [ "nixome-qubes-rw-init.service" ];
-      after = [ "nixome-qubes-rw-init.service" ];
+      wants = [ "airlock-qubes-rw-init.service" ];
+      requires = [ "airlock-qubes-rw-init.service" ];
+      after = [ "airlock-qubes-rw-init.service" ];
       before = [ "qubes-qrexec-agent.service" ];
       path = [
         pkgs.coreutils
@@ -3069,11 +3069,11 @@ in
       };
     };
 
-    systemd.services.nixome-sys-net-networkmanager-state = lib.mkIf hasSysNetRole {
+    systemd.services.airlock-sys-net-networkmanager-state = lib.mkIf hasSysNetRole {
       description = "Prepare persistent NetworkManager state for sys-net";
-      wants = [ "nixome-qubes-rw-init.service" ];
-      requires = [ "nixome-qubes-rw-init.service" ];
-      after = [ "nixome-qubes-rw-init.service" ];
+      wants = [ "airlock-qubes-rw-init.service" ];
+      requires = [ "airlock-qubes-rw-init.service" ];
+      after = [ "airlock-qubes-rw-init.service" ];
       before = [ "NetworkManager.service" ];
       path = [
         pkgs.coreutils
@@ -3108,12 +3108,12 @@ in
 
     systemd.services.NetworkManager = lib.mkIf hasSysNetRole {
       wants = [
-        "nixome-sys-net-networkmanager-state.service"
+        "airlock-sys-net-networkmanager-state.service"
         "qubes-sysinit.service"
       ];
-      requires = [ "nixome-sys-net-networkmanager-state.service" ];
+      requires = [ "airlock-sys-net-networkmanager-state.service" ];
       after = [
-        "nixome-sys-net-networkmanager-state.service"
+        "airlock-sys-net-networkmanager-state.service"
         "qubes-sysinit.service"
       ];
       unitConfig.ConditionPathExists = "/run/qubes-service/network-manager";
@@ -3233,31 +3233,31 @@ in
       ];
       requires = [ "systemd-tmpfiles-setup.service" ];
       overrideStrategy = "asDropin";
-      unitConfig.OnFailure = [ "nixome-qubes-db-diagnostics.service" ];
+      unitConfig.OnFailure = [ "airlock-qubes-db-diagnostics.service" ];
     };
 
     systemd.services.qubes-qrexec-agent =
       let
         roleInitDeps =
-          lib.optional hasConfigRole "nixome-config-guest-init.service"
-          ++ lib.optional hasDevRole "nixome-dev-guest-init.service";
+          lib.optional hasConfigRole "airlock-config-guest-init.service"
+          ++ lib.optional hasDevRole "airlock-dev-guest-init.service";
         normalAfter = [
-          "nixome-qubes-rw-init.service"
+          "airlock-qubes-rw-init.service"
           "systemd-user-sessions.service"
         ]
         ++ roleInitDeps;
         networkProviderAfter = [
           "xendriverdomain.service"
-          "nixome-qubes-rw-init.service"
+          "airlock-qubes-rw-init.service"
         ]
         ++ roleInitDeps;
       in
       {
         enable = true;
         wantedBy = [ "multi-user.target" ];
-        wants = [ "nixome-qubes-rw-init.service" ];
+        wants = [ "airlock-qubes-rw-init.service" ];
         requires = [
-          "nixome-qubes-rw-init.service"
+          "airlock-qubes-rw-init.service"
         ]
         ++ roleInitDeps;
         after = if hasNetworkProviderRole then lib.mkForce networkProviderAfter else normalAfter;
@@ -3265,7 +3265,7 @@ in
         aliases = [ "qubes-core-agent.service" ];
         overrideStrategy = "asDropin";
         unitConfig = {
-          OnFailure = [ "nixome-qubes-qrexec-diagnostics.service" ];
+          OnFailure = [ "airlock-qubes-qrexec-diagnostics.service" ];
         };
       };
 
@@ -3345,95 +3345,95 @@ in
       mode = "0444";
     };
 
-    environment.etc."qubes-rpc/nixome.Config.CandidateExport" = lib.mkIf hasConfigStagingRole {
+    environment.etc."qubes-rpc/airlock.Config.CandidateExport" = lib.mkIf hasConfigStagingRole {
       source = configCandidateExportService;
       mode = "0555";
     };
 
-    environment.etc."qubes-rpc/nixome.Config.ImportCurrent" = lib.mkIf hasConfigStagingRole {
+    environment.etc."qubes-rpc/airlock.Config.ImportCurrent" = lib.mkIf hasConfigStagingRole {
       source = configCurrentImportService;
       mode = "0555";
     };
 
-    environment.etc."nixome/guest-tools/nixome-config-staging-validate" =
+    environment.etc."airlock/guest-tools/airlock-config-staging-validate" =
       lib.mkIf hasConfigStagingRole
         {
           source = configStagingValidate;
         };
 
-    environment.etc."qubes/rpc-config/nixome.Config.CandidateExport" = lib.mkIf hasConfigStagingRole {
+    environment.etc."qubes/rpc-config/airlock.Config.CandidateExport" = lib.mkIf hasConfigStagingRole {
       text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };
 
-    environment.etc."qubes/rpc-config/nixome.Config.ImportCurrent" = lib.mkIf hasConfigStagingRole {
+    environment.etc."qubes/rpc-config/airlock.Config.ImportCurrent" = lib.mkIf hasConfigStagingRole {
       text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };
 
-    environment.etc."qubes-rpc/nixome.Config.ValidateCandidate" = lib.mkIf hasConfigValidatorRole {
+    environment.etc."qubes-rpc/airlock.Config.ValidateCandidate" = lib.mkIf hasConfigValidatorRole {
       source = configCandidateValidateService;
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/nixome.Config.ValidateCandidate" =
+    environment.etc."qubes/rpc-config/airlock.Config.ValidateCandidate" =
       lib.mkIf hasConfigValidatorRole
         {
           text = "force-user='${cfg.user}'\n";
           mode = "0444";
         };
 
-    environment.etc."qubes-rpc/nixome.Config.InputsImport" = lib.mkIf hasConfigInputsImportRole {
+    environment.etc."qubes-rpc/airlock.Config.InputsImport" = lib.mkIf hasConfigInputsImportRole {
       source = configInputsImportService;
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/nixome.Config.InputsImport" = lib.mkIf hasConfigInputsImportRole {
+    environment.etc."qubes/rpc-config/airlock.Config.InputsImport" = lib.mkIf hasConfigInputsImportRole {
       text = "force-user='root'\n";
       mode = "0444";
     };
 
-    environment.etc."qubes-rpc/nixome.Config.ArchiveCandidate" = lib.mkIf hasConfigVaultRole {
+    environment.etc."qubes-rpc/airlock.Config.ArchiveCandidate" = lib.mkIf hasConfigVaultRole {
       source = configArchiveService;
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/nixome.Config.ArchiveCandidate" = lib.mkIf hasConfigVaultRole {
+    environment.etc."qubes/rpc-config/airlock.Config.ArchiveCandidate" = lib.mkIf hasConfigVaultRole {
       text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };
 
-    environment.etc."qubes-rpc/nixome.Config.ArchiveDeployment" = lib.mkIf hasConfigVaultRole {
+    environment.etc."qubes-rpc/airlock.Config.ArchiveDeployment" = lib.mkIf hasConfigVaultRole {
       source = configDeploymentArchiveService;
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/nixome.Config.ArchiveDeployment" = lib.mkIf hasConfigVaultRole {
+    environment.etc."qubes/rpc-config/airlock.Config.ArchiveDeployment" = lib.mkIf hasConfigVaultRole {
       text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };
 
-    environment.etc."qubes-rpc/nixome.Config.ExportCurrent" = lib.mkIf hasConfigVaultRole {
+    environment.etc."qubes-rpc/airlock.Config.ExportCurrent" = lib.mkIf hasConfigVaultRole {
       source = configCurrentExportService;
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/nixome.Config.ExportCurrent" = lib.mkIf hasConfigVaultRole {
+    environment.etc."qubes/rpc-config/airlock.Config.ExportCurrent" = lib.mkIf hasConfigVaultRole {
       text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };
 
-    environment.etc."qubes-rpc/nixome.NixStoreRuntimeCheck" = {
+    environment.etc."qubes-rpc/airlock.NixStoreRuntimeCheck" = {
       source = nixStoreRuntimeCheckService;
       mode = "0555";
     };
 
-    environment.etc."qubes-rpc/nixome.PolicyProbe" = lib.mkIf hasConfigRole {
+    environment.etc."qubes-rpc/airlock.PolicyProbe" = lib.mkIf hasConfigRole {
       source = policyProbeService;
       mode = "0555";
     };
 
-    environment.etc."qubes/rpc-config/nixome.PolicyProbe" = lib.mkIf hasConfigRole {
+    environment.etc."qubes/rpc-config/airlock.PolicyProbe" = lib.mkIf hasConfigRole {
       text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };

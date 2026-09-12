@@ -10,19 +10,19 @@ import pytest
 
 ENV_KEYS = {
     "NIX_CONFIG",
-    "NIXOME_DATA_ROOT",
-    "NIXOME_LOG_DIR",
-    "NIXOME_NIX_CONFIGURED",
-    "NIXOME_NIX_ROOT",
-    "NIXOME_NIX_STORE",
-    "NIXOME_QUBES_CACHE_DIR",
-    "NIXOME_RESULT_LINK_DIR",
-    "NIXOME_USE_HOST_NIX_STORE",
-    "NIXOME_VM_DIR",
+    "AIRLOCK_DATA_ROOT",
+    "AIRLOCK_LOG_DIR",
+    "AIRLOCK_NIX_CONFIGURED",
+    "AIRLOCK_NIX_ROOT",
+    "AIRLOCK_NIX_STORE",
+    "AIRLOCK_QUBES_CACHE_DIR",
+    "AIRLOCK_RESULT_LINK_DIR",
+    "AIRLOCK_USE_HOST_NIX_STORE",
+    "AIRLOCK_VM_DIR",
     "TMPDIR",
     "XDG_CACHE_HOME",
 }
-SESSION_START_KEY = "nixome_session_start"
+SESSION_START_KEY = "airlock_session_start"
 RUNTIME_REPORTS: dict[str, dict[str, object]] = {}
 
 
@@ -30,20 +30,20 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _load_nixome_env(repo_root: Path) -> None:
-    if os.environ.get("NIXOME_PYTEST_ENV_LOADED") == "1":
+def _load_airlock_env(repo_root: Path) -> None:
+    if os.environ.get("AIRLOCK_PYTEST_ENV_LOADED") == "1":
         return
 
     # Load the same guarded environment that Make/script entry points use.
-    # This should point Nix at the shared Nixome store, not the host /nix/store,
-    # unless the caller explicitly set NIXOME_USE_HOST_NIX_STORE=1.
+    # This should point Nix at the shared Airlock store, not the host /nix/store,
+    # unless the caller explicitly set AIRLOCK_USE_HOST_NIX_STORE=1.
     result = subprocess.run(
         [
             "bash",
             "-c",
             'source "$1"; env -0',
             "bash",
-            str(repo_root / "lifecycle/misc/tools/scripts/lib/nixome-env.sh"),
+            str(repo_root / "lifecycle/misc/tools/scripts/lib/airlock-env.sh"),
         ],
         check=False,
         stdout=subprocess.PIPE,
@@ -51,7 +51,7 @@ def _load_nixome_env(repo_root: Path) -> None:
     )
     if result.returncode != 0:
         message = result.stderr.decode("utf-8", errors="replace").strip()
-        pytest.exit(f"failed to initialize Nixome test environment: {message}", 1)
+        pytest.exit(f"failed to initialize Airlock test environment: {message}", 1)
 
     for item in result.stdout.split(b"\0"):
         if not item or b"=" not in item:
@@ -60,7 +60,7 @@ def _load_nixome_env(repo_root: Path) -> None:
         name = key.decode("utf-8", errors="replace")
         if name in ENV_KEYS:
             os.environ[name] = value.decode("utf-8", errors="replace")
-    os.environ["NIXOME_PYTEST_ENV_LOADED"] = "1"
+    os.environ["AIRLOCK_PYTEST_ENV_LOADED"] = "1"
 
 
 def _run_setup_command(log_dir: Path, name: str, command: list[str]) -> None:
@@ -90,7 +90,7 @@ def _run_setup_command(log_dir: Path, name: str, command: list[str]) -> None:
 
 
 def _log_dir(repo_root: Path) -> Path:
-    return Path(os.environ.get("NIXOME_LOG_DIR", repo_root / ".nixome-logs"))
+    return Path(os.environ.get("AIRLOCK_LOG_DIR", repo_root / ".airlock-logs"))
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
@@ -99,7 +99,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         return
 
     repo_root = _repo_root()
-    _load_nixome_env(repo_root)
+    _load_airlock_env(repo_root)
 
     session.config.stash[SESSION_START_KEY] = time.time()
 
@@ -119,9 +119,9 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     if session.config.option.collectonly:
         return
 
-    if os.environ.get("NIXOME_PYTEST_WARM_STORE", "1") == "1":
-        # Warm common immutable inputs once in the shared Nixome store. Per-test
-        # mutable artifacts still live under each test's own NIXOME_LOG_DIR.
+    if os.environ.get("AIRLOCK_PYTEST_WARM_STORE", "1") == "1":
+        # Warm common immutable inputs once in the shared Airlock store. Per-test
+        # mutable artifacts still live under each test's own AIRLOCK_LOG_DIR.
         _run_setup_command(
             log_dir,
             "warm-erofs-utils",
@@ -130,7 +130,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    _load_nixome_env(_repo_root())
+    _load_airlock_env(_repo_root())
     if not hasattr(config, "workerinput"):
         config.stash.setdefault(SESSION_START_KEY, time.time())
 
@@ -157,13 +157,13 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
 
 
 def pytest_testnodedown(node, error) -> None:
-    worker_reports = node.workeroutput.get("nixome_runtime_reports", {})
+    worker_reports = node.workeroutput.get("airlock_runtime_reports", {})
     RUNTIME_REPORTS.update(worker_reports)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if hasattr(session.config, "workerinput"):
-        session.config.workeroutput["nixome_runtime_reports"] = RUNTIME_REPORTS
+        session.config.workeroutput["airlock_runtime_reports"] = RUNTIME_REPORTS
         return
     if session.config.option.collectonly:
         return
@@ -184,7 +184,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     tests.sort(key=lambda item: item["total_seconds"], reverse=True)
 
     latest = {
-        "schema": "nixome.pytest-runtimes.v1",
+        "schema": "airlock.pytest-runtimes.v1",
         "exitstatus": exitstatus,
         "started_at": started_at,
         "finished_at": finished_at,
@@ -204,7 +204,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             )
 
     history_entry = {
-        "schema": "nixome.pytest-runtime-history.v1",
+        "schema": "airlock.pytest-runtime-history.v1",
         "finished_at": finished_at,
         "exitstatus": exitstatus,
         "duration_seconds": latest["duration_seconds"],
@@ -223,7 +223,7 @@ def repo_root() -> Path:
 
 
 @pytest.fixture
-def nixome_log_dir(repo_root: Path) -> Path:
-    log_dir = Path(os.environ.get("NIXOME_LOG_DIR", repo_root / ".nixome-logs"))
+def airlock_log_dir(repo_root: Path) -> Path:
+    log_dir = Path(os.environ.get("AIRLOCK_LOG_DIR", repo_root / ".airlock-logs"))
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir

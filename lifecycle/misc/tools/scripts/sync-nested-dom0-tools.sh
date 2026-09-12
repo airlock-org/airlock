@@ -2,23 +2,23 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
+source "$ROOT/lifecycle/misc/tools/scripts/lib/airlock-env.sh"
 
-LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-$ROOT/.airlock-logs}"
 RESULT_JSON="$LOG_DIR/vm-gui-sync-dom0-tools.json"
-SSH_PORT="${NIXOME_VM_SSH_PORT:-2222}"
-SSH_USER="${NIXOME_VM_SSH_USER:-nixome}"
-SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
-REMOTE_BIN_DIR="${NIXOME_NESTED_WARM_BIN_DIR:-/run/nixome-warm/bin}"
-REMOTE_TOPOLOGY_PATH="${NIXOME_NESTED_WARM_TOPOLOGY_PATH:-/run/nixome-warm/current-qubes-topology.json}"
-REMOTE_CONFIG_INPUTS_PATH="${NIXOME_NESTED_WARM_CONFIG_INPUTS_PATH:-/run/nixome-warm/config-inputs}"
-REMOTE_CONFIG_INPUTS_SYSTEM_PATH="${NIXOME_NESTED_WARM_CONFIG_INPUTS_SYSTEM_PATH:-/etc/nixome/config-inputs}"
-REMOTE_DROPIN="/run/systemd/system/qubesd.service.d/zz-nixome-warm-tools.conf"
-REMOTE_OLD_DROPIN="/run/systemd/system/qubesd.service.d/90-nixome-warm-tools.conf"
-RESTART_QUBESD="${NIXOME_NESTED_WARM_RESTART_QUBESD:-1}"
-SYNC_TOPOLOGY="${NIXOME_NESTED_WARM_SYNC_TOPOLOGY:-1}"
-SYNC_CONFIG_INPUTS="${NIXOME_NESTED_WARM_SYNC_CONFIG_INPUTS:-1}"
-WARM_NIX_DOMAINS="${NIXOME_NESTED_WARM_NIX_DOMAINS:-sys-config-staging sys-config-validator sys-config-vault}"
+SSH_PORT="${AIRLOCK_VM_SSH_PORT:-2222}"
+SSH_USER="${AIRLOCK_VM_SSH_USER:-airlock}"
+SSH_PASSWORD="${AIRLOCK_VM_SSH_PASSWORD:-airlock}"
+REMOTE_BIN_DIR="${AIRLOCK_NESTED_WARM_BIN_DIR:-/run/airlock-warm/bin}"
+REMOTE_TOPOLOGY_PATH="${AIRLOCK_NESTED_WARM_TOPOLOGY_PATH:-/run/airlock-warm/current-qubes-topology.json}"
+REMOTE_CONFIG_INPUTS_PATH="${AIRLOCK_NESTED_WARM_CONFIG_INPUTS_PATH:-/run/airlock-warm/config-inputs}"
+REMOTE_CONFIG_INPUTS_SYSTEM_PATH="${AIRLOCK_NESTED_WARM_CONFIG_INPUTS_SYSTEM_PATH:-/etc/airlock/config-inputs}"
+REMOTE_DROPIN="/run/systemd/system/qubesd.service.d/zz-airlock-warm-tools.conf"
+REMOTE_OLD_DROPIN="/run/systemd/system/qubesd.service.d/90-airlock-warm-tools.conf"
+RESTART_QUBESD="${AIRLOCK_NESTED_WARM_RESTART_QUBESD:-1}"
+SYNC_TOPOLOGY="${AIRLOCK_NESTED_WARM_SYNC_TOPOLOGY:-1}"
+SYNC_CONFIG_INPUTS="${AIRLOCK_NESTED_WARM_SYNC_CONFIG_INPUTS:-1}"
+WARM_NIX_DOMAINS="${AIRLOCK_NESTED_WARM_NIX_DOMAINS:-sys-config-staging sys-config-validator sys-config-vault}"
 TOPOLOGY_JSON="$LOG_DIR/vm-gui-current-qubes-topology.json"
 CONFIG_INPUTS_JSON="$LOG_DIR/vm-gui-current-config-inputs.json"
 CONFIG_INPUTS_MANIFEST_JSON="$LOG_DIR/vm-gui-current-config-inputs-manifest.json"
@@ -34,7 +34,7 @@ shell_quote() {
 }
 
 ssh_base() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/misc/tools/scripts/airlock-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     ssh \
       -F /dev/null \
       -o LogLevel=ERROR \
@@ -49,7 +49,7 @@ ssh_base() {
 }
 
 scp_base() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/misc/tools/scripts/airlock-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     scp \
       -F /dev/null \
       -q \
@@ -67,7 +67,7 @@ build_output() {
   local attr="$1"
   local out
 
-  out="$("$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" build "$ROOT#$attr" --no-link --print-out-paths --print-build-logs --show-trace)"
+  out="$("$ROOT/lifecycle/misc/tools/scripts/airlock-nix.sh" build "$ROOT#$attr" --no-link --print-out-paths --print-build-logs --show-trace)"
   awk 'NF { last = $0 } END { print last }' <<< "$out"
 }
 
@@ -77,7 +77,7 @@ find_output_with_bin() {
   local physical
 
   for output in "${closure_paths[@]}"; do
-    physical="$(nixome_physical_store_path "$output")"
+    physical="$(airlock_physical_store_path "$output")"
     if [ -x "$physical/bin/$binary" ]; then
       printf '%s\n' "$output"
       return 0
@@ -89,31 +89,31 @@ find_output_with_bin() {
 }
 
 printf 'warm-sync: building current dom0 tools\n' >&2
-setup_config_out="$(build_output packages.x86_64-linux.nixome-setup-config)"
-config_inputs_import_out="$(build_output packages.x86_64-linux.nixome-config-inputs-import)"
-config_vms_smoke_out="$(build_output packages.x86_64-linux.nixome-config-vms-smoke)"
-nix_closure_out="$(build_output packages.x86_64-linux.nixome-nix-closure-domain-smoke)"
-storage_out="$(build_output packages.x86_64-linux.nixome-qubes-storage)"
+setup_config_out="$(build_output packages.x86_64-linux.airlock-setup-config)"
+config_inputs_import_out="$(build_output packages.x86_64-linux.airlock-config-inputs-import)"
+config_vms_smoke_out="$(build_output packages.x86_64-linux.airlock-config-vms-smoke)"
+nix_closure_out="$(build_output packages.x86_64-linux.airlock-nix-closure-domain-smoke)"
+storage_out="$(build_output packages.x86_64-linux.airlock-qubes-storage)"
 
 topology_synced=false
 topology_sources=()
 case "$SYNC_TOPOLOGY" in
   1|true|yes)
     printf 'warm-sync: evaluating current concrete Qubes topology\n' >&2
-    "$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" eval \
+    "$ROOT/lifecycle/misc/tools/scripts/airlock-nix.sh" eval \
       --impure \
       --json \
-      "$ROOT#nixosConfigurations.vm-gui-config.config.nixome.qubes.topology" \
+      "$ROOT#nixosConfigurations.vm-gui-config.config.airlock.qubes.topology" \
       > "$TOPOLOGY_JSON"
-    jq -e '.schema == "nixome.qubes-topology.v1"' "$TOPOLOGY_JSON" >/dev/null
+    jq -e '.schema == "airlock.qubes-topology.v1"' "$TOPOLOGY_JSON" >/dev/null
 
     printf 'warm-sync: building current config-domain artifacts\n' >&2
-    qubes_kernel_out="$(build_output packages.x86_64-linux.nixome-qubes-vm-kernel)"
+    qubes_kernel_out="$(build_output packages.x86_64-linux.airlock-qubes-vm-kernel)"
     topology_sources+=("$qubes_kernel_out")
     for domain in $WARM_NIX_DOMAINS; do
-      system_out="$(build_output "nixosConfigurations.nixome-domain-$domain.config.system.build.toplevel")"
-      root_out="$(build_output "packages.x86_64-linux.nixome-domain-$domain-root-image")"
-      store_out="$(build_output "packages.x86_64-linux.nixome-domain-$domain-store-closure")"
+      system_out="$(build_output "nixosConfigurations.airlock-domain-$domain.config.system.build.toplevel")"
+      root_out="$(build_output "packages.x86_64-linux.airlock-domain-$domain-root-image")"
+      store_out="$(build_output "packages.x86_64-linux.airlock-domain-$domain-store-closure")"
       topology_sources+=("$system_out" "$root_out" "$store_out")
       jq -c -n \
         --arg domain "$domain" \
@@ -144,7 +144,7 @@ case "$SYNC_TOPOLOGY" in
     printf 'warm-sync: topology artifact sync disabled\n' >&2
     ;;
   *)
-    printf 'unsupported NIXOME_NESTED_WARM_SYNC_TOPOLOGY value: %s\n' "$SYNC_TOPOLOGY" >&2
+    printf 'unsupported AIRLOCK_NESTED_WARM_SYNC_TOPOLOGY value: %s\n' "$SYNC_TOPOLOGY" >&2
     exit 1
     ;;
 esac
@@ -154,25 +154,25 @@ config_input_sources=()
 case "$SYNC_CONFIG_INPUTS" in
   1|true|yes)
     printf 'warm-sync: evaluating current config inputs\n' >&2
-    "$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" eval \
+    "$ROOT/lifecycle/misc/tools/scripts/airlock-nix.sh" eval \
       --impure \
       --json \
-      "$ROOT#nixome.configInputs" \
+      "$ROOT#airlock.configInputs" \
       > "$CONFIG_INPUTS_JSON"
     jq -e '
       (.nixpkgs | startswith("/nix/store/")) and
       (.nixpkgsLibvirt105 | startswith("/nix/store/")) and
       (.nixosQubes | startswith("/nix/store/")) and
-      (.nixomeSupport | startswith("/nix/store/"))
+      (.airlockSupport | startswith("/nix/store/"))
     ' "$CONFIG_INPUTS_JSON" >/dev/null
     jq '
       {
-        schema: "nixome.config-inputs.v1",
+        schema: "airlock.config-inputs.v1",
         inputs: {
           nixpkgs: .nixpkgs,
           "nixpkgs-libvirt_10_5": .nixpkgsLibvirt105,
           "nixos-qubes": .nixosQubes,
-          "nixome-support": .nixomeSupport
+          "airlock-support": .airlockSupport
         }
       }
     ' "$CONFIG_INPUTS_JSON" > "$CONFIG_INPUTS_MANIFEST_JSON"
@@ -189,7 +189,7 @@ case "$SYNC_CONFIG_INPUTS" in
         ["nixpkgs", .nixpkgs],
         ["nixpkgs-libvirt_10_5", .nixpkgsLibvirt105],
         ["nixos-qubes", .nixosQubes],
-        ["nixome-support", .nixomeSupport]
+        ["airlock-support", .airlockSupport]
       ][]
       | @tsv
     ' "$CONFIG_INPUTS_JSON" > "$CONFIG_INPUTS_JSONL"
@@ -199,7 +199,7 @@ case "$SYNC_CONFIG_INPUTS" in
     printf 'warm-sync: config input sync disabled\n' >&2
     ;;
   *)
-    printf 'unsupported NIXOME_NESTED_WARM_SYNC_CONFIG_INPUTS value: %s\n' "$SYNC_CONFIG_INPUTS" >&2
+    printf 'unsupported AIRLOCK_NESTED_WARM_SYNC_CONFIG_INPUTS value: %s\n' "$SYNC_CONFIG_INPUTS" >&2
     exit 1
     ;;
 esac
@@ -216,7 +216,7 @@ mapfile -t closure_paths < <(
     sort -u
 )
 
-storage_physical="$(nixome_physical_store_path "$storage_out")"
+storage_physical="$(airlock_physical_store_path "$storage_out")"
 storage_site_physical="$(find "$storage_physical/lib" -type d -name site-packages -print -quit)"
 [ -n "$storage_site_physical" ] || {
   printf 'could not locate site-packages under %s\n' "$storage_out" >&2
@@ -227,7 +227,7 @@ storage_site="$storage_out/${storage_site_physical#"$storage_physical"/}"
 dmsetup_out="$(find_output_with_bin dmsetup)"
 losetup_out="$(find_output_with_bin losetup)"
 erofs_out="$(find_output_with_bin mkfs.erofs)"
-domain_storage_out="$(find_output_with_bin nixome-nix-domain-storage)"
+domain_storage_out="$(find_output_with_bin airlock-nix-domain-storage)"
 dmsetup_bin="$dmsetup_out/bin"
 losetup_bin="$losetup_out/bin"
 erofs_bin="$erofs_out/bin"
@@ -242,7 +242,7 @@ mapfile -t missing_paths < <(printf '%s\n' "$missing_paths_text" | sed '/^$/d')
 if [ "${#missing_paths[@]}" -gt 0 ]; then
   printf 'warm-sync: importing %s missing store paths into nested dom0\n' "${#missing_paths[@]}" >&2
   nix-store --export "${missing_paths[@]}" |
-    ssh_base 'sudo -n nix-store --import >/tmp/nixome-warm-tools-import.log'
+    ssh_base 'sudo -n nix-store --import >/tmp/airlock-warm-tools-import.log'
 else
   printf 'warm-sync: all tool closure paths already present in nested dom0\n' >&2
 fi
@@ -266,20 +266,20 @@ dropin="$LOG_DIR/vm-gui-sync-dom0-tools-qubesd.conf"
 
 printf 'warm-sync: installing warm tool symlinks and qubesd override\n' >&2
 ssh_base "sudo -n mkdir -p $(shell_quote "$REMOTE_BIN_DIR") /run/systemd/system/qubesd.service.d"
-ssh_base "sudo -n ln -sfn $(shell_quote "$setup_config_out/bin/nixome-setup-config") $(shell_quote "$REMOTE_BIN_DIR/nixome-setup-config")"
-ssh_base "sudo -n ln -sfn $(shell_quote "$config_inputs_import_out/bin/nixome-config-inputs-import") $(shell_quote "$REMOTE_BIN_DIR/nixome-config-inputs-import")"
-ssh_base "sudo -n ln -sfn $(shell_quote "$config_vms_smoke_out/bin/nixome-config-vms-smoke") $(shell_quote "$REMOTE_BIN_DIR/nixome-config-vms-smoke")"
-ssh_base "sudo -n ln -sfn $(shell_quote "$nix_closure_out/bin/nixome-nix-closure-domain-smoke") $(shell_quote "$REMOTE_BIN_DIR/nixome-nix-closure-domain-smoke")"
-ssh_base "sudo -n ln -sfn $(shell_quote "$storage_out/bin/nixome-closure-store") $(shell_quote "$REMOTE_BIN_DIR/nixome-closure-store")"
-ssh_base "sudo -n ln -sfn $(shell_quote "$domain_storage_out/bin/nixome-nix-domain-storage") $(shell_quote "$REMOTE_BIN_DIR/nixome-nix-domain-storage")"
-scp_base "$dropin" "$SSH_USER@127.0.0.1:/tmp/nixome-warm-tools-qubesd.conf"
-ssh_base "sudo -n unlink $(shell_quote "$REMOTE_OLD_DROPIN") 2>/dev/null || true; sudo -n mv /tmp/nixome-warm-tools-qubesd.conf $(shell_quote "$REMOTE_DROPIN") && sudo -n systemctl daemon-reload"
+ssh_base "sudo -n ln -sfn $(shell_quote "$setup_config_out/bin/airlock-setup-config") $(shell_quote "$REMOTE_BIN_DIR/airlock-setup-config")"
+ssh_base "sudo -n ln -sfn $(shell_quote "$config_inputs_import_out/bin/airlock-config-inputs-import") $(shell_quote "$REMOTE_BIN_DIR/airlock-config-inputs-import")"
+ssh_base "sudo -n ln -sfn $(shell_quote "$config_vms_smoke_out/bin/airlock-config-vms-smoke") $(shell_quote "$REMOTE_BIN_DIR/airlock-config-vms-smoke")"
+ssh_base "sudo -n ln -sfn $(shell_quote "$nix_closure_out/bin/airlock-nix-closure-domain-smoke") $(shell_quote "$REMOTE_BIN_DIR/airlock-nix-closure-domain-smoke")"
+ssh_base "sudo -n ln -sfn $(shell_quote "$storage_out/bin/airlock-closure-store") $(shell_quote "$REMOTE_BIN_DIR/airlock-closure-store")"
+ssh_base "sudo -n ln -sfn $(shell_quote "$domain_storage_out/bin/airlock-nix-domain-storage") $(shell_quote "$REMOTE_BIN_DIR/airlock-nix-domain-storage")"
+scp_base "$dropin" "$SSH_USER@127.0.0.1:/tmp/airlock-warm-tools-qubesd.conf"
+ssh_base "sudo -n unlink $(shell_quote "$REMOTE_OLD_DROPIN") 2>/dev/null || true; sudo -n mv /tmp/airlock-warm-tools-qubesd.conf $(shell_quote "$REMOTE_DROPIN") && sudo -n systemctl daemon-reload"
 
 if [ "$topology_synced" = true ]; then
   remote_topology_dir="${REMOTE_TOPOLOGY_PATH%/*}"
   ssh_base "sudo -n mkdir -p $(shell_quote "$remote_topology_dir")"
-  scp_base "$TOPOLOGY_JSON" "$SSH_USER@127.0.0.1:/tmp/nixome-warm-current-qubes-topology.json"
-  ssh_base "sudo -n mv /tmp/nixome-warm-current-qubes-topology.json $(shell_quote "$REMOTE_TOPOLOGY_PATH")"
+  scp_base "$TOPOLOGY_JSON" "$SSH_USER@127.0.0.1:/tmp/airlock-warm-current-qubes-topology.json"
+  ssh_base "sudo -n mv /tmp/airlock-warm-current-qubes-topology.json $(shell_quote "$REMOTE_TOPOLOGY_PATH")"
 fi
 
 if [ "$config_inputs_synced" = true ]; then
@@ -288,10 +288,10 @@ if [ "$config_inputs_synced" = true ]; then
   ssh_base "sudo -n mkdir -p $(shell_quote "$remote_config_inputs_parent") $(shell_quote "$REMOTE_CONFIG_INPUTS_PATH")"
   remote_config_inputs_system_parent="${REMOTE_CONFIG_INPUTS_SYSTEM_PATH%/*}"
   ssh_base "sudo -n mkdir -p $(shell_quote "$remote_config_inputs_system_parent") $(shell_quote "$REMOTE_CONFIG_INPUTS_SYSTEM_PATH")"
-  scp_base "$CONFIG_INPUTS_MANIFEST_JSON" "$SSH_USER@127.0.0.1:/tmp/nixome-warm-config-inputs-manifest.json"
+  scp_base "$CONFIG_INPUTS_MANIFEST_JSON" "$SSH_USER@127.0.0.1:/tmp/airlock-warm-config-inputs-manifest.json"
   ssh_base "
     set -e
-    manifest_tmp=/tmp/nixome-warm-config-inputs-manifest.json
+    manifest_tmp=/tmp/airlock-warm-config-inputs-manifest.json
     sudo -n install -m 0644 \"\$manifest_tmp\" $(shell_quote "$REMOTE_CONFIG_INPUTS_PATH/manifest.json")
     sudo -n install -m 0644 \"\$manifest_tmp\" $(shell_quote "$REMOTE_CONFIG_INPUTS_SYSTEM_PATH/manifest.json")
     sudo -n rm -f \"\$manifest_tmp\"
@@ -328,7 +328,7 @@ case "$RESTART_QUBESD" in
   0|false|no)
     ;;
   *)
-    printf 'unsupported NIXOME_NESTED_WARM_RESTART_QUBESD value: %s\n' "$RESTART_QUBESD" >&2
+    printf 'unsupported AIRLOCK_NESTED_WARM_RESTART_QUBESD value: %s\n' "$RESTART_QUBESD" >&2
     exit 1
     ;;
 esac
@@ -353,7 +353,7 @@ config_inputs_json="$(jq -Rn '
 ' < "$CONFIG_INPUTS_JSONL")"
 
 jq -n \
-  --arg schema "nixome.nested-dom0-tool-sync.v1" \
+  --arg schema "airlock.nested-dom0-tool-sync.v1" \
   --arg status "passed" \
   --arg setup_config "$setup_config_out" \
   --arg config_inputs_import "$config_inputs_import_out" \

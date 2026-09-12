@@ -13,10 +13,10 @@
     vcpus = 2;
   };
   features = {
-    "nixome-managed" = "1";
-    "nixome-role" = "sys-config-staging";
-    "nixome-config-staging" = "1";
-    "nixome-config-applied-message" = "initial";
+    "airlock-managed" = "1";
+    "airlock-role" = "sys-config-staging";
+    "airlock-config-staging" = "1";
+    "airlock-config-applied-message" = "initial";
   };
   services."network-manager" = false;
 }

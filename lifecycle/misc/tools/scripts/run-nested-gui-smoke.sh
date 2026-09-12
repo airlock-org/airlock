@@ -2,56 +2,56 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
-LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
+source "$ROOT/lifecycle/misc/tools/scripts/lib/airlock-env.sh"
+LOG_DIR="${AIRLOCK_LOG_DIR:-$ROOT/.airlock-logs}"
 mkdir -p "$LOG_DIR"
 
-SSH_PORT="${NIXOME_VM_SSH_PORT:-2222}"
-SSH_USER="${NIXOME_VM_SSH_USER:-nixome}"
-SSH_PASSWORD="${NIXOME_VM_SSH_PASSWORD:-nixome}"
-SSH_WAIT_SECONDS="${NIXOME_VM_SSH_WAIT_SECONDS:-240}"
-VM_TIMEOUT="${NIXOME_VM_RUN_TIMEOUT:-14400}"
-VM_START_WAIT_SECONDS="${NIXOME_VM_START_WAIT_SECONDS:-$VM_TIMEOUT}"
-SETUP_CONFIG_BOOT_WAIT_SECONDS="${NIXOME_SETUP_CONFIG_BOOT_WAIT_SECONDS:-900}"
-IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-dev-image}"
-DISPLAY_MODE="${NIXOME_VM_DISPLAY:-gtk}"
-KEEP_VM="${NIXOME_KEEP_VM:-0}"
-REUSE_WARM_VM="${NIXOME_REUSE_WARM_VM:-0}"
-AUTO_GC_AFTER_RUN="${NIXOME_AUTO_GC_AFTER_RUN:-0}"
-SYNC_DOM0_TOOLS="${NIXOME_SYNC_DOM0_TOOLS:-0}"
-REMOTE_WARM_BIN_DIR="${NIXOME_NESTED_WARM_BIN_DIR:-/run/nixome-warm/bin}"
-REMOTE_WARM_TOPOLOGY_PATH="${NIXOME_NESTED_WARM_TOPOLOGY_PATH:-/run/nixome-warm/current-qubes-topology.json}"
-REMOTE_WARM_CONFIG_INPUTS_PATH="${NIXOME_NESTED_WARM_CONFIG_INPUTS_PATH:-/run/nixome-warm/config-inputs}"
-SETUP_CONFIG_COMMAND="${NIXOME_SETUP_CONFIG_COMMAND:-nixome-setup-config}"
-SETUP_CONFIG_TOPOLOGY="${NIXOME_SETUP_CONFIG_TOPOLOGY:-}"
-CONFIG_INPUTS_IMPORT_COMMAND="${NIXOME_CONFIG_INPUTS_IMPORT_COMMAND:-nixome-config-inputs-import}"
-CONFIG_VMS_SMOKE_COMMAND="${NIXOME_CONFIG_VMS_SMOKE_COMMAND:-nixome-config-vms-smoke}"
-NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="${NIXOME_NIX_CLOSURE_DOMAIN_SMOKE_COMMAND:-nixome-nix-closure-domain-smoke}"
-STOP_WARM_NIX_DOMAINS="${NIXOME_NESTED_WARM_STOP_NIX_DOMAINS:-0}"
-WARM_NIX_DOMAINS="${NIXOME_NESTED_WARM_NIX_DOMAINS:-sys-config-staging sys-config-validator sys-config-vault}"
+SSH_PORT="${AIRLOCK_VM_SSH_PORT:-2222}"
+SSH_USER="${AIRLOCK_VM_SSH_USER:-airlock}"
+SSH_PASSWORD="${AIRLOCK_VM_SSH_PASSWORD:-airlock}"
+SSH_WAIT_SECONDS="${AIRLOCK_VM_SSH_WAIT_SECONDS:-240}"
+VM_TIMEOUT="${AIRLOCK_VM_RUN_TIMEOUT:-14400}"
+VM_START_WAIT_SECONDS="${AIRLOCK_VM_START_WAIT_SECONDS:-$VM_TIMEOUT}"
+SETUP_CONFIG_BOOT_WAIT_SECONDS="${AIRLOCK_SETUP_CONFIG_BOOT_WAIT_SECONDS:-900}"
+IMAGE_ATTR="${AIRLOCK_VM_IMAGE_ATTR:-airlock-vm-gui-dev-image}"
+DISPLAY_MODE="${AIRLOCK_VM_DISPLAY:-gtk}"
+KEEP_VM="${AIRLOCK_KEEP_VM:-0}"
+REUSE_WARM_VM="${AIRLOCK_REUSE_WARM_VM:-0}"
+AUTO_GC_AFTER_RUN="${AIRLOCK_AUTO_GC_AFTER_RUN:-0}"
+SYNC_DOM0_TOOLS="${AIRLOCK_SYNC_DOM0_TOOLS:-0}"
+REMOTE_WARM_BIN_DIR="${AIRLOCK_NESTED_WARM_BIN_DIR:-/run/airlock-warm/bin}"
+REMOTE_WARM_TOPOLOGY_PATH="${AIRLOCK_NESTED_WARM_TOPOLOGY_PATH:-/run/airlock-warm/current-qubes-topology.json}"
+REMOTE_WARM_CONFIG_INPUTS_PATH="${AIRLOCK_NESTED_WARM_CONFIG_INPUTS_PATH:-/run/airlock-warm/config-inputs}"
+SETUP_CONFIG_COMMAND="${AIRLOCK_SETUP_CONFIG_COMMAND:-airlock-setup-config}"
+SETUP_CONFIG_TOPOLOGY="${AIRLOCK_SETUP_CONFIG_TOPOLOGY:-}"
+CONFIG_INPUTS_IMPORT_COMMAND="${AIRLOCK_CONFIG_INPUTS_IMPORT_COMMAND:-airlock-config-inputs-import}"
+CONFIG_VMS_SMOKE_COMMAND="${AIRLOCK_CONFIG_VMS_SMOKE_COMMAND:-airlock-config-vms-smoke}"
+NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="${AIRLOCK_NIX_CLOSURE_DOMAIN_SMOKE_COMMAND:-airlock-nix-closure-domain-smoke}"
+STOP_WARM_NIX_DOMAINS="${AIRLOCK_NESTED_WARM_STOP_NIX_DOMAINS:-0}"
+WARM_NIX_DOMAINS="${AIRLOCK_NESTED_WARM_NIX_DOMAINS:-sys-config-staging sys-config-validator sys-config-vault}"
 
-BOOTSTRAP_QUBES="${NIXOME_BOOTSTRAP_QUBES:-1}"
-RUN_SETUP_CONFIG="${NIXOME_RUN_SETUP_CONFIG:-0}"
-RUN_CONFIG_INPUTS_IMPORT="${NIXOME_RUN_CONFIG_INPUTS_IMPORT:-0}"
-RUN_CONFIG_VMS_SMOKE="${NIXOME_RUN_CONFIG_VMS_SMOKE:-0}"
-RUN_CONFIG_BOOT_VERIFY="${NIXOME_RUN_CONFIG_BOOT_VERIFY:-0}"
-RUN_NIX_CLOSURE_SMOKE="${NIXOME_RUN_NIX_CLOSURE_SMOKE:-0}"
-RUN_QREXEC_SMOKE="${NIXOME_RUN_QUBES_SMOKE:-1}"
-RUN_GUI_SMOKE="${NIXOME_RUN_GUI_SMOKE:-1}"
-CACHE_QUBES_ASSETS="${NIXOME_CACHE_QUBES_ASSETS:-1}"
-CACHE_DIR="${NIXOME_QUBES_CACHE_DIR:-$ROOT/.nixome-cache/rpms}"
-GUEST_CACHE_DIR="/var/cache/nixome/qubes-rpms"
-SHUTDOWN_VM_ON_SUCCESS="${NIXOME_SHUTDOWN_VM_ON_SUCCESS:-0}"
-SHUTDOWN_WAIT_SECONDS="${NIXOME_VM_SHUTDOWN_WAIT_SECONDS:-180}"
-REQUIRE_CLEAN_SHUTDOWN="${NIXOME_REQUIRE_CLEAN_SHUTDOWN:-0}"
+BOOTSTRAP_QUBES="${AIRLOCK_BOOTSTRAP_QUBES:-1}"
+RUN_SETUP_CONFIG="${AIRLOCK_RUN_SETUP_CONFIG:-0}"
+RUN_CONFIG_INPUTS_IMPORT="${AIRLOCK_RUN_CONFIG_INPUTS_IMPORT:-0}"
+RUN_CONFIG_VMS_SMOKE="${AIRLOCK_RUN_CONFIG_VMS_SMOKE:-0}"
+RUN_CONFIG_BOOT_VERIFY="${AIRLOCK_RUN_CONFIG_BOOT_VERIFY:-0}"
+RUN_NIX_CLOSURE_SMOKE="${AIRLOCK_RUN_NIX_CLOSURE_SMOKE:-0}"
+RUN_QREXEC_SMOKE="${AIRLOCK_RUN_QUBES_SMOKE:-1}"
+RUN_GUI_SMOKE="${AIRLOCK_RUN_GUI_SMOKE:-1}"
+CACHE_QUBES_ASSETS="${AIRLOCK_CACHE_QUBES_ASSETS:-1}"
+CACHE_DIR="${AIRLOCK_QUBES_CACHE_DIR:-$ROOT/.airlock-cache/rpms}"
+GUEST_CACHE_DIR="/var/cache/airlock/qubes-rpms"
+SHUTDOWN_VM_ON_SUCCESS="${AIRLOCK_SHUTDOWN_VM_ON_SUCCESS:-0}"
+SHUTDOWN_WAIT_SECONDS="${AIRLOCK_VM_SHUTDOWN_WAIT_SECONDS:-180}"
+REQUIRE_CLEAN_SHUTDOWN="${AIRLOCK_REQUIRE_CLEAN_SHUTDOWN:-0}"
 
-TEMPLATE="${NIXOME_QUBES_TEMPLATE:-fedora-43-xfce}"
-TEMPLATE_URL="${NIXOME_QUBES_TEMPLATE_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/templates-itl/rpm/qubes-template-fedora-43-xfce-4.3.0-202601041226.noarch.rpm}"
-QUBE="${NIXOME_TEST_QUBE:-test-nixome-smoke}"
+TEMPLATE="${AIRLOCK_QUBES_TEMPLATE:-fedora-43-xfce}"
+TEMPLATE_URL="${AIRLOCK_QUBES_TEMPLATE_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/templates-itl/rpm/qubes-template-fedora-43-xfce-4.3.0-202601041226.noarch.rpm}"
+QUBE="${AIRLOCK_TEST_QUBE:-test-airlock-smoke}"
 
-KERNEL_URL="${NIXOME_QUBES_KERNEL_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm}"
-KERNEL_MODULES_URL="${NIXOME_QUBES_KERNEL_MODULES_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-modules-6.12.64-1.qubes.fc41.x86_64.rpm}"
-GPG_KEY_URL="${NIXOME_QUBES_GPG_KEY_URL:-https://keys.qubes-os.org/keys/qubes-release-4.3-signing-key.asc}"
+KERNEL_URL="${AIRLOCK_QUBES_KERNEL_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-qubes-vm-6.12.64-1.qubes.fc41.x86_64.rpm}"
+KERNEL_MODULES_URL="${AIRLOCK_QUBES_KERNEL_MODULES_URL:-https://ftp.qubes-os.org/repo/yum/r4.3/current/dom0/fc41/rpm/kernel-modules-6.12.64-1.qubes.fc41.x86_64.rpm}"
+GPG_KEY_URL="${AIRLOCK_QUBES_GPG_KEY_URL:-https://keys.qubes-os.org/keys/qubes-release-4.3-signing-key.asc}"
 
 QEMU_LOG="$LOG_DIR/vm-gui-smoke-qemu.log"
 OBSERVE_JSON="$LOG_DIR/vm-gui-observe.json"
@@ -151,12 +151,12 @@ cleanup() {
 
   case "$AUTO_GC_AFTER_RUN" in
     1|true|yes)
-      "$ROOT/lifecycle/misc/tools/scripts/gc-nixome-store.sh" auto || true
+      "$ROOT/lifecycle/misc/tools/scripts/gc-airlock-store.sh" auto || true
       ;;
     0|false|no)
       ;;
     *)
-      printf 'warning: ignoring unsupported NIXOME_AUTO_GC_AFTER_RUN value: %s\n' "$AUTO_GC_AFTER_RUN" >&2
+      printf 'warning: ignoring unsupported AIRLOCK_AUTO_GC_AFTER_RUN value: %s\n' "$AUTO_GC_AFTER_RUN" >&2
       ;;
   esac
 }
@@ -234,17 +234,17 @@ prepare_cached_bootstrap_assets() {
 
   printf 'cache: host Qubes asset cache: %s\n' "$CACHE_DIR"
 
-  if [ -z "${NIXOME_QUBES_GPG_KEY:-}" ] && [ "${NIXOME_QUBES_VERIFY_RPMS:-1}" = "1" ]; then
+  if [ -z "${AIRLOCK_QUBES_GPG_KEY:-}" ] && [ "${AIRLOCK_QUBES_VERIFY_RPMS:-1}" = "1" ]; then
     local gpg_key_filename
     gpg_key_filename="$(filename_from_url "$GPG_KEY_URL")"
     cached_gpg_key_host="$(download_cached "$GPG_KEY_URL" "$gpg_key_filename")"
     cached_gpg_key_guest="$GUEST_CACHE_DIR/$gpg_key_filename"
-    NIXOME_QUBES_GPG_KEY="$cached_gpg_key_guest"
+    AIRLOCK_QUBES_GPG_KEY="$cached_gpg_key_guest"
   fi
 
-  if [ -n "${NIXOME_QUBES_KERNEL_RPM:-}" ] || [ -n "${NIXOME_QUBES_KERNEL_MODULES_RPM:-}" ]; then
-    if [ -z "${NIXOME_QUBES_KERNEL_RPM:-}" ] || [ -z "${NIXOME_QUBES_KERNEL_MODULES_RPM:-}" ]; then
-      printf 'NIXOME_QUBES_KERNEL_RPM and NIXOME_QUBES_KERNEL_MODULES_RPM must be set together\n' >&2
+  if [ -n "${AIRLOCK_QUBES_KERNEL_RPM:-}" ] || [ -n "${AIRLOCK_QUBES_KERNEL_MODULES_RPM:-}" ]; then
+    if [ -z "${AIRLOCK_QUBES_KERNEL_RPM:-}" ] || [ -z "${AIRLOCK_QUBES_KERNEL_MODULES_RPM:-}" ]; then
+      printf 'AIRLOCK_QUBES_KERNEL_RPM and AIRLOCK_QUBES_KERNEL_MODULES_RPM must be set together\n' >&2
       exit 1
     fi
   else
@@ -256,16 +256,16 @@ prepare_cached_bootstrap_assets() {
     cached_kernel_guest="$GUEST_CACHE_DIR/$kernel_filename"
     cached_kernel_modules_host="$(download_cached "$KERNEL_MODULES_URL" "$kernel_modules_filename")"
     cached_kernel_modules_guest="$GUEST_CACHE_DIR/$kernel_modules_filename"
-    NIXOME_QUBES_KERNEL_RPM="$cached_kernel_guest"
-    NIXOME_QUBES_KERNEL_MODULES_RPM="$cached_kernel_modules_guest"
+    AIRLOCK_QUBES_KERNEL_RPM="$cached_kernel_guest"
+    AIRLOCK_QUBES_KERNEL_MODULES_RPM="$cached_kernel_modules_guest"
   fi
 
-  if [ -z "${NIXOME_QUBES_TEMPLATE_RPM:-}" ]; then
+  if [ -z "${AIRLOCK_QUBES_TEMPLATE_RPM:-}" ]; then
     local template_filename
     template_filename="$(filename_from_url "$TEMPLATE_URL")"
     cached_template_host="$(download_cached "$TEMPLATE_URL" "$template_filename")"
     cached_template_guest="$GUEST_CACHE_DIR/$template_filename"
-    NIXOME_QUBES_TEMPLATE_RPM="$cached_template_guest"
+    AIRLOCK_QUBES_TEMPLATE_RPM="$cached_template_guest"
   fi
 }
 
@@ -308,21 +308,21 @@ remote_env_prefix() {
   local name
 
   for name in \
-    NIXOME_QUBES_TEMPLATE \
-    NIXOME_QUBES_TEMPLATE_URL \
-    NIXOME_QUBES_TEMPLATE_RPM \
-    NIXOME_QUBES_KERNEL_NAME \
-    NIXOME_QUBES_KERNEL_VERSION \
-    NIXOME_QUBES_KERNEL_FEDORA \
-    NIXOME_QUBES_KERNEL_URL \
-    NIXOME_QUBES_KERNEL_MODULES_URL \
-    NIXOME_QUBES_KERNEL_RPM \
-    NIXOME_QUBES_KERNEL_MODULES_RPM \
-    NIXOME_QUBES_GPG_KEY_URL \
-    NIXOME_QUBES_GPG_KEY \
-    NIXOME_QUBES_VERIFY_RPMS \
-    NIXOME_QUBES_DEFAULT_DVM \
-    NIXOME_QUBES_UPDATEVM; do
+    AIRLOCK_QUBES_TEMPLATE \
+    AIRLOCK_QUBES_TEMPLATE_URL \
+    AIRLOCK_QUBES_TEMPLATE_RPM \
+    AIRLOCK_QUBES_KERNEL_NAME \
+    AIRLOCK_QUBES_KERNEL_VERSION \
+    AIRLOCK_QUBES_KERNEL_FEDORA \
+    AIRLOCK_QUBES_KERNEL_URL \
+    AIRLOCK_QUBES_KERNEL_MODULES_URL \
+    AIRLOCK_QUBES_KERNEL_RPM \
+    AIRLOCK_QUBES_KERNEL_MODULES_RPM \
+    AIRLOCK_QUBES_GPG_KEY_URL \
+    AIRLOCK_QUBES_GPG_KEY \
+    AIRLOCK_QUBES_VERIFY_RPMS \
+    AIRLOCK_QUBES_DEFAULT_DVM \
+    AIRLOCK_QUBES_UPDATEVM; do
     if [ -n "${!name+x}" ]; then
       prefix="$prefix $name=$(shell_quote "${!name}")"
     fi
@@ -336,21 +336,21 @@ config_vms_env_prefix() {
   local name
 
   for name in \
-    NIXOME_CONFIG_APPLY_MESSAGE \
-    NIXOME_CONFIG_APPLY_STAGE \
-    NIXOME_CONFIG_CREATED_QUBE \
-    NIXOME_CONFIG_DOM0_SYSTEM_REASON \
-    NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION \
-    NIXOME_CONFIG_INPUTS_IMPORT_SERVICE \
-    NIXOME_CONFIG_INPUTS_QREXEC_TIMEOUT \
-    NIXOME_CONFIG_INPUTS_SOURCE \
-    NIXOME_CONFIG_STAGING_VM \
-    NIXOME_CONFIG_VALIDATOR_VM \
-    NIXOME_CONFIG_VAULT_VM \
-    NIXOME_CONFIG_VMS_IMPORT_INPUTS \
-    NIXOME_CONFIG_VMS_SMOKE_MODE \
-    NIXOME_NIX_DOMAIN_STORAGE_HELPER \
-    NIXOME_SETUP_CONFIG_COMMAND; do
+    AIRLOCK_CONFIG_APPLY_MESSAGE \
+    AIRLOCK_CONFIG_APPLY_STAGE \
+    AIRLOCK_CONFIG_CREATED_QUBE \
+    AIRLOCK_CONFIG_DOM0_SYSTEM_REASON \
+    AIRLOCK_CONFIG_DOM0_SYSTEM_SWITCH_ACTION \
+    AIRLOCK_CONFIG_INPUTS_IMPORT_SERVICE \
+    AIRLOCK_CONFIG_INPUTS_QREXEC_TIMEOUT \
+    AIRLOCK_CONFIG_INPUTS_SOURCE \
+    AIRLOCK_CONFIG_STAGING_VM \
+    AIRLOCK_CONFIG_VALIDATOR_VM \
+    AIRLOCK_CONFIG_VAULT_VM \
+    AIRLOCK_CONFIG_VMS_IMPORT_INPUTS \
+    AIRLOCK_CONFIG_VMS_SMOKE_MODE \
+    AIRLOCK_NIX_DOMAIN_STORAGE_HELPER \
+    AIRLOCK_SETUP_CONFIG_COMMAND; do
     if [ -n "${!name+x}" ]; then
       prefix="$prefix $name=$(shell_quote "${!name}")"
     fi
@@ -364,11 +364,11 @@ config_inputs_import_env_prefix() {
   local name
 
   for name in \
-    NIXOME_CONFIG_INPUTS_IMPORT_SERVICE \
-    NIXOME_CONFIG_INPUTS_QREXEC_TIMEOUT \
-    NIXOME_CONFIG_INPUTS_SOURCE \
-    NIXOME_CONFIG_STAGING_VM \
-    NIXOME_CONFIG_VALIDATOR_VM; do
+    AIRLOCK_CONFIG_INPUTS_IMPORT_SERVICE \
+    AIRLOCK_CONFIG_INPUTS_QREXEC_TIMEOUT \
+    AIRLOCK_CONFIG_INPUTS_SOURCE \
+    AIRLOCK_CONFIG_STAGING_VM \
+    AIRLOCK_CONFIG_VALIDATOR_VM; do
     if [ -n "${!name+x}" ]; then
       prefix="$prefix $name=$(shell_quote "${!name}")"
     fi
@@ -382,8 +382,8 @@ config_boot_verify_env_prefix() {
   local name
 
   for name in \
-    NIXOME_EXPECTED_APPLIED_MESSAGE \
-    NIXOME_EXPECTED_HOST_SYSTEM_SOURCE; do
+    AIRLOCK_EXPECTED_APPLIED_MESSAGE \
+    AIRLOCK_EXPECTED_HOST_SYSTEM_SOURCE; do
     if [ -n "${!name+x}" ]; then
       prefix="$prefix $name=$(shell_quote "${!name}")"
     fi
@@ -397,19 +397,19 @@ nix_closure_env_prefix() {
   local name
 
   for name in \
-    NIXOME_CONFIG_APPLY_NIX_OFFLINE \
-    NIXOME_CONFIG_STAGING_VM \
-    NIXOME_CONFIG_VALIDATOR_VM \
-    NIXOME_CONFIG_VAULT_VM \
-    NIXOME_NIX_CLOSURE_APPLY_MESSAGE \
-    NIXOME_NIX_CLOSURE_DOMAIN \
-    NIXOME_NIX_CLOSURE_GUI_PROBE \
-    NIXOME_NIX_CLOSURE_PEER_DOMAIN \
-    NIXOME_NIX_CLOSURE_QREXEC_TIMEOUT_SECONDS \
-    NIXOME_NIX_CLOSURE_REBOOT_PROBE \
-    NIXOME_NIX_CLOSURE_WAIT_SECONDS \
-    NIXOME_QUBE_USER \
-    NIXOME_SETUP_CONFIG_COMMAND; do
+    AIRLOCK_CONFIG_APPLY_NIX_OFFLINE \
+    AIRLOCK_CONFIG_STAGING_VM \
+    AIRLOCK_CONFIG_VALIDATOR_VM \
+    AIRLOCK_CONFIG_VAULT_VM \
+    AIRLOCK_NIX_CLOSURE_APPLY_MESSAGE \
+    AIRLOCK_NIX_CLOSURE_DOMAIN \
+    AIRLOCK_NIX_CLOSURE_GUI_PROBE \
+    AIRLOCK_NIX_CLOSURE_PEER_DOMAIN \
+    AIRLOCK_NIX_CLOSURE_QREXEC_TIMEOUT_SECONDS \
+    AIRLOCK_NIX_CLOSURE_REBOOT_PROBE \
+    AIRLOCK_NIX_CLOSURE_WAIT_SECONDS \
+    AIRLOCK_QUBE_USER \
+    AIRLOCK_SETUP_CONFIG_COMMAND; do
     if [ -n "${!name+x}" ]; then
       prefix="$prefix $name=$(shell_quote "${!name}")"
     fi
@@ -419,7 +419,7 @@ nix_closure_env_prefix() {
 }
 
 ssh_command() {
-  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/misc/tools/scripts/nixome-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
+  SSHPASS="$SSH_PASSWORD" "$ROOT/lifecycle/misc/tools/scripts/airlock-nix.sh" shell nixpkgs#sshpass -c sshpass -e \
     ssh \
       -F /dev/null \
       -o LogLevel=ERROR \
@@ -442,37 +442,37 @@ sync_dom0_tools() {
     1|true|yes)
       ;;
     0|false|no)
-      printf '{"schema":"nixome.nested-dom0-tool-sync.v1","status":"skipped","reason":"NIXOME_SYNC_DOM0_TOOLS=0"}\n' > "$SYNC_DOM0_TOOLS_JSON"
+      printf '{"schema":"airlock.nested-dom0-tool-sync.v1","status":"skipped","reason":"AIRLOCK_SYNC_DOM0_TOOLS=0"}\n' > "$SYNC_DOM0_TOOLS_JSON"
       return 0
       ;;
     *)
-      printf 'unsupported NIXOME_SYNC_DOM0_TOOLS value: %s\n' "$SYNC_DOM0_TOOLS" >&2
+      printf 'unsupported AIRLOCK_SYNC_DOM0_TOOLS value: %s\n' "$SYNC_DOM0_TOOLS" >&2
       exit 1
       ;;
   esac
 
   printf 'warm-sync: syncing current dom0 tools into nested VM\n'
-  if ! NIXOME_LOG_DIR="$LOG_DIR" NIXOME_NESTED_WARM_CONFIG_INPUTS_PATH="$REMOTE_WARM_CONFIG_INPUTS_PATH" "$ROOT/lifecycle/misc/tools/scripts/sync-nested-dom0-tools.sh" > "$SYNC_DOM0_TOOLS_STDOUT" 2> "$SYNC_DOM0_TOOLS_STDERR"; then
+  if ! AIRLOCK_LOG_DIR="$LOG_DIR" AIRLOCK_NESTED_WARM_CONFIG_INPUTS_PATH="$REMOTE_WARM_CONFIG_INPUTS_PATH" "$ROOT/lifecycle/misc/tools/scripts/sync-nested-dom0-tools.sh" > "$SYNC_DOM0_TOOLS_STDOUT" 2> "$SYNC_DOM0_TOOLS_STDERR"; then
     collect_diagnostics
     cat "$SYNC_DOM0_TOOLS_STDERR" >&2 || true
     exit 1
   fi
-  if ! extract_json_result "nixome.nested-dom0-tool-sync.v1" "$SYNC_DOM0_TOOLS_STDOUT" "$SYNC_DOM0_TOOLS_JSON"; then
+  if ! extract_json_result "airlock.nested-dom0-tool-sync.v1" "$SYNC_DOM0_TOOLS_STDOUT" "$SYNC_DOM0_TOOLS_JSON"; then
     collect_diagnostics
     printf 'warm-sync did not emit result JSON; see %s\n' "$SYNC_DOM0_TOOLS_STDOUT" >&2
     exit 1
   fi
 
-  NIXOME_SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-setup-config"
-  SETUP_CONFIG_COMMAND="$NIXOME_SETUP_CONFIG_COMMAND"
+  AIRLOCK_SETUP_CONFIG_COMMAND="$REMOTE_WARM_BIN_DIR/airlock-setup-config"
+  SETUP_CONFIG_COMMAND="$AIRLOCK_SETUP_CONFIG_COMMAND"
   SETUP_CONFIG_TOPOLOGY="$REMOTE_WARM_TOPOLOGY_PATH"
-  NIXOME_NIX_DOMAIN_STORAGE_HELPER="$REMOTE_WARM_BIN_DIR/nixome-nix-domain-storage"
-  CONFIG_INPUTS_IMPORT_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-config-inputs-import"
-  if [ -z "${NIXOME_CONFIG_INPUTS_SOURCE+x}" ]; then
-    NIXOME_CONFIG_INPUTS_SOURCE="$REMOTE_WARM_CONFIG_INPUTS_PATH"
+  AIRLOCK_NIX_DOMAIN_STORAGE_HELPER="$REMOTE_WARM_BIN_DIR/airlock-nix-domain-storage"
+  CONFIG_INPUTS_IMPORT_COMMAND="$REMOTE_WARM_BIN_DIR/airlock-config-inputs-import"
+  if [ -z "${AIRLOCK_CONFIG_INPUTS_SOURCE+x}" ]; then
+    AIRLOCK_CONFIG_INPUTS_SOURCE="$REMOTE_WARM_CONFIG_INPUTS_PATH"
   fi
-  CONFIG_VMS_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-config-vms-smoke"
-  NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/nixome-nix-closure-domain-smoke"
+  CONFIG_VMS_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/airlock-config-vms-smoke"
+  NIX_CLOSURE_DOMAIN_SMOKE_COMMAND="$REMOTE_WARM_BIN_DIR/airlock-nix-closure-domain-smoke"
 }
 
 stop_warm_nix_domains() {
@@ -483,7 +483,7 @@ stop_warm_nix_domains() {
       return 0
       ;;
     *)
-      printf 'unsupported NIXOME_NESTED_WARM_STOP_NIX_DOMAINS value: %s\n' "$STOP_WARM_NIX_DOMAINS" >&2
+      printf 'unsupported AIRLOCK_NESTED_WARM_STOP_NIX_DOMAINS value: %s\n' "$STOP_WARM_NIX_DOMAINS" >&2
       exit 1
       ;;
   esac
@@ -536,56 +536,56 @@ prepare_warm_sync_boot_unit() {
   # Keep the boot oneshot in its active/exited state so later system switches do
   # not start it again and reapply the boot image topology over the candidate
   # topology that config-apply just applied.
-  remote 'sudo -n systemctl reset-failed nixome-setup-config.service >/dev/null 2>&1 || true'
-  printf '{"schema":"nixome.setup-config.v1","status":"skipped","reason":"warm tool sync uses explicit setup-config"}\n' > "$SETUP_CONFIG_BOOT_JSON"
+  remote 'sudo -n systemctl reset-failed airlock-setup-config.service >/dev/null 2>&1 || true'
+  printf '{"schema":"airlock.setup-config.v1","status":"skipped","reason":"warm tool sync uses explicit setup-config"}\n' > "$SETUP_CONFIG_BOOT_JSON"
   printf '# warm tool sync uses explicit setup-config\n' > "$SETUP_CONFIG_BOOT_COMMANDS_LOG"
 }
 
 collect_diagnostics() {
   remote 'systemctl --failed --no-legend || true' > "$FAILED_UNITS_LOG" 2>/dev/null || true
-  remote 'journalctl -b --no-pager -n 320 -u qubesd -u qubes-core -u libvirtd -u qubes-db-dom0 -u qubes-qrexec-policy-daemon -u nixome-qubes-store-init -u nixome-setup-config || true' > "$JOURNAL_LOG" 2>/dev/null || true
+  remote 'journalctl -b --no-pager -n 320 -u qubesd -u qubes-core -u libvirtd -u qubes-db-dom0 -u qubes-qrexec-policy-daemon -u airlock-qubes-store-init -u airlock-setup-config || true' > "$JOURNAL_LOG" 2>/dev/null || true
   remote 'qvm-ls || true' > "$QVM_LS_LOG" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/qubes-bootstrap.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-bootstrap.commands.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/qubes-bootstrap.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-bootstrap.commands.log" 2>/dev/null || true
   [ -s "$SETUP_CONFIG_BOOT_JSON" ] ||
-    remote 'sudo -n cat /var/log/nixome/setup-config.json 2>/dev/null || true' > "$SETUP_CONFIG_BOOT_JSON" 2>/dev/null || true
+    remote 'sudo -n cat /var/log/airlock/setup-config.json 2>/dev/null || true' > "$SETUP_CONFIG_BOOT_JSON" 2>/dev/null || true
   [ -s "$SETUP_CONFIG_BOOT_COMMANDS_LOG" ] ||
-    remote 'sudo -n cat /var/log/nixome/setup-config.commands.log 2>/dev/null || true' > "$SETUP_CONFIG_BOOT_COMMANDS_LOG" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/setup-config.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-setup-config.commands.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-smoke.commands.log 2>/dev/null || true' > "$CONFIG_VMS_COMMANDS_LOG" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-config-staging-update.log 2>/dev/null || true' > "$CONFIG_VMS_STAGING_UPDATE_LOG" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-config-staging-update.sh 2>/dev/null || true' > "$CONFIG_VMS_STAGING_UPDATE_SCRIPT" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-inputs-import.json 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_JSON" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-inputs-import.stderr.log 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_STDERR" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-archive.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.json" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-archive.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.commands.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-apply.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply.json" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-apply.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply.commands.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-apply-template-builds.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-builds.json" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-apply-template-builds.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-builds.log" 2>/dev/null || true
-  remote 'sudo -n sh -c '"'"'for f in /var/log/nixome/config-apply-template-build-*.log; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-build-details.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-apply-system-builds.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-system-builds.json" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-apply-system-builds.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-system-builds.log" 2>/dev/null || true
-  remote 'sudo -n sh -c '"'"'for f in /var/log/nixome/config-apply-system-build-*.log; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-system-build-details.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-apply-nix-domain-builds.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-nix-domain-builds.json" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-apply-nix-domain-builds.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-nix-domain-builds.log" 2>/dev/null || true
-  remote 'sudo -n sh -c '"'"'for f in /var/log/nixome/config-apply-nix-domain-build-*.log; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-nix-domain-build-details.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-apply-nix-domain-materializations.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-nix-domain-materializations.json" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-system-apply.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-system-apply.json" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-system-apply.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-system-apply.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-system-profile-activation.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-system-profile-activation.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-journal.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-journal.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-libxl.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-libxl.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-qvm-prefs.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-qvm-prefs.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-config-status.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-status.json" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-config-vault-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-vault-console.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-config-staging-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-staging-console.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-vms-config-validator-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-validator-console.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-boot-verify.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify.json" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-boot-verify-status.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify-status.json" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/config-boot-verify-marker.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify-marker.log" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/nix-closure-domain-smoke.json 2>/dev/null || true' > "$NIX_CLOSURE_JSON" 2>/dev/null || true
-  remote 'sudo -n cat /var/log/nixome/nix-closure-domain-smoke.commands.log 2>/dev/null || true' > "$NIX_CLOSURE_COMMANDS_LOG" 2>/dev/null || true
-  remote 'sudo -n sh -c '"'"'for f in /var/log/nixome/nix-closure-domain-*; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-nix-closure-domain-details.log" 2>/dev/null || true
+    remote 'sudo -n cat /var/log/airlock/setup-config.commands.log 2>/dev/null || true' > "$SETUP_CONFIG_BOOT_COMMANDS_LOG" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/setup-config.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-setup-config.commands.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-vms-smoke.commands.log 2>/dev/null || true' > "$CONFIG_VMS_COMMANDS_LOG" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-vms-config-staging-update.log 2>/dev/null || true' > "$CONFIG_VMS_STAGING_UPDATE_LOG" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-vms-config-staging-update.sh 2>/dev/null || true' > "$CONFIG_VMS_STAGING_UPDATE_SCRIPT" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-inputs-import.json 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_JSON" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-inputs-import.stderr.log 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_STDERR" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-archive.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-archive.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-archive.commands.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-apply.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-apply.commands.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply.commands.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-apply-template-builds.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-builds.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-apply-template-builds.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-builds.log" 2>/dev/null || true
+  remote 'sudo -n sh -c '"'"'for f in /var/log/airlock/config-apply-template-build-*.log; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-template-build-details.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-apply-system-builds.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-system-builds.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-apply-system-builds.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-system-builds.log" 2>/dev/null || true
+  remote 'sudo -n sh -c '"'"'for f in /var/log/airlock/config-apply-system-build-*.log; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-system-build-details.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-apply-nix-domain-builds.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-nix-domain-builds.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-apply-nix-domain-builds.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-nix-domain-builds.log" 2>/dev/null || true
+  remote 'sudo -n sh -c '"'"'for f in /var/log/airlock/config-apply-nix-domain-build-*.log; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-nix-domain-build-details.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-apply-nix-domain-materializations.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-apply-nix-domain-materializations.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-system-apply.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-system-apply.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-system-apply.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-system-apply.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-system-profile-activation.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-system-profile-activation.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-vms-journal.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-journal.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-vms-libxl.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-libxl.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-vms-qvm-prefs.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-qvm-prefs.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-vms-config-status.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-status.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-vms-config-vault-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-vault-console.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-vms-config-staging-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-staging-console.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-vms-config-validator-console.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-vms-config-validator-console.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-boot-verify.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-boot-verify-status.json 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify-status.json" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/config-boot-verify-marker.log 2>/dev/null || true' > "$LOG_DIR/vm-gui-config-boot-verify-marker.log" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/nix-closure-domain-smoke.json 2>/dev/null || true' > "$NIX_CLOSURE_JSON" 2>/dev/null || true
+  remote 'sudo -n cat /var/log/airlock/nix-closure-domain-smoke.commands.log 2>/dev/null || true' > "$NIX_CLOSURE_COMMANDS_LOG" 2>/dev/null || true
+  remote 'sudo -n sh -c '"'"'for f in /var/log/airlock/nix-closure-domain-*; do [ -f "$f" ] && printf "== %s ==\n" "$f" && cat "$f"; done'"'"' 2>/dev/null || true' > "$LOG_DIR/vm-gui-nix-closure-domain-details.log" 2>/dev/null || true
 }
 
 extract_json_result() {
@@ -618,13 +618,13 @@ PY
 }
 
 wait_for_setup_config_boot_unit() {
-  if ! remote 'systemctl cat nixome-setup-config.service >/dev/null 2>&1'; then
+  if ! remote 'systemctl cat airlock-setup-config.service >/dev/null 2>&1'; then
     return 0
   fi
 
   printf 'setup-config: waiting for boot setup unit\n'
-  if ! remote "deadline=\$((SECONDS + $SETUP_CONFIG_BOOT_WAIT_SECONDS)); while [ \"\$(systemctl show -p ActiveState --value nixome-setup-config.service 2>/dev/null || printf missing)\" = activating ]; do if [ \"\$SECONDS\" -ge \"\$deadline\" ]; then systemctl --no-pager status nixome-setup-config.service || true; exit 124; fi; sleep 2; done; state=\"\$(systemctl show -p ActiveState --value nixome-setup-config.service 2>/dev/null || printf missing)\"; if [ \"\$state\" = failed ]; then systemctl --no-pager status nixome-setup-config.service || true; exit 1; fi"; then
-    remote 'sudo -n cat /var/log/nixome/setup-config.json 2>/dev/null || true' > "$SETUP_CONFIG_JSON" 2>/dev/null || true
+  if ! remote "deadline=\$((SECONDS + $SETUP_CONFIG_BOOT_WAIT_SECONDS)); while [ \"\$(systemctl show -p ActiveState --value airlock-setup-config.service 2>/dev/null || printf missing)\" = activating ]; do if [ \"\$SECONDS\" -ge \"\$deadline\" ]; then systemctl --no-pager status airlock-setup-config.service || true; exit 124; fi; sleep 2; done; state=\"\$(systemctl show -p ActiveState --value airlock-setup-config.service 2>/dev/null || printf missing)\"; if [ \"\$state\" = failed ]; then systemctl --no-pager status airlock-setup-config.service || true; exit 1; fi"; then
+    remote 'sudo -n cat /var/log/airlock/setup-config.json 2>/dev/null || true' > "$SETUP_CONFIG_JSON" 2>/dev/null || true
     collect_diagnostics
     exit 1
   fi
@@ -635,13 +635,13 @@ wait_for_setup_config_boot_unit() {
 copy_boot_setup_config_artifacts() {
   local copied=1
 
-  if remote 'sudo -n test -r /var/log/nixome/setup-config.json' >/dev/null 2>&1; then
-    remote 'sudo -n cat /var/log/nixome/setup-config.json' > "$SETUP_CONFIG_BOOT_JSON" 2>/dev/null || true
+  if remote 'sudo -n test -r /var/log/airlock/setup-config.json' >/dev/null 2>&1; then
+    remote 'sudo -n cat /var/log/airlock/setup-config.json' > "$SETUP_CONFIG_BOOT_JSON" 2>/dev/null || true
     copied=0
   fi
 
-  if remote 'sudo -n test -r /var/log/nixome/setup-config.commands.log' >/dev/null 2>&1; then
-    remote 'sudo -n cat /var/log/nixome/setup-config.commands.log' > "$SETUP_CONFIG_BOOT_COMMANDS_LOG" 2>/dev/null || true
+  if remote 'sudo -n test -r /var/log/airlock/setup-config.commands.log' >/dev/null 2>&1; then
+    remote 'sudo -n cat /var/log/airlock/setup-config.commands.log' > "$SETUP_CONFIG_BOOT_COMMANDS_LOG" 2>/dev/null || true
     copied=0
   fi
 
@@ -651,7 +651,7 @@ copy_boot_setup_config_artifacts() {
 copy_boot_setup_config_result() {
   copy_boot_setup_config_artifacts || return 1
 
-  if grep -q '"schema":"nixome.setup-config.v1"' "$SETUP_CONFIG_BOOT_JSON"; then
+  if grep -q '"schema":"airlock.setup-config.v1"' "$SETUP_CONFIG_BOOT_JSON"; then
     cp "$SETUP_CONFIG_BOOT_JSON" "$SETUP_CONFIG_JSON"
     return 0
   fi
@@ -667,7 +667,7 @@ shutdown_vm_on_success() {
       return 0
       ;;
     *)
-      printf 'warning: ignoring unsupported NIXOME_SHUTDOWN_VM_ON_SUCCESS value: %s\n' "$SHUTDOWN_VM_ON_SUCCESS" >&2
+      printf 'warning: ignoring unsupported AIRLOCK_SHUTDOWN_VM_ON_SUCCESS value: %s\n' "$SHUTDOWN_VM_ON_SUCCESS" >&2
       return 0
       ;;
   esac
@@ -698,7 +698,7 @@ shutdown_vm_on_success() {
     0|false|no)
       ;;
     *)
-      printf 'warning: ignoring unsupported NIXOME_REQUIRE_CLEAN_SHUTDOWN value: %s\n' "$REQUIRE_CLEAN_SHUTDOWN" >&2
+      printf 'warning: ignoring unsupported AIRLOCK_REQUIRE_CLEAN_SHUTDOWN value: %s\n' "$REQUIRE_CLEAN_SHUTDOWN" >&2
       ;;
   esac
 }
@@ -720,16 +720,16 @@ case "$REUSE_WARM_VM" in
   0|false|no)
     ;;
   *)
-    printf 'unsupported NIXOME_REUSE_WARM_VM value: %s\n' "$REUSE_WARM_VM" >&2
+    printf 'unsupported AIRLOCK_REUSE_WARM_VM value: %s\n' "$REUSE_WARM_VM" >&2
     exit 1
     ;;
 esac
 
 if [ "$reuse_existing_vm" != true ]; then
   timeout -k 20s "$VM_TIMEOUT" env \
-    NIXOME_VM_IMAGE_ATTR="$IMAGE_ATTR" \
-    NIXOME_VM_DISPLAY="$DISPLAY_MODE" \
-    NIXOME_VM_SSH_PORT="$SSH_PORT" \
+    AIRLOCK_VM_IMAGE_ATTR="$IMAGE_ATTR" \
+    AIRLOCK_VM_DISPLAY="$DISPLAY_MODE" \
+    AIRLOCK_VM_SSH_PORT="$SSH_PORT" \
     "$ROOT/lifecycle/misc/tools/scripts/run-nested-vm.sh" > "$QEMU_LOG" 2>&1 &
   vm_pid="$!"
 
@@ -774,7 +774,7 @@ if [ "$reuse_existing_vm" != true ]; then
   fi
 fi
 
-if ! remote 'nixome-observe-dom0' > "$OBSERVE_JSON"; then
+if ! remote 'airlock-observe-dom0' > "$OBSERVE_JSON"; then
   collect_diagnostics
   exit 1
 fi
@@ -792,18 +792,18 @@ if [ "$BOOTSTRAP_QUBES" = "1" ]; then
   printf 'bootstrap: installing/checking Qubes VM kernel and template\n'
   copy_cached_bootstrap_assets_to_guest
   bootstrap_env="$(remote_env_prefix)"
-  if ! remote "sudo -n $bootstrap_env NIXOME_LOG_DIR=/var/log/nixome nixome-qube-bootstrap" > "$BOOTSTRAP_STDOUT" 2> "$BOOTSTRAP_STDERR"; then
+  if ! remote "sudo -n $bootstrap_env AIRLOCK_LOG_DIR=/var/log/airlock airlock-qube-bootstrap" > "$BOOTSTRAP_STDOUT" 2> "$BOOTSTRAP_STDERR"; then
     collect_diagnostics
     cat "$BOOTSTRAP_STDERR" >&2 || true
     exit 1
   fi
-  if ! extract_json_result "nixome.qubes-bootstrap.v1" "$BOOTSTRAP_STDOUT" "$BOOTSTRAP_JSON"; then
+  if ! extract_json_result "airlock.qubes-bootstrap.v1" "$BOOTSTRAP_STDOUT" "$BOOTSTRAP_JSON"; then
     collect_diagnostics
     printf 'bootstrap did not emit result JSON; see %s\n' "$BOOTSTRAP_STDOUT" >&2
     exit 1
   fi
 else
-  printf '{"schema":"nixome.qubes-bootstrap.v1","status":"skipped","reason":"NIXOME_BOOTSTRAP_QUBES=0"}\n' > "$BOOTSTRAP_JSON"
+  printf '{"schema":"airlock.qubes-bootstrap.v1","status":"skipped","reason":"AIRLOCK_BOOTSTRAP_QUBES=0"}\n' > "$BOOTSTRAP_JSON"
 fi
 
 if [ "$RUN_SETUP_CONFIG" = "1" ]; then
@@ -814,15 +814,15 @@ if [ "$RUN_SETUP_CONFIG" = "1" ]; then
     setup_config_args="$setup_config_args --topology $(shell_quote "$SETUP_CONFIG_TOPOLOGY")"
   fi
   stop_warm_nix_domains
-  if ! remote "sudo -n env NIXOME_LOG_DIR=/var/log/nixome $setup_config_command $setup_config_args" > "$SETUP_CONFIG_STDOUT" 2> "$SETUP_CONFIG_STDERR"; then
-    remote 'sudo -n cat /var/log/nixome/setup-config.json 2>/dev/null || true' > "$SETUP_CONFIG_JSON" 2>/dev/null || true
+  if ! remote "sudo -n env AIRLOCK_LOG_DIR=/var/log/airlock $setup_config_command $setup_config_args" > "$SETUP_CONFIG_STDOUT" 2> "$SETUP_CONFIG_STDERR"; then
+    remote 'sudo -n cat /var/log/airlock/setup-config.json 2>/dev/null || true' > "$SETUP_CONFIG_JSON" 2>/dev/null || true
     collect_diagnostics
     cat "$SETUP_CONFIG_STDERR" >&2 || true
     exit 1
   fi
-  if ! extract_json_result "nixome.setup-config.v1" "$SETUP_CONFIG_STDOUT" "$SETUP_CONFIG_JSON"; then
-    remote 'sudo -n cat /var/log/nixome/setup-config.json 2>/dev/null || true' > "$SETUP_CONFIG_JSON" 2>/dev/null || true
-    if ! grep -q '"schema":"nixome.setup-config.v1"' "$SETUP_CONFIG_JSON"; then
+  if ! extract_json_result "airlock.setup-config.v1" "$SETUP_CONFIG_STDOUT" "$SETUP_CONFIG_JSON"; then
+    remote 'sudo -n cat /var/log/airlock/setup-config.json 2>/dev/null || true' > "$SETUP_CONFIG_JSON" 2>/dev/null || true
+    if ! grep -q '"schema":"airlock.setup-config.v1"' "$SETUP_CONFIG_JSON"; then
       collect_diagnostics
       printf 'setup-config did not emit result JSON; see %s\n' "$SETUP_CONFIG_STDOUT" >&2
       exit 1
@@ -830,7 +830,7 @@ if [ "$RUN_SETUP_CONFIG" = "1" ]; then
   fi
 else
   if ! copy_boot_setup_config_result; then
-    printf '{"schema":"nixome.setup-config.v1","status":"skipped","reason":"NIXOME_RUN_SETUP_CONFIG=0"}\n' > "$SETUP_CONFIG_JSON"
+    printf '{"schema":"airlock.setup-config.v1","status":"skipped","reason":"AIRLOCK_RUN_SETUP_CONFIG=0"}\n' > "$SETUP_CONFIG_JSON"
   fi
 fi
 
@@ -838,109 +838,109 @@ if [ "$RUN_CONFIG_INPUTS_IMPORT" = "1" ]; then
   printf 'config-inputs: importing offline config inputs into config VMs\n'
   config_inputs_import_env="$(config_inputs_import_env_prefix)"
   config_inputs_import_command="$(shell_quote "$CONFIG_INPUTS_IMPORT_COMMAND")"
-  if ! remote "sudo -n $config_inputs_import_env NIXOME_LOG_DIR=/var/log/nixome $config_inputs_import_command" > "$CONFIG_INPUTS_IMPORT_STDOUT" 2> "$CONFIG_INPUTS_IMPORT_STDERR"; then
-    remote 'sudo -n cat /var/log/nixome/config-inputs-import.json 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_JSON" 2>/dev/null || true
+  if ! remote "sudo -n $config_inputs_import_env AIRLOCK_LOG_DIR=/var/log/airlock $config_inputs_import_command" > "$CONFIG_INPUTS_IMPORT_STDOUT" 2> "$CONFIG_INPUTS_IMPORT_STDERR"; then
+    remote 'sudo -n cat /var/log/airlock/config-inputs-import.json 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_JSON" 2>/dev/null || true
     collect_diagnostics
     cat "$CONFIG_INPUTS_IMPORT_STDERR" >&2 || true
     exit 1
   fi
-  if ! extract_json_result "nixome.config-inputs-import.v1" "$CONFIG_INPUTS_IMPORT_STDOUT" "$CONFIG_INPUTS_IMPORT_JSON"; then
-    remote 'sudo -n cat /var/log/nixome/config-inputs-import.json 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_JSON" 2>/dev/null || true
-    if ! grep -q '"schema":"nixome.config-inputs-import.v1"' "$CONFIG_INPUTS_IMPORT_JSON"; then
+  if ! extract_json_result "airlock.config-inputs-import.v1" "$CONFIG_INPUTS_IMPORT_STDOUT" "$CONFIG_INPUTS_IMPORT_JSON"; then
+    remote 'sudo -n cat /var/log/airlock/config-inputs-import.json 2>/dev/null || true' > "$CONFIG_INPUTS_IMPORT_JSON" 2>/dev/null || true
+    if ! grep -q '"schema":"airlock.config-inputs-import.v1"' "$CONFIG_INPUTS_IMPORT_JSON"; then
       collect_diagnostics
       printf 'config input import did not emit result JSON; see %s\n' "$CONFIG_INPUTS_IMPORT_STDOUT" >&2
       exit 1
     fi
   fi
 else
-  printf '{"schema":"nixome.config-inputs-import.v1","status":"skipped","reason":"NIXOME_RUN_CONFIG_INPUTS_IMPORT=0"}\n' > "$CONFIG_INPUTS_IMPORT_JSON"
+  printf '{"schema":"airlock.config-inputs-import.v1","status":"skipped","reason":"AIRLOCK_RUN_CONFIG_INPUTS_IMPORT=0"}\n' > "$CONFIG_INPUTS_IMPORT_JSON"
 fi
 
 if [ "$RUN_CONFIG_VMS_SMOKE" = "1" ]; then
   printf 'config-vms: booting declared NixOS config VMs and archiving a validated config candidate\n'
   config_vms_env="$(config_vms_env_prefix)"
   config_vms_smoke_command="$(shell_quote "$CONFIG_VMS_SMOKE_COMMAND")"
-  if ! remote "sudo -n $config_vms_env NIXOME_LOG_DIR=/var/log/nixome $config_vms_smoke_command" > "$CONFIG_VMS_STDOUT" 2> "$CONFIG_VMS_STDERR"; then
-    remote 'sudo -n cat /var/log/nixome/config-vms-smoke.json 2>/dev/null || true' > "$CONFIG_VMS_JSON" 2>/dev/null || true
+  if ! remote "sudo -n $config_vms_env AIRLOCK_LOG_DIR=/var/log/airlock $config_vms_smoke_command" > "$CONFIG_VMS_STDOUT" 2> "$CONFIG_VMS_STDERR"; then
+    remote 'sudo -n cat /var/log/airlock/config-vms-smoke.json 2>/dev/null || true' > "$CONFIG_VMS_JSON" 2>/dev/null || true
     collect_diagnostics
     cat "$CONFIG_VMS_STDERR" >&2 || true
     exit 1
   fi
-  if ! extract_json_result "nixome.config-vms-smoke.v1" "$CONFIG_VMS_STDOUT" "$CONFIG_VMS_JSON"; then
-    remote 'sudo -n cat /var/log/nixome/config-vms-smoke.json 2>/dev/null || true' > "$CONFIG_VMS_JSON" 2>/dev/null || true
-    if ! grep -q '"schema":"nixome.config-vms-smoke.v1"' "$CONFIG_VMS_JSON"; then
+  if ! extract_json_result "airlock.config-vms-smoke.v1" "$CONFIG_VMS_STDOUT" "$CONFIG_VMS_JSON"; then
+    remote 'sudo -n cat /var/log/airlock/config-vms-smoke.json 2>/dev/null || true' > "$CONFIG_VMS_JSON" 2>/dev/null || true
+    if ! grep -q '"schema":"airlock.config-vms-smoke.v1"' "$CONFIG_VMS_JSON"; then
       collect_diagnostics
       printf 'config VMs smoke did not emit result JSON; see %s\n' "$CONFIG_VMS_STDOUT" >&2
       exit 1
     fi
   fi
 else
-  printf '{"schema":"nixome.config-vms-smoke.v1","status":"skipped","reason":"NIXOME_RUN_CONFIG_VMS_SMOKE=0"}\n' > "$CONFIG_VMS_JSON"
+  printf '{"schema":"airlock.config-vms-smoke.v1","status":"skipped","reason":"AIRLOCK_RUN_CONFIG_VMS_SMOKE=0"}\n' > "$CONFIG_VMS_JSON"
 fi
 
 if [ "$RUN_CONFIG_BOOT_VERIFY" = "1" ]; then
   printf 'config-boot: verifying dom0 booted into staged generation\n'
   config_boot_verify_env="$(config_boot_verify_env_prefix)"
-  if ! remote "sudo -n $config_boot_verify_env NIXOME_LOG_DIR=/var/log/nixome nixome-config-boot-verify" > "$CONFIG_BOOT_VERIFY_STDOUT" 2> "$CONFIG_BOOT_VERIFY_STDERR"; then
-    remote 'sudo -n cat /var/log/nixome/config-boot-verify.json 2>/dev/null || true' > "$CONFIG_BOOT_VERIFY_JSON" 2>/dev/null || true
+  if ! remote "sudo -n $config_boot_verify_env AIRLOCK_LOG_DIR=/var/log/airlock airlock-config-boot-verify" > "$CONFIG_BOOT_VERIFY_STDOUT" 2> "$CONFIG_BOOT_VERIFY_STDERR"; then
+    remote 'sudo -n cat /var/log/airlock/config-boot-verify.json 2>/dev/null || true' > "$CONFIG_BOOT_VERIFY_JSON" 2>/dev/null || true
     collect_diagnostics
     cat "$CONFIG_BOOT_VERIFY_STDERR" >&2 || true
     exit 1
   fi
-  if ! extract_json_result "nixome.config-boot-verify.v1" "$CONFIG_BOOT_VERIFY_STDOUT" "$CONFIG_BOOT_VERIFY_JSON"; then
-    remote 'sudo -n cat /var/log/nixome/config-boot-verify.json 2>/dev/null || true' > "$CONFIG_BOOT_VERIFY_JSON" 2>/dev/null || true
-    if ! grep -q '"schema":"nixome.config-boot-verify.v1"' "$CONFIG_BOOT_VERIFY_JSON"; then
+  if ! extract_json_result "airlock.config-boot-verify.v1" "$CONFIG_BOOT_VERIFY_STDOUT" "$CONFIG_BOOT_VERIFY_JSON"; then
+    remote 'sudo -n cat /var/log/airlock/config-boot-verify.json 2>/dev/null || true' > "$CONFIG_BOOT_VERIFY_JSON" 2>/dev/null || true
+    if ! grep -q '"schema":"airlock.config-boot-verify.v1"' "$CONFIG_BOOT_VERIFY_JSON"; then
       collect_diagnostics
       printf 'config boot verify did not emit result JSON; see %s\n' "$CONFIG_BOOT_VERIFY_STDOUT" >&2
       exit 1
     fi
   fi
 else
-  printf '{"schema":"nixome.config-boot-verify.v1","status":"skipped","reason":"NIXOME_RUN_CONFIG_BOOT_VERIFY=0"}\n' > "$CONFIG_BOOT_VERIFY_JSON"
+  printf '{"schema":"airlock.config-boot-verify.v1","status":"skipped","reason":"AIRLOCK_RUN_CONFIG_BOOT_VERIFY=0"}\n' > "$CONFIG_BOOT_VERIFY_JSON"
 fi
 
 if [ "$RUN_NIX_CLOSURE_SMOKE" = "1" ]; then
   printf 'nix-closure: running standalone closure-backed domain lifecycle test\n'
   nix_closure_env="$(nix_closure_env_prefix)"
   nix_closure_domain_smoke_command="$(shell_quote "$NIX_CLOSURE_DOMAIN_SMOKE_COMMAND")"
-  if ! remote "sudo -n $nix_closure_env NIXOME_LOG_DIR=/var/log/nixome $nix_closure_domain_smoke_command" > "$NIX_CLOSURE_STDOUT" 2> "$NIX_CLOSURE_STDERR"; then
-    remote 'sudo -n cat /var/log/nixome/nix-closure-domain-smoke.json 2>/dev/null || true' > "$NIX_CLOSURE_JSON" 2>/dev/null || true
+  if ! remote "sudo -n $nix_closure_env AIRLOCK_LOG_DIR=/var/log/airlock $nix_closure_domain_smoke_command" > "$NIX_CLOSURE_STDOUT" 2> "$NIX_CLOSURE_STDERR"; then
+    remote 'sudo -n cat /var/log/airlock/nix-closure-domain-smoke.json 2>/dev/null || true' > "$NIX_CLOSURE_JSON" 2>/dev/null || true
     collect_diagnostics
     cat "$NIX_CLOSURE_STDERR" >&2 || true
     exit 1
   fi
-  if ! extract_json_result "nixome.nix-closure-domain-smoke.v1" "$NIX_CLOSURE_STDOUT" "$NIX_CLOSURE_JSON"; then
-    remote 'sudo -n cat /var/log/nixome/nix-closure-domain-smoke.json 2>/dev/null || true' > "$NIX_CLOSURE_JSON" 2>/dev/null || true
-    if ! grep -q '"schema":"nixome.nix-closure-domain-smoke.v1"' "$NIX_CLOSURE_JSON"; then
+  if ! extract_json_result "airlock.nix-closure-domain-smoke.v1" "$NIX_CLOSURE_STDOUT" "$NIX_CLOSURE_JSON"; then
+    remote 'sudo -n cat /var/log/airlock/nix-closure-domain-smoke.json 2>/dev/null || true' > "$NIX_CLOSURE_JSON" 2>/dev/null || true
+    if ! grep -q '"schema":"airlock.nix-closure-domain-smoke.v1"' "$NIX_CLOSURE_JSON"; then
       collect_diagnostics
       printf 'nix-closure domain smoke did not emit result JSON; see %s\n' "$NIX_CLOSURE_STDOUT" >&2
       exit 1
     fi
   fi
 else
-  printf '{"schema":"nixome.nix-closure-domain-smoke.v1","status":"skipped","reason":"NIXOME_RUN_NIX_CLOSURE_SMOKE=0"}\n' > "$NIX_CLOSURE_JSON"
+  printf '{"schema":"airlock.nix-closure-domain-smoke.v1","status":"skipped","reason":"AIRLOCK_RUN_NIX_CLOSURE_SMOKE=0"}\n' > "$NIX_CLOSURE_JSON"
 fi
 
 if [ "$RUN_QREXEC_SMOKE" = "1" ]; then
   printf 'qrexec: running uname smoke test\n'
-  if ! remote "env NIXOME_LOG_DIR=/tmp/nixome-logs NIXOME_TEST_TEMPLATE=$(shell_quote "$TEMPLATE") NIXOME_TEST_QUBE=$(shell_quote "$QUBE") NIXOME_TEST_CLEANUP=0 nixome-qubes-smoke" > "$QREXEC_JSON" 2> "$QREXEC_STDERR"; then
+  if ! remote "env AIRLOCK_LOG_DIR=/tmp/airlock-logs AIRLOCK_TEST_TEMPLATE=$(shell_quote "$TEMPLATE") AIRLOCK_TEST_QUBE=$(shell_quote "$QUBE") AIRLOCK_TEST_CLEANUP=0 airlock-qubes-smoke" > "$QREXEC_JSON" 2> "$QREXEC_STDERR"; then
     collect_diagnostics
     cat "$QREXEC_STDERR" >&2 || true
     exit 1
   fi
 else
-  printf '{"schema":"nixome.qubes-smoke.v1","status":"skipped","reason":"NIXOME_RUN_QUBES_SMOKE=0"}\n' > "$QREXEC_JSON"
+  printf '{"schema":"airlock.qubes-smoke.v1","status":"skipped","reason":"AIRLOCK_RUN_QUBES_SMOKE=0"}\n' > "$QREXEC_JSON"
 fi
 
 if [ "$RUN_GUI_SMOKE" = "1" ]; then
   printf 'gui: running AppVM window smoke test\n'
-  if ! remote "env NIXOME_LOG_DIR=/tmp/nixome-logs NIXOME_TEST_QUBE=$(shell_quote "$QUBE") NIXOME_GUI_DISPLAY=:0 nixome-qube-gui-smoke" > "$GUI_JSON" 2> "$GUI_STDERR"; then
+  if ! remote "env AIRLOCK_LOG_DIR=/tmp/airlock-logs AIRLOCK_TEST_QUBE=$(shell_quote "$QUBE") AIRLOCK_GUI_DISPLAY=:0 airlock-qube-gui-smoke" > "$GUI_JSON" 2> "$GUI_STDERR"; then
     collect_diagnostics
     cat "$GUI_STDERR" >&2 || true
     exit 1
   fi
 else
-  printf '{"schema":"nixome.qubes-gui-smoke.v1","status":"skipped","reason":"NIXOME_RUN_GUI_SMOKE=0"}\n' > "$GUI_JSON"
+  printf '{"schema":"airlock.qubes-gui-smoke.v1","status":"skipped","reason":"AIRLOCK_RUN_GUI_SMOKE=0"}\n' > "$GUI_JSON"
 fi
 
 remote 'qvm-ls || true' > "$QVM_LS_LOG" 2>/dev/null || true

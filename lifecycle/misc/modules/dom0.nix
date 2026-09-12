@@ -5,13 +5,13 @@
   ...
 }:
 let
-  cfg = config.nixome.dom0;
-  imageCfg = config.nixome.image;
-  qubeBootstrap = pkgs.callPackage ../../bootstrap/tools/pkgs/nixome-qube-bootstrap { };
-  qubeGuiSmoke = pkgs.callPackage ../tools/pkgs/nixome-qube-gui-smoke { };
-  qubesStorage = pkgs.python3.pkgs.callPackage ../../runtime/tools/pkgs/nixome-qubes-storage { };
-  observeDom0 = pkgs.callPackage ../../runtime/tools/pkgs/nixome-observe { };
-  qubesSmoke = pkgs.callPackage ../tools/pkgs/nixome-qubes-smoke { };
+  cfg = config.airlock.dom0;
+  imageCfg = config.airlock.image;
+  qubeBootstrap = pkgs.callPackage ../../bootstrap/tools/pkgs/airlock-qube-bootstrap { };
+  qubeGuiSmoke = pkgs.callPackage ../tools/pkgs/airlock-qube-gui-smoke { };
+  qubesStorage = pkgs.python3.pkgs.callPackage ../../runtime/tools/pkgs/airlock-qubes-storage { };
+  observeDom0 = pkgs.callPackage ../../runtime/tools/pkgs/airlock-observe { };
+  qubesSmoke = pkgs.callPackage ../tools/pkgs/airlock-qubes-smoke { };
   qrexecDom0 = pkgs.python3.pkgs.qubes-core-qrexec.dom0;
   qubesAdminClient = pkgs.python3.pkgs.qubes-core-admin-client;
   dom0DevPackages = with pkgs; [
@@ -24,7 +24,7 @@ let
   devNetworkProxyUrl = "http://${devNetworkProxyListen}";
   sysGuiVisibleSystemDomains = lib.filter (
     name: lib.hasPrefix "sys-" name
-  ) (builtins.attrNames config.nixome.qubes.domains);
+  ) (builtins.attrNames config.airlock.qubes.domains);
   devNetworkProxyEnv = {
     http_proxy = devNetworkProxyUrl;
     https_proxy = devNetworkProxyUrl;
@@ -33,16 +33,16 @@ let
     no_proxy = "127.0.0.1,localhost,::1";
     NO_PROXY = "127.0.0.1,localhost,::1";
   };
-  dom0DevNetworkProxyPolicyPackage = pkgs.runCommand "nixome-dom0-network-proxy-policy" { } ''
+  dom0DevNetworkProxyPolicyPackage = pkgs.runCommand "airlock-dom0-network-proxy-policy" { } ''
     install -d "$out/etc/qubes/policy.d"
-    cat > "$out/etc/qubes/policy.d/35-nixome-dom0-network-proxy.policy" <<'EOF'
-    # Managed by Nixome. Let dev-mode dom0 reach the updates proxy through its configured network qube.
+    cat > "$out/etc/qubes/policy.d/35-airlock-dom0-network-proxy.policy" <<'EOF'
+    # Managed by Airlock. Let dev-mode dom0 reach the updates proxy through its configured network qube.
     qubes.UpdatesProxy * dom0 ${devNetworkProxy.target} allow
     EOF
   '';
-  sysGuiPolicyPackage = pkgs.runCommand "nixome-sys-gui-policy" { } ''
+  sysGuiPolicyPackage = pkgs.runCommand "airlock-sys-gui-policy" { } ''
     install -d "$out/etc/qubes/policy.d"
-    cat > "$out/etc/qubes/policy.d/50-nixome-sys-gui.policy" <<'EOF'
+    cat > "$out/etc/qubes/policy.d/50-airlock-sys-gui.policy" <<'EOF'
     # Based on Qubes' qvm/template-gui.jinja for the hybrid sys-gui domain.
     policy.EvalGUI +qubes.ClipboardPaste sys-gui dom0 allow
     qubes.GetImageRGBA * sys-gui @tag:guivm-sys-gui allow
@@ -143,7 +143,7 @@ let
     EOF
   '';
   sysGuiSessionPackage =
-    pkgs.runCommand "nixome-sys-gui-session"
+    pkgs.runCommand "airlock-sys-gui-session"
       {
         passthru.providedSessions = [ "sys-gui" ];
       }
@@ -182,21 +182,21 @@ in
     ) packages;
   };
 
-  options.nixome.image.devMode.enable = lib.mkOption {
+  options.airlock.image.devMode.enable = lib.mkOption {
     type = lib.types.bool;
     default = false;
     description = ''
-      Build this whole Nixome OS image as a development image.
+      Build this whole Airlock OS image as a development image.
       This is a build-time image selection flag, not a runtime mode.
     '';
   };
 
-  options.nixome.dom0 = {
-    enable = lib.mkEnableOption "the Nixome Qubes-on-NixOS dom0 proof of concept";
+  options.airlock.dom0 = {
+    enable = lib.mkEnableOption "the Airlock Qubes-on-NixOS dom0 proof of concept";
 
     user = lib.mkOption {
       type = lib.types.str;
-      default = "nixome";
+      default = "airlock";
       description = ''
         Local user that receives access to the Qubes control group.
         Qubes dom0 is effectively a single-user control environment.
@@ -208,9 +208,9 @@ in
     observability.enable = lib.mkOption {
       type = lib.types.bool;
       default = imageCfg.devMode.enable;
-      defaultText = lib.literalExpression "config.nixome.image.devMode.enable";
+      defaultText = lib.literalExpression "config.airlock.image.devMode.enable";
       description = ''
-        Install the development-only nixome-observe-dom0 command.
+        Install the development-only airlock-observe-dom0 command.
         It reports Xen, systemd, and Qubes control-stack state as JSON.
         Defaults to the image-level development mode flag.
       '';
@@ -219,7 +219,7 @@ in
     testingTools.enable = lib.mkOption {
       type = lib.types.bool;
       default = imageCfg.devMode.enable;
-      defaultText = lib.literalExpression "config.nixome.image.devMode.enable";
+      defaultText = lib.literalExpression "config.airlock.image.devMode.enable";
       description = ''
         Install development-only bootstrap and smoke-test commands.
         These commands may create or modify Qubes runtime state.
@@ -245,7 +245,7 @@ in
       enable = lib.mkOption {
         type = lib.types.bool;
         default = imageCfg.devMode.enable;
-        defaultText = lib.literalExpression "config.nixome.image.devMode.enable";
+        defaultText = lib.literalExpression "config.airlock.image.devMode.enable";
         description = ''
           In development images, expose a dom0 loopback HTTP proxy that
           forwards requests over qrexec to the selected network qube.
@@ -297,23 +297,23 @@ in
     assertions = [
       {
         assertion = cfg.user != "";
-        message = "nixome.dom0.user must name the local Qubes control user.";
+        message = "airlock.dom0.user must name the local Qubes control user.";
       }
       {
         assertion = cfg.dom0Resources.memoryMiB > 0;
-        message = "nixome.dom0.dom0Resources.memoryMiB must be greater than zero.";
+        message = "airlock.dom0.dom0Resources.memoryMiB must be greater than zero.";
       }
       {
         assertion = cfg.dom0Resources.maxMemoryMiB >= cfg.dom0Resources.memoryMiB;
-        message = "nixome.dom0.dom0Resources.maxMemoryMiB must be >= memoryMiB.";
+        message = "airlock.dom0.dom0Resources.maxMemoryMiB must be >= memoryMiB.";
       }
       {
         assertion = !devNetworkProxy.enable || devNetworkProxy.target != "";
-        message = "nixome.dom0.devModeNetworkProxy.target must not be empty when the proxy is enabled.";
+        message = "airlock.dom0.devModeNetworkProxy.target must not be empty when the proxy is enabled.";
       }
       {
         assertion = !devNetworkProxy.enable || lib.match "[A-Za-z0-9_.-]+" devNetworkProxy.target != null;
-        message = "nixome.dom0.devModeNetworkProxy.target must be a simple Qubes domain name.";
+        message = "airlock.dom0.devModeNetworkProxy.target must be a simple Qubes domain name.";
       }
     ];
 
@@ -347,8 +347,8 @@ in
       greeters.gtk.enable = false;
       autoLogin.timeout = 0;
     };
-    systemd.services.display-manager.after = lib.optional cfg.gui.enable "nixome-setup-config.service";
-    nixome.qubes.setupConfigOnBoot.statusDevice = lib.mkIf cfg.gui.enable (lib.mkDefault "/dev/tty1");
+    systemd.services.display-manager.after = lib.optional cfg.gui.enable "airlock-setup-config.service";
+    airlock.qubes.setupConfigOnBoot.statusDevice = lib.mkIf cfg.gui.enable (lib.mkDefault "/dev/tty1");
 
     virtualisation.qubes = {
       dom0.enable = true;
@@ -389,8 +389,8 @@ in
 
     virtualisation.libvirtd.firewallBackend = lib.mkForce cfg.libvirtFirewallBackend;
 
-    systemd.services.nixome-qubes-store-init = {
-      description = "Initialize the Qubes XML store for Nixome dom0";
+    systemd.services.airlock-qubes-store-init = {
+      description = "Initialize the Qubes XML store for Airlock dom0";
       after = [ "systemd-tmpfiles-setup.service" ];
       before = [ "qubesd.service" ];
       requiredBy = [ "qubesd.service" ];
@@ -407,8 +407,8 @@ in
     };
 
     systemd.services.qubesd = {
-      after = [ "nixome-qubes-store-init.service" ];
-      requires = [ "nixome-qubes-store-init.service" ];
+      after = [ "airlock-qubes-store-init.service" ];
+      requires = [ "airlock-qubes-store-init.service" ];
       environment.PYTHONPATH = lib.mkBefore "${qubesStorage}/${pkgs.python3.sitePackages}";
       path = [
         pkgs.erofs-utils
@@ -419,8 +419,8 @@ in
     };
 
     systemd.tmpfiles.rules = [
-      "d /var/lib/nixome 0700 root root - -"
-      "d /var/lib/nixome/closure-store 0700 root root - -"
+      "d /var/lib/airlock 0700 root root - -"
+      "d /var/lib/airlock/closure-store 0700 root root - -"
     ];
 
     networking.useDHCP = lib.mkDefault imageCfg.devMode.enable;
@@ -436,7 +436,7 @@ in
       ]
       ++ lib.optional cfg.gui.enable sysGuiPolicyPackage;
 
-    systemd.sockets.nixome-dom0-updates-proxy = lib.mkIf devNetworkProxy.enable {
+    systemd.sockets.airlock-dom0-updates-proxy = lib.mkIf devNetworkProxy.enable {
       description = "Listen for dev-mode dom0 traffic to the updates proxy";
       wantedBy = [ "sockets.target" ];
       listenStreams = [ devNetworkProxyListen ];
@@ -446,15 +446,15 @@ in
       };
     };
 
-    systemd.services."nixome-dom0-updates-proxy@" = lib.mkIf devNetworkProxy.enable {
+    systemd.services."airlock-dom0-updates-proxy@" = lib.mkIf devNetworkProxy.enable {
       description = "Forward a dev-mode dom0 proxy connection to the network qube";
       wants = [
-        "nixome-start-network-providers.service"
+        "airlock-start-network-providers.service"
         "qubes-qrexec-policy-daemon.service"
         "qubesd.service"
       ];
       after = [
-        "nixome-start-network-providers.service"
+        "airlock-start-network-providers.service"
         "qubes-qrexec-policy-daemon.service"
         "qubesd.service"
       ];
@@ -487,7 +487,7 @@ in
     ++ lib.optionals imageCfg.devMode.enable dom0DevPackages;
 
     environment.etc = lib.mkIf imageCfg.devMode.enable {
-      "nixome/dev-mode".text = ''
+      "airlock/dev-mode".text = ''
         enabled
       '';
     };

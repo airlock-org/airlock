@@ -2,10 +2,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-source "$ROOT/lifecycle/misc/tools/scripts/lib/nixome-env.sh"
-LOG_DIR="${NIXOME_LOG_DIR:-$ROOT/.nixome-logs}"
-IMAGE_ATTR="${NIXOME_VM_IMAGE_ATTR:-nixome-vm-gui-config-dev-image}"
-VM_DIR="${NIXOME_VM_DIR:-$ROOT/.nixome-vm}"
+source "$ROOT/lifecycle/misc/tools/scripts/lib/airlock-env.sh"
+LOG_DIR="${AIRLOCK_LOG_DIR:-$ROOT/.airlock-logs}"
+IMAGE_ATTR="${AIRLOCK_VM_IMAGE_ATTR:-airlock-vm-gui-config-dev-image}"
+VM_DIR="${AIRLOCK_VM_DIR:-$ROOT/.airlock-vm}"
 VM_IMAGE_LINK="$VM_DIR/${IMAGE_ATTR}-result"
 VM_IMAGE_PATH_LOG="$LOG_DIR/vm-config-boot-activate-image-path.txt"
 mkdir -p "$LOG_DIR"
@@ -37,7 +37,7 @@ write_result() {
 
   {
     printf '{'
-    printf '"schema":"nixome.config-boot-activate-flow.v1"'
+    printf '"schema":"airlock.config-boot-activate-flow.v1"'
     printf ',"status":'
     json_string "$status"
     printf ',"reason":'
@@ -73,20 +73,20 @@ printf 'config-boot-activate: resolve stable base VM image\n'
 
 printf 'config-boot-activate: stage next dom0 boot generation\n'
 env \
-  NIXOME_AUTO_GC_AFTER_RUN=0 \
-  NIXOME_VM_IMAGE_ATTR="$IMAGE_ATTR" \
-  NIXOME_VM_DIR="$VM_DIR" \
-  NIXOME_VM_SKIP_BASE_BUILD=1 \
-  NIXOME_VM_DISPLAY="${NIXOME_VM_DISPLAY:-none}" \
-  NIXOME_VM_FRESH=1 \
-  NIXOME_SHUTDOWN_VM_ON_SUCCESS=1 \
-  NIXOME_BOOTSTRAP_QUBES=0 \
-  NIXOME_RUN_SETUP_CONFIG=1 \
-  NIXOME_RUN_CONFIG_VMS_SMOKE=1 \
-  NIXOME_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot \
-  NIXOME_RUN_CONFIG_BOOT_VERIFY=0 \
-  NIXOME_RUN_QUBES_SMOKE=0 \
-  NIXOME_RUN_GUI_SMOKE=0 \
+  AIRLOCK_AUTO_GC_AFTER_RUN=0 \
+  AIRLOCK_VM_IMAGE_ATTR="$IMAGE_ATTR" \
+  AIRLOCK_VM_DIR="$VM_DIR" \
+  AIRLOCK_VM_SKIP_BASE_BUILD=1 \
+  AIRLOCK_VM_DISPLAY="${AIRLOCK_VM_DISPLAY:-none}" \
+  AIRLOCK_VM_FRESH=1 \
+  AIRLOCK_SHUTDOWN_VM_ON_SUCCESS=1 \
+  AIRLOCK_BOOTSTRAP_QUBES=0 \
+  AIRLOCK_RUN_SETUP_CONFIG=1 \
+  AIRLOCK_RUN_CONFIG_VMS_SMOKE=1 \
+  AIRLOCK_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot \
+  AIRLOCK_RUN_CONFIG_BOOT_VERIFY=0 \
+  AIRLOCK_RUN_QUBES_SMOKE=0 \
+  AIRLOCK_RUN_GUI_SMOKE=0 \
   "$ROOT/lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh"
 
 [ -r "$CONFIG_VMS_JSON" ] ||
@@ -99,7 +99,7 @@ expected_host_system_source="$(jq -r '.dom0_system_apply.host_system_source // "
 
 jq -e '
   . as $result |
-  .schema == "nixome.config-vms-smoke.v1" and
+  .schema == "airlock.config-vms-smoke.v1" and
   .status == "passed" and
   .dom0_system_apply.status == "passed" and
   .dom0_system_apply.host_system_switch_action == "boot" and
@@ -113,20 +113,20 @@ jq -e '
 
 printf 'config-boot-activate: boot staged dom0 generation\n'
 env \
-  NIXOME_AUTO_GC_AFTER_RUN=1 \
-  NIXOME_VM_IMAGE_ATTR="$IMAGE_ATTR" \
-  NIXOME_VM_DIR="$VM_DIR" \
-  NIXOME_VM_SKIP_BASE_BUILD=1 \
-  NIXOME_VM_DISPLAY="${NIXOME_VM_DISPLAY:-none}" \
-  NIXOME_VM_FRESH=0 \
-  NIXOME_SHUTDOWN_VM_ON_SUCCESS=1 \
-  NIXOME_BOOTSTRAP_QUBES=0 \
-  NIXOME_RUN_SETUP_CONFIG=0 \
-  NIXOME_RUN_CONFIG_VMS_SMOKE=0 \
-  NIXOME_RUN_CONFIG_BOOT_VERIFY=1 \
-  NIXOME_EXPECTED_HOST_SYSTEM_SOURCE="$expected_host_system_source" \
-  NIXOME_RUN_QUBES_SMOKE=0 \
-  NIXOME_RUN_GUI_SMOKE=0 \
+  AIRLOCK_AUTO_GC_AFTER_RUN=1 \
+  AIRLOCK_VM_IMAGE_ATTR="$IMAGE_ATTR" \
+  AIRLOCK_VM_DIR="$VM_DIR" \
+  AIRLOCK_VM_SKIP_BASE_BUILD=1 \
+  AIRLOCK_VM_DISPLAY="${AIRLOCK_VM_DISPLAY:-none}" \
+  AIRLOCK_VM_FRESH=0 \
+  AIRLOCK_SHUTDOWN_VM_ON_SUCCESS=1 \
+  AIRLOCK_BOOTSTRAP_QUBES=0 \
+  AIRLOCK_RUN_SETUP_CONFIG=0 \
+  AIRLOCK_RUN_CONFIG_VMS_SMOKE=0 \
+  AIRLOCK_RUN_CONFIG_BOOT_VERIFY=1 \
+  AIRLOCK_EXPECTED_HOST_SYSTEM_SOURCE="$expected_host_system_source" \
+  AIRLOCK_RUN_QUBES_SMOKE=0 \
+  AIRLOCK_RUN_GUI_SMOKE=0 \
   "$ROOT/lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh"
 
 [ -r "$CONFIG_BOOT_VERIFY_JSON" ] ||
@@ -136,7 +136,7 @@ cp "$CONFIG_BOOT_VERIFY_JSON" "$VERIFY_JSON"
 jq -e \
   --arg expected "$expected_host_system_source" \
   '
-    .schema == "nixome.config-boot-verify.v1" and
+    .schema == "airlock.config-boot-verify.v1" and
     .status == "passed" and
     .expected_host_system_source == $expected and
     .host_system_profile_resolved_target == $expected and

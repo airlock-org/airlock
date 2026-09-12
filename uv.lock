@@ -262,7 +262,7 @@ wheels = [
 ]
 
 [[package]]
-name = "nixome"
+name = "airlock"
 version = "0.1.0"
 source = { virtual = "." }
 

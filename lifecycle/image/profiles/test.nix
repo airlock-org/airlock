@@ -1,14 +1,14 @@
 { lib, ... }:
 {
-  nixome.dom0 = {
+  airlock.dom0 = {
     enable = true;
-    user = "nixome";
+    user = "airlock";
     gui.enable = false;
   };
 
-  users.users.nixome = {
+  users.users.airlock = {
     isNormalUser = true;
-    description = "Nixome test operator";
+    description = "Airlock test operator";
     extraGroups = [ "wheel" ];
   };
 
@@ -17,7 +17,7 @@
   boot.initrd.systemd.enable = true;
 
   fileSystems."/" = {
-    device = "/dev/disk/by-label/nixome-root";
+    device = "/dev/disk/by-label/airlock-root";
     fsType = "ext4";
   };
 

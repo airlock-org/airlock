@@ -1,6 +1,6 @@
 # Testing
 
-Nixome exposes three test-suite targets. They are intentionally not aliases:
+Airlock exposes three test-suite targets. They are intentionally not aliases:
 
 - `make test-quick`
 - `make test-warm`
@@ -24,10 +24,10 @@ Runs local checks:
 The quick layer should pass on ordinary NixOS development hosts. It does not
 prove that Xen boots or that Qubes services run.
 
-By default, local tests and Nix builds use the shared Nixome store under
-`${NIXOME_DATA_ROOT:-/run/media/user/data/nixome}/nix-root`, not the host
+By default, local tests and Nix builds use the shared Airlock store under
+`${AIRLOCK_DATA_ROOT:-/run/media/user/data/airlock}/nix-root`, not the host
 `/nix/store`. That shared store is expected and acts as the test/build cache.
-Only set `NIXOME_USE_HOST_NIX_STORE=1` when you intentionally want test Nix
+Only set `AIRLOCK_USE_HOST_NIX_STORE=1` when you intentionally want test Nix
 commands to use your host store.
 
 `make test-quick` runs parallel-safe local tests with 4 pytest-xdist workers by
@@ -89,14 +89,14 @@ make test-slow TEST_VM_JOBS=2
 Each lane gets its own VM directory, result-link directory, log directory, SSH
 port, and qcow2 overlay while sharing the Nix store/cache. The lane-local VM
 image result link is prepared from the shared prebuild and workers run with
-`NIXOME_VM_SKIP_BASE_BUILD=1`, so they do not each re-resolve the same base
+`AIRLOCK_VM_SKIP_BASE_BUILD=1`, so they do not each re-resolve the same base
 image with Nix. Slow parallel lanes use ports from
 `VM_PARALLEL_SSH_BASE_PORT`, defaulting to `2300`, and the serial
 boot-activation flow uses `VM_SLOW_SERIAL_VM_DIR` plus
 `VM_SLOW_SERIAL_SSH_PORT`, defaulting to `2310`. That keeps slow runs separate
 from the warm VM's default port and disk.
 
-Multi-lane VM runs also set `NIXOME_SKIP_GC_AUTO=1` inside each lane to avoid
+Multi-lane VM runs also set `AIRLOCK_SKIP_GC_AUTO=1` inside each lane to avoid
 concurrent GC lock contention; run `make gc-auto` before or after a slow batch
 when needed.
 
@@ -118,7 +118,7 @@ also save the raw command output to that flow's `pytest-command.log`. The
 default pytest capture mode is controlled by `PYTEST_VM_OUTPUT_ARGS`, which is
 set to `--capture=tee-sys`; set `PYTEST_VM_OUTPUT_ARGS=` for quieter runs.
 
-Direct pytest runs without `NIXOME_RUN_VM_TESTS=1` collect the VM tests but skip
+Direct pytest runs without `AIRLOCK_RUN_VM_TESTS=1` collect the VM tests but skip
 them.
 
 ## Reports
@@ -132,17 +132,17 @@ pytest reports under the log directory:
 - `test-runtimes-latest.tsv`
 - `test-runtimes-history.jsonl`
 
-Each shell check receives its own `NIXOME_LOG_DIR` subdirectory below the report
+Each shell check receives its own `AIRLOCK_LOG_DIR` subdirectory below the report
 directory so parallel workers do not overwrite same-named artifacts.
 
-Before quick tests run, pytest initializes the shared Nixome environment once
+Before quick tests run, pytest initializes the shared Airlock environment once
 and warms the common `nixpkgs#erofs-utils` dependency in the shared Nix store.
-Set `NIXOME_PYTEST_WARM_STORE=0` to skip that warm-up for narrow runs.
+Set `AIRLOCK_PYTEST_WARM_STORE=0` to skip that warm-up for narrow runs.
 
 Show the slowest tests from the latest run:
 
 ```bash
-column -t -s $'\t' "${NIXOME_LOG_DIR:-.nixome-logs}/test-runtimes-latest.tsv"
+column -t -s $'\t' "${AIRLOCK_LOG_DIR:-.airlock-logs}/test-runtimes-latest.tsv"
 ```
 
 ## Build Layer
@@ -174,15 +174,15 @@ VM directory. Defaults:
 - 8192 MiB RAM
 - 4 vCPUs
 - SSH forwarded on `127.0.0.1:2222`
-- user `nixome`
-- password `nixome`
+- user `airlock`
+- password `airlock`
 
 Useful overrides:
 
 ```bash
-NIXOME_VM_MEMORY=12288 NIXOME_VM_SMP=6 make vm-gui-config-run
-NIXOME_VM_SSH_PORT=2223 make vm-gui-config-run
-NIXOME_KEEP_VM=1 make vm-config-flow
+AIRLOCK_VM_MEMORY=12288 AIRLOCK_VM_SMP=6 make vm-gui-config-run
+AIRLOCK_VM_SSH_PORT=2223 make vm-gui-config-run
+AIRLOCK_KEEP_VM=1 make vm-config-flow
 ```
 
 Connect with:
@@ -213,13 +213,13 @@ the setup command, and verifies:
 - `sys-config-validator` validates and evaluates the candidate.
 - dom0 applies the resolved topology/system plan.
 - `sys-config-vault` records candidate and deployment history.
-- generated Nixome-owned qrexec policy is active.
+- generated Airlock-owned qrexec policy is active.
 - a staged Nix-native domain can be created and booted through qrexec.
 
 Results are copied to:
 
 ```text
-/run/media/user/data/nixome/logs/vm-gui-config-vms-smoke.json
+/run/media/user/data/airlock/logs/vm-gui-config-vms-smoke.json
 ```
 
 The script name still contains `smoke` for historical reasons; the current
@@ -237,7 +237,7 @@ make vm-config-boot-activate-flow
 generation and report a pending reboot without changing the running generation.
 
 `make vm-config-boot-activate-flow` preserves the same writable nested disk,
-boots it again, and runs `nixome-config-boot-verify` in dom0. The verifier
+boots it again, and runs `airlock-config-boot-verify` in dom0. The verifier
 checks that `/nix/var/nix/profiles/system` and `/run/current-system` resolve to
 the staged generation and that status no longer reports a pending reboot.
 
@@ -265,33 +265,33 @@ kept separate from NixOS `nix-closure` domains and should continue to pass this
 path.
 
 The Fedora template RPM is large. When `/run/media/user/data` is mounted,
-generated VM disks, logs, caches, temp files, and Nixome Nix build outputs
+generated VM disks, logs, caches, temp files, and Airlock Nix build outputs
 default to:
 
 ```text
-/run/media/user/data/nixome/
+/run/media/user/data/airlock/
 ```
 
 Inside nested dom0, cached Qubes RPM/template inputs are copied to:
 
 ```text
-/var/cache/nixome/qubes-rpms/
+/var/cache/airlock/qubes-rpms/
 ```
 
 ## Generated State
 
 The source tree, Nix code, scripts, docs, and Git history stay in
-`/home/user/dev/nixome`. The Nixome Nix store is a chroot local store at:
+`/home/user/dev/airlock`. The Airlock Nix store is a chroot local store at:
 
 ```text
-/run/media/user/data/nixome/nix-root
+/run/media/user/data/airlock/nix-root
 ```
 
 Logical store paths remain `/nix/store/...`; the physical files live under the
-data-disk root. Named build roots that should survive Nixome-only GC live under:
+data-disk root. Named build roots that should survive Airlock-only GC live under:
 
 ```text
-/run/media/user/data/nixome/result-links
+/run/media/user/data/airlock/result-links
 ```
 
 If local builds run low on disk:
@@ -307,12 +307,12 @@ make clean-vm-workdirs
 make clean-logs
 ```
 
-`make gc` refreshes Nixome-managed GC roots and deletes unreachable paths only
-from the separate Nixome store. It refuses to operate on the host `/nix/store`.
+`make gc` refreshes Airlock-managed GC roots and deletes unreachable paths only
+from the separate Airlock store. It refuses to operate on the host `/nix/store`.
 
 ## Physical Target
 
 Nested Xen/KVM is useful for development, but production security validation
-requires a physical Xen-capable test machine that can boot a Nixome dom0 image,
+requires a physical Xen-capable test machine that can boot a Airlock dom0 image,
 run Qubes control services, import conventional templates, boot closure-backed
 NixOS domains, and archive logs/results for inspection.

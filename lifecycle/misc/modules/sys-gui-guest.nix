@@ -5,12 +5,12 @@
   ...
 }:
 let
-  cfg = config.nixome.sysGuiGuest;
+  cfg = config.airlock.sysGuiGuest;
   guiAgent = pkgs.qubes-gui-agent-linux;
-  guestUser = config.nixome.qubeGuest.user;
+  guestUser = config.airlock.qubeGuest.user;
   # LightDM owns the inner display and authenticates the desktop user. The
   # Qubes agent still owns the outer Xorg display (:1) forwarded to dom0.
-  loginXserver = pkgs.writeShellScript "nixome-gui-login-xserver" ''
+  loginXserver = pkgs.writeShellScript "airlock-gui-login-xserver" ''
     set -euo pipefail
     export DISPLAY=:1
     unset XAUTHORITY
@@ -34,13 +34,13 @@ let
     exec ${pkgs.xorg-server}/bin/Xephyr \
       -sw-cursor -no-host-grab -output DUMMY0 "''${args[@]}"
   '';
-  guiSession = pkgs.writeShellScript "nixome-gui-login-session" ''
+  guiSession = pkgs.writeShellScript "airlock-gui-login-session" ''
     set -euo pipefail
     if [ "''${QREXEC_REMOTE_DOMAIN:-}" != dom0 ]; then
       echo "GUI login may only be started by dom0" >&2
       exit 1
     fi
-    exec 9>/run/nixome-gui-login.lock
+    exec 9>/run/airlock-gui-login.lock
     ${pkgs.util-linux}/bin/flock -n 9 || exit 1
     trap '${pkgs.systemd}/bin/systemctl stop --no-block display-manager.service' EXIT
     trap 'exit 0' HUP INT TERM
@@ -54,7 +54,7 @@ let
   '';
 in
 {
-  options.nixome.sysGuiGuest.enable = lib.mkEnableOption "the Nixome hybrid sys-gui role";
+  options.airlock.sysGuiGuest.enable = lib.mkEnableOption "the Airlock hybrid sys-gui role";
 
   config = lib.mkIf cfg.enable {
     boot.kernelModules = [
@@ -110,7 +110,7 @@ in
       # Start only when dom0 has connected the Qubes display transport.
       wantedBy = lib.mkForce [ ];
       requires = [ "qubes-gui-agent.service" ];
-      after = [ "qubes-gui-agent.service" "nixome-qubes-rw-init.service" ];
+      after = [ "qubes-gui-agent.service" "airlock-qubes-rw-init.service" ];
     };
     systemd.packages = [ guiAgent ];
     systemd.services.qubes-gui-agent = {

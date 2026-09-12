@@ -1,5 +1,5 @@
 let
-  schema = "nixome.system.v1";
+  schema = "airlock.system.v1";
 
   activationActions = [
     "none"
@@ -51,7 +51,7 @@ let
 
   concatMap = f: values: concatLists (map f values);
 
-  fail = path: message: throw "nixome.system${if path == "" then "" else ".${path}"}: ${message}";
+  fail = path: message: throw "airlock.system${if path == "" then "" else ".${path}"}: ${message}";
 
   expectAttrs =
     path: value:
@@ -226,7 +226,7 @@ let
         else if hasSnakeCommand then
           expectRelativePath "dom0.profile.activation_command" profile.activation_command
         else
-          "bin/nixome-dom0-profile-activate";
+          "bin/airlock-dom0-profile-activate";
       hasCamelAction = hasAttr "activationAction" profile;
       hasSnakeAction = hasAttr "activation_action" profile;
       camelAction =

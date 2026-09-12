@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_DIR="${NIXOME_LOG_DIR:-/var/log/nixome}"
+LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
 RESULT_JSON="$LOG_DIR/config-current-bootstrap.json"
 COMMAND_LOG="$LOG_DIR/config-current-bootstrap.commands.log"
 EXPORT_STDERR="$LOG_DIR/config-current-bootstrap-export.stderr.log"
@@ -9,13 +9,13 @@ IMPORT_STDOUT="$LOG_DIR/config-current-bootstrap-import.stdout.log"
 IMPORT_STDERR="$LOG_DIR/config-current-bootstrap-import.stderr.log"
 CURRENT_TAR="$LOG_DIR/config-current-bootstrap-current.tar"
 MANIFEST_JSON="$LOG_DIR/config-current-bootstrap-manifest.json"
-XEN_CAPABILITIES="${NIXOME_XEN_CAPABILITIES:-/proc/xen/capabilities}"
-QREXEC_RUN_DIR="${NIXOME_QREXEC_RUN_DIR:-/var/run/qubes}"
-QREXEC_READY_WAIT_SECONDS="${NIXOME_CONFIG_QREXEC_READY_WAIT_SECONDS:-120}"
-VAULT="${NIXOME_CONFIG_VAULT_VM:-sys-config-vault}"
-STAGING="${NIXOME_CONFIG_STAGING_VM:-sys-config-staging}"
-EXPORT_SERVICE="${NIXOME_CONFIG_CURRENT_EXPORT_SERVICE:-nixome.Config.ExportCurrent}"
-IMPORT_SERVICE="${NIXOME_CONFIG_CURRENT_IMPORT_SERVICE:-nixome.Config.ImportCurrent}"
+XEN_CAPABILITIES="${AIRLOCK_XEN_CAPABILITIES:-/proc/xen/capabilities}"
+QREXEC_RUN_DIR="${AIRLOCK_QREXEC_RUN_DIR:-/var/run/qubes}"
+QREXEC_READY_WAIT_SECONDS="${AIRLOCK_CONFIG_QREXEC_READY_WAIT_SECONDS:-120}"
+VAULT="${AIRLOCK_CONFIG_VAULT_VM:-sys-config-vault}"
+STAGING="${AIRLOCK_CONFIG_STAGING_VM:-sys-config-staging}"
+EXPORT_SERVICE="${AIRLOCK_CONFIG_CURRENT_EXPORT_SERVICE:-airlock.Config.ExportCurrent}"
+IMPORT_SERVICE="${AIRLOCK_CONFIG_CURRENT_IMPORT_SERVICE:-airlock.Config.ImportCurrent}"
 
 tmpdir=""
 
@@ -45,7 +45,7 @@ write_result() {
 
   import_json="$(json_file_or_null "$IMPORT_STDOUT")"
   jq -c -n \
-    --arg schema "nixome.config-current-bootstrap.v1" \
+    --arg schema "airlock.config-current-bootstrap.v1" \
     --arg status "$status" \
     --arg reason "$reason" \
     --arg vault "$VAULT" \
@@ -209,7 +209,7 @@ verify_current_archive() {
     ' || fail "vault current archive contains unexpected paths"
 
   tar -O -xf "$CURRENT_TAR" manifest.json > "$MANIFEST_JSON"
-  jq -e '.schema == "nixome.config-candidate.v1" and (.commit | type == "string")' "$MANIFEST_JSON" >/dev/null ||
+  jq -e '.schema == "airlock.config-candidate.v1" and (.commit | type == "string")' "$MANIFEST_JSON" >/dev/null ||
     fail "vault current manifest is invalid"
 }
 
@@ -243,7 +243,7 @@ archive_bytes="$(wc -c < "$CURRENT_TAR" | tr -d ' ')"
 
 run_qrexec_service_with_stdin "$STAGING" "$CURRENT_TAR" "$IMPORT_STDOUT" "$IMPORT_STDERR" "$IMPORT_SERVICE" ||
   fail "importing current config into $STAGING failed"
-jq -e '.schema == "nixome.config-staging-import-current.v1" and .status == "passed"' "$IMPORT_STDOUT" >/dev/null ||
+jq -e '.schema == "airlock.config-staging-import-current.v1" and .status == "passed"' "$IMPORT_STDOUT" >/dev/null ||
   fail "staging import did not emit a passing result"
 
 write_result passed "sys-config-vault current exported and sys-config-staging initialized" "$candidate_commit" "$archive_bytes"
