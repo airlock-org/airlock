@@ -52,18 +52,16 @@
   boot.loader.efi.canTouchEfiVariables = false;
   boot.initrd.systemd.enable = true;
   boot.kernelParams = [ "console=tty0" "console=hvc0" ];
-  # On first boot, extend the seed's root partition and ext4 filesystem to the
-  # actual USB capacity. The image stays small and flashes quickly.
-  boot.growPartition = true;
+  # Keep the POC image fixed-size: it avoids first-boot partition mutation.
+  boot.growPartition = false;
   fileSystems."/".device = lib.mkForce "/dev/disk/by-label/airlock-usb";
-  fileSystems."/".autoResize = lib.mkForce true;
+  fileSystems."/".autoResize = lib.mkForce false;
   # NixOS's disk-image builder formats its EFI partition with this label before
   # it invokes switch-to-configuration to install systemd-boot. Keep the
   # runtime configuration aligned with that build-time filesystem.
   fileSystems."/boot".device = lib.mkForce "/dev/disk/by-label/ESP";
   image = { baseName = "airlock-usb-dev"; format = "raw"; efiSupport = true; };
-  # A 20-GiB seed: 1 GiB EFI plus roughly 19 GiB root. First boot grows root
-  # to the available USB capacity, including a nominal 64-GB device.
+  # A fixed 20-GiB POC image: 1 GiB EFI plus roughly 19 GiB root.
   virtualisation.diskSize = 20480;
   system.build.image = lib.mkForce (import "${modulesPath}/../lib/make-disk-image.nix" {
     inherit config lib pkgs;

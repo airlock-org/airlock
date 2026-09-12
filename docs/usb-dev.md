@@ -8,10 +8,9 @@ live ISO or an installer. XFCE remains the desktop. Normal VM targets are unchan
 Run `make usb-dev-image`. The result link is under
 `$AIRLOCK_RESULT_LINK_DIR/usb-dev-image` (or `.airlock/usb-dev-image` without a
 configured data root). Find its `.img` file; resolve it to its physical path
-in the custom store before using the writer. The current image is a 20 GiB
-seed, so it fits a nominal 64 GB USB. On its first boot, NixOS grows the root
-partition and filesystem to use the remaining USB capacity. 128 GB is still
-recommended for longer-lived builds.
+in the custom store before using the writer. The current image is a fixed
+20 GiB image, so it fits a nominal 64 GB USB. The remaining USB space is left
+unused for this POC. 128 GB is still recommended for longer-lived builds.
 
 Inspect `lsblk -o NAME,TRAN,SIZE,MODEL,SERIAL,MOUNTPOINTS` and select an expendable
 whole-disk `/dev/disk/by-id/usb-…` path. Do not use the internal NVMe. Unmount
@@ -111,9 +110,8 @@ Wi-Fi settings, logs, repository and VM state persist on the **unencrypted** roo
 
 For builds on the USB, keep the custom store off the host store, for example:
 `AIRLOCK_DATA_ROOT=/home/airlock/airlock-data make usb-dev-image`.
-The first boot expands the root filesystem to the USB's available capacity.
-It can fill quickly; use the guarded `make gc-auto` with that same data root.
-No full-store garbage collection is done automatically.
+The fixed 20 GiB root can fill quickly; use the guarded `make gc-auto` with
+that same data root. No full-store garbage collection is done automatically.
 
 ## Evidence and next experiment
 
