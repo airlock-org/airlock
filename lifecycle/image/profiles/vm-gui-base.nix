@@ -5,7 +5,7 @@
 }:
 {
   imports = [
-    ./vm-base.nix
+    ./vm.nix
   ];
 
   airlock.dom0.gui.enable = true;
