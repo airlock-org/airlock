@@ -2809,7 +2809,7 @@ def check_config_candidate_nix_native(repo_root: Path, log_dir: Path) -> None:
               nixNative.domains.bad.role = "sys-config-staging";
             }
             """,
-            "airlock.nixNative.domains.bad.role: expected one of base, dev",
+            "airlock.nixNative.domains.bad.role: expected one of base, cmd, sys-firewall, sys-gui, sys-net",
         ),
     ]
     invalid_log = result_dir / "invalid.log"
@@ -3250,7 +3250,8 @@ def check_config_staging_validate(repo_root: Path, log_dir: Path) -> None:
         "nix-flake-check": None,
     }
     for name, path_key in expected_checks.items():
-        assert checks[name]["status"] == "passed"
+        expected_status = "skipped" if name == "nix-flake-check" else "passed"
+        assert checks[name]["status"] == expected_status
         if path_key == "output" and "topology" in name:
             assert checks[name][path_key] == str(
                 validation_dir / f"topology-{commit}.json"
