@@ -5,34 +5,34 @@ live ISO or an installer. XFCE remains the desktop. Normal VM targets are unchan
 
 ## Build and provision on the development host
 
-Run `make usb-dev-image`. The result link is under
-`$AIRLOCK_RESULT_LINK_DIR/usb-dev-image` (or `.airlock/usb-dev-image` without a
-configured data root). Find its `.img` file; resolve it to its physical path
-in the custom store before using the writer. The current image is a fixed
-20 GiB image, so it fits a nominal 64 GB USB. The remaining USB space is left
-unused for this POC. 128 GB is still recommended for longer-lived builds.
+Run `make usb-dev-image`. Its result link identifies the current image without
+exposing its changing Nix store path. The current image is a fixed 20 GiB
+image, so it fits a nominal 64 GB USB. The remaining USB space is left unused
+for this POC. 128 GB is still recommended for longer-lived builds.
 
 Inspect `lsblk -o NAME,TRAN,SIZE,MODEL,SERIAL,MOUNTPOINTS` and select an expendable
 whole-disk `/dev/disk/by-id/usb-…` path. Do not use the internal NVMe. Unmount
 every partition on the selected USB. The writer rejects mounted disks,
 non-USB disks, partitions and active device-mapper holders.
 
+Write it with the serial printed by `lsblk`; the command resolves the current
+result link, calculates the image SHA-256 itself, and requires exactly one
+attached whole-disk USB with that serial:
+
 ```sh
-python3 lifecycle/image/tools/usb-dev.py write --image /absolute/airlock-usb-dev.img --device /dev/disk/by-id/usb-EXACT_ID
-sha256sum /absolute/airlock-usb-dev.img
+make usb-dev-write USB_SERIAL=25110814640207
 ```
 
-Only after reviewing the printed model/serial/size, repeat with sudo and add
-`--write --confirm-serial EXACT_SERIAL --sha256 EXACT_HASH`. This **erases the
-selected USB**, flushes the device, and does not touch firmware boot variables.
-It checks the image hash before writing, then copies only allocated image
-extents by default; this makes a sparse seed image much quicker to flash. Add
-`--full-write` to materialize zero-filled holes, or `--verify` for the slower
-full write and full hash read-back. Sparse writing leaves any prior USB bytes
-in filesystem blocks marked free by the image; use `--full-write` for an
-untrusted/reused USB where that data-remanence trade-off is unacceptable.
-An interrupted write requires re-imaging that USB. The host needs Python,
-util-linux, Git, OpenSSH, OpenSSL, cryptsetup and e2fsprogs for these tools.
+This **erases the selected USB**, flushes the device, and does not touch
+firmware boot variables. It copies only allocated image extents by default;
+this makes a sparse seed image much quicker to flash. The selected USB must be
+fully unmounted. To use the lower-level writer with `--full-write` or
+`--verify`, run `python3 lifecycle/image/tools/usb-dev.py write --help`.
+Sparse writing leaves any prior USB bytes in filesystem blocks marked free by
+the image; use `--full-write` for an untrusted/reused USB where that
+data-remanence trade-off is unacceptable. An interrupted write requires
+re-imaging that USB. The host needs Python, util-linux, Git, OpenSSH, OpenSSL,
+cryptsetup and e2fsprogs for these tools.
 
 Mount the new USB's `airlock-usb` root partition at a fresh mountpoint, using its
 **USB by-id partition path** (normally `…-part2`). Inspect `lsblk -f` first.

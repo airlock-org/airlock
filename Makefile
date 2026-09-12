@@ -127,10 +127,14 @@ test-quick: ensure-generated-dirs
 
 .PHONY: vm-gui-minimal-image vm-gui-minimal-run vm-gui-minimal-ssh
 
-.PHONY: usb-dev-image usb-dev-help
+.PHONY: usb-dev-image usb-dev-write usb-dev-help
 
 usb-dev-image: ensure-generated-dirs
 	$(AIRLOCK_NIX) build .#airlock-usb-dev-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --print-build-logs
+
+usb-dev-write:
+	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-write USB_SERIAL=25110814640207" >&2; exit 2)
+	sudo python3 lifecycle/image/tools/usb-dev.py write-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --serial "$(USB_SERIAL)" --write
 
 usb-dev-help:
 	python3 lifecycle/image/tools/usb-dev.py --help
