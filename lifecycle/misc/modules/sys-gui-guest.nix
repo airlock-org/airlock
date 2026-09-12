@@ -47,6 +47,57 @@ let
       "application/xhtml+xml"
     ];
   };
+  panelLaunchers = pkgs.writeShellScript "airlock-pin-desktop-launchers" ''
+    set -eu
+
+    config_home="''${XDG_CONFIG_HOME:-$HOME/.config}"
+    marker="$config_home/airlock/desktop-launchers-v1"
+    [ -e "$marker" ] && exit 0
+
+    panel=""
+    for _attempt in $(${pkgs.coreutils}/bin/seq 1 30); do
+      panel="$(${pkgs.xfconf}/bin/xfconf-query -c xfce4-panel -p /panels -l 2>/dev/null |
+        ${pkgs.gnused}/bin/sed -n 's#^\(/panels/panel-[0-9][0-9]*\)$#\1#p' |
+        ${pkgs.coreutils}/bin/head -n 1 || true)"
+      [ -n "$panel" ] && break
+      ${pkgs.coreutils}/bin/sleep 1
+    done
+    [ -n "$panel" ] || exit 0
+
+    # Recreate the panel's plugin-id array with two new launcher plugins.
+    # This is done only for a fresh Airlock user profile, preserving later
+    # panel changes in the user's persistent sys-gui home.
+    ids="$(${pkgs.xfconf}/bin/xfconf-query -c xfce4-panel -p "$panel/plugin-ids" 2>/dev/null |
+      ${pkgs.gnugrep}/bin/grep -E '^[0-9]+$' | ${pkgs.coreutils}/bin/tr '\n' ' ' || true)"
+    next=100
+    for id in $ids; do
+      [ "$id" -ge "$next" ] && next=$((id + 1))
+    done
+
+    launcher_root="$config_home/xfce4/panel"
+    ${pkgs.coreutils}/bin/install -d -m 0700 "$launcher_root"
+    for desktop in org.gnome.Nautilus firefox; do
+      id="$next"
+      next=$((next + 1))
+      ${pkgs.xfconf}/bin/xfconf-query -c xfce4-panel -p "/plugins/plugin-$id" \
+        -n -t string -s launcher
+      ${pkgs.coreutils}/bin/install -d -m 0700 "$launcher_root/launcher-$id"
+      case "$desktop" in
+        org.gnome.Nautilus) source=${filesDesktop}/share/applications/org.gnome.Nautilus.desktop ;;
+        firefox) source=${browserDesktop}/share/applications/firefox.desktop ;;
+      esac
+      ${pkgs.coreutils}/bin/install -m 0600 \
+        "$source" \
+        "$launcher_root/launcher-$id/$desktop.desktop"
+      ids="$ids$id "
+    done
+    # --force-array is necessary when the original panel has a single plugin.
+    # shellcheck disable=SC2086
+    ${pkgs.xfconf}/bin/xfconf-query -c xfce4-panel -p "$panel/plugin-ids" \
+      -a -t int -s $ids
+    ${pkgs.coreutils}/bin/install -d -m 0700 "$(${pkgs.coreutils}/bin/dirname "$marker")"
+    : > "$marker"
+  '';
   # LightDM owns the inner display and authenticates the desktop user. The
   # Qubes agent still owns the outer Xorg display (:1) forwarded to dom0.
   loginXserver = pkgs.writeShellScript "airlock-gui-login-xserver" ''
@@ -200,6 +251,14 @@ in
         "${pkgs.qubes-gui-daemon}/etc/xdg/autostart/qubes-icon-receiver.desktop";
       "xdg/autostart/qubes-screen-layout-watches.desktop".source =
         "${pkgs.qubes-gui-daemon}/etc/xdg/autostart/qubes-screen-layout-watches.desktop";
+      "xdg/autostart/airlock-desktop-launchers.desktop".text = ''
+        [Desktop Entry]
+        Type=Application
+        Name=Airlock desktop launchers
+        Exec=${panelLaunchers}
+        OnlyShowIn=XFCE;
+        X-GNOME-Autostart-Phase=Panel
+      '';
     };
 
     # Canonical desktop IDs keep XFCE's menu, launcher search, dock and MIME
