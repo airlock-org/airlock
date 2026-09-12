@@ -87,7 +87,10 @@
     } ];
   });
 
-  services.journald.extraConfig = "Storage=persistent\nSystemMaxUse=1G";
+  services.journald.settings.Journal = {
+    Storage = "persistent";
+    SystemMaxUse = "1G";
+  };
   environment.etc."airlock/usb-dev".text = "airlock-usb-dev-v1\n";
   environment.systemPackages = with pkgs; [
     curl jq gnumake python3 cryptsetup rsync xdotool e2fsprogs openssl
