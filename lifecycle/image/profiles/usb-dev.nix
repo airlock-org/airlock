@@ -24,7 +24,8 @@
   users.users.root.hashedPassword = "!";
   security.sudo.wheelNeedsPassword = true;
 
-  networking.hostName = "airlock-usb";
+  # Keep upstream's dom0 hostname: Qubes utilities can use it as the domain
+  # identity. Give this device its distinct Tailscale name during enrollment.
   networking.useDHCP = false;
   networking.networkmanager.enable = true;
   networking.firewall.interfaces.tailscale0.allowedTCPPorts = [ 22 ];

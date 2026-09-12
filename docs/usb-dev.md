@@ -70,7 +70,7 @@ Log into XFCE as `user` with the password you chose. Dom0's local console uses
 
 ```sh
 nmcli --ask device wifi connect YOUR_SSID
-sudo tailscale up
+sudo tailscale up --hostname=airlock-usb
 sudo airlock-usb vault-unlock
 cd /home/airlock/dev/nixome
 codex
