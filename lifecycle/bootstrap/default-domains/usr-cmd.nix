@@ -1,5 +1,5 @@
 {
-  guestHostName = "cmd-vm";
+  guestHostName = "usr-cmd";
   label = "yellow";
   rootImageSizeMiB = 1024;
   netvm = "sys-firewall";
