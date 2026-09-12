@@ -85,7 +85,8 @@ def write_image(args):
     print(json.dumps({"device": str(target), "identity": args.device,
                       "model": info["model"], "serial": info["serial"],
                       "bytes": info["size"], "image": str(image),
-                      "image_bytes": image.stat().st_size, "write": args.write}, indent=2))
+                      "image_bytes": image.stat().st_size, "write": args.write,
+                      "full_verify": args.verify}, indent=2))
     if not args.write:
         print("Inspection only. Writing requires --write --confirm-serial SERIAL --sha256 HASH.")
         return
@@ -101,18 +102,22 @@ def write_image(args):
         with os.fdopen(fd, "wb", buffering=0) as destination:
             shutil.copyfileobj(source, destination, 8 * 1024 * 1024)
             os.fsync(destination.fileno())
-    # Verify only the image prefix; a larger USB may have unused trailing space.
-    check = hashlib.sha256()
-    remaining = image.stat().st_size
-    with target.open("rb", buffering=0) as stream:
-        while remaining:
-            data = stream.read(min(8 * 1024 * 1024, remaining))
-            require(data, "Unexpected end of USB during verification.")
-            check.update(data)
-            remaining -= len(data)
-    require(check.hexdigest() == args.sha256.lower(), "USB read-back verification failed.")
     run("blockdev", "--rereadpt", str(target))
-    print("Image written and verified. Previous USB contents were overwritten and are not recoverable by this tool.")
+    if args.verify:
+        # Verify only the image prefix; a larger USB may have unused trailing space.
+        check = hashlib.sha256()
+        remaining = image.stat().st_size
+        with target.open("rb", buffering=0) as stream:
+            while remaining:
+                data = stream.read(min(8 * 1024 * 1024, remaining))
+                require(data, "Unexpected end of USB during verification.")
+                check.update(data)
+                remaining -= len(data)
+        require(check.hexdigest() == args.sha256.lower(), "USB read-back verification failed.")
+        result = "Image written, flushed and fully verified."
+    else:
+        result = "Image written and flushed; full read-back verification was skipped."
+    print(f"{result} Previous USB contents were overwritten and are not recoverable by this tool.")
 
 
 def checked_root(value):
@@ -275,6 +280,7 @@ def main():
     writer.add_argument("--write", action="store_true")
     writer.add_argument("--confirm-serial")
     writer.add_argument("--sha256")
+    writer.add_argument("--verify", action="store_true", help="Read the full image back and verify its SHA-256.")
     writer.set_defaults(handler=write_image)
     setup = commands.add_parser("personalize")
     setup.add_argument("--root", required=True)

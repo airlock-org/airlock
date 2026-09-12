@@ -24,9 +24,11 @@ sha256sum /absolute/airlock-usb-dev.img
 
 Only after reviewing the printed model/serial/size, repeat with sudo and add
 `--write --confirm-serial EXACT_SERIAL --sha256 EXACT_HASH`. This **erases the
-selected USB**, verifies the written image, and does not touch firmware boot
-variables. An interrupted write requires re-imaging that USB. The host needs
-Python, util-linux, Git, OpenSSH, OpenSSL, cryptsetup and e2fsprogs for these tools.
+selected USB**, flushes the device, and does not touch firmware boot variables.
+It checks the image hash before writing but skips a full USB read-back by
+default. Add `--verify` only when you want the slower full hash verification.
+An interrupted write requires re-imaging that USB. The host needs Python,
+util-linux, Git, OpenSSH, OpenSSL, cryptsetup and e2fsprogs for these tools.
 
 Mount the new USB's `airlock-usb` root partition at a fresh mountpoint, using its
 **USB by-id partition path** (normally `…-part2`). Inspect `lsblk -f` first.
