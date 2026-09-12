@@ -150,7 +150,14 @@ ssh_base "
 "
 
 if [ "$sync_config" = true ]; then
-  fail "config.toml sync is not implemented for cmd-vm; copy only auth.json"
+  scp_base "$tmpdir/config.toml" "$SSH_USER@127.0.0.1:$remote_config_tmp"
+  ssh_base "
+    set -e
+    config_tmp=$(shell_quote "$remote_config_tmp")
+    cmd_vm=$(shell_quote "$CMD_VM")
+    sudo -n qrexec-client -d \"\$cmd_vm\" 'DEFAULT:QUBESRPC airlock.CodexConfigImport+ dom0' < \"\$config_tmp\"
+    rm -f \"\$config_tmp\"
+  "
 fi
 
 write_result passed "" "$sync_config"

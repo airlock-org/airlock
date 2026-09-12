@@ -105,6 +105,16 @@ let
     ${pkgs.coreutils}/bin/install -d -m 0700 "$codex_home"
     ${pkgs.coreutils}/bin/install -m 0600 "$temp" "$codex_home/auth.json"
   '';
+  codexConfigImportService = pkgs.writeShellScript "airlock-codex-config-import" ''
+    set -euo pipefail
+
+    codex_home=${lib.escapeShellArg cfg.codexHome}
+    temp="$(mktemp "''${TMPDIR:-/tmp}/airlock-codex-config.XXXXXX")"
+    trap 'rm -f "$temp"' EXIT
+    ${pkgs.coreutils}/bin/cat > "$temp"
+    ${pkgs.coreutils}/bin/install -d -m 0700 "$codex_home"
+    ${pkgs.coreutils}/bin/install -m 0600 "$temp" "$codex_home/config.toml"
+  '';
 
   tinyproxyUpdatesConfig = pkgs.writeText "tinyproxy-updates.conf" ''
     User tinyproxy
@@ -3500,6 +3510,16 @@ in
     };
 
     environment.etc."qubes/rpc-config/airlock.CodexAuthImport" = lib.mkIf hasCmdRole {
+      text = "force-user='${cfg.user}'\n";
+      mode = "0444";
+    };
+
+    environment.etc."qubes-rpc/airlock.CodexConfigImport" = lib.mkIf hasCmdRole {
+      source = codexConfigImportService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes/rpc-config/airlock.CodexConfigImport" = lib.mkIf hasCmdRole {
       text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };

@@ -512,6 +512,8 @@ let
     # Host-provided Codex login state enters only the command workspace.
     airlock.CodexAuthImport * dom0 cmd-vm allow
     airlock.CodexAuthImport * @anyvm @anyvm deny
+    airlock.CodexConfigImport * dom0 cmd-vm allow
+    airlock.CodexConfigImport * @anyvm @anyvm deny
     EOF
   '';
 
