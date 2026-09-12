@@ -43,3 +43,31 @@ def test_auth_requires_mounted_vault(usb, tmp_path):
 def test_flatten_includes_descendants(usb):
     nodes = [{"name": "disk", "children": [{"name": "partition", "children": [{"name": "crypt"}]}]}]
     assert [node["name"] for node in usb.flatten(nodes)] == ["disk", "partition", "crypt"]
+
+
+@pytest.fixture
+def amd():
+    source = Path(__file__).resolve().parents[1] / "lifecycle/image/tools/amd-preflight.py"
+    spec = importlib.util.spec_from_file_location("amd_preflight", source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_amd_missing_evidence_is_a_failure(amd, tmp_path):
+    report = amd.inspect(tmp_path / "sys", tmp_path / "proc")
+    assert not report["assignment_gate_passed"]
+    assert "not-xen-dom0" in report["failures"]
+    assert "missing-or-shared-iommu-group" in report["failures"]
+    assert not report["graphics_verified"]
+
+
+def test_amd_bus_reset_is_not_accepted(amd, tmp_path):
+    device = tmp_path / "sys/bus/pci/devices/0000:04:00.0"
+    device.mkdir(parents=True)
+    (device / "vendor").write_text("0x1002\n")
+    (device / "device").write_text("0x1681\n")
+    (device / "reset_method").write_text("bus\n")
+    report = amd.inspect(tmp_path / "sys", tmp_path / "proc")
+    assert "function-level-reset-not-selected-review-required" in report["failures"]
+    assert not report["assignment_gate_passed"]

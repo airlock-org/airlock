@@ -49,6 +49,17 @@
   boot.loader.systemd-boot.configurationLimit = 5;
   boot.loader.timeout = 10;
   boot.loader.efi.canTouchEfiVariables = false;
+  # Never let boot-entry wildcard ordering select the hardware experiment.
+  # Run after upstream's Xen entry builder and dom0's recovery title update.
+  boot.loader.systemd-boot.extraInstallCommands = lib.mkOrder 1700 ''
+    normal_entry="$(${pkgs.findutils}/bin/find ${config.boot.loader.efi.efiSysMountPoint}/loader/entries \
+      -maxdepth 1 -type f -name 'xen-generation-*.conf' ! -name '*specialisation*' |
+      ${pkgs.coreutils}/bin/sort -V | ${pkgs.coreutils}/bin/tail -n 1)"
+    test -n "$normal_entry"
+    normal_entry="$(${pkgs.coreutils}/bin/basename "$normal_entry")"
+    ${pkgs.gnused}/bin/sed -i "s/^default .*/default $normal_entry/" \
+      ${config.boot.loader.efi.efiSysMountPoint}/loader/loader.conf
+  '';
   boot.initrd.systemd.enable = true;
   boot.kernelParams = [ "console=tty0" "console=hvc0" ];
   boot.growPartition = false;
@@ -83,6 +94,9 @@
       export PATH=${lib.makeBinPath [ coreutils util-linux cryptsetup e2fsprogs git openssh openssl ]}:$PATH
       exec ${python3}/bin/python3 ${../tools/usb-dev.py} "$@"
     '')
+    (writeShellScriptBin "airlock-usb-amd-preflight" ''
+      exec ${python3}/bin/python3 ${../tools/amd-preflight.py} "$@"
+    '')
     (lib.hiPrio (writeShellScriptBin "codex" ''
       if ! ${util-linux}/bin/mountpoint -q /home/airlock/.codex; then
         echo 'Unlock the encrypted credentials first: sudo airlock-usb vault-unlock' >&2
@@ -104,15 +118,26 @@
     after = [ "airlock-setup-config.service" ];
     before = [ "display-manager.service" ];
     serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
-    path = [ pkgs.python3.pkgs.qubes-core-admin-client ];
+    path = [ (pkgs.python3.withPackages (ps: [ ps.qubes-core-admin-client ])) ];
     script = ''
       set -eu
       test -s /var/lib/airlock/usb/local-password.hash
+      # Empty declarative PCI lists do not remove mutable Qubes assignments.
+      # Fail closed if an experiment left one behind; use text recovery.
+      python3 - <<'PY'
+      import qubesadmin
+      vm = qubesadmin.Qubes().domains['sys-gui']
+      if list(vm.devices['pci'].get_assigned_devices()):
+          raise SystemExit('sys-gui has PCI assignments; remove them in USB text recovery before hybrid boot')
+      PY
       { printf 'user:'; cat /var/lib/airlock/usb/local-password.hash; } |
         qvm-run --pass-io --no-gui --user root sys-gui 'chpasswd -e'
     '';
   };
   systemd.services.display-manager.requires = [ "airlock-usb-gui-password.service" ];
   systemd.services.display-manager.after = [ "airlock-usb-gui-password.service" ];
+  # Persisted autostart symlinks must not race declarative setup or recovery.
+  # The hybrid relay/password service explicitly starts sys-gui through Qubes.
+  systemd.services."qubes-vm@".enable = lib.mkForce false;
   system.stateVersion = "26.05";
 }

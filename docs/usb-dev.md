@@ -103,3 +103,7 @@ Xen, sys-gui lifecycle, input and persistence before trying the GPU experiment.
 See [the plan](usb-dev-plan.md) for the acceptance gates. Do not infer AMD
 passthrough from a working hybrid desktop: in default mode dom0 still drives
 the physical AMD GPU.
+
+The image also includes manual [text-recovery and AMD-lab boot entries](usb-amd-lab.md).
+The AMD entry is scaffolding for remote diagnostics, not a working physical
+desktop yet; input forwarding and reset safety remain open.

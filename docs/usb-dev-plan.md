@@ -1,6 +1,8 @@
 # USB development track
 
-Status: USB profile and provisioning tools implemented, unbuilt and untested.
+Status: USB profile, provisioning tools and AMD lab scaffolding implemented,
+unbuilt and untested. Actual assignment, reset safety and upstream input-proxy
+integration remain hardware-development follow-ups.
 See [the runbook](usb-dev.md) for commands. No builds or tests authorized for this change.
 
 Scope: ThinkPad T14 Gen 3 AMD (21CFCTO1WW), persistent removable development
@@ -17,6 +19,7 @@ The existing VM profiles are unchanged.
    the image or a Nix derivation.
 3. Explicit AMD experiment and recovery workflow; do not change the default
    display ownership until a real hardware run succeeds.
+   See [AMD lab and recovery](usb-amd-lab.md).
 
 ## Hardware evidence
 

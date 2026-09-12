@@ -8,6 +8,11 @@ let
   cfg = config.airlock.sysGuiGuest;
   guiAgent = pkgs.qubes-gui-agent-linux;
   guestUser = config.airlock.qubeGuest.user;
+  hybrid = cfg.displayMode == "hybrid";
+  physicalXserver = pkgs.writeShellScript "airlock-gui-physical-xserver" ''
+    export LD_PRELOAD=${pkgs.qubes-gui-daemon}/lib/qubes-gui-daemon/shmoverride.so
+    exec ${pkgs.xorg-server}/bin/Xorg "$@"
+  '';
   filesLauncher = pkgs.writeShellScriptBin "airlock-launch-files" ''
     set -eu
     exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
@@ -148,6 +153,11 @@ let
 in
 {
   options.airlock.sysGuiGuest.enable = lib.mkEnableOption "the Airlock hybrid sys-gui role";
+  options.airlock.sysGuiGuest.displayMode = lib.mkOption {
+    type = lib.types.enum [ "hybrid" "physical-amd-lab" ];
+    default = "hybrid";
+    description = "Hybrid relay by default; physical AMD Xorg is an unvalidated, manually started lab mode.";
+  };
   options.airlock.sysGuiGuest.personalLaunchers.enable = lib.mkOption {
     type = lib.types.bool;
     default = true;
@@ -191,15 +201,15 @@ in
       desktopManager.xfce.enable = true;
       desktopManager.xterm.enable = false;
       displayManager = {
-        xserverBin = lib.mkOverride 50 loginXserver;
-        xserverArgs = lib.mkForce [ ];
+        xserverBin = lib.mkOverride 50 (if hybrid then loginXserver else physicalXserver);
+        xserverArgs = lib.mkIf hybrid (lib.mkForce [ ]);
         lightdm = {
           enable = true;
-          extraConfig = ''
+          extraConfig = lib.mkIf hybrid ''
             logind-check-graphical=false
             minimum-vt=8
           '';
-          extraSeatDefaults = ''
+          extraSeatDefaults = lib.mkIf hybrid ''
             type=xlocal
             xserver-share=true
           '';
@@ -211,13 +221,15 @@ in
       autoLogin.enable = false;
     };
     systemd.services.display-manager = {
-      # Start only when dom0 has connected the Qubes display transport.
+      # Hybrid starts after dom0 connects; the physical lab also stays manual
+      # so diagnostics/password seeding happen before taking over the panel.
       wantedBy = lib.mkForce [ ];
-      requires = [ "qubes-gui-agent.service" ];
-      after = [ "qubes-gui-agent.service" "airlock-qubes-rw-init.service" ];
+      requires = lib.optional hybrid "qubes-gui-agent.service";
+      after = [ "airlock-qubes-rw-init.service" ] ++ lib.optional hybrid "qubes-gui-agent.service";
     };
     systemd.packages = [ guiAgent ];
     systemd.services.qubes-gui-agent = {
+      enable = hybrid;
       wantedBy = [ "multi-user.target" ];
       after = [
         "qubes-db.service"
@@ -247,7 +259,7 @@ in
     environment.etc = {
       "X11/xorg-qubes.conf.template".source = "${guiAgent}/etc/X11/xorg-qubes.conf.template";
       "X11/xinit/xinitrc".source = "${guiAgent}/bin/qubes-session";
-      "qubes-rpc/qubes.GuiVMSession".source = guiSession;
+      "qubes-rpc/qubes.GuiVMSession" = lib.mkIf hybrid { source = guiSession; };
       "qubes-rpc/qubes.SetMonitorLayout".source = "${guiAgent}/etc/qubes-rpc/qubes.SetMonitorLayout";
       "qubes-rpc/qubes.WindowIconUpdater".source =
         "${pkgs.qubes-gui-daemon}/etc/qubes-rpc/qubes.WindowIconUpdater";
@@ -286,8 +298,7 @@ in
     systemd.tmpfiles.rules = [
       "d /var/log/qubes 0755 root root - -"
       "f /run/qubes-service/guivm 0644 root root - -"
-      "f /run/qubes-service/guivm-gui-agent 0644 root root - -"
       "f /run/qubes-service-environment 0644 root root - -"
-    ];
+    ] ++ lib.optional hybrid "f /run/qubes-service/guivm-gui-agent 0644 root root - -";
   };
 }

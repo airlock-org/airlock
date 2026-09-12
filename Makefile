@@ -81,6 +81,7 @@ PYTHON_FILES := \
 	tests/test_gui_minimal.py \
 	tests/test_usb_dev.py \
 	lifecycle/image/tools/usb-dev.py \
+	lifecycle/image/tools/amd-preflight.py \
 	lifecycle/misc/tools/pkgs/airlock-gpu-probe/src/gpu-probe.py
 
 PYTEST_LOG_DIR = $${AIRLOCK_LOG_DIR:-.airlock-logs}

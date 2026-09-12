@@ -304,6 +304,50 @@
           self.nixosModules.dom0
           ./lifecycle/image/profiles/usb-dev.nix
           ./lifecycle/image/hardware/thinkpad-t14-gen3-amd.nix
+          ({ lib, ... }: {
+            specialisation.usb-text-recovery.configuration = {
+              imports = [ ./lifecycle/image/profiles/usb-headless.nix ];
+              # Do not reconcile or start VMs from possibly changed qubes.xml.
+              airlock.qubes.setupConfigOnBoot.enable = lib.mkForce false;
+            };
+            specialisation.usb-amd-lab.configuration = {
+              imports = [ ./lifecycle/image/profiles/usb-amd-lab.nix ];
+              airlock.qubes.domains.sys-gui = lib.mkForce (materializeNixClosureDomain (
+                (mkAirlockQubeBuilders system).mkNixNativeDomain {
+                  name = "sys-gui";
+                  guestRole = "sys-gui";
+                  configurationName = "airlock-domain-sys-gui-usb-amd-lab";
+                  kernelName = airlockQubesVmKernelName;
+                  label = "black";
+                  netvm = null;
+                  prefs = {
+                    autostart = false;
+                    guivm = null;
+                    audiovm = null;
+                    virt_mode = "hvm";
+                    memory = 4096;
+                    maxmem = 4096;
+                    vcpus = 4;
+                  };
+                  features = { "video-model" = "none"; "airlock-role" = "sys-gui"; };
+                  services = { guivm = true; "guivm-gui-agent" = false; };
+                  devices.pci = [ ];
+                  modules = [ ({ pkgs, ... }: {
+                    airlock.sysGuiGuest = {
+                      displayMode = "physical-amd-lab";
+                      personalLaunchers.enable = false;
+                    };
+                    users.users.user.initialHashedPassword = "!";
+                    hardware.enableRedistributableFirmware = true;
+                    hardware.graphics.enable = true;
+                    services.xserver.videoDrivers = [ "amdgpu" ];
+                    boot.kernelModules = [ "amdgpu" ];
+                    environment.systemPackages = [ pkgs.pciutils pkgs.mesa-demos ];
+                  }) ];
+                }
+              ));
+            };
+          })
         ];
       };
 
