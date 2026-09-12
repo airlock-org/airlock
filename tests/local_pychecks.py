@@ -9952,8 +9952,11 @@ def check_config_topology_eval(repo_root: Path, log_dir: Path) -> None:
     ).stdout.strip()
     sys_net_system_path = Path(_physical_store_path(repo_root, sys_net_system))
     sys_net_packaged_qrexec_unit = Path(
-        os.path.realpath(
-            sys_net_system_path / "etc/systemd/system/qubes-qrexec-agent.service"
+        _physical_store_path(
+            repo_root,
+            os.path.realpath(
+                sys_net_system_path / "etc/systemd/system/qubes-qrexec-agent.service"
+            ),
         )
     )
     sys_net_packaged_qrexec_unit_text = sys_net_packaged_qrexec_unit.read_text(
