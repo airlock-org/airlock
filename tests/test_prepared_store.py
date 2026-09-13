@@ -164,6 +164,27 @@ def test_ordinary_store_has_no_prepared_admission(tmp_path):
 
 
 @pytest.mark.nix
+def test_usb_prepared_store_preserves_sealed_view_mode():
+    expression = f"""
+      let config = (builtins.getFlake \"{ROOT}\").nixosConfigurations.usb-dev.config;
+      in {{
+        mode = config.airlock.image.preparedStoreMode;
+        image = config.system.build.image.drvPath;
+      }}
+    """
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    prepared = json.loads(result.stdout)
+    assert prepared["mode"] == "go-rwx"
+    assert prepared["image"].endswith(".drv")
+
+
+@pytest.mark.nix
 @pytest.mark.skipif(
     os.environ.get("AIRLOCK_RUN_PREPARED_IMAGE_CHECK") != "1",
     reason="set AIRLOCK_RUN_PREPARED_IMAGE_CHECK=1 for real image closure accounting",

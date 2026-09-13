@@ -11,14 +11,22 @@ let
   '';
 in
 {
-  environment.etc."airlock/qubes-topology.json" = {
-    text = lib.mkForce null;
-    source = topology;
+  options.airlock.image.preparedStoreMode = lib.mkOption {
+    type = lib.types.str;
+    default = "go-rwx";
+    description = "Mode adjustment applied while installing the prepared guest store.";
   };
-  system.extraDependencies = [ airlockUsbPreparedStore.descriptors ]
-    ++ map (entry: entry.rootImage) (builtins.attrValues airlockUsbGuestEntries)
-    ++ map (kernel: kernel.source) (builtins.attrValues config.airlock.qubes.kernels);
-  # Only the disk builder consumes this output, placing it at its final path.
-  # Do not add the payload to extraDependencies: that would copy it twice.
-  system.build.usbPreparedGuestStore = airlockUsbPreparedStore;
+
+  config = {
+    environment.etc."airlock/qubes-topology.json" = {
+      text = lib.mkForce null;
+      source = topology;
+    };
+    system.extraDependencies = [ airlockUsbPreparedStore.descriptors ]
+      ++ map (entry: entry.rootImage) (builtins.attrValues airlockUsbGuestEntries)
+      ++ map (kernel: kernel.source) (builtins.attrValues config.airlock.qubes.kernels);
+    # Only the disk builder consumes this output, placing it at its final path.
+    # Do not add the payload to extraDependencies: that would copy it twice.
+    system.build.usbPreparedGuestStore = airlockUsbPreparedStore;
+  };
 }

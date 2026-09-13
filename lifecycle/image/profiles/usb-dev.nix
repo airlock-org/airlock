@@ -84,7 +84,10 @@
       {
         source = "${config.system.build.usbPreparedGuestStore}/pool";
         target = "/var/lib/airlock/closure-store";
-        mode = "u+rwX,go-rwx";
+        # Preserve sealed files' read-only owner mode. Qubes verifies this
+        # before exposing the EROFS view to a guest. Remove only group/other
+        # access from the prepared source tree.
+        mode = config.airlock.image.preparedStoreMode;
       }
     ];
   });
