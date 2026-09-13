@@ -3,6 +3,14 @@
 Physical USB boot is still being validated. This is a writable disk image, not
 a live ISO or an installer. XFCE remains the desktop. Normal VM targets are unchanged.
 
+The USB developer profile disables USBGuard so the inherited dom0 default-block
+policy cannot disconnect its USB root disk. This development-only exception also
+applies to its recovery modes, not normal installed-system profiles. Persistent
+journals synchronize every second to reduce lost diagnostics after forced shutdown.
+Before a physical GUI test, validate the image with a virtual USB boot disk;
+virtio-only testing does not exercise USB root access. Use the default hybrid GUI
+entry for this checkpoint, not the experimental AMD passthrough entry.
+
 ## Build and provision on the development host
 
 Run `make usb-dev-image`. Its result link identifies the current image without

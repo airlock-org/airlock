@@ -42,6 +42,9 @@
   };
   services.udisks2.enable = lib.mkForce false;
   services.gvfs.enable = lib.mkForce false;
+  # The inherited dom0 USB policy would block this image's USB root disk.
+  # Restrict this development exception to the USB image and its recovery modes.
+  services.usbguard.enable = lib.mkForce false;
   services.xserver.enable = true;
   services.xserver.displayManager.lightdm.enable = true;
   services.libinput.enable = true;
@@ -79,6 +82,7 @@
   services.journald.settings.Journal = {
     Storage = "persistent";
     SystemMaxUse = "1G";
+    SyncIntervalSec = "1s";
   };
   environment.etc."airlock/usb-dev".text = "airlock-usb-dev-v1\n";
   environment.systemPackages = with pkgs; [
