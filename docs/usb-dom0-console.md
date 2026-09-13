@@ -17,6 +17,11 @@ The fixed disk capacity is 12 GiB including a 1 GiB EFI partition; no partition
 or filesystem expansion runs on boot. No personalization is needed: local
 login is `airlock` / `password`. No repository or credentials are copied.
 
+The persistent journal uses `SyncIntervalSec=1s` to reduce buffered log loss
+during forced shutdowns. This changes disk synchronization, not log verbosity,
+and cannot guarantee the final messages survive a kernel or storage failure.
+Rebuild and rewrite the USB to apply this setting; older images are unchanged.
+
 Boot the default Xen entry, log in, and run:
 
 ```sh

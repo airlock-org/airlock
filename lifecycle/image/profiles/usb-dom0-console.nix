@@ -68,7 +68,12 @@
     label = "airlock-console";
   });
 
-  services.journald.settings.Journal = { Storage = "persistent"; SystemMaxUse = "256M"; };
+  services.journald.settings.Journal = {
+    Storage = "persistent";
+    SystemMaxUse = "256M";
+    # Reduce buffered log loss if a black-screen boot needs a forced shutdown.
+    SyncIntervalSec = "1s";
+  };
   environment.systemPackages = with pkgs; [ pciutils usbutils ];
   environment.etc."airlock/usb-dom0-console".text = "airlock-usb-dom0-console-v1\n";
   environment.loginShellInit = ''
