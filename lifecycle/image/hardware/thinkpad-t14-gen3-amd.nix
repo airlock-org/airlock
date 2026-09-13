@@ -12,4 +12,21 @@
   services.xserver.videoDrivers = [ "amdgpu" ];
   hardware.graphics.enable = true;
   environment.systemPackages = [ pkgs.pciutils pkgs.usbutils ];
+  # Observed stable evdev links on this machine. This declaration is inert
+  # unless a physical-GUI profile opts into the sender. Do not copy eventN
+  # numbers, touchscreen devices, or this selection into generic modules.
+  airlock.inputProxy.sender.devices = {
+    keyboard = {
+      path = "/dev/input/by-path/platform-i8042-serio-0-event-kbd";
+      type = "keyboard";
+    };
+    pointingstick = {
+      path = "/dev/input/by-path/platform-i8042-serio-1-event-mouse";
+      type = "mouse";
+    };
+    touchpad = {
+      path = "/dev/input/by-path/platform-AMDI0010:01-event-mouse";
+      type = "tablet";
+    };
+  };
 }

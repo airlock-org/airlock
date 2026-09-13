@@ -1,6 +1,7 @@
 # AMD ownership experiment
 
-Implemented scaffolding, **not validated GPU passthrough**. The default USB
+An experimental physical GPU profile, with one successful laptop desktop
+login; **not general hardware or reset certification**. The default USB
 configuration still runs the hybrid XFCE desktop with AMD driven by dom0.
 The lab is a separate boot specialisation, not a runtime toggle.
 Its immediate purpose is to inspect Xen ownership of the laptop GPU over SSH
@@ -13,7 +14,8 @@ now booted successfully over SSH with the GPU reserved and bootstrap passed.
 The [first assignment experiment](amd-gpu-first-assignment.md) found a missing
 video BIOS. The [VBIOS follow-up](amd-gpu-vbios.md) resolved that: amdgpu now
 initializes inside sys-gui, exposes DRM devices and sees the connected eDP
-panel. Physical desktop and input remain unvalidated. Firmware delivery is
+panel. A subsequent [input experiment](sys-gui-input.md) connected the physical
+keyboard and pointers, and the user logged into the visible desktop. Firmware delivery is
 machine-local and explicitly opt-in, not automatically included in the image.
 The [assignment/reset review](amd-gpu-assignment-reset-findings.md) finds no
 shared Xen DMA-requestor group for the GPU, but reset effectiveness remains
@@ -95,10 +97,11 @@ the saved default.
   variants share declarative `user` / `password` credentials; no runtime
   password seeding is required. After safe assignment/start, explicitly start
   the guest's display-manager. Dom0 credentials still come from personalization.
-- Package and wire **upstream Qubes input proxy**, including dom0's PS/2 and
-  I2C inputs, with narrowly scoped receiver policy. No custom Rust/RPC input
-  protocol and no broad USB controller passthrough. This is not implemented
-  by the lab profile yet; remote diagnostics remain available.
+- **Upstream Qubes input proxy** is now packaged and wired, including dom0's
+  selected PS/2 and I2C inputs. The shared module is opt-in; the machine
+  hardware file supplies stable paths. Activate it manually after the guest
+  is ready, following [the input runbook](sys-gui-input.md). It was exercised
+  live on the existing guest; the updated full image has not been rebuilt.
 - Validate display initialization, input, logout and cold-boot recovery.
   Guest stop/start/reset cycles are a separate risk review, not an automatic loop.
 

@@ -184,6 +184,7 @@ let
   ++ lib.optional (!cfg.gui.enable) "dom0-is-gui";
 in
 {
+  imports = [ ./qubes-input-proxy.nix ];
   # Upstream installs these desktop frontends for every dom0. Keep the
   # backend/CLI packages, including desktop-linux-common's RPC helpers, but
   # expose the graphical applications only in the GUI domain.

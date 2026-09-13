@@ -121,3 +121,8 @@ AMD direct-display configuration still needs:
 
 Hyprland follows that milestone, with separate Qubes window/input integration
 testing. No GPU discovery or automatic device reassignment is introduced here.
+
+The opt-in physical laptop experiment now has a confirmed GUI login with
+keyboard and pointer input. Its [reusable input module and findings](sys-gui-input.md)
+are separate from machine-specific GPU reservation and firmware delivery.
+This does not change the default hybrid profile or establish reset safety.

@@ -164,6 +164,7 @@ let
   '');
 in
 {
+  imports = [ ./qubes-input-proxy.nix ];
   options.airlock.sysGuiGuest.enable = lib.mkEnableOption "the Airlock hybrid sys-gui role";
   options.airlock.sysGuiGuest.displayMode = lib.mkOption {
     type = lib.types.enum [ "hybrid" "physical-amd-lab" ];
@@ -177,6 +178,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    airlock.inputProxy.receiver.enable = lib.mkDefault (!hybrid);
     # Upstream graphical.target Wants=display-manager.service even when the
     # service has no wantedBy. Boot the physical lab to text, then start X
     # explicitly only after GPU initialization and diagnostics succeed.

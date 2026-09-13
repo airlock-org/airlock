@@ -1,6 +1,9 @@
 { lib, ... }:
 {
   imports = [ ./usb-headless.nix ];
+  # Device selection belongs to the imported machine hardware profile.
+  # Forwarding still requires explicit activation after the guest is ready.
+  airlock.inputProxy.sender.enable = true;
   environment.etc."airlock/usb-amd-lab".text = "experimental; manual GPU assignment only\n";
   # Opt-in firmware delivery through Qubes' per-VM template extension. The
   # machine-local VFCT is provisioned separately; never bundle laptop ROMs.

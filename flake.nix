@@ -480,6 +480,7 @@
         in
         configDomainPackages
         // {
+          qubes-input-proxy = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/qubes-input-proxy { };
           airlock-config-apply = pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-config-apply { };
           airlock-config-archive-candidate =
             pkgs.callPackage ./lifecycle/runtime/tools/pkgs/airlock-config-archive

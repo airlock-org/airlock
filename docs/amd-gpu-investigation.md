@@ -174,11 +174,14 @@ TrackPoint/touchpad, login and a normal application in the guest desktop.
 Completion: physical display and input work with the GPU owned by `sys-gui`.
 Remote SSH access alone is not this milestone.
 
-Status: kernel connector enumeration succeeded; eDP is connected and reports
-3840x2400. The display manager remains stopped in the successful VBIOS boot.
-Xorg/physical login, accelerated user-space rendering and input forwarding
-have not been validated. The first attempt's unintended display-manager
-startup is now avoided with multi-user boot for the physical lab.
+Status: **physical GUI login and input confirmed on this boot.** After the
+successful VBIOS attempt, the guest display manager was started manually and
+the upstream Qubes input proxy connected the dom0 keyboard, TrackPoint and
+touchpad. Xorg/libinput registered all three; the user confirmed visible GUI,
+typing, pointer movement and successful login. See [input findings](sys-gui-input.md)
+for the reusable implementation, portable qrexec packaging fix and validation.
+Accelerated user-space rendering, a normal application and detailed pointer
+behavior remain unchecked. No GPU restart was needed for input deployment.
 
 ### 6. Validate lifecycle and separate general support from this machine
 
