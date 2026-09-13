@@ -278,6 +278,44 @@ dead bytes inside segment files; physical compaction is described above.
 Measure allocated filesystem blocks for real disk usage, not just sparse volume
 sizes, manifest sizes, or Nix `narSize` (serialized archive size).
 
+### Possible future directions (not implemented)
+
+The `/nix/store` pathname and the physical storage behind it are different
+things. NixOS programs still require their expected `/nix/store/...` paths, but
+those paths could be provided by a mounted view rather than a separate copy of
+the package files. Two possible follow-up stages are:
+
+1. **Prepare guest backing data during image construction.** Build the shared
+   segment pool and closure views before distributing the image, retaining
+   dom0's conventional store initially. Avoid including guest-only source
+   payloads in the final image where they are no longer needed. This requires
+   adapting bootstrap references and admission/reuse checks, not simply adding
+   a prebuilt pool alongside the existing source store. Packages also needed by
+   dom0 would still have two representations at this stage.
+2. **Let dom0 use a view of the same backing pool.** Give dom0 its own closure
+   view mounted at `/nix/store`, so identical store objects used by dom0 and
+   guests can share backing bytes too. This is an architectural possibility,
+   not a supported dom0 boot configuration today.
+
+Repackaging cannot be replaced by an ordinary file move because source files
+and segment fragments have different layouts. An image builder could instead
+produce the shared representation and omit unnecessary source copies from the
+final image, without deleting anything from the build machine's Nix store.
+
+Sharing dom0's backing store needs an early-boot mount path that works before
+normal dom0 services or any guest VM starts. It also needs bootable updates and
+rollback, protection of active dom0 generations during GC and compaction, and
+consistent Nix store metadata. Since the existing views are read-only, local
+builds and package installation would require a writable layer or a separate
+staging store with a defined admission/update lifecycle. Hosting the backing
+pool in another VM adds a boot dependency; it does not solve these issues or
+remove duplication by itself.
+
+These are separate storage and boot milestones. The immediate GUI milestone
+keeps dom0's current boot/store design: provide enough measured space for
+sys-gui initialization, then verify a personalized image reaches a usable GUI
+when booted through virtual USB storage before another physical laptop trial.
+
 ## Warm Integration Loop
 
 Use local tests first:
