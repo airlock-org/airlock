@@ -22,6 +22,13 @@ Both manual entries retain direct dom0 networking, SSH and Tailscale. The lab
 reserves **only** `0000:04:00.0`, not audio, USB, PSP, ACP or storage functions.
 It blacklists dom0 AMD drivers and disables the firmware framebuffer. The
 lab is specific to the inspected ThinkPad; do not select it on other hardware.
+Airlock dom0 configures libvirt to shut guests down instead of saving their
+memory at host shutdown, and to ignore previously running guests at boot.
+Qubes controls their startup. Older USB builds used libvirt's suspend/resume
+defaults, which could restore the hybrid guest while lab setup replaced its
+configuration. Existing saved memory must be inspected and discarded for the
+affected, stopped guest before its next cold start; this does not remove its
+virtual disks.
 Do not activate a specialisation with `switch-to-configuration switch`: GPU
 ownership is established during boot. The upstream systemd-boot/Xen builder
 keeps the normal generation as the default; do not manually make the lab entry

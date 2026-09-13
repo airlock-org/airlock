@@ -403,6 +403,11 @@ in
     '';
 
     virtualisation.libvirtd.firewallBackend = lib.mkForce cfg.libvirtFirewallBackend;
+    # Qubes owns VM startup. Libvirt's defaults save running guests at host
+    # shutdown and resume them on the next boot regardless of autostart flags,
+    # racing topology reconciliation (including USB profile changes).
+    virtualisation.libvirtd.onBoot = "ignore";
+    virtualisation.libvirtd.onShutdown = "shutdown";
 
     systemd.services.airlock-qubes-store-init = {
       description = "Initialize the Qubes XML store for Airlock dom0";
