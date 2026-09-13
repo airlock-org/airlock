@@ -45,6 +45,14 @@ Do not reinstall or mount the internal SSD for these checks.
 Completion: another developer can identify the exact configuration and
 hardware behind every subsequent result.
 
+Status: complete for boot ID `3a19d380-405e-4e8e-8c3f-c2ddba13091a`. The
+capture is on the USB under `.airlock-logs/usb-dev/<boot-id>/` and was copied
+to the development workstation. It records USB root `/dev/sda2`, an unmounted
+internal NVMe, Xen 4.19.4, the Generation 2 AMD-lab command line, the running
+system path, the deployed repo commit, PCI topology, input inventory and boot
+journal. The laptop-side repo predates this document; this is expected because
+the baseline was captured before synchronizing the documentation commit.
+
 ### 2. Establish Xen's assignment boundary
 
 Inspect the pinned Xen, libvirt and Qubes implementations and their upstream
@@ -60,6 +68,18 @@ failure, unavailable evidence and a reviewed hardware decision.
 
 Completion: a documented assignment boundary, or a precise explanation of
 which evidence is still unavailable. IOMMU enablement alone is insufficient.
+
+Status: partially complete. Xen exposes only `0000:04:00.0` through
+`xl pci-assignable-list`, and Qubes identifies it as
+`dom0:00_08.1-00_00.0` (`sbdf: 0000:04:00.0`). The upstream Qubes device API
+enumerates the GPU and every bus-04 sibling individually when queried with
+`qvm-device pci list dom0 --with-sbdf`; calling it without `dom0` lists no
+backend and was an incorrect diagnostic query. The GPU and siblings sit below
+the same `00:08.1` PCIe bridge, but that is topology rather than proof that
+they share an IOMMU or reset boundary. Under this Xen/dom0 boot, none of
+`04:00.0` through `04:00.6` expose a Linux `iommu_group` symlink, while Xen
+does report AMD IOMMU and interrupt remapping enabled. The missing Xen device-
+group evidence remains an explicit gap for the reset decision.
 
 ### 3. Determine the actual reset behavior
 
@@ -92,7 +112,7 @@ Check that qrexec diagnostics can be reached without a display and arrange
 dom0/guest log collection before starting the display manager.
 
 Use upstream Qubes device tools. Resolve the actual device identifier from
-`qvm-device pci list`; do not assume an older short BDF identifier is accepted
+`qvm-device pci list dom0 --with-sbdf`; do not assume an older short BDF identifier is accepted
 by the installed version. Inspect existing assignments and saved state first.
 Make the smallest justified assignment and record how to undo it. Recheck
 that dom0's GPU driver remains unbound.
