@@ -64,8 +64,11 @@
   # runtime configuration aligned with that build-time filesystem.
   fileSystems."/boot".device = lib.mkForce "/dev/disk/by-label/ESP";
   image = { baseName = "airlock-usb-dev"; format = "raw"; efiSupport = true; };
-  # A fixed 20-GiB POC image: 1 GiB EFI plus roughly 19 GiB root.
-  virtualisation.diskSize = 20480;
+  # A fixed 32-GiB developer image: 1 GiB EFI plus roughly 31 GiB root.
+  # The extra headroom is required by the current first-boot shared-closure
+  # admission, which retains dom0's source store while creating its segment
+  # representation for sys-gui.
+  virtualisation.diskSize = 32768;
   system.build.image = lib.mkForce (import "${modulesPath}/../lib/make-disk-image.nix" {
     inherit config lib pkgs;
     inherit (config.image) baseName format;

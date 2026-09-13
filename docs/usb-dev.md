@@ -14,7 +14,7 @@ entry for this checkpoint, not the experimental AMD passthrough entry.
 ## Build and provision on the development host
 
 Run `make usb-dev-image`. Its result link identifies the current image without
-exposing its changing Nix store path. The current image is a fixed 20 GiB
+exposing its changing Nix store path. The current image is a fixed 32 GiB
 image, so it fits a nominal 64 GB USB. The remaining USB space is left unused
 for this POC. 128 GB is still recommended for longer-lived builds.
 
@@ -141,7 +141,9 @@ Wi-Fi settings, logs, repository and VM state persist on the **unencrypted** roo
 
 For builds on the USB, keep the custom store off the host store, for example:
 `AIRLOCK_DATA_ROOT=/home/airlock/airlock-data make usb-dev-image`.
-The fixed 20 GiB root can fill quickly; use the guarded `make gc-auto` with
+The fixed 32 GiB root is the current capacity experiment for sys-gui's
+first-boot admission; verify it before treating it as sufficient. It can still
+fill during local development builds. Use the guarded `make gc-auto` with
 that same data root. No full-store garbage collection is done automatically.
 
 ## Evidence and next experiment

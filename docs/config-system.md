@@ -237,14 +237,15 @@ also uses. Read-only access and guest isolation do not inherently require this
 duplication; it is a limitation of the current image/bootstrap integration.
 Putting the pool in another VM would not by itself remove the source copy.
 
-The 20 GiB GUI developer image hit `ENOSPC` while appending object data during
-sys-gui's first admission, before sys-gui started. A successful image build only
-proves the initial filesystem fits; it does not prove first-boot initialization
-fits. Capacity planning must include the retained source store, new segment
-data, temporary admission files, metadata, and writable runtime state. Preparing
-the shared pool at image-build time and avoiding unnecessary retained source
-payloads is possible follow-up work, not implemented behavior; preparing the
-pool alone would not remove duplication.
+The earlier 20 GiB GUI developer image hit `ENOSPC` while appending object data
+during sys-gui's first admission, before sys-gui started. The current profile
+uses a fixed 32 GiB image as the next capacity experiment. A successful image
+build only proves the initial filesystem fits; it does not prove first-boot
+initialization fits. Capacity planning must include the retained source store,
+new segment data, temporary admission files, metadata, and writable runtime
+state. Preparing the shared pool at image-build time and avoiding unnecessary
+retained source payloads is possible follow-up work, not implemented behavior;
+preparing the pool alone would not remove duplication.
 
 Implementation references: [closure manifest construction](../lifecycle/misc/lib/qube-template.nix)
 (`mkNixStoreClosureManifest`), [domain admission](../lifecycle/runtime/tools/scripts/nix-domain-storage.py)
