@@ -104,6 +104,32 @@ Completion: a written decision with one of these outcomes:
 No reset writes, broad controller assignment, permissive mode, ACS override
 or `no-strict-reset` bypass is part of the evidence-gathering phase.
 
+Status: **blocked for normal reset-safe passthrough.** Qubes' pinned PCI
+extension creates a managed libvirt PCI host device. At guest start it binds
+the assigned function to `pciback`; libvirt then manages the host-device
+attachment and reset. The generated XML has `managed="yes"` and has no
+`nostrictreset` or `permissive` option. This is the normal upstream path.
+
+The observed GPU has `FLReset-` and only `bus` in `reset_method`. Its
+multi-function device contains `04:00.1` audio, `.2` PSP/CCP, `.3` and `.4`
+USB controllers, `.5` ACP and `.6` audio. Those functions are active in dom0;
+the USB and PSP functions must stay there. Qubes documents that functions with
+the same BDF except for the function number may need assignment to the same
+VM, and that dropping this requirement uses `no-strict-reset` with security
+consequences. Its troubleshooting guide documents the corresponding libvirt
+failure: an active sibling on the bus prevents a bus reset. See
+[Qubes PCI devices](https://doc.qubes-os.org/en/latest/user/how-to-guides/how-to-use-pci-devices.html)
+and [PCI troubleshooting](https://doc.qubes-os.org/en/r4.3/user/troubleshooting/pci-troubleshooting.html).
+
+We will not force the start failure, write a reset, assign sibling controllers,
+or enable `no-strict-reset`/`permissive` merely to advance the experiment.
+Those actions would cross the gate without resolving the hardware constraint.
+The practical product direction is therefore an additional GPU for `sys-gpu`,
+while this iGPU remains owned by dom0's hybrid display path on this laptop.
+Revisit iGPU-to-`sys-gui` only with new evidence of a safe platform-specific
+reset/assignment path, or after explicitly deciding to accept a restricted,
+cold-boot-only reduced-security model.
+
 ### 4. Prepare and perform the first guest assignment
 
 Only after the assignment/reset decision permits it, verify the lab guest's
@@ -121,6 +147,8 @@ Completion: the guest sees the intended GPU, loads its driver and exposes
 DRM devices, with no unexpected device ownership or host failure. On failure,
 capture the first actionable error before changing another variable.
 
+Status: not started; blocked by the reset decision above.
+
 ### 5. Bring up the panel and input
 
 Start the guest display manager manually. Inspect firmware loading, PCI BAR
@@ -134,6 +162,8 @@ TrackPoint/touchpad, login and a normal application in the guest desktop.
 
 Completion: physical display and input work with the GPU owned by `sys-gui`.
 Remote SSH access alone is not this milestone.
+
+Status: not started; blocked by the reset decision above.
 
 ### 6. Validate lifecycle and separate general support from this machine
 
@@ -150,6 +180,10 @@ another machine. One successful laptop does not establish general AMD support.
 Completion: a repeatable supported workflow, stated limitations and a clear
 next step toward the general product rule: `sys-gui` owns the sole/internal
 GPU; optional `sys-gpu` is for an additional GPU.
+
+Status: not started. The laptop result rejects that general product rule for
+this integrated multi-function GPU under the normal Qubes security model.
+General support must detect this condition and retain the hybrid display path.
 
 ## Working method and recovery
 
