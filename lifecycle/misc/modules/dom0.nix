@@ -40,6 +40,18 @@ let
     qubes.UpdatesProxy * dom0 ${devNetworkProxy.target} allow
     EOF
   '';
+  dom0PoweroffService = pkgs.writeShellScript "airlock-dom0-poweroff" ''
+    set -eu
+
+    # qrexec policy is the authority boundary; retain this check so a future
+    # policy mistake cannot turn the handler into a general dom0 power service.
+    [ "''${QREXEC_REMOTE_DOMAIN:-}" = "sys-gui" ] || {
+      echo "airlock.Dom0Poweroff is restricted to sys-gui" >&2
+      exit 1
+    }
+
+    exec ${pkgs.systemd}/bin/systemctl poweroff
+  '';
   sysGuiPolicyPackage = pkgs.runCommand "airlock-sys-gui-policy" { } ''
     install -d "$out/etc/qubes/policy.d"
     cat > "$out/etc/qubes/policy.d/50-airlock-sys-gui.policy" <<'EOF'
@@ -52,6 +64,9 @@ let
     # Keep it limited to dom0 starting the declared sys-gui domain.
     qubes.GuiVMSession * dom0 sys-gui allow
     qubes.GuiVMSession * @anyvm @anyvm deny
+    # The GUI domain may request one host action: a clean power-off. It has no
+    # shell or general systemd authority in dom0.
+    airlock.Dom0Poweroff * sys-gui dom0 allow
     qubes.ClipboardCopy + sys-gui @tag:guivm-sys-gui allow
     qubes.ClipboardPaste + sys-gui @tag:guivm-sys-gui allow
     qubes.SetMonitorLayout * sys-gui @tag:guivm-sys-gui allow
@@ -423,6 +438,11 @@ in
       "d /var/lib/airlock/closure-store 0700 root root - -"
     ];
 
+    environment.etc."qubes-rpc/airlock.Dom0Poweroff" = lib.mkIf cfg.gui.enable {
+      source = dom0PoweroffService;
+      mode = "0555";
+    };
+
     networking.useDHCP = lib.mkDefault imageCfg.devMode.enable;
     networking.dhcpcd.extraConfig = lib.mkIf devNetworkProxy.enable (
       lib.mkAfter ''
@@ -486,8 +506,8 @@ in
     ]
     ++ lib.optionals imageCfg.devMode.enable dom0DevPackages;
 
-    environment.etc = lib.mkIf imageCfg.devMode.enable {
-      "airlock/dev-mode".text = ''
+    environment.etc."airlock/dev-mode" = lib.mkIf imageCfg.devMode.enable {
+      text = ''
         enabled
       '';
     };

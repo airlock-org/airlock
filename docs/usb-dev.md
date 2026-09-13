@@ -129,6 +129,10 @@ cd /home/airlock/dev/nixome
 codex
 ```
 
+The XFCE panel's **Shut Down** action requests a clean dom0 power-off through
+a single qrexec service restricted to `sys-gui`; it does not merely halt the
+GUI VM. Log out and reboot remain guest-session actions for now.
+
 When using the encrypted-vault path, run `sudo airlock-usb vault-unlock` before
 starting Codex. It is not needed for `--insecure-plain-codex-auth`.
 

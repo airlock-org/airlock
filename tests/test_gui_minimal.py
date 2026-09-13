@@ -18,6 +18,9 @@ def test_gui_minimal_topology_and_desktop():
         image = flake.nixosConfigurations.vm-gui-minimal.config;
         guest = flake.nixosConfigurations.airlock-domain-sys-gui-minimal.config;
         normal = flake.nixosConfigurations.airlock-domain-sys-gui.config;
+        sysGuiPolicy = builtins.head (builtins.filter (package:
+          (package.pname or package.name) == "airlock-sys-gui-policy"
+        ) image.virtualisation.qubes.packages);
       in {{
         topology = image.airlock.qubes.topology;
         setup = image.airlock.qubes.setupConfigOnBoot;
@@ -35,6 +38,8 @@ def test_gui_minimal_topology_and_desktop():
         normalPersonalLaunchers = normal.airlock.sysGuiGuest.personalLaunchers.enable;
         etc = builtins.attrNames guest.environment.etc;
         hostEtc = builtins.attrNames image.environment.etc;
+        hostPoweroffService = builtins.readFile image.environment.etc."qubes-rpc/airlock.Dom0Poweroff".source;
+        hostPoweroffPolicy = builtins.readFile "${{sysGuiPolicy}}/etc/qubes/policy.d/50-airlock-sys-gui.policy";
         mimeDefaults = guest.xdg.mime.defaultApplications;
         packages = map (p: p.pname or p.name) guest.environment.systemPackages;
         assertionsPass = builtins.all (a: a.assertion) (image.assertions ++ guest.assertions);
@@ -80,8 +85,12 @@ def test_gui_minimal_topology_and_desktop():
     assert report["guestSession"] == "xfce"
     assert report["xfce"] is True
     assert "xdg/autostart/airlock-bootstrap-desktop-launchers.desktop" not in report["etc"]
+    assert "airlock.Dom0Poweroff is restricted to sys-gui" in report["hostPoweroffService"]
+    assert "systemctl poweroff" in report["hostPoweroffService"]
+    assert "airlock.Dom0Poweroff * sys-gui dom0 allow" in report["hostPoweroffPolicy"]
     assert not any(name.startswith("airlock/config-inputs/") for name in report["hostEtc"])
     assert "airlock-launch-files" not in report["packages"]
     assert "airlock-launch-browser" not in report["packages"]
+    assert "xfce4-session-logout" in report["packages"]
     assert "firefox.desktop" not in str(report["mimeDefaults"])
     assert "org.gnome.Nautilus.desktop" not in str(report["mimeDefaults"])

@@ -150,6 +150,18 @@ let
     ${pkgs.systemd}/bin/journalctl -u display-manager.service -n 30 --no-pager >&2
     exit 1
   '';
+  # XFCE's panel power action calls `xfce4-session-logout --halt`. In a GUI
+  # domain, upstream would halt only this VM, which destroys the active
+  # desktop relay. Route precisely that action through the dedicated dom0
+  # qrexec service; all other session actions retain XFCE's normal behavior.
+  poweroffSessionAction = lib.hiPrio (pkgs.writeShellScriptBin "xfce4-session-logout" ''
+    set -eu
+    if [ "''${1:-}" = "--halt" ]; then
+      exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
+        --pass-io --no-gui --service dom0 airlock.Dom0Poweroff
+    fi
+    exec ${pkgs.xfce4-session}/bin/xfce4-session-logout "$@"
+  '');
 in
 {
   options.airlock.sysGuiGuest.enable = lib.mkEnableOption "the Airlock hybrid sys-gui role";
@@ -180,6 +192,7 @@ in
       pkgs.python3.pkgs.qubes-desktop-linux-common
       pkgs.python3.pkgs.qubes-desktop-linux-manager
       pkgs.xfce4-session
+      poweroffSessionAction
       pkgs.xfce4-panel
       pkgs.xfdesktop
       pkgs.xdpyinfo
