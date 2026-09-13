@@ -17,6 +17,11 @@ The fixed disk capacity is 12 GiB including a 1 GiB EFI partition; no partition
 or filesystem expansion runs on boot. No personalization is needed: local
 login is `airlock` / `password`. No repository or credentials are copied.
 
+USBGuard is disabled only in this diagnostic profile: the inherited dom0
+default-block policy otherwise blocks the USB root disk during boot. This is
+a development-only relaxation of USB restrictions, not a production policy.
+Validate this image with a virtual USB boot disk, not just virtio storage.
+
 The persistent journal uses `SyncIntervalSec=1s` to reduce buffered log loss
 during forced shutdowns. This changes disk synchronization, not log verbosity,
 and cannot guarantee the final messages survive a kernel or storage failure.

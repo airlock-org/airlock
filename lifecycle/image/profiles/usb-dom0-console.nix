@@ -15,6 +15,10 @@
   systemd.defaultUnit = "multi-user.target";
   systemd.services."qubes-vm@".enable = lib.mkForce false;
 
+  # Dom0's default-block USB policy has no exception for the live root disk.
+  # Keep USB storage accessible in this diagnostic image only.
+  services.usbguard.enable = lib.mkForce false;
+
   users.users.airlock = {
     isNormalUser = true;
     uid = 1000;
