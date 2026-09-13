@@ -281,19 +281,19 @@
           );
         };
 
+      usbSysGuiLoginModule = { lib, ... }: {
+        # Shared by both USB graphics modes. Set the developer login at boot
+        # through NixOS account configuration, without a qrexec password update.
+        users.mutableUsers = lib.mkForce false;
+        users.users.user.initialPassword = lib.mkForce "password";
+        users.users.user.initialHashedPassword = lib.mkForce null;
+      };
+
       mkUsbSysGuiDomainEntry = system:
         bootstrapDomains.mkSysGuiDomainEntryWith system {
           personalLaunchers = false;
           configurationName = "airlock-domain-sys-gui-usb";
-          extraModules = [ ({ lib, ... }: {
-            # This isolated developer image has a fixed guest password. The
-            # Nix-closure guest's /etc is immutable at runtime, so trying to
-            # mutate it through qrexec would fail and must never gate dom0's
-            # graphical login.
-            users.mutableUsers = lib.mkForce false;
-            users.users.user.initialPassword = lib.mkForce "password";
-            users.users.user.initialHashedPassword = lib.mkForce null;
-          }) ];
+          extraModules = [ usbSysGuiLoginModule ];
         };
 
       mkUsbAmdSysGuiDomainEntry = system:
@@ -316,13 +316,11 @@
           features = { "video-model" = "none"; "airlock-role" = "sys-gui"; };
           services = { guivm = true; "guivm-gui-agent" = false; };
           devices.pci = [ ];
-          modules = [ ({ lib, pkgs, ... }: {
+          modules = [ usbSysGuiLoginModule ({ pkgs, ... }: {
             airlock.sysGuiGuest = {
               displayMode = "physical-amd-lab";
               personalLaunchers.enable = false;
             };
-            users.mutableUsers = lib.mkForce true;
-            users.users.user.initialHashedPassword = "!";
             hardware.enableRedistributableFirmware = true;
             hardware.graphics.enable = true;
             services.xserver.videoDrivers = [ "amdgpu" ];
@@ -640,6 +638,10 @@
       # Minimal nested desktop harness. No physical GPU assignment and no
       # dependency on the full bootstrap/configuration VM topology.
       nixosConfigurations.usb-dev = mkUsbConfiguration "x86_64-linux";
+      nixosConfigurations.airlock-domain-sys-gui-usb =
+        (mkUsbSysGuiDomainEntry "x86_64-linux").configuration;
+      nixosConfigurations.airlock-domain-sys-gui-usb-amd-lab =
+        (mkUsbAmdSysGuiDomainEntry "x86_64-linux").configuration;
 
       nixosConfigurations.usb-dom0-console = lib.nixosSystem {
         system = "x86_64-linux";

@@ -119,8 +119,9 @@ Qubes kernel is already installed. The detailed setup log is
 `/var/log/airlock/setup-config.commands.log` and the result is
 `/var/log/airlock/setup-config.json`.
 
-Log into XFCE as `user` with the password you chose. Dom0's local console uses
-`airlock` and the same password. From the dom0 console:
+Both USB graphics modes configure the guest login as `user` / `password`.
+Dom0's local console uses `airlock` and the password supplied during
+personalization (`password` with `--insecure-dev-password`). From the dom0 console:
 
 ```sh
 nmcli --ask device wifi connect YOUR_SSID

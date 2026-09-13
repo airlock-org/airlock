@@ -3,6 +3,9 @@
 Implemented scaffolding, **not validated GPU passthrough**. The default USB
 configuration still runs the hybrid XFCE desktop with AMD driven by dom0.
 The lab is a separate boot specialisation, not a runtime toggle.
+Its immediate purpose is to inspect Xen ownership of the laptop GPU over SSH
+before attempting assignment. A usable desktop still needs safe assignment,
+display initialization and input forwarding.
 
 ## Boot choices
 
@@ -11,7 +14,7 @@ entries. Verify the generated entries before the first hardware experiment:
 
 | Xen entry | Display | VM startup |
 | --- | --- | --- |
-| Default | Existing hybrid XFCE | sys-gui started explicitly after setup/password checks |
+| Default | Existing hybrid XFCE | sys-gui started by the desktop relay after setup |
 | `usb-text-recovery` | dom0 text console, AMD not hidden | No setup or guest autostart |
 | `usb-amd-lab` | May be blank; AMD reserved for Xen pciback | Lab definition applied, no guest autostart |
 
@@ -60,10 +63,10 @@ the saved default.
   Do not use a NixOS kernel's unrelated modules with the shared Qubes kernel.
 - The lab guest is HVM, has no emulated video or outer GUI agent, and uses
   physical Xorg with Qubes' shared-memory wrapper. Its LightDM remains manual
-  so remote diagnostics can run before taking over the screen. After a safe
-  assignment/start, dom0 must seed the local password through Qubes before
-  explicitly starting the guest's display-manager. No default guest password
-  is included.
+  so remote diagnostics can run before taking over the screen. Both USB guest
+  variants share declarative `user` / `password` credentials; no runtime
+  password seeding is required. After safe assignment/start, explicitly start
+  the guest's display-manager. Dom0 credentials still come from personalization.
 - Package and wire **upstream Qubes input proxy**, including dom0's PS/2 and
   I2C inputs, with narrowly scoped receiver policy. No custom Rust/RPC input
   protocol and no broad USB controller passthrough. This is not implemented
@@ -86,6 +89,7 @@ If a later manual experiment assigned devices, inspect
 VM disks or `qubes.xml`. Then reboot the default USB entry.
 
 An empty declarative PCI list does not currently remove runtime assignments.
-The default profile refuses its GUI/password startup if sys-gui still has
-any assigned PCI device. This prevents silently taking the AMD GPU back out
-of dom0 when returning to the hybrid profile.
+The former password service also checked for leftover PCI assignments; that
+check was removed with the service. Until a separate guard is implemented,
+unassign the experimental GPU in text recovery before returning to the default
+profile, whose desktop relay starts sys-gui.

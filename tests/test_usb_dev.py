@@ -17,7 +17,9 @@ def usb():
     return module
 
 
-@pytest.mark.parametrize("device", ["/dev/sda", "/dev/nvme0n1", "/", "/dev/disk/by-id/ata-disk"])
+@pytest.mark.parametrize(
+    "device", ["/dev/sda", "/dev/nvme0n1", "/", "/dev/disk/by-id/ata-disk"]
+)
 def test_writer_requires_explicit_usb_identity(usb, device):
     with pytest.raises(ValueError, match="whole-disk"):
         usb.usb_disk(device)
@@ -70,13 +72,24 @@ def test_auth_requires_mounted_vault(usb, tmp_path):
 
 
 def test_flatten_includes_descendants(usb):
-    nodes = [{"name": "disk", "children": [{"name": "partition", "children": [{"name": "crypt"}]}]}]
-    assert [node["name"] for node in usb.flatten(nodes)] == ["disk", "partition", "crypt"]
+    nodes = [
+        {
+            "name": "disk",
+            "children": [{"name": "partition", "children": [{"name": "crypt"}]}],
+        }
+    ]
+    assert [node["name"] for node in usb.flatten(nodes)] == [
+        "disk",
+        "partition",
+        "crypt",
+    ]
 
 
 @pytest.fixture
 def amd():
-    source = Path(__file__).resolve().parents[1] / "lifecycle/image/tools/amd-preflight.py"
+    source = (
+        Path(__file__).resolve().parents[1] / "lifecycle/image/tools/amd-preflight.py"
+    )
     spec = importlib.util.spec_from_file_location("amd_preflight", source)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -94,14 +107,26 @@ def test_amd_missing_evidence_is_a_failure(amd, tmp_path):
 @pytest.mark.nix
 def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
     root = Path(__file__).resolve().parents[1]
-    expression = f'''
-      let config = (builtins.getFlake "{root}").nixosConfigurations.usb-dev.config;
+    expression = f"""
+      let
+        configs = (builtins.getFlake "{root}").nixosConfigurations;
+        config = configs.usb-dev.config;
+        login = guest: {{
+          password = guest.users.users.user.initialPassword;
+          initialHash = guest.users.users.user.initialHashedPassword;
+          mutable = guest.users.mutableUsers;
+        }};
       in {{
         hasPasswordService = builtins.hasAttr "airlock-usb-gui-password" config.systemd.services;
         displayRequires = config.systemd.services.display-manager.requires;
         displayAfter = config.systemd.services.display-manager.after;
+        hybridLogin = login configs.airlock-domain-sys-gui-usb.config;
+        labLogin = login configs.airlock-domain-sys-gui-usb-amd-lab.config;
+        normalPassword = configs.airlock-domain-sys-gui.config.users.users.user.initialPassword;
+        labHasPasswordService = builtins.hasAttr "airlock-usb-gui-password"
+          config.specialisation.usb-amd-lab.configuration.systemd.services;
       }}
-    '''
+    """
     result = subprocess.run(
         ["nix", "eval", "--impure", "--json", "--expr", expression],
         cwd=root,
@@ -113,6 +138,13 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
     assert configuration["hasPasswordService"] is False
     assert "airlock-usb-gui-password.service" not in configuration["displayRequires"]
     assert "airlock-usb-gui-password.service" not in configuration["displayAfter"]
+    assert (
+        configuration["hybridLogin"]
+        == configuration["labLogin"]
+        == {"password": "password", "initialHash": None, "mutable": False}
+    )
+    assert configuration["normalPassword"] == "airlock"
+    assert configuration["labHasPasswordService"] is False
 
 
 def test_amd_bus_reset_is_not_accepted(amd, tmp_path):

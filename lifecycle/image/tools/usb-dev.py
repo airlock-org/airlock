@@ -523,7 +523,7 @@ def personalize(args):
             file=sys.stderr,
         )
     else:
-        password = getpass.getpass("New local dom0 + sys-gui password: ")
+        password = getpass.getpass("New local dom0 password (sys-gui uses password): ")
         require(len(password) >= 12, "Use at least 12 characters.")
         require(password == getpass.getpass("Confirm password: "), "Passwords differ.")
     password_hash = run(
