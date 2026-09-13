@@ -122,33 +122,8 @@
     "d /home/airlock/dev 0755 airlock users - -"
     "d /home/airlock/.airlock-logs 0700 airlock users - -"
   ];
-  # The reusable guest is locked. Personalization supplies a local password
-  # hash outside Nix; propagate it through dom0's existing Qubes authority.
-  systemd.services.airlock-usb-gui-password = {
-    requires = [ "airlock-setup-config.service" ];
-    after = [ "airlock-setup-config.service" ];
-    before = [ "display-manager.service" ];
-    serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
-    path = [ (pkgs.python3.withPackages (ps: [ ps.qubes-core-admin-client ])) ];
-    script = ''
-      set -eu
-      test -s /var/lib/airlock/usb/local-password.hash
-      # Empty declarative PCI lists do not remove mutable Qubes assignments.
-      # Fail closed if an experiment left one behind; use text recovery.
-      python3 - <<'PY'
-      import qubesadmin
-      vm = qubesadmin.Qubes().domains['sys-gui']
-      if list(vm.devices['pci'].get_assigned_devices()):
-          raise SystemExit('sys-gui has PCI assignments; remove them in USB text recovery before hybrid boot')
-      PY
-      { printf 'user:'; cat /var/lib/airlock/usb/local-password.hash; } |
-        qvm-run --pass-io --no-gui --user root sys-gui 'chpasswd -e'
-    '';
-  };
-  systemd.services.display-manager.requires = [ "airlock-usb-gui-password.service" ];
-  systemd.services.display-manager.after = [ "airlock-usb-gui-password.service" ];
   # Persisted autostart symlinks must not race declarative setup or recovery.
-  # The hybrid relay/password service explicitly starts sys-gui through Qubes.
+  # The hybrid desktop path explicitly starts sys-gui through Qubes.
   systemd.services."qubes-vm@".enable = lib.mkForce false;
   system.stateVersion = "26.05";
 }

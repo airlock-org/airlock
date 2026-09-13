@@ -1,7 +1,9 @@
 """Provisioning safety contracts; no actual disks, mounts or credentials used."""
 
 import importlib.util
+import json
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -87,6 +89,30 @@ def test_amd_missing_evidence_is_a_failure(amd, tmp_path):
     assert "not-xen-dom0" in report["failures"]
     assert "missing-or-shared-iommu-group" in report["failures"]
     assert not report["graphics_verified"]
+
+
+@pytest.mark.nix
+def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
+    root = Path(__file__).resolve().parents[1]
+    expression = f'''
+      let config = (builtins.getFlake "{root}").nixosConfigurations.usb-dev.config;
+      in {{
+        hasPasswordService = builtins.hasAttr "airlock-usb-gui-password" config.systemd.services;
+        displayRequires = config.systemd.services.display-manager.requires;
+        displayAfter = config.systemd.services.display-manager.after;
+      }}
+    '''
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    configuration = json.loads(result.stdout)
+    assert configuration["hasPasswordService"] is False
+    assert "airlock-usb-gui-password.service" not in configuration["displayRequires"]
+    assert "airlock-usb-gui-password.service" not in configuration["displayAfter"]
 
 
 def test_amd_bus_reset_is_not_accepted(amd, tmp_path):

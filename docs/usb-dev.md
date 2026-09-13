@@ -63,8 +63,8 @@ sudo python3 lifecycle/image/tools/usb-dev.py personalize \
   --insecure-dev-password --insecure-plain-codex-auth
 ```
 
-This asks for a new local password for dom0 `airlock` and guest `user`, installs
-one public SSH key and clones the clean committed repository onto a writable
+This asks for a new local password for dom0 `airlock`, installs one public SSH
+key and clones the clean committed repository onto a writable
 `usb-dev` branch. By default, `--auth-file` creates an encrypted Codex vault,
 imports only that cache, then locks the vault. No private keys, untracked files,
 hooks, build artifacts, remote credentials or Codex settings are copied. The
@@ -73,9 +73,10 @@ outside Nix, readable only by root. Re-personalization refuses to overwrite an
 existing setup.
 
 For a throwaway, physically controlled developer USB only, add
-`--insecure-dev-password` to set the literal password `password` without a
-prompt. It is intentionally opt-in and must not be used for a shared or
-network-exposed system.
+`--insecure-dev-password` to set dom0's literal password `password` without a
+prompt. sys-gui uses that same fixed developer password, set declaratively in
+its immutable NixOS image; it is not mutated over qrexec during boot. This is
+intentionally opt-in and must not be used for a shared or network-exposed system.
 
 Add `--insecure-plain-codex-auth` with `--auth-file` to skip LUKS and store the
 Codex cache directly in the USB's writable root. This is also intentionally

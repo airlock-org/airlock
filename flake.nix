@@ -286,13 +286,13 @@
           personalLaunchers = false;
           configurationName = "airlock-domain-sys-gui-usb";
           extraModules = [ ({ lib, ... }: {
-            # The USB provisioning service sets this guest's local password
-            # through qrexec after first boot. The general Nix-native guest
-            # default is immutable accounts, which makes chpasswd fail.
-            # Keep this exception confined to the personalized developer USB.
-            users.mutableUsers = lib.mkForce true;
-            users.users.user.initialPassword = lib.mkForce null;
-            users.users.user.initialHashedPassword = "!";
+            # This isolated developer image has a fixed guest password. The
+            # Nix-closure guest's /etc is immutable at runtime, so trying to
+            # mutate it through qrexec would fail and must never gate dom0's
+            # graphical login.
+            users.mutableUsers = lib.mkForce false;
+            users.users.user.initialPassword = lib.mkForce "password";
+            users.users.user.initialHashedPassword = lib.mkForce null;
           }) ];
         };
 
