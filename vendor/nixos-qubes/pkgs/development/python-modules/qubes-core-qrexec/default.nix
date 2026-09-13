@@ -138,7 +138,13 @@ let
         ./0002-refactor-remove-default-policy-prgram.patch
       ];
 
-      postPatch = optionalString (!isBootstrap) ''
+      postPatch = ''
+        # qrexec-client -l runs a local command through a hardcoded shell.
+        # NixOS has /bin/sh, but no /bin/bash; PATH cannot fix execl().
+        substituteInPlace daemon/qrexec-client.c \
+          --replace-fail '"/bin/bash"' '"${bash}/bin/bash"'
+      ''
+      + optionalString (!isBootstrap) ''
         substituteInPlace systemd/qubes-qrexec-policy-daemon.service \
           --replace-fail "ExecStart=/usr/bin/qrexec-policy-daemon" "ExecStart=${base}/bin/qrexec-policy-daemon"
       '';

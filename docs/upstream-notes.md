@@ -86,6 +86,13 @@ Known gaps/TODOs found in module/package comments:
   the dom0 module.
 - Some Qubes policy and RPC paths are mutable under `/etc`; package removal can
   leave stale policy files.
+- Qubes 4.4.1 `qrexec-client -l` calls `execl("/bin/bash", ...)`. NixOS does
+  not provide that path, so dom0 input-proxy senders failed before opening
+  their devices. The local package now substitutes the Nix Bash path in both
+  the bootstrap and full dom0 builds. Changing PATH cannot fix an absolute
+  `execl` call. This portable packaging correction was built and exercised
+  through the physical GUI input connection on 2026-09-13. See the
+  [upstream call](https://github.com/QubesOS/qubes-core-qrexec/blob/v4.4.1/daemon/qrexec-client.c#L71).
 - Qubes creates mutable systemd units for VM autostart behavior.
 - The module notes unresolved Xen store/dom0 memory details around Qubes memory
   manager behavior.
