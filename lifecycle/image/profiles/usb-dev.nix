@@ -16,6 +16,11 @@
     devModeNetworkProxy.enable = false;
     dom0Resources = { memoryMiB = 8192; maxMemoryMiB = 8192; };
   };
+  # The image build creates this account before offline personalization supplies
+  # its hash. With mutable users, activation preserves that existing locked
+  # password instead of applying hashedPasswordFile. Keep USB users declarative
+  # so every boot (including specialisations) applies the provisioned hash.
+  users.mutableUsers = false;
   users.users.airlock = {
     isNormalUser = true;
     uid = 1000;

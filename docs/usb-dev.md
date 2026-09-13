@@ -69,7 +69,11 @@ key and clones the clean committed repository onto a writable
 imports only that cache, then locks the vault. No private keys, untracked files,
 hooks, build artifacts, remote credentials or Codex settings are copied. The
 clone has no origin; configure a suitable remote later. The password hash is
-outside Nix, readable only by root. Re-personalization refuses to overwrite an
+outside Nix, readable only by root. USB dom0 uses declarative users so boot
+activation applies this hash even though the image already contains a locked
+account. This also applies to the text-recovery and AMD-lab boot entries.
+Changes made with `passwd` are reset at activation; the provisioned hash file
+is the source of truth for dom0's password. Re-personalization refuses to overwrite an
 existing setup.
 
 For a throwaway, physically controlled developer USB only, add

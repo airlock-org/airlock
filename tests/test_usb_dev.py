@@ -116,7 +116,15 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
           initialHash = guest.users.users.user.initialHashedPassword;
           mutable = guest.users.mutableUsers;
         }};
+        dom0Login = host: {{
+          mutable = host.users.mutableUsers;
+          passwordFile = host.users.users.airlock.hashedPasswordFile;
+          rootHash = host.users.users.root.hashedPassword;
+        }};
       in {{
+        dom0Logins = [ (dom0Login config) ] ++ builtins.map
+          (name: dom0Login config.specialisation.${{name}}.configuration)
+          (builtins.attrNames config.specialisation);
         hasPasswordService = builtins.hasAttr "airlock-usb-gui-password" config.systemd.services;
         displayRequires = config.systemd.services.display-manager.requires;
         displayAfter = config.systemd.services.display-manager.after;
@@ -135,6 +143,12 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
         check=True,
     )
     configuration = json.loads(result.stdout)
+    for login in configuration["dom0Logins"]:
+        assert login == {
+            "mutable": False,
+            "passwordFile": "/var/lib/airlock/usb/local-password.hash",
+            "rootHash": "!",
+        }
     assert configuration["hasPasswordService"] is False
     assert "airlock-usb-gui-password.service" not in configuration["displayRequires"]
     assert "airlock-usb-gui-password.service" not in configuration["displayAfter"]
