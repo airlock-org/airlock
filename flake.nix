@@ -286,6 +286,11 @@
           personalLaunchers = false;
           configurationName = "airlock-domain-sys-gui-usb";
           extraModules = [ ({ lib, ... }: {
+            # The USB provisioning service sets this guest's local password
+            # through qrexec after first boot. The general Nix-native guest
+            # default is immutable accounts, which makes chpasswd fail.
+            # Keep this exception confined to the personalized developer USB.
+            users.mutableUsers = lib.mkForce true;
             users.users.user.initialPassword = lib.mkForce null;
             users.users.user.initialHashedPassword = "!";
           }) ];
@@ -332,11 +337,13 @@
                   features = { "video-model" = "none"; "airlock-role" = "sys-gui"; };
                   services = { guivm = true; "guivm-gui-agent" = false; };
                   devices.pci = [ ];
-                  modules = [ ({ pkgs, ... }: {
+                  modules = [ ({ lib, pkgs, ... }: {
                     airlock.sysGuiGuest = {
                       displayMode = "physical-amd-lab";
                       personalLaunchers.enable = false;
                     };
+                    # Keep USB personalization valid in this alternate entry.
+                    users.mutableUsers = lib.mkForce true;
                     users.users.user.initialHashedPassword = "!";
                     hardware.enableRedistributableFirmware = true;
                     hardware.graphics.enable = true;
