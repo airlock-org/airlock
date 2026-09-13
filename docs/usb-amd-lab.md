@@ -7,6 +7,11 @@ Its immediate purpose is to inspect Xen ownership of the laptop GPU over SSH
 before attempting assignment. A usable desktop still needs safe assignment,
 display initialization and input forwarding.
 
+The current evidence, investigation gates and completion criteria are in
+[the AMD GPU investigation plan](amd-gpu-investigation.md). Generation 2 has
+now booted successfully over SSH with the GPU reserved and bootstrap passed;
+guest assignment and physical graphics remain unvalidated.
+
 ## Boot choices
 
 The USB should contain three Xen boot choices, plus upstream non-Xen recovery
@@ -38,9 +43,11 @@ the saved default.
 
 1. Boot the default USB. Confirm the laptop's internal filesystems are not
    mounted, Xen is running, XFCE/input works and Tailscale SSH reconnects.
-2. Boot **`usb-text-recovery` with Xen** from the boot menu. Verify console
-   login and remote access. Return to the default entry and verify XFCE.
-3. Only then select **`usb-amd-lab` with Xen** once from the boot menu.
+2. An optional recovery rehearsal is to boot **`usb-text-recovery` with Xen**,
+   verify console login and remote access, then return to the default entry.
+   This rehearsal was skipped for the current experiment; see the plan's
+   recovery notes before any persistent device assignment.
+3. Select **`usb-amd-lab` with Xen** once from the boot menu.
    Expect a blank panel. Reconnect over SSH and collect evidence:
 
    ```sh
