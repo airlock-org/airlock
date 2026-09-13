@@ -1,9 +1,11 @@
-{ ... }:
+{ lib, ... }:
 {
   imports = [ ./usb-headless.nix ];
   environment.etc."airlock/usb-amd-lab".text = "experimental; manual GPU assignment only\n";
   boot.blacklistedKernelModules = [ "amdgpu" "radeon" ];
-  boot.initrd.kernelModules = [ "xen-pciback" ];
+  # The lab owns the AMD GPU through pciback, so it must override the normal
+  # ThinkPad profile's early amdgpu console setup.
+  boot.initrd.kernelModules = lib.mkForce [ "xen-pciback" ];
   boot.kernelParams = [
     "xen-pciback.hide=(0000:04:00.0)"
     "initcall_blacklist=sysfb_init"
