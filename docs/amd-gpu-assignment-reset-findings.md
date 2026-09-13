@@ -1,5 +1,8 @@
 # Laptop GPU assignment/reset findings
 
+Subsequent hardware result: [first assignment experiment](amd-gpu-first-assignment.md).
+The account below preserves the preceding read-only review and its limits.
+
 Evidence review: 2026-09-13. Scope: the ThinkPad T14 Gen 3 AMD's Radeon 680M,
 reserved for Xen in USB Generation 2 `usb-amd-lab`. No guest assignment,
 manual reset, device unbind, policy bypass or production configuration change
@@ -158,7 +161,10 @@ options was changed. See [reset-error patch](https://github.com/QubesOS/qubes-co
 [RDM patch](https://github.com/QubesOS/qubes-core-libvirt/blob/v10.5.0-2/0007-libxl-plug-workaround-for-missing-pcidev-group-assig.patch),
 and [guest PM filtering patch](https://github.com/QubesOS/qubes-core-libvirt/blob/v10.5.0-2/0017-Add-powerManagementFiltering-for-PCI-PM-control.patch).
 
-## Next experiment, not performed here
+## Proposed experiment after this read-only review
+
+Subsequently performed once with user authorization; see the linked hardware
+report above. Assignment/startup succeeded, but video-BIOS discovery failed.
 
 The justified next step is to review a **single-owner, cold-boot-only lab
 assignment** to `sys-gui`, retaining normal upstream flags. This accepts

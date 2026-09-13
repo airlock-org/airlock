@@ -151,8 +151,13 @@ Completion: the guest sees the intended GPU, loads its driver and exposes
 DRM devices, with no unexpected device ownership or host failure. On failure,
 capture the first actionable error before changing another variable.
 
-Status: not started; requires acceptance and preparation of the restricted
-hardware experiment described above. Not part of the read-only review.
+Status: one authorized attempt performed on 2026-09-13. Assignment, HVM start
+and qrexec succeeded; the guest enumerated the Radeon 680M. The matching
+amdgpu module loaded but probing failed with `Unable to locate a BIOS ROM`
+and error -22; no DRM device appeared. No second start or reset bypass was
+attempted. Persistent assignment was removed, the guest shut down once and
+dom0 stayed reachable. See [first assignment findings](amd-gpu-first-assignment.md).
+This gate is partially complete, not a successful graphics milestone.
 
 ### 5. Bring up the panel and input
 
@@ -169,6 +174,8 @@ Completion: physical display and input work with the GPU owned by `sys-gui`.
 Remote SSH access alone is not this milestone.
 
 Status: not started; depends on guest assignment and driver initialization.
+The first assignment unexpectedly auto-started the display manager despite
+the intended manual configuration; this did not produce a usable GPU display.
 
 ### 6. Validate lifecycle and separate general support from this machine
 
@@ -186,9 +193,10 @@ Completion: a repeatable supported workflow, stated limitations and a clear
 next step toward the general product rule: `sys-gui` owns the sole/internal
 GPU; optional `sys-gpu` is for an additional GPU.
 
-Status: not started. The read-only findings do not reject the general product
-rule. This laptop's reusable reset-safe lifecycle remains unvalidated; keep
-the working hybrid profile as the fallback while investigating it.
+Status: one failed-initialization guest shutdown completed without losing
+dom0. Fresh-power-cycle repeatability, guest restart, suspend/resume and reset
+state isolation remain unvalidated. The findings do not reject the general
+product rule; keep the working hybrid profile as the fallback.
 
 ## Working method and recovery
 

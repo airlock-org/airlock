@@ -9,8 +9,10 @@ display initialization and input forwarding.
 
 The current evidence, investigation gates and completion criteria are in
 [the AMD GPU investigation plan](amd-gpu-investigation.md). Generation 2 has
-now booted successfully over SSH with the GPU reserved and bootstrap passed;
-guest assignment and physical graphics remain unvalidated.
+now booted successfully over SSH with the GPU reserved and bootstrap passed.
+The [first assignment experiment](amd-gpu-first-assignment.md) started the HVM
+and exposed the GPU to it, but amdgpu could not locate its video BIOS. Physical
+graphics remain unvalidated; the guest was shut down and assignment removed.
 The [assignment/reset review](amd-gpu-assignment-reset-findings.md) finds no
 shared Xen DMA-requestor group for the GPU, but reset effectiveness remains
 unproven. The conservative preflight failure is not a proof that assignment
@@ -84,8 +86,9 @@ the saved default.
   loads, PCI BARs map, and the guest exposes AMD DRM and the built-in eDP panel.
   Do not use a NixOS kernel's unrelated modules with the shared Qubes kernel.
 - The lab guest is HVM, has no emulated video or outer GUI agent, and uses
-  physical Xorg with Qubes' shared-memory wrapper. Its LightDM remains manual
-  so remote diagnostics can run before taking over the screen. Both USB guest
+  physical Xorg with Qubes' shared-memory wrapper. LightDM is intended to be
+  manual, but the first experiment found that `graphical.target` still starts
+  it automatically; fix that dependency before the next attempt. Both USB guest
   variants share declarative `user` / `password` credentials; no runtime
   password seeding is required. After safe assignment/start, explicitly start
   the guest's display-manager. Dom0 credentials still come from personalization.
