@@ -26,9 +26,10 @@ complete assignment/reset boundary under the running Xen configuration.
 
 The GPU reports only `bus` in `reset_method` and `FLReset-` in its PCIe
 capabilities. Bus 04 also contains audio, PSP, USB controllers and ACP.
-We have not manually reset or assigned the GPU to a guest. pciback can attempt
-resets automatically during initialization; reservation does not prove one
-succeeded. The completed read-only review is recorded in
+At this baseline no manual reset or guest assignment had been performed.
+Later assignment and driver results are recorded in stages 4–5 below.
+pciback can attempt resets automatically during initialization; reservation
+does not prove one succeeded. The completed read-only review is recorded in
 [assignment/reset findings](amd-gpu-assignment-reset-findings.md).
 
 ## Investigation sequence
@@ -151,13 +152,13 @@ Completion: the guest sees the intended GPU, loads its driver and exposes
 DRM devices, with no unexpected device ownership or host failure. On failure,
 capture the first actionable error before changing another variable.
 
-Status: one authorized attempt performed on 2026-09-13. Assignment, HVM start
-and qrexec succeeded; the guest enumerated the Radeon 680M. The matching
-amdgpu module loaded but probing failed with `Unable to locate a BIOS ROM`
-and error -22; no DRM device appeared. No second start or reset bypass was
-attempted. Persistent assignment was removed, the guest shut down once and
-dom0 stayed reachable. See [first assignment findings](amd-gpu-first-assignment.md).
-This gate is partially complete, not a successful graphics milestone.
+Status: **assignment/driver gate completed on this laptop.** The
+[first assignment](amd-gpu-first-assignment.md) found missing video BIOS.
+A subsequent [VBIOS experiment](amd-gpu-vbios.md), on a new host boot,
+supplied only the matching firmware data through Xen ACPI delivery. The guest
+loaded amdgpu, exposed card0/renderD128 and enumerated the built-in eDP panel.
+Default PCI security flags were retained and siblings stayed in dom0.
+This is not yet a validated desktop or restart-safe lifecycle.
 
 ### 5. Bring up the panel and input
 
@@ -173,9 +174,11 @@ TrackPoint/touchpad, login and a normal application in the guest desktop.
 Completion: physical display and input work with the GPU owned by `sys-gui`.
 Remote SSH access alone is not this milestone.
 
-Status: not started; depends on guest assignment and driver initialization.
-The first assignment unexpectedly auto-started the display manager despite
-the intended manual configuration; this did not produce a usable GPU display.
+Status: kernel connector enumeration succeeded; eDP is connected and reports
+3840x2400. The display manager remains stopped in the successful VBIOS boot.
+Xorg/physical login, accelerated user-space rendering and input forwarding
+have not been validated. The first attempt's unintended display-manager
+startup is now avoided with multi-user boot for the physical lab.
 
 ### 6. Validate lifecycle and separate general support from this machine
 

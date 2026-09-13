@@ -1,5 +1,8 @@
 # Laptop GPU: first assignment experiment
 
+Subsequent result: [validated VBIOS delivery resolved the driver failure](amd-gpu-vbios.md).
+This report preserves the first attempt's observations.
+
 2026-09-13, 15:24–15:27 UTC. Follow-up to the
 [assignment/reset review](amd-gpu-assignment-reset-findings.md), explicitly
 authorized as one single-owner lab attempt, with normal upstream PCI flags.

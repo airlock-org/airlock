@@ -177,6 +177,10 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Upstream graphical.target Wants=display-manager.service even when the
+    # service has no wantedBy. Boot the physical lab to text, then start X
+    # explicitly only after GPU initialization and diagnostics succeed.
+    systemd.defaultUnit = lib.mkIf (!hybrid) "multi-user.target";
     boot.kernelModules = [
       "xen-gntalloc"
       "xen-gntdev"

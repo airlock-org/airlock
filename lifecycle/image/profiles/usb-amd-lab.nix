@@ -2,6 +2,10 @@
 {
   imports = [ ./usb-headless.nix ];
   environment.etc."airlock/usb-amd-lab".text = "experimental; manual GPU assignment only\n";
+  # Opt-in firmware delivery through Qubes' per-VM template extension. The
+  # machine-local VFCT is provisioned separately; never bundle laptop ROMs.
+  environment.etc."qubes/templates/libvirt/xen/by-name/sys-gui.xml".source =
+    ../templates/sys-gui-amd-vfct.xml;
   boot.blacklistedKernelModules = [ "amdgpu" "radeon" ];
   # The lab owns the AMD GPU through pciback, so it must override the normal
   # ThinkPad profile's early amdgpu console setup.
