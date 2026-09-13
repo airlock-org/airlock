@@ -689,6 +689,14 @@ async def ensure_shared_store(args):
 
     if current_admission is not None:
         admission = current_admission
+    elif os.path.exists(os.path.join(args.artifact, "prepared.json")):
+        from airlock_qubes_storage._engine.prepared import verify_prepared
+
+        try:
+            generation = verify_prepared(args)
+        except (OSError, ValueError, RuntimeError) as exc:
+            fail(f"cannot adopt prepared store for {args.domain}: {exc}")
+        admission = load_generation_admission(args.pool_root, args.domain, generation)
     else:
         admission = run_engine(
             [

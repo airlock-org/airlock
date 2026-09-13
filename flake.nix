@@ -296,14 +296,70 @@
           }) ];
         };
 
-      mkUsbConfiguration = system: lib.nixosSystem {
+      mkUsbAmdSysGuiDomainEntry = system:
+        (mkAirlockQubeBuilders system).mkNixNativeDomain {
+          name = "sys-gui";
+          guestRole = "sys-gui";
+          configurationName = "airlock-domain-sys-gui-usb-amd-lab";
+          kernelName = airlockQubesVmKernelName;
+          label = "black";
+          netvm = null;
+          prefs = {
+            autostart = false;
+            guivm = null;
+            audiovm = null;
+            virt_mode = "hvm";
+            memory = 4096;
+            maxmem = 4096;
+            vcpus = 4;
+          };
+          features = { "video-model" = "none"; "airlock-role" = "sys-gui"; };
+          services = { guivm = true; "guivm-gui-agent" = false; };
+          devices.pci = [ ];
+          modules = [ ({ lib, pkgs, ... }: {
+            airlock.sysGuiGuest = {
+              displayMode = "physical-amd-lab";
+              personalLaunchers.enable = false;
+            };
+            users.mutableUsers = lib.mkForce true;
+            users.users.user.initialHashedPassword = "!";
+            hardware.enableRedistributableFirmware = true;
+            hardware.graphics.enable = true;
+            services.xserver.videoDrivers = [ "amdgpu" ];
+            boot.kernelModules = [ "amdgpu" ];
+            environment.systemPackages = [ pkgs.pciutils pkgs.mesa-demos ];
+          }) ];
+        };
+
+      mkUsbConfiguration = system:
+      let
+        entries = {
+          hybrid = mkUsbSysGuiDomainEntry system;
+          amd-lab = mkUsbAmdSysGuiDomainEntry system;
+        };
+        preparedStore = import ./lifecycle/image/prepared-guest-store.nix {
+          inherit lib entries;
+          pkgs = pkgsFor system;
+        };
+        preparedDomain = name:
+          let domain = materializeNixClosureDomain entries.${name};
+          in domain // {
+            backend = domain.backend // {
+              store = domain.backend.store // {
+                source = "${preparedStore.descriptors}/${name}";
+              };
+            };
+          };
+      in lib.nixosSystem {
         inherit system;
         specialArgs = {
           airlockQubeKernel = {
             name = airlockQubesVmKernelName;
             package = self.packages.${system}.airlock-qubes-vm-kernel;
           };
-          airlockGuiDomain = materializeNixClosureDomain (mkUsbSysGuiDomainEntry system);
+          airlockGuiDomain = preparedDomain "hybrid";
+          airlockUsbPreparedStore = preparedStore;
+          airlockUsbGuestEntries = entries;
         };
         modules = [
           self.nixosModules.dom0
@@ -317,42 +373,7 @@
             };
             specialisation.usb-amd-lab.configuration = {
               imports = [ ./lifecycle/image/profiles/usb-amd-lab.nix ];
-              airlock.qubes.domains.sys-gui = lib.mkForce (materializeNixClosureDomain (
-                (mkAirlockQubeBuilders system).mkNixNativeDomain {
-                  name = "sys-gui";
-                  guestRole = "sys-gui";
-                  configurationName = "airlock-domain-sys-gui-usb-amd-lab";
-                  kernelName = airlockQubesVmKernelName;
-                  label = "black";
-                  netvm = null;
-                  prefs = {
-                    autostart = false;
-                    guivm = null;
-                    audiovm = null;
-                    virt_mode = "hvm";
-                    memory = 4096;
-                    maxmem = 4096;
-                    vcpus = 4;
-                  };
-                  features = { "video-model" = "none"; "airlock-role" = "sys-gui"; };
-                  services = { guivm = true; "guivm-gui-agent" = false; };
-                  devices.pci = [ ];
-                  modules = [ ({ lib, pkgs, ... }: {
-                    airlock.sysGuiGuest = {
-                      displayMode = "physical-amd-lab";
-                      personalLaunchers.enable = false;
-                    };
-                    # Keep USB personalization valid in this alternate entry.
-                    users.mutableUsers = lib.mkForce true;
-                    users.users.user.initialHashedPassword = "!";
-                    hardware.enableRedistributableFirmware = true;
-                    hardware.graphics.enable = true;
-                    services.xserver.videoDrivers = [ "amdgpu" ];
-                    boot.kernelModules = [ "amdgpu" ];
-                    environment.systemPackages = [ pkgs.pciutils pkgs.mesa-demos ];
-                  }) ];
-                }
-              ));
+              airlock.qubes.domains.sys-gui = lib.mkForce (preparedDomain "amd-lab");
             };
           })
         ];

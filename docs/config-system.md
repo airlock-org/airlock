@@ -206,14 +206,13 @@ The object pool, closure views, and generation manifests are the authoritative
 state. `shared-closure` with `erofs-objectmap` is the only supported NixOS VM
 store backend.
 
-### First-boot admission and the extra source copy
+### Admission and prepared USB stores
 
-In the current GUI developer USB image, the guest packages are included in the
-image's ordinary dom0 `/nix/store`. The small `store-closure` artifact contains a
-list of store paths and a manifest, not the package contents. Those references
-keep the actual package payloads in the image's Nix closure.
+The ordinary admission path starts with guest packages in dom0's `/nix/store`.
+The small `store-closure` artifact contains a list of store paths and a manifest,
+not the package contents. Its references retain the source package payloads.
 
-On a fresh boot, `airlock-setup-config` invokes
+During setup, `airlock-setup-config` invokes
 `airlock-nix-domain-storage ensure-store` to prepare sys-gui. For each store path
 not already admitted, the storage engine reads the source files from
 `/nix/store`, creates a temporary deterministic tar fragment, and appends its
@@ -234,23 +233,52 @@ Admission does not delete the source files or remove their Nix references.
 Consequently, sharing within the runtime pool does not eliminate duplication
 between that pool and the image's ordinary `/nix/store`, even for packages dom0
 also uses. Read-only access and guest isolation do not inherently require this
-duplication; it is a limitation of the current image/bootstrap integration.
+duplication; it is a limitation of this source-based admission path.
 Putting the pool in another VM would not by itself remove the source copy.
 
-The earlier 20 GiB GUI developer image hit `ENOSPC` while appending object data
-during sys-gui's first admission, before sys-gui started. The current profile
-uses a fixed 32 GiB image as the next capacity experiment. A successful image
-build only proves the initial filesystem fits; it does not prove first-boot
-initialization fits. Capacity planning must include the retained source store,
-new segment data, temporary admission files, metadata, and writable runtime
-state. Preparing the shared pool at image-build time and avoiding unnecessary
-retained source payloads is possible follow-up work, not implemented behavior;
-preparing the pool alone would not remove duplication.
+The earlier 20 GiB GUI developer image hit `ENOSPC` during admission. On a
+32 GiB image, admission succeeded but took approximately 22 minutes on the test
+USB, with about 22 GiB read and 7 GiB written according to systemd accounting.
+
+The USB developer image now prepares its guest store during image construction.
+Both the hybrid and AMD-lab sys-gui closures are admitted as separate retained
+generations in one shared pool. The build seals the segments and writes
+descriptors containing hashes of the installed metadata and segment bytes.
+The disk builder places the pool directly at `/var/lib/airlock/closure-store`,
+outside the image's ordinary Nix store. It is not copied there on first boot.
+
+The topology and prepared descriptors deliberately discard Nix references to
+guest source packages, using Nix's image-artifact reference-discard mechanism.
+Explicit dependencies retain the descriptors, guest root images and Qubes
+kernel artifacts that dom0 still needs. The guest system paths remain valid
+identities inside the guest's filtered store, without requiring those paths to
+exist in dom0's store. Packages independently required by dom0 still remain
+there, so dom0/guest overlap continues to occupy two representations. The
+build machine's source store is not modified or pruned by this process.
+
+On first setup, the storage helper recognizes `prepared.json`, checks the exact
+domain/system/root/kernel/closure identity and device layout, and verifies the
+prepared files against their checksums. This includes one sequential integrity
+read of each required segment; it does not create tar fragments or copy package
+data. Invalid or missing seed data fails instead of silently starting a fresh
+admission. Qubes then creates its normal read-only store volumes and records
+the selected generation. Subsequent matching setup uses the existing generation
+without repeating this seed verification. Ordinary source-based admission
+remains available for later updates supplied with their source packages.
+
+Prepared descriptors describe the original sealed seed. After compaction or
+removal of a seed generation, they are not a substitute for an update artifact;
+the ordinary generation and Qubes volume state remain authoritative. Reimaging
+installs a fresh seed. Runtime writable VM state and future updates still need
+free space even though the initial package-conversion workspace is eliminated.
 
 Implementation references: [closure manifest construction](../lifecycle/misc/lib/qube-template.nix)
 (`mkNixStoreClosureManifest`), [domain admission](../lifecycle/runtime/tools/scripts/nix-domain-storage.py)
 (`ensure_shared_store`), and [object reuse and copying](../lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/objects.py)
 (`admit_object_tar_fragment`, `append_file_to_open_segment_blob`).
+Prepared images use [the seed builder](../lifecycle/image/prepared-guest-store.nix),
+[USB dependencies](../lifecycle/image/profiles/usb-prepared-store.nix), and
+[preparation/verification](../lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/prepared.py).
 
 ### What closure and VM storage sharing saves
 
@@ -265,7 +293,7 @@ from multiple filtered views referencing the same backing objects.
 | Closure manifest and EROFS view | Path lists, filesystem metadata, and mappings, rather than another full copy of package data. |
 | Shared package objects | Reused across unrelated VMs and retained generations when they use the same store paths. Different store paths are not automatically deduplicated merely because some files match. |
 | Private and volatile volumes | Independent VM state, not deduplicated by the closure pool. Sparse image capacity is not the same as allocated disk blocks; writes consume real space. |
-| Ordinary dom0 source store | Separate from the shared pool; currently retained in the USB image and must be counted in addition to it. |
+| Ordinary dom0 store | Separate from the shared pool. Prepared USB images omit guest-only source packages; packages dom0 itself needs still count in addition to the guest backing data. |
 
 For example, if two VM closures each need 6 GiB of backing object data and share
 5 GiB of identical store objects, the pool needs about 7 GiB of payload rather
@@ -284,19 +312,11 @@ sizes, manifest sizes, or Nix `narSize` (serialized archive size).
 The `/nix/store` pathname and the physical storage behind it are different
 things. NixOS programs still require their expected `/nix/store/...` paths, but
 those paths could be provided by a mounted view rather than a separate copy of
-the package files. Two possible follow-up stages are:
-
-1. **Prepare guest backing data during image construction.** Build the shared
-   segment pool and closure views before distributing the image, retaining
-   dom0's conventional store initially. Avoid including guest-only source
-   payloads in the final image where they are no longer needed. This requires
-   adapting bootstrap references and admission/reuse checks, not simply adding
-   a prebuilt pool alongside the existing source store. Packages also needed by
-   dom0 would still have two representations at this stage.
-2. **Let dom0 use a view of the same backing pool.** Give dom0 its own closure
-   view mounted at `/nix/store`, so identical store objects used by dom0 and
-   guests can share backing bytes too. This is an architectural possibility,
-   not a supported dom0 boot configuration today.
+the package files. Build-time preparation is now implemented for the developer
+USB as described above. Possible follow-ups are extending it to other image
+profiles and giving dom0 its own closure view of the same backing pool. That
+would let identical store objects used by dom0 and guests share backing bytes
+too; it is not a supported dom0 boot configuration today.
 
 Repackaging cannot be replaced by an ordinary file move because source files
 and segment fragments have different layouts. An image builder could instead
@@ -660,10 +680,8 @@ The default `shared-closure` path physically shares canonical Nix store object
 fragments across unrelated NixOS domains and generations, while preserving
 independent read-only closure views. Remaining storage work is narrower:
 
-- integrating image construction with shared-store initialization to avoid
-  unnecessary retained source copies, and checking peak first-boot disk usage
-  before distributing fixed-size USB images (see the admission explanation
-  above).
+- validating the prepared USB store through a complete GUI boot and measuring
+  its startup time and disk usage, then extending preparation to other images.
 - running more Qubes/Xen lifecycle coverage for segment compaction under active
   VMs.
 - reducing object admission overhead if tar fragment creation becomes a

@@ -18,6 +18,13 @@ exposing its changing Nix store path. The current image is a fixed 32 GiB
 image, so it fits a nominal 64 GB USB. The remaining USB space is left unused
 for this POC. 128 GB is still recommended for longer-lived builds.
 
+The build now prepares the shared guest package store for both sys-gui boot
+variants and places it at its final location in the image. Guest-only source
+packages are omitted from dom0's ordinary store. First setup checks the prepared
+store's integrity and attaches it; it no longer repackages gigabytes of packages
+on the USB. The integrity scan still reads the backing data once. The speedup
+needs to be measured on a rebuilt image; see [storage details](config-system.md#admission-and-prepared-usb-stores).
+
 Inspect `lsblk -o NAME,TRAN,SIZE,MODEL,SERIAL,MOUNTPOINTS` and select an expendable
 whole-disk `/dev/disk/by-id/usb-…` path. Do not use the internal NVMe. Unmount
 every partition on the selected USB. The writer rejects mounted disks,
@@ -141,9 +148,9 @@ Wi-Fi settings, logs, repository and VM state persist on the **unencrypted** roo
 
 For builds on the USB, keep the custom store off the host store, for example:
 `AIRLOCK_DATA_ROOT=/home/airlock/airlock-data make usb-dev-image`.
-The fixed 32 GiB root is the current capacity experiment for sys-gui's
-first-boot admission; verify it before treating it as sufficient. It can still
-fill during local development builds. Use the guarded `make gc-auto` with
+The image has approximately 31 GiB of root filesystem capacity. The prepared
+guest store eliminates initial admission's temporary copies, but local builds
+and VM updates can still fill the disk. Use the guarded `make gc-auto` with
 that same data root. No full-store garbage collection is done automatically.
 
 ## Evidence and next experiment

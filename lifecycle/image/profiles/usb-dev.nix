@@ -4,6 +4,7 @@
     "${modulesPath}/virtualisation/disk-image.nix"
     ../../bootstrap/gui-minimal.nix
     ./dev-mode.nix
+    ./usb-prepared-store.nix
   ];
 
   # Physical developer system: deliberately separate from vm.nix's shared
@@ -65,9 +66,8 @@
   fileSystems."/boot".device = lib.mkForce "/dev/disk/by-label/ESP";
   image = { baseName = "airlock-usb-dev"; format = "raw"; efiSupport = true; };
   # A fixed 32-GiB developer image: 1 GiB EFI plus roughly 31 GiB root.
-  # The extra headroom is required by the current first-boot shared-closure
-  # admission, which retains dom0's source store while creating its segment
-  # representation for sys-gui.
+  # Keep headroom for writable VM state and developer updates. Guest backing
+  # data is already present at its final path; first boot only verifies/adopts it.
   virtualisation.diskSize = 32768;
   system.build.image = lib.mkForce (import "${modulesPath}/../lib/make-disk-image.nix" {
     inherit config lib pkgs;
@@ -76,10 +76,17 @@
     partitionTableType = "efi";
     bootSize = "1G";
     label = "airlock-usb";
-    contents = [ {
-      source = pkgs.writeText "airlock-usb-image" "airlock-usb-dev-v1\n";
-      target = "/airlock-usb-image";
-    } ];
+    contents = [
+      {
+        source = pkgs.writeText "airlock-usb-image" "airlock-usb-dev-v1\n";
+        target = "/airlock-usb-image";
+      }
+      {
+        source = "${config.system.build.usbPreparedGuestStore}/pool";
+        target = "/var/lib/airlock/closure-store";
+        mode = "u+rwX,go-rwx";
+      }
+    ];
   });
 
   services.journald.settings.Journal = {
