@@ -1,7 +1,7 @@
 # Persistent USB developer system
 
-Implementation is unbuilt and untested. This is a writable disk image, not a
-live ISO or an installer. XFCE remains the desktop. Normal VM targets are unchanged.
+Physical USB boot is still being validated. This is a writable disk image, not
+a live ISO or an installer. XFCE remains the desktop. Normal VM targets are unchanged.
 
 ## Build and provision on the development host
 
@@ -90,6 +90,16 @@ Unmount the root and use the laptop's firmware USB boot menu. No installation
 onto an internal disk is needed. Only one Airlock USB should be attached.
 
 ## First boot
+
+Initial setup prepares sys-gui's storage before launching the login screen.
+The bootstrap screen shows the current phase and elapsed time; preparation
+can take several minutes, and substantially longer on a slow USB drive.
+Do not manually start sys-gui until `airlock-setup-config.service` completes:
+its kernel preference is applied after storage preparation. Starting it early
+can misleadingly report a missing `pvgrub2-pvh/vmlinuz` even though the intended
+Qubes kernel is already installed. The detailed setup log is
+`/var/log/airlock/setup-config.commands.log` and the result is
+`/var/log/airlock/setup-config.json`.
 
 Log into XFCE as `user` with the password you chose. Dom0's local console uses
 `airlock` and the same password. From the dom0 console:

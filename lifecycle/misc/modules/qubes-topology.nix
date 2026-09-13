@@ -622,7 +622,7 @@ in
       statusDevice = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
-        description = "Optional console device where boot-critical setup displays concise progress.";
+        description = "Optional console device where boot-critical or full boot setup displays concise progress.";
       };
     };
 

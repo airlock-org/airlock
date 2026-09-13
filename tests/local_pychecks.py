@@ -4650,6 +4650,32 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     assert result["domains_changed"] == 2
     assert result["devices_changed"] == 0
 
+    # Minimal GUI/USB images use the full scope at boot. A supplied status
+    # device must show progress/completion there too, rather than stay blank.
+    status_device.write_text("", encoding="utf-8")
+    _run(
+        [
+            "bash",
+            str(repo_root / "lifecycle/misc/tools/scripts/setup-config.sh"),
+            "--apply",
+            "--topology",
+            str(topology),
+        ],
+        cwd=repo_root,
+        env=env,
+        stdout=setup_log_dir / "all-stdout.log",
+        stderr=setup_log_dir / "all-stderr.log",
+    )
+    full_result = json.loads(
+        (setup_log_dir / "setup-config.json").read_text(encoding="utf-8")
+    )
+    assert full_result["scope"] == "all"
+    assert full_result["status"] == "passed"
+    full_screen = status_device.read_text(encoding="utf-8")
+    assert "Startup preparation complete" in full_screen
+    assert "5 startup VMs prepared." in full_screen
+    assert full_screen.count("[done]") == 4
+
 
 def check_setup_config_qrexec_policy(repo_root: Path, log_dir: Path) -> None:
     work_dir = log_dir

@@ -380,7 +380,10 @@ render_boot_status() {
 }
 
 show_boot_status() {
-  [ "$SETUP_SCOPE" = "boot-critical" ] || return 0
+  # Minimal GUI/USB images prepare their entire topology at boot. They need
+  # the same progress screen as boot-critical setup; deferred background
+  # reconciliation must never overwrite the desktop handover screen.
+  [ "$SETUP_SCOPE" != "deferred" ] || return 0
   [ -n "$STATUS_DEVICE" ] || return 0
   [ -w "$STATUS_DEVICE" ] || return 0
 
