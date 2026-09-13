@@ -11,6 +11,10 @@ The current evidence, investigation gates and completion criteria are in
 [the AMD GPU investigation plan](amd-gpu-investigation.md). Generation 2 has
 now booted successfully over SSH with the GPU reserved and bootstrap passed;
 guest assignment and physical graphics remain unvalidated.
+The [assignment/reset review](amd-gpu-assignment-reset-findings.md) finds no
+shared Xen DMA-requestor group for the GPU, but reset effectiveness remains
+unproven. The conservative preflight failure is not a proof that assignment
+is impossible, and successful guest startup would not prove safe reset.
 
 ## Boot choices
 
@@ -64,9 +68,13 @@ the saved default.
 
 4. **Stop for reset review.** Ubuntu reported only `bus` for this GPU, and
    other bus 04 functions include important USB/security/audio devices. The
-   gate is expected to fail until reset safety is established. There is no
+   current probe is expected to fail on this machine; a reviewed reset
+   decision does not automatically change its Linux-sysfs/FLR-only checks.
+   See the assignment/reset findings before any guest start. There is no
    `no-strict-reset`, permissive mode, ACS override, forced unbind, reset write,
    automatic PCI assignment or reset-check bypass in these profiles/tools.
+   The underlying pciback/libvirt/Xen lifecycle can still attempt resets
+   automatically; absence of explicit reset commands is not a no-reset mode.
 
 ## What remains before a usable physical sys-gui
 

@@ -26,7 +26,10 @@ complete assignment/reset boundary under the running Xen configuration.
 
 The GPU reports only `bus` in `reset_method` and `FLReset-` in its PCIe
 capabilities. Bus 04 also contains audio, PSP, USB controllers and ACP.
-We have not performed a reset or assigned the GPU to a guest.
+We have not manually reset or assigned the GPU to a guest. pciback can attempt
+resets automatically during initialization; reservation does not prove one
+succeeded. The completed read-only review is recorded in
+[assignment/reset findings](amd-gpu-assignment-reset-findings.md).
 
 ## Investigation sequence
 
@@ -45,7 +48,9 @@ Do not reinstall or mount the internal SSD for these checks.
 Completion: another developer can identify the exact configuration and
 hardware behind every subsequent result.
 
-Status: complete for boot ID `3a19d380-405e-4e8e-8c3f-c2ddba13091a`. The
+Status: captured, with the assignment/reset supplement completing controller
+mapping and command exit-code recording for boot ID
+`3a19d380-405e-4e8e-8c3f-c2ddba13091a`. The
 capture is on the USB under `.airlock-logs/usb-dev/<boot-id>/` and was copied
 to the development workstation. It records USB root `/dev/sda2`, an unmounted
 internal NVMe, Xen 4.19.4, the Generation 2 AMD-lab command line, the running
@@ -69,17 +74,23 @@ failure, unavailable evidence and a reviewed hardware decision.
 Completion: a documented assignment boundary, or a precise explanation of
 which evidence is still unavailable. IOMMU enablement alone is insufficient.
 
-Status: partially complete. Xen exposes only `0000:04:00.0` through
+Status: read-only boundary review complete; actual assignment untested.
+Xen exposes only `0000:04:00.0` through
 `xl pci-assignable-list`, and Qubes identifies it as
 `dom0:00_08.1-00_00.0` (`sbdf: 0000:04:00.0`). The upstream Qubes device API
 enumerates the GPU and every bus-04 sibling individually when queried with
-`qvm-device pci list dom0 --with-sbdf`; calling it without `dom0` lists no
-backend and was an incorrect diagnostic query. The GPU and siblings sit below
+`qvm-device pci list dom0 --with-sbdf`; the earlier empty frontend-oriented
+query was not evidence of a broken enumeration API. The GPU and siblings sit below
 the same `00:08.1` PCIe bridge, but that is topology rather than proof that
 they share an IOMMU or reset boundary. Under this Xen/dom0 boot, none of
 `04:00.0` through `04:00.6` expose a Linux `iommu_group` symlink, while Xen
-does report AMD IOMMU and interrupt remapping enabled. The missing Xen device-
-group evidence remains an explicit gap for the reset decision.
+does report AMD IOMMU and interrupt remapping enabled. Read-only
+`xc_get_device_group` queries against domain 0 now report zero same-requestor
+peers for each of the seven functions, with successful return codes. The
+pinned AMD implementation and dom0 IOMMU setup were checked to interpret that
+result. This supports a separate DMA assignment boundary, not independent
+reset or complete hardware-isolation certification. The USB root disk is
+behind `05:00.3`, not the GPU's bus-04 bridge. See the findings for evidence.
 
 ### 3. Determine the actual reset behavior
 
@@ -104,31 +115,24 @@ Completion: a written decision with one of these outcomes:
 No reset writes, broad controller assignment, permissive mode, ACS override
 or `no-strict-reset` bypass is part of the evidence-gathering phase.
 
-Status: **blocked for normal reset-safe passthrough.** Qubes' pinned PCI
-extension creates a managed libvirt PCI host device. At guest start it binds
-the assigned function to `pciback`; libvirt then manages the host-device
-attachment and reset. The generated XML has `managed="yes"` and has no
-`nostrictreset` or `permissive` option. This is the normal upstream path.
+Status: **read-only review complete; reset effectiveness unproven.** The
+decision is to investigate a restricted, single-owner cold-boot experiment,
+subject to accepting its limitations before assignment. The previous claim
+that normal reset handling necessarily rejects this GPU is withdrawn.
 
-The observed GPU has `FLReset-` and only `bus` in `reset_method`. Its
-multi-function device contains `04:00.1` audio, `.2` PSP/CCP, `.3` and `.4`
-USB controllers, `.5` ACP and `.6` audio. Those functions are active in dom0;
-the USB and PSP functions must stay there. Qubes documents that functions with
-the same BDF except for the function number may need assignment to the same
-VM, and that dropping this requirement uses `no-strict-reset` with security
-consequences. Its troubleshooting guide documents the corresponding libvirt
-failure: an active sibling on the bus prevents a bus reset. See
-[Qubes PCI devices](https://doc.qubes-os.org/en/latest/user/how-to-guides/how-to-use-pci-devices.html)
-and [PCI troubleshooting](https://doc.qubes-os.org/en/r4.3/user/troubleshooting/pci-troubleshooting.html).
+Pinned libvirt reads the GPU's advertised PM reset capability directly and
+would try D3hot-to-D0, despite Linux's broad AMD VGA quirk excluding that
+method. Linux's bus-reset path is expected to reject the present siblings,
+but Xen libxl does not make its reset helper's failure fatal to assignment.
+pciback initialization and teardown also attempt resets without establishing
+that GPU state was erased. Thus successful reservation or guest startup is
+not sufficient evidence of a safe reusable lifecycle.
 
-We will not force the start failure, write a reset, assign sibling controllers,
-or enable `no-strict-reset`/`permissive` merely to advance the experiment.
-Those actions would cross the gate without resolving the hardware constraint.
-The practical product direction is therefore an additional GPU for `sys-gpu`,
-while this iGPU remains owned by dom0's hybrid display path on this laptop.
-Revisit iGPU-to-`sys-gui` only with new evidence of a safe platform-specific
-reset/assignment path, or after explicitly deciding to accept a restricted,
-cold-boot-only reduced-security model.
+The [findings report](amd-gpu-assignment-reset-findings.md) records the pinned
+source trace, read-only results, uncertainties and proposed experiment.
+No policy bypass, reset write or guest assignment was performed in this
+review. Hardware reset efficacy remains untested; neither general support
+nor impossibility has been established.
 
 ### 4. Prepare and perform the first guest assignment
 
@@ -147,7 +151,8 @@ Completion: the guest sees the intended GPU, loads its driver and exposes
 DRM devices, with no unexpected device ownership or host failure. On failure,
 capture the first actionable error before changing another variable.
 
-Status: not started; blocked by the reset decision above.
+Status: not started; requires acceptance and preparation of the restricted
+hardware experiment described above. Not part of the read-only review.
 
 ### 5. Bring up the panel and input
 
@@ -163,7 +168,7 @@ TrackPoint/touchpad, login and a normal application in the guest desktop.
 Completion: physical display and input work with the GPU owned by `sys-gui`.
 Remote SSH access alone is not this milestone.
 
-Status: not started; blocked by the reset decision above.
+Status: not started; depends on guest assignment and driver initialization.
 
 ### 6. Validate lifecycle and separate general support from this machine
 
@@ -181,9 +186,9 @@ Completion: a repeatable supported workflow, stated limitations and a clear
 next step toward the general product rule: `sys-gui` owns the sole/internal
 GPU; optional `sys-gpu` is for an additional GPU.
 
-Status: not started. The laptop result rejects that general product rule for
-this integrated multi-function GPU under the normal Qubes security model.
-General support must detect this condition and retain the hybrid display path.
+Status: not started. The read-only findings do not reject the general product
+rule. This laptop's reusable reset-safe lifecycle remains unvalidated; keep
+the working hybrid profile as the fallback while investigating it.
 
 ## Working method and recovery
 
