@@ -503,6 +503,7 @@
           airlock-vm-gpu-lab-image = self.nixosConfigurations.vm-gpu-lab.config.system.build.image;
           airlock-vm-gui-minimal-image = self.nixosConfigurations.vm-gui-minimal.config.system.build.image;
           airlock-usb-dev-image = self.nixosConfigurations.usb-dev.config.system.build.image;
+          airlock-usb-dom0-console-image = self.nixosConfigurations.usb-dom0-console.config.system.build.image;
           airlock-domain-sys-gui-minimal-root-image = (mkMinimalSysGuiDomainEntry system).rootImage;
           airlock-domain-sys-gui-minimal-store-closure = (mkMinimalSysGuiDomainEntry system).storeArtifact;
           airlock-qubes-vm-kernel = pkgs.repackRpmKernel {
@@ -611,6 +612,14 @@
       # Minimal nested desktop harness. No physical GPU assignment and no
       # dependency on the full bootstrap/configuration VM topology.
       nixosConfigurations.usb-dev = mkUsbConfiguration "x86_64-linux";
+
+      nixosConfigurations.usb-dom0-console = lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          self.nixosModules.dom0
+          ./lifecycle/image/profiles/usb-dom0-console.nix
+        ];
+      };
 
       nixosConfigurations.vm-gui-minimal = mkVmConfiguration {
         gui = true;

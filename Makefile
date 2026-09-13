@@ -129,6 +129,15 @@ test-quick: ensure-generated-dirs
 
 .PHONY: usb-dev-image usb-dev-write usb-dev-provision usb-dev-help
 
+.PHONY: usb-dom0-console-image usb-dom0-console-write
+
+usb-dom0-console-image: ensure-generated-dirs
+	$(AIRLOCK_NIX) build .#airlock-usb-dom0-console-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dom0-console-image" --print-build-logs
+
+usb-dom0-console-write:
+	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial" >&2; exit 2)
+	sudo python3 lifecycle/image/tools/usb-dev.py write-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dom0-console-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --write
+
 usb-dev-image: ensure-generated-dirs
 	$(AIRLOCK_NIX) build .#airlock-usb-dev-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --print-build-logs
 
