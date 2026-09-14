@@ -257,7 +257,7 @@ def test_nix_selection_drives_reservation_assignment_and_start():
         }};
       in {{
         normal = report normal; lab = report lab; alternate = report alternate;
-        service = {{ inherit (lab.systemd.services.airlock-start-gui-gpu) requires after serviceConfig; }};
+        service = {{ inherit (lab.systemd.services.airlock-start-gui-gpu) requires wants after serviceConfig; }};
         noBypass = !lab.systemd.services."qubes-vm@sys-gui".enable;
         normalGuard = builtins.fromJSON normal.environment.etc."airlock/gui-gpu.json".text;
       }}
@@ -297,9 +297,16 @@ def test_nix_selection_drives_reservation_assignment_and_start():
     assert "xen-pciback.hide=(0000:04:00.0)" not in report["alternate"]["params"]
     service = report["service"]
     assert "airlock-setup-config.service" in service["requires"]
+    assert "qubesd.service" not in service["requires"]
+    assert "qubesd.service" in service["wants"]
+    assert "qubesd.service" in service["after"]
     assert "airlock-setup-config.service" in service["after"]
     assert service["serviceConfig"]["Restart"] == "no"
-    assert "--phase start" in service["serviceConfig"]["ExecStartPre"][0]
+    assert (
+        "is-active --quiet qubesd.service"
+        in service["serviceConfig"]["ExecStartPre"][0]
+    )
+    assert "--phase start" in service["serviceConfig"]["ExecStartPre"][1]
     assert report["noBypass"] is True
 
 

@@ -103,10 +103,11 @@ in
           systemd.services.airlock-start-gui-gpu = lib.mkIf cfg.startOnBoot {
             description = "Validate and start the physical sys-gui GPU once";
             wantedBy = [ "multi-user.target" ];
-            requires = [
-              "airlock-setup-config.service"
-              "qubesd.service"
-            ];
+            requires = [ "airlock-setup-config.service" ];
+            # Bootstrap restarts qubesd after adopting VM storage. Requires
+            # would propagate that stop and cancel our still-pending start.
+            # Keep ordering/pull-in, then check daemon readiness after setup.
+            wants = [ "qubesd.service" ];
             after = [
               "airlock-setup-config.service"
               "qubesd.service"
@@ -116,7 +117,10 @@ in
             serviceConfig = {
               Type = "oneshot";
               RemainAfterExit = true;
-              ExecStartPre = [ "${checker}/bin/airlock-gui-gpu-check --phase start" ];
+              ExecStartPre = [
+                "${pkgs.systemd}/bin/systemctl is-active --quiet qubesd.service"
+                "${checker}/bin/airlock-gui-gpu-check --phase start"
+              ];
               ExecStart = "${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-start sys-gui";
               # Never loop over GPU resets, restart the VM on exit, or hide failure.
               Restart = "no";

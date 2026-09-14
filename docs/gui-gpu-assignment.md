@@ -47,8 +47,9 @@ driver/firmware support. The physical AMD guest still needs compatible VFCT.
    its sole persistent **required**, port-matched Qubes assignment. Matching
    assignments are reused; stale or conflicting assignments are not silently
    removed. No reset/permissive options are supplied.
-4. `airlock-start-gui-gpu.service` requires successful bootstrap, rechecks the
-   hardware and persistent assignment, then runs ordinary `qvm-start sys-gui`
+4. `airlock-start-gui-gpu.service` requires successful bootstrap, checks that
+   `qubesd` is active, rechecks the hardware and persistent assignment, then
+   runs ordinary `qvm-start sys-gui`
    once. Qubes/VFCT/libvirt perform the normal guest start. Qubes autostart is
    disabled for this VM so it cannot race this ordering; no retry loop or
    automatic guest restart is configured.
@@ -130,3 +131,35 @@ boot selections were changed on the laptop during this implementation.
 
 Evidence is preserved under `.airlock-logs/gui-gpu-assignment/`. These results
 do not replace the pending real fresh-flash and subsequent reboot checks.
+
+### Bootstrap daemon stop/start cancellation — 2026-09-14
+
+On laptop boot `1384e043-2b30-4042-b3c5-ed4b15ed85bf`, bootstrap completed and
+the persistent GPU assignment passed validation, but sys-gui remained halted.
+The guest startup service had no invocation: it had not attempted `qvm-start`.
+Bootstrap's storage adoption stops `qubesd`, updates storage, then starts it
+again. The startup service's `Requires=qubesd.service` propagated that explicit
+stop to its pending start job while it was still waiting for bootstrap.
+
+The startup service now uses `Wants=qubesd.service` and retains `After=` for
+ordering. It still requires successful bootstrap, and an explicit
+`systemctl is-active --quiet qubesd.service` precondition fails startup if the
+daemon did not return. No guest retries, reset changes, or laptop-specific
+workarounds were added.
+
+`tests/test_gui_gpu_boot_order.py` reproduces the cancellation with inert,
+uniquely named local user-systemd units and verifies the corrected dependency.
+It also verifies that failed bootstrap or an unavailable daemon blocks the
+guest. The fixture deliberately uses separate **stop and start** operations,
+matching storage adoption; a single `systemctl restart` did not reproduce the
+cancelled job. Run it explicitly with:
+
+```sh
+AIRLOCK_RUN_SYSTEMD_ORDER_TEST=1 make test-quick PYTEST_DEFAULT_TARGETS= \
+  PYTEST_SELECTED='tests/test_gui_gpu_boot_order.py tests/test_gui_gpu_assignment.py'
+```
+
+Result: 31 passed, one optional SSH check skipped. Evidence is under
+`.airlock-logs/gui-gpu-boot-order/`; laptop boot evidence is under
+`.airlock-logs/gpu-boot-1384e043/`. The fix has not yet passed a real fresh boot;
+the laptop's guest and GPU state were left unchanged during this fix.

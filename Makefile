@@ -66,6 +66,7 @@ VM_PREBUILD_ATTRS := \
 PYTHON_FILES := \
 	lifecycle/misc/tools/pkgs/airlock-gui-gpu-check/src/check.py \
 	tests/test_gui_gpu_assignment.py \
+	tests/test_gui_gpu_boot_order.py \
 	tests/test_prepared_store.py \
 	lifecycle/runtime/tools/pkgs/airlock-amd-vbios/src/airlock_amd_vbios/*.py \
 	lifecycle/image/tools/amd-vbios.py \
@@ -103,7 +104,7 @@ PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
 PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
-PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py tests/test_usb_dev.py tests/test_prepared_store.py tests/test_amd_vbios.py tests/test_amd_vbios_runtime.py tests/test_amd_vbios_libvirt.py tests/test_amd_vbios_events.py tests/test_gui_gpu_assignment.py)
+PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py tests/test_usb_dev.py tests/test_prepared_store.py tests/test_amd_vbios.py tests/test_amd_vbios_runtime.py tests/test_amd_vbios_libvirt.py tests/test_amd_vbios_events.py tests/test_gui_gpu_assignment.py tests/test_gui_gpu_boot_order.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 VM_STAGED_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm_staged.py::test_staged_vm_step[$(test)]')
 VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow
