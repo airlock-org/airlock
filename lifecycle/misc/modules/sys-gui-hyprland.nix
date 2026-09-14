@@ -6,6 +6,7 @@
 }:
 let
   cfg = config.airlock.sysGuiHyprland;
+  terminalCommand = "${pkgs.foot}/bin/foot -f '${cfg.appearance.terminalFont}'";
   shellStart = pkgs.writeShellScript "airlock-hyprland-shell-start" ''
     set -eu
     ${pkgs.dbus}/bin/dbus-update-activation-environment --systemd \
@@ -13,8 +14,8 @@ let
     ${pkgs.systemd}/bin/systemctl --user start airlock-desktop-shell.service
   '';
   logout = "${config.programs.hyprland.package}/bin/hyprctl dispatch 'hl.dsp.exit()'";
-  settings = pkgs.writeText "airlock-dms-settings.json" (
-    builtins.toJSON {
+  settings = pkgs.writeText "airlock-dms-settings.json" (builtins.toJSON (
+    {
       # These are first-login defaults, not a security boundary. Host controls
       # must continue to use narrowly scoped Qubes RPCs, not local VM power APIs.
       powerMenuActions = [
@@ -24,13 +25,6 @@ let
       powerMenuDefaultAction = "logout";
       customPowerActionLogout = logout;
       customPowerActionPowerOff = "${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run --pass-io --no-gui --service dom0 airlock.Dom0Poweroff";
-      # A comfortable default for the lab's HiDPI display. Both scales are
-      # exposed by DMS and remain editable in the user's settings file.
-      fontScale = 1.5;
-      dankBarFontScale = 1.5;
-      # DMS keeps its bar-icon controls separate from its text scale.
-      dankBarIconScale = 1.25;
-      dankBarMaximizeWidgetIcons = true;
       controlCenterWidgets = [
         {
           id = "darkMode";
@@ -39,7 +33,8 @@ let
         }
       ];
     }
-  );
+    // cfg.appearance.dmsSettings
+  ));
   hyprConfig = pkgs.writeText "airlock-hyprland.lua" ''
     -- Hyprland 0.56 uses Lua. No laptop-specific outputs or PCI addresses.
     -- Let each display's density determine scaling, including HiDPI panels.
@@ -51,9 +46,9 @@ let
     })
     hl.on("hyprland.start", function ()
       hl.exec_cmd("${shellStart}")
-      hl.exec_cmd("${pkgs.foot}/bin/foot -f 'monospace:size=18'")
+      hl.exec_cmd("${terminalCommand}")
     end)
-    hl.bind("SUPER + Return", hl.dsp.exec_cmd("${pkgs.foot}/bin/foot -f 'monospace:size=18'"))
+    hl.bind("SUPER + Return", hl.dsp.exec_cmd("${terminalCommand}"))
     hl.bind("SUPER + D", hl.dsp.exec_cmd("${cfg.shellPackage}/bin/dms ipc call spotlight toggle"))
     hl.bind("SUPER + SHIFT + D", hl.dsp.exec_cmd("airlock-dom0-terminal"))
     hl.bind("SUPER + SHIFT + E", hl.dsp.exit())
@@ -119,6 +114,18 @@ in
       default = "${cfg.shellPackage}/bin/dms run --session";
       description = "Desktop-shell command, replaceable with a different Quickshell layout.";
     };
+    appearance = {
+      terminalFont = lib.mkOption {
+        type = lib.types.str;
+        default = "monospace:size=12";
+        description = "Foot font used by the Hyprland session and Super+Enter shortcut.";
+      };
+      dmsSettings = lib.mkOption {
+        type = lib.types.attrs;
+        default = { };
+        description = "First-login DankMaterialShell appearance defaults for this profile.";
+      };
+    };
   };
   config = lib.mkIf cfg.enable {
     assertions = [
@@ -131,7 +138,7 @@ in
     programs.hyprland.xwayland.enable = true;
     programs.foot = {
       enable = true;
-      settings.main.font = "monospace:size=18";
+      settings.main.font = cfg.appearance.terminalFont;
     };
     environment.systemPackages = [
       cfg.shellPackage
