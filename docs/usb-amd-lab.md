@@ -108,6 +108,28 @@ framebuffers, failed console/driver detach, repeated handoff and inhibition of
 late driver probing. Evidence is under `.airlock-logs/boot-framebuffer/`.
 Hardware display and handoff remain unverified for this change.
 
+### Firmware device hierarchy fix — 2026-09-14
+
+USB boot `10919aa911814072be5c465d8ab4d42f` completed bootstrap in about five
+minutes and passed the persistent GPU assignment check. At 16:30 BST the
+handoff guard rejected `efi-framebuffer.0` before any framebuffer writes or
+`qvm-start`. The kernel had initialized efifb at `0x8b0000000`, matching the
+selected GPU's BAR 0. This was a startup failure, not a VM initialization hang.
+
+The guard incorrectly required every platform device's physical sysfs path
+to be under `/sys/devices/platform`. Platform devices can instead be nested
+under a PCI parent. It now validates the platform bus's device entry and the
+device's `subsystem` backlink, retaining firmware-driver allowlisting and
+checking the driver's registration backlink. No GPU/reset checks are removed.
+
+Regression fixtures cover both EFI/simple framebuffers under platform-root
+and PCI-parent layouts, using a GPU address different from the laptop's.
+The old code fails both PCI-parent release tests; the corrected code passes.
+Verification: 75 checks passed, five opt-in checks skipped; startup unit built.
+Evidence is under `.airlock-logs/boot-framebuffer-layout-fix/`, with original
+USB logs under `.airlock-logs/usb-boot-10919aa9/`. The USB was not modified;
+fresh-image laptop handoff remains to be verified.
+
 ## Historical reservation experiment
 
 The following sequence documents the earlier manual investigation. Current

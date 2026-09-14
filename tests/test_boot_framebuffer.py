@@ -15,16 +15,25 @@ spec.loader.exec_module(fb)
 BDF = "0000:09:03.0"
 
 
+@pytest.fixture(params=["platform-root", "pci-parent"])
+def layout(request):
+    return request.param
+
+
 @pytest.fixture(params=fb.DRIVERS)
-def tree(tmp_path, request):
-    gpu = tmp_path / "bus/pci/devices" / BDF
+def tree(tmp_path, request, layout):
+    gpu = tmp_path / "devices/pci0000:00/0000:00:08.1" / BDF
     gpu.mkdir(parents=True)
     (gpu / "class").write_text("0x030000\n")
+    pci = tmp_path / "bus/pci/devices"
+    pci.mkdir(parents=True)
+    (pci / BDF).symlink_to(gpu)
     name = request.param
     driver = tmp_path / "bus/platform/drivers" / name
     driver.mkdir(parents=True)
     (driver / "unbind").touch()
-    device = tmp_path / "devices/platform" / (name + ".0")
+    parent = tmp_path / "devices/platform" if layout == "platform-root" else gpu
+    device = parent / (name + ".0")
     device.mkdir(parents=True)
     (device / "driver_override").touch()
     (device / "driver").symlink_to(driver)
@@ -32,6 +41,7 @@ def tree(tmp_path, request):
     platform = tmp_path / "bus/platform/devices"
     platform.mkdir(parents=True)
     (platform / device.name).symlink_to(device)
+    (device / "subsystem").symlink_to(platform.parent)
     graphic = tmp_path / "class/graphics/fb0"
     graphic.mkdir(parents=True)
     (graphic / "device").symlink_to(device)
@@ -76,10 +86,20 @@ def test_unbound_firmware_device_cannot_probe_later(tree):
 
 
 @pytest.mark.parametrize(
-    "fault", ["other-gpu", "unknown-fb", "missing-override", "wrong-gpu"]
+    "fault",
+    [
+        "other-gpu",
+        "unknown-fb",
+        "missing-override",
+        "wrong-gpu",
+        "wrong-bus",
+        "missing-bus",
+        "wrong-driver",
+        "wrong-registration",
+    ],
 )
 def test_validation_precedes_all_writes(tree, fault):
-    root, _, device, _, writes, write = tree
+    root, driver, device, _, writes, write = tree
     bdf = BDF
     if fault == "other-gpu":
         other = root / "bus/pci/devices/0000:01:00.0"
@@ -91,6 +111,18 @@ def test_validation_precedes_all_writes(tree, fault):
         (graphic / "device").symlink_to(root / "bus/pci/devices" / BDF)
     elif fault == "missing-override":
         (device / "driver_override").unlink()
+    elif fault in ("wrong-bus", "missing-bus"):
+        (device / "subsystem").unlink()
+        if fault == "wrong-bus":
+            (device / "subsystem").symlink_to(root / "bus/pci")
+    elif fault == "wrong-driver":
+        (device / "driver").unlink()
+        other = root / "bus/platform/drivers/not-firmware"
+        other.mkdir()
+        (device / "driver").symlink_to(other)
+    elif fault == "wrong-registration":
+        (driver / device.name).unlink()
+        (driver / device.name).symlink_to(root / "devices")
     else:
         bdf = "0000:01:00.0"
     with pytest.raises((ValueError, OSError)):

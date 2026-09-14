@@ -25,8 +25,16 @@ def inventory(root, bdf):
         if not re.fullmatch(r"(?:efi|simple)-framebuffer\.\d+", entry.name):
             continue
         device = entry.resolve(strict=True)
-        if not device.is_relative_to((root / "devices/platform").resolve()):
-            raise ValueError(f"not a firmware platform device: {entry}")
+        # Platform bus membership does not imply a /devices/platform parent:
+        # sysfb may parent the firmware device beneath its PCI display device.
+        # Validate the bus backlink, not a particular hardware hierarchy.
+        if (
+            not device.is_relative_to((root / "devices").resolve(strict=True))
+            or device.name != entry.name
+            or (device / "subsystem").resolve(strict=True)
+            != (root / "bus/platform").resolve(strict=True)
+        ):
+            raise ValueError(f"not a firmware platform device: {entry} -> {device}")
         driver = None
         if (device / "driver").exists():
             driver = (device / "driver").resolve(strict=True)
@@ -35,6 +43,8 @@ def inventory(root, bdf):
             ]
             if driver not in allowed:
                 raise ValueError(f"firmware driver mismatch: {entry}")
+            if (driver / entry.name).resolve(strict=True) != device:
+                raise ValueError(f"firmware driver registration mismatch: {entry}")
         if not (device / "driver_override").exists() or (
             driver and not (driver / "unbind").exists()
         ):
