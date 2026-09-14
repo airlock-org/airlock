@@ -546,6 +546,7 @@ def check_setup_config_runtime_path(repo_root: Path, log_dir: Path) -> None:
     path_value = _physical_path_list(repo_root, match.group(1))
     qubesadmin_python = qubesadmin_python_match.group(1)
     required = [
+        "airlock-gui-gpu-check",
         "awk",
         "chmod",
         "cmp",

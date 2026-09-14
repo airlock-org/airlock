@@ -18,6 +18,9 @@ reservation, assignment, and the decision about isolation/reset safety remain
 separate: the lab still reserves its reviewed GPU through its hardware boot
 configuration. Another machine must supply its own reservation and input
 selection. This feature does not discover which GPU the user wants to assign.
+The lab now connects that choice to boot using
+[declarative sys-gui assignment](gui-gpu-assignment.md); firmware preparation
+itself still does not assign devices. Fresh-image validation remains pending.
 
 ## Startup behavior
 

@@ -51,6 +51,7 @@ writeShellApplication {
     nix
     airlock-nix-domain-storage
     airlock-qubes-storage
+    (callPackage ../airlock-gui-gpu-check { })
     python3
     qubes-core-admin
     qubes-desktop-linux-common

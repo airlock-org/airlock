@@ -187,6 +187,7 @@ in
   imports = [
     ./qubes-input-proxy.nix
     ./amd-vbios.nix
+    ./gui-gpu.nix
   ];
   # Upstream installs these desktop frontends for every dom0. Keep the
   # backend/CLI packages, including desktop-linux-common's RPC helpers, but

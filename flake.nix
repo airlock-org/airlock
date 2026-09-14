@@ -371,7 +371,10 @@
             };
             specialisation.usb-amd-lab.configuration = {
               imports = [ ./lifecycle/image/profiles/usb-amd-lab.nix ];
-              airlock.qubes.domains.sys-gui = lib.mkForce (preparedDomain "amd-lab");
+              # Replace hybrid guest fields, leaving PCI selection to the
+              # reusable module and this machine's hardware inventory.
+              airlock.qubes.domains.sys-gui = lib.mapAttrs (_: lib.mkForce)
+                (builtins.removeAttrs (preparedDomain "amd-lab") [ "devices" ]);
             };
           })
         ];

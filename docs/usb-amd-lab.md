@@ -4,9 +4,8 @@ An experimental physical GPU profile, with one successful laptop desktop
 login; **not general hardware or reset certification**. The default USB
 configuration still runs the hybrid XFCE desktop with AMD driven by dom0.
 The lab is a separate boot specialisation, not a runtime toggle.
-Its immediate purpose is to inspect Xen ownership of the laptop GPU over SSH
-before attempting assignment. A usable desktop still needs safe assignment,
-display initialization and input forwarding.
+Its current milestone is reproducible boot-time GPU assignment and automatic
+firmware delivery, checked over SSH. Desktop/input startup remains manual.
 
 The current evidence, investigation gates and completion criteria are in
 [the AMD GPU investigation plan](amd-gpu-investigation.md). Generation 2 has
@@ -33,7 +32,7 @@ entries. Verify the generated entries before the first hardware experiment:
 | --- | --- | --- |
 | Default | Existing hybrid XFCE | sys-gui started by the desktop relay after setup |
 | `usb-text-recovery` | dom0 text console, AMD not hidden | No setup or guest autostart |
-| `usb-amd-lab` | May be blank; AMD reserved for Xen pciback | Lab definition applied, no guest autostart |
+| `usb-amd-lab` | May be blank; AMD reserved for Xen pciback | Validated persistent assignment, then one ordered sys-gui start |
 
 Both manual entries retain direct dom0 networking, SSH and Tailscale. The lab
 reserves **only** `0000:04:00.0`, not audio, USB, PSP, ACP or storage functions.
@@ -51,7 +50,11 @@ ownership is established during boot. The upstream systemd-boot/Xen builder
 keeps the normal generation as the default; do not manually make the lab entry
 the saved default.
 
-## Ordered experiment
+## Historical reservation experiment
+
+The following sequence documents the earlier manual investigation. Current
+images assign and start the reviewed GPU on lab boot; use the
+[fresh-flash acceptance checklist](gui-gpu-assignment.md) for the next test.
 
 1. Boot the default USB. Confirm the laptop's internal filesystems are not
    mounted, Xen is running, XFCE/input works and Tailscale SSH reconnects.
@@ -86,8 +89,8 @@ the saved default.
 
 ## What remains before a usable physical sys-gui
 
-- A reviewed, hardware-specific decision on safe reset and actual PCI
-  assignment through upstream Qubes tooling. This commit does not assign it.
+- Fresh-flash verification of the reviewed selection's declarative assignment
+  and startup. Reset effectiveness remains a separate open question.
 - Confirm the shared Qubes kernel's attached modules contain `amdgpu`, firmware
   loads, PCI BARs map, and the guest exposes AMD DRM and the built-in eDP panel.
   Do not use a NixOS kernel's unrelated modules with the shared Qubes kernel.
@@ -109,19 +112,18 @@ the saved default.
 
 ## Automatic VBIOS workflow
 
-The lab enables `airlock.amdVbios.domains.sys-gui` in Nix. After bootstrap has
-finished, assign the reviewed GPU using its currently enumerated Qubes port
-and run the ordinary `qvm-start sys-gui`. The extension selects the matching
+The lab enables `airlock.amdVbios.domains.sys-gui` in Nix. Bootstrap now applies
+the machine's declared required GPU assignment, and the ordered start service
+runs ordinary `qvm-start sys-gui` once. The extension selects the matching
 host VFCT entry, validates it, and generates a table for the explicit guest
 PCI slot. No `airlock-amd-vfct` feature or provisioned firmware file is used.
 The GPU must be the sole required PCI assignment and already reserved to
 pciback. Failures are reported through Qubes and the dom0 journal.
 
-GPU selection, isolation/reset review, and assigning devices remain separate
-from firmware delivery. The lab does not automatically assign or start the GPU.
-For a single controlled start, remove the persistent assignment after startup
-using `qvm-device pci unassign sys-gui <port>`; this leaves the running device
-attached. Inspect assignments with `qvm-device pci list sys-gui --assignments`.
+GPU selection and isolation/reset review remain separate from firmware delivery.
+See [declarative assignment](gui-gpu-assignment.md) for configuration, safety
+boundaries and validation. Keep the persistent assignment for the reboot test;
+the earlier unassign-after-start procedure was for manual experiments only.
 
 This follows upstream's separation of [hybrid and GPU GUI domains](https://doc.qubes-os.org/en/latest/user/advanced-topics/gui-domain.html)
 and its [HVM/input-proxy configuration](https://github.com/QubesOS/qubes-mgmt-salt-dom0-virtual-machines/blob/main/qvm/sys-gui-gpu.sls).
@@ -132,13 +134,12 @@ Upstream's permissive PCI suggestion is deliberately not enabled here.
 If the GPU or the host wedges, a cold power cycle may be necessary. Select
 `usb-text-recovery` **with Xen**, not the AMD entry. The profile does not hide
 the GPU and masks guest autostart even if Qubes' mutable state has stale links.
-If a later manual experiment assigned devices, inspect
+To return to the hybrid profile after a physical-GPU boot, inspect
 `qvm-pci list --assignments` and unassign only the verified experimental
-`dom0:04_00.0` assignment from sys-gui using Qubes' device tools. Do not delete
+`dom0:00_08.1-00_00.0` assignment from sys-gui using Qubes' device tools. Do not delete
 VM disks or `qubes.xml`. Then reboot the default USB entry.
 
 An empty declarative PCI list does not currently remove runtime assignments.
-The former password service also checked for leftover PCI assignments; that
-check was removed with the service. Until a separate guard is implemented,
-unassign the experimental GPU in text recovery before returning to the default
-profile, whose desktop relay starts sys-gui.
+The GPU-selection guard now stops hybrid bootstrap if sys-gui still has PCI
+state from the lab. Unassign the verified device while halted in text recovery
+before returning to the default profile, whose desktop relay starts sys-gui.

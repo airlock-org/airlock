@@ -2018,6 +2018,18 @@ systemctl is-active --quiet qubes-qrexec-policy-daemon.service || fail "qubes-qr
 schema="$(jq_get '.schema')"
 [ "$schema" = "airlock.qubes-topology.v1" ] || fail "unsupported topology schema: $schema"
 
+# Validate before any VM/storage/settings changes, including manual --apply.
+# The helper only observes; the existing setup_domain_pci_devices path owns
+# persistent assignment. Absent configuration leaves ordinary profiles alone.
+if [ -e /etc/airlock/gui-gpu.json ]; then
+  airlock-gui-gpu-check --topology "$TOPOLOGY" --phase bootstrap \
+    > "$LOG_DIR/gui-gpu-check.json" || {
+      cat "$LOG_DIR/gui-gpu-check.json"
+      fail "GPU selection validation failed; see $LOG_DIR/gui-gpu-check.json"
+    }
+  cat "$LOG_DIR/gui-gpu-check.json"
+fi
+
 preflight_domain_backends
 setup_qrexec_policy
 
