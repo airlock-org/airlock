@@ -132,14 +132,44 @@ Qubes kernel is already installed. The detailed setup log is
 
 Both USB graphics modes configure the guest login as `user` / `password`.
 Dom0's local console uses `airlock` and the password supplied during
-personalization (`password` with `--insecure-dev-password`). From the dom0 console:
+personalization (`password` with `--insecure-dev-password`). The development USB
+also supplies **dom0 Terminal (Development)** in sys-gui's applications menu
+(or run `airlock-dom0-terminal` from a guest terminal). It opens a shell as
+dom0's `airlock` account; `sudo` uses the dom0 password. In that terminal:
 
 ```sh
-nmcli --ask device wifi connect YOUR_SSID
-sudo tailscale up --hostname=airlock-usb
+sudo nmcli --ask device wifi connect YOUR_SSID
+sudo tailscale up --ssh --hostname=airlock-usb
 cd /home/airlock/dev/nixome
 codex
 ```
+
+Complete the Tailscale authentication link on another connected device if
+needed. This works from the physical AMD lab without a recovery boot once its
+desktop/input works. The ordinary guest terminal is still a sys-gui shell.
+
+The launcher uses a byte stream over [Qubes qrexec](https://github.com/QubesOS/qubes-doc/blob/main/developer/services/qrexec.rst),
+not a dom0 X server, SSH listener or general `qubes.VMShell` permission. The
+dedicated `airlock.DevDom0Shell` RPC allows only sys-gui with no argument. Its
+fixed root handler verifies the source then drops to `airlock` before opening
+a PTY. No passwordless sudo is added. **This grants any process in sys-gui
+access to the dom0 user account and its files, including development secrets.**
+It is an intentional development exception, not a secure administrative
+boundary against a compromised sys-gui; both policy and launcher are absent
+from normal images. A host assertion rejects enabling it outside dev mode.
+
+The terminal starts at 100 columns by 30 rows. Automatic remote resize is not
+implemented; use `stty rows N cols M` in dom0 if you resize the window. Exit
+disconnects the shell. This is not a fallback for failed guest/display startup:
+retain text recovery and provisioned remote access for those failures.
+
+Launcher verification (2026-09-14): 33 focused pytest checks passed, with one
+optional SSH check skipped; the handler, policy and menu launcher built.
+Local PTY transport checks cover an interactive shell, hidden password input,
+Ctrl-C and terminal restoration. They substitute a local byte-stream relay
+for qrexec and do not establish end-to-end Qubes policy/PAM behavior on the
+laptop. That fresh-image check remains pending. Evidence is under
+`.airlock-logs/dev-dom0-terminal/`.
 
 The XFCE panel's **Shut Down** action requests a clean dom0 power-off through
 a single qrexec service restricted to `sys-gui`; it does not merely halt the

@@ -282,6 +282,7 @@
         };
 
       usbSysGuiLoginModule = { lib, ... }: {
+        airlock.devDom0Terminal.guest.enable = true;
         # Shared by both USB graphics modes. Set the developer login at boot
         # through NixOS account configuration, without a qrexec password update.
         users.mutableUsers = lib.mkForce false;

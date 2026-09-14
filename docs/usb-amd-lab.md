@@ -52,10 +52,12 @@ ownership is established during boot. The upstream systemd-boot/Xen builder
 keeps the normal generation as the default; do not manually make the lab entry
 the saved default.
 
-After a fresh flash, configure dom0 networking and Tailscale from
-`usb-text-recovery` with Xen, then reboot into the lab **without reflashing**.
-The physical desktop is in sys-gui, not dom0: its terminal cannot configure
-dom0's network or enroll dom0 in Tailscale. Guest login is `user` / `password`.
+After a fresh flash, log in with `user` / `password` and open **dom0 Terminal
+(Development)** from the applications menu to configure dom0 networking and
+Tailscale. Follow [the USB setup commands and security caveat](usb-dev.md#first-boot).
+The ordinary terminal remains a sys-gui shell. If desktop/input fails, use
+`usb-text-recovery` with Xen to establish networking, then reboot into the lab
+**without reflashing**.
 The screen can remain blank during bootstrap; a continuing blank screen needs
 SSH/log inspection, not an assumption that the computer is frozen.
 

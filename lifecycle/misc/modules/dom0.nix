@@ -64,8 +64,8 @@ let
     # Keep it limited to dom0 starting the declared sys-gui domain.
     qubes.GuiVMSession * dom0 sys-gui allow
     qubes.GuiVMSession * @anyvm @anyvm deny
-    # The GUI domain may request one host action: a clean power-off. It has no
-    # shell or general systemd authority in dom0.
+    # The normal GUI policy grants a clean power-off, not a dom0 shell.
+    # Development USB shells require the separate explicit dev policy.
     airlock.Dom0Poweroff * sys-gui dom0 allow
     qubes.ClipboardCopy + sys-gui @tag:guivm-sys-gui allow
     qubes.ClipboardPaste + sys-gui @tag:guivm-sys-gui allow
@@ -185,6 +185,7 @@ let
 in
 {
   imports = [
+    ./dev-dom0-terminal.nix
     ./qubes-input-proxy.nix
     ./amd-vbios.nix
     ./gui-gpu.nix

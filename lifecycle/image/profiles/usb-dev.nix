@@ -36,6 +36,7 @@
   networking.networkmanager.enable = true;
   networking.firewall.interfaces.tailscale0.allowedTCPPorts = [ 22 ];
   services.tailscale.enable = true;
+  airlock.devDom0Terminal.host.enable = true;
   services.openssh = {
     enable = true;
     openFirewall = false;
