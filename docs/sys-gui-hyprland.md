@@ -75,6 +75,14 @@ from the control-center defaults. These UI defaults are not a security policy;
 other settings can expose local guest controls. Host suspend/reboot, audio,
 network integration and lock-screen behavior are not acceptance claims here.
 
+Airlock applies a small, version-pinned Quickshell patch to DMS's Spotlight
+launcher: its search field, result rows, icons and modal width are enlarged for
+HiDPI use. This is deliberately a DMS/Quickshell customization—not a change to
+Hyprland's display scale—and is checked when the pinned DMS package builds.
+It is the first example of the intended layout-customization seam; keep future
+changes similarly narrow or replace `shellCommand` with a separate Quickshell
+layout when DMS no longer fits.
+
 Cross-VM windows are a separate follow-up: the existing Qubes Xorg
 `shmoverride` integration is not applied to Hyprland or Xwayland. Xwayland is
 enabled for ordinary local X11 applications, not claimed to provide working
