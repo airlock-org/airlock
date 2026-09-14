@@ -94,9 +94,12 @@ def test_usb_only_and_sudo_preserved(terminal_config):
     assert any(
         "dom0 terminal requires a development image" in m for m in report["rejected"]
     )
-    assert "airlock.DevDom0Shell + sys-gui dom0 allow user=root" in report["policy"]
+    assert "airlock.DevDom0Shell + sys-gui dom0 allow" in report["policy"]
+    assert "user=root" not in report["policy"]
     assert "airlock.DevDom0Shell * @anyvm dom0 deny" in report["policy"]
-    assert "/bin/runuser -u airlock --" in report["handler"]
+    assert "/bin/id -un" in report["handler"]
+    assert "unexpected dom0 execution user" in report["handler"]
+    assert "/bin/runuser" not in report["handler"]
     assert "/bin/script --quiet --return --flush" in report["handler"]
     assert "100x30" in report["launcher"]
     assert "/bin/xterm -hold " in report["launcher"]
@@ -108,7 +111,7 @@ def test_usb_only_and_sudo_preserved(terminal_config):
     "source,argument", [("", ""), ("usr-browser", ""), ("sys-gui", "command")]
 )
 def test_handler_rejects_wrong_source_or_arguments(terminal_config, source, argument):
-    # All must exit before invoking runuser; no actual dom0 account is touched.
+    # All must exit before opening the local PTY; no dom0 account is touched.
     result = subprocess.run(
         ["bash", "-c", quiet_logger(terminal_config["handler"])],
         env={
@@ -144,15 +147,16 @@ def replace_transport(client, command):
 
 @pytest.mark.nix
 def test_dom0_startup_stderr_is_forwarded(terminal_config, tmp_path):
-    stub = tmp_path / "failed-runuser.py"
+    stub = tmp_path / "failed-script.py"
     stub.write_text(
-        "import sys\nprint('simulated PAM failure', file=sys.stderr)\nsys.exit(1)\n"
+        "import sys\nprint('simulated PTY failure', file=sys.stderr)\nsys.exit(1)\n"
     )
     handler = re.sub(
-        r"/nix/store/[^/]+/bin/runuser",
+        r"/nix/store/[^/]+/bin/script",
         f"{sys.executable} {stub}",
         quiet_logger(terminal_config["handler"]),
     )
+    handler = handler.replace("= airlock", "= user")
     result = subprocess.run(
         ["bash", "-c", handler],
         env={
@@ -166,8 +170,8 @@ def test_dom0_startup_stderr_is_forwarded(terminal_config, tmp_path):
     )
     assert result.returncode == 1
     assert "handler reached" in result.stdout
-    assert "starting the unprivileged dom0 PTY session" in result.stdout
-    assert "simulated PAM failure" in result.stdout
+    assert "starting the dom0 user PTY session" in result.stdout
+    assert "simulated PTY failure" in result.stdout
     assert result.stderr == ""
 
 

@@ -27,7 +27,7 @@ let
       echo "dom0-terminal: $*"
       ${pkgs.util-linux}/bin/logger -t airlock-dev-dom0-terminal -- "$*" || true
     }
-    stage "handler reached (uid=$EUID)"
+    stage "handler reached (uid=$EUID user=$(${pkgs.coreutils}/bin/id -un))"
     [ "''${QREXEC_REMOTE_DOMAIN:-}" = sys-gui ] || {
       stage 'refused: caller is not sys-gui'
       exit 1
@@ -36,18 +36,22 @@ let
       stage 'refused: this service accepts no arguments'
       exit 1
     fi
-    # Policy executes this fixed handler as root, but the interactive shell
-    # and its PTY run as the ordinary dom0 user. No passwordless sudo is added.
-    stage 'starting the unprivileged dom0 PTY session'
-    exec ${pkgs.util-linux}/bin/runuser -u ${lib.escapeShellArg cfg.user} -- \
-      ${pkgs.util-linux}/bin/script --quiet --return --flush \
+    # This service intentionally runs as the dom0 development user. Do not
+    # depend on a root transition: its normal password-protected sudo policy
+    # is precisely the administrative boundary for this development helper.
+    [ "$(${pkgs.coreutils}/bin/id -un)" = ${lib.escapeShellArg cfg.user} ] || {
+      stage 'refused: unexpected dom0 execution user'
+      exit 1
+    }
+    stage 'starting the dom0 user PTY session'
+    exec ${pkgs.util-linux}/bin/script --quiet --return --flush \
       --command ${shell} /dev/null
   '';
   policy = pkgs.runCommand "airlock-dev-dom0-terminal-policy" { } ''
     install -d "$out/etc/qubes/policy.d"
     cat > "$out/etc/qubes/policy.d/40-airlock-dev-dom0-terminal.policy" <<'EOF'
     # Intentional development-only dom0 user shell, not a production capability.
-    airlock.DevDom0Shell + sys-gui dom0 allow user=root
+    airlock.DevDom0Shell + sys-gui dom0 allow
     airlock.DevDom0Shell * @anyvm dom0 deny
     airlock.DevDom0Shell * @anyvm @anyvm deny
     EOF

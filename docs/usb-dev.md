@@ -151,8 +151,8 @@ desktop/input works. The ordinary guest terminal is still a sys-gui shell.
 The launcher uses a byte stream over [Qubes qrexec](https://github.com/QubesOS/qubes-doc/blob/main/developer/services/qrexec.rst),
 not a dom0 X server, SSH listener or general `qubes.VMShell` permission. The
 dedicated `airlock.DevDom0Shell` RPC allows only sys-gui with no argument. Its
-fixed root handler verifies the source then drops to `airlock` before opening
-a PTY. No passwordless sudo is added. **This grants any process in sys-gui
+handler verifies the source and requires Qubes to invoke it as the declared
+dom0 `airlock` user before opening a PTY. No passwordless sudo is added. **This grants any process in sys-gui
 access to the dom0 user account and its files, including development secrets.**
 It is an intentional development exception, not a secure administrative
 boundary against a compromised sys-gui; both policy and launcher are absent
@@ -183,7 +183,7 @@ path otherwise leaves that stderr on the host, unlike its VM-side transport
 ([upstream implementation](https://github.com/QubesOS/qubes-core-qrexec/blob/v4.4.1/daemon/qrexec-daemon-common.c)).
 
 The window reports handler entry, caller/argument rejection when applicable,
-the attempt to start the unprivileged session, and entry into the remote PTY.
+the attempt to start the dom0 user session, and entry into the remote PTY.
 Numeric UIDs help detect an execution-user mismatch. These fixed stage messages
 also go to dom0's journal with tag `airlock-dev-dom0-terminal`. Commands,
 passwords, environment contents and the interactive stream are **not** logged.
@@ -202,6 +202,19 @@ Diagnostic verification: seven focused pytest checks passed, including a
 simulated startup stderr failure and terminal restoration on exit code 1;
 launcher package built. Actual laptop shell startup is still unverified.
 Evidence is under `.airlock-logs/dev-dom0-terminal-diagnostics/`.
+
+### Direct dom0-user execution — 2026-09-14
+
+The first diagnostic image showed the handler ran as UID 1000 and then failed:
+`runuser: may not be used by non-root user`. That is the expected ordinary
+dom0 `airlock` account, so the extra `runuser` was both unnecessary and
+incorrect. The service now explicitly expects that user, opens `script`'s PTY
+directly, and the policy no longer requests `user=root`. `sudo` continues to
+prompt for the dom0 password. This is still a development-only capability.
+
+35 focused checks passed, with one optional check skipped, including the
+ordinary-user startup path and error forwarding. The launcher package build
+and laptop retry remain pending.
 
 The XFCE panel's **Shut Down** action requests a clean dom0 power-off through
 a single qrexec service restricted to `sys-gui`; it does not merely halt the
