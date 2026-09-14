@@ -19,5 +19,5 @@
   };
   # Nothing here relaxes reset checks or enables permissive PCI access.
   # The prepared physical guest boots to LightDM; the selected boot entry
-  # chooses Hyprland or the XFCE fallback guest configuration.
+  # chooses GNOME, Hyprland, or the XFCE fallback guest configuration.
 }

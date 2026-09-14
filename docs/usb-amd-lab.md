@@ -30,19 +30,20 @@ is impossible, and successful guest startup would not prove safe reset.
 
 ## Boot choices
 
-The USB should contain four Xen boot choices, plus upstream non-Xen recovery
+The USB should contain five Xen boot choices, plus upstream non-Xen recovery
 entries. Verify the generated entries before the first hardware experiment:
 
 | Xen entry | Display | VM startup |
 | --- | --- | --- |
 | Default | Existing hybrid XFCE | sys-gui started by the desktop relay after setup |
 | `usb-text-recovery` | dom0 text console, AMD not hidden | No setup or guest autostart |
-| `usb-amd-lab` | Temporary dom0 bootstrap text, then sys-gui Hyprland + DankMaterialShell login | Validated assignment, framebuffer release, one sys-gui start, then input forwarding |
+| `usb-amd-lab` | Temporary dom0 bootstrap text, then sys-gui GNOME login with Dash to Dock | Validated assignment, framebuffer release, one sys-gui start, then input forwarding |
+| `usb-amd-lab-hyprland` | Same physical GPU path, Hyprland + DankMaterialShell | Retained experimental desktop implementation |
 | `usb-amd-lab-xfce` | Same physical GPU path, XFCE fallback desktop | Same validated startup sequence |
 
-The new Hyprland session is not yet hardware-verified. The successful desktop
-evidence above is for XFCE. See [the Hyprland milestone](sys-gui-hyprland.md)
-for build, boot, shortcuts and diagnostic commands.
+GNOME and Hyprland are not yet hardware-verified. The successful desktop evidence
+above is for XFCE. See [the Hyprland milestone](sys-gui-hyprland.md) for its
+build, boot, shortcuts and diagnostic commands.
 
 All manual entries retain direct dom0 networking, SSH and Tailscale. The lab
 reserves **only** `0000:04:00.0`, not audio, USB, PSP, ACP or storage functions.

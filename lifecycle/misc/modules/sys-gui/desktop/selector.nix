@@ -1,13 +1,13 @@
 { config, lib, ... }:
 let
   cfg = config.airlock.sysGuiDesktop;
-  displayManagerSession = if cfg.session == "hyprland" then "airlock-hyprland" else "xfce";
+  displayManagerSession = if cfg.session == "hyprland" then "airlock-hyprland" else cfg.session;
 in
 {
-  imports = [ ./hyprland/default.nix ];
+  imports = [ ./hyprland/default.nix ./gnome/default.nix ];
 
   options.airlock.sysGuiDesktop.session = lib.mkOption {
-    type = lib.types.enum [ "xfce" "hyprland" ];
+    type = lib.types.enum [ "xfce" "gnome" "hyprland" ];
     default = "xfce";
     description = "Desktop implementation selected for the physical sys-gui session.";
   };

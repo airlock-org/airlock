@@ -8,9 +8,11 @@ outside this investigation.
 
 ## Current milestone — 2026-09-14
 
-Follow-up: [Hyprland + DankMaterialShell](sys-gui-hyprland.md) is now configured
-as the `usb-amd-lab` desktop, pending build and hardware validation. The XFCE
-baseline described below remains available as `usb-amd-lab-xfce`.
+Follow-up: [GNOME](sys-gui-gnome.md) is now configured as the `usb-amd-lab`
+desktop, pending build and hardware validation. [Hyprland +
+DankMaterialShell](sys-gui-hyprland.md) remains available as
+`usb-amd-lab-hyprland`; the XFCE baseline described below remains available as
+`usb-amd-lab-xfce`.
 
 The rebuilt USB's **usb-amd-lab with Xen** now boots into a physical sys-gui
 desktop with hardware-accelerated AMD rendering. Boot ID:
@@ -39,9 +41,9 @@ is not a claim of universal hardware compatibility or safe GPU reset.
 The handoff log proves release, not that every bootstrap status update was
 visible. Per-device input behavior and suspend/resume remain separate checks.
 
-The next desktop experiment can trial **Hyprland alongside XFCE**, retaining
-XFCE as a fallback. Wayland compositor startup and displaying other Qubes
-VMs' windows need their own validation; the OpenGL result does not prove those
+The next desktop experiment can trial **GNOME**, while retaining Hyprland and
+XFCE as separate fallbacks. GNOME startup and displaying other Qubes VMs'
+windows need their own validation; the OpenGL result does not prove those
 integrations. AI inference and sys-gpu remain deferred. The sections below
 preserve the earlier investigation and its evidence.
 
