@@ -160,7 +160,8 @@ from normal images. A host assertion rejects enabling it outside dev mode.
 
 The terminal starts at 100 columns by 30 rows. Automatic remote resize is not
 implemented; use `stty rows N cols M` in dom0 if you resize the window. Exit
-disconnects the shell. This is not a fallback for failed guest/display startup:
+disconnects the shell; the window stays open so its final messages remain
+readable and can be closed manually. This is not a fallback for failed guest/display startup:
 retain text recovery and provisioned remote access for those failures.
 
 Launcher verification (2026-09-14): 33 focused pytest checks passed, with one
@@ -170,6 +171,37 @@ Ctrl-C and terminal restoration. They substitute a local byte-stream relay
 for qrexec and do not establish end-to-end Qubes policy/PAM behavior on the
 laptop. That fresh-image check remains pending. Evidence is under
 `.airlock-logs/dev-dom0-terminal/`.
+
+### Diagnosing a blank dom0 terminal
+
+The first laptop attempt opened a blank window and returned exit code 1.
+That did not establish whether the failure was in policy, the handler, PAM,
+or shell startup. The launcher now holds the window open and prints the
+connection exit code after restoring terminal settings. Dom0's handler merges
+its stderr into the forwarded stdout stream: Qubes' dom0 service execution
+path otherwise leaves that stderr on the host, unlike its VM-side transport
+([upstream implementation](https://github.com/QubesOS/qubes-core-qrexec/blob/v4.4.1/daemon/qrexec-daemon-common.c)).
+
+The window reports handler entry, caller/argument rejection when applicable,
+the attempt to start the unprivileged session, and entry into the remote PTY.
+Numeric UIDs help detect an execution-user mismatch. These fixed stage messages
+also go to dom0's journal with tag `airlock-dev-dom0-terminal`. Commands,
+passwords, environment contents and the interactive stream are **not** logged.
+Permissions and authentication are unchanged.
+
+Rebuild/flash, open **dom0 Terminal (Development)**, and record the visible
+messages. If no `handler reached` message appears, inspect dom0's qrexec/policy
+logs. With dom0 access, use:
+
+```sh
+sudo journalctl -b -t airlock-dev-dom0-terminal --no-pager
+sudo journalctl -b -u qubes-qrexec-policy-daemon --no-pager
+```
+
+Diagnostic verification: seven focused pytest checks passed, including a
+simulated startup stderr failure and terminal restoration on exit code 1;
+launcher package built. Actual laptop shell startup is still unverified.
+Evidence is under `.airlock-logs/dev-dom0-terminal-diagnostics/`.
 
 The XFCE panel's **Shut Down** action requests a clean dom0 power-off through
 a single qrexec service restricted to `sys-gui`; it does not merely halt the

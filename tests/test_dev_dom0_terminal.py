@@ -99,6 +99,8 @@ def test_usb_only_and_sudo_preserved(terminal_config):
     assert "/bin/runuser -u airlock --" in report["handler"]
     assert "/bin/script --quiet --return --flush" in report["handler"]
     assert "100x30" in report["launcher"]
+    assert "/bin/xterm -hold " in report["launcher"]
+    assert "exec 2>&1" in report["handler"]
 
 
 @pytest.mark.nix
@@ -108,7 +110,7 @@ def test_usb_only_and_sudo_preserved(terminal_config):
 def test_handler_rejects_wrong_source_or_arguments(terminal_config, source, argument):
     # All must exit before invoking runuser; no actual dom0 account is touched.
     result = subprocess.run(
-        ["bash", "-c", terminal_config["handler"]],
+        ["bash", "-c", quiet_logger(terminal_config["handler"])],
         env={
             **os.environ,
             "QREXEC_REMOTE_DOMAIN": source,
@@ -120,10 +122,58 @@ def test_handler_rejects_wrong_source_or_arguments(terminal_config, source, argu
     )
     assert result.returncode == 1, result.stderr
     assert result.stderr == ""
+    assert "dom0-terminal: refused:" in result.stdout
+
+
+def quiet_logger(text):
+    # Do not emit fixture messages to the workstation's actual journal.
+    return re.sub(r"/nix/store/[^/]+/bin/logger", "true", text)
+
+
+def replace_transport(client, command):
+    text, count = re.subn(
+        r"/nix/store/[^/]+/bin/qrexec-client-vm \\\n"
+        r"\s*--no-filter-escape-chars-stdout --no-filter-escape-chars-stderr \\\n"
+        r"\s*dom0 airlock.DevDom0Shell",
+        lambda _: command,
+        client,
+    )
+    assert count == 1
+    return text
 
 
 @pytest.mark.nix
-def test_interactive_transport_restores_terminal(terminal_config, tmp_path):
+def test_dom0_startup_stderr_is_forwarded(terminal_config, tmp_path):
+    stub = tmp_path / "failed-runuser.py"
+    stub.write_text(
+        "import sys\nprint('simulated PAM failure', file=sys.stderr)\nsys.exit(1)\n"
+    )
+    handler = re.sub(
+        r"/nix/store/[^/]+/bin/runuser",
+        f"{sys.executable} {stub}",
+        quiet_logger(terminal_config["handler"]),
+    )
+    result = subprocess.run(
+        ["bash", "-c", handler],
+        env={
+            **os.environ,
+            "QREXEC_REMOTE_DOMAIN": "sys-gui",
+            "QREXEC_SERVICE_ARGUMENT": "",
+        },
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert result.returncode == 1
+    assert "handler reached" in result.stdout
+    assert "starting the unprivileged dom0 PTY session" in result.stdout
+    assert "simulated PAM failure" in result.stdout
+    assert result.stderr == ""
+
+
+@pytest.mark.nix
+@pytest.mark.parametrize("failure", [False, True])
+def test_interactive_transport_restores_terminal(terminal_config, tmp_path, failure):
     # Replace only qrexec transport with a local PTY server. No root account,
     # Qubes service, GUI or hardware is used in this protocol smoke check.
     script = shutil.which("script")
@@ -149,11 +199,12 @@ def test_interactive_transport_restores_terminal(terminal_config, tmp_path):
         "sys.exit(p.wait(timeout=5))\n"
     )
     client = re.sub(r"/nix/store/[^/]+/bin/stty", stty, terminal_config["client"])
-    client = re.sub(
-        r"/nix/store/[^/]+/bin/qrexec-client-vm[\s\S]*$",
-        f"{sys.executable} {relay}\n",
-        client,
-    )
+    client = replace_transport(client, f"{sys.executable} {relay}")
+    if failure:
+        # Fail before any remote PTY exists, as in the reported blank window.
+        relay.write_text(
+            "import sys\nprint('simulated connection failure')\nsys.exit(1)\n"
+        )
     master, slave = pty.openpty()
     before = termios.tcgetattr(slave)
     process = subprocess.Popen(
@@ -170,6 +221,12 @@ def test_interactive_transport_restores_terminal(terminal_config, tmp_path):
                 output += os.read(master, 65536)
 
     try:
+        if failure:
+            receive_until(b"exit code 1")
+            assert process.wait(timeout=5) == 1
+            assert b"simulated connection failure" in output
+            assert termios.tcgetattr(slave) == before
+            return
         receive_until(b"bash-")
         os.write(
             master, b"test -t 0 && test -t 1 && printf '\\nPTY_OK\\n'; stty size\n"
