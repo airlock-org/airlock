@@ -40,8 +40,10 @@ In the receiving guest, enable `airlock.inputProxy.receiver.enable`. The
 physical GUI lab does this by default; the hybrid guest does not. This loads
 `uinput` and installs root RPC handlers with the source check above.
 
-After rebuilding both configurations and bringing up the physical guest,
-activate forwarding **in dom0**:
+The USB AMD lab now activates the target automatically in the successful
+GPU guest startup service's `ExecStartPost`. The shared sender module itself
+remains manual; other profiles do not gain automatic forwarding. If debugging
+an already-running physical guest, activate forwarding **in dom0**:
 
 ```sh
 sudo systemctl start airlock-gui-input.target
@@ -58,8 +60,8 @@ sudo systemctl stop airlock-gui-input.target
 
 Losing the qrexec connection also ends the sender and releases its device.
 After a connection failure, explicitly restart the target once the guest is
-ready. Automatic activation tied to the supported desktop lifecycle and
-hotplug are future work. Never enable forwarding alongside the hybrid
+ready. Automatic reconnection and hotplug remain future work. Never enable
+forwarding alongside the hybrid
 desktop's existing input path.
 
 ## Laptop result — 2026-09-13

@@ -169,8 +169,10 @@ in
   options.airlock.sysGuiGuest.displayMode = lib.mkOption {
     type = lib.types.enum [ "hybrid" "physical-amd-lab" ];
     default = "hybrid";
-    description = "Hybrid relay by default; physical AMD Xorg is an unvalidated, manually started lab mode.";
+    description = "Hybrid relay by default; physical AMD Xorg is an experimental lab mode.";
   };
+  options.airlock.sysGuiGuest.physicalDesktopOnBoot = lib.mkEnableOption
+    "automatic physical desktop login after guest boot (not the hybrid relay)";
   options.airlock.sysGuiGuest.personalLaunchers.enable = lib.mkOption {
     type = lib.types.bool;
     default = true;
@@ -179,10 +181,11 @@ in
 
   config = lib.mkIf cfg.enable {
     airlock.inputProxy.receiver.enable = lib.mkDefault (!hybrid);
-    # Upstream graphical.target Wants=display-manager.service even when the
-    # service has no wantedBy. Boot the physical lab to text, then start X
-    # explicitly only after GPU initialization and diagnostics succeed.
-    systemd.defaultUnit = lib.mkIf (!hybrid) (lib.mkForce "multi-user.target");
+    # Keep a text-only physical diagnostic mode available. graphical.target
+    # itself pulls in LightDM, independently of the service's wantedBy.
+    systemd.defaultUnit = lib.mkIf (!hybrid) (lib.mkForce (
+      if cfg.physicalDesktopOnBoot then "graphical.target" else "multi-user.target"
+    ));
     boot.kernelModules = [
       "xen-gntalloc"
       "xen-gntdev"
@@ -240,9 +243,8 @@ in
       autoLogin.enable = false;
     };
     systemd.services.display-manager = {
-      # Hybrid starts after dom0 connects; the physical lab also stays manual
-      # so diagnostics/password seeding happen before taking over the panel.
-      wantedBy = lib.mkForce [ ];
+      # Hybrid always waits for its dom0 relay; physical boot is opt-in.
+      wantedBy = lib.mkForce (lib.optional (!hybrid && cfg.physicalDesktopOnBoot) "graphical.target");
       requires = lib.optional hybrid "qubes-gui-agent.service";
       after = [ "airlock-qubes-rw-init.service" ] ++ lib.optional hybrid "qubes-gui-agent.service";
     };

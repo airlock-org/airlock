@@ -319,6 +319,7 @@
           modules = [ usbSysGuiLoginModule ({ pkgs, ... }: {
             airlock.sysGuiGuest = {
               displayMode = "physical-amd-lab";
+              physicalDesktopOnBoot = true;
               personalLaunchers.enable = false;
             };
             hardware.enableRedistributableFirmware = true;

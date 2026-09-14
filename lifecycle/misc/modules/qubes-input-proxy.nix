@@ -107,7 +107,8 @@ in
       # attempting to create a child entry under that immutable directory.
       virtualisation.qubes.packages = [ senderPolicyPackage ];
 
-      # Manual activation is intentional during the physical-display lab.
+      # The module supplies no boot activation; the physical-display profile
+      # can start this target after its validated guest startup succeeds.
       # Starting this target grabs only the selected inputs. Stopping it, or
       # losing the qrexec connection, releases them back to dom0. Nothing
       # autostarts the GUI VM or retries a GPU assignment.

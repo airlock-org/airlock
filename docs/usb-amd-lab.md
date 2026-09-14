@@ -5,7 +5,9 @@ login; **not general hardware or reset certification**. The default USB
 configuration still runs the hybrid XFCE desktop with AMD driven by dom0.
 The lab is a separate boot specialisation, not a runtime toggle.
 Its current milestone is reproducible boot-time GPU assignment and automatic
-firmware delivery, checked over SSH. Desktop/input startup remains manual.
+firmware delivery, checked over SSH. The lab now also enables automatic
+XFCE/LightDM login and selected input forwarding; fresh-boot validation of
+this combined workflow is pending.
 
 The current evidence, investigation gates and completion criteria are in
 [the AMD GPU investigation plan](amd-gpu-investigation.md). Generation 2 has
@@ -32,7 +34,7 @@ entries. Verify the generated entries before the first hardware experiment:
 | --- | --- | --- |
 | Default | Existing hybrid XFCE | sys-gui started by the desktop relay after setup |
 | `usb-text-recovery` | dom0 text console, AMD not hidden | No setup or guest autostart |
-| `usb-amd-lab` | May be blank; AMD reserved for Xen pciback | Validated persistent assignment, then one ordered sys-gui start |
+| `usb-amd-lab` | sys-gui physical XFCE login after startup | Validated assignment, one sys-gui start, then input forwarding |
 
 Both manual entries retain direct dom0 networking, SSH and Tailscale. The lab
 reserves **only** `0000:04:00.0`, not audio, USB, PSP, ACP or storage functions.
@@ -49,6 +51,18 @@ Do not activate a specialisation with `switch-to-configuration switch`: GPU
 ownership is established during boot. The upstream systemd-boot/Xen builder
 keeps the normal generation as the default; do not manually make the lab entry
 the saved default.
+
+After a fresh flash, configure dom0 networking and Tailscale from
+`usb-text-recovery` with Xen, then reboot into the lab **without reflashing**.
+The physical desktop is in sys-gui, not dom0: its terminal cannot configure
+dom0's network or enroll dom0 in Tailscale. Guest login is `user` / `password`.
+The screen can remain blank during bootstrap; a continuing blank screen needs
+SSH/log inspection, not an assumption that the computer is frozen.
+
+Implementation checks (2026-09-14): 32 focused pytest checks passed, one optional
+SSH check skipped. The generated guest display-manager and dom0 startup units
+built successfully. Evidence is under `.airlock-logs/amd-lab-desktop/`.
+This does not yet establish that the combined workflow works on a fresh boot.
 
 ## Historical reservation experiment
 
@@ -96,17 +110,18 @@ images assign and start the reviewed GPU on lab boot; use the
   Do not use a NixOS kernel's unrelated modules with the shared Qubes kernel.
 - The lab guest is HVM, has no emulated video or outer GUI agent, and uses
   physical Xorg with Qubes' shared-memory wrapper. The physical lab now boots
-  to `multi-user.target` so LightDM remains manual; the already-built guest
-  used the equivalent kernel argument for the successful VBIOS experiment.
+  to `graphical.target` via `airlock.sysGuiGuest.physicalDesktopOnBoot = true`.
+  Setting that option false retains text-only guest diagnostics.
   Both USB guest
   variants share declarative `user` / `password` credentials; no runtime
-  password seeding is required. After safe assignment/start, explicitly start
-  the guest's display-manager. Dom0 credentials still come from personalization.
+  password seeding is required. LightDM starts automatically inside the guest.
+  Dom0 credentials still come from personalization.
 - **Upstream Qubes input proxy** is now packaged and wired, including dom0's
   selected PS/2 and I2C inputs. The shared module is opt-in; the machine
-  hardware file supplies stable paths. Activate it manually after the guest
-  is ready, following [the input runbook](sys-gui-input.md). It was exercised
-  live on the existing guest; the updated full image has not been rebuilt.
+  hardware file supplies stable paths. The lab starts its target from the
+  successful VM startup service's `ExecStartPost`, never before `qvm-start`
+  returns. Individual senders remain non-restarting and release their grabs
+  when the connection ends; see [the input runbook](sys-gui-input.md).
 - Validate display initialization, input, logout and cold-boot recovery.
   Guest stop/start/reset cycles are a separate risk review, not an automatic loop.
 

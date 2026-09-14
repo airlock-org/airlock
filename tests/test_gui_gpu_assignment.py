@@ -240,6 +240,15 @@ def test_nix_selection_drives_reservation_assignment_and_start():
         base = f.nixosConfigurations.usb-dev;
         normal = base.config;
         lab = normal.specialisation.usb-amd-lab.configuration;
+        guestBase = f.nixosConfigurations.airlock-domain-sys-gui-usb-amd-lab;
+        guestReport = c: {{
+          defaultUnit = c.systemd.defaultUnit;
+          displayWantedBy = c.systemd.services.display-manager.wantedBy;
+          session = c.services.displayManager.defaultSession;
+          receiver = c.airlock.inputProxy.receiver.enable;
+          guiAgent = c.systemd.services.qubes-gui-agent.enable;
+          failed = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
+        }};
         alternate = (base.extendModules {{ modules = [ ({{ lib, ... }}: {{
           specialisation.usb-amd-lab.configuration.airlock.guiGpu.device = lib.mkForce {{
             bdf = "0000:09:03.0"; port = "00_03.1-00_00.0";
@@ -260,6 +269,15 @@ def test_nix_selection_drives_reservation_assignment_and_start():
         service = {{ inherit (lab.systemd.services.airlock-start-gui-gpu) requires wants after serviceConfig; }};
         noBypass = !lab.systemd.services."qubes-vm@sys-gui".enable;
         normalGuard = builtins.fromJSON normal.environment.etc."airlock/gui-gpu.json".text;
+        guest = guestReport guestBase.config;
+        diagnosticGuest = guestReport (guestBase.extendModules {{ modules = [
+          ({{ lib, ... }}: {{ airlock.sysGuiGuest.physicalDesktopOnBoot = lib.mkForce false; }})
+        ]; }}).config;
+        hybridGuest = guestReport f.nixosConfigurations.airlock-domain-sys-gui-usb.config;
+        normalSender = normal.airlock.inputProxy.sender.enable;
+        recoverySender = normal.specialisation.usb-text-recovery.configuration.airlock.inputProxy.sender.enable;
+        inputTarget = lab.systemd.targets.airlock-gui-input.wantedBy;
+        inputServices = lab.systemd.targets.airlock-gui-input.wants;
       }}
     """
     result = subprocess.run(
@@ -308,6 +326,25 @@ def test_nix_selection_drives_reservation_assignment_and_start():
     )
     assert "--phase start" in service["serviceConfig"]["ExecStartPre"][1]
     assert report["noBypass"] is True
+    assert service["serviceConfig"]["ExecStartPost"].endswith(
+        "/bin/systemctl start airlock-gui-input.target"
+    )
+    assert report["inputTarget"] == []  # Only pulled in after successful VM start.
+    assert report["inputServices"]
+    assert report["normalSender"] is False
+    assert report["recoverySender"] is False
+    guest = report["guest"]
+    assert guest["failed"] == []
+    assert guest["defaultUnit"] == "graphical.target"
+    assert guest["displayWantedBy"] == ["graphical.target"]
+    assert guest["session"] == "xfce"
+    assert guest["receiver"] is True
+    assert guest["guiAgent"] is False
+    assert report["diagnosticGuest"]["defaultUnit"] == "multi-user.target"
+    assert report["diagnosticGuest"]["displayWantedBy"] == []
+    assert report["diagnosticGuest"]["failed"] == []
+    assert report["hybridGuest"]["displayWantedBy"] == []
+    assert report["hybridGuest"]["receiver"] is False
 
 
 def test_bootstrap_guard_precedes_mutation():

@@ -105,9 +105,10 @@ Confirm the active libvirt hostdev, generated VFCT manifest and guest
 reboot should retain the same assignment and succeed without manual changes.
 Do not use repeated guest stop/start loops as a substitute for that check.
 
-The guest display manager and physical input forwarding remain manual. A blank
-panel by itself does not fail this assignment milestone. Desktop startup and
-Hyprland remain subsequent milestones.
+The USB AMD lab now opts into the guest's physical XFCE/LightDM boot and starts
+the input target only after successful `qvm-start`. A blank panel by itself
+does not identify which stage failed; check the guest display manager and each
+input sender separately. Hyprland remains a subsequent milestone.
 
 Implementation verification uses pytest fixtures with a different PCI address,
 port and vendor, plus Nix evaluation of normal, laptop and alternate selections.
