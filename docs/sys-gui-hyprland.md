@@ -5,6 +5,15 @@ The preceding XFCE milestone verified AMD hardware-accelerated OpenGL in
 sys-gui. That is a prerequisite, not evidence that Wayland or cross-VM windows
 work. See [the GPU investigation](amd-gpu-investigation.md).
 
+## Repository layout
+
+`lifecycle/misc/modules/sys-gui/base.nix` contains the shared Qubes sys-gui
+role. `desktop/selector.nix` chooses the desktop implementation; it currently
+supports `xfce` and `hyprland`. The Hyprland/DMS implementation, its AMD-lab
+HiDPI profile, and its DMS package customization live together under
+`sys-gui/desktop/hyprland/`. GNOME will be added as a sibling implementation,
+not by replacing this one.
+
 ## Build and boot
 
 ```console
@@ -59,7 +68,7 @@ XFCE does not start it.
 
 ## Customization and boundaries
 
-GPU/input configuration is separate from `sys-gui-hyprland.nix`. That module
+GPU/input configuration is separate from `sys-gui/desktop/hyprland/default.nix`. That module
 has a replaceable `shellCommand`, so another Quickshell layout can replace DMS
 without changing GPU passthrough. DMS-specific launcher bindings and defaults
 would then also need adapting; arbitrary layouts do not inherit DMS services.
@@ -75,8 +84,9 @@ from the control-center defaults. These UI defaults are not a security policy;
 other settings can expose local guest controls. Host suspend/reboot, audio,
 network integration and lock-screen behavior are not acceptance claims here.
 
-The reusable `sys-gui-hyprland` module is hardware-neutral. The AMD lab imports
-its separate `sys-gui-hyprland-hidpi` appearance profile, which supplies the
+The reusable `sys-gui/desktop` selector chooses a desktop implementation. Its
+Hyprland implementation is hardware-neutral. The AMD lab imports its separate
+`sys-gui/desktop/hyprland/hidpi-amd-lab.nix` appearance profile, which supplies the
 larger terminal, DMS fonts/icons and a small, version-pinned Quickshell patch to
 DMS's Spotlight launcher. The patch enlarges its search field, result rows,
 icons and modal width; it is deliberately not a change to Hyprland's display

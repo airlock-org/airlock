@@ -322,13 +322,12 @@
           services = { guivm = true; "guivm-gui-agent" = false; };
           devices.pci = [ ];
           modules = [ usbSysGuiLoginModule ] ++ lib.optionals withHyprland [
-            ./lifecycle/misc/modules/sys-gui-hyprland.nix
-            ./lifecycle/misc/modules/sys-gui-hyprland-hidpi.nix
+            ./lifecycle/misc/modules/sys-gui/desktop/selector.nix
+            ./lifecycle/misc/modules/sys-gui/desktop/hyprland/hidpi-amd-lab.nix
             {
-              services.displayManager.defaultSession = lib.mkForce "airlock-hyprland";
+              airlock.sysGuiDesktop.session = "hyprland";
               airlock.sysGuiHyprland = {
-                enable = true;
-                shellPackage = import ./lifecycle/misc/pkgs/dms-shell-hidpi.nix {
+                shellPackage = import ./lifecycle/misc/modules/sys-gui/desktop/hyprland/dms-shell-hidpi.nix {
                   package = inputs.dank-material-shell.packages.${system}.default;
                 };
               };

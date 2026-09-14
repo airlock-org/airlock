@@ -164,7 +164,7 @@ let
   '');
 in
 {
-  imports = [ ./qubes-input-proxy.nix ./dev-dom0-terminal.nix ];
+  imports = [ ../qubes-input-proxy.nix ../dev-dom0-terminal.nix ];
   options.airlock.sysGuiGuest.enable = lib.mkEnableOption "the Airlock hybrid sys-gui role";
   options.airlock.sysGuiGuest.displayMode = lib.mkOption {
     type = lib.types.enum [ "hybrid" "physical-amd-lab" ];

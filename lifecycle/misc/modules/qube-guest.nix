@@ -2581,7 +2581,7 @@ let
 in
 {
   imports = [
-    ./sys-gui-guest.nix
+    ./sys-gui/base.nix
   ];
 
   options.airlock.qubeGuest = {
