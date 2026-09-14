@@ -1,0 +1,113 @@
+From 0f86eebe19c932021cbc50daf94fb2f5bca3ea59 Mon Sep 17 00:00:00 2001
+From: Airlock <noreply@airlock.local>
+Date: Mon, 14 Sep 2026 11:15:01 +0100
+Subject: [PATCH] libxl: honor explicit guest PCI slots for firmware identity
+
+Pass a bus-zero, function-zero guest PCI slot to libxl vdevfn and preserve it in xl configuration roundtrips. Reject addresses the backend cannot represent. This permits firmware tables to refer to a known guest PCI address without guessing device-model allocation. Unaddressed devices retain existing behavior.
+---
+ src/libxl/libxl_conf.c | 14 ++++++++++++++
+ src/libxl/xen_common.c | 31 ++++++++++++++++++++++++++++++-
+ 2 files changed, 44 insertions(+), 1 deletion(-)
+
+diff --git a/src/libxl/libxl_conf.c b/src/libxl/libxl_conf.c
+index ccd4402..9b42676 100644
+--- a/src/libxl/libxl_conf.c
++++ b/src/libxl/libxl_conf.c
+@@ -2337,6 +2337,20 @@ libxlMakePCI(virDomainHostdevDef *hostdev, libxl_device_pci *pcidev)
+     pcidev->bus = pcisrc->addr.bus;
+     pcidev->dev = pcisrc->addr.slot;
+     pcidev->func = pcisrc->addr.function;
++    if (hostdev->info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
++        const virPCIDeviceAddress *guest = &hostdev->info->addr.pci;
++
++        /* libxl's explicit vslot addresses function zero on guest bus zero.
++         * Reject unsupported addresses instead of silently auto-placing them.
++         */
++        if (guest->domain || guest->bus || guest->function ||
++            guest->slot == 0 || guest->slot > 31) {
++            virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
++                           _("libxl PCI guest address requires domain 0, bus 0, function 0 and slot 1-31"));
++            return -1;
++        }
++        pcidev->vdevfn = guest->slot << 3;
++    }
+     pcidev->permissive = hostdev->writeFiltering == VIR_TRISTATE_BOOL_NO;
+     pcidev->power_mgmt = hostdev->powerManagementFiltering == VIR_TRISTATE_BOOL_NO;
+     /* there is no LIBXL_HAVE_xxx for this field... */
+diff --git a/src/libxl/xen_common.c b/src/libxl/xen_common.c
+index 28dde90..b1f5422 100644
+--- a/src/libxl/xen_common.c
++++ b/src/libxl/xen_common.c
+@@ -381,6 +381,8 @@ xenParsePCI(char *entry)
+     int bus;
+     int slot;
+     int func;
++    int guestSlot = 0;
++    char *guestStr;
+     virTristateBool filtered = VIR_TRISTATE_BOOL_ABSENT;
+     virTristateBool powerManagementFiltering = VIR_TRISTATE_BOOL_ABSENT;
+ 
+@@ -418,6 +420,15 @@ xenParsePCI(char *entry)
+         *nextstr = '\0';
+         nextstr++;
+     }
++    if ((guestStr = strchr(str, '@'))) {
++        *guestStr++ = '\0';
++        if (virStrToLong_i(guestStr, NULL, 16, &guestSlot) < 0 ||
++            guestSlot < 1 || guestSlot > 31) {
++            virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
++                           _("libxl PCI guest slot must be between 1 and 31"));
++            return NULL;
++        }
++    }
+     if (virStrToLong_i(str, NULL, 16, &func) < 0)
+         return NULL;
+ 
+@@ -465,6 +476,10 @@ xenParsePCI(char *entry)
+     hostdev->source.subsys.u.pci.addr.bus = bus;
+     hostdev->source.subsys.u.pci.addr.slot = slot;
+     hostdev->source.subsys.u.pci.addr.function = func;
++    if (guestSlot) {
++        hostdev->info->type = VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI;
++        hostdev->info->addr.pci.slot = guestSlot;
++    }
+ 
+     return hostdev;
+ }
+@@ -1772,6 +1787,19 @@ xenFormatPCI(virConf *conf, virDomainDef *def)
+             char *buf;
+             const char *permissive_str = NULL;
+             const char *power_mgmt_str = NULL;
++            g_autofree char *guest_slot_str = NULL;
++
++            if (def->hostdevs[i]->info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
++                const virPCIDeviceAddress *guest = &def->hostdevs[i]->info->addr.pci;
++
++                if (guest->domain || guest->bus || guest->function ||
++                    guest->slot == 0 || guest->slot > 31) {
++                    virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
++                                   _("libxl PCI guest address requires domain 0, bus 0, function 0 and slot 1-31"));
++                    return -1;
++                }
++                guest_slot_str = g_strdup_printf("@%02x", guest->slot);
++            }
+ 
+             switch (def->hostdevs[i]->writeFiltering) {
+                 case VIR_TRISTATE_BOOL_YES:
+@@ -1799,11 +1827,12 @@ xenFormatPCI(virConf *conf, virDomainDef *def)
+                     break;
+             }
+ 
+-            buf = g_strdup_printf("%04x:%02x:%02x.%x%s%s",
++            buf = g_strdup_printf("%04x:%02x:%02x.%x%s%s%s",
+                                   def->hostdevs[i]->source.subsys.u.pci.addr.domain,
+                                   def->hostdevs[i]->source.subsys.u.pci.addr.bus,
+                                   def->hostdevs[i]->source.subsys.u.pci.addr.slot,
+                                   def->hostdevs[i]->source.subsys.u.pci.addr.function,
++                                  guest_slot_str ? guest_slot_str : "",
+                                   permissive_str,
+                                   power_mgmt_str);
+ 
+-- 
+2.54.0
+

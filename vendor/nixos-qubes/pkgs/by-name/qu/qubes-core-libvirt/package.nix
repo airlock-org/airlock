@@ -42,6 +42,7 @@ assert assertMsg (libvirt.version == "10.5.0")
       cp ${./series.conf} series-qubes.conf
       ${patches}/apply-patches series-qubes.conf ${patches}
       patch -p1 --input ${./0019-libxl-enable-hvm-pirq-for-pci-passthrough.patch}
+      patch -p1 --input ${./0020-libxl-honor-explicit-guest-pci-slot.patch}
     ''
     + optionalString (oldAttrs ? postPatch) oldAttrs.postPatch;
 
