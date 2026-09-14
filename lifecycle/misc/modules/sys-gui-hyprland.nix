@@ -28,6 +28,9 @@ let
       # exposed by DMS and remain editable in the user's settings file.
       fontScale = 1.5;
       dankBarFontScale = 1.5;
+      # DMS keeps its bar-icon controls separate from its text scale.
+      dankBarIconScale = 1.25;
+      dankBarMaximizeWidgetIcons = true;
       controlCenterWidgets = [
         {
           id = "darkMode";
