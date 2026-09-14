@@ -129,6 +129,10 @@ test-quick: ensure-generated-dirs
 
 .PHONY: usb-dev-image usb-dev-write usb-dev-provision usb-dev-help
 
+AMD_VFCT_FILE ?= $(CURDIR)/.airlock-logs/amd-vbios/prepared/guest-vfct.bin
+USB_DEV_PROVISION = sudo python3 lifecycle/image/tools/usb-dev.py provision-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --repo "$(CURDIR)" --public-key "$(HOME)/.ssh/id_ed25519.pub" --auth-file "$(HOME)/.codex/auth.json" --insecure-dev-password --insecure-plain-codex-auth
+USB_DEV_AMD_VFCT_ARG = $(if $(wildcard $(AMD_VFCT_FILE)),--amd-vfct "$(AMD_VFCT_FILE)")
+
 .PHONY: usb-dom0-console-image usb-dom0-console-write
 
 usb-dom0-console-image: ensure-generated-dirs
@@ -149,7 +153,7 @@ usb-dev-provision:
 	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-provision USB_SERIAL=25110814640207" >&2; exit 2)
 	@test -f "$(HOME)/.ssh/id_ed25519.pub" || (echo "Missing $(HOME)/.ssh/id_ed25519.pub" >&2; exit 2)
 	@test -f "$(HOME)/.codex/auth.json" || (echo "Missing $(HOME)/.codex/auth.json" >&2; exit 2)
-	sudo python3 lifecycle/image/tools/usb-dev.py provision-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --repo "$(CURDIR)" --public-key "$(HOME)/.ssh/id_ed25519.pub" --auth-file "$(HOME)/.codex/auth.json" --insecure-dev-password --insecure-plain-codex-auth
+	$(USB_DEV_PROVISION) $(USB_DEV_AMD_VFCT_ARG)
 
 usb-dev-help:
 	python3 lifecycle/image/tools/usb-dev.py --help

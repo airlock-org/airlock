@@ -102,6 +102,11 @@ feature, restore kernelopts, stop the guest if the attempt failed, and clear
 the one-shot recovery selection only after cleanup is verified. Keep logs and
 firmware artifacts for inspection. No default boot-order change is required.
 
+For a fresh ThinkPad lab USB, the normal `make usb-dev-provision USB_SERIAL=…`
+installs the validated local filtered VFCT during offline personalization when
+the prepared artifact exists. This replaces the former post-boot `scp` step.
+It does not put laptop firmware into the generic image or Git.
+
 ## Runtime result — successful driver initialization
 
 On 2026-09-13 the host was rebooted once into Generation 2 `usb-amd-lab`.

@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -418,6 +419,7 @@ def provision_latest_image(args):
                 repo=args.repo,
                 public_key=args.public_key,
                 auth_file=args.auth_file,
+                amd_vfct=args.amd_vfct,
                 insecure_dev_password=args.insecure_dev_password,
                 insecure_plain_codex_auth=args.insecure_plain_codex_auth,
             )
@@ -486,17 +488,47 @@ def read_auth_cache(value):
     return data
 
 
+def read_amd_vfct(value):
+    """Read a machine-local, structurally valid ACPI VFCT table."""
+    source = Path(value).resolve(strict=True)
+    require(
+        stat.S_ISREG(source.stat().st_mode), "AMD VFCT source must be a regular file."
+    )
+    data = source.read_bytes()
+    require(len(data) >= 36, "AMD VFCT source is too short.")
+    require(data[:4] == b"VFCT", "AMD VFCT source has the wrong ACPI signature.")
+    require(
+        struct.unpack_from("<I", data, 4)[0] == len(data),
+        "AMD VFCT source length does not match its ACPI header.",
+    )
+    require(sum(data) % 256 == 0, "AMD VFCT source has an invalid ACPI checksum.")
+    return data
+
+
+def readonly_root_file(path, data):
+    """Create a root-owned firmware input without following symlinks."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(data)
+        os.fchown(stream.fileno(), 0, 0)
+        os.fchmod(stream.fileno(), 0o444)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
 def personalize(args):
     root = checked_root(args.root)
     require(root != Path("/"), "Personalize offline, before the first USB boot.")
     password_file = beneath(root, "var/lib/airlock/usb/local-password.hash")
     repo_target = beneath(root, "home/airlock/dev/nixome")
     key_target = beneath(root, "home/airlock/.ssh/authorized_keys")
+    vfct_target = beneath(root, "var/lib/airlock/amd-lab/sys-gui.vfct")
     require(
-        not any(p.exists() for p in [password_file, repo_target, key_target]),
+        not any(p.exists() for p in [password_file, repo_target, key_target, vfct_target]),
         "Already personalized (or interrupted); refusing to overwrite data.",
     )
     auth_data = read_auth_cache(args.auth_file) if args.auth_file else None
+    vfct_data = read_amd_vfct(args.amd_vfct) if args.amd_vfct else None
     require(
         not args.insecure_plain_codex_auth or auth_data is not None,
         "--insecure-plain-codex-auth requires --auth-file.",
@@ -554,6 +586,9 @@ def personalize(args):
     run("git", "-C", str(repo_target), "remote", "remove", "origin")
     private_file(key_target, key if key.endswith(b"\n") else key + b"\n", UID, GID)
     private_file(password_file, password_hash)
+    if vfct_data is not None:
+        vfct_target.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+        readonly_root_file(vfct_target, vfct_data)
     for current, directories, files in os.walk(
         root / "home/airlock", followlinks=False
     ):
@@ -593,6 +628,11 @@ def personalize(args):
     else:
         print(
             f"Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}). No credentials copied."
+        )
+    if vfct_data is not None:
+        print(
+            "Installed the machine-local AMD VFCT at /var/lib/airlock/amd-lab/sys-gui.vfct.",
+            file=sys.stderr,
         )
 
 
@@ -739,6 +779,10 @@ def main():
     )
     provisioner.add_argument("--auth-file", help="Optional existing Codex auth.json")
     provisioner.add_argument(
+        "--amd-vfct",
+        help="Optional validated, machine-local AMD VFCT to install before first boot.",
+    )
+    provisioner.add_argument(
         "--insecure-dev-password",
         action="store_true",
         help="Set the literal development password 'password' without prompting.",
@@ -761,6 +805,10 @@ def main():
     setup.add_argument(
         "--auth-file",
         help="Optional existing Codex auth.json; imports it into a new encrypted vault.",
+    )
+    setup.add_argument(
+        "--amd-vfct",
+        help="Optional validated, machine-local AMD VFCT to install before first boot.",
     )
     setup.add_argument(
         "--insecure-dev-password",

@@ -39,6 +39,15 @@ Codex auth cache, syncs it, then unmounts it again:
 make usb-dev-provision USB_SERIAL=25110814640207
 ```
 
+When `.airlock-logs/amd-vbios/prepared/guest-vfct.bin` exists, the same normal
+provisioning command installs it at
+`/var/lib/airlock/amd-lab/sys-gui.vfct` before the first boot. Override
+`AMD_VFCT_FILE=/absolute/path/to/guest-vfct.bin` for another machine-local
+table. The tool accepts only a regular file with a valid VFCT ACPI signature,
+length and checksum, writes it root-owned/read-only, and refuses to overwrite a
+prior personalization. A machine without this local artifact provisions the
+unchanged generic USB.
+
 This development shortcut deliberately selects the literal local password
 `password` and plaintext Codex auth; it is only for a physically controlled
 USB. It requires exactly one attached whole-disk USB with that serial, **erases
