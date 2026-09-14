@@ -14,6 +14,14 @@ let
     tablet = "qubes.InputTablet";
   };
   unitName = name: "airlock-gui-input-${name}";
+  senderPolicyPackage = pkgs.runCommand "airlock-gui-input-policy" { } ''
+    install -d -m 0755 "$out/etc/qubes/policy.d"
+    cat > "$out/etc/qubes/policy.d/40-airlock-gui-input.policy" <<'EOF'
+    ${lib.concatMapStringsSep "\n" (service: "${service} * @anyvm ${cfg.sender.target} deny") (
+      builtins.attrValues services
+    )}
+    EOF
+  '';
 in
 {
   options.airlock.inputProxy = {
@@ -94,11 +102,10 @@ in
       # Dom0's upstream qrexec-client administrative path does not consult
       # policy. Deny VM-originated input calls separately; the guest also
       # checks QREXEC_REMOTE_DOMAIN before opening uinput.
-      environment.etc."qubes/policy.d/40-airlock-gui-input.policy".text =
-        lib.concatMapStringsSep "\n" (service: "${service} * @anyvm ${cfg.sender.target} deny") (
-          builtins.attrValues services
-        )
-        + "\n";
+      # The Qubes module owns /etc/qubes/policy.d as one read-only joined
+      # directory. Supply this policy through its package list rather than
+      # attempting to create a child entry under that immutable directory.
+      virtualisation.qubes.packages = [ senderPolicyPackage ];
 
       # Manual activation is intentional during the physical-display lab.
       # Starting this target grabs only the selected inputs. Stopping it, or
