@@ -51,9 +51,9 @@ let
     })
     hl.on("hyprland.start", function ()
       hl.exec_cmd("${shellStart}")
-      hl.exec_cmd("${pkgs.foot}/bin/foot -f 'monospace:size=15'")
+      hl.exec_cmd("${pkgs.foot}/bin/foot -f 'monospace:size=18'")
     end)
-    hl.bind("SUPER + Return", hl.dsp.exec_cmd("${pkgs.foot}/bin/foot -f 'monospace:size=15'"))
+    hl.bind("SUPER + Return", hl.dsp.exec_cmd("${pkgs.foot}/bin/foot -f 'monospace:size=18'"))
     hl.bind("SUPER + D", hl.dsp.exec_cmd("${cfg.shellPackage}/bin/dms ipc call spotlight toggle"))
     hl.bind("SUPER + SHIFT + D", hl.dsp.exec_cmd("airlock-dom0-terminal"))
     hl.bind("SUPER + SHIFT + E", hl.dsp.exit())
@@ -131,7 +131,7 @@ in
     programs.hyprland.xwayland.enable = true;
     programs.foot = {
       enable = true;
-      settings.main.font = "monospace:size=15";
+      settings.main.font = "monospace:size=18";
     };
     environment.systemPackages = [
       cfg.shellPackage
