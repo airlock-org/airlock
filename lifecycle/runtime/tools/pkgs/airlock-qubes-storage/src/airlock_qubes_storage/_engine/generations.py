@@ -1,5 +1,4 @@
 import os
-import uuid
 
 
 from .core import (
@@ -19,6 +18,7 @@ from .core import (
     read_store_paths,
     run_verify,
     safe_domain_name,
+    transaction_id,
     utc_now,
 )
 from .objects import admit_object
@@ -49,10 +49,10 @@ def admit_generation(args):
     domain_dir = root / "domains" / domain
     generations_dir = domain_dir / "generations"
     generations_dir.mkdir(parents=True, exist_ok=True)
-    txid = uuid.uuid4().hex
-    tx_path = root / "transactions" / f"{txid}.json"
     previous = current_generation(root, domain)
     generation = next_generation(domain_dir)
+    txid = transaction_id(f"{domain}:{generation}:{args.system}")
+    tx_path = root / "transactions" / f"{txid}.json"
     generation_dir = generations_dir / str(generation)
     generation_dir.mkdir(parents=True, exist_ok=False)
 

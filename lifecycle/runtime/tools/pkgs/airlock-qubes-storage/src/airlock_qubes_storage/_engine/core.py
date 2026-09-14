@@ -7,6 +7,8 @@ import stat
 import subprocess
 import time
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 SCHEMA_POOL = "airlock.closure-store.v1"
@@ -38,7 +40,33 @@ class EngineError(RuntimeError):
     pass
 
 
+_image_build = ContextVar("airlock_seed_image_build", default=False)
+
+
+@contextmanager
+def reproducible_image_build():
+    """Only fresh seed construction opts in; never change runtime admission."""
+    token = _image_build.set(True)
+    try:
+        yield
+    finally:
+        _image_build.reset(token)
+
+
+def image_building():
+    return _image_build.get()
+
+
+def transaction_id(identity):
+    if image_building():
+        return uuid.uuid5(uuid.NAMESPACE_URL, "airlock-image-seed:" + identity).hex
+    return uuid.uuid4().hex
+
+
 def utc_now():
+    if image_building():
+        # Seed metadata records a reproducible epoch, not an actual boot time.
+        return "1970-01-01T00:00:01Z"
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 

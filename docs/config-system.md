@@ -247,6 +247,33 @@ descriptors containing hashes of the installed metadata and segment bytes.
 The disk builder places the pool directly at `/var/lib/airlock/closure-store`,
 outside the image's ordinary Nix store. It is not copied there on first boot.
 
+Seed builds must be reproducible across independent rebuilds of their two Nix
+outputs. Dom0 retains the small descriptors, but the build-time pool output
+can be garbage-collected and regenerated. The first implementation reused
+runtime admission's random transaction IDs, wall-clock timestamps and random
+EROFS filesystem UUIDs. A regenerated pool could therefore disagree with the
+still-cached descriptors even though both had the same Nix derivation identity.
+This caused the 2026-09-14 USB bootstrap integrity failure before GPU assignment.
+
+Fresh seed construction now uses an explicitly scoped deterministic build
+context: metadata timestamps use the epoch, transaction IDs derive from the
+domain/generation/system, and EROFS uses a fixed timestamp and closure-derived
+UUID. Runtime admissions retain real timestamps and random transaction IDs;
+no runtime integrity checks are relaxed. An image dependency also verifies
+the finalized pool against both variants' descriptors before image creation,
+hashing each shared file once. Its small result receipt retains neither the
+pool nor the guest source closure in dom0's runtime store. Reproducibility tests
+build the same seed twice and cross-check each pool with the other build's
+descriptors, modeling either output surviving collection.
+
+Fix verification on 2026-09-14: 13 focused prepared-store/storage/recovery
+checks passed (the optional full-OS closure accounting test was not run).
+The full USB seed passed finalized-output validation for both variants across
+2,741 files, and `nix build --rebuild` of the seed confirmed identical outputs.
+The original broken artifacts fail the new validator. Evidence is preserved
+under `.airlock-logs/prepared-store-reproducibility/`; a rebuilt/flashed USB
+boot remains the hardware acceptance check.
+
 The topology and prepared descriptors deliberately discard Nix references to
 guest source packages, using Nix's image-artifact reference-discard mechanism.
 Explicit dependencies retain the descriptors, guest root images and Qubes

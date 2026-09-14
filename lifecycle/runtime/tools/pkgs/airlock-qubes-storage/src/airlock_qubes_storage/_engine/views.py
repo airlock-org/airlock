@@ -115,6 +115,8 @@ def reconstruct_blob_view(blob_map, output_path):
 
 
 def create_erofs_tar_index_image(root, blob_map, metadata_path, closure_id, txid):
+    from .core import image_building
+
     mkfs_erofs = require_tool("mkfs.erofs", "AIRLOCK_MKFS_EROFS")
     root = Path(root)
     metadata_path = Path(metadata_path)
@@ -142,11 +144,17 @@ def create_erofs_tar_index_image(root, blob_map, metadata_path, closure_id, txid
         tmp_source = None
 
     try:
+        seed_options = (
+            ["-T", "1", "-U", str(uuid.UUID(closure_id[:32]))]
+            if image_building()
+            else []
+        )
         run_checked(
             [
                 mkfs_erofs,
                 "--quiet",
                 "--tar=i",
+                *seed_options,
                 str(metadata_path),
                 source_path,
             ]

@@ -66,6 +66,7 @@ VM_PREBUILD_ATTRS := \
 PYTHON_FILES := \
 	lifecycle/misc/tools/pkgs/airlock-gui-gpu-check/src/check.py \
 	tests/test_gui_gpu_assignment.py \
+	tests/test_prepared_store.py \
 	lifecycle/runtime/tools/pkgs/airlock-amd-vbios/src/airlock_amd_vbios/*.py \
 	lifecycle/image/tools/amd-vbios.py \
 	tests/test_amd_vbios.py \

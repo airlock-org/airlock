@@ -11,6 +11,7 @@ from .core import (
     hash_file,
     read_json,
     read_store_paths,
+    reproducible_image_build,
 )
 from .generations import admit_generation
 from .segments import seal_segment_locked, segment_ids
@@ -33,6 +34,7 @@ def relocate(value, old, new):
     return value
 
 
+@reproducible_image_build()
 def prepare_pool(root, descriptors, specs, runtime_root):
     """Only called in a build sandbox; outputs must be fresh directories."""
     from .cli import build_parser
@@ -146,6 +148,43 @@ def prepare_pool(root, descriptors, specs, runtime_root):
         )
 
 
+def verify_files(root, files, fingerprints=None):
+    """Check finalized seed bytes, both in the image build and on first boot."""
+    root = Path(root)
+    fingerprints = {} if fingerprints is None else fingerprints
+    for relative, expected in files.items():
+        path = root / relative
+        if Path(relative).is_absolute() or ".." in Path(relative).parts:
+            fail("prepared store checksum path escapes pool")
+        if not path.resolve().is_relative_to(root.resolve()):
+            fail("prepared store checksum symlink escapes pool")
+        if relative not in fingerprints:
+            fingerprints[relative] = {
+                "size": path.stat().st_size,
+                "sha256": hash_file(path),
+            }
+        if fingerprints[relative] != expected:
+            fail(f"prepared store integrity check failed: {relative}")
+
+
+def verify_outputs(root, descriptors):
+    """Read-only check of the actual, independently cacheable Nix outputs."""
+    fingerprints = {}
+    paths = sorted(Path(descriptors).glob("*/prepared.json"))
+    if not paths:
+        fail("prepared store has no descriptors")
+    for path in paths:
+        descriptor = read_json(path)
+        if descriptor.get("schema") != SCHEMA_PREPARED:
+            fail("unsupported prepared store descriptor")
+        relative = f"domains/{descriptor['domain']}/generations/{descriptor['generation']}/manifest.json"
+        files = descriptor["files"]
+        if relative not in files:
+            fail("prepared store manifest checksum missing")
+        verify_files(root, files, fingerprints)
+    return {"status": "passed", "variants": len(paths), "files": len(fingerprints)}
+
+
 def verify_prepared(args):
     """Verify the selected seed once before Qubes records its generation.
 
@@ -185,17 +224,7 @@ def verify_prepared(args):
         file=sys.stderr,
         flush=True,
     )
-    for relative, expected in files.items():
-        path = root / relative
-        if Path(relative).is_absolute() or ".." in Path(relative).parts:
-            fail("prepared store checksum path escapes pool")
-        if not path.resolve().is_relative_to(root.resolve()):
-            fail("prepared store checksum symlink escapes pool")
-        if (
-            path.stat().st_size != expected["size"]
-            or hash_file(path) != expected["sha256"]
-        ):
-            fail(f"prepared store integrity check failed: {relative}")
+    verify_files(root, files)
     manifest = read_json(generation_manifest_path(root, args.domain, generation))
     store = manifest.get("store", {})
     if not generation_is_committed(root, manifest):
@@ -220,6 +249,9 @@ def verify_prepared(args):
 
 
 if __name__ == "__main__":
-    import sys
+    import json
 
-    prepare_pool(sys.argv[1], sys.argv[2], read_json(sys.argv[3]), sys.argv[4])
+    if sys.argv[1] == "--check":
+        print(json.dumps(verify_outputs(sys.argv[2], sys.argv[3]), sort_keys=True))
+    else:
+        prepare_pool(sys.argv[1], sys.argv[2], read_json(sys.argv[3]), sys.argv[4])
