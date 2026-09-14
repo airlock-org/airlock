@@ -79,6 +79,7 @@ let
   '';
   launcher = pkgs.writeShellScriptBin "airlock-dom0-terminal" ''
     exec ${pkgs.xterm}/bin/xterm -hold -T 'dom0 terminal — DEVELOPMENT' \
+      -bg '#1e1e2e' -fg '#cdd6f4' -cr '#f5e0dc' \
       -geometry 100x30 -e ${client}
   '';
   desktop = pkgs.makeDesktopItem {
