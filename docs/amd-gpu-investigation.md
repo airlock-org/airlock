@@ -8,6 +8,10 @@ outside this investigation.
 
 ## Current milestone — 2026-09-14
 
+Follow-up: [Hyprland + DankMaterialShell](sys-gui-hyprland.md) is now configured
+as the `usb-amd-lab` desktop, pending build and hardware validation. The XFCE
+baseline described below remains available as `usb-amd-lab-xfce`.
+
 The rebuilt USB's **usb-amd-lab with Xen** now boots into a physical sys-gui
 desktop with hardware-accelerated AMD rendering. Boot ID:
 `f34306b1-b7f6-483a-bfc6-7ef8cf298e1c`. Running dom0 system:

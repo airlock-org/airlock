@@ -4,6 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixpkgs-libvirt_10_5.url = "github:NixOS/nixpkgs/e0464e47880a69896f0fb1810f00e0de469f770a";
+    dank-material-shell = {
+      url = "github:AvengeMedia/DankMaterialShell/v1.6.1";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
     nixos-qubes = {
       url = "path:./vendor/nixos-qubes";
@@ -297,11 +301,11 @@
           extraModules = [ usbSysGuiLoginModule ];
         };
 
-      mkUsbAmdSysGuiDomainEntry = system:
+      mkUsbAmdSysGuiDomainEntry = system: withHyprland:
         (mkAirlockQubeBuilders system).mkNixNativeDomain {
           name = "sys-gui";
           guestRole = "sys-gui";
-          configurationName = "airlock-domain-sys-gui-usb-amd-lab";
+          configurationName = "airlock-domain-sys-gui-usb-amd-lab${lib.optionalString (!withHyprland) "-xfce"}";
           kernelName = airlockQubesVmKernelName;
           label = "black";
           netvm = null;
@@ -317,7 +321,16 @@
           features = { "video-model" = "none"; "airlock-role" = "sys-gui"; };
           services = { guivm = true; "guivm-gui-agent" = false; };
           devices.pci = [ ];
-          modules = [ usbSysGuiLoginModule ({ pkgs, ... }: {
+          modules = [ usbSysGuiLoginModule ] ++ lib.optionals withHyprland [
+            ./lifecycle/misc/modules/sys-gui-hyprland.nix
+            {
+              services.displayManager.defaultSession = lib.mkForce "airlock-hyprland";
+              airlock.sysGuiHyprland = {
+                enable = true;
+                shellPackage = inputs.dank-material-shell.packages.${system}.default;
+              };
+            }
+          ] ++ [ ({ pkgs, ... }: {
             airlock.sysGuiGuest = {
               displayMode = "physical-amd-lab";
               physicalDesktopOnBoot = true;
@@ -335,7 +348,8 @@
       let
         entries = {
           hybrid = mkUsbSysGuiDomainEntry system;
-          amd-lab = mkUsbAmdSysGuiDomainEntry system;
+          amd-lab = mkUsbAmdSysGuiDomainEntry system true;
+          amd-lab-xfce = mkUsbAmdSysGuiDomainEntry system false;
         };
         preparedStore = import ./lifecycle/image/prepared-guest-store.nix {
           inherit lib entries;
@@ -377,6 +391,11 @@
               # reusable module and this machine's hardware inventory.
               airlock.qubes.domains.sys-gui = lib.mapAttrs (_: lib.mkForce)
                 (builtins.removeAttrs (preparedDomain "amd-lab") [ "devices" ]);
+            };
+            specialisation.usb-amd-lab-xfce.configuration = {
+              imports = [ ./lifecycle/image/profiles/usb-amd-lab.nix ];
+              airlock.qubes.domains.sys-gui = lib.mapAttrs (_: lib.mkForce)
+                (builtins.removeAttrs (preparedDomain "amd-lab-xfce") [ "devices" ]);
             };
           })
         ];
@@ -647,7 +666,9 @@
       nixosConfigurations.airlock-domain-sys-gui-usb =
         (mkUsbSysGuiDomainEntry "x86_64-linux").configuration;
       nixosConfigurations.airlock-domain-sys-gui-usb-amd-lab =
-        (mkUsbAmdSysGuiDomainEntry "x86_64-linux").configuration;
+        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" true).configuration;
+      nixosConfigurations.airlock-domain-sys-gui-usb-amd-lab-xfce =
+        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" false).configuration;
 
       nixosConfigurations.usb-dom0-console = lib.nixosSystem {
         system = "x86_64-linux";

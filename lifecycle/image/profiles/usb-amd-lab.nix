@@ -18,5 +18,6 @@
     domains.sys-gui = { };
   };
   # Nothing here relaxes reset checks or enables permissive PCI access.
-  # The prepared physical guest boots to its XFCE/LightDM login screen.
+  # The prepared physical guest boots to LightDM; the selected boot entry
+  # chooses Hyprland or the XFCE fallback guest configuration.
 }
