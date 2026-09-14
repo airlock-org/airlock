@@ -36,7 +36,7 @@ driver/firmware support. The physical AMD guest still needs compatible VFCT.
 ## Boot sequence and checks
 
 1. Nix generates `xen-pciback.hide=(BDF)`, loads xen-pciback early, blacklists
-   the selected dom0 driver, disables the host firmware framebuffer, and
+   the selected dom0 driver, disables the host firmware framebuffer by default, and
    requires Xen's IOMMU. It does not reserve sibling audio/USB/security devices.
 2. Before bootstrap mutates VM/storage/settings, `airlock-gui-gpu-check` checks
    the PCI function exists, vendor/device and display class match, pciback owns
@@ -53,6 +53,12 @@ driver/firmware support. The physical AMD guest still needs compatible VFCT.
    once. Qubes/VFCT/libvirt perform the normal guest start. Qubes autostart is
    disabled for this VM so it cannot race this ordering; no retry loop or
    automatic guest restart is configured.
+
+The USB AMD lab now opts into a temporary firmware console for bootstrap
+progress. Its startup precondition detaches that console and firmware driver
+before `qvm-start`; failed release blocks the guest. This sole-display-GPU
+experiment does not change the default reservation behavior for other users
+of the module. See [the framebuffer handoff](usb-amd-lab.md#temporary-bootstrap-framebuffer).
 
 Boot reservation is address-based and happens before userspace identity
 validation. If hardware changes, a stale BDF can reserve the wrong function;

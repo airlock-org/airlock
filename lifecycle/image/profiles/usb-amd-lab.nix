@@ -11,6 +11,7 @@
   airlock.guiGpu = {
     enable = true;
     startOnBoot = true;
+    bootFramebuffer.enable = true;
   };
   airlock.amdVbios = {
     enable = true;

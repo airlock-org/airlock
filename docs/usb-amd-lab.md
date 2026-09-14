@@ -34,11 +34,11 @@ entries. Verify the generated entries before the first hardware experiment:
 | --- | --- | --- |
 | Default | Existing hybrid XFCE | sys-gui started by the desktop relay after setup |
 | `usb-text-recovery` | dom0 text console, AMD not hidden | No setup or guest autostart |
-| `usb-amd-lab` | sys-gui physical XFCE login after startup | Validated assignment, one sys-gui start, then input forwarding |
+| `usb-amd-lab` | Temporary dom0 bootstrap text, then sys-gui physical XFCE login | Validated assignment, framebuffer release, one sys-gui start, then input forwarding |
 
 Both manual entries retain direct dom0 networking, SSH and Tailscale. The lab
 reserves **only** `0000:04:00.0`, not audio, USB, PSP, ACP or storage functions.
-It blacklists dom0 AMD drivers and disables the firmware framebuffer. The
+It blacklists dom0 AMD drivers but temporarily permits the firmware framebuffer. The
 lab is specific to the inspected ThinkPad; do not select it on other hardware.
 Airlock dom0 configures libvirt to shut guests down instead of saving their
 memory at host shutdown, and to ignore previously running guests at boot.
@@ -58,13 +58,55 @@ Tailscale. Follow [the USB setup commands and security caveat](usb-dev.md#first-
 The ordinary terminal remains a sys-gui shell. If desktop/input fails, use
 `usb-text-recovery` with Xen to establish networking, then reboot into the lab
 **without reflashing**.
-The screen can remain blank during bootstrap; a continuing blank screen needs
-SSH/log inspection, not an assumption that the computer is frozen.
+The lab now attempts to show bootstrap progress on dom0's firmware console.
+There is still a display gap after framebuffer release while the guest starts.
+If firmware-console initialization fails, it may remain blank throughout;
+use SSH/log inspection rather than assuming the computer is frozen.
 
 Implementation checks (2026-09-14): 32 focused pytest checks passed, one optional
 SSH check skipped. The generated guest display-manager and dom0 startup units
 built successfully. Evidence is under `.airlock-logs/amd-lab-desktop/`.
 This does not yet establish that the combined workflow works on a fresh boot.
+
+## Temporary bootstrap framebuffer
+
+The existing AMD lab entry enables `airlock.guiGpu.bootFramebuffer.enable`.
+This is an experimental boot-time exception to exclusive sys-gui display
+access, not permission to run AMD's driver or a desktop in dom0. Other profiles
+are unchanged. The generic option defaults off and can be disabled to restore
+the previous headless handoff.
+
+The entry allows Linux's EFI/simple firmware framebuffer, includes simpledrm
+in the initrd's available modules, requests immediate fbcon takeover and
+selects tty1 for the existing once-per-second bootstrap renderer. The tty1
+getty is disabled to avoid competing with that renderer; other gettys remain.
+Xen uses `vga=current` **without `keep`**, allowing its console to relinquish
+control to dom0. See [Xen's console options](https://xenbits.xen.org/docs/4.19-testing/misc/xen-command-line.html#vga).
+
+After bootstrap finishes and the GPU/assignment guard passes, the startup
+service runs `boot-framebuffer.py` before `qvm-start`. It requires the selected
+GPU to be the sole PCI display controller, accepts only EFI/simple platform
+framebuffers, prevents subsequent driver probing, detaches fbcon, then unbinds
+the firmware platform driver. It verifies that no framebuffer remains before
+allowing guest startup. This follows the kernel's
+[fbcon detachment ordering](https://docs.kernel.org/fb/fbcon.html#unloading-the-drivers).
+It does not write PCI unbind/reset interfaces or restore VGA modes. Ambiguous
+hardware or failed detachment stops startup with a journal error. Missing
+firmware display is reported but does not prevent an otherwise clean start.
+
+The result is printed to the journal and saved as
+`/var/log/airlock/boot-framebuffer-handoff.json`. The override lasts for this
+boot; there is no automatic reattachment on guest failure or shutdown. There
+is no physical GPU handoff test in an ordinary emulator: fixture tests and
+initrd/unit builds do not replace the next laptop boot test. Check for visible
+bootstrap progress, then successful GUI login/input, and a `released` result.
+
+Implementation checks (2026-09-14): 49 focused pytest checks passed, one
+optional SSH check skipped; the updated initrd and GPU startup unit built.
+Fixtures cover both firmware driver types, mismatched/multiple GPUs, unknown
+framebuffers, failed console/driver detach, repeated handoff and inhibition of
+late driver probing. Evidence is under `.airlock-logs/boot-framebuffer/`.
+Hardware display and handoff remain unverified for this change.
 
 ## Historical reservation experiment
 

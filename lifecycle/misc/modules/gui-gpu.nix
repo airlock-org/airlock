@@ -13,6 +13,7 @@ in
   options.airlock.guiGpu = {
     enable = lib.mkEnableOption "declarative physical sys-gui GPU ownership";
     startOnBoot = lib.mkEnableOption "one sys-gui start after validated bootstrap";
+    bootFramebuffer.enable = lib.mkEnableOption "experimental temporary firmware console, detached before the sole GPU guest starts";
     device = lib.mkOption {
       default = null;
       description = "Machine-local GPU selection; declaring it alone does not reserve hardware.";
@@ -55,6 +56,10 @@ in
         {
           assertions = [
             {
+              assertion = !cfg.bootFramebuffer.enable || cfg.startOnBoot;
+              message = "The boot framebuffer requires ordered GPU startup and handoff.";
+            }
+            {
               assertion = gpu != null;
               message = "airlock.guiGpu requires an explicit machine GPU selection.";
             }
@@ -84,10 +89,25 @@ in
           boot.initrd.kernelModules = [ "xen-pciback" ];
           boot.kernelParams = [
             "xen-pciback.hide=(${gpu.bdf})"
+          ]
+          ++ lib.optionals (!cfg.bootFramebuffer.enable) [
             "initcall_blacklist=sysfb_init"
             "video=efifb:off"
+          ]
+          ++ lib.optionals cfg.bootFramebuffer.enable [
+            "fbcon=nodefer"
           ];
-          virtualisation.xen.boot.params = [ "iommu=required" ];
+          # Do not use vga=...,keep: Xen must relinquish its early console.
+          virtualisation.xen.boot.params = [
+            "iommu=required"
+          ]
+          ++ lib.optional cfg.bootFramebuffer.enable "vga=current";
+          boot.initrd.availableKernelModules = lib.optionals cfg.bootFramebuffer.enable [ "simpledrm" ];
+          airlock.qubes.setupConfigOnBoot.statusDevice = lib.mkIf cfg.bootFramebuffer.enable "/dev/tty1";
+          systemd.services."getty@tty1".enable = lib.mkIf cfg.bootFramebuffer.enable false;
+          systemd.services.airlock-setup-config.serviceConfig.ExecStartPre =
+            lib.mkIf cfg.bootFramebuffer.enable
+              [ "-${pkgs.kbd}/bin/chvt 1" ];
           airlock.qubes.domains.sys-gui.devices.pci = [
             {
               backend = "dom0";
@@ -120,7 +140,8 @@ in
               ExecStartPre = [
                 "${pkgs.systemd}/bin/systemctl is-active --quiet qubesd.service"
                 "${checker}/bin/airlock-gui-gpu-check --phase start"
-              ];
+              ]
+              ++ lib.optional cfg.bootFramebuffer.enable "${pkgs.python3}/bin/python3 ${../tools/scripts/boot-framebuffer.py} --gpu ${gpu.bdf} --report /var/log/airlock/boot-framebuffer-handoff.json";
               ExecStart = "${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-start sys-gui";
               # Never loop over GPU resets, restart the VM on exit, or hide failure.
               Restart = "no";

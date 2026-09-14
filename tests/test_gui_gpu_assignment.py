@@ -269,6 +269,16 @@ def test_nix_selection_drives_reservation_assignment_and_start():
         service = {{ inherit (lab.systemd.services.airlock-start-gui-gpu) requires wants after serviceConfig; }};
         noBypass = !lab.systemd.services."qubes-vm@sys-gui".enable;
         normalGuard = builtins.fromJSON normal.environment.etc."airlock/gui-gpu.json".text;
+        framebuffer = {{
+          enabled = lab.airlock.guiGpu.bootFramebuffer.enable;
+          statusDevice = lab.airlock.qubes.setupConfigOnBoot.statusDevice;
+          getty = lab.systemd.services."getty@tty1".enable;
+          displayManager = lab.systemd.services.display-manager.enable;
+          prepare = lab.systemd.services.airlock-setup-config.serviceConfig.ExecStartPre;
+        }};
+        dark = report (base.extendModules {{ modules = [ ({{ lib, ... }}: {{
+          specialisation.usb-amd-lab.configuration.airlock.guiGpu.bootFramebuffer.enable = lib.mkForce false;
+        }}) ]; }}).config.specialisation.usb-amd-lab.configuration;
         guest = guestReport guestBase.config;
         diagnosticGuest = guestReport (guestBase.extendModules {{ modules = [
           ({{ lib, ... }}: {{ airlock.sysGuiGuest.physicalDesktopOnBoot = lib.mkForce false; }})
@@ -326,6 +336,24 @@ def test_nix_selection_drives_reservation_assignment_and_start():
     )
     assert "--phase start" in service["serviceConfig"]["ExecStartPre"][1]
     assert report["noBypass"] is True
+    assert report["framebuffer"]["enabled"] is True
+    assert report["framebuffer"]["statusDevice"] == "/dev/tty1"
+    assert report["framebuffer"]["getty"] is False
+    assert report["framebuffer"]["displayManager"] is False
+    assert report["framebuffer"]["prepare"][0].endswith("/bin/chvt 1")
+    assert "initcall_blacklist=sysfb_init" not in report["lab"]["params"]
+    assert "video=efifb:off" not in report["lab"]["params"]
+    assert "fbcon=nodefer" in report["lab"]["params"]
+    assert "vga=current" in report["lab"]["xenParams"]
+    assert not any(
+        p.startswith("vga=") and ",keep" in p for p in report["lab"]["xenParams"]
+    )
+    assert "initcall_blacklist=sysfb_init" in report["dark"]["params"]
+    assert "video=efifb:off" in report["dark"]["params"]
+    assert (
+        "boot-framebuffer.py --gpu 0000:04:00.0"
+        in service["serviceConfig"]["ExecStartPre"][2]
+    )
     assert service["serviceConfig"]["ExecStartPost"].endswith(
         "/bin/systemctl start airlock-gui-input.target"
     )
