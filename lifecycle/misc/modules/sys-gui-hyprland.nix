@@ -24,6 +24,10 @@ let
       powerMenuDefaultAction = "logout";
       customPowerActionLogout = logout;
       customPowerActionPowerOff = "${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run --pass-io --no-gui --service dom0 airlock.Dom0Poweroff";
+      # A comfortable default for the lab's HiDPI display. Both scales are
+      # exposed by DMS and remain editable in the user's settings file.
+      fontScale = 1.25;
+      dankBarFontScale = 1.25;
       controlCenterWidgets = [
         {
           id = "darkMode";
@@ -44,9 +48,9 @@ let
     })
     hl.on("hyprland.start", function ()
       hl.exec_cmd("${shellStart}")
-      hl.exec_cmd("${pkgs.foot}/bin/foot")
+      hl.exec_cmd("${pkgs.foot}/bin/foot -f 'monospace:size=15'")
     end)
-    hl.bind("SUPER + Return", hl.dsp.exec_cmd("${pkgs.foot}/bin/foot"))
+    hl.bind("SUPER + Return", hl.dsp.exec_cmd("${pkgs.foot}/bin/foot -f 'monospace:size=15'"))
     hl.bind("SUPER + D", hl.dsp.exec_cmd("${cfg.shellPackage}/bin/dms ipc call spotlight toggle"))
     hl.bind("SUPER + SHIFT + D", hl.dsp.exec_cmd("airlock-dom0-terminal"))
     hl.bind("SUPER + SHIFT + E", hl.dsp.exit())
@@ -122,6 +126,10 @@ in
     ];
     programs.hyprland.enable = true;
     programs.hyprland.xwayland.enable = true;
+    programs.foot = {
+      enable = true;
+      settings.main.font = "monospace:size=15";
+    };
     environment.systemPackages = [
       cfg.shellPackage
       pkgs.quickshell
