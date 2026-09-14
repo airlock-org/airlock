@@ -26,8 +26,8 @@ let
       customPowerActionPowerOff = "${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run --pass-io --no-gui --service dom0 airlock.Dom0Poweroff";
       # A comfortable default for the lab's HiDPI display. Both scales are
       # exposed by DMS and remain editable in the user's settings file.
-      fontScale = 1.25;
-      dankBarFontScale = 1.25;
+      fontScale = 1.5;
+      dankBarFontScale = 1.5;
       controlCenterWidgets = [
         {
           id = "darkMode";
