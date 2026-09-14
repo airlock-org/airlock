@@ -35,7 +35,8 @@ let
   );
   hyprConfig = pkgs.writeText "airlock-hyprland.lua" ''
     -- Hyprland 0.56 uses Lua. No laptop-specific outputs or PCI addresses.
-    hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })
+    -- Let each display's density determine scaling, including HiDPI panels.
+    hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
     hl.config({
       input = { kb_layout = "${config.services.xserver.xkb.layout}" },
       general = { gaps_in = 4, gaps_out = 8, border_size = 2 },
