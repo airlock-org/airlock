@@ -87,7 +87,14 @@ Qubes. Then reboot the default entry. Do not remove VM disks or `qubes.xml`.
 Reflashing/reprovisioning also creates fresh runtime state, but is not necessary
 just to remove a reviewed assignment.
 
-## Fresh-flash acceptance (pending)
+## Boot acceptance (one successful AMD-lab boot recorded)
+
+Boot `f34306b1-b7f6-483a-bfc6-7ef8cf298e1c` passed bootstrap, GPU startup and
+framebuffer release on the rebuilt USB; the guest uses amdgpu and hardware
+OpenGL. The user reached the desktop, and input senders are active. This
+followed a default/hybrid boot; repeat cold-boot acceptance remains pending.
+See [the recorded milestone](amd-gpu-investigation.md#current-milestone--2026-09-14).
+The procedure below remains the checklist for subsequent acceptance runs.
 
 ```sh
 make usb-dev-image
@@ -118,8 +125,8 @@ input sender separately. Hyprland remains a subsequent milestone.
 
 Implementation verification uses pytest fixtures with a different PCI address,
 port and vendor, plus Nix evaluation of normal, laptop and alternate selections.
-The laptop is retained as-is for read-only validation; a fresh-flash/boot pass
-has not yet been claimed.
+The current successful boot was inspected read-only. Earlier implementation
+checks below are historical; the current milestone records the newer evidence.
 
 ### Implementation checks — 2026-09-14
 

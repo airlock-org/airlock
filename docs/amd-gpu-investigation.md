@@ -6,6 +6,41 @@ Progress is measured by evidence and completed gates, not elapsed time.
 Keep the initial desktop on XFCE/Xorg; Hyprland, inference and `sys-gpu` are
 outside this investigation.
 
+## Current milestone — 2026-09-14
+
+The rebuilt USB's **usb-amd-lab with Xen** now boots into a physical sys-gui
+desktop with hardware-accelerated AMD rendering. Boot ID:
+`f34306b1-b7f6-483a-bfc6-7ef8cf298e1c`. Running dom0 system:
+`/nix/store/ly0qakmf1zdx5aa1bfgi4g1d97k4bh8h-nixos-system-dom0-efi-raw-26.11.20260904.801bef6`.
+
+Read-only SSH checks confirmed:
+
+- Bootstrap and ordered GPU startup succeeded. The firmware console
+  (`efi-framebuffer.0`, `vtcon1`) was released before sys-gui started.
+- Dom0's `0000:04:00.0` Radeon 680M (`1002:1681`) is bound to pciback.
+  Sys-gui sees it at `00:10.0`, uses amdgpu and exposes `card0`/`renderD128`.
+- The guest display manager and all three input senders (keyboard, TrackPoint,
+  touchpad) are active. The user reported reaching login and the desktop.
+- The development dom0 terminal reached its PTY as `airlock`, UID 1000.
+  Tailscale SSH to `root@dom0` works. Dom0 reported no failed systemd units.
+- `glxinfo -B`, run as the desktop user on display `:0`, reported
+  `direct rendering: Yes`, `Accelerated: yes`, AMD Radeon Graphics
+  (`radeonsi, rembrandt, ACO`), and OpenGL 4.6 with Mesa 26.2.2.
+  This verifies hardware rendering inside sys-gui's Xorg session.
+
+Evidence: `.airlock-logs/gpu-milestone-f34306b1/verification.log`.
+This successful AMD-lab boot followed an earlier default/hybrid boot on the
+rebuilt USB. An independently repeated cold boot remains to be recorded; this
+is not a claim of universal hardware compatibility or safe GPU reset.
+The handoff log proves release, not that every bootstrap status update was
+visible. Per-device input behavior and suspend/resume remain separate checks.
+
+The next desktop experiment can trial **Hyprland alongside XFCE**, retaining
+XFCE as a fallback. Wayland compositor startup and displaying other Qubes
+VMs' windows need their own validation; the OpenGL result does not prove those
+integrations. AI inference and sys-gpu remain deferred. The sections below
+preserve the earlier investigation and its evidence.
+
 ## Verified starting point — 2026-09-13
 
 The ThinkPad T14 Gen 3 AMD has booted USB Generation 2, `usb-amd-lab` with Xen.

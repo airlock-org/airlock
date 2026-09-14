@@ -1,13 +1,16 @@
 # AMD ownership experiment
 
-An experimental physical GPU profile, with one successful laptop desktop
-login; **not general hardware or reset certification**. The default USB
+An experimental physical GPU profile, with a successful automatic laptop desktop
+boot; **not general hardware or reset certification**. The default USB
 configuration still runs the hybrid XFCE desktop with AMD driven by dom0.
 The lab is a separate boot specialisation, not a runtime toggle.
 Its current milestone is reproducible boot-time GPU assignment and automatic
 firmware delivery, checked over SSH. The lab now also enables automatic
-XFCE/LightDM login and selected input forwarding; fresh-boot validation of
-this combined workflow is pending.
+XFCE/LightDM login and selected input forwarding. Boot
+`f34306b1-b7f6-483a-bfc6-7ef8cf298e1c` now confirms successful automatic startup,
+framebuffer release, a working dom0 terminal, and hardware-accelerated AMD
+OpenGL in sys-gui. See [the current milestone](amd-gpu-investigation.md#current-milestone--2026-09-14).
+An independently repeated cold boot and further desktop integration remain.
 
 The current evidence, investigation gates and completion criteria are in
 [the AMD GPU investigation plan](amd-gpu-investigation.md). Generation 2 has
