@@ -327,7 +327,11 @@
               services.displayManager.defaultSession = lib.mkForce "airlock-hyprland";
               airlock.sysGuiHyprland = {
                 enable = true;
-                shellPackage = inputs.dank-material-shell.packages.${system}.default;
+                shellPackage = inputs.dank-material-shell.packages.${system}.default.overrideAttrs (_: {
+                  # v1.6.1 ships a stale Go vendor hash. Keep the release pinned;
+                  # this is the observed hash, also corrected on upstream master.
+                  vendorHash = "sha256-Ls6Dquwt0fzDCEjZ6FfTsZTXDI8408mFdByv/OWHVgI=";
+                });
               };
             }
           ] ++ [ ({ pkgs, ... }: {
