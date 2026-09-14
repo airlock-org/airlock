@@ -64,6 +64,12 @@ VM_PREBUILD_ATTRS := \
 	$(VM_GUI_CONFIG_IMAGE_ATTR)
 
 PYTHON_FILES := \
+	lifecycle/runtime/tools/pkgs/airlock-amd-vbios/src/airlock_amd_vbios/*.py \
+	lifecycle/image/tools/amd-vbios.py \
+	tests/test_amd_vbios.py \
+	tests/test_amd_vbios_runtime.py \
+	tests/test_amd_vbios_libvirt.py \
+	tests/test_amd_vbios_events.py \
 	lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/__init__.py \
 	lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/cli.py \
 	lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/engine.py \
@@ -94,7 +100,7 @@ PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
 PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
-PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py tests/test_usb_dev.py tests/test_prepared_store.py)
+PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py tests/test_usb_dev.py tests/test_prepared_store.py tests/test_amd_vbios.py tests/test_amd_vbios_runtime.py tests/test_amd_vbios_libvirt.py tests/test_amd_vbios_events.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 VM_STAGED_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm_staged.py::test_staged_vm_step[$(test)]')
 VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow
@@ -129,9 +135,7 @@ test-quick: ensure-generated-dirs
 
 .PHONY: usb-dev-image usb-dev-write usb-dev-provision usb-dev-help
 
-AMD_VFCT_FILE ?= $(CURDIR)/.airlock-logs/amd-vbios/prepared/guest-vfct.bin
 USB_DEV_PROVISION = sudo python3 lifecycle/image/tools/usb-dev.py provision-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --repo "$(CURDIR)" --public-key "$(HOME)/.ssh/id_ed25519.pub" --auth-file "$(HOME)/.codex/auth.json" --insecure-dev-password --insecure-plain-codex-auth
-USB_DEV_AMD_VFCT_ARG = $(if $(wildcard $(AMD_VFCT_FILE)),--amd-vfct "$(AMD_VFCT_FILE)")
 
 .PHONY: usb-dom0-console-image usb-dom0-console-write
 
@@ -153,7 +157,7 @@ usb-dev-provision:
 	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-provision USB_SERIAL=25110814640207" >&2; exit 2)
 	@test -f "$(HOME)/.ssh/id_ed25519.pub" || (echo "Missing $(HOME)/.ssh/id_ed25519.pub" >&2; exit 2)
 	@test -f "$(HOME)/.codex/auth.json" || (echo "Missing $(HOME)/.codex/auth.json" >&2; exit 2)
-	$(USB_DEV_PROVISION) $(USB_DEV_AMD_VFCT_ARG)
+	$(USB_DEV_PROVISION)
 
 usb-dev-help:
 	python3 lifecycle/image/tools/usb-dev.py --help

@@ -184,7 +184,10 @@ let
   ++ lib.optional (!cfg.gui.enable) "dom0-is-gui";
 in
 {
-  imports = [ ./qubes-input-proxy.nix ];
+  imports = [
+    ./qubes-input-proxy.nix
+    ./amd-vbios.nix
+  ];
   # Upstream installs these desktop frontends for every dom0. Keep the
   # backend/CLI packages, including desktop-linux-common's RPC helpers, but
   # expose the graphical applications only in the GUI domain.
@@ -430,7 +433,9 @@ in
     systemd.services.qubesd = {
       after = [ "airlock-qubes-store-init.service" ];
       requires = [ "airlock-qubes-store-init.service" ];
-      environment.PYTHONPATH = lib.mkBefore "${qubesStorage}/${pkgs.python3.sitePackages}";
+      environment.PYTHONPATH =
+        "${qubesStorage}/${pkgs.python3.sitePackages}"
+        + lib.optionalString config.airlock.amdVbios.enable ":${config.airlock.amdVbios.package}/${pkgs.python3.sitePackages}";
       path = [
         pkgs.erofs-utils
         pkgs.lvm2

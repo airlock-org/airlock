@@ -204,6 +204,14 @@ dom0. Fresh-power-cycle repeatability, guest restart, suspend/resume and reset
 state isolation remain unvalidated. The findings do not reject the general
 product rule; keep the working hybrid profile as the fallback.
 
+Update — 2026-09-14: [automatic AMD VFCT delivery](amd-vbios-automatic.md)
+now discovers the assigned GPU's firmware and maps it to an explicit guest
+PCI slot through Qubes/libvirt startup. A real laptop start initialized amdgpu
+at `00:10.0` using the newly generated table, without the old provisioned
+VBIOS artifact. This generalizes firmware preparation; hardware reservation,
+reset review, additional-machine testing, and a rebuilt-image boot check remain
+separate milestones.
+
 ## Working method and recovery
 
 Make and commit changes in the local repo, build there, and transfer only

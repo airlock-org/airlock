@@ -94,6 +94,15 @@ Known gaps/TODOs found in module/package comments:
   through the physical GUI input connection on 2026-09-13. See the
   [upstream call](https://github.com/QubesOS/qubes-core-qrexec/blob/v4.4.1/daemon/qrexec-client.c#L71).
 - Qubes creates mutable systemd units for VM autostart behavior.
+- Pinned libvirt 10.5's Xen backend discarded explicit guest PCI addresses.
+  Airlock adds `0020-libxl-honor-explicit-guest-pci-slot.patch` to transmit a
+  bus-zero/function-zero guest slot through libxl `vdevfn`, and preserve it
+  in XML/XL roundtrips. Unsupported addresses are rejected; unaddressed devices
+  keep their existing placement. This is a libvirt patch, not a Xen patch.
+  It lets [automatic AMD VFCT delivery](amd-vbios-automatic.md) use the same
+  explicit address in the VM definition and firmware table. The extension
+  verifies native conversion before allowing domain creation, so an older
+  daemon cannot silently ignore the requested placement.
 - The module notes unresolved Xen store/dom0 memory details around Qubes memory
   manager behavior.
 - Some GUI/Xwayland/Xorg integration is still marked FIXME.

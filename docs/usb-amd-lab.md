@@ -15,8 +15,10 @@ The [first assignment experiment](amd-gpu-first-assignment.md) found a missing
 video BIOS. The [VBIOS follow-up](amd-gpu-vbios.md) resolved that: amdgpu now
 initializes inside sys-gui, exposes DRM devices and sees the connected eDP
 panel. A subsequent [input experiment](sys-gui-input.md) connected the physical
-keyboard and pointers, and the user logged into the visible desktop. Firmware delivery is
-machine-local and explicitly opt-in, not automatically included in the image.
+keyboard and pointers, and the user logged into the visible desktop. The lab now
+enables [automatic firmware preparation](amd-vbios-automatic.md) at guest startup.
+The reusable implementation discovers the assigned GPU; only the lab's boot-time
+GPU reservation and input-device selection remain machine-specific.
 The [assignment/reset review](amd-gpu-assignment-reset-findings.md) finds no
 shared Xen DMA-requestor group for the GPU, but reset effectiveness remains
 unproven. The conservative preflight failure is not a proof that assignment
@@ -104,6 +106,22 @@ the saved default.
   live on the existing guest; the updated full image has not been rebuilt.
 - Validate display initialization, input, logout and cold-boot recovery.
   Guest stop/start/reset cycles are a separate risk review, not an automatic loop.
+
+## Automatic VBIOS workflow
+
+The lab enables `airlock.amdVbios.domains.sys-gui` in Nix. After bootstrap has
+finished, assign the reviewed GPU using its currently enumerated Qubes port
+and run the ordinary `qvm-start sys-gui`. The extension selects the matching
+host VFCT entry, validates it, and generates a table for the explicit guest
+PCI slot. No `airlock-amd-vfct` feature or provisioned firmware file is used.
+The GPU must be the sole required PCI assignment and already reserved to
+pciback. Failures are reported through Qubes and the dom0 journal.
+
+GPU selection, isolation/reset review, and assigning devices remain separate
+from firmware delivery. The lab does not automatically assign or start the GPU.
+For a single controlled start, remove the persistent assignment after startup
+using `qvm-device pci unassign sys-gui <port>`; this leaves the running device
+attached. Inspect assignments with `qvm-device pci list sys-gui --assignments`.
 
 This follows upstream's separation of [hybrid and GPU GUI domains](https://doc.qubes-os.org/en/latest/user/advanced-topics/gui-domain.html)
 and its [HVM/input-proxy configuration](https://github.com/QubesOS/qubes-mgmt-salt-dom0-virtual-machines/blob/main/qvm/sys-gui-gpu.sls).

@@ -1,5 +1,10 @@
 # AMD laptop VBIOS delivery experiment
 
+This page records the original manual experiment. The current implementation
+is [automatic AMD VFCT preparation](amd-vbios-automatic.md): it discovers the
+assigned device at startup and explicitly places it at the guest address used
+in its generated table. No pre-extracted laptop firmware is required.
+
 Follow-up to [first assignment](amd-gpu-first-assignment.md). This is a
 hardware-specific lab mechanism, not general AMD passthrough certification.
 It addresses the observed `Unable to locate a BIOS ROM` driver failure.
@@ -102,10 +107,10 @@ feature, restore kernelopts, stop the guest if the attempt failed, and clear
 the one-shot recovery selection only after cleanup is verified. Keep logs and
 firmware artifacts for inspection. No default boot-order change is required.
 
-For a fresh ThinkPad lab USB, the normal `make usb-dev-provision USB_SERIAL=…`
-installs the validated local filtered VFCT during offline personalization when
-the prepared artifact exists. This replaces the former post-boot `scp` step.
-It does not put laptop firmware into the generic image or Git.
+The intermediate USB workflow installed a prepared VFCT during personalization.
+That workflow is superseded by automatic startup preparation; current normal
+provisioning no longer copies the local artifact. Older images can still use
+the lower-level personalization `--amd-vfct` option to reproduce this experiment.
 
 ## Runtime result — successful driver initialization
 

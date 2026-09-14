@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airlock-amd-vbios"
+version = "0.1.0"
+description = "Validated AMD VFCT delivery through Qubes VM startup"
+requires-python = ">=3.11"
+
+[project.scripts]
+airlock-amd-vbios = "airlock_amd_vbios.firmware:main"
+
+[project.entry-points."qubes.ext"]
+airlock-amd-vbios = "airlock_amd_vbios.extension:AMDVBIOS"
