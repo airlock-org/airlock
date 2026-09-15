@@ -108,7 +108,10 @@ in
           systemd.services.airlock-setup-config.serviceConfig.ExecStartPre =
             lib.mkIf cfg.bootFramebuffer.enable
               [ "-${pkgs.kbd}/bin/chvt 1" ];
-          airlock.qubes.domains.sys-gui.devices.pci = [
+          # A physical-GPU profile must win over a prepared domain descriptor.
+          # Otherwise a descriptor's empty PCI list leaves sys-gui running with
+          # no display device after the boot framebuffer is released.
+          airlock.qubes.domains.sys-gui.devices.pci = lib.mkForce [
             {
               backend = "dom0";
               id = gpu.port;

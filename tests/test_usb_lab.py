@@ -24,6 +24,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         domains = builtins.attrNames host.airlock.qubes.domains;
         inherit (host.airlock.qubes.prefs) default_netvm;
         browserNetvm = host.airlock.qubes.domains.usr-browser.netvm;
+        guiPci = host.airlock.qubes.domains.sys-gui.devices.pci;
         hostNetworkManager = host.networking.networkmanager.enable;
         hostTailscale = host.services.tailscale.enable;
         hostSsh = host.services.openssh.enable;
@@ -55,6 +56,15 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["domains"] == ["sys-dev", "sys-gui", "usr-browser", "usr-home"]
     assert report["default_netvm"] == "sys-dev"
     assert report["browserNetvm"] == "sys-dev"
+    assert report["guiPci"] == [
+        {
+            "backend": "dom0",
+            "id": "00_08.1-00_00.0",
+            "match": "port",
+            "mode": "required",
+            "options": {},
+        }
+    ]
     assert not report["hostNetworkManager"]
     assert not report["hostTailscale"]
     assert not report["hostSsh"]

@@ -418,7 +418,20 @@
             specialisation.usb-lab.configuration = {
               imports = [ ./lifecycle/image/profiles/usb-lab.nix ];
               airlock.qubes.domains = lib.mapAttrs (_: lib.mkForce) {
-                sys-gui = builtins.removeAttrs (preparedDomain "lab-gui") [ "devices" ];
+                # Keep this explicit physical assignment in the forced prepared
+                # descriptor. Without it, the descriptor's device defaults can
+                # win during specialisation merging and sys-gui starts headless.
+                sys-gui = (builtins.removeAttrs (preparedDomain "lab-gui") [ "devices" ]) // {
+                  devices.pci = [
+                    {
+                      backend = "dom0";
+                      id = "00_08.1-00_00.0";
+                      mode = "required";
+                      match = "port";
+                      options = { };
+                    }
+                  ];
+                };
                 sys-dev = preparedDomain "lab-sys-dev";
                 usr-home = preparedDomain "lab-usr-home";
                 usr-browser = (preparedDomain "lab-usr-browser") // { netvm = "sys-dev"; };
