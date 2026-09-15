@@ -7,6 +7,7 @@
     enable = true;
     extraUpFlags = [ "--ssh" ];
   };
+  environment.systemPackages = [ pkgs.jq ];
   environment.etc."qubes-rpc/airlock.DevTailscaleUp" = {
     source = pkgs.writeShellScript "airlock-dev-tailscale-up" ''
       set -eu

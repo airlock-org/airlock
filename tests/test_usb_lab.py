@@ -76,6 +76,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
           tailscaleSsh = dev.services.tailscale.extraUpFlags;
           dom0Shell = dev.airlock.devDom0Terminal.guest.enable;
           networkManager = dev.networking.networkmanager.enable;
+          packages = map (package: package.pname or package.name) dev.environment.systemPackages;
           userSelection = dev.airlock.qubeGuest.allowQrexecUserSelection;
           providesNetwork = dev.airlock.qubeGuest.role == "sys-dev";
         }};
@@ -140,7 +141,18 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["callers"] == ["sys-dev"]
     assert "airlock.DevDom0Shell + sys-dev dom0 allow" in report["policy"]
     assert "airlock.DevDom0Shell + sys-gui dom0 allow" not in report["policy"]
-    assert report["dev"] == {
+    assert {
+        key: report["dev"][key]
+        for key in (
+            "role",
+            "tailscale",
+            "tailscaleSsh",
+            "dom0Shell",
+            "networkManager",
+            "userSelection",
+            "providesNetwork",
+        )
+    } == {
         "role": "sys-dev",
         "tailscale": True,
         "tailscaleSsh": ["--ssh"],
@@ -149,3 +161,4 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         "userSelection": True,
         "providesNetwork": True,
     }
+    assert "jq" in report["dev"]["packages"]
