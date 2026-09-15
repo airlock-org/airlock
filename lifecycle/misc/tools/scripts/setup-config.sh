@@ -905,8 +905,10 @@ list_auto_network_pci_devices() {
     fi
   } > "$excluded_devices_file"
 
+  # Identify the exclusion file by name: NR == FNR also matches every line
+  # of the candidates file when the first file is empty.
   awk '
-    NR == FNR {
+    FILENAME == ARGV[1] {
       if ($0 != "") {
         excluded[$0] = 1
       }

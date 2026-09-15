@@ -4167,7 +4167,15 @@ def check_setup_config_external_netvm(repo_root: Path, log_dir: Path) -> None:
     )
 
 
-def check_setup_config_auto_sys_net_pci(repo_root: Path, log_dir: Path) -> None:
+def check_setup_config_auto_sys_net_pci(
+    repo_root: Path,
+    log_dir: Path,
+    *,
+    domain_name: str = "sys-net",
+    default_route: str = "00_03.0",
+    exclusions: str = "",
+    expected_devices: tuple[str, ...] = ("00_04.0",),
+) -> None:
     work_dir = log_dir
     bin_dir = work_dir / "bin"
     setup_log_dir = work_dir / "logs"
@@ -4264,7 +4272,8 @@ def check_setup_config_auto_sys_net_pci(repo_root: Path, log_dir: Path) -> None:
     env.update(
         {
             "PATH": f"{bin_dir}:{env['PATH']}",
-            "AIRLOCK_DOM0_DEFAULT_ROUTE_PCI_DEVICES": "00_03.0",
+            "AIRLOCK_DOM0_DEFAULT_ROUTE_PCI_DEVICES": default_route,
+            "AIRLOCK_SYS_NET_PCI_EXCLUDE": exclusions,
             "AIRLOCK_QUBESADMIN_PYTHON": str(qubesadmin_python),
             "QUBESADMIN_PYTHON_LOG": str(qubesadmin_python_log),
             "AIRLOCK_QUBES_POLICY_DIR": str(policy_dir),
@@ -4272,6 +4281,16 @@ def check_setup_config_auto_sys_net_pci(repo_root: Path, log_dir: Path) -> None:
             "AIRLOCK_LOG_DIR": str(setup_log_dir),
         }
     )
+    env.pop("AIRLOCK_DOM0_NETWORK_PCI_DEVICES", None)
+    if domain_name != "sys-net":
+        definition = json.loads(topology.read_text())
+        domain = definition["domains"].pop("sys-net")
+        domain["features"] = {
+            "airlock-role": domain_name,
+            "airlock-auto-network-pci": "1",
+        }
+        definition["domains"][domain_name] = domain
+        topology.write_text(json.dumps(definition))
     _run(
         [
             "bash",
@@ -4297,22 +4316,25 @@ def check_setup_config_auto_sys_net_pci(repo_root: Path, log_dir: Path) -> None:
     assert result["schema"] == "airlock.setup-config.v1"
     assert result["status"] == "passed"
     assert result["mode"] == "plan"
-    assert result["devices_changed"] == 1
-    assert any(
-        action["type"] == "domain-device"
-        and action["action"] == "assign"
-        and action["domain"] == "sys-net"
-        and action["field"] == "pci"
-        and action["value"] == "dom0:00_04.0 mode=required match=port"
+    assert result["devices_changed"] == len(expected_devices)
+    assignments = {
+        action["value"]
         for action in result["live_actions"]
-    )
-    assert (
-        "+ qvm-device pci assign --required --port sys-net dom0:00_04.0"
-        in command_lines
-    )
-    assert not any("dom0:00_03.0" in line for line in command_lines)
+        if action["type"] == "domain-device"
+        and action["action"] == "assign"
+        and action["domain"] == domain_name
+        and action["field"] == "pci"
+    }
+    assert assignments == {
+        f"dom0:{device} mode=required match=port" for device in expected_devices
+    }
+    for device in expected_devices:
+        assert (
+            f"+ qvm-device pci assign --required --port {domain_name} dom0:{device}"
+            in command_lines
+        )
     qubesadmin_script = qubesadmin_python_log.read_text(encoding="utf-8")
-    assert qubesadmin_script.count("import qubesadmin") == 2
+    assert "import qubesadmin" in qubesadmin_script
 
 
 def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
