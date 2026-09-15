@@ -23,6 +23,9 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
           }}) ];
         }}).config;
         minimal = f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.config;
+        appGuest = (f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.extendModules {{
+          modules = [ ({{ lib, ... }}: {{ airlock.qubeGuest.role = lib.mkForce "base"; }}) ];
+        }}).config;
       in {{
         applications = map (application: {{
           inherit (application) launcher application desktopFile;
@@ -36,6 +39,10 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         workspaceStartApp = workspace.environment.etc."qubes-rpc/qubes.StartApp".source;
         workspaceStartAppConfig = workspace.environment.etc."qubes/rpc-config/qubes.StartApp".text;
         workspaceGSettings = workspace.services.desktopManager.gnome.extraGSettingsOverrides;
+        appGuestDhcp = appGuest.networking.useDHCP;
+        appGuestUplink = {{ inherit (appGuest.systemd.services."qubes-network-uplink@") requires after bindsTo; }};
+        appGuestForwarding = builtins.hasAttr "qubes-network" appGuest.systemd.services;
+        appGuestUdev = appGuest.services.udev.extraRules;
       }}
     """
     result = subprocess.run(
@@ -49,6 +56,16 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
     log_dir.mkdir(parents=True, exist_ok=True)
     (log_dir / "report.json").write_text(result.stdout)
     report = json.loads(result.stdout)
+    assert report["appGuestDhcp"] is False
+    assert report["appGuestForwarding"] is False
+    assert "qubes-db.service" in report["appGuestUplink"]["requires"]
+    assert "qubes-sysinit.service" in report["appGuestUplink"]["after"]
+    assert report["appGuestUplink"]["bindsTo"] == [
+        "sys-subsystem-net-devices-%i.device"
+    ]
+    assert 'DRIVERS=="vif"' in report["appGuestUdev"]
+    assert "qubes-network-uplink@$name.service" in report["appGuestUdev"]
+    assert 'KERNEL=="eth*"' not in report["appGuestUdev"]
 
     expected = {
         "files": ("org.gnome.Nautilus", "nautilus"),

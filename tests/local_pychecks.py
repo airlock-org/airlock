@@ -2367,7 +2367,6 @@ def check_cmd_role(repo_root: Path, log_dir: Path) -> None:
       network_client_support_present = lib.all (name: has name devPackages) [
         "bind"
         "codex"
-        "dhcpcd"
         "git"
         "nix"
         "nss-cacert"
@@ -2926,7 +2925,8 @@ def check_airlock_minimal_guest(repo_root: Path, log_dir: Path) -> None:
         cfg:
         (cfg.systemd.package.pname or "") == "systemd"
         && cfg.services.dbus.enable == true
-        && cfg.networking.useDHCP == true
+        && cfg.networking.useDHCP == false
+        && cfg.systemd.services ? "qubes-network-uplink@"
       );
       no_guest_config_input_etc = allCfgs noConfigInputEtc;
       required_qubes_services_retained = allCfgs (

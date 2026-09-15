@@ -19,9 +19,9 @@ let
       )}; do
         for source_root in "$package/share/icons" "$package/share/pixmaps"; do
           [ -d "$source_root" ] || continue
-          ${pkgs.findutils}/bin/find "$source_root" -type f -print0 |
+          ${pkgs.findutils}/bin/find -L "$source_root" -type f -print0 |
             while IFS= read -r -d $'\0' source; do
-              relative="$(${pkgs.coreutils}/bin/realpath --relative-to="$package/share" "$source")"
+              relative="''${source#"$package/share/"}"
               destination="$out/share/$relative"
               ${pkgs.coreutils}/bin/mkdir -p "$(dirname "$destination")"
               ${pkgs.coreutils}/bin/ln -sfn "$source" "$destination"

@@ -37,6 +37,10 @@ let
   # Run it with an interpreter that includes its Python dependencies and make
   # the agent's private Python modules available without relying on /usr paths.
   qubesStartAppService = pkgs.writeShellScript "airlock-qubes-start-app" ''
+    if [ -r /etc/profile ]; then
+      . /etc/profile
+    fi
+    export XDG_DATA_DIRS="/run/current-system/sw/share:''${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
     export PYTHONPATH="${qubesAgentLinux}/${pkgs.python3.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
     exec ${qubesPython}/bin/python ${qubesAgentLinux.src}/qubes-rpc/qubes.StartApp "$@"
   '';
@@ -2741,7 +2745,9 @@ in
     };
 
     networking.hostName = lib.mkDefault "airlock-qube";
-    networking.useDHCP = lib.mkDefault (!hasNetworkProviderRole);
+    # QubesDB supplies addressing for Xen frontend NICs; there is no DHCP
+    # server on the link to the NetVM. Physical NICs use NetworkManager.
+    networking.useDHCP = lib.mkDefault false;
     networking.firewall.enable = lib.mkIf hasNetworkProviderRole false;
     networking.networkmanager.enable = lib.mkIf hasNetworkDriverRole true;
     networking.networkmanager.settings = lib.mkIf hasNetworkDriverRole {
@@ -3254,13 +3260,20 @@ in
       };
     };
 
-    systemd.services."qubes-network-uplink@" = lib.mkIf hasNetworkProviderRole {
+    # Match the Xen frontend driver, including NixOS names such as enX0.
+    # A VM without a NetVM has no such device and starts no uplink service.
+    services.udev.extraRules = ''
+      SUBSYSTEM=="net", ACTION=="add", DRIVERS=="vif", TAG+="systemd", ENV{SYSTEMD_WANTS}+="qubes-network-uplink@$name.service"
+    '';
+
+    systemd.services."qubes-network-uplink@" = {
       description = "Qubes network uplink setup";
-      after = [ "network-pre.target" ];
-      requires = [ "network-pre.target" ];
+      after = [ "network-pre.target" "qubes-db.service" "qubes-sysinit.service" "sys-subsystem-net-devices-%i.device" ];
+      requires = [ "network-pre.target" "qubes-db.service" "qubes-sysinit.service" ];
+      bindsTo = [ "sys-subsystem-net-devices-%i.device" ];
       before = [ "network.target" ];
       wants = [ "network.target" ];
-      path = networkGuestPath;
+      path = qubesGuestPath ++ [ pkgs.iproute2 pkgs.networkmanager ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
