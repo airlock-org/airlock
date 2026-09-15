@@ -212,7 +212,12 @@ let
       inherit name;
       guestRole = "base";
       modules = [
-        ({ ... }: { networking.hostName = defaults.guestHostName; })
+        ({ lib, ... }: {
+          networking.hostName = defaults.guestHostName;
+          # Current lab GNOME display uses 3x Xwayland rendering at 250%.
+          # Override this for other monitors; automatic scale sync is future work.
+          airlock.appGui.scale = lib.mkDefault 3;
+        })
         guestModule
       ];
       rootImageSizeMiB = defaults.rootImageSizeMiB;

@@ -40,6 +40,15 @@ let
     libvirt105Overlay
     (import "${nixosQubesSource}/nix/overlay.nix")
     (import "${airlockSupport}/lifecycle/misc/overlays/qubes-manager-without-template-tools.nix")
+    (final: prev: {
+      # Mutter embeds this path; programs.xwayland.package alone is not enough.
+      # Reuse upstream Qubes' shmoverride wrapper rather than patching the store.
+      mutter = prev.mutter.override {
+        xwayland = final.qubes-gui-daemon.xwayland.overrideAttrs (old: {
+          meta = (old.meta or { }) // { mainProgram = "Xwayland"; };
+        });
+      };
+    })
   ];
 
   pkgs = import nixpkgs {

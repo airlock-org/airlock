@@ -409,7 +409,7 @@ in
     };
 
     systemd.tmpfiles.rules = [
-      "d /var/log/qubes 0755 root root - -"
+      "d /var/log/qubes 2775 root qubes - -"
       "f /run/qubes-service/guivm 0644 root root - -"
       "f /run/qubes-service-environment 0644 root root - -"
     ] ++ lib.optional hybrid "f /run/qubes-service/guivm-gui-agent 0644 root root - -";

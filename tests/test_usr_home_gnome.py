@@ -38,12 +38,17 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         workspaceStartApp = workspace.environment.etc."qubes-rpc/qubes.StartApp".source;
         workspaceStartAppConfig = workspace.environment.etc."qubes/rpc-config/qubes.StartApp".text;
         workspaceGSettings = workspace.services.desktopManager.gnome.extraGSettingsOverrides;
+        guiLogRules = workspace.systemd.tmpfiles.rules;
+        mutterFlags = workspace.nixpkgs.pkgs.mutter.mesonFlags;
         appGuestDhcp = appGuest.networking.useDHCP;
         appGuestUplink = {{ inherit (appGuest.systemd.services."qubes-network-uplink@") requires after bindsTo; }};
         appGuestForwarding = builtins.hasAttr "qubes-network" appGuest.systemd.services;
         appGuestUdev = appGuest.services.udev.extraRules;
         appGui = map (cfg: {{
           enabled = cfg.systemd.services.qubes-gui-agent.enable;
+          envPath = cfg.systemd.services.qubes-gui-agent.environment.ENV_PATH;
+          scale = cfg.airlock.appGui.scale;
+          forkAutostart = cfg.environment.etc."xdg/autostart/qubes-qrexec-fork-server.desktop".text;
           wantedBy = cfg.systemd.services.qubes-gui-agent.wantedBy;
           pam = cfg.security.pam.services.qubes-gui-agent.startSession;
           session = cfg.environment.etc."X11/xinit/xinitrc".source;
@@ -64,7 +69,19 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
     log_dir.mkdir(parents=True, exist_ok=True)
     (log_dir / "report.json").write_text(result.stdout)
     report = json.loads(result.stdout)
+    assert "d /var/log/qubes 2775 root qubes - -" in report["guiLogRules"]
+    assert any(
+        flag.startswith("-Dxwayland_path=")
+        and "xwayland-qubes" in flag
+        and flag.endswith("/bin/Xwayland")
+        for flag in report["mutterFlags"]
+    )
     for guest in report["appGui"]:
+        assert guest["envPath"] == "/run/current-system/sw/bin:/run/wrappers/bin"
+        assert len(guest["envPath"]) < 250
+        assert guest["scale"] == 3
+        assert "/bin/qrexec-fork-server" in guest["forkAutostart"]
+        assert "Exec=/usr/bin/" not in guest["forkAutostart"]
         assert guest["enabled"] and guest["pam"]
         assert "multi-user.target" in guest["wantedBy"]
         assert guest["session"] and guest["xorg"]
