@@ -7,6 +7,26 @@
 let
   cfg = config.airlock.sysGuiGuest;
   homeApplications = import ../../lib/usr-home-applications.nix { inherit pkgs; };
+  homeApplicationIcons = pkgs.runCommand "airlock-usr-home-application-icons"
+    {
+      nativeBuildInputs = [ pkgs.coreutils pkgs.findutils ];
+    }
+    ''
+      set -eu
+      ${pkgs.coreutils}/bin/mkdir -p "$out/share"
+      for package in ${lib.concatMapStringsSep " " toString (map (application: application.package) homeApplications)}; do
+        for source_root in "$package/share/icons" "$package/share/pixmaps"; do
+          [ -d "$source_root" ] || continue
+          ${pkgs.findutils}/bin/find "$source_root" -type f -print0 |
+            while IFS= read -r -d $'\0' source; do
+              relative="$(${pkgs.coreutils}/bin/realpath --relative-to="$package/share" "$source")"
+              destination="$out/share/$relative"
+              ${pkgs.coreutils}/bin/mkdir -p "$(dirname "$destination")"
+              ${pkgs.coreutils}/bin/ln -sfn "$source" "$destination"
+            done
+        done
+      done
+    '';
   guiAgent = pkgs.qubes-gui-agent-linux;
   guestUser = config.airlock.qubeGuest.user;
   hybrid = cfg.displayMode == "hybrid";
@@ -62,6 +82,26 @@ let
       "application/xhtml+xml"
     ];
   };
+  gnomeDesktopShortcuts = pkgs.writeShellScript "airlock-gnome-desktop-shortcuts" ''
+    set -eu
+
+    config_home="''${XDG_CONFIG_HOME:-$HOME/.config}"
+    marker="$config_home/airlock/gnome-desktop-shortcuts-v1"
+    [ -e "$marker" ] && exit 0
+
+    desktop="$(${pkgs.xdg-user-dirs}/bin/xdg-user-dir DESKTOP 2>/dev/null || true)"
+    [ -n "$desktop" ] && [ "$desktop" != "$HOME" ] || desktop="$HOME/Desktop"
+    ${pkgs.coreutils}/bin/install -d -m 0700 "$desktop"
+
+    ${lib.concatMapStringsSep "\n" (application: ''
+      ${pkgs.coreutils}/bin/install -m 0700 \
+        ${homeApplicationDesktop application}/share/applications/${application.desktopFile}.desktop \
+        "$desktop/${application.desktopFile}.desktop"
+    '') homeApplications}
+
+    ${pkgs.coreutils}/bin/install -d -m 0700 "$(${pkgs.coreutils}/bin/dirname "$marker")"
+    : > "$marker"
+  '';
   panelLaunchers = pkgs.writeShellScript "airlock-bootstrap-desktop-launchers" ''
     set -eu
 
@@ -226,6 +266,7 @@ in
       ++ [
         browserLauncher
         browserDesktop
+        homeApplicationIcons
       ]
       ++ (map homeApplicationDesktop homeApplications)
     );
@@ -315,6 +356,16 @@ in
           Exec=${panelLaunchers}
           OnlyShowIn=XFCE;
           X-GNOME-Autostart-Phase=Panel
+        '';
+      };
+      "xdg/autostart/airlock-gnome-desktop-shortcuts.desktop" = lib.mkIf cfg.personalLaunchers.enable {
+        text = ''
+          [Desktop Entry]
+          Type=Application
+          Name=Airlock GNOME desktop shortcuts
+          Exec=${gnomeDesktopShortcuts}
+          OnlyShowIn=GNOME;
+          X-GNOME-Autostart-Phase=Desktop
         '';
       };
     };

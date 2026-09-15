@@ -32,6 +32,8 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         workspacePackages = map (package: package.name or "") workspace.environment.systemPackages;
         minimalCoreApps = minimal.services.gnome.core-apps.enable;
         minimalPackages = map (package: package.name or "") minimal.environment.systemPackages;
+        workspaceEtc = builtins.attrNames workspace.environment.etc;
+        workspaceGSettings = workspace.services.desktopManager.gnome.extraGSettingsOverrides;
       }}
     """
     result = subprocess.run(
@@ -72,12 +74,19 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
     } == expected
     assert report["workspaceCoreApps"] is False
     assert report["minimalCoreApps"] is True
+    assert (
+        "xdg/autostart/airlock-gnome-desktop-shortcuts.desktop"
+        in report["workspaceEtc"]
+    )
+    assert "ding@rastersoft.com" in report["workspaceGSettings"]
 
     packages = set(report["workspacePackages"])
     for launcher in expected:
         assert f"airlock-launch-{launcher}" in packages
     for package in ("gnome-calculator", "gnome-text-editor", "nautilus"):
         assert not any(name.startswith(f"{package}-") for name in packages)
+    assert any("airlock-usr-home-application-icons" in name for name in packages)
+    assert any("desktop-icons-ng-ding" in name for name in packages)
     assert any(
         package.startswith("gnome-console-") for package in report["minimalPackages"]
     )

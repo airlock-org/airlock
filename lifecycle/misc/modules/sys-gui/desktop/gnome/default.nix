@@ -4,7 +4,16 @@ let
 in
 {
   config = lib.mkIf (cfg.session == "gnome") {
-    services.desktopManager.gnome.enable = true;
+    services.desktopManager.gnome = {
+      enable = true;
+      extraGSettingsOverridePackages = lib.optionals config.airlock.sysGuiGuest.personalLaunchers.enable [
+        pkgs.gnomeExtensions.desktop-icons-ng-ding
+      ];
+      extraGSettingsOverrides = lib.optionalString config.airlock.sysGuiGuest.personalLaunchers.enable ''
+        [org.gnome.shell]
+        enabled-extensions=['ding@rastersoft.com']
+      '';
+    };
     # Where usr-home is part of the topology, applications belong in that
     # offline desktop-work VM. Minimal profiles without it retain GNOME's
     # regular core application set.
@@ -15,6 +24,7 @@ in
       lib.optionals config.airlock.sysGuiGuest.personalLaunchers.enable [
         # Accessibility controls the sys-gui session itself.
         pkgs.gnome-tecla
+        pkgs.gnomeExtensions.desktop-icons-ng-ding
       ];
 
     # Sys-gui has no NetVM and should not acquire host-facing services merely
