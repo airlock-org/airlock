@@ -287,7 +287,6 @@
         };
 
       usbSysGuiLoginModule = { lib, ... }: {
-        airlock.devDom0Terminal.guest.enable = true;
         # Shared by both USB graphics modes. Set the developer login at boot
         # through NixOS account configuration, without a qrexec password update.
         users.mutableUsers = lib.mkForce false;
@@ -299,10 +298,13 @@
         bootstrapDomains.mkSysGuiDomainEntryWith system {
           personalLaunchers = false;
           configurationName = "airlock-domain-sys-gui-usb";
-          extraModules = [ usbSysGuiLoginModule ];
+          extraModules = [
+            usbSysGuiLoginModule
+            ({ ... }: { airlock.devDom0Terminal.guest.enable = true; })
+          ];
         };
 
-      mkUsbAmdSysGuiDomainEntry = system: desktop: personalLaunchers:
+      mkUsbAmdSysGuiDomainEntry = system: desktop: personalLaunchers: directDom0Terminal:
         (mkAirlockQubeBuilders system).mkNixNativeDomain {
           name = "sys-gui";
           guestRole = "sys-gui";
@@ -343,7 +345,9 @@
                 displayMode = "physical-amd-lab";
                 physicalDesktopOnBoot = true;
                 personalLaunchers.enable = personalLaunchers;
+                sysDevTailscaleShortcut.enable = personalLaunchers && !directDom0Terminal;
               };
+              airlock.devDom0Terminal.guest.enable = directDom0Terminal;
               hardware.enableRedistributableFirmware = true;
               hardware.graphics.enable = true;
               services.xserver.videoDrivers = [ "amdgpu" ];
@@ -357,10 +361,10 @@
       let
         entries = {
           hybrid = mkUsbSysGuiDomainEntry system;
-          gui-lab = mkUsbAmdSysGuiDomainEntry system "gnome" false;
-          gui-lab-hyprland = mkUsbAmdSysGuiDomainEntry system "hyprland" false;
-          gui-lab-xfce = mkUsbAmdSysGuiDomainEntry system "xfce" false;
-          lab-gui = mkUsbAmdSysGuiDomainEntry system "gnome" true;
+          gui-lab = mkUsbAmdSysGuiDomainEntry system "gnome" false true;
+          gui-lab-hyprland = mkUsbAmdSysGuiDomainEntry system "hyprland" false true;
+          gui-lab-xfce = mkUsbAmdSysGuiDomainEntry system "xfce" false true;
+          lab-gui = mkUsbAmdSysGuiDomainEntry system "gnome" true false;
           lab-sys-dev = (bootstrapDomains.mkSysDevDomainEntry system) // { preparedDomainName = "sys-dev"; };
           lab-usr-home = (bootstrapDomains.mkHomeVmDomainEntry system) // { preparedDomainName = "usr-home"; };
           lab-usr-browser = (bootstrapDomains.mkBrowserVmDomainEntry system) // { preparedDomainName = "usr-browser"; };
@@ -701,11 +705,13 @@
       nixosConfigurations.airlock-domain-sys-gui-usb =
         (mkUsbSysGuiDomainEntry "x86_64-linux").configuration;
       nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab =
-        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "gnome" false).configuration;
+        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "gnome" false true).configuration;
       nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab-hyprland =
-        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "hyprland" false).configuration;
+        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "hyprland" false true).configuration;
       nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab-xfce =
-        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "xfce" false).configuration;
+        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "xfce" false true).configuration;
+      nixosConfigurations.airlock-domain-sys-gui-usb-lab =
+        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "gnome" true false).configuration;
 
       nixosConfigurations.usb-dom0-console = lib.nixosSystem {
         system = "x86_64-linux";

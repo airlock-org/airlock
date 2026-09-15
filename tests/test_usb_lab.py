@@ -40,6 +40,13 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         host = f.nixosConfigurations.usb-dev.config.specialisation.usb-lab.configuration;
         dev = f.nixosConfigurations.airlock-domain-sys-dev.config;
         gui = f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.config;
+        labGui = f.nixosConfigurations.airlock-domain-sys-gui-usb-lab.config;
+        tailscaleLauncher = builtins.head (builtins.filter (package:
+          (package.pname or package.name) == "airlock-start-sys-dev-tailscale"
+        ) labGui.environment.systemPackages);
+        tailscaleDesktop = builtins.head (builtins.filter (package:
+          (package.pname or package.name) == "airlock-start-sys-dev-tailscale.desktop"
+        ) labGui.environment.systemPackages);
         policy = builtins.head (builtins.filter (p:
           (p.name or "") == "airlock-dev-dom0-terminal-policy"
         ) host.virtualisation.qubes.packages);
@@ -49,6 +56,10 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         browserNetvm = host.airlock.qubes.domains.usr-browser.netvm;
         guiPci = host.airlock.qubes.domains.sys-gui.devices.pci;
         guiHostname = gui.networking.hostName;
+        labGuiHasDom0Terminal = labGui.airlock.devDom0Terminal.guest.enable;
+        labGuiPackages = map (package: package.pname or package.name) labGui.environment.systemPackages;
+        tailscaleLauncher = builtins.readFile "${{tailscaleLauncher}}/bin/airlock-start-sys-dev-tailscale";
+        tailscaleDesktop = builtins.readFile "${{tailscaleDesktop}}/share/applications/airlock-start-sys-dev-tailscale.desktop";
         hostNetworkManager = host.networking.networkmanager.enable;
         hostTailscale = host.services.tailscale.enable;
         hostSsh = host.services.openssh.enable;
@@ -81,6 +92,11 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["default_netvm"] == "sys-dev"
     assert report["browserNetvm"] == "sys-dev"
     assert report["guiHostname"] == "sys-gui"
+    assert not report["labGuiHasDom0Terminal"]
+    assert "airlock-start-sys-dev-tailscale" in report["labGuiPackages"]
+    assert "airlock-start-sys-dev-tailscale.desktop" in report["labGuiPackages"]
+    assert "/bin/xterm -hold " in report["tailscaleLauncher"]
+    assert "Exec=airlock-start-sys-dev-tailscale" in report["tailscaleDesktop"]
     assert report["guiPci"] == [
         {
             "backend": "dom0",

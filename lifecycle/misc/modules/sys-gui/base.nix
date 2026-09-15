@@ -82,6 +82,23 @@ let
       "application/xhtml+xml"
     ];
   };
+  sysDevTailscaleEnrollment = pkgs.writeShellScript "airlock-start-sys-dev-tailscale" ''
+    set -eu
+    exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
+      --pass-io --no-gui --user root sys-dev 'tailscale up --ssh'
+  '';
+  sysDevTailscaleLauncher = pkgs.writeShellScriptBin "airlock-start-sys-dev-tailscale" ''
+    exec ${pkgs.xterm}/bin/xterm -hold -T 'Start sys-dev Tailscale' \
+      -e ${sysDevTailscaleEnrollment}
+  '';
+  sysDevTailscaleDesktop = pkgs.makeDesktopItem {
+    name = "airlock-start-sys-dev-tailscale";
+    desktopName = "Start sys-dev Tailscale";
+    comment = "Enroll sys-dev in Tailscale and display the login URL";
+    exec = "airlock-start-sys-dev-tailscale";
+    icon = "network-workgroup";
+    categories = [ "System" "Network" ];
+  };
   gnomeDesktopShortcuts = pkgs.writeShellScript "airlock-gnome-desktop-shortcuts" ''
     set -eu
 
@@ -229,6 +246,8 @@ in
     default = true;
     description = "Install Files and Terminal launchers for usr-home and a Firefox launcher for usr-browser.";
   };
+  options.airlock.sysGuiGuest.sysDevTailscaleShortcut.enable = lib.mkEnableOption
+    "the desktop shortcut that enrolls sys-dev in Tailscale";
 
   config = lib.mkIf cfg.enable {
     airlock.inputProxy.receiver.enable = lib.mkDefault (!hybrid);
@@ -269,7 +288,11 @@ in
         homeApplicationIcons
       ]
       ++ (map homeApplicationDesktop homeApplications)
-    );
+    )
+    ++ lib.optionals cfg.sysDevTailscaleShortcut.enable [
+      sysDevTailscaleLauncher
+      sysDevTailscaleDesktop
+    ];
 
     services.udev.packages = [ guiAgent ];
     services.xserver = {
