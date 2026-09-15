@@ -47,6 +47,7 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         appGui = map (cfg: {{
           enabled = cfg.systemd.services.qubes-gui-agent.enable;
           envPath = cfg.systemd.services.qubes-gui-agent.environment.ENV_PATH;
+          packages = map (package: package.pname or package.name or "") cfg.environment.systemPackages;
           scale = cfg.airlock.appGui.scale;
           forkAutostart = cfg.environment.etc."xdg/autostart/qubes-qrexec-fork-server.desktop".text;
           wantedBy = cfg.systemd.services.qubes-gui-agent.wantedBy;
@@ -79,6 +80,8 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
     for guest in report["appGui"]:
         assert guest["envPath"] == "/run/current-system/sw/bin:/run/wrappers/bin"
         assert len(guest["envPath"]) < 250
+        assert "libxcvt" in guest["packages"]
+        assert "xrandr" in guest["packages"]
         assert guest["scale"] == 3
         assert "/bin/qrexec-fork-server" in guest["forkAutostart"]
         assert "Exec=/usr/bin/" not in guest["forkAutostart"]

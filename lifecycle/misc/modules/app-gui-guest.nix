@@ -44,6 +44,12 @@ in
     environment.systemPackages = [
       agent
       pkgs.dbus
+      # qubes.SetMonitorLayout calls these by name.  Without them, a guest
+      # that connects before the GuiVM reaches its final display size keeps
+      # the initial 1280x800 X screen and its pointer cannot reach the rest of
+      # a subsequently enlarged application window.
+      pkgs.libxcvt
+      pkgs.xrandr
       pkgs.xsetroot
     ];
     services.udev.packages = [ agent ];
