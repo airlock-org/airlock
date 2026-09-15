@@ -17,6 +17,7 @@
   };
   features = {
     "airlock-managed" = "1";
+    "airlock-auto-network-pci" = "1";
     "airlock-role" = "sys-net";
     "airlock-network-provider" = "sys-net";
   };

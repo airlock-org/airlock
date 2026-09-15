@@ -19,7 +19,7 @@ The existing VM profiles are unchanged.
    the image or a Nix derivation.
 3. Explicit AMD experiment and recovery workflow; do not change the default
    display ownership until a real hardware run succeeds.
-   See [AMD lab and recovery](usb-amd-lab.md).
+   See [GUI lab and recovery](usb-gui-lab.md).
 
 ## Hardware evidence
 

@@ -17,12 +17,12 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         f = builtins.getFlake "{ROOT}";
         pkgs = import f.inputs.nixpkgs {{ system = "x86_64-linux"; }};
         applications = import {ROOT}/lifecycle/misc/lib/usr-home-applications.nix {{ inherit pkgs; }};
-        workspace = (f.nixosConfigurations.airlock-domain-sys-gui-usb-amd-lab.extendModules {{
+        workspace = (f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.extendModules {{
           modules = [ ({{ lib, ... }}: {{
             airlock.sysGuiGuest.personalLaunchers.enable = lib.mkForce true;
           }}) ];
         }}).config;
-        minimal = f.nixosConfigurations.airlock-domain-sys-gui-usb-amd-lab.config;
+        minimal = f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.config;
       in {{
         applications = map (application: {{
           inherit (application) launcher application desktopFile;

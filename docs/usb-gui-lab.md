@@ -37,9 +37,9 @@ entries. Verify the generated entries before the first hardware experiment:
 | --- | --- | --- |
 | Default | Existing hybrid XFCE | sys-gui started by the desktop relay after setup |
 | `usb-text-recovery` | dom0 text console, AMD not hidden | No setup or guest autostart |
-| `usb-amd-lab` | Temporary dom0 bootstrap text, then stock sys-gui GNOME login | Validated assignment, framebuffer release, one sys-gui start, then input forwarding |
-| `usb-amd-lab-hyprland` | Same physical GPU path, Hyprland + DankMaterialShell | Retained experimental desktop implementation |
-| `usb-amd-lab-xfce` | Same physical GPU path, XFCE fallback desktop | Same validated startup sequence |
+| `usb-gui-lab` | Temporary dom0 bootstrap text, then stock sys-gui GNOME login | Validated assignment, framebuffer release, one sys-gui start, then input forwarding |
+| `usb-gui-lab-hyprland` | Same physical GPU path, Hyprland + DankMaterialShell | Retained experimental desktop implementation |
+| `usb-gui-lab-xfce` | Same physical GPU path, XFCE fallback desktop | Same validated startup sequence |
 
 GNOME and Hyprland are not yet hardware-verified. The successful desktop evidence
 above is for XFCE. See [the Hyprland milestone](sys-gui-hyprland.md) for its
@@ -151,7 +151,7 @@ images assign and start the reviewed GPU on lab boot; use the
    verify console login and remote access, then return to the default entry.
    This rehearsal was skipped for the current experiment; see the plan's
    recovery notes before any persistent device assignment.
-3. Select **`usb-amd-lab` with Xen** once from the boot menu.
+3. Select **`usb-gui-lab` with Xen** once from the boot menu.
    Expect a blank panel. Reconnect over SSH and collect evidence:
 
    ```sh

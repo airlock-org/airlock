@@ -13,8 +13,10 @@ let
   hasConfigValidatorRole = cfg.role == "sys-config-validator";
   hasCmdRole = cfg.role == "cmd";
   hasSysNetRole = cfg.role == "sys-net";
+  hasSysDevRole = cfg.role == "sys-dev";
+  hasNetworkDriverRole = hasSysNetRole || hasSysDevRole;
   hasSysGuiRole = cfg.role == "sys-gui";
-  hasNetworkProviderRole = hasSysNetRole || cfg.role == "sys-firewall";
+  hasNetworkProviderRole = hasSysNetRole || hasSysDevRole || cfg.role == "sys-firewall";
   hasConfigRole = hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole;
   hasPrivateNixRole =
     hasConfigVaultRole || hasConfigStagingRole || hasConfigValidatorRole || hasCmdRole;
@@ -2597,6 +2599,7 @@ in
         "sys-firewall"
         "sys-gui"
         "sys-net"
+        "sys-dev"
       ];
       default = "base";
       description = "Airlock role-specific userspace to place in the guest domain.";
@@ -2731,8 +2734,8 @@ in
     networking.hostName = lib.mkDefault "airlock-qube";
     networking.useDHCP = lib.mkDefault (!hasNetworkProviderRole);
     networking.firewall.enable = lib.mkIf hasNetworkProviderRole false;
-    networking.networkmanager.enable = lib.mkIf hasSysNetRole true;
-    networking.networkmanager.settings = lib.mkIf hasSysNetRole {
+    networking.networkmanager.enable = lib.mkIf hasNetworkDriverRole true;
+    networking.networkmanager.settings = lib.mkIf hasNetworkDriverRole {
       main.dns = "default";
       keyfile."unmanaged-devices" = "mac:fe:ff:ff:ff:ff:ff";
       device."wifi.scan-rand-mac-address" = "yes";
@@ -3115,8 +3118,8 @@ in
       };
     };
 
-    systemd.services.airlock-sys-net-networkmanager-state = lib.mkIf hasSysNetRole {
-      description = "Prepare persistent NetworkManager state for sys-net";
+    systemd.services.airlock-network-driver-networkmanager-state = lib.mkIf hasNetworkDriverRole {
+      description = "Prepare persistent NetworkManager state for the network driver domain";
       wants = [ "airlock-qubes-rw-init.service" ];
       requires = [ "airlock-qubes-rw-init.service" ];
       after = [ "airlock-qubes-rw-init.service" ];
@@ -3152,14 +3155,14 @@ in
       };
     };
 
-    systemd.services.NetworkManager = lib.mkIf hasSysNetRole {
+    systemd.services.NetworkManager = lib.mkIf hasNetworkDriverRole {
       wants = [
-        "airlock-sys-net-networkmanager-state.service"
+        "airlock-network-driver-networkmanager-state.service"
         "qubes-sysinit.service"
       ];
-      requires = [ "airlock-sys-net-networkmanager-state.service" ];
+      requires = [ "airlock-network-driver-networkmanager-state.service" ];
       after = [
-        "airlock-sys-net-networkmanager-state.service"
+        "airlock-network-driver-networkmanager-state.service"
         "qubes-sysinit.service"
       ];
       unitConfig.ConditionPathExists = "/run/qubes-service/network-manager";
@@ -3339,17 +3342,17 @@ in
       before = [ "systemd-user-sessions.service" ];
     };
 
-    environment.etc."NetworkManager/dispatcher.d/qubes-nmhook" = lib.mkIf hasSysNetRole {
+    environment.etc."NetworkManager/dispatcher.d/qubes-nmhook" = lib.mkIf hasNetworkDriverRole {
       source = qubesNetworkManagerHook;
       mode = "0555";
     };
 
-    environment.etc."NetworkManager/dispatcher.d/30-qubes-external-ip" = lib.mkIf hasSysNetRole {
+    environment.etc."NetworkManager/dispatcher.d/30-qubes-external-ip" = lib.mkIf hasNetworkDriverRole {
       source = qubesExternalIpHook;
       mode = "0555";
     };
 
-    environment.etc."systemd/network/80-qubes-vif.link" = lib.mkIf hasSysNetRole {
+    environment.etc."systemd/network/80-qubes-vif.link" = lib.mkIf hasNetworkDriverRole {
       source = "${qubesAgentLinux}/lib/systemd/network/80-qubes-vif.link";
       mode = "0444";
     };

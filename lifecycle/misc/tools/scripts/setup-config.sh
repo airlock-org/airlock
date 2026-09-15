@@ -914,14 +914,17 @@ list_auto_sys_net_pci_devices() {
   rm -f "$network_devices_file" "$excluded_devices_file"
 }
 
-domain_wants_auto_sys_net_pci() {
+domain_wants_auto_network_pci() {
   local domain="$1"
 
-  [ "$domain" = "sys-net" ] || return 1
   jq -e --arg name "$domain" '
     (.domains[$name] // null) as $domain
     | $domain != null
     and (($domain.devices.pci // []) | length == 0)
+    and (
+      ($domain.features["airlock-auto-network-pci"] // "") == "1"
+      or $name == "sys-net"
+    )
     and (($domain.prefs.provides_network // false) == true)
     and (
       ($domain.netvm // null) == null
@@ -1030,24 +1033,28 @@ setup_domain_pci_devices() {
   done
 }
 
-setup_domain_auto_sys_net_pci_devices() {
+setup_domain_auto_network_pci_devices() {
   local domain="$1"
   local device_id
   local -a device_ids=()
 
-  domain_wants_auto_sys_net_pci "$domain" || return 0
+  domain_wants_auto_network_pci "$domain" || return 0
 
   if [ "$APPLY" = "1" ] && ! domain_exists "$domain"; then
-    fail "domain is missing before automatic sys-net PCI assignment: $domain"
+    fail "domain is missing before automatic network PCI assignment: $domain"
   fi
 
   mapfile -t device_ids < <(list_auto_sys_net_pci_devices)
   if [ "${#device_ids[@]}" -eq 0 ]; then
-    fail "automatic sys-net PCI assignment found no available dom0 network PCI devices"
+    fail "automatic network PCI assignment found no available dom0 network PCI devices"
   fi
 
   for device_id in "${device_ids[@]}"; do
-    printf 'automatic sys-net PCI assignment candidate: dom0:%s\n' "$device_id"
+    if [ "$domain" = "sys-net" ]; then
+      printf 'automatic sys-net PCI assignment candidate: dom0:%s\n' "$device_id"
+    else
+      printf 'automatic network PCI assignment candidate for %s: dom0:%s\n' "$domain" "$device_id"
+    fi
     assign_domain_pci_device "$domain" dom0 "$device_id" required port '{}'
   done
 }
@@ -1056,7 +1063,7 @@ setup_domain_devices() {
   local domain="$1"
 
   setup_domain_pci_devices "$domain"
-  setup_domain_auto_sys_net_pci_devices "$domain"
+  setup_domain_auto_network_pci_devices "$domain"
 }
 
 is_preferred_domain_pref() {

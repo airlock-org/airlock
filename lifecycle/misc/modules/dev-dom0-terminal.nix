@@ -28,10 +28,13 @@ let
       ${pkgs.util-linux}/bin/logger -t airlock-dev-dom0-terminal -- "$*" || true
     }
     stage "handler reached (uid=$EUID user=$(${pkgs.coreutils}/bin/id -un))"
-    [ "''${QREXEC_REMOTE_DOMAIN:-}" = sys-gui ] || {
-      stage 'refused: caller is not sys-gui'
+    case " ${lib.concatStringsSep " " cfg.callers} " in
+      *" ''${QREXEC_REMOTE_DOMAIN:-} "*) ;;
+      *)
+      stage 'refused: caller is not an enabled development domain'
       exit 1
-    }
+      ;;
+    esac
     if [ -n "''${QREXEC_SERVICE_ARGUMENT:-}" ] || [ -n "''${1:-}" ] || [ "$#" -gt 1 ]; then
       stage 'refused: this service accepts no arguments'
       exit 1
@@ -51,7 +54,7 @@ let
     install -d "$out/etc/qubes/policy.d"
     cat > "$out/etc/qubes/policy.d/40-airlock-dev-dom0-terminal.policy" <<'EOF'
     # Intentional development-only dom0 user shell, not a production capability.
-    airlock.DevDom0Shell + sys-gui dom0 allow
+    ${lib.concatMapStringsSep "\n" (caller: "airlock.DevDom0Shell + ${caller} dom0 allow") cfg.callers}
     airlock.DevDom0Shell * @anyvm dom0 deny
     airlock.DevDom0Shell * @anyvm @anyvm deny
     EOF
@@ -77,6 +80,9 @@ let
     echo 'You can close this window.'
     exit "$result"
   '';
+  shellClient = pkgs.writeShellScriptBin "airlock-dom0-shell" ''
+    exec ${client} "$@"
+  '';
   launcher = pkgs.writeShellScriptBin "airlock-dom0-terminal" ''
     exec ${pkgs.xterm}/bin/xterm -hold -T 'dom0 terminal — DEVELOPMENT' \
       -bg '#1e1e2e' -fg '#cdd6f4' -cr '#f5e0dc' \
@@ -99,6 +105,11 @@ in
   options.airlock.devDom0Terminal = {
     host.enable = lib.mkEnableOption "the development-only sys-gui to dom0 shell RPC";
     guest.enable = lib.mkEnableOption "the development-only dom0 terminal launcher";
+    callers = lib.mkOption {
+      type = lib.types.listOf (lib.types.strMatching "[A-Za-z][A-Za-z0-9_.-]*");
+      default = [ "sys-gui" ];
+      description = "Qubes domains permitted to open the development-only dom0 shell.";
+    };
     user = lib.mkOption {
       type = lib.types.strMatching "[a-z_][a-z0-9_-]*";
       default = "airlock";
@@ -123,10 +134,7 @@ in
       };
     })
     (lib.mkIf cfg.guest.enable {
-      environment.systemPackages = [
-        launcher
-        desktop
-      ];
+      environment.systemPackages = [ shellClient launcher desktop ];
     })
   ];
 }

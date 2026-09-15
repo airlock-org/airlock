@@ -26,8 +26,8 @@ def terminal_config():
         f = builtins.getFlake "{ROOT}";
         usb = f.nixosConfigurations.usb-dev;
         host = usb.config;
-        lab = host.specialisation.usb-amd-lab.configuration;
-        guest = f.nixosConfigurations.airlock-domain-sys-gui-usb-amd-lab.config;
+        lab = host.specialisation.usb-gui-lab.configuration;
+        guest = f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.config;
         policy = builtins.head (builtins.filter (p:
           (p.name or "") == "airlock-dev-dom0-terminal-policy"
         ) host.virtualisation.qubes.packages);

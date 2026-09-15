@@ -21,14 +21,14 @@ make usb-dev-image
 make usb-dev-provision USB_SERIAL=25110814640207
 ```
 
-Choose **usb-amd-lab-hyprland with Xen**, then log in as `user` with `password`.
+Choose **usb-gui-lab-hyprland with Xen**, then log in as `user` with `password`.
 LightDM selects **Airlock Hyprland (experimental)** by default. The shell is
 DankMaterialShell v1.6.1, pinned in flake.lock, running on the separate upstream
 Quickshell package from our existing nixpkgs pin. Hyprland and Mesa also use that
 pin. The Hyprland 0.56 configuration is Lua, not older hyprlang syntax.
 
 For the known-working physical-GPU desktop, reboot and choose
-**usb-amd-lab-xfce with Xen**. That guest does not enable Hyprland or DMS.
+**usb-gui-lab-xfce with Xen**. That guest does not enable Hyprland or DMS.
 All physical boot entries use identical GPU assignment, firmware preparation
 and input forwarding. The ordinary hybrid XFCE and text recovery entries remain
 unchanged. Boot specialisations are not live-switchable GPU modes.

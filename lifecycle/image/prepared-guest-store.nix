@@ -8,7 +8,7 @@ let
   python = pkgs.python3.withPackages (_: [ engine ]);
   specs = lib.mapAttrsToList (name: entry: {
     inherit name;
-    domain = "sys-gui";
+    domain = entry.preparedDomainName or "sys-gui";
     system = toString entry.configuration.config.system.build.toplevel;
     root_source = "${entry.rootImage}/root.img";
     kernel_name = entry.domain.backend.kernel.name;

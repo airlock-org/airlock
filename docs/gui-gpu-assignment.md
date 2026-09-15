@@ -21,7 +21,7 @@ airlock.guiGpu = {
 ```
 
 The ThinkPad selection lives in
-`lifecycle/image/hardware/thinkpad-t14-gen3-amd.nix`; only `usb-amd-lab` enables
+`lifecycle/image/hardware/thinkpad-t14-gen3-amd.nix`; only `usb-gui-lab` enables
 it. The normal USB still uses the hybrid dom0-driven display. The existing USB
 flake imports this ThinkPad hardware fixture: it is not yet a universal USB
 installer. Future installation/provisioning should generate machine-local
@@ -58,7 +58,7 @@ The USB AMD lab now opts into a temporary firmware console for bootstrap
 progress. Its startup precondition detaches that console and firmware driver
 before `qvm-start`; failed release blocks the guest. This sole-display-GPU
 experiment does not change the default reservation behavior for other users
-of the module. See [the framebuffer handoff](usb-amd-lab.md#temporary-bootstrap-framebuffer).
+of the module. See [the framebuffer handoff](usb-gui-lab.md#temporary-bootstrap-framebuffer).
 
 Boot reservation is address-based and happens before userspace identity
 validation. If hardware changes, a stale BDF can reserve the wrong function;
@@ -101,7 +101,7 @@ make usb-dev-image
 make usb-dev-provision USB_SERIAL=25110814640207
 ```
 
-Boot **usb-amd-lab with Xen**. No manual `qvm-device` or firmware copy should
+Boot **usb-gui-lab with Xen**. No manual `qvm-device` or firmware copy should
 be needed. Reconnect with SSH and inspect:
 
 ```sh

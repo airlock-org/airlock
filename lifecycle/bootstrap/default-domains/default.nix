@@ -22,6 +22,7 @@ let
   };
 
   sysNetRoleDefaults = import ./sys-net.nix { inherit sysNetPrivateSizeBytes; };
+  sysDevRoleDefaults = import ./sys-dev.nix;
   sysFirewallRoleDefaults = import ./sys-firewall.nix { inherit networkDebug; };
   sysGuiRoleDefaults = import ./sys-gui.nix;
   cmdVmRoleDefaults = import ./usr-cmd.nix;
@@ -98,6 +99,29 @@ let
       services = sysNetRoleDefaults.services;
       devices = sysNetRoleDefaults.devices;
       state = sysNetRoleDefaults.state;
+    };
+
+  mkSysDevDomainEntry =
+    system:
+    let
+      qubeBuilders = mkAirlockQubeBuilders system;
+    in
+    qubeBuilders.mkNixNativeDomain {
+      name = "sys-dev";
+      guestRole = "sys-dev";
+      modules = [
+        ({ ... }: { networking.hostName = sysDevRoleDefaults.guestHostName; })
+        ../../misc/modules/sys-dev-guest.nix
+      ];
+      rootImageSizeMiB = sysDevRoleDefaults.rootImageSizeMiB;
+      kernelName = airlockQubesVmKernelName;
+      label = sysDevRoleDefaults.label;
+      netvm = sysDevRoleDefaults.netvm;
+      prefs = sysDevRoleDefaults.prefs;
+      features = sysDevRoleDefaults.features;
+      services = sysDevRoleDefaults.services;
+      devices = sysDevRoleDefaults.devices;
+      state = sysDevRoleDefaults.state;
     };
 
   mkSysFirewallDomainEntry =
@@ -243,6 +267,7 @@ in
     mkSysGuiDomainEntry
     mkSysGuiDomainEntryWith
     mkSysNetDomainEntry
+    mkSysDevDomainEntry
     sysFirewallRoleDefaults
     sysGuiRoleDefaults
     sysNetRoleDefaults

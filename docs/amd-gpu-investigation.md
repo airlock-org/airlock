@@ -8,13 +8,13 @@ outside this investigation.
 
 ## Current milestone — 2026-09-14
 
-Follow-up: [GNOME](sys-gui-gnome.md) is now configured as the `usb-amd-lab`
+Follow-up: [GNOME](sys-gui-gnome.md) is now configured as the `usb-gui-lab`
 desktop, pending build and hardware validation. [Hyprland +
 DankMaterialShell](sys-gui-hyprland.md) remains available as
-`usb-amd-lab-hyprland`; the XFCE baseline described below remains available as
-`usb-amd-lab-xfce`.
+`usb-gui-lab-hyprland`; the XFCE baseline described below remains available as
+`usb-gui-lab-xfce`.
 
-The rebuilt USB's **usb-amd-lab with Xen** now boots into a physical sys-gui
+The rebuilt USB's **usb-gui-lab with Xen** now boots into a physical sys-gui
 desktop with hardware-accelerated AMD rendering. Boot ID:
 `f34306b1-b7f6-483a-bfc6-7ef8cf298e1c`. Running dom0 system:
 `/nix/store/ly0qakmf1zdx5aa1bfgi4g1d97k4bh8h-nixos-system-dom0-efi-raw-26.11.20260904.801bef6`.
@@ -49,7 +49,7 @@ preserve the earlier investigation and its evidence.
 
 ## Verified starting point — 2026-09-13
 
-The ThinkPad T14 Gen 3 AMD has booted USB Generation 2, `usb-amd-lab` with Xen.
+The ThinkPad T14 Gen 3 AMD has booted USB Generation 2, `usb-gui-lab` with Xen.
 SSH to `airlock@airlock-usb` works. The deployed lifecycle fix is `123164a`:
 libvirt uses `ON_BOOT=ignore` and `ON_SHUTDOWN=shutdown`. Its boot service
 succeeded, bootstrap passed, and `sys-gui` remained stopped with HVM mode and
@@ -271,6 +271,6 @@ Record findings and next actions at each gate. Distinguish a confirmed defect
 from an untested hypothesis; do not change several subsystems in response to
 a black screen without logs locating the failure.
 
-See [the AMD lab runbook](usb-amd-lab.md) for profile details and
+See [the GUI lab runbook](usb-gui-lab.md) for profile details and
 [Qubes device-handling security](https://doc.qubes-os.org/en/latest/user/security-in-qubes/device-handling-security.html)
 for the reset trust model to review alongside the pinned implementation.

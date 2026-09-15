@@ -205,6 +205,7 @@
         mkBrowserVmDomainEntry
         mkSysFirewallDomainEntry
         mkSysGuiDomainEntry
+        mkSysDevDomainEntry
         mkSysNetDomainEntry
         ;
 
@@ -301,11 +302,11 @@
           extraModules = [ usbSysGuiLoginModule ];
         };
 
-      mkUsbAmdSysGuiDomainEntry = system: desktop:
+      mkUsbAmdSysGuiDomainEntry = system: desktop: personalLaunchers:
         (mkAirlockQubeBuilders system).mkNixNativeDomain {
           name = "sys-gui";
           guestRole = "sys-gui";
-          configurationName = "airlock-domain-sys-gui-usb-amd-lab${
+          configurationName = "airlock-domain-sys-gui-usb-gui-lab${
             lib.optionalString (desktop == "hyprland") "-hyprland"
             + lib.optionalString (desktop == "xfce") "-xfce"
           }";
@@ -340,7 +341,7 @@
               airlock.sysGuiGuest = {
                 displayMode = "physical-amd-lab";
                 physicalDesktopOnBoot = true;
-                personalLaunchers.enable = false;
+                personalLaunchers.enable = personalLaunchers;
               };
               hardware.enableRedistributableFirmware = true;
               hardware.graphics.enable = true;
@@ -355,9 +356,13 @@
       let
         entries = {
           hybrid = mkUsbSysGuiDomainEntry system;
-          amd-lab = mkUsbAmdSysGuiDomainEntry system "gnome";
-          amd-lab-hyprland = mkUsbAmdSysGuiDomainEntry system "hyprland";
-          amd-lab-xfce = mkUsbAmdSysGuiDomainEntry system "xfce";
+          gui-lab = mkUsbAmdSysGuiDomainEntry system "gnome" false;
+          gui-lab-hyprland = mkUsbAmdSysGuiDomainEntry system "hyprland" false;
+          gui-lab-xfce = mkUsbAmdSysGuiDomainEntry system "xfce" false;
+          lab-gui = mkUsbAmdSysGuiDomainEntry system "gnome" true;
+          lab-sys-dev = (bootstrapDomains.mkSysDevDomainEntry system) // { preparedDomainName = "sys-dev"; };
+          lab-usr-home = (bootstrapDomains.mkHomeVmDomainEntry system) // { preparedDomainName = "usr-home"; };
+          lab-usr-browser = (bootstrapDomains.mkBrowserVmDomainEntry system) // { preparedDomainName = "usr-browser"; };
         };
         preparedStore = import ./lifecycle/image/prepared-guest-store.nix {
           inherit lib entries;
@@ -393,22 +398,31 @@
               # Do not reconcile or start VMs from possibly changed qubes.xml.
               airlock.qubes.setupConfigOnBoot.enable = lib.mkForce false;
             };
-            specialisation.usb-amd-lab.configuration = {
-              imports = [ ./lifecycle/image/profiles/usb-amd-lab.nix ];
+            specialisation.usb-gui-lab.configuration = {
+              imports = [ ./lifecycle/image/profiles/usb-gui-lab.nix ];
               # Replace hybrid guest fields, leaving PCI selection to the
               # reusable module and this machine's hardware inventory.
               airlock.qubes.domains.sys-gui = lib.mapAttrs (_: lib.mkForce)
-                (builtins.removeAttrs (preparedDomain "amd-lab") [ "devices" ]);
+                (builtins.removeAttrs (preparedDomain "gui-lab") [ "devices" ]);
             };
-            specialisation.usb-amd-lab-hyprland.configuration = {
-              imports = [ ./lifecycle/image/profiles/usb-amd-lab.nix ];
+            specialisation.usb-gui-lab-hyprland.configuration = {
+              imports = [ ./lifecycle/image/profiles/usb-gui-lab.nix ];
               airlock.qubes.domains.sys-gui = lib.mapAttrs (_: lib.mkForce)
-                (builtins.removeAttrs (preparedDomain "amd-lab-hyprland") [ "devices" ]);
+                (builtins.removeAttrs (preparedDomain "gui-lab-hyprland") [ "devices" ]);
             };
-            specialisation.usb-amd-lab-xfce.configuration = {
-              imports = [ ./lifecycle/image/profiles/usb-amd-lab.nix ];
+            specialisation.usb-gui-lab-xfce.configuration = {
+              imports = [ ./lifecycle/image/profiles/usb-gui-lab.nix ];
               airlock.qubes.domains.sys-gui = lib.mapAttrs (_: lib.mkForce)
-                (builtins.removeAttrs (preparedDomain "amd-lab-xfce") [ "devices" ]);
+                (builtins.removeAttrs (preparedDomain "gui-lab-xfce") [ "devices" ]);
+            };
+            specialisation.usb-lab.configuration = {
+              imports = [ ./lifecycle/image/profiles/usb-lab.nix ];
+              airlock.qubes.domains = lib.mapAttrs (_: lib.mkForce) {
+                sys-gui = builtins.removeAttrs (preparedDomain "lab-gui") [ "devices" ];
+                sys-dev = preparedDomain "lab-sys-dev";
+                usr-home = preparedDomain "lab-usr-home";
+                usr-browser = (preparedDomain "lab-usr-browser") // { netvm = "sys-dev"; };
+              };
             };
           })
         ];
@@ -678,12 +692,12 @@
       nixosConfigurations.usb-dev = mkUsbConfiguration "x86_64-linux";
       nixosConfigurations.airlock-domain-sys-gui-usb =
         (mkUsbSysGuiDomainEntry "x86_64-linux").configuration;
-      nixosConfigurations.airlock-domain-sys-gui-usb-amd-lab =
-        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "gnome").configuration;
-      nixosConfigurations.airlock-domain-sys-gui-usb-amd-lab-hyprland =
-        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "hyprland").configuration;
-      nixosConfigurations.airlock-domain-sys-gui-usb-amd-lab-xfce =
-        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "xfce").configuration;
+      nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab =
+        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "gnome" false).configuration;
+      nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab-hyprland =
+        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "hyprland" false).configuration;
+      nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab-xfce =
+        (mkUsbAmdSysGuiDomainEntry "x86_64-linux" "xfce" false).configuration;
 
       nixosConfigurations.usb-dom0-console = lib.nixosSystem {
         system = "x86_64-linux";
@@ -740,6 +754,8 @@
         (networkDebugBootstrapDomains.mkSysNetDomainEntry "x86_64-linux").configuration;
       nixosConfigurations.airlock-domain-sys-firewall =
         (mkSysFirewallDomainEntry "x86_64-linux").configuration;
+      nixosConfigurations.airlock-domain-sys-dev =
+        (mkSysDevDomainEntry "x86_64-linux").configuration;
       nixosConfigurations.airlock-domain-sys-gui = (mkSysGuiDomainEntry "x86_64-linux").configuration;
     };
 }

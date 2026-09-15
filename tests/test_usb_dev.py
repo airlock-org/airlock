@@ -129,10 +129,10 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
         displayRequires = config.systemd.services.display-manager.requires;
         displayAfter = config.systemd.services.display-manager.after;
         hybridLogin = login configs.airlock-domain-sys-gui-usb.config;
-        labLogin = login configs.airlock-domain-sys-gui-usb-amd-lab.config;
+        labLogin = login configs.airlock-domain-sys-gui-usb-gui-lab.config;
         normalPassword = configs.airlock-domain-sys-gui.config.users.users.user.initialPassword;
         labHasPasswordService = builtins.hasAttr "airlock-usb-gui-password"
-          config.specialisation.usb-amd-lab.configuration.systemd.services;
+          config.specialisation.usb-gui-lab.configuration.systemd.services;
       }}
     """
     result = subprocess.run(

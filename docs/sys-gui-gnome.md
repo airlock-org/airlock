@@ -2,13 +2,13 @@
 
 Status: configured, pending its first physical AMD-lab boot.
 
-`usb-amd-lab with Xen` is the primary physical-GPU sys-gui experiment. It uses
+`usb-gui-lab with Xen` is the primary physical-GPU sys-gui experiment. It uses
 the stock GNOME desktop from the pinned Nixpkgs package set, without additional
 GNOME Shell extensions.
 
 Hyprland + DankMaterialShell remains available at
-`usb-amd-lab-hyprland with Xen`; the known-good XFCE fallback is
-`usb-amd-lab-xfce with Xen`. The three choices share the same GPU assignment,
+`usb-gui-lab-hyprland with Xen`; the known-good XFCE fallback is
+`usb-gui-lab-xfce with Xen`. The three choices share the same GPU assignment,
 firmware preparation, input forwarding, guest kernel, and sys-gui role. They
 differ only in the selected desktop implementation.
 

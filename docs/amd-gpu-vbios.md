@@ -114,7 +114,7 @@ the lower-level personalization `--amd-vfct` option to reproduce this experiment
 
 ## Runtime result — successful driver initialization
 
-On 2026-09-13 the host was rebooted once into Generation 2 `usb-amd-lab`.
+On 2026-09-13 the host was rebooted once into Generation 2 `usb-gui-lab`.
 New boot ID: `75eadf68-6b62-4c42-8ce7-5960acb3809a`. This was a host reboot,
 not a measured removal of platform power. No guest was automatically started.
 The original host VFCT hash was unchanged after reboot.

@@ -239,8 +239,8 @@ def test_nix_selection_drives_reservation_assignment_and_start():
         f = builtins.getFlake "{ROOT}";
         base = f.nixosConfigurations.usb-dev;
         normal = base.config;
-        lab = normal.specialisation.usb-amd-lab.configuration;
-        guestBase = f.nixosConfigurations.airlock-domain-sys-gui-usb-amd-lab;
+        lab = normal.specialisation.usb-gui-lab.configuration;
+        guestBase = f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab;
         guestReport = c: {{
           defaultUnit = c.systemd.defaultUnit;
           displayWantedBy = c.systemd.services.display-manager.wantedBy;
@@ -250,11 +250,11 @@ def test_nix_selection_drives_reservation_assignment_and_start():
           failed = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
         }};
         alternate = (base.extendModules {{ modules = [ ({{ lib, ... }}: {{
-          specialisation.usb-amd-lab.configuration.airlock.guiGpu.device = lib.mkForce {{
+          specialisation.usb-gui-lab.configuration.airlock.guiGpu.device = lib.mkForce {{
             bdf = "0000:09:03.0"; port = "00_03.1-00_00.0";
             vendor = "1002"; device = "9999"; driver = "amdgpu";
           }};
-        }}) ]; }}).config.specialisation.usb-amd-lab.configuration;
+        }}) ]; }}).config.specialisation.usb-gui-lab.configuration;
         report = c: {{
           enabled = c.airlock.guiGpu.enable;
           device = c.airlock.guiGpu.device;
@@ -277,8 +277,8 @@ def test_nix_selection_drives_reservation_assignment_and_start():
           prepare = lab.systemd.services.airlock-setup-config.serviceConfig.ExecStartPre;
         }};
         dark = report (base.extendModules {{ modules = [ ({{ lib, ... }}: {{
-          specialisation.usb-amd-lab.configuration.airlock.guiGpu.bootFramebuffer.enable = lib.mkForce false;
-        }}) ]; }}).config.specialisation.usb-amd-lab.configuration;
+          specialisation.usb-gui-lab.configuration.airlock.guiGpu.bootFramebuffer.enable = lib.mkForce false;
+        }}) ]; }}).config.specialisation.usb-gui-lab.configuration;
         guest = guestReport guestBase.config;
         diagnosticGuest = guestReport (guestBase.extendModules {{ modules = [
           ({{ lib, ... }}: {{ airlock.sysGuiGuest.physicalDesktopOnBoot = lib.mkForce false; }})
@@ -392,7 +392,7 @@ def test_laptop_read_only_preflight():
             "nix",
             "eval",
             "--json",
-            ".#nixosConfigurations.usb-dev.config.specialisation.usb-amd-lab.configuration",
+            ".#nixosConfigurations.usb-dev.config.specialisation.usb-gui-lab.configuration",
             "--apply",
             'c: { selection = builtins.fromJSON c.environment.etc."airlock/gui-gpu.json".text; topology = c.airlock.qubes.topology; }',
         ],

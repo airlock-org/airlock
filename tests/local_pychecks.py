@@ -2822,7 +2822,7 @@ def check_config_candidate_nix_native(repo_root: Path, log_dir: Path) -> None:
               nixNative.domains.bad.role = "sys-config-staging";
             }
             """,
-            "airlock.nixNative.domains.bad.role: expected one of base, cmd, sys-firewall, sys-gui, sys-net",
+            "airlock.nixNative.domains.bad.role: expected one of base, cmd, sys-dev, sys-firewall, sys-gui, sys-net",
         ),
     ]
     invalid_log = result_dir / "invalid.log"
