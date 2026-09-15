@@ -4,6 +4,13 @@ let
 in
 {
   config = lib.mkIf (cfg.session == "gnome") {
+    # GNOME's greeter and screen locking require GDM. Its NixOS module
+    # disables the common sys-gui LightDM default.
+    services.displayManager.gdm = {
+      enable = true;
+      # The GUI VM must stay awake while waiting for a login.
+      autoSuspend = false;
+    };
     services.desktopManager.gnome = {
       enable = true;
       extraGSettingsOverridePackages = lib.optionals config.airlock.sysGuiGuest.personalLaunchers.enable [

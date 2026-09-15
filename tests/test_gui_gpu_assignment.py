@@ -245,6 +245,8 @@ def test_nix_selection_drives_reservation_assignment_and_start():
           defaultUnit = c.systemd.defaultUnit;
           displayWantedBy = c.systemd.services.display-manager.wantedBy;
           session = c.services.displayManager.defaultSession;
+          gdm = c.services.displayManager.gdm.enable;
+          lightdm = c.services.xserver.displayManager.lightdm.enable;
           receiver = c.airlock.inputProxy.receiver.enable;
           guiAgent = c.systemd.services.qubes-gui-agent.enable;
           failed = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
@@ -366,6 +368,8 @@ def test_nix_selection_drives_reservation_assignment_and_start():
     assert guest["defaultUnit"] == "graphical.target"
     assert guest["displayWantedBy"] == ["graphical.target"]
     assert guest["session"] == "gnome"
+    assert guest["gdm"] is True
+    assert guest["lightdm"] is False
     assert guest["receiver"] is True
     assert guest["guiAgent"] is False
     assert report["diagnosticGuest"]["defaultUnit"] == "multi-user.target"
@@ -373,6 +377,8 @@ def test_nix_selection_drives_reservation_assignment_and_start():
     assert report["diagnosticGuest"]["failed"] == []
     assert report["hybridGuest"]["displayWantedBy"] == []
     assert report["hybridGuest"]["receiver"] is False
+    assert report["hybridGuest"]["gdm"] is False
+    assert report["hybridGuest"]["lightdm"] is True
 
 
 def test_bootstrap_guard_precedes_mutation():

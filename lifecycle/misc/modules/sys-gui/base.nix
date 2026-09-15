@@ -303,7 +303,7 @@ in
         xserverBin = lib.mkOverride 50 (if hybrid then loginXserver else physicalXserver);
         xserverArgs = lib.mkIf hybrid (lib.mkForce [ ]);
         lightdm = {
-          enable = true;
+          enable = lib.mkDefault true;
           extraConfig = lib.mkIf hybrid ''
             logind-check-graphical=false
             minimum-vt=8
