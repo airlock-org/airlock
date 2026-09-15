@@ -85,10 +85,10 @@ let
   sysDevTailscaleEnrollment = pkgs.writeShellScript "airlock-start-sys-dev-tailscale" ''
     set -eu
     exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
-      --pass-io --no-gui --user root sys-dev 'tailscale up --ssh'
+      --pass-io --no-gui --service sys-dev airlock.DevTailscaleUp
   '';
   sysDevTailscaleLauncher = pkgs.writeShellScriptBin "airlock-start-sys-dev-tailscale" ''
-    exec ${pkgs.xterm}/bin/xterm -hold -T 'Start sys-dev Tailscale' \
+    exec ${pkgs.xterm}/bin/xterm -hold -fa 'DejaVu Sans Mono' -fs 16 -geometry 100x30 -T 'Start sys-dev Tailscale' \
       -e ${sysDevTailscaleEnrollment}
   '';
   sysDevTailscaleDesktop = pkgs.makeDesktopItem {

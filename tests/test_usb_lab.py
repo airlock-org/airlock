@@ -62,6 +62,9 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
           labGui.services.desktopManager.gnome.extraGSettingsOverridePackages;
         tailscaleLauncher = builtins.readFile "${{tailscaleLauncher}}/bin/airlock-start-sys-dev-tailscale";
         tailscaleDesktop = builtins.readFile "${{tailscaleDesktop}}/share/applications/airlock-start-sys-dev-tailscale.desktop";
+        tailscaleHandler = builtins.readFile dev.environment.etc."qubes-rpc/airlock.DevTailscaleUp".source;
+        tailscaleRpcConfig = dev.environment.etc."qubes/rpc-config/airlock.DevTailscaleUp".text;
+        tailscalePolicy = builtins.readFile "${{host.environment.etc."qubes/policy.d".source}}/40-airlock-dev-tailscale.policy";
         hostNetworkManager = host.networking.networkmanager.enable;
         hostTailscale = host.services.tailscale.enable;
         hostSsh = host.services.openssh.enable;
@@ -100,6 +103,27 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert "nautilus" in report["labGuiPackages"]
     assert report["labGuiGsettingsOverridePackages"] == ["gnome-shell"]
     assert "/bin/xterm -hold " in report["tailscaleLauncher"]
+    assert "-fs 16" in report["tailscaleLauncher"]
+    assert "force-user='root'" in report["tailscaleRpcConfig"]
+    assert (
+        "airlock.DevTailscaleUp + sys-gui sys-dev allow user=root"
+        in report["tailscalePolicy"]
+    )
+    assert "airlock.DevTailscaleUp * @anyvm @anyvm deny" in report["tailscalePolicy"]
+    assert "/bin/tailscale up --ssh" in report["tailscaleHandler"]
+    # Rejected requests must exit before executing Tailscale on the test host.
+    for source, argument in [("usr-browser", ""), ("sys-gui", "unexpected")]:
+        rejected = subprocess.run(
+            ["bash", "-c", report["tailscaleHandler"]],
+            env={
+                **os.environ,
+                "QREXEC_REMOTE_DOMAIN": source,
+                "QREXEC_SERVICE_ARGUMENT": argument,
+            },
+            capture_output=True,
+            timeout=5,
+        )
+        assert rejected.returncode == 1
     assert "Exec=airlock-start-sys-dev-tailscale" in report["tailscaleDesktop"]
     assert report["guiPci"] == [
         {

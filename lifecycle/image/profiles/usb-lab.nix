@@ -13,6 +13,13 @@
   services.tailscale.enable = lib.mkForce false;
   services.openssh.enable = lib.mkForce false;
 
+  virtualisation.qubes.packages = [
+    (pkgs.writeTextDir "etc/qubes/policy.d/40-airlock-dev-tailscale.policy" ''
+      airlock.DevTailscaleUp + sys-gui sys-dev allow user=root
+      airlock.DevTailscaleUp * @anyvm @anyvm deny
+    '')
+  ];
+
   airlock.qubes = {
     startNetworkProvidersOnBoot.enable = lib.mkForce true;
     prefs.default_netvm = lib.mkForce "sys-dev";
