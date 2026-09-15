@@ -1,7 +1,6 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, ... }:
 let
   cfg = config.airlock.sysGuiDesktop;
-  dashToDock = pkgs.gnomeExtensions.dash-to-dock;
 in
 {
   config = lib.mkIf (cfg.session == "gnome") {
@@ -17,15 +16,5 @@ in
     services.gnome.gnome-user-share.enable = lib.mkForce false;
     services.gnome.rygel.enable = lib.mkForce false;
 
-    environment.systemPackages = [ dashToDock ];
-
-    # Install and enable the extension from Nix. Lock only the extension list:
-    # the user can still customize Dash to Dock's own settings in GNOME.
-    programs.dconf.profiles.user.databases = [
-      {
-        settings."org/gnome/shell".enabled-extensions = [ dashToDock.extensionUuid ];
-        locks = [ "/org/gnome/shell/enabled-extensions" ];
-      }
-    ];
   };
 }

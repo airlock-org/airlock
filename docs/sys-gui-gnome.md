@@ -3,11 +3,8 @@
 Status: configured, pending its first physical AMD-lab boot.
 
 `usb-amd-lab with Xen` is the primary physical-GPU sys-gui experiment. It uses
-GNOME and installs Dash to Dock from the pinned Nixpkgs package set. Airlock
-enables Dash to Dock declaratively through the system dconf database, so the
-dock is present on first login. GNOME users may change the extension's own
-preferences; only GNOME Shell's enabled-extension list is locked to keep it
-active.
+the stock GNOME desktop from the pinned Nixpkgs package set, without additional
+GNOME Shell extensions.
 
 Hyprland + DankMaterialShell remains available at
 `usb-amd-lab-hyprland with Xen`; the known-good XFCE fallback is

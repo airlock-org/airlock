@@ -37,7 +37,7 @@ entries. Verify the generated entries before the first hardware experiment:
 | --- | --- | --- |
 | Default | Existing hybrid XFCE | sys-gui started by the desktop relay after setup |
 | `usb-text-recovery` | dom0 text console, AMD not hidden | No setup or guest autostart |
-| `usb-amd-lab` | Temporary dom0 bootstrap text, then sys-gui GNOME login with Dash to Dock | Validated assignment, framebuffer release, one sys-gui start, then input forwarding |
+| `usb-amd-lab` | Temporary dom0 bootstrap text, then stock sys-gui GNOME login | Validated assignment, framebuffer release, one sys-gui start, then input forwarding |
 | `usb-amd-lab-hyprland` | Same physical GPU path, Hyprland + DankMaterialShell | Retained experimental desktop implementation |
 | `usb-amd-lab-xfce` | Same physical GPU path, XFCE fallback desktop | Same validated startup sequence |
 
