@@ -332,6 +332,7 @@
             ./lifecycle/misc/modules/sys-gui/desktop/hyprland/hidpi-amd-lab.nix
           ] ++ [
             ({ pkgs, lib, ... }: {
+              networking.hostName = "sys-gui";
               airlock.sysGuiDesktop.session = desktop;
               airlock.sysGuiHyprland = lib.mkIf (desktop == "hyprland") {
                 shellPackage = import ./lifecycle/misc/modules/sys-gui/desktop/hyprland/dms-shell-hidpi.nix {

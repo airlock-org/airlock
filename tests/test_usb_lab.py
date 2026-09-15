@@ -39,6 +39,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         f = builtins.getFlake "{ROOT}";
         host = f.nixosConfigurations.usb-dev.config.specialisation.usb-lab.configuration;
         dev = f.nixosConfigurations.airlock-domain-sys-dev.config;
+        gui = f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.config;
         policy = builtins.head (builtins.filter (p:
           (p.name or "") == "airlock-dev-dom0-terminal-policy"
         ) host.virtualisation.qubes.packages);
@@ -47,6 +48,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         inherit (host.airlock.qubes.prefs) default_netvm;
         browserNetvm = host.airlock.qubes.domains.usr-browser.netvm;
         guiPci = host.airlock.qubes.domains.sys-gui.devices.pci;
+        guiHostname = gui.networking.hostName;
         hostNetworkManager = host.networking.networkmanager.enable;
         hostTailscale = host.services.tailscale.enable;
         hostSsh = host.services.openssh.enable;
@@ -78,6 +80,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["domains"] == ["sys-dev", "sys-gui", "usr-browser", "usr-home"]
     assert report["default_netvm"] == "sys-dev"
     assert report["browserNetvm"] == "sys-dev"
+    assert report["guiHostname"] == "sys-gui"
     assert report["guiPci"] == [
         {
             "backend": "dom0",
