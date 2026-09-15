@@ -33,6 +33,8 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         minimalCoreApps = minimal.services.gnome.core-apps.enable;
         minimalPackages = map (package: package.name or "") minimal.environment.systemPackages;
         workspaceEtc = builtins.attrNames workspace.environment.etc;
+        workspaceStartApp = workspace.environment.etc."qubes-rpc/qubes.StartApp".source;
+        workspaceStartAppConfig = workspace.environment.etc."qubes/rpc-config/qubes.StartApp".text;
         workspaceGSettings = workspace.services.desktopManager.gnome.extraGSettingsOverrides;
       }}
     """
@@ -78,6 +80,8 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         "xdg/autostart/airlock-gnome-desktop-shortcuts.desktop"
         in report["workspaceEtc"]
     )
+    assert "airlock-qubes-start-app" in report["workspaceStartApp"]
+    assert "force-user=" in report["workspaceStartAppConfig"]
     assert "ding@rastersoft.com" in report["workspaceGSettings"]
 
     packages = set(report["workspacePackages"])

@@ -2010,6 +2010,9 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
     sys_gui_guest = (repo_root / "lifecycle/misc/modules/sys-gui/base.nix").read_text(
         encoding="utf-8"
     )
+    qube_guest = (repo_root / "lifecycle/misc/modules/qube-guest.nix").read_text(
+        encoding="utf-8"
+    )
     runtime = (
         repo_root / "lifecycle/bootstrap/initial-runtime-config/airlock/runtime.nix"
     ).read_text(encoding="utf-8")
@@ -2024,6 +2027,8 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
     assert 'application = "org.gnome.Nautilus"' in home_applications
     assert 'application = "org.gnome.Console"' in home_applications
     assert "qubes.StartApp+${application.application}" in sys_gui_guest
+    assert '"qubes-rpc/qubes.StartApp"' in qube_guest
+    assert "qubesStartAppService" in qube_guest
     assert "homeApplicationLauncher" in sys_gui_guest
     assert "homeApplicationDesktop" in sys_gui_guest
     assert "qubes.StartApp+firefox" in sys_gui_guest
@@ -2033,6 +2038,8 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
     assert '"x-scheme-handler/https" = "firefox.desktop"' in sys_gui_guest
     assert "airlock-bootstrap-desktop-launchers" in sys_gui_guest
     assert "desktop-bootstrap-v1" in sys_gui_guest
+    assert "gnome-desktop-shortcuts-v2" in sys_gui_guest
+    assert '"$desktop/firefox.desktop"' in sys_gui_guest
     assert "org.gnome.Nautilus airlock-terminal firefox" in sys_gui_guest
     assert "X-GNOME-Autostart-Phase=Panel" in sys_gui_guest
     assert "usr-home = {" in runtime

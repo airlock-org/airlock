@@ -29,8 +29,17 @@ let
     }).pythonModule;
   qubesPython = pkgs.python3.withPackages (ps: [
     ps.dbus-python
+    ps.pygobject3
+    ps.pyxdg
     qubesDbPython
   ]);
+  # The packaged agent installs this upstream qrexec handler as source only.
+  # Run it with an interpreter that includes its Python dependencies and make
+  # the agent's private Python modules available without relying on /usr paths.
+  qubesStartAppService = pkgs.writeShellScript "airlock-qubes-start-app" ''
+    export PYTHONPATH="${qubesAgentLinux}/${pkgs.python3.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+    exec ${qubesPython}/bin/python ${qubesAgentLinux.src}/qubes-rpc/qubes.StartApp "$@"
+  '';
   qubesDnatToNs = pkgs.writeShellScript "airlock-qubes-setup-dnat-to-ns" ''
     exec ${qubesPython}/bin/python ${qubesAgentLinux}/lib/qubes/qubes-setup-dnat-to-ns "$@"
   '';
@@ -3494,6 +3503,16 @@ in
 
     environment.etc."qubes/rpc-config/qubes.VMShell" = {
       text = lib.optionalString (!cfg.allowQrexecUserSelection) "force-user='${cfg.user}'\n";
+      mode = "0444";
+    };
+
+    environment.etc."qubes-rpc/qubes.StartApp" = {
+      source = qubesStartAppService;
+      mode = "0555";
+    };
+
+    environment.etc."qubes/rpc-config/qubes.StartApp" = {
+      text = "force-user='${cfg.user}'\n";
       mode = "0444";
     };
 

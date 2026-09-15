@@ -14,7 +14,9 @@ let
     ''
       set -eu
       ${pkgs.coreutils}/bin/mkdir -p "$out/share"
-      for package in ${lib.concatMapStringsSep " " toString (map (application: application.package) homeApplications)}; do
+      for package in ${lib.concatMapStringsSep " " toString (
+        (map (application: application.package) homeApplications) ++ [ pkgs.firefox ]
+      )}; do
         for source_root in "$package/share/icons" "$package/share/pixmaps"; do
           [ -d "$source_root" ] || continue
           ${pkgs.findutils}/bin/find "$source_root" -type f -print0 |
@@ -103,7 +105,7 @@ let
     set -eu
 
     config_home="''${XDG_CONFIG_HOME:-$HOME/.config}"
-    marker="$config_home/airlock/gnome-desktop-shortcuts-v1"
+    marker="$config_home/airlock/gnome-desktop-shortcuts-v2"
     [ -e "$marker" ] && exit 0
 
     desktop="$(${pkgs.xdg-user-dirs}/bin/xdg-user-dir DESKTOP 2>/dev/null || true)"
@@ -115,6 +117,9 @@ let
         ${homeApplicationDesktop application}/share/applications/${application.desktopFile}.desktop \
         "$desktop/${application.desktopFile}.desktop"
     '') homeApplications}
+    ${pkgs.coreutils}/bin/install -m 0700 \
+      ${browserDesktop}/share/applications/firefox.desktop \
+      "$desktop/firefox.desktop"
 
     ${pkgs.coreutils}/bin/install -d -m 0700 "$(${pkgs.coreutils}/bin/dirname "$marker")"
     : > "$marker"
