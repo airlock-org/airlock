@@ -770,6 +770,10 @@
         (mkSysFirewallDomainEntry "x86_64-linux").configuration;
       nixosConfigurations.airlock-domain-sys-dev =
         (mkSysDevDomainEntry "x86_64-linux").configuration;
+      nixosConfigurations.airlock-domain-usr-home =
+        (mkHomeVmDomainEntry "x86_64-linux").configuration;
+      nixosConfigurations.airlock-domain-usr-browser =
+        (mkBrowserVmDomainEntry "x86_64-linux").configuration;
       nixosConfigurations.airlock-domain-sys-gui = (mkSysGuiDomainEntry "x86_64-linux").configuration;
     };
 }

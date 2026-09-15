@@ -16,6 +16,7 @@ let
   '';
 in
 {
+  imports = [ ./app-gui-guest.nix ];
   # Firefox stores its profile below /home/user/.mozilla, which is on this
   # domain's private Qubes volume. No usr-home volume is attached here.
   environment.systemPackages = [

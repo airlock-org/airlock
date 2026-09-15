@@ -3282,16 +3282,25 @@ in
       };
     };
 
-    systemd.services.qubes-network-uplink = lib.mkIf hasNetworkProviderRole {
-      description = "Qubes network uplink wait";
+    systemd.services.qubes-network-uplink = {
+      description = "Configure Qubes uplinks already discovered in the initrd";
       wantedBy = [ "multi-user.target" ];
-      wants = [ "network.target" ];
-      before = [ "network.target" ];
-      path = networkGuestPath;
+      requires = [ "qubes-db.service" "qubes-sysinit.service" ];
+      wants = [ "systemd-udev-settle.service" ];
+      after = [ "qubes-db.service" "qubes-sysinit.service" "systemd-udev-settle.service" ];
+      path = [ pkgs.coreutils systemdPackage ];
+      # The initrd may have processed the add event before the root's udev
+      # rule was available. Reconcile existing frontends as well as hotplug.
+      script = ''
+        for interface in /sys/class/net/*; do
+          [ -e "$interface/device/driver" ] || continue
+          [ "$(basename "$(readlink -f "$interface/device/driver")")" = vif ] || continue
+          systemctl start "qubes-network-uplink@$(basename "$interface").service"
+        done
+      '';
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${qubesAgentLinux}/lib/qubes/init/network-uplink-wait.sh";
       };
     };
 

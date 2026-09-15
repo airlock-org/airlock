@@ -23,9 +23,8 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
           }}) ];
         }}).config;
         minimal = f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.config;
-        appGuest = (f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.extendModules {{
-          modules = [ ({{ lib, ... }}: {{ airlock.qubeGuest.role = lib.mkForce "base"; }}) ];
-        }}).config;
+        appGuest = f.nixosConfigurations.airlock-domain-usr-browser.config;
+        homeGuest = f.nixosConfigurations.airlock-domain-usr-home.config;
       in {{
         applications = map (application: {{
           inherit (application) launcher application desktopFile;
@@ -43,6 +42,15 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         appGuestUplink = {{ inherit (appGuest.systemd.services."qubes-network-uplink@") requires after bindsTo; }};
         appGuestForwarding = builtins.hasAttr "qubes-network" appGuest.systemd.services;
         appGuestUdev = appGuest.services.udev.extraRules;
+        appGui = map (cfg: {{
+          enabled = cfg.systemd.services.qubes-gui-agent.enable;
+          wantedBy = cfg.systemd.services.qubes-gui-agent.wantedBy;
+          pam = cfg.security.pam.services.qubes-gui-agent.startSession;
+          session = cfg.environment.etc."X11/xinit/xinitrc".source;
+          xorg = cfg.environment.etc."X11/xorg-qubes.conf.template".source;
+          networkBoot = cfg.systemd.services.qubes-network-uplink.wantedBy;
+          networkReconcile = cfg.systemd.services.qubes-network-uplink.script;
+        }}) [ appGuest homeGuest ];
       }}
     """
     result = subprocess.run(
@@ -56,6 +64,12 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
     log_dir.mkdir(parents=True, exist_ok=True)
     (log_dir / "report.json").write_text(result.stdout)
     report = json.loads(result.stdout)
+    for guest in report["appGui"]:
+        assert guest["enabled"] and guest["pam"]
+        assert "multi-user.target" in guest["wantedBy"]
+        assert guest["session"] and guest["xorg"]
+        assert "multi-user.target" in guest["networkBoot"]
+        assert "/sys/class/net/*" in guest["networkReconcile"]
     assert report["appGuestDhcp"] is False
     assert report["appGuestForwarding"] is False
     assert "qubes-db.service" in report["appGuestUplink"]["requires"]
