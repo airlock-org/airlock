@@ -6,6 +6,7 @@
 }:
 let
   cfg = config.airlock.sysGuiGuest;
+  homeApplications = import ../../lib/usr-home-applications.nix { inherit pkgs; };
   guiAgent = pkgs.qubes-gui-agent-linux;
   guestUser = config.airlock.qubeGuest.user;
   hybrid = cfg.displayMode == "hybrid";
@@ -13,16 +14,29 @@ let
     export LD_PRELOAD=${pkgs.qubes-gui-daemon}/lib/qubes-gui-daemon/shmoverride.so
     exec ${pkgs.xorg-server}/bin/Xorg "$@"
   '';
-  filesLauncher = pkgs.writeShellScriptBin "airlock-launch-files" ''
-    set -eu
-    exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
-      --auto --service usr-home qubes.StartApp+org.gnome.Nautilus
-  '';
-  terminalLauncher = pkgs.writeShellScriptBin "airlock-launch-terminal" ''
-    set -eu
-    exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
-      --auto --service usr-home qubes.StartApp+org.gnome.Console
-  '';
+  homeApplicationLauncher = application:
+    pkgs.writeShellScriptBin "airlock-launch-${application.launcher}" ''
+      set -eu
+      exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
+        --auto --service usr-home qubes.StartApp+${application.application}
+    '';
+  homeApplicationDesktop = application:
+    pkgs.makeDesktopItem {
+      name = application.desktopFile;
+      desktopName = application.desktopName;
+      genericName = application.genericName or "";
+      exec = "airlock-launch-${application.launcher}";
+      icon = application.icon;
+      categories = application.categories;
+      mimeTypes = application.mimeTypes or [ ];
+    };
+  homeApplicationByLauncher = launcher:
+    lib.findFirst
+      (application: application.launcher == launcher)
+      (throw "missing usr-home launcher ${launcher}")
+      homeApplications;
+  filesDesktop = homeApplicationDesktop (homeApplicationByLauncher "files");
+  terminalDesktop = homeApplicationDesktop (homeApplicationByLauncher "terminal");
   browserLauncher = pkgs.writeShellScriptBin "airlock-launch-browser" ''
     set -eu
     if [ "$#" -eq 0 ]; then
@@ -34,23 +48,6 @@ let
     exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
       --auto --service usr-browser "airlock.OpenUrl+$1"
   '';
-  filesDesktop = pkgs.makeDesktopItem {
-    name = "org.gnome.Nautilus";
-    desktopName = "Files";
-    genericName = "File Manager";
-    exec = "airlock-launch-files";
-    icon = "org.gnome.Nautilus";
-    categories = [ "GNOME" "GTK" "Utility" "FileManager" ];
-    mimeTypes = [ "inode/directory" ];
-  };
-  terminalDesktop = pkgs.makeDesktopItem {
-    name = "airlock-terminal";
-    desktopName = "Terminal";
-    genericName = "Terminal Emulator";
-    exec = "airlock-launch-terminal";
-    icon = "org.gnome.Console";
-    categories = [ "GNOME" "GTK" "System" "TerminalEmulator" ];
-  };
   browserDesktop = pkgs.makeDesktopItem {
     name = "firefox";
     desktopName = "Firefox";
@@ -224,14 +221,14 @@ in
       pkgs.xdotool
       pkgs.xterm
     ]
-    ++ lib.optionals cfg.personalLaunchers.enable [
-      filesLauncher
-      terminalLauncher
-      browserLauncher
-      filesDesktop
-      terminalDesktop
-      browserDesktop
-    ];
+    ++ lib.optionals cfg.personalLaunchers.enable (
+      (map homeApplicationLauncher homeApplications)
+      ++ [
+        browserLauncher
+        browserDesktop
+      ]
+      ++ (map homeApplicationDesktop homeApplications)
+    );
 
     services.udev.packages = [ guiAgent ];
     services.xserver = {

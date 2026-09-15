@@ -4,6 +4,9 @@
 application menus, tray widgets, notifications, and graphical settings tools.
 The offline `usr-home` desktop-work VM owns the Files and Terminal processes
 and the user's persistent home directory; their windows render in `sys-gui`.
+Its GNOME application catalog also includes local document, image, media,
+calendar, contact, editor, utility and help applications. `sys-gui` exposes
+each through a fixed launcher; it does not install GNOME's broad core app set.
 The bootstrap and initial runtime configurations use **user / airlock** for
 the guest login. The dom0 console account remains **airlock / airlock**.
 These are development credentials. Deployments should configure the GUI

@@ -1,10 +1,21 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 let
   cfg = config.airlock.sysGuiDesktop;
 in
 {
   config = lib.mkIf (cfg.session == "gnome") {
     services.desktopManager.gnome.enable = true;
+    # Where usr-home is part of the topology, applications belong in that
+    # offline desktop-work VM. Minimal profiles without it retain GNOME's
+    # regular core application set.
+    services.gnome.core-apps.enable = lib.mkForce (
+      !config.airlock.sysGuiGuest.personalLaunchers.enable
+    );
+    environment.systemPackages =
+      lib.optionals config.airlock.sysGuiGuest.personalLaunchers.enable [
+        # Accessibility controls the sys-gui session itself.
+        pkgs.gnome-tecla
+      ];
 
     # Sys-gui has no NetVM and should not acquire host-facing services merely
     # because the desktop implementation normally enables them by default.

@@ -2001,6 +2001,9 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
     home_guest = (repo_root / "lifecycle/misc/modules/usr-home-guest.nix").read_text(
         encoding="utf-8"
     )
+    home_applications = (
+        repo_root / "lifecycle/misc/lib/usr-home-applications.nix"
+    ).read_text(encoding="utf-8")
     browser_guest = (
         repo_root / "lifecycle/misc/modules/usr-browser-guest.nix"
     ).read_text(encoding="utf-8")
@@ -2011,12 +2014,18 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
         repo_root / "lifecycle/bootstrap/initial-runtime-config/airlock/runtime.nix"
     ).read_text(encoding="utf-8")
 
-    assert "pkgs.nautilus" in home_guest
-    assert "pkgs.gnome-console" in home_guest
+    assert "usr-home-applications.nix" in home_guest
+    assert 'launcher = "files"' in home_applications
+    assert "pkgs.nautilus" in home_applications
+    assert 'launcher = "terminal"' in home_applications
+    assert "pkgs.gnome-console" in home_applications
     assert "pkgs.firefox" in browser_guest
     assert "airlock.OpenUrl" in browser_guest
-    assert "qubes.StartApp+org.gnome.Nautilus" in sys_gui_guest
-    assert "qubes.StartApp+org.gnome.Console" in sys_gui_guest
+    assert 'application = "org.gnome.Nautilus"' in home_applications
+    assert 'application = "org.gnome.Console"' in home_applications
+    assert "qubes.StartApp+${application.application}" in sys_gui_guest
+    assert "homeApplicationLauncher" in sys_gui_guest
+    assert "homeApplicationDesktop" in sys_gui_guest
     assert "qubes.StartApp+firefox" in sys_gui_guest
     assert "--auto --service usr-home" in sys_gui_guest
     assert "--auto --service usr-browser" in sys_gui_guest
