@@ -18,8 +18,12 @@ def inspect(sysfs=Path("/sys"), proc=Path("/proc")):
     device = sysfs / "bus/pci/devices" / bdf
     group = device / "iommu_group/devices"
     members = sorted(p.name for p in group.iterdir()) if group.is_dir() else []
-    methods = (read(device / "reset_method") or "").replace("[", "").replace("]", "").split()
-    driver = (device / "driver").resolve().name if (device / "driver").is_symlink() else None
+    methods = (
+        (read(device / "reset_method") or "").replace("[", "").replace("]", "").split()
+    )
+    driver = (
+        (device / "driver").resolve().name if (device / "driver").is_symlink() else None
+    )
     capabilities = read(proc / "xen/capabilities") or ""
     failures = []
     if "control_d" not in capabilities:
@@ -34,17 +38,28 @@ def inspect(sysfs=Path("/sys"), proc=Path("/proc")):
     # Deliberately do not provide a bypass; this laptop was bus-only in Ubuntu.
     if not methods or methods[0] != "flr":
         failures.append("function-level-reset-not-selected-review-required")
-    dom0_drm = sorted(str(p) for p in (sysfs / "class/drm").glob("card*/device")
-                      if p.resolve() == device.resolve())
+    dom0_drm = sorted(
+        str(p)
+        for p in (sysfs / "class/drm").glob("card*/device")
+        if p.resolve() == device.resolve()
+    )
     if dom0_drm:
         failures.append("dom0-still-has-gpu-drm-device")
-    return {"schema": 1, "bdf": bdf, "vendor": read(device / "vendor"),
-            "device": read(device / "device"), "driver": driver,
-            "iommu_members": members, "reset_methods": methods,
-            "dom0_drm_devices": dom0_drm, "failures": failures,
-            "assignment_gate_passed": not failures,
-            "graphics_verified": False, "input_verified": False,
-            "note": "Read-only preflight, not proof of passthrough or reset safety."}
+    return {
+        "schema": 1,
+        "bdf": bdf,
+        "vendor": read(device / "vendor"),
+        "device": read(device / "device"),
+        "driver": driver,
+        "iommu_members": members,
+        "reset_methods": methods,
+        "dom0_drm_devices": dom0_drm,
+        "failures": failures,
+        "assignment_gate_passed": not failures,
+        "graphics_verified": False,
+        "input_verified": False,
+        "note": "Read-only preflight, not proof of passthrough or reset safety.",
+    }
 
 
 if __name__ == "__main__":

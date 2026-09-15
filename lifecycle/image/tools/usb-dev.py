@@ -524,7 +524,9 @@ def personalize(args):
     key_target = beneath(root, "home/airlock/.ssh/authorized_keys")
     vfct_target = beneath(root, "var/lib/airlock/amd-lab/sys-gui.vfct")
     require(
-        not any(p.exists() for p in [password_file, repo_target, key_target, vfct_target]),
+        not any(
+            p.exists() for p in [password_file, repo_target, key_target, vfct_target]
+        ),
         "Already personalized (or interrupted); refusing to overwrite data.",
     )
     auth_data = read_auth_cache(args.auth_file) if args.auth_file else None
