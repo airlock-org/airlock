@@ -148,8 +148,8 @@ def prepare_pool(root, descriptors, specs, runtime_root):
         )
 
 
-def verify_files(root, files, fingerprints=None):
-    """Check finalized seed bytes, both in the image build and on first boot."""
+def verify_files(root, files, fingerprints=None, *, trust_payload=False):
+    """Check seed files; bootstrap trusts installed payload bytes, not metadata."""
     root = Path(root)
     fingerprints = {} if fingerprints is None else fingerprints
     for relative, expected in files.items():
@@ -158,6 +158,14 @@ def verify_files(root, files, fingerprints=None):
             fail("prepared store checksum path escapes pool")
         if not path.resolve().is_relative_to(root.resolve()):
             fail("prepared store checksum symlink escapes pool")
+        if (
+            trust_payload
+            and Path(relative).parent == Path("objects/segments")
+            and path.suffix == ".blob"
+        ):
+            if not path.is_file() or path.stat().st_size != expected["size"]:
+                fail(f"prepared store payload missing or size mismatch: {relative}")
+            continue
         if relative not in fingerprints:
             fingerprints[relative] = {
                 "size": path.stat().st_size,
@@ -186,11 +194,13 @@ def verify_outputs(root, descriptors):
 
 
 def verify_prepared(args):
-    """Verify the selected seed once before Qubes records its generation.
+    """Check selected seed metadata before Qubes records its generation.
 
     A present but invalid descriptor fails closed; never silently repack from
     sources the prepared image intentionally omits. This descriptor is part of
     the administrator-selected store artifact, not supplied by a guest.
+    Trust payload bytes from the image validated by verify_outputs: bootstrap
+    checks their presence and size without reading or hashing the segments.
     """
     descriptor_path = Path(args.artifact) / "prepared.json"
     if not descriptor_path.exists():
@@ -220,11 +230,11 @@ def verify_prepared(args):
     if relative_manifest not in files:
         fail("prepared store manifest checksum missing")
     print(
-        f"Checking prepared store for {args.domain} (sequential integrity read; no package copying)",
+        f"Checking prepared store metadata for {args.domain} (trusting image payload; no payload scan)",
         file=sys.stderr,
         flush=True,
     )
-    verify_files(root, files)
+    verify_files(root, files, trust_payload=True)
     manifest = read_json(generation_manifest_path(root, args.domain, generation))
     store = manifest.get("store", {})
     if not generation_is_committed(root, manifest):

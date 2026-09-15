@@ -195,16 +195,16 @@ def test_prepared_adoption_without_sources_or_repacking(seed, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "damage", ["payload", "metadata", "missing", "identity", "escape"]
+    "damage", ["truncated", "metadata", "missing", "identity", "escape"]
 )
 def test_prepared_adoption_rejects_corrupt_or_wrong_seed(seed, damage):
     args, _, _ = seed
     pool = Path(args.pool_root)
-    if damage == "payload":
+    if damage == "truncated":
         path = next(pool.rglob("*.blob"))
         path.chmod(0o600)
         data = path.read_bytes()
-        path.write_bytes(bytes([data[0] ^ 1]) + data[1:])
+        path.write_bytes(data[:-1])
     elif damage == "metadata":
         descriptor = json.loads((Path(args.artifact) / "prepared.json").read_text())
         relative = next(
@@ -223,6 +223,28 @@ def test_prepared_adoption_rejects_corrupt_or_wrong_seed(seed, damage):
         path.write_text(json.dumps(descriptor))
     with pytest.raises((core.EngineError, OSError)):
         prepared.verify_prepared(args)
+
+
+def test_bootstrap_trusts_payload_but_full_validation_detects_corruption(
+    seed, monkeypatch
+):
+    args, descriptors, _ = seed
+    path = next((Path(args.pool_root) / "objects/segments").glob("*.blob"))
+    path.chmod(0o600)
+    data = path.read_bytes()
+    path.write_bytes(bytes([data[0] ^ 1]) + data[1:])
+    original_open = Path.open
+
+    def metadata_only_open(self, *a, **kw):
+        if self.suffix == ".blob":
+            pytest.fail("bootstrap must not open payload segments")
+        return original_open(self, *a, **kw)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "open", metadata_only_open)
+        assert prepared.verify_prepared(args) == 1
+    with pytest.raises(core.EngineError, match="integrity check failed.*blob"):
+        prepared.verify_outputs(args.pool_root, descriptors)
 
 
 def test_ordinary_store_has_no_prepared_admission(tmp_path):

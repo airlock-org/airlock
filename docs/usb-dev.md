@@ -20,10 +20,11 @@ for this POC. 128 GB is still recommended for longer-lived builds.
 
 The build now prepares the shared guest package store for both sys-gui boot
 variants and places it at its final location in the image. Guest-only source
-packages are omitted from dom0's ordinary store. First setup checks the prepared
-store's integrity and attaches it; it no longer repackages gigabytes of packages
-on the USB. The integrity scan still reads the backing data once. The speedup
-needs to be measured on a rebuilt image; see [storage details](config-system.md#admission-and-prepared-usb-stores).
+packages are omitted from dom0's ordinary store. First setup trusts the prepared
+image payload, checks metadata and backing-file presence and sizes, and attaches
+the store without scanning or repackaging gigabytes of packages on the USB.
+Full checksums remain mandatory during image validation. Startup timing needs
+to be measured on a rebuilt image; see [storage details](config-system.md#admission-and-prepared-usb-stores).
 
 Inspect `lsblk -o NAME,TRAN,SIZE,MODEL,SERIAL,MOUNTPOINTS` and select an expendable
 whole-disk `/dev/disk/by-id/usb-…` path. Do not use the internal NVMe. Unmount

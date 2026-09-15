@@ -285,9 +285,13 @@ build machine's source store is not modified or pruned by this process.
 
 On first setup, the storage helper recognizes `prepared.json`, checks the exact
 domain/system/root/kernel/closure identity and device layout, and verifies the
-prepared files against their checksums. This includes one sequential integrity
-read of each required segment; it does not create tar fragments or copy package
-data. Invalid or missing seed data fails instead of silently starting a fresh
+prepared metadata against its checksums. Bootstrap trusts the image's payload:
+it checks segment paths, presence and sizes without reading or hashing their
+contents. Full payload checksums remain mandatory in finalized-output image
+validation and available explicitly through the prepared-store module's
+`--check POOL DESCRIPTORS` command. Same-size payload corruption after image
+validation is therefore not detected by bootstrap. Missing or truncated segments
+and invalid metadata fail instead of silently starting a fresh
 admission. Qubes then creates its normal read-only store volumes and records
 the selected generation. Subsequent matching setup uses the existing generation
 without repeating this seed verification. Ordinary source-based admission
