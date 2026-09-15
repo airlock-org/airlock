@@ -30,7 +30,7 @@ is impossible, and successful guest startup would not prove safe reset.
 
 ## Boot choices
 
-The USB should contain five Xen boot choices, plus upstream non-Xen recovery
+The USB currently contains four Xen boot choices, plus upstream non-Xen recovery
 entries. Verify the generated entries before the first hardware experiment:
 
 | Xen entry | Display | VM startup |
@@ -38,8 +38,10 @@ entries. Verify the generated entries before the first hardware experiment:
 | Default | Existing hybrid XFCE | sys-gui started by the desktop relay after setup |
 | `usb-text-recovery` | dom0 text console, AMD not hidden | No setup or guest autostart |
 | `usb-gui-lab` | Temporary dom0 bootstrap text, then stock sys-gui GNOME login | Validated assignment, framebuffer release, one sys-gui start, then input forwarding |
-| `usb-gui-lab-hyprland` | Same physical GPU path, Hyprland + DankMaterialShell | Retained experimental desktop implementation |
-| `usb-gui-lab-xfce` | Same physical GPU path, XFCE fallback desktop | Same validated startup sequence |
+| `usb-lab` | Temporary dom0 bootstrap text, then sys-gui GNOME | General development topology, with sys-dev Tailnet access |
+
+The Hyprland and XFCE physical-GUI builders remain in the source tree, but their
+boot entries are disabled until those experiments resume.
 
 GNOME and Hyprland are not yet hardware-verified. The successful desktop evidence
 above is for XFCE. See [the Hyprland milestone](sys-gui-hyprland.md) for its

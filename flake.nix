@@ -405,16 +405,10 @@
               airlock.qubes.domains.sys-gui = lib.mapAttrs (_: lib.mkForce)
                 (builtins.removeAttrs (preparedDomain "gui-lab") [ "devices" ]);
             };
-            specialisation.usb-gui-lab-hyprland.configuration = {
-              imports = [ ./lifecycle/image/profiles/usb-gui-lab.nix ];
-              airlock.qubes.domains.sys-gui = lib.mapAttrs (_: lib.mkForce)
-                (builtins.removeAttrs (preparedDomain "gui-lab-hyprland") [ "devices" ]);
-            };
-            specialisation.usb-gui-lab-xfce.configuration = {
-              imports = [ ./lifecycle/image/profiles/usb-gui-lab.nix ];
-              airlock.qubes.domains.sys-gui = lib.mapAttrs (_: lib.mkForce)
-                (builtins.removeAttrs (preparedDomain "gui-lab-xfce") [ "devices" ]);
-            };
+            # Keep the guest builders below for future experiments, but do not
+            # emit Hyprland or XFCE boot-menu entries during USB-lab work.
+            # specialisation.usb-gui-lab-hyprland.configuration = { ... };
+            # specialisation.usb-gui-lab-xfce.configuration = { ... };
             specialisation.usb-lab.configuration = {
               imports = [ ./lifecycle/image/profiles/usb-lab.nix ];
               airlock.qubes.domains = lib.mapAttrs (_: lib.mkForce) {
