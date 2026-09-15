@@ -28,6 +28,10 @@ in
         # Accessibility controls the sys-gui session itself.
         pkgs.gnome-tecla
         pkgs.gnomeExtensions.desktop-icons-ng-ding
+        # DING delegates desktop file operations to the Nautilus executable.
+        # The Airlock Files launcher still routes ordinary file-manager use to
+        # usr-home, whose desktop entry takes precedence over Nautilus's.
+        pkgs.nautilus
       ];
 
     # Sys-gui has no NetVM and should not acquire host-facing services merely

@@ -97,6 +97,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert not report["labGuiHasDom0Terminal"]
     assert "airlock-start-sys-dev-tailscale" in report["labGuiPackages"]
     assert "airlock-start-sys-dev-tailscale.desktop" in report["labGuiPackages"]
+    assert "nautilus" in report["labGuiPackages"]
     assert report["labGuiGsettingsOverridePackages"] == ["gnome-shell"]
     assert "/bin/xterm -hold " in report["tailscaleLauncher"]
     assert "Exec=airlock-start-sys-dev-tailscale" in report["tailscaleDesktop"]

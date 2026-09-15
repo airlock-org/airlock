@@ -83,8 +83,11 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
     packages = set(report["workspacePackages"])
     for launcher in expected:
         assert f"airlock-launch-{launcher}" in packages
-    for package in ("gnome-calculator", "gnome-text-editor", "nautilus"):
+    for package in ("gnome-calculator", "gnome-text-editor"):
         assert not any(name.startswith(f"{package}-") for name in packages)
+    # DING requires the local Nautilus binary for desktop file operations. The
+    # visible Files launcher still calls usr-home through qrexec.
+    assert any(name.startswith("nautilus-") for name in packages)
     assert any("airlock-usr-home-application-icons" in name for name in packages)
     assert any("desktop-icons-ng-ding" in name for name in packages)
     assert any(
