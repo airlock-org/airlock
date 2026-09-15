@@ -36,6 +36,7 @@ def test_gui_minimal_topology_and_desktop():
         xfce = guest.services.xserver.desktopManager.xfce.enable;
         personalLaunchers = guest.airlock.sysGuiGuest.personalLaunchers.enable;
         normalPersonalLaunchers = normal.airlock.sysGuiGuest.personalLaunchers.enable;
+        normalPackages = map (p: p.pname or p.name) normal.environment.systemPackages;
         etc = builtins.attrNames guest.environment.etc;
         hostEtc = builtins.attrNames image.environment.etc;
         hostPoweroffService = builtins.readFile image.environment.etc."qubes-rpc/airlock.Dom0Poweroff".source;
@@ -81,15 +82,24 @@ def test_gui_minimal_topology_and_desktop():
     ):
         assert report[key] is False, key
     assert report["normalPersonalLaunchers"] is True
+    assert "airlock-launch-terminal" in report["normalPackages"]
+    assert "airlock-terminal.desktop" in report["normalPackages"]
     assert report["session"] == "sys-gui"
     assert report["guestSession"] == "xfce"
     assert report["xfce"] is True
-    assert "xdg/autostart/airlock-bootstrap-desktop-launchers.desktop" not in report["etc"]
-    assert "airlock.Dom0Poweroff is restricted to sys-gui" in report["hostPoweroffService"]
+    assert (
+        "xdg/autostart/airlock-bootstrap-desktop-launchers.desktop" not in report["etc"]
+    )
+    assert (
+        "airlock.Dom0Poweroff is restricted to sys-gui" in report["hostPoweroffService"]
+    )
     assert "systemctl poweroff" in report["hostPoweroffService"]
     assert "airlock.Dom0Poweroff * sys-gui dom0 allow" in report["hostPoweroffPolicy"]
-    assert not any(name.startswith("airlock/config-inputs/") for name in report["hostEtc"])
+    assert not any(
+        name.startswith("airlock/config-inputs/") for name in report["hostEtc"]
+    )
     assert "airlock-launch-files" not in report["packages"]
+    assert "airlock-launch-terminal" not in report["packages"]
     assert "airlock-launch-browser" not in report["packages"]
     assert "xfce4-session-logout" in report["packages"]
     assert "firefox.desktop" not in str(report["mimeDefaults"])

@@ -365,7 +365,7 @@ def test_nix_selection_drives_reservation_assignment_and_start():
     assert guest["failed"] == []
     assert guest["defaultUnit"] == "graphical.target"
     assert guest["displayWantedBy"] == ["graphical.target"]
-    assert guest["session"] == "xfce"
+    assert guest["session"] == "gnome"
     assert guest["receiver"] is True
     assert guest["guiAgent"] is False
     assert report["diagnosticGuest"]["defaultUnit"] == "multi-user.target"

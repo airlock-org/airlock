@@ -4,7 +4,9 @@
   rootImageSizeMiB = 1024;
   netvm = null;
   prefs = {
-    autostart = false;
+    # Keep the offline desktop-work VM ready alongside sys-gui. Its applications
+    # own the user's files and shell state while their windows render in sys-gui.
+    autostart = true;
     include_in_backups = true;
     memory = 2048;
     maxmem = 4096;

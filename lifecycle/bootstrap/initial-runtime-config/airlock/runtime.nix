@@ -62,6 +62,7 @@
       netvm = null;
       rootImageSizeMiB = 1024;
       prefs = {
+        autostart = true;
         include_in_backups = true;
         memory = 2048;
         maxmem = 4096;

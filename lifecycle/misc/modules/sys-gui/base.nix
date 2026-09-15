@@ -18,6 +18,11 @@ let
     exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
       --auto --service usr-home qubes.StartApp+org.gnome.Nautilus
   '';
+  terminalLauncher = pkgs.writeShellScriptBin "airlock-launch-terminal" ''
+    set -eu
+    exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
+      --auto --service usr-home qubes.StartApp+org.gnome.Console
+  '';
   browserLauncher = pkgs.writeShellScriptBin "airlock-launch-browser" ''
     set -eu
     if [ "$#" -eq 0 ]; then
@@ -37,6 +42,14 @@ let
     icon = "org.gnome.Nautilus";
     categories = [ "GNOME" "GTK" "Utility" "FileManager" ];
     mimeTypes = [ "inode/directory" ];
+  };
+  terminalDesktop = pkgs.makeDesktopItem {
+    name = "airlock-terminal";
+    desktopName = "Terminal";
+    genericName = "Terminal Emulator";
+    exec = "airlock-launch-terminal";
+    icon = "org.gnome.Console";
+    categories = [ "GNOME" "GTK" "System" "TerminalEmulator" ];
   };
   browserDesktop = pkgs.makeDesktopItem {
     name = "firefox";
@@ -84,7 +97,7 @@ let
 
     launcher_root="$config_home/xfce4/panel"
     ${pkgs.coreutils}/bin/install -d -m 0700 "$launcher_root"
-    for desktop in org.gnome.Nautilus firefox; do
+    for desktop in org.gnome.Nautilus airlock-terminal firefox; do
       id="$next"
       next=$((next + 1))
       ${pkgs.xfconf}/bin/xfconf-query -c xfce4-panel -p "/plugins/plugin-$id" \
@@ -92,6 +105,7 @@ let
       ${pkgs.coreutils}/bin/install -d -m 0700 "$launcher_root/launcher-$id"
       case "$desktop" in
         org.gnome.Nautilus) source=${filesDesktop}/share/applications/org.gnome.Nautilus.desktop ;;
+        airlock-terminal) source=${terminalDesktop}/share/applications/airlock-terminal.desktop ;;
         firefox) source=${browserDesktop}/share/applications/firefox.desktop ;;
       esac
       ${pkgs.coreutils}/bin/install -m 0600 \
@@ -176,7 +190,7 @@ in
   options.airlock.sysGuiGuest.personalLaunchers.enable = lib.mkOption {
     type = lib.types.bool;
     default = true;
-    description = "Install Files and Firefox launchers targeting usr-home and usr-browser.";
+    description = "Install Files and Terminal launchers for usr-home and a Firefox launcher for usr-browser.";
   };
 
   config = lib.mkIf cfg.enable {
@@ -212,8 +226,10 @@ in
     ]
     ++ lib.optionals cfg.personalLaunchers.enable [
       filesLauncher
+      terminalLauncher
       browserLauncher
       filesDesktop
+      terminalDesktop
       browserDesktop
     ];
 

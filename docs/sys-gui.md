@@ -1,7 +1,9 @@
 # sys-gui desktop and login
 
-`sys-gui` owns LightDM's login screen, the XFCE desktop, Qubes Manager,
+`sys-gui` owns LightDM's login screen, desktop session, Qubes Manager,
 application menus, tray widgets, notifications, and graphical settings tools.
+The offline `usr-home` desktop-work VM owns the Files and Terminal processes
+and the user's persistent home directory; their windows render in `sys-gui`.
 The bootstrap and initial runtime configurations use **user / airlock** for
 the guest login. The dom0 console account remains **airlock / airlock**.
 These are development credentials. Deployments should configure the GUI

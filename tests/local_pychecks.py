@@ -1991,6 +1991,7 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
     browser = domains["usr-browser"]
 
     assert home["netvm"] is None
+    assert home["prefs"]["autostart"] is True
     assert home["backend"]["state"]["persistent"] == "usr-home-private"
     assert home["features"]["menu-items"] == ""
     assert browser["netvm"] == "sys-firewall"
@@ -2003,7 +2004,7 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
     browser_guest = (
         repo_root / "lifecycle/misc/modules/usr-browser-guest.nix"
     ).read_text(encoding="utf-8")
-    sys_gui_guest = (repo_root / "lifecycle/misc/modules/sys-gui-guest.nix").read_text(
+    sys_gui_guest = (repo_root / "lifecycle/misc/modules/sys-gui/base.nix").read_text(
         encoding="utf-8"
     )
     runtime = (
@@ -2011,9 +2012,11 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
     ).read_text(encoding="utf-8")
 
     assert "pkgs.nautilus" in home_guest
+    assert "pkgs.gnome-console" in home_guest
     assert "pkgs.firefox" in browser_guest
     assert "airlock.OpenUrl" in browser_guest
     assert "qubes.StartApp+org.gnome.Nautilus" in sys_gui_guest
+    assert "qubes.StartApp+org.gnome.Console" in sys_gui_guest
     assert "qubes.StartApp+firefox" in sys_gui_guest
     assert "--auto --service usr-home" in sys_gui_guest
     assert "--auto --service usr-browser" in sys_gui_guest
@@ -2021,7 +2024,7 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
     assert '"x-scheme-handler/https" = "firefox.desktop"' in sys_gui_guest
     assert "airlock-bootstrap-desktop-launchers" in sys_gui_guest
     assert "desktop-bootstrap-v1" in sys_gui_guest
-    assert "org.gnome.Nautilus firefox" in sys_gui_guest
+    assert "org.gnome.Nautilus airlock-terminal firefox" in sys_gui_guest
     assert "X-GNOME-Autostart-Phase=Panel" in sys_gui_guest
     assert "usr-home = {" in runtime
     assert "usr-browser = {" in runtime
