@@ -885,7 +885,8 @@ list_dom0_default_route_pci_devices() {
     awk 'NF && !seen[$0]++ { print }'
 }
 
-list_auto_sys_net_pci_devices() {
+list_auto_network_pci_devices() {
+  local domain="$1"
   local network_devices_file
   local excluded_devices_file
 
@@ -893,7 +894,12 @@ list_auto_sys_net_pci_devices() {
   excluded_devices_file="$(mktemp)"
   list_dom0_network_pci_devices > "$network_devices_file"
   {
-    list_dom0_default_route_pci_devices
+    # A conventional sys-net must not take dom0's active recovery route during
+    # ordinary setup. sys-dev is the USB-lab transition domain, however: it is
+    # specifically meant to take that NIC so dom0 can be shut down later.
+    if [ "$domain" = "sys-net" ]; then
+      list_dom0_default_route_pci_devices
+    fi
     if [ -n "${AIRLOCK_SYS_NET_PCI_EXCLUDE:-}" ]; then
       printf '%s\n' "$AIRLOCK_SYS_NET_PCI_EXCLUDE" | split_device_words_unique
     fi
@@ -1044,7 +1050,7 @@ setup_domain_auto_network_pci_devices() {
     fail "domain is missing before automatic network PCI assignment: $domain"
   fi
 
-  mapfile -t device_ids < <(list_auto_sys_net_pci_devices)
+  mapfile -t device_ids < <(list_auto_network_pci_devices "$domain")
   if [ "${#device_ids[@]}" -eq 0 ]; then
     fail "automatic network PCI assignment found no available dom0 network PCI devices"
   fi
