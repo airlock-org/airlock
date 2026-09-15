@@ -7,7 +7,10 @@ in
     services.desktopManager.gnome = {
       enable = true;
       extraGSettingsOverridePackages = lib.optionals config.airlock.sysGuiGuest.personalLaunchers.enable [
-        pkgs.gnomeExtensions.desktop-icons-ng-ding
+        # The override below changes org.gnome.shell. DING's own schema lives
+        # inside its extension directory, rather than NixOS's standard schema
+        # location, so it must not be passed to the override compiler.
+        pkgs.gnome-shell
       ];
       extraGSettingsOverrides = lib.optionalString config.airlock.sysGuiGuest.personalLaunchers.enable ''
         [org.gnome.shell]

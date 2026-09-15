@@ -58,6 +58,8 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         guiHostname = gui.networking.hostName;
         labGuiHasDom0Terminal = labGui.airlock.devDom0Terminal.guest.enable;
         labGuiPackages = map (package: package.pname or package.name) labGui.environment.systemPackages;
+        labGuiGsettingsOverridePackages = map (package: package.pname or package.name)
+          labGui.services.desktopManager.gnome.extraGSettingsOverridePackages;
         tailscaleLauncher = builtins.readFile "${{tailscaleLauncher}}/bin/airlock-start-sys-dev-tailscale";
         tailscaleDesktop = builtins.readFile "${{tailscaleDesktop}}/share/applications/airlock-start-sys-dev-tailscale.desktop";
         hostNetworkManager = host.networking.networkmanager.enable;
@@ -95,6 +97,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert not report["labGuiHasDom0Terminal"]
     assert "airlock-start-sys-dev-tailscale" in report["labGuiPackages"]
     assert "airlock-start-sys-dev-tailscale.desktop" in report["labGuiPackages"]
+    assert report["labGuiGsettingsOverridePackages"] == ["gnome-shell"]
     assert "/bin/xterm -hold " in report["tailscaleLauncher"]
     assert "Exec=airlock-start-sys-dev-tailscale" in report["tailscaleDesktop"]
     assert report["guiPci"] == [
