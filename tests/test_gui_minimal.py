@@ -97,6 +97,17 @@ def test_gui_minimal_topology_and_desktop():
     assert "airlock-host-poweroff@airlock.local" in report["gnomeOverrides"]
     assert "airlock-gnome-host-poweroff" in report["gnomeHostPoweroffExtensionSource"]
     assert "activatePowerOff" in report["gnomeHostPoweroffExtensionSource"]
+    assert (
+        "import GObject from 'gi://GObject'"
+        in report["gnomeHostPoweroffExtensionSource"]
+    )
+    assert "GObject.registerClass(" in report["gnomeHostPoweroffExtensionSource"]
+    assert "_init()" in report["gnomeHostPoweroffExtensionSource"]
+    assert (
+        "super._init({destroyOnClose: false})"
+        in report["gnomeHostPoweroffExtensionSource"]
+    )
+    assert "constructor()" not in report["gnomeHostPoweroffExtensionSource"]
     assert "airlock.Dom0Poweroff" in report["gnomeHostPoweroffHelper"]
     assert report["session"] == "sys-gui"
     assert report["guestSession"] == "xfce"

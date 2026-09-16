@@ -1,5 +1,6 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -9,9 +10,10 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const HOST_POWEROFF = '@hostPoweroff@';
 
+const HostPowerOffDialog = GObject.registerClass(
 class HostPowerOffDialog extends ModalDialog.ModalDialog {
-    constructor() {
-        super({destroyOnClose: false});
+    _init() {
+        super._init({destroyOnClose: false});
 
         this.contentLayout.add_child(new St.Label({
             text: 'Power Off',
@@ -58,7 +60,7 @@ class HostPowerOffDialog extends ModalDialog.ModalDialog {
                 'The request could not be started. The computer remains on.');
         }
     }
-}
+});
 
 export default class AirlockHostPowerOffExtension extends Extension {
     enable() {
