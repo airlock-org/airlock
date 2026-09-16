@@ -2,7 +2,7 @@
 [
   {
     launcher = "files";
-    desktopFile = "org.gnome.Nautilus";
+    desktopFile = "airlock-files";
     application = "org.gnome.Nautilus";
     desktopName = "Files";
     genericName = "File Manager";
@@ -54,6 +54,7 @@
     application = "org.gnome.Calculator";
     desktopName = "Calculator";
     icon = "org.gnome.Calculator";
+    wmClass = "gnome-calculator";
     categories = [ "GNOME" "GTK" "Utility" "Calculator" ];
     package = pkgs.gnome-calculator;
   }
@@ -127,6 +128,7 @@
     application = "org.gnome.SystemMonitor";
     desktopName = "System Monitor";
     icon = "org.gnome.SystemMonitor";
+    wmClass = "gnome-system-monitor";
     categories = [ "GNOME" "GTK" "System" "Monitor" ];
     package = pkgs.gnome-system-monitor;
   }

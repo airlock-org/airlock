@@ -28,6 +28,7 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
       in {{
         applications = map (application: {{
           inherit (application) launcher application desktopFile;
+          wmClass = application.wmClass or application.application;
           package = application.package.pname or application.package.name;
         }}) applications;
         workspaceCoreApps = workspace.services.gnome.core-apps.enable;
@@ -125,6 +126,20 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         application["launcher"]: (application["application"], application["package"])
         for application in report["applications"]
     } == expected
+    wm_classes = {
+        application["launcher"]: application["wmClass"]
+        for application in report["applications"]
+    }
+    assert set(wm_classes) == set(expected)
+    assert wm_classes["calculator"] == "gnome-calculator"
+    assert wm_classes["system-monitor"] == "gnome-system-monitor"
+    for launcher, wm_class in wm_classes.items():
+        if launcher not in {"calculator", "system-monitor"}:
+            assert wm_class == next(
+                application["application"]
+                for application in report["applications"]
+                if application["launcher"] == launcher
+            )
     assert report["workspaceCoreApps"] is False
     assert report["minimalCoreApps"] is True
     assert (

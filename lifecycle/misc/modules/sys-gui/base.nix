@@ -49,6 +49,7 @@ let
       genericName = application.genericName or "";
       exec = "airlock-launch-${application.launcher}";
       icon = application.icon;
+      startupWMClass = "usr-home:${application.wmClass or application.application}";
       categories = application.categories;
       mimeTypes = application.mimeTypes or [ ];
     };
@@ -76,6 +77,7 @@ let
     genericName = "Web Browser";
     exec = "airlock-launch-browser %u";
     icon = "firefox";
+    startupWMClass = "usr-browser:firefox";
     categories = [ "Network" "WebBrowser" ];
     mimeTypes = [
       "x-scheme-handler/http"
@@ -156,14 +158,14 @@ let
 
     launcher_root="$config_home/xfce4/panel"
     ${pkgs.coreutils}/bin/install -d -m 0700 "$launcher_root"
-    for desktop in org.gnome.Nautilus airlock-terminal firefox; do
+    for desktop in airlock-files airlock-terminal firefox; do
       id="$next"
       next=$((next + 1))
       ${pkgs.xfconf}/bin/xfconf-query -c xfce4-panel -p "/plugins/plugin-$id" \
         -n -t string -s launcher
       ${pkgs.coreutils}/bin/install -d -m 0700 "$launcher_root/launcher-$id"
       case "$desktop" in
-        org.gnome.Nautilus) source=${filesDesktop}/share/applications/org.gnome.Nautilus.desktop ;;
+        airlock-files) source=${filesDesktop}/share/applications/airlock-files.desktop ;;
         airlock-terminal) source=${terminalDesktop}/share/applications/airlock-terminal.desktop ;;
         firefox) source=${browserDesktop}/share/applications/firefox.desktop ;;
       esac
@@ -401,7 +403,7 @@ in
     # Canonical desktop IDs keep XFCE's menu, launcher search, dock and MIME
     # defaults pointed at the two user-facing domains instead of per-VM copies.
     xdg.mime.defaultApplications = lib.mkIf cfg.personalLaunchers.enable {
-      "inode/directory" = "org.gnome.Nautilus.desktop";
+      "inode/directory" = "airlock-files.desktop";
       "x-scheme-handler/http" = "firefox.desktop";
       "x-scheme-handler/https" = "firefox.desktop";
       "text/html" = "firefox.desktop";

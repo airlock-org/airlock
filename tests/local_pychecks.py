@@ -2034,13 +2034,13 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
     assert "qubes.StartApp+firefox" in sys_gui_guest
     assert "--auto --service usr-home" in sys_gui_guest
     assert "--auto --service usr-browser" in sys_gui_guest
-    assert '"inode/directory" = "org.gnome.Nautilus.desktop"' in sys_gui_guest
+    assert '"inode/directory" = "airlock-files.desktop"' in sys_gui_guest
     assert '"x-scheme-handler/https" = "firefox.desktop"' in sys_gui_guest
     assert "airlock-bootstrap-desktop-launchers" in sys_gui_guest
     assert "desktop-bootstrap-v1" in sys_gui_guest
     assert "gnome-desktop-shortcuts-v2" in sys_gui_guest
     assert '"$desktop/firefox.desktop"' in sys_gui_guest
-    assert "org.gnome.Nautilus airlock-terminal firefox" in sys_gui_guest
+    assert "airlock-files airlock-terminal firefox" in sys_gui_guest
     assert "X-GNOME-Autostart-Phase=Panel" in sys_gui_guest
     assert "usr-home = {" in runtime
     assert "usr-browser = {" in runtime
