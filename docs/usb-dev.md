@@ -50,7 +50,11 @@ and grows only partition 2. The EFI partition, root start, partition UUIDs and
 filesystem UUID remain unchanged. It checks the grown filesystem again before
 personalization. Unexpected layouts or filesystem errors stop provisioning.
 Raw table backups, `before.json`, and a successful `result.json` are stored in
-`.airlock-logs/usb-root-expansion/grow-*/` on the development host (root-owned).
+`$AIRLOCK_LOG_DIR/usb-root-expansion/grow-*/` on the development host (root-owned),
+or `/var/log/airlock/usb-root-expansion/grow-*/` without a configured log directory.
+Keep these outside the repository: root-only backup directories prevent Nix from
+reading the source tree. Backups from older tooling under
+`.airlock-logs/usb-root-expansion` should be moved outside the repo, not deleted.
 These are recovery metadata, **not backups of data erased by flashing**. Do not
 restore a smaller old partition boundary over an already enlarged filesystem.
 
@@ -65,6 +69,26 @@ space check still applies. This is disk storage, not dom0 RAM allocation.
 Low-level `write` and `write-latest` remain image-only operations and do not grow
 partitions. `boot.growPartition` and filesystem auto-resize remain disabled:
 partition mutation occurs only in this explicit host-side provisioning command.
+
+If provisioning stops **after flashing but before personalization**, finish the
+already-written image without another build or flash:
+
+```sh
+make usb-dev-provision-resume USB_SERIAL=25110814640207
+```
+
+This resolves/unmounts the USB by serial, validates the image marker, completes
+root expansion and runs the usual personalization. It does not write the image
+from the result link. It refuses an already personalized/bootstrapped installation
+or partially completed personalization; do not use it as an update command.
+
+In particular, `blockdev --rereadpt: Device or resource busy` after sfdisk's
+successful partition update could come from a redundant second kernel refresh
+racing device probing. Provisioning now settles udev and checks the actual
+kernel partition size instead of repeating that refresh. If the size is still
+stale, it stops before filesystem resizing and requests unplug/replug, then
+resume. An already enlarged partition is left unchanged; its filesystem can
+still be grown on the resumed run. A successful resume leaves the USB unmounted.
 
 The AMD lab now prepares its GPU's VFCT automatically from the booted host's
 firmware during normal Qubes VM startup. No local firmware artifact or

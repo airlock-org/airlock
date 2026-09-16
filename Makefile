@@ -152,9 +152,9 @@ test-quick: ensure-generated-dirs
 
 .PHONY: vm-gui-minimal-image vm-gui-minimal-run vm-gui-minimal-ssh
 
-.PHONY: usb-dev-image usb-dev-write usb-dev-provision usb-dev-help
+.PHONY: usb-dev-image usb-dev-write usb-dev-provision usb-dev-provision-resume usb-dev-help
 
-USB_DEV_PROVISION = sudo python3 lifecycle/image/tools/usb-dev.py provision-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --resize-backup-dir "$(CURDIR)/.airlock-logs/usb-root-expansion" --repo "$(CURDIR)" --public-key "$(HOME)/.ssh/id_ed25519.pub" --auth-file "$(HOME)/.codex/auth.json" --insecure-dev-password --insecure-plain-codex-auth
+USB_DEV_PROVISION = sudo python3 lifecycle/image/tools/usb-dev.py provision-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --resize-backup-dir "$(or $(AIRLOCK_LOG_DIR),/var/log/airlock)/usb-root-expansion" --repo "$(CURDIR)" --public-key "$(HOME)/.ssh/id_ed25519.pub" --auth-file "$(HOME)/.codex/auth.json" --insecure-dev-password --insecure-plain-codex-auth
 
 .PHONY: usb-dom0-console-image usb-dom0-console-write
 
@@ -172,11 +172,11 @@ usb-dev-write:
 	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-write USB_SERIAL=25110814640207" >&2; exit 2)
 	sudo python3 lifecycle/image/tools/usb-dev.py write-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --write
 
-usb-dev-provision:
+usb-dev-provision usb-dev-provision-resume:
 	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-provision USB_SERIAL=25110814640207" >&2; exit 2)
 	@test -f "$(HOME)/.ssh/id_ed25519.pub" || (echo "Missing $(HOME)/.ssh/id_ed25519.pub" >&2; exit 2)
 	@test -f "$(HOME)/.codex/auth.json" || (echo "Missing $(HOME)/.codex/auth.json" >&2; exit 2)
-	$(USB_DEV_PROVISION)
+	$(USB_DEV_PROVISION) $(if $(filter usb-dev-provision-resume,$@),--resume,)
 
 usb-dev-help:
 	python3 lifecycle/image/tools/usb-dev.py --help

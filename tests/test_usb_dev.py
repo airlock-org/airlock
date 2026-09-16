@@ -261,7 +261,7 @@ def test_provision_stops_before_personalization_if_expansion_fails(usb, monkeypa
     monkeypatch.setattr(usb, "write_latest_image", lambda args: calls.append("write"))
     monkeypatch.setattr(usb, "run", lambda *args: calls.append(args))
 
-    def fail(*args):
+    def fail(*args, **kwargs):
         calls.append("expand")
         raise ValueError("expansion failed")
 
@@ -361,3 +361,101 @@ def test_ext4_grows_to_container_size_without_changing_uuid(usb, tmp_path):
     assert (
         int(fields["Block count"]) * int(fields["Block size"]) == image.stat().st_size
     )
+
+
+def test_kernel_size_verification_does_not_repeat_partition_reread(usb, monkeypatch):
+    calls = []
+    monkeypatch.setattr(usb, "run", lambda *args: calls.append(args))
+    monkeypatch.setattr(
+        usb, "output", lambda *args: calls.append(args) or "61420322304"
+    )
+    usb.verify_kernel_partition_size(Path("/dev/sdc2"), 61420322304)
+    assert calls == [
+        ("udevadm", "settle"),
+        ("blockdev", "--getsize64", "/dev/sdc2"),
+    ]
+
+
+def test_stale_kernel_size_still_fails_closed(usb, monkeypatch):
+    monkeypatch.setattr(usb, "run", lambda *args: None)
+    monkeypatch.setattr(usb, "output", lambda *args: "33283899392")
+    with pytest.raises(ValueError, match="Unplug/replug"):
+        usb.verify_kernel_partition_size(Path("/dev/sdc2"), 61420322304)
+
+
+def test_growth_detects_already_expanded_partition(usb, growth_table):
+    disk_bytes = 62495129600
+    assert not usb.root_fills_disk(growth_table, disk_bytes)
+    growth_table["lastlba"] = disk_bytes // 512 - 34
+    growth_table["partitions"][1]["size"] = 61420322304 // 512
+    assert usb.root_fills_disk(growth_table, disk_bytes)
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "var/lib/airlock/usb/local-password.hash",
+        "home/airlock/dev/nixome",
+        "var/lib/airlock/system/current-topology.json",
+    ],
+)
+def test_resume_rejects_personalized_or_bootstrapped_usb(usb, tmp_path, relative):
+    target = tmp_path / relative
+    target.parent.mkdir(parents=True)
+    target.write_text("existing")
+    with pytest.raises(ValueError, match="unpersonalized"):
+        usb.require_unpersonalized_root(tmp_path)
+
+
+def test_resume_accepts_unpersonalized_image(usb, tmp_path):
+    usb.require_unpersonalized_root(tmp_path)
+
+
+def test_resume_never_calls_image_writer(usb, monkeypatch):
+    calls = []
+    monkeypatch.setattr(usb, "root_only", lambda: None)
+    monkeypatch.setattr(usb, "usb_device_by_serial", lambda serial: "by-id-usb")
+    monkeypatch.setattr(
+        usb, "unmount_usb", lambda device: calls.append(("unmount", device))
+    )
+    monkeypatch.setattr(usb, "run", lambda *args: calls.append(args))
+    monkeypatch.setattr(
+        usb, "write_latest_image", lambda args: pytest.fail("resume must never reflash")
+    )
+
+    def stop_at_expansion(device, serial, backup, *, resume):
+        assert (device, serial, backup, resume) == (
+            "by-id-usb",
+            "serial",
+            "backups",
+            True,
+        )
+        raise ValueError("reached expansion without flashing")
+
+    monkeypatch.setattr(usb, "expand_provisioned_root", stop_at_expansion)
+    with pytest.raises(ValueError, match="without flashing"):
+        usb.provision_latest_image(
+            SimpleNamespace(resume=True, serial="serial", resize_backup_dir="backups")
+        )
+    assert calls == [("unmount", "by-id-usb"), ("udevadm", "settle")]
+
+
+@pytest.mark.parametrize("resume", [False, True])
+def test_provision_make_target_keeps_root_only_backups_outside_repo(resume):
+    target = "usb-dev-provision-resume" if resume else "usb-dev-provision"
+    result = subprocess.run(
+        [
+            "make",
+            "-n",
+            target,
+            "USB_SERIAL=test-serial",
+            "AIRLOCK_DATA_ROOT=",
+            "AIRLOCK_LOG_DIR=",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert '--resize-backup-dir "/var/log/airlock/usb-root-expansion"' in result.stdout
+    assert ("--resume" in result.stdout) is resume
