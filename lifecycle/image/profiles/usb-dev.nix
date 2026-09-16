@@ -76,7 +76,7 @@
   # root for writable VM state and staged/retained Nix generations. Guest backing
   # data is already present at its final path; first boot only verifies/adopts it.
   virtualisation.diskSize = 32768;
-  system.build.image = lib.mkForce (import "${modulesPath}/../lib/make-disk-image.nix" {
+  system.build.image = lib.mkForce (lib.overrideDerivation (import "${modulesPath}/../lib/make-disk-image.nix" {
     inherit config lib pkgs;
     inherit (config.image) baseName format;
     diskSize = config.virtualisation.diskSize;
@@ -97,7 +97,15 @@
         mode = config.airlock.image.preparedStoreMode;
       }
     ];
-  });
+  }) (old: {
+    # Validate the exact finalized payload/descriptors on every image assembly,
+    # before copying them. A previously cached validation output is insufficient
+    # if Nix has since rebuilt only one output of the prepared-store derivation.
+    preVM = ''
+      echo "Validating prepared guest store before image assembly"
+      ${config.system.build.usbPreparedGuestStore.checkCommand}
+    '' + old.preVM;
+  }));
 
   services.journald.settings.Journal = {
     Storage = "persistent";

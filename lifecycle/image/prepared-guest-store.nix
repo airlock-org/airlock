@@ -33,6 +33,9 @@ let
         unsafeDiscardReferences.out = true;
         unsafeDiscardReferences.descriptors = true;
         AIRLOCK_CLOSURE_STORE_INDEX_SOURCE = "file";
+        # Execute this in the consuming image derivation too: a cached receipt
+        # cannot attest to payload bytes rebuilt after that receipt was made.
+        passthru.checkCommand = "${python}/bin/python -m airlock_qubes_storage._engine.prepared --check ${seed}/pool ${seed.descriptors}";
         passthru.validation =
           pkgs.runCommand "airlock-usb-prepared-store-validation"
             {
@@ -41,8 +44,7 @@ let
             ''
               # Check finalized outputs: descriptors can survive while Nix rebuilds a
               # collected payload. The receipt contains no paths retaining that payload.
-              python -m airlock_qubes_storage._engine.prepared --check \
-                ${seed}/pool ${seed.descriptors} > "$out"
+              ${seed.checkCommand} > "$out"
             '';
       }
       ''

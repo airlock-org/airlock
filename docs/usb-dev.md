@@ -25,7 +25,8 @@ variants and places it at its final location in the image. Guest-only source
 packages are omitted from dom0's ordinary store. First setup trusts the prepared
 image payload, checks metadata and backing-file presence and sizes, and attaches
 the store without scanning or repackaging gigabytes of packages on the USB.
-Full checksums remain mandatory during image validation. Startup timing needs
+Full checksums run directly before each image assembly, even if the separate
+validation receipt is cached. Startup timing needs
 to be measured on a rebuilt image; see [storage details](config-system.md#admission-and-prepared-usb-stores).
 
 Inspect `lsblk -o NAME,TRAN,SIZE,MODEL,SERIAL,MOUNTPOINTS` and select an expendable

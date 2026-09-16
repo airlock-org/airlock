@@ -259,12 +259,20 @@ Fresh seed construction now uses an explicitly scoped deterministic build
 context: metadata timestamps use the epoch, transaction IDs derive from the
 domain/generation/system, and EROFS uses a fixed timestamp and closure-derived
 UUID. Runtime admissions retain real timestamps and random transaction IDs;
-no runtime integrity checks are relaxed. An image dependency also verifies
-the finalized pool against both variants' descriptors before image creation,
-hashing each shared file once. Its small result receipt retains neither the
-pool nor the guest source closure in dom0's runtime store. Reproducibility tests
-build the same seed twice and cross-check each pool with the other build's
-descriptors, modeling either output surviving collection.
+no runtime integrity checks are relaxed. POSIX tar fragments also omit PAX
+access/change timestamps, use stable extended-header names and encode file bytes
+independently of host hardlink deduplication. This preserves long paths and
+symlinks without depending on the build host's inode history.
+
+The image builder runs the prepared-store checker directly in `preVM`, before
+copying the pool or assembling the disk. It checks all descriptors and hashes
+each shared file once. The separate validation dependency remains useful as a
+build/test target, but its cached receipt is not sufficient evidence for a new
+image assembly. Neither the receipt nor the build-only checker adds the pool or
+guest source closure to dom0's runtime store. Reproducibility tests build the
+same seed twice with changed source inode timestamps, then cross-check each
+pool with the other build's descriptors, modeling either output surviving
+collection.
 
 Fix verification on 2026-09-14: 13 focused prepared-store/storage/recovery
 checks passed (the optional full-OS closure accounting test was not run).
@@ -273,6 +281,24 @@ The full USB seed passed finalized-output validation for both variants across
 The original broken artifacts fail the new validator. Evidence is preserved
 under `.airlock-logs/prepared-store-reproducibility/`; a rebuilt/flashed USB
 boot remains the hardware acceptance check.
+
+The 2026-09-16 USB failure exposed a gap in that earlier test: `--mtime=@1`
+does not remove POSIX tar's PAX `atime` and `ctime` fields. The failed sys-dev
+fragment contained real host timestamps, and the local pool failed the same
+metadata checksum as the USB. The separate validation receipt was still cached
+as passed. The archive normalization and in-image-build check above address
+both faults; do not work around this failure by disabling bootstrap metadata
+verification or manually editing its checksums. Rebuild the image and provision
+it normally after the fix. A successful local validation is not proof of a
+successful physical boot.
+
+Fix verification on 2026-09-16: the timestamp-changing regression failed before
+the fix and passed afterward. The rebuilt eight-variant USB seed passed full
+validation across 3,931 files. `make test-quick` passed 290 tests (23 skipped),
+and the focused image-hook test confirmed that corrupt metadata stops assembly
+despite a prior successful receipt. The validation result is rooted at
+`.airlock-logs/prepared-store-reproducibility/validation-pax-fix`; the full image
+rebuild and physical boot remain separate acceptance steps.
 
 The topology and prepared descriptors deliberately discard Nix references to
 guest source packages, using Nix's image-artifact reference-discard mechanism.

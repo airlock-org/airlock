@@ -238,6 +238,12 @@ def create_tar_fragment(source, entry, target):
         [
             tar,
             "--format=posix",
+            # POSIX/PAX stores atime and ctime even with --mtime. These change
+            # when Nix restores/deduplicates a package, breaking cached seed
+            # descriptors. Keep long-path support without host inode metadata
+            # or process-dependent extended-header names.
+            "--pax-option=exthdr.name=%d/PaxHeaders/%f,delete=atime,delete=ctime",
+            "--hard-dereference",
             "--sort=name",
             "--numeric-owner",
             "--owner=0",

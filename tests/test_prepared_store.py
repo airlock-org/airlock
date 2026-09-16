@@ -2,11 +2,14 @@
 
 import asyncio
 import importlib.util
+import io
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ENGINE_SOURCE = ROOT / "lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src"
 sys.path.insert(0, str(ENGINE_SOURCE))
 
-from airlock_qubes_storage._engine import core, prepared, views  # noqa: E402
+from airlock_qubes_storage._engine import core, objects, prepared, views  # noqa: E402
 
 
 @pytest.fixture
@@ -104,8 +107,43 @@ def tree_fingerprints(root):
     }
 
 
+def test_tar_fragments_ignore_inode_timestamps_and_hardlink_layout(tmp_path):
+    source = tmp_path / ("a" * 32 + "-package")
+    source.mkdir()
+    payload = source / ("long-name-" * 15)
+    payload.write_text("identical package contents")
+    duplicate = source / "duplicate"
+    duplicate.write_bytes(payload.read_bytes())
+    (source / "symlink").symlink_to(payload.name)
+    first = tmp_path / "first.fragment"
+    second = tmp_path / "second.fragment"
+    os.utime(payload, ns=(1_000_000_000, 1_000_000_000))
+    objects.create_tar_fragment(source, source.name, first)
+    # Nix can restore or deduplicate the same content into different inodes.
+    # No package bytes, modes, paths or symlink targets have changed.
+    before = core.tree_hash(source)
+    duplicate.unlink()
+    duplicate.hardlink_to(payload)
+    os.utime(payload, ns=(2_000_000_000, 3_000_000_000))
+    objects.create_tar_fragment(source, source.name, second)
+    assert core.tree_hash(source) == before
+    assert first.read_bytes() == second.read_bytes()
+    with tarfile.open(fileobj=io.BytesIO(first.read_bytes() + b"\0" * 1024)) as tar:
+        members = tar.getmembers()
+        assert any(member.pax_headers.get("path") for member in members)
+        for member in members:
+            assert "atime" not in member.pax_headers
+            assert "ctime" not in member.pax_headers
+            assert member.mtime == 1
+        assert (
+            tar.extractfile(source.name + "/" + payload.name).read()
+            == payload.read_bytes()
+        )
+        assert tar.getmember(source.name + "/symlink").linkname == payload.name
+
+
 def test_seed_rebuild_can_reuse_either_cached_output(tmp_path, seed_inputs):
-    specs, _, _ = seed_inputs
+    specs, _, source = seed_inputs
     pool = tmp_path / "pool"
     descriptors = tmp_path / "descriptors"
     runtime = "/var/lib/airlock/closure-store"
@@ -116,7 +154,10 @@ def test_seed_rebuild_can_reuse_either_cached_output(tmp_path, seed_inputs):
     )
     pool.rename(old_pool)
     descriptors.rename(old_descriptors)
-    # Build again with the same output identities, but fresh runtime entropy.
+    # Rebuild with unchanged contents but different inode timestamps, as after
+    # restoring source packages from cache. The previous test missed this.
+    for path in source.rglob("*"):
+        os.utime(path, ns=(2_000_000_000, 3_000_000_000))
     prepared.prepare_pool(pool, descriptors, specs, runtime)
     assert tree_fingerprints(old_pool) == tree_fingerprints(pool)
     assert tree_fingerprints(old_descriptors) == tree_fingerprints(descriptors)
@@ -252,13 +293,15 @@ def test_ordinary_store_has_no_prepared_admission(tmp_path):
 
 
 @pytest.mark.nix
-def test_usb_prepared_store_preserves_sealed_view_mode():
+def test_usb_prepared_store_preserves_sealed_view_mode(seed):
     expression = f"""
       let config = (builtins.getFlake \"{ROOT}\").nixosConfigurations.usb-dev.config;
       in {{
         mode = config.airlock.image.preparedStoreMode;
         image = config.system.build.image.drvPath;
         validation = config.system.build.usbPreparedGuestStore.validation.outPath;
+        checkCommand = config.system.build.usbPreparedGuestStore.checkCommand;
+        preVM = config.system.build.image.preVM;
         dependencies = map toString config.system.extraDependencies;
       }}
     """
@@ -273,6 +316,48 @@ def test_usb_prepared_store_preserves_sealed_view_mode():
     assert prepared["mode"] == "go-rwx"
     assert prepared["image"].endswith(".drv")
     assert prepared["validation"] in prepared["dependencies"]
+    # The command must execute in the disk-image build, not only in a separately
+    # cacheable validation derivation. Fail before copying or partitioning.
+    assert (
+        prepared["preVM"]
+        .lstrip()
+        .startswith(
+            'echo "Validating prepared guest store before image assembly"\n'
+            + prepared["checkCommand"]
+            + "\n"
+        )
+    )
+    # Execute the real hook prefix against a small pool. A stale successful
+    # receipt must not allow assembly to proceed after metadata corruption.
+    args, descriptors, _ = seed
+    gate, assembly = prepared["preVM"].split(prepared["checkCommand"], 1)
+    assert assembly.strip()  # Preserve upstream's image assembly after the gate.
+    checker = shlex.join(
+        [
+            sys.executable,
+            "-m",
+            "airlock_qubes_storage._engine.prepared",
+            "--check",
+            args.pool_root,
+            str(descriptors),
+        ]
+    )
+    script = gate + checker + '\necho "ASSEMBLY_REACHED"\n'
+    env = dict(os.environ, PYTHONPATH=str(ENGINE_SOURCE))
+    valid = subprocess.run(
+        ["bash", "-e", "-c", script], capture_output=True, text=True, env=env
+    )
+    assert valid.returncode == 0, valid.stderr
+    assert "ASSEMBLY_REACHED" in valid.stdout
+    (descriptors / "cached-validation.json").write_text('{"status":"passed"}')
+    metadata = next((Path(args.pool_root) / "objects/blob-metadata").glob("*.json"))
+    metadata.write_text("{}")
+    invalid = subprocess.run(
+        ["bash", "-e", "-c", script], capture_output=True, text=True, env=env
+    )
+    assert invalid.returncode != 0
+    assert "integrity check failed" in invalid.stderr
+    assert "ASSEMBLY_REACHED" not in invalid.stdout
 
 
 @pytest.mark.nix
