@@ -1,0 +1,7 @@
+{
+  "name": "Airlock Host Power Off",
+  "description": "Route GNOME's power-off action through the Airlock dom0 RPC.",
+  "uuid": "airlock-host-poweroff@airlock.local",
+  "shell-version": ["50"],
+  "version": 1
+}

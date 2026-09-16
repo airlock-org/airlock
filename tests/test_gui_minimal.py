@@ -18,9 +18,14 @@ def test_gui_minimal_topology_and_desktop():
         image = flake.nixosConfigurations.vm-gui-minimal.config;
         guest = flake.nixosConfigurations.airlock-domain-sys-gui-minimal.config;
         normal = flake.nixosConfigurations.airlock-domain-sys-gui.config;
+        gnome = flake.nixosConfigurations.airlock-domain-sys-gui-usb-lab.config;
         sysGuiPolicy = builtins.head (builtins.filter (package:
           (package.pname or package.name) == "airlock-sys-gui-policy"
         ) image.virtualisation.qubes.packages);
+        gnomeHostPoweroffExtension = builtins.head (builtins.filter (package:
+          (package.pname or package.name) == "airlock-gnome-host-poweroff-1"
+          || (package.pname or "") == "airlock-gnome-host-poweroff"
+        ) gnome.environment.systemPackages);
       in {{
         topology = image.airlock.qubes.topology;
         setup = image.airlock.qubes.setupConfigOnBoot;
@@ -37,6 +42,10 @@ def test_gui_minimal_topology_and_desktop():
         personalLaunchers = guest.airlock.sysGuiGuest.personalLaunchers.enable;
         normalPersonalLaunchers = normal.airlock.sysGuiGuest.personalLaunchers.enable;
         normalPackages = map (p: p.pname or p.name) normal.environment.systemPackages;
+        gnomeOverrides = gnome.services.desktopManager.gnome.extraGSettingsOverrides;
+        gnomeHostPoweroffExtensionSource = builtins.readFile
+          "${{gnomeHostPoweroffExtension}}/share/gnome-shell/extensions/airlock-host-poweroff@airlock.local/extension.js";
+        gnomeHostPoweroffHelper = builtins.readFile gnomeHostPoweroffExtension.hostPoweroff;
         etc = builtins.attrNames guest.environment.etc;
         hostEtc = builtins.attrNames image.environment.etc;
         hostPoweroffService = builtins.readFile image.environment.etc."qubes-rpc/airlock.Dom0Poweroff".source;
@@ -51,8 +60,9 @@ def test_gui_minimal_topology_and_desktop():
         cwd=ROOT,
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
+    assert result.returncode == 0, result.stderr
     log_dir = Path(os.environ["AIRLOCK_LOG_DIR"]) / "gui-minimal-topology"
     log_dir.mkdir(parents=True, exist_ok=True)
     (log_dir / "report.json").write_text(result.stdout)
@@ -84,6 +94,10 @@ def test_gui_minimal_topology_and_desktop():
     assert report["normalPersonalLaunchers"] is True
     assert "airlock-launch-terminal" in report["normalPackages"]
     assert "airlock-terminal.desktop" in report["normalPackages"]
+    assert "airlock-host-poweroff@airlock.local" in report["gnomeOverrides"]
+    assert "airlock-gnome-host-poweroff" in report["gnomeHostPoweroffExtensionSource"]
+    assert "activatePowerOff" in report["gnomeHostPoweroffExtensionSource"]
+    assert "airlock.Dom0Poweroff" in report["gnomeHostPoweroffHelper"]
     assert report["session"] == "sys-gui"
     assert report["guestSession"] == "xfce"
     assert report["xfce"] is True
