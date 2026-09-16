@@ -287,7 +287,16 @@ def main(argv=None):
         else:
             action = ["/var/lib/airlock/machine/controller", args.action]
         if args.action in ("status", "verify"):
-            print(session.run(shlex.join(action), timeout=900))
+            script = shlex.join(action)
+            if args.action == "status":
+                # A pristine image has no selected release/controller yet.
+                # Do not hide a broken controller symlink or controller failure.
+                controller = shlex.quote(action[0])
+                script = (
+                    f"if [ -e {controller} ] || [ -L {controller} ]; then {script}; "
+                    "else /run/current-system/sw/bin/airlock-machine-deploy status; fi"
+                )
+            print(session.run(script, timeout=900))
         else:
             unit = "airlock-machine-deploy-" + uuid.uuid4().hex[:12]
             script = shlex.join(

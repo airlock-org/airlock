@@ -4,6 +4,7 @@ from copy import deepcopy
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -371,3 +372,46 @@ def test_bridge_space_check_does_not_require_python(monkeypatch, report, error):
     with pytest.raises(RuntimeError, match=error):
         client.transfer("sys-dev", "sys-dev", "/nix/store/release", Session())
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize("controller", ["absent", "present", "broken", "failed"])
+def test_client_status_before_and_after_first_deployment(
+    monkeypatch, tmp_path, capsys, controller
+):
+    image_engine = tmp_path / "image-engine"
+    image_engine.write_text('#!/bin/sh\necho "image-baseline"\n')
+    image_engine.chmod(0o755)
+    selected = tmp_path / "controller"
+    if controller in ("present", "failed"):
+        selected.write_text(
+            '#!/bin/sh\necho "selected-release"\n'
+            + ("exit 1\n" if controller == "failed" else "")
+        )
+        selected.chmod(0o755)
+    elif controller == "broken":
+        selected.symlink_to(tmp_path / "missing")
+
+    class Session:
+        def __init__(self, target):
+            assert target == "sys-dev"
+
+        def run(self, script, **kwargs):
+            script = script.replace(
+                "/var/lib/airlock/machine/controller", str(selected)
+            ).replace(
+                "/run/current-system/sw/bin/airlock-machine-deploy", str(image_engine)
+            )
+            return subprocess.check_output(["bash", "-e", "-c", script], text=True)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(client, "Dom0", Session)
+    result = client.main(["status", "--target", "sys-dev"])
+    output = capsys.readouterr().out
+    if controller == "absent":
+        assert result == 0 and "image-baseline" in output
+    elif controller == "present":
+        assert result == 0 and "selected-release" in output
+    else:
+        assert result == 1 and "image-baseline" not in output
