@@ -240,6 +240,44 @@ def test_lock_prevents_two_writers(machine):
                 pass
 
 
+@pytest.mark.parametrize("deferred", [False, True])
+def test_native_boot_hooks_do_not_write_readonly_systemd_tree(
+    tmp_path, topology, monkeypatch, deferred
+):
+    release = write_release(tmp_path / "release", topology)
+    manifest = deploy.read_json(release / "release.json")
+    manifest["coordinator"] = "/nix/store/new-engine/bin/airlock-machine-deploy"
+    deploy.atomic_json(release / "release.json", manifest)
+    state = tmp_path / "state"
+    state.mkdir()
+    calls = []
+
+    def command(*args):
+        calls.append(args)
+        assert args[:2] == ("systemctl", "show")
+        if args[3] == "--property=LoadState":
+            return (
+                "not-found"
+                if args[2].endswith("-deferred") and not deferred
+                else "loaded"
+            )
+        assert args[3] == "--property=ExecStart"
+        return (
+            "{ path=/nix/store/old-engine/bin/airlock-machine-deploy ; "
+            "argv[]=/nix/store/old-engine/bin/airlock-machine-deploy boot-setup "
+            "/nix/store/setup/bin/airlock-setup-config --apply ; }"
+        )
+
+    def guarded_path(*args):
+        assert args[0] != "/etc/systemd/system", "must not mutate declarative units"
+        return Path(*args)
+
+    monkeypatch.setattr(deploy, "Path", guarded_path)
+    deploy.Coordinator(state, command).install_boot_hook(release, release)
+    assert str((state / "controller").readlink()) == manifest["coordinator"]
+    assert not any(call[1] == "daemon-reload" for call in calls)
+
+
 def test_profile_mismatch_fails_before_staging(
     machine, tmp_path, topology, monkeypatch
 ):

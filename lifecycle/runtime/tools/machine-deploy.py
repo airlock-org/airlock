@@ -266,6 +266,7 @@ class Coordinator:
             link.unlink(missing_ok=True)
             link.symlink_to(controller)
             link.replace(self.state / "controller")
+        changed = False
         for unit, scope in (
             ("airlock-setup-config", ""),
             ("airlock-setup-config-deferred", " --deferred"),
@@ -277,6 +278,14 @@ class Coordinator:
                 )
                 == "not-found"
             ):
+                continue
+            start = self.command(
+                "systemctl", "show", unit, "--property=ExecStart", "--value"
+            )
+            if "/airlock-machine-deploy boot-setup " in start:
+                # Current NixOS images already declare this hook. Their
+                # /etc/systemd/system points into the immutable Nix store;
+                # never try to place a compatibility drop-in inside it.
                 continue
             dropin = Path(
                 "/etc/systemd/system", unit + ".service.d", "90-airlock-machine.conf"
@@ -292,7 +301,9 @@ class Coordinator:
                 + scope
                 + "\n"
             )
-        self.command("systemctl", "daemon-reload")
+            changed = True
+        if changed:
+            self.command("systemctl", "daemon-reload")
 
     def stage(self, release, topology, names, directory):
         staged = {}
