@@ -43,6 +43,16 @@ The release build and pytest fault tests are
 separate evidence, not a claim of a completed physical deployment. Do not erase
 this distinction when handing off to another agent.
 
+Physical follow-up, 2026-09-16: the expanded USB successfully applied release
+revision `f8e15558ccc625c84035851727420e7d9b00f98c` and rebooted into its selected
+host generation. `airlock-machine-autostart` started `usr-home` automatically;
+`machine-verify` returned `complete`, with matching host and running guest
+generations and no failed dom0 units. The browser stayed stopped as configured.
+The earlier image-to-release apply also survived restarting sys-dev/sys-gui.
+Rollback and user-data preservation across rollback remain unverified. GNOME's
+shutdown action was observed stopping only sys-gui, and input forwarding did not
+recover after that VM stopped; these are separate unresolved desktop issues.
+
 ## Normal loop
 
 ```bash
