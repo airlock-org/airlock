@@ -112,6 +112,9 @@ let
     admin.pool.UsageDetails * sys-gui dom0 allow
     admin.pool.ListDrivers * sys-gui dom0 allow
     admin.vmclass.List * sys-gui dom0 allow
+    # Qubes Manager's domain widget consumes the global read-only CPU and
+    # memory event stream. Without it, the widget retries once per second.
+    admin.vm.Stats * sys-gui dom0 allow
     # Creation is a global API call, but only these VM classes are permitted.
     ${lib.concatMapStringsSep "\n" (class: ''
       admin.vm.Create.${class} * sys-gui dom0 allow

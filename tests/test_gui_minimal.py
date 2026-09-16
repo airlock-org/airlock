@@ -109,6 +109,7 @@ def test_gui_minimal_topology_and_desktop():
     )
     assert "systemctl poweroff" in report["hostPoweroffService"]
     assert "airlock.Dom0Poweroff * sys-gui dom0 allow" in report["hostPoweroffPolicy"]
+    assert "admin.vm.Stats * sys-gui dom0 allow" in report["hostPoweroffPolicy"]
     assert not any(
         name.startswith("airlock/config-inputs/") for name in report["hostEtc"]
     )
