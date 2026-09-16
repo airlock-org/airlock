@@ -290,6 +290,8 @@ def test_nix_selection_drives_reservation_assignment_and_start():
         recoverySender = normal.specialisation.usb-text-recovery.configuration.airlock.inputProxy.sender.enable;
         inputTarget = lab.systemd.targets.airlock-gui-input.wantedBy;
         inputServices = lab.systemd.targets.airlock-gui-input.wants;
+        touchpadPath = lab.airlock.inputProxy.sender.devices.touchpad.path;
+        udevRules = lab.services.udev.extraRules;
       }}
     """
     result = subprocess.run(
@@ -361,6 +363,14 @@ def test_nix_selection_drives_reservation_assignment_and_start():
     )
     assert report["inputTarget"] == []  # Only pulled in after successful VM start.
     assert report["inputServices"]
+    assert report["touchpadPath"] == (
+        "/dev/input/by-path/platform-AMDI0010:01-event-touchpad"
+    )
+    assert 'ATTRS{name}=="SYNA8018:00 06CB:CE67 Touchpad"' in report["udevRules"]
+    assert (
+        'SYMLINK+="input/by-path/platform-AMDI0010:01-event-touchpad"'
+        in report["udevRules"]
+    )
     assert report["normalSender"] is False
     assert report["recoverySender"] is False
     guest = report["guest"]
