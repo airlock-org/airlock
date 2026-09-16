@@ -10,16 +10,21 @@ ROOT = Path(__file__).resolve().parents[1]
 PATCH_ROOT = ROOT / "lifecycle/misc/patches"
 
 
-def patch_text(package: str) -> str:
-    patches = list((PATCH_ROOT / package).glob("*.patch"))
-    assert len(patches) == 1
-    return patches[0].read_text(encoding="utf-8")
+def patch_text(package: str, name: str) -> str:
+    return (PATCH_ROOT / package / name).read_text(encoding="utf-8")
 
 
 def test_window_state_protocol_patches_cover_both_protocol_peers():
-    common = patch_text("qubes-gui-common")
-    agent = patch_text("qubes-gui-agent-linux")
-    daemon = patch_text("qubes-gui-daemon")
+    common = patch_text(
+        "qubes-gui-common", "0001-protocol-add-maximize-window-flags.patch"
+    )
+    agent = patch_text(
+        "qubes-gui-agent-linux",
+        "0001-gui-agent-forward-minimize-and-maximize-requests.patch",
+    )
+    daemon = patch_text(
+        "qubes-gui-daemon", "0001-gui-daemon-apply-maximize-window-flags.patch"
+    )
 
     for flag in ("WINDOW_FLAG_MAXIMIZE_VERT", "WINDOW_FLAG_MAXIMIZE_HORZ"):
         assert flag in common
@@ -36,6 +41,38 @@ def test_window_state_protocol_patches_cover_both_protocol_peers():
     assert "Keep the two-dimensional maximize transition atomic" in daemon
     assert "flags &= ~(WINDOW_FLAG_MAXIMIZE_VERT" in daemon
     assert "msg.flags_unset & maximize_flags" in daemon
+
+
+def test_window_move_protocol_uses_trusted_host_pointer_coordinates():
+    common = patch_text(
+        "qubes-gui-common",
+        "0002-protocol-add-interactive-window-move-message.patch",
+    )
+    agent = patch_text(
+        "qubes-gui-agent-linux",
+        "0002-gui-agent-forward-interactive-window-move-requests.patch",
+    )
+    daemon = patch_text(
+        "qubes-gui-daemon",
+        "0002-gui-daemon-apply-interactive-window-move-requests.patch",
+    )
+
+    assert "QUBES_GUID_PROTOCOL_VERSION_MINOR 9" in common
+    assert "QUBES_GUID_MIN_WINDOW_MOVERESIZE 0x00010009" in common
+    assert "MSG_WINDOW_MOVERESIZE" in common
+    assert "struct msg_window_moveresize" in common
+    assert "int32_t x" not in common
+
+    assert "ev->message_type == g->wm_moveresize" in agent
+    assert "g->protocol_version >= QUBES_GUID_MIN_WINDOW_MOVERESIZE" in agent
+    assert "hdr.type = MSG_WINDOW_MOVERESIZE" in agent
+
+    assert '"_NET_WM_MOVERESIZE"' in daemon
+    assert "XQueryPointer(g->display, g->root_win" in daemon
+    assert "Button1Mask << (msg.button - 1)" in daemon
+    assert "ev.data.l[0] = root_x" in daemon
+    assert "ev.data.l[1] = root_y" in daemon
+    assert "vm_window->override_redirect" in daemon
 
 
 @pytest.mark.nix
@@ -71,11 +108,24 @@ def test_window_state_overlay_patches_common_agent_and_daemon():
     report = json.loads(result.stdout)
 
     assert report == {
-        "common": ["0001-protocol-add-maximize-window-flags.patch"],
-        "agent": ["0001-gui-agent-forward-minimize-and-maximize-requests.patch"],
-        "daemon": ["0001-gui-daemon-apply-maximize-window-flags.patch"],
-        "preparedGuestAgent": [
-            "0001-gui-agent-forward-minimize-and-maximize-requests.patch"
+        "common": [
+            "0001-protocol-add-maximize-window-flags.patch",
+            "0002-protocol-add-interactive-window-move-message.patch",
         ],
-        "preparedGuiDaemon": ["0001-gui-daemon-apply-maximize-window-flags.patch"],
+        "agent": [
+            "0001-gui-agent-forward-minimize-and-maximize-requests.patch",
+            "0002-gui-agent-forward-interactive-window-move-requests.patch",
+        ],
+        "daemon": [
+            "0001-gui-daemon-apply-maximize-window-flags.patch",
+            "0002-gui-daemon-apply-interactive-window-move-requests.patch",
+        ],
+        "preparedGuestAgent": [
+            "0001-gui-agent-forward-minimize-and-maximize-requests.patch",
+            "0002-gui-agent-forward-interactive-window-move-requests.patch",
+        ],
+        "preparedGuiDaemon": [
+            "0001-gui-daemon-apply-maximize-window-flags.patch",
+            "0002-gui-daemon-apply-interactive-window-move-requests.patch",
+        ],
     }
