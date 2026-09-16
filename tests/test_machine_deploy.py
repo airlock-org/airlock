@@ -318,7 +318,7 @@ def test_low_space_stops_transfer_before_any_write(monkeypatch):
     class Session:
         def run(self, script, **kwargs):
             calls.append(script)
-            return "" if script == "nix path-info --all" else str(1024**3)
+            return "" if script == client.REMOTE_INVENTORY else str(1024**3)
 
     with pytest.raises(RuntimeError, match="No VMs or partitions changed"):
         client.transfer("sys-dev-2", "sys-dev", "/nix/store/release", Session())
@@ -334,7 +334,7 @@ def test_existing_closure_requires_no_upload(monkeypatch):
 
     class Session:
         def run(self, script, **kwargs):
-            assert script == "nix path-info --all"
+            assert script == client.REMOTE_INVENTORY
             return "/nix/store/present"
 
     client.transfer("sys-dev-2", "sys-dev", "/nix/store/present", Session())

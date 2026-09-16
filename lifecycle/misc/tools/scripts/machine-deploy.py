@@ -17,6 +17,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[4]
 NIX = ROOT / "lifecycle/misc/tools/scripts/airlock-nix.sh"
+REMOTE_INVENTORY = "nix --extra-experimental-features nix-command path-info --all"
 
 
 def command(*args, **kwargs):
@@ -143,7 +144,7 @@ def transfer(target, bridge_vm, release, session):
     local = (
         [entry["path"] for entry in paths] if isinstance(paths, list) else list(paths)
     )
-    valid = set(session.run("nix path-info --all", timeout=120).splitlines())
+    valid = set(session.run(REMOTE_INVENTORY, timeout=120).splitlines())
     missing = [path for path in local if path not in valid]
     if not missing:
         return
