@@ -9,4 +9,6 @@ in
   # terminal, while sys-gui owns the display and starts these applications by
   # fixed qrexec services. It remains offline through its null NetVM.
   environment.systemPackages = map (application: application.package) applications;
+  # Temporary committed marker for the physical deployment/rollback acceptance run.
+  environment.etc."airlock/deployment-acceptance".text = "usr-home-generation-b-20260916\n";
 }
