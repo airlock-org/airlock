@@ -135,6 +135,14 @@ compatibility drop-in for setup-config; new images include the coordinator and
 profile marker. `/var/lib/airlock/machine/controller` points to a pinned Nix
 binary, not a manually maintained live script.
 
+`airlock-machine-autostart.service` starts declared autostart VMs and their
+dependencies after topology setup, network-provider startup, and the guarded
+physical-GPU startup. This replaces the boot responsibility of the deliberately
+masked USB `qubes-vm@` service, without bypassing GPU checks. It consumes the
+selected release (or image topology before the first deployment), skips running
+VMs, and fails closed on interrupted deployments or a profile mismatch. It does
+not resurrect every VM that happened to be open before shutdown.
+
 Reflashing can erase deployment journals and machine data. It does **not** erase
 the committed implementation or configuration in this local repo. Building the
 next image from that commit reproduces its declared configuration. Runtime user

@@ -189,6 +189,50 @@ def new_release(tmp_path, topology):
     return write_release(tmp_path / "new", new)
 
 
+def test_boot_start_image_autostart_and_dependencies(machine, tmp_path, topology):
+    for vm in topology["domains"].values():
+        vm["prefs"]["autostart"] = False
+    topology["domains"]["usr-home"]["prefs"]["autostart"] = True
+    path = tmp_path / "image.json"
+    deploy.atomic_json(path, topology)
+    machine.live = {"sys-gui", "sys-dev"}
+    result = machine.boot_start(path, ["sys-gui"])
+    assert result["started"] == ["usr-home"]
+    assert machine.boot_start(path, ["sys-gui"])["started"] == []
+    assert "usr-browser" not in machine.live
+
+
+def test_boot_start_uses_selected_release_not_image(machine, tmp_path, topology):
+    topology["domains"]["usr-browser"]["prefs"]["autostart"] = False
+    machine.apply(new_release(tmp_path, topology))
+    machine.live = {"sys-gui", "sys-dev"}
+    assert machine.boot_start("/missing-image", ["sys-gui"])["started"] == ["usr-home"]
+
+
+def test_boot_start_refuses_missing_gpu_guard(machine):
+    machine.live = set()
+    with pytest.raises(deploy.DeploymentError, match="guarded VMs"):
+        machine.boot_start(machine.initial / "topology.json", ["sys-gui"])
+    assert not any(call[0] == "qvm-start" for call in machine.calls)
+
+
+@pytest.mark.parametrize("reason", ["profile", "interrupted"])
+def test_boot_start_fails_closed(machine, tmp_path, topology, monkeypatch, reason):
+    machine.apply(new_release(tmp_path, topology))
+    machine.calls.clear()
+    if reason == "profile":
+        monkeypatch.setattr(deploy, "active_profile", lambda: "usb-gui-lab")
+    else:
+        selected = machine.pointer()
+        deploy.atomic_json(
+            machine.state / "transactions" / selected["transaction"] / "status.json",
+            {"phase": "configuring"},
+        )
+    with pytest.raises(deploy.DeploymentError):
+        machine.boot_start("/missing-image")
+    assert not any(call[0] == "qvm-start" for call in machine.calls)
+
+
 def test_guest_success_and_pending_host_are_distinct(machine, tmp_path, topology):
     release = new_release(tmp_path, topology)
     result = machine.apply(release)

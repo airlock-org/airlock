@@ -540,6 +540,43 @@ class Coordinator:
             atomic_json(self.state / "latest.json", record)
             return record
 
+    def boot_start(self, default_topology, require_running=()):
+        """Start declared autostart guests only after boot setup/GPU guards."""
+        with self.locked():
+            selected = self.pointer()
+            if selected:
+                if selected["profile"] != active_profile():
+                    raise DeploymentError(
+                        "selected deployment belongs to another boot profile"
+                    )
+                status = read_json(
+                    self.state
+                    / "transactions"
+                    / selected["transaction"]
+                    / "status.json"
+                )
+                if status["phase"] not in ("complete", "reboot-required"):
+                    raise DeploymentError(
+                        "interrupted deployment; resume or rollback first"
+                    )
+                _, topology = load_release(selected["release"])
+            else:
+                topology = read_json(default_topology)
+            running = self.running()
+            missing = set(require_running) - running
+            if missing:
+                raise DeploymentError(
+                    "guarded VMs are not running: " + ", ".join(sorted(missing))
+                )
+            # No previous-session running set: cold boot follows autostart only.
+            starts = plan(topology, topology, set())["start"]
+            started = []
+            for name in starts:
+                if name not in running:
+                    self.command("qvm-start", name, timeout=180)
+                    started.append(name)
+            return {"autostart": starts, "started": started}
+
     def boot_setup(self, default_setup, args):
         with self.locked() as lock:
             # Keep the lock across exec through the exact setup wrapper.
@@ -586,6 +623,9 @@ def main(argv=None):
     boot = sub.add_parser("boot-setup")
     boot.add_argument("setup")
     boot.add_argument("args", nargs=argparse.REMAINDER)
+    start = sub.add_parser("boot-start")
+    start.add_argument("--topology", default="/etc/airlock/qubes-topology.json")
+    start.add_argument("--require-running", action="append", default=[])
     args = parser.parse_args(argv)
     coordinator = Coordinator()
     try:
@@ -602,6 +642,8 @@ def main(argv=None):
         elif args.action == "boot-setup":
             coordinator.boot_setup(args.setup, args.args)
             return 0
+        elif args.action == "boot-start":
+            result = coordinator.boot_start(args.topology, args.require_running)
         elif args.action == "verify":
             result = coordinator.verify_selected()
         else:

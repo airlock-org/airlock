@@ -68,6 +68,10 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         hostNetworkManager = host.networking.networkmanager.enable;
         hostTailscale = host.services.tailscale.enable;
         hostSsh = host.services.openssh.enable;
+        autostart = {{
+          inherit (host.systemd.services.airlock-machine-autostart) after requires wantedBy;
+          command = host.systemd.services.airlock-machine-autostart.serviceConfig.ExecStart;
+        }};
         callers = host.airlock.devDom0Terminal.callers;
         policy = builtins.readFile "${{policy}}/etc/qubes/policy.d/40-airlock-dev-dom0-terminal.policy";
         dev = {{
@@ -93,6 +97,18 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     log_dir.mkdir(parents=True, exist_ok=True)
     (log_dir / "topology.json").write_text(result.stdout)
     report = json.loads(result.stdout)
+
+    for prerequisite in (
+        "airlock-setup-config.service",
+        "airlock-start-gui-gpu.service",
+        "airlock-start-network-providers.service",
+    ):
+        assert prerequisite in report["autostart"]["after"]
+        assert prerequisite in report["autostart"]["requires"]
+    assert report["autostart"]["wantedBy"] == ["multi-user.target"]
+    assert report["autostart"]["command"].endswith(
+        "boot-start --require-running sys-gui"
+    )
 
     assert report["domains"] == ["sys-dev", "sys-gui", "usr-browser", "usr-home"]
     assert report["default_netvm"] == "sys-dev"
