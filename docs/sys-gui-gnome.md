@@ -52,3 +52,21 @@ The outer GNOME title bars remain. Removing duplicate decorations while keeping
 trusted VM identity visible is unfinished; do not treat these changes as
 complete Qubes window-label integration. Recheck launches, scaling, cursor,
 resize/maximize and login/lock after building and booting the updated image.
+
+## Deferred: appearance synchronization
+
+Changing light/dark appearance in sys-gui does not currently update applications
+running in `usr-home` or `usr-browser`, because each VM has its own GNOME/dconf
+settings and session bus. Add a narrow appearance-sync mechanism later:
+
+- watch sys-gui's `org.gnome.desktop.interface color-scheme` value;
+- send only allowlisted appearance values over a dedicated qrexec service;
+- restrict policy to sys-gui targeting `usr-home` and `usr-browser`;
+- apply the value to the desktop user's GNOME settings in each target VM; and
+- apply the current value when an application VM starts, as well as forwarding
+  later changes to already-running applications.
+
+Do not share the complete dconf database or a session bus between VMs. The same
+mechanism may later gain separately allowlisted accent colour, high-contrast and
+text-scaling values. Window-manager chrome already belongs to sys-gui and does
+not need this synchronization.
