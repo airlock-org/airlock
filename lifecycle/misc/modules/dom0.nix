@@ -54,7 +54,7 @@ let
       exit 1
     }
 
-    exec ${pkgs.systemd}/bin/systemctl poweroff
+    exec ${pkgs.sudo}/bin/sudo -n ${pkgs.systemd}/bin/systemctl poweroff
   '';
   sysGuiPolicyPackage = pkgs.runCommand "airlock-sys-gui-policy" { } ''
     install -d "$out/etc/qubes/policy.d"
@@ -70,7 +70,7 @@ let
     qubes.GuiVMSession * @anyvm @anyvm deny
     # The normal GUI policy grants a clean power-off, not a dom0 shell.
     # Development USB shells require the separate explicit dev policy.
-    airlock.Dom0Poweroff + sys-gui dom0 allow user=root
+    airlock.Dom0Poweroff + sys-gui dom0 allow
     airlock.Dom0Poweroff * @anyvm @anyvm deny
     qubes.ClipboardCopy + sys-gui @tag:guivm-sys-gui allow
     qubes.ClipboardPaste + sys-gui @tag:guivm-sys-gui allow
@@ -471,9 +471,14 @@ in
       source = dom0PoweroffService;
       mode = "0555";
     };
-    environment.etc."qubes/rpc-config/airlock.Dom0Poweroff" = lib.mkIf cfg.gui.enable {
-      text = "force-user='root'\n";
-      mode = "0444";
+    security.sudo.extraRules = lib.optional cfg.gui.enable {
+      users = [ cfg.user ];
+      commands = [
+        {
+          command = "${pkgs.systemd}/bin/systemctl poweroff";
+          options = [ "NOPASSWD" ];
+        }
+      ];
     };
 
     networking.useDHCP = lib.mkDefault imageCfg.devMode.enable;

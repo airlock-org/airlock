@@ -50,7 +50,7 @@ def test_gui_minimal_topology_and_desktop():
         etc = builtins.attrNames guest.environment.etc;
         hostEtc = builtins.attrNames image.environment.etc;
         hostPoweroffService = builtins.readFile image.environment.etc."qubes-rpc/airlock.Dom0Poweroff".source;
-        hostPoweroffRpcConfig = image.environment.etc."qubes/rpc-config/airlock.Dom0Poweroff".text;
+        hostPoweroffSudoRules = image.security.sudo.extraRules;
         hostPoweroffPolicy = builtins.readFile "${{sysGuiPolicy}}/etc/qubes/policy.d/50-airlock-sys-gui.policy";
         mimeDefaults = guest.xdg.mime.defaultApplications;
         packages = map (p: p.pname or p.name) guest.environment.systemPackages;
@@ -120,16 +120,24 @@ def test_gui_minimal_topology_and_desktop():
     assert (
         "airlock.Dom0Poweroff is restricted to sys-gui" in report["hostPoweroffService"]
     )
+    assert "sudo -n" in report["hostPoweroffService"]
     assert "systemctl poweroff" in report["hostPoweroffService"]
-    assert report["hostPoweroffRpcConfig"] == "force-user='root'\n"
-    assert (
-        "airlock.Dom0Poweroff + sys-gui dom0 allow user=root"
-        in report["hostPoweroffPolicy"]
-    )
+    poweroff_rules = [
+        rule
+        for rule in report["hostPoweroffSudoRules"]
+        if "airlock" in rule["users"]
+        and any(
+            command["command"].endswith("/systemctl poweroff")
+            for command in rule["commands"]
+        )
+    ]
+    assert len(poweroff_rules) == 1
+    assert poweroff_rules[0]["commands"][0]["options"] == ["NOPASSWD"]
+    assert "airlock.Dom0Poweroff + sys-gui dom0 allow" in report["hostPoweroffPolicy"]
     assert "airlock.Dom0Poweroff * @anyvm @anyvm deny" in report["hostPoweroffPolicy"]
     # Exercise the packaged handler's boundary without powering off the test host.
     handler = re.sub(
-        r"/nix/store/[^/]+/bin/systemctl poweroff",
+        r"/nix/store/[^/]+/bin/sudo -n /nix/store/[^/]+/bin/systemctl poweroff",
         "printf poweroff-requested",
         report["hostPoweroffService"],
     )
