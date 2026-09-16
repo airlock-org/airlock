@@ -120,7 +120,7 @@ def test_gui_minimal_topology_and_desktop():
     assert (
         "airlock.Dom0Poweroff is restricted to sys-gui" in report["hostPoweroffService"]
     )
-    assert "sudo -n" in report["hostPoweroffService"]
+    assert "/run/wrappers/bin/sudo -n" in report["hostPoweroffService"]
     assert "systemctl poweroff" in report["hostPoweroffService"]
     poweroff_rules = [
         rule
@@ -137,7 +137,7 @@ def test_gui_minimal_topology_and_desktop():
     assert "airlock.Dom0Poweroff * @anyvm @anyvm deny" in report["hostPoweroffPolicy"]
     # Exercise the packaged handler's boundary without powering off the test host.
     handler = re.sub(
-        r"/nix/store/[^/]+/bin/sudo -n /nix/store/[^/]+/bin/systemctl poweroff",
+        r"/run/wrappers/bin/sudo -n /nix/store/[^/]+/bin/systemctl poweroff",
         "printf poweroff-requested",
         report["hostPoweroffService"],
     )

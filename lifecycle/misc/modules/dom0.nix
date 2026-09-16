@@ -54,7 +54,9 @@ let
       exit 1
     }
 
-    exec ${pkgs.sudo}/bin/sudo -n ${pkgs.systemd}/bin/systemctl poweroff
+    # Nix store binaries cannot carry the setuid bit.  NixOS exposes the
+    # privileged sudo entry point through its root-owned wrapper instead.
+    exec /run/wrappers/bin/sudo -n ${pkgs.systemd}/bin/systemctl poweroff
   '';
   sysGuiPolicyPackage = pkgs.runCommand "airlock-sys-gui-policy" { } ''
     install -d "$out/etc/qubes/policy.d"
