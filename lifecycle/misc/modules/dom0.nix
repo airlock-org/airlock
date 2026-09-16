@@ -398,16 +398,24 @@ in
     # The upstream Xen builder runs first and changes loader.conf to select the
     # matching xen-* entry. Keep the ordinary NixOS entry as an explicit
     # recovery path rather than something that looks suitable for Qubes use.
+    # The installer can retain already-labelled entries between generations;
+    # Xen copies their titles. Normalize both kinds after every install.
     boot.loader.systemd-boot.extraInstallCommands = lib.mkAfter ''
       # extraInstallCommands is emitted as its own strict shell script, so it
       # cannot use the efiMountPoint shell variable from systemd-boot's
       # installer.  Interpolate the configured mount point here instead.
+      for entry in "${config.boot.loader.efi.efiSysMountPoint}"/loader/entries/xen-*.conf; do
+        [ -f "$entry" ] || continue
+        ${pkgs.gnused}/bin/sed -i \
+          '/^title /s/ (Recovery: without Xen)//g' \
+          "$entry"
+      done
       for entry in "${config.boot.loader.efi.efiSysMountPoint}"/loader/entries/nixos-*.conf; do
         [ -f "$entry" ] || continue
-        ${pkgs.gnugrep}/bin/grep -Fq "(Recovery: without Xen)" "$entry" || \
-          ${pkgs.gnused}/bin/sed -i \
-            's/^title \(.*\)$/title \1 (Recovery: without Xen)/' \
-            "$entry"
+        ${pkgs.gnused}/bin/sed -i \
+          -e '/^title /s/ (Recovery: without Xen)//g' \
+          -e 's/^title \(.*\)$/title \1 (Recovery: without Xen)/' \
+          "$entry"
       done
     '';
 
