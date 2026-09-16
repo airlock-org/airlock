@@ -30,6 +30,24 @@ let
     export XCURSOR_SIZE=${toString (24 * config.airlock.appGui.scale)}
     exec ${upstreamSession}
   '';
+  monitorLayout = pkgs.writeShellScript "airlock-qubes-set-monitor-layout" ''
+    set -eu
+
+    # The RPC handler runs outside the graphical login shell.  Give the
+    # upstream script every command it invokes explicitly; otherwise a
+    # missing xrandr makes its 100 ms Xorg readiness loop run forever.
+    export PATH=${lib.makeBinPath [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.libxcvt
+      pkgs.xrandr
+    ]}
+
+    # A layout request can race Xorg startup, but it must not become a
+    # permanent polling process if the display never appears.
+    exec ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=5s 60s \
+      ${agent}/bin/qubes-set-monitor-layout "$@"
+  '';
 in
 {
   options.airlock.appGui.scale = lib.mkOption {
@@ -73,6 +91,13 @@ in
         "airlock-qubes-rw-init.service"
         "systemd-user-sessions.service"
       ];
+      # qvm-start-gui and the guest can start concurrently.  Retry if the
+      # GuiVM vchan backend was not ready for the first connection attempt.
+      unitConfig.StartLimitIntervalSec = 0;
+      serviceConfig = {
+        Restart = "on-failure";
+        RestartSec = "5s";
+      };
       path = [
         pkgs.coreutils
         pkgs.gnused
@@ -101,7 +126,7 @@ in
       '';
       "X11/xorg-qubes.conf.template".source = "${agent}/etc/X11/xorg-qubes.conf.template";
       "X11/xinit/xinitrc".source = session;
-      "qubes-rpc/qubes.SetMonitorLayout".source = "${agent}/etc/qubes-rpc/qubes.SetMonitorLayout";
+      "qubes-rpc/qubes.SetMonitorLayout".source = monitorLayout;
       "qubes/rpc-config/qubes.SetMonitorLayout".text = "force-user='${config.airlock.qubeGuest.user}'\n";
     };
   };

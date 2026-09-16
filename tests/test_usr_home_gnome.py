@@ -48,7 +48,11 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         appGui = map (cfg: {{
           enabled = cfg.systemd.services.qubes-gui-agent.enable;
           envPath = cfg.systemd.services.qubes-gui-agent.environment.ENV_PATH;
+          restart = cfg.systemd.services.qubes-gui-agent.serviceConfig.Restart;
+          restartSec = cfg.systemd.services.qubes-gui-agent.serviceConfig.RestartSec;
+          startLimit = cfg.systemd.services.qubes-gui-agent.unitConfig.StartLimitIntervalSec;
           packages = map (package: package.pname or package.name or "") cfg.environment.systemPackages;
+          monitorLayout = builtins.readFile cfg.environment.etc."qubes-rpc/qubes.SetMonitorLayout".source;
           scale = cfg.airlock.appGui.scale;
           forkAutostart = cfg.environment.etc."xdg/autostart/qubes-qrexec-fork-server.desktop".text;
           wantedBy = cfg.systemd.services.qubes-gui-agent.wantedBy;
@@ -81,8 +85,14 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
     for guest in report["appGui"]:
         assert guest["envPath"] == "/run/current-system/sw/bin:/run/wrappers/bin"
         assert len(guest["envPath"]) < 250
+        assert guest["restart"] == "on-failure"
+        assert guest["restartSec"] == "5s"
+        assert guest["startLimit"] == 0
         assert "libxcvt" in guest["packages"]
         assert "xrandr" in guest["packages"]
+        assert "export PATH=" in guest["monitorLayout"]
+        assert "timeout --signal=TERM --kill-after=5s 60s" in guest["monitorLayout"]
+        assert "/bin/qubes-set-monitor-layout" in guest["monitorLayout"]
         assert guest["scale"] == 3
         assert "/bin/qrexec-fork-server" in guest["forkAutostart"]
         assert "Exec=/usr/bin/" not in guest["forkAutostart"]
