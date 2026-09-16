@@ -471,6 +471,10 @@ in
       source = dom0PoweroffService;
       mode = "0555";
     };
+    environment.etc."qubes/rpc-config/airlock.Dom0Poweroff" = lib.mkIf cfg.gui.enable {
+      text = "force-user='root'\n";
+      mode = "0444";
+    };
 
     networking.useDHCP = lib.mkDefault imageCfg.devMode.enable;
     networking.dhcpcd.extraConfig = lib.mkIf devNetworkProxy.enable (

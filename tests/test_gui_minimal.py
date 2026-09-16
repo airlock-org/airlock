@@ -50,6 +50,7 @@ def test_gui_minimal_topology_and_desktop():
         etc = builtins.attrNames guest.environment.etc;
         hostEtc = builtins.attrNames image.environment.etc;
         hostPoweroffService = builtins.readFile image.environment.etc."qubes-rpc/airlock.Dom0Poweroff".source;
+        hostPoweroffRpcConfig = image.environment.etc."qubes/rpc-config/airlock.Dom0Poweroff".text;
         hostPoweroffPolicy = builtins.readFile "${{sysGuiPolicy}}/etc/qubes/policy.d/50-airlock-sys-gui.policy";
         mimeDefaults = guest.xdg.mime.defaultApplications;
         packages = map (p: p.pname or p.name) guest.environment.systemPackages;
@@ -120,6 +121,7 @@ def test_gui_minimal_topology_and_desktop():
         "airlock.Dom0Poweroff is restricted to sys-gui" in report["hostPoweroffService"]
     )
     assert "systemctl poweroff" in report["hostPoweroffService"]
+    assert report["hostPoweroffRpcConfig"] == "force-user='root'\n"
     assert (
         "airlock.Dom0Poweroff + sys-gui dom0 allow user=root"
         in report["hostPoweroffPolicy"]
