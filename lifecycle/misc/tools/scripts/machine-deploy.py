@@ -165,13 +165,19 @@ def transfer(target, bridge_vm, release, session):
             f"only {free / 1024**3:.1f} GiB is available. No VMs or partitions changed. "
             "Provision development storage first; do not delete active/rollback store generations."
         )
-    bridge_free = int(
+    # sys-dev deliberately has a small package set and need not include Python.
+    # GNU stat is already available; use available blocks, not total/free blocks.
+    bridge_blocks, bridge_block_size = map(
+        int,
         command(
             "ssh",
             target,
-            "python3 -c 'import os; s=os.statvfs(\"/home/user\"); print(s.f_bavail*s.f_frsize)'",
-        )
+            "stat -f -c '%a %S' /home/user",
+        ).split(),
     )
+    if bridge_blocks < 0 or bridge_block_size <= 0:
+        raise RuntimeError("invalid sys-dev filesystem space report")
+    bridge_free = bridge_blocks * bridge_block_size
     if bridge_free < needed + 512 * 1024**2:
         raise RuntimeError(
             "sys-dev needs more private-volume space for the compressed closure transfer"

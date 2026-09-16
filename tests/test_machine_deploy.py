@@ -338,3 +338,36 @@ def test_existing_closure_requires_no_upload(monkeypatch):
             return "/nix/store/present"
 
     client.transfer("sys-dev-2", "sys-dev", "/nix/store/present", Session())
+
+
+@pytest.mark.parametrize(
+    "report,error",
+    [
+        ("262144 4096", "private-volume space"),
+        ("4080335 4096", "reached export"),
+        ("-1 4096", "invalid sys-dev"),
+        ("100 0", "invalid sys-dev"),
+    ],
+)
+def test_bridge_space_check_does_not_require_python(monkeypatch, report, error):
+    calls = []
+
+    def command(*args):
+        calls.append(args)
+        if args[0] == "ssh":
+            assert args == ("ssh", "sys-dev", "stat -f -c '%a %S' /home/user")
+            return report
+        return json.dumps({"/nix/store/new": {"narSize": 1024**3}})
+
+    class Session:
+        def run(self, script, **kwargs):
+            return "" if script == client.REMOTE_INVENTORY else str(30 * 1024**3)
+
+    def stop_at_export(*args, **kwargs):
+        raise RuntimeError("reached export")
+
+    monkeypatch.setattr(client, "command", command)
+    monkeypatch.setattr(client.subprocess, "Popen", stop_at_export)
+    with pytest.raises(RuntimeError, match=error):
+        client.transfer("sys-dev", "sys-dev", "/nix/store/release", Session())
+    assert len(calls) == 2
