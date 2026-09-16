@@ -117,12 +117,15 @@
           });
         };
 
+      airlockQubesGuiWindowStateOverlay = import ./lifecycle/misc/overlays/qubes-gui-window-state.nix;
+
       pkgsFor =
         system:
         import nixpkgs {
           inherit system;
           overlays = [
             nixos-qubes.overlays.default
+            airlockQubesGuiWindowStateOverlay
             airlockImageBuildToolsOverlay
           ];
           config.allowUnfreePredicate =
@@ -515,6 +518,7 @@
       airlock.configInputs = airlockConfigInputs;
 
       overlays.airlockImageBuildTools = airlockImageBuildToolsOverlay;
+      overlays.airlockQubesGuiWindowState = airlockQubesGuiWindowStateOverlay;
 
       packages = forAllSystems (
         system:
@@ -665,6 +669,7 @@
         { lib, ... }:
         {
           nixpkgs.overlays = lib.mkAfter [
+            self.overlays.airlockQubesGuiWindowState
             self.overlays.airlockImageBuildTools
           ];
 

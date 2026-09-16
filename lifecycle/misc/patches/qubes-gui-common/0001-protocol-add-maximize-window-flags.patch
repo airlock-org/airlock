@@ -1,0 +1,25 @@
+From b469018d019f0a6085b9ecca9ad43389dda81978 Mon Sep 17 00:00:00 2001
+From: Airlock Developers <airlock@example.invalid>
+Date: Wed, 16 Sep 2026 01:01:43 +0100
+Subject: [PATCH] protocol: add maximize window flags
+
+---
+ include/qubes-gui-protocol.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/include/qubes-gui-protocol.h b/include/qubes-gui-protocol.h
+index cd56d98..d4fc493 100644
+--- a/include/qubes-gui-protocol.h
++++ b/include/qubes-gui-protocol.h
+@@ -288,6 +288,8 @@ struct msg_window_flags {
+ #define WINDOW_FLAG_FULLSCREEN          (1<<0)
+ #define WINDOW_FLAG_DEMANDS_ATTENTION   (1<<1)
+ #define WINDOW_FLAG_MINIMIZE            (1<<2)
++#define WINDOW_FLAG_MAXIMIZE_VERT        (1<<3)
++#define WINDOW_FLAG_MAXIMIZE_HORZ        (1<<4)
+ 
+ /* Agent -> Daemon, deprecated */
+ struct shm_cmd {
+-- 
+2.54.0
+
