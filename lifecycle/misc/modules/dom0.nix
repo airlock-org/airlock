@@ -49,6 +49,10 @@ let
       echo "airlock.Dom0Poweroff is restricted to sys-gui" >&2
       exit 1
     }
+    [ -z "''${QREXEC_SERVICE_ARGUMENT:-}" ] || {
+      echo "airlock.Dom0Poweroff does not accept arguments" >&2
+      exit 1
+    }
 
     exec ${pkgs.systemd}/bin/systemctl poweroff
   '';
@@ -66,7 +70,8 @@ let
     qubes.GuiVMSession * @anyvm @anyvm deny
     # The normal GUI policy grants a clean power-off, not a dom0 shell.
     # Development USB shells require the separate explicit dev policy.
-    airlock.Dom0Poweroff * sys-gui dom0 allow
+    airlock.Dom0Poweroff + sys-gui dom0 allow user=root
+    airlock.Dom0Poweroff * @anyvm @anyvm deny
     qubes.ClipboardCopy + sys-gui @tag:guivm-sys-gui allow
     qubes.ClipboardPaste + sys-gui @tag:guivm-sys-gui allow
     qubes.SetMonitorLayout * sys-gui @tag:guivm-sys-gui allow

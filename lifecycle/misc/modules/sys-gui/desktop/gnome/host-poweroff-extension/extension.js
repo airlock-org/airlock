@@ -50,7 +50,7 @@ class HostPowerOffDialog extends ModalDialog.ModalDialog {
                     logError(error, 'Airlock host power-off request failed');
                     Main.notifyError(
                         'Power Off Failed',
-                        'The request did not reach dom0. The computer remains on.');
+                        'Dom0 did not confirm the power-off request. The computer may remain on.');
                 }
             });
         } catch (error) {

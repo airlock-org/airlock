@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -119,7 +120,35 @@ def test_gui_minimal_topology_and_desktop():
         "airlock.Dom0Poweroff is restricted to sys-gui" in report["hostPoweroffService"]
     )
     assert "systemctl poweroff" in report["hostPoweroffService"]
-    assert "airlock.Dom0Poweroff * sys-gui dom0 allow" in report["hostPoweroffPolicy"]
+    assert (
+        "airlock.Dom0Poweroff + sys-gui dom0 allow user=root"
+        in report["hostPoweroffPolicy"]
+    )
+    assert "airlock.Dom0Poweroff * @anyvm @anyvm deny" in report["hostPoweroffPolicy"]
+    # Exercise the packaged handler's boundary without powering off the test host.
+    handler = re.sub(
+        r"/nix/store/[^/]+/bin/systemctl poweroff",
+        "printf poweroff-requested",
+        report["hostPoweroffService"],
+    )
+    for source, argument, allowed in [
+        ("sys-gui", "", True),
+        ("sys-gui", "reboot", False),
+        ("sys-dev", "", False),
+        ("", "", False),
+    ]:
+        result = subprocess.run(
+            ["bash", "-c", handler],
+            env={
+                **os.environ,
+                "QREXEC_REMOTE_DOMAIN": source,
+                "QREXEC_SERVICE_ARGUMENT": argument,
+            },
+            capture_output=True,
+            text=True,
+        )
+        assert (result.returncode == 0) is allowed
+        assert ("poweroff-requested" in result.stdout) is allowed
     assert "admin.vm.Stats * sys-gui dom0 allow" in report["hostPoweroffPolicy"]
     assert not any(
         name.startswith("airlock/config-inputs/") for name in report["hostEtc"]
