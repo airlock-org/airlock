@@ -55,7 +55,7 @@ def build_parser():
     admit_parser.add_argument(
         "--verify-mode",
         default=os.environ.get("AIRLOCK_CLOSURE_STORE_VERIFY", "nix-store"),
-        choices=["none", "tree", "nix-store", "nix-store-trust"],
+        choices=["none", "tree", "nix-store", "nix-store-trust", "incremental"],
     )
     admit_parser.add_argument(
         "--view-backend",

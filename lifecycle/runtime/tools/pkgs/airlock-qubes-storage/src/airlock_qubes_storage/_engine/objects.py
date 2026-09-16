@@ -465,6 +465,36 @@ def admit_object_tar_fragment(
     return payload
 
 
+def reusable_object(root, logical_path):
+    """Trust complete admission records in the dom0-owned append-only pool.
+
+    Incomplete publication after interruption must be verified/admitted again.
+    Payload integrity scrubbing remains a separate, explicit operation.
+    """
+    entry = store_entry(logical_path)
+    meta = object_meta_path(root, entry)
+    blob_meta = object_blob_meta_path(root, entry)
+    if not meta.exists() or not blob_meta.exists():
+        return None
+    obj, blob = read_json(meta), read_json(blob_meta)
+    if obj.get("schema") != "airlock.closure-store.object.v2":
+        return None
+    if any(
+        record.get("path") != logical_path or record.get("entry") != entry
+        for record in (obj, blob)
+    ):
+        fail(f"object identity mismatch for {logical_path}")
+    if not obj.get("tree_hash") or obj["tree_hash"] != blob.get("tree_hash"):
+        fail(f"object admission metadata mismatch for {logical_path}")
+    extent = object_extent_from_meta(root, blob, logical_path, verify_payload=False)
+    recorded = object_extent_from_meta(
+        root, obj["tar_fragment"], logical_path, verify_payload=False
+    )
+    if extent != recorded:
+        fail(f"object extent metadata mismatch for {logical_path}")
+    return dict(obj, admitted=False)
+
+
 def admit_object(root, logical_path, physical_store_root, txid, target_bytes):
     entry = store_entry(logical_path)
     source = physical_store_path(logical_path, physical_store_root)

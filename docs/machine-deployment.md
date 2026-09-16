@@ -150,6 +150,22 @@ the image's prepared descriptor sources are replaced by closure-manifest sources
 Already running VMs and declared autostart VMs are brought back, with their
 dependencies. Shutdown timeouts fail the transaction; the tool does not kill VMs.
 
+Deployment admission uses `--verify-mode incremental`: complete canonical object
+records in dom0's managed append-only pool are reused without rehashing their
+source trees or stored payloads. Both metadata records must agree on identity,
+tree hash and extent; backing extents must exist and fit their segment. Missing
+records fall back to admission. New paths undergo nonrecursive Nix content
+verification, tree hashing and archive admission before generation publication.
+The generation manifest records new/reused object counts. Prepared image objects
+are trusted under the same build-validated image assumption used at bootstrap.
+
+This assumes the pool and its admission metadata remain dom0-owned and payloads
+are not modified after admission. Incremental deployment does not detect silent
+bit rot in previously admitted bytes. Explicit `admit --verify-mode nix-store`
+retains the full source/closure verification path and payload checks; it can be
+used for an integrity investigation rather than on every deployment. Transport
+checks, generation verification and fail-closed publication remain in place.
+
 The selection survives a normal reboot. Boot setup consumes the selected
 release, not the original image topology. Old images receive a repository-owned
 compatibility drop-in for setup-config; new images include the coordinator and

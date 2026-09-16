@@ -231,13 +231,20 @@ def verify_segment_region(root, segment_id, offset, size, digest, label):
         fail(f"{label} hash mismatch at offset {offset}")
 
 
-def object_extent_from_meta(root, meta, label):
+def object_extent_from_meta(root, meta, label, *, verify_payload=True):
     location = current_location_from_meta(meta, label)
     segment_id = validate_segment_id(location["segment_id"])
     offset = int(location["segment_offset"])
     size = int(location["size"])
     digest = location["sha256"]
-    verify_segment_region(root, segment_id, offset, size, digest, label)
+    if (
+        offset < 0
+        or size <= 0
+        or offset + size > segment_blob_path(root, segment_id).stat().st_size
+    ):
+        fail(f"{label} extent is outside backing segment")
+    if verify_payload:
+        verify_segment_region(root, segment_id, offset, size, digest, label)
     return {
         "segment_id": segment_id,
         "segment_blob": str(segment_blob_path(root, segment_id)),

@@ -308,7 +308,9 @@ def align_up(value, alignment):
     return ((value + alignment - 1) // alignment) * alignment
 
 
-def run_verify(paths, mode):
+def run_verify(paths, mode, *, recursive=True):
+    if not paths:
+        return {"mode": mode, "status": "passed", "reason": "no new objects"}
     if mode == "none":
         return {
             "mode": mode,
@@ -331,8 +333,9 @@ def run_verify(paths, mode):
         "nix-command",
         "store",
         "verify",
-        "--recursive",
     ]
+    if recursive:
+        command.append("--recursive")
     if mode == "nix-store":
         command.append("--no-trust")
     command.extend(paths)

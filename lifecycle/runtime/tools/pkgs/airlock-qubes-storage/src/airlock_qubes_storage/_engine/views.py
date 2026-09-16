@@ -441,7 +441,14 @@ def detach_blob_view(root, domain, generation):
 
 
 def materialize_erofs_objectmap_view(
-    root, generation_dir, paths, closure_id, txid, target_bytes
+    root,
+    generation_dir,
+    paths,
+    closure_id,
+    txid,
+    target_bytes,
+    *,
+    trusted_paths=frozenset(),
 ):
     root = Path(root)
     view_root = root / "views/by-closure" / closure_id
@@ -483,7 +490,12 @@ def materialize_erofs_objectmap_view(
                     f"canonical object data is missing while creating view: {logical_path}"
                 )
             meta = read_json(meta_path)
-            extent = object_extent_from_meta(root, meta, f"canonical object {entry}")
+            extent = object_extent_from_meta(
+                root,
+                meta,
+                f"canonical object {entry}",
+                verify_payload=logical_path not in trusted_paths,
+            )
             size = int(extent["size"])
             offset = int(extent["segment_offset"])
             if size % TAR_BLOCK_SIZE != 0 or offset % TAR_BLOCK_SIZE != 0:
@@ -637,10 +649,18 @@ def materialize_view(
     view_backend,
     txid,
     target_bytes,
+    *,
+    trusted_paths=frozenset(),
 ):
     generation_dir = Path(root) / "domains" / domain / "generations" / str(generation)
     if view_backend == VIEW_BACKEND_EROFS_OBJECTMAP:
         return materialize_erofs_objectmap_view(
-            root, generation_dir, paths, closure_id, txid, target_bytes
+            root,
+            generation_dir,
+            paths,
+            closure_id,
+            txid,
+            target_bytes,
+            trusted_paths=trusted_paths,
         )
     fail(f"unsupported closure view backend: {view_backend}")

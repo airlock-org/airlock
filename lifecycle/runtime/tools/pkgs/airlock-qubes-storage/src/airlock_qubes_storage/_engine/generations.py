@@ -21,7 +21,7 @@ from .core import (
     transaction_id,
     utc_now,
 )
-from .objects import admit_object
+from .objects import admit_object, reusable_object
 from .pool import ensure_pool
 from .segments import configured_segment_target_bytes
 from .state import (
@@ -76,11 +76,27 @@ def admit_generation(args):
         paths = sorted(set(paths))
     target_bytes = configured_segment_target_bytes(args.segment_target_bytes)
 
-    verification = run_verify([args.system], args.verify_mode)
+    incremental = args.verify_mode == "incremental"
+    cached = {}
+    if incremental:
+        cached = {
+            path: obj
+            for path in paths
+            if (obj := reusable_object(root, path)) is not None
+        }
+        additions = [path for path in paths if path not in cached]
+        verification = run_verify(additions, "nix-store", recursive=False)
+        verification.update(
+            mode="incremental",
+            verified_objects=len(additions),
+            reused_objects=len(cached),
+        )
+    else:
+        verification = run_verify([args.system], args.verify_mode)
     admitted = []
     reused = []
     for logical_path in paths:
-        result = admit_object(
+        result = cached.get(logical_path) or admit_object(
             root, logical_path, args.physical_store_root, txid, target_bytes
         )
         if result["admitted"]:
@@ -98,6 +114,7 @@ def admit_generation(args):
         args.view_backend,
         txid,
         target_bytes,
+        trusted_paths=set(cached),
     )
     manifest_path = generation_dir / "manifest.json"
     manifest = {

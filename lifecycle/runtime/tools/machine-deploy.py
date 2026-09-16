@@ -317,6 +317,8 @@ class Coordinator:
             output = self.command(
                 "airlock-closure-store",
                 "admit",
+                "--verify-mode",
+                "incremental",
                 "--domain",
                 name,
                 "--system",

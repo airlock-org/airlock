@@ -22,6 +22,56 @@ sys.path.insert(0, str(ENGINE_SOURCE))
 from airlock_qubes_storage._engine import core, objects, prepared, views  # noqa: E402
 
 
+def test_incremental_reuse_needs_no_source_or_payload_read(seed, monkeypatch):
+    args, _, systems = seed
+    monkeypatch.setattr(objects, "tree_hash", lambda *a: pytest.fail("rehashed source"))
+    from airlock_qubes_storage._engine import segments
+
+    monkeypatch.setattr(
+        segments, "verify_segment_region", lambda *a: pytest.fail("rehashed payload")
+    )
+    reused = objects.reusable_object(args.pool_root, systems[0])
+    assert reused and not reused["admitted"]
+    # A partial publication cannot qualify for reuse after a crash.
+    meta = segments.object_meta_path(Path(args.pool_root), Path(systems[0]).name)
+    meta.unlink()
+    assert objects.reusable_object(args.pool_root, systems[0]) is None
+
+
+def test_incremental_reuse_rejects_truncated_backing(seed):
+    args, _, systems = seed
+    from airlock_qubes_storage._engine import segments
+
+    meta = core.read_json(
+        segments.object_blob_meta_path(Path(args.pool_root), Path(systems[0]).name)
+    )
+    blob = segments.segment_blob_path(Path(args.pool_root), meta["segment_id"])
+    blob.chmod(0o600)
+    with blob.open("r+b") as stream:
+        stream.truncate(1)
+    with pytest.raises(Exception, match="outside backing segment"):
+        objects.reusable_object(args.pool_root, systems[0])
+
+
+def test_incremental_nix_verification_is_nonrecursive_and_rejects_corruption(
+    monkeypatch,
+):
+    calls = []
+
+    def command(argv, **kwargs):
+        calls.append(argv)
+        return SimpleNamespace(returncode=1, stderr="corrupt new object", stdout="")
+
+    monkeypatch.setattr(core.subprocess, "run", command)
+    with pytest.raises(Exception, match="corrupt new object"):
+        core.run_verify(["/nix/store/new-object"], "nix-store", recursive=False)
+    assert "--recursive" not in calls[0]
+    assert calls[0][-1] == "/nix/store/new-object"
+    calls.clear()
+    assert core.run_verify([], "nix-store", recursive=False)["status"] == "passed"
+    assert not calls
+
+
 @pytest.fixture
 def seed_inputs(tmp_path, monkeypatch):
     # Exercise the real tar/EROFS format, using the guarded Airlock Nix store
@@ -105,6 +155,50 @@ def tree_fingerprints(root):
         for path in root.rglob("*")
         if path.is_symlink() or path.is_file()
     }
+
+
+def test_incremental_generation_verifies_only_additions(
+    seed_inputs, tmp_path, monkeypatch
+):
+    from airlock_qubes_storage._engine import generations
+
+    specs, systems, source = seed_inputs
+    calls = []
+    monkeypatch.setattr(
+        generations,
+        "run_verify",
+        lambda paths, mode, **kw: calls.append((paths, kw)) or {"status": "passed"},
+    )
+    args = SimpleNamespace(
+        pool_root=str(tmp_path / "pool"),
+        domain="usr-home",
+        system=systems[0],
+        closure_source=specs[0]["closure_source"],
+        physical_store_root=str(source),
+        segment_target_bytes="",
+        verify_mode="incremental",
+        root_source="",
+        kernel_name="test",
+        view_backend="erofs-objectmap",
+        approved_by="dom0",
+        approval_source="test",
+        store_mountpoint="/nix/store",
+        store_device="/dev/xvde",
+        store_blob_device="/dev/xvdf",
+        retain="true",
+        activate="false",
+    )
+    generations.admit_generation(args)
+    assert len(calls[0][0]) == 2
+    args.system = systems[1]
+    args.closure_source = specs[1]["closure_source"]
+    generations.admit_generation(args)
+    assert calls[1] == ([systems[1]], {"recursive": False})
+    # Rollback to an admitted closure needs no source verification.
+    args.system = systems[0]
+    args.closure_source = specs[0]["closure_source"]
+    generations.admit_generation(args)
+    assert calls[2] == ([], {"recursive": False})
 
 
 def test_tar_fragments_ignore_inode_timestamps_and_hardlink_layout(tmp_path):
