@@ -395,18 +395,24 @@
           airlockGuiDomain = preparedDomain "hybrid";
           airlockUsbPreparedStore = preparedStore;
           airlockUsbGuestEntries = entries;
+          airlockSourceRevision = self.rev or "dirty";
+          airlockSourceLockHash = builtins.hashFile "sha256" ./flake.lock;
         };
         modules = [
           self.nixosModules.dom0
           ./lifecycle/image/profiles/usb-dev.nix
+          ./lifecycle/misc/modules/machine-deployment.nix
           ./lifecycle/image/hardware/thinkpad-t14-gen3-amd.nix
           ({ lib, ... }: {
+            airlock.machineDeployment.enable = true;
+            airlock.machineDeployment.profile = "usb-dev";
             specialisation.usb-text-recovery.configuration = {
               imports = [ ./lifecycle/image/profiles/usb-headless.nix ];
               # Do not reconcile or start VMs from possibly changed qubes.xml.
               airlock.qubes.setupConfigOnBoot.enable = lib.mkForce false;
             };
             specialisation.usb-gui-lab.configuration = {
+              airlock.machineDeployment.profile = lib.mkForce "usb-gui-lab";
               imports = [ ./lifecycle/image/profiles/usb-gui-lab.nix ];
               # Replace hybrid guest fields, leaving PCI selection to the
               # reusable module and this machine's hardware inventory.
@@ -418,6 +424,7 @@
             # specialisation.usb-gui-lab-hyprland.configuration = { ... };
             # specialisation.usb-gui-lab-xfce.configuration = { ... };
             specialisation.usb-lab.configuration = {
+              airlock.machineDeployment.profile = lib.mkForce "usb-lab";
               imports = [ ./lifecycle/image/profiles/usb-lab.nix ];
               airlock.qubes.domains = lib.mapAttrs (_: lib.mkForce) {
                 # Keep this explicit physical assignment in the forced prepared

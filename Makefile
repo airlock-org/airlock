@@ -64,6 +64,9 @@ VM_PREBUILD_ATTRS := \
 	$(VM_GUI_CONFIG_IMAGE_ATTR)
 
 PYTHON_FILES := \
+	lifecycle/runtime/tools/machine-deploy.py \
+	lifecycle/misc/tools/scripts/machine-deploy.py \
+	tests/test_machine_deploy.py \
 	lifecycle/misc/tools/pkgs/airlock-gui-gpu-check/src/check.py \
 	tests/test_gui_gpu_assignment.py \
 	tests/test_gui_gpu_boot_order.py \
@@ -110,6 +113,14 @@ PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
 PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py tests/test_usr_home_gnome.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_amd_vbios.py tests/test_amd_vbios_runtime.py tests/test_amd_vbios_libvirt.py tests/test_amd_vbios_events.py tests/test_gui_gpu_assignment.py tests/test_gui_gpu_boot_order.py tests/test_dev_dom0_terminal.py tests/test_qubes_gui_window_state.py tests/test_boot_framebuffer.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
+PYTEST_DEFAULT_TARGETS += $(if $(TESTS),,tests/test_machine_deploy.py)
+
+# One committed configuration, one whole-machine release. No per-VM switches.
+DEPLOY_PROFILE ?= usb-lab
+DEPLOY_TARGET ?=
+.PHONY: machine-build machine-plan machine-apply machine-status machine-verify machine-resume machine-rollback
+machine-build machine-plan machine-apply machine-status machine-verify machine-resume machine-rollback:
+	uv run python lifecycle/misc/tools/scripts/machine-deploy.py $(patsubst machine-%,%,$@) --profile "$(DEPLOY_PROFILE)" $(if $(DEPLOY_TARGET),--target "$(DEPLOY_TARGET)",)
 VM_STAGED_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm_staged.py::test_staged_vm_step[$(test)]')
 VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow
 VM_SLOW_PARALLEL_FLOW_IDS = $(VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS) vm-config-boot-flow

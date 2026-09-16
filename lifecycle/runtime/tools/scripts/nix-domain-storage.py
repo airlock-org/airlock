@@ -687,7 +687,28 @@ async def ensure_shared_store(args):
     if vm_running:
         fail(f"shared store source changed but domain is running: {args.domain}")
 
-    if current_admission is not None:
+    staged_file = os.environ.get("AIRLOCK_STAGED_GENERATIONS")
+    staged_generation = None
+    if staged_file:
+        with open(staged_file) as stream:
+            staged_generation = json.load(stream).get(args.domain)
+
+    if staged_generation:
+        admission = load_generation_admission(
+            args.pool_root, args.domain, staged_generation
+        )
+        expected = {
+            "system": args.system,
+            "root_source": args.root,
+            "kernel_name": args.kernel,
+            "source": args.artifact,
+            "approval_source": args.source,
+            "view_backend": args.view_backend,
+            "blob_device": args.blob_device,
+        }
+        if any(admission.get(key) != value for key, value in expected.items()):
+            fail(f"staged generation identity mismatch for {args.domain}")
+    elif current_admission is not None:
         admission = current_admission
     elif os.path.exists(os.path.join(args.artifact, "prepared.json")):
         from airlock_qubes_storage._engine.prepared import verify_prepared

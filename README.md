@@ -42,6 +42,20 @@ re-running bootstrap.
 
 ## Commands
 
+For physical USB-lab iteration without reflashing, use the repository-owned
+[whole-machine deployment workflow](docs/machine-deployment.md):
+
+```bash
+make machine-plan DEPLOY_TARGET=sys-dev-2
+make machine-apply DEPLOY_TARGET=sys-dev-2
+make machine-status DEPLOY_TARGET=sys-dev-2
+make machine-verify DEPLOY_TARGET=sys-dev-2
+```
+
+Commit first. This builds one release for dom0 and the complete VM topology;
+only affected VMs restart. Host changes require reboot. The first transfer needs
+substantial spare disk space; see the guide's prerequisites and recovery limits.
+
 ```bash
 make test-quick
 make test-warm

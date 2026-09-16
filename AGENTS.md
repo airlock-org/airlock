@@ -6,6 +6,12 @@
   and Qubes' own tests.
 - Keep Nix as the source of truth wherever practical, but accept existing Qubes
   runtime state such as `qubes.xml` for the first milestone.
+- For physical lab development, read `docs/machine-deployment.md` first. Change
+  and commit this repo, then use `make machine-plan` / `make machine-apply`
+  with `DEPLOY_TARGET=...`; verify the resulting whole-machine generation.
+  Never leave successful fixes only in a live VM, `/run`, or an ad-hoc overlay.
+  Record any unavoidable diagnostic mutation and remove it before verification.
+  A successful build is not a successful live deployment; report both separately.
 - Keep development observation separate from production behavior. Observation
   tools should report state without expanding Qubes control authority.
 - `make test-quick` is the primary feedback loop. Preserve clear logs and
