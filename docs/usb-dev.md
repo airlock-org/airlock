@@ -15,8 +15,10 @@ entry for this checkpoint, not the experimental AMD passthrough entry.
 
 Run `make usb-dev-image`. Its result link identifies the current image without
 exposing its changing Nix store path. The current image is a fixed 32 GiB
-image, so it fits a nominal 64 GB USB. The remaining USB space is left unused
-for this POC. 128 GB is still recommended for longer-lived builds.
+seed image, so it fits a nominal 64 GB USB. `usb-dev-provision` expands its
+root partition and ext4 filesystem to the USB's capacity after writing, before
+personalization. The build/flash does not need to write a larger empty image.
+Larger media provides more headroom for longer-lived development.
 
 The build now prepares the shared guest package store for both sys-gui boot
 variants and places it at its final location in the image. Guest-only source
@@ -33,12 +35,36 @@ non-USB disks, partitions and active device-mapper holders.
 
 Provision it with the serial printed by `lsblk`; the command resolves the
 current result link, calculates the image SHA-256 itself, unmounts the selected
-USB, writes it, copies the committed repository, SSH public key and local
+USB, writes it, expands root into the remaining space, copies the committed repository, SSH public key and local
 Codex auth cache, syncs it, then unmounts it again:
 
 ```sh
 make usb-dev-provision USB_SERIAL=25110814640207
 ```
+
+Expansion is part of this command; no extra sudo command or first-boot resize
+is needed. It validates the USB serial and the expected two-partition GPT layout,
+checks the Airlock image marker and ext4 label, backs up the **newly written**
+partition table, checks the filesystem offline, relocates the backup GPT header,
+and grows only partition 2. The EFI partition, root start, partition UUIDs and
+filesystem UUID remain unchanged. It checks the grown filesystem again before
+personalization. Unexpected layouts or filesystem errors stop provisioning.
+Raw table backups, `before.json`, and a successful `result.json` are stored in
+`.airlock-logs/usb-root-expansion/grow-*/` on the development host (root-owned).
+These are recovery metadata, **not backups of data erased by flashing**. Do not
+restore a smaller old partition boundary over an already enlarged filesystem.
+
+The roughly 58.2-GiB USB with serial `25110814640207` should get a roughly
+57.2-GiB root partition instead of 31 GiB. Dom0 needs that space because it hosts
+the shared VM package store, writable VM disks and retained rollback generations.
+The deployment workflow also imports/stages new Nix closures before changing
+running VMs; the first transfer can temporarily duplicate packages already packed
+in the image. Actual free space is lower than partition capacity and the deployment
+space check still applies. This is disk storage, not dom0 RAM allocation.
+
+Low-level `write` and `write-latest` remain image-only operations and do not grow
+partitions. `boot.growPartition` and filesystem auto-resize remain disabled:
+partition mutation occurs only in this explicit host-side provisioning command.
 
 The AMD lab now prepares its GPU's VFCT automatically from the booted host's
 firmware during normal Qubes VM startup. No local firmware artifact or

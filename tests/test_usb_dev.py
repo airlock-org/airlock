@@ -4,6 +4,9 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+from copy import deepcopy
+from types import SimpleNamespace
+import shutil
 
 import pytest
 
@@ -170,3 +173,191 @@ def test_amd_bus_reset_is_not_accepted(amd, tmp_path):
     report = amd.inspect(tmp_path / "sys", tmp_path / "proc")
     assert "function-level-reset-not-selected-review-required" in report["failures"]
     assert not report["assignment_gate_passed"]
+
+
+@pytest.fixture
+def growth_table():
+    return {
+        "label": "gpt",
+        "device": "/dev/sdc",
+        "id": "disk-id",
+        "sectorsize": 512,
+        "lastlba": 67108830,
+        "partitions": [
+            {
+                "node": "/dev/sdc1",
+                "start": 16384,
+                "size": 2082816,
+                "type": "C12A7328-F81F-11D2-BA4B-00A0C93EC93B",
+                "uuid": "esp-id",
+            },
+            {
+                "node": "/dev/sdc2",
+                "start": 2099200,
+                "size": 65007616,
+                "type": "0FC63DAF-8483-4772-8E79-3D69D8477DE4",
+                "uuid": "root-id",
+            },
+        ],
+    }
+
+
+def test_growth_accepts_actual_seed_layout(usb, growth_table):
+    root = usb.checked_growth_layout(
+        growth_table, Path("/dev/sdc"), Path("/dev/sdc2"), 62495129600
+    )
+    assert root["start"] == 2099200
+
+
+@pytest.mark.parametrize(
+    "damage", ["mbr", "extra", "overlap", "sector", "identity", "beyond", "type"]
+)
+def test_growth_rejects_unexpected_layout(usb, growth_table, damage):
+    if damage == "mbr":
+        growth_table["label"] = "dos"
+    elif damage == "extra":
+        growth_table["partitions"].append({})
+    elif damage == "overlap":
+        growth_table["partitions"][1]["start"] = 40
+    elif damage == "sector":
+        growth_table["sectorsize"] = 4096
+    elif damage == "identity":
+        growth_table["partitions"][1]["uuid"] = ""
+    elif damage == "beyond":
+        growth_table["partitions"][1]["size"] = 10**12
+    else:
+        growth_table["partitions"][1]["type"] = "different"
+    with pytest.raises(ValueError):
+        usb.checked_growth_layout(
+            growth_table, Path("/dev/sdc"), Path("/dev/sdc2"), 62495129600
+        )
+
+
+@pytest.mark.parametrize(
+    "damage", ["start", "uuid", "esp", "disk", "shrink", "not-full"]
+)
+def test_growth_refuses_bad_result_before_filesystem_resize(usb, growth_table, damage):
+    after = deepcopy(growth_table)
+    after["lastlba"] = 122060766
+    after["partitions"][1]["size"] = (
+        after["lastlba"] + 1 - after["partitions"][1]["start"]
+    )
+    if damage in ("start", "uuid"):
+        after["partitions"][1][damage] = 20
+    elif damage == "esp":
+        after["partitions"][0]["size"] += 1
+    elif damage == "disk":
+        after["id"] = "other"
+    elif damage == "shrink":
+        after["partitions"][1]["size"] = 1
+    else:
+        after["partitions"][1]["size"] -= 2048
+    with pytest.raises(ValueError):
+        usb.checked_growth_result(growth_table, after)
+
+
+def test_provision_stops_before_personalization_if_expansion_fails(usb, monkeypatch):
+    calls = []
+    monkeypatch.setattr(usb, "write_latest_image", lambda args: calls.append("write"))
+    monkeypatch.setattr(usb, "run", lambda *args: calls.append(args))
+
+    def fail(*args):
+        calls.append("expand")
+        raise ValueError("expansion failed")
+
+    monkeypatch.setattr(usb, "expand_provisioned_root", fail)
+    monkeypatch.setattr(
+        usb, "personalize", lambda args: pytest.fail("must not personalize")
+    )
+    with pytest.raises(ValueError, match="expansion failed"):
+        usb.provision_latest_image(
+            SimpleNamespace(
+                device="device", serial="serial", resize_backup_dir="backups"
+            )
+        )
+    assert calls == ["write", ("udevadm", "settle"), "expand"]
+
+
+@pytest.mark.parametrize(
+    "code,ok", [(0, True), (1, True), (2, False), (4, False), (8, False)]
+)
+def test_filesystem_check_exit_statuses(usb, monkeypatch, code, ok):
+    monkeypatch.setattr(
+        usb.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=code)
+    )
+    if ok:
+        usb.check_ext4("partition")
+    else:
+        with pytest.raises(ValueError, match="Filesystem check failed"):
+            usb.check_ext4("partition")
+
+
+def test_gpt_expansion_on_regular_file_preserves_partition_identities(usb, tmp_path):
+    """Real util-linux, no root, loop devices, mounts, or physical disks."""
+    if not shutil.which("sfdisk"):
+        pytest.skip("sfdisk unavailable")
+    image = tmp_path / "disk.img"
+    with image.open("wb") as stream:
+        stream.truncate(64 * 1024**2)
+    usb.run(
+        "sfdisk", str(image), input="label: gpt\nsize=8M, type=U\ntype=L\n", text=True
+    )
+    before = json.loads(usb.output("sfdisk", "--json", str(image)))["partitiontable"]
+    usb.run(
+        "sfdisk",
+        "--backup-file",
+        str(tmp_path / "backup"),
+        "--backup-pt-sectors",
+        str(image),
+    )
+    assert list(tmp_path.glob("backup*"))
+    with image.open("r+b") as stream:
+        stream.truncate(128 * 1024**2)
+    usb.run("sfdisk", "--lock=yes", "--relocate", "gpt-bak-std", str(image))
+    usb.run(
+        "sfdisk",
+        "--lock=yes",
+        "--wipe=never",
+        "--wipe-partitions=never",
+        "-N",
+        "2",
+        str(image),
+        input=", +\n",
+        text=True,
+    )
+    after = json.loads(usb.output("sfdisk", "--json", str(image)))["partitiontable"]
+    usb.checked_growth_layout(
+        after, image, Path(str(image) + "2"), image.stat().st_size
+    )
+    usb.checked_growth_result(before, after)
+    assert after["partitions"][1]["size"] > before["partitions"][1]["size"]
+
+
+def test_ext4_grows_to_container_size_without_changing_uuid(usb, tmp_path):
+    if not all(
+        shutil.which(tool)
+        for tool in ("mkfs.ext4", "e2fsck", "resize2fs", "blkid", "dumpe2fs")
+    ):
+        pytest.skip("e2fsprogs unavailable")
+    image = tmp_path / "root.ext4"
+    with image.open("wb") as stream:
+        stream.truncate(32 * 1024**2)
+    usb.run("mkfs.ext4", "-q", "-L", "airlock-usb", str(image))
+    old_uuid = usb.output("blkid", "-s", "UUID", "-o", "value", str(image))
+    usb.check_ext4(image)
+    with image.open("r+b") as stream:
+        stream.truncate(64 * 1024**2)
+    usb.run("resize2fs", str(image))
+    usb.check_ext4(image)
+    assert usb.output("blkid", "-s", "UUID", "-o", "value", str(image)) == old_uuid
+    fields = dict(
+        (key.strip(), value.strip())
+        for key, value in (
+            line.split(":", 1)
+            for line in usb.output("dumpe2fs", "-h", str(image)).splitlines()
+            if ":" in line
+        )
+    )
+    assert (
+        int(fields["Block count"]) * int(fields["Block size"]) == image.stat().st_size
+    )

@@ -401,10 +401,181 @@ def write_latest_image(args):
     write_image(args)
 
 
+def checked_growth_layout(table, target, partition, disk_bytes):
+    """Only the seed image's two-partition GPT layout may be expanded."""
+    require(table.get("label") == "gpt", "Root expansion requires GPT.")
+    require(table.get("sectorsize") == 512, "Expected 512-byte image sectors.")
+    require(table.get("device") == str(target), "Partition table device mismatch.")
+    parts = table.get("partitions", [])
+    require(len(parts) == 2, "Expected exactly ESP and root; refusing a custom layout.")
+    esp, root = parts
+    require(
+        esp["node"] == str(target) + "1" and root["node"] == str(partition),
+        "Unexpected partition numbering/order.",
+    )
+    require(
+        esp["type"].upper() == "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
+        and root["type"].upper() == "0FC63DAF-8483-4772-8E79-3D69D8477DE4",
+        "Expected EFI system partition followed by Linux root.",
+    )
+    require(
+        34 <= esp["start"] < esp["start"] + esp["size"] <= root["start"]
+        and root["size"] > 0
+        and root["start"] + root["size"] <= disk_bytes // 512 - 33,
+        "Invalid or overlapping partition boundaries.",
+    )
+    require(root.get("uuid") and esp.get("uuid"), "Missing partition identities.")
+    return root
+
+
+def checked_growth_result(before, after):
+    require(before["id"] == after["id"], "Disk UUID changed during expansion.")
+    require(
+        before["partitions"][0] == after["partitions"][0],
+        "ESP changed during expansion.",
+    )
+    old, new = before["partitions"][1], after["partitions"][1]
+    require(
+        {key: value for key, value in old.items() if key != "size"}
+        == {key: value for key, value in new.items() if key != "size"},
+        "Root start/identity changed; refusing filesystem resize.",
+    )
+    require(new["size"] >= old["size"], "Refusing to shrink the root partition.")
+    require(
+        0 <= after["lastlba"] + 1 - new["start"] - new["size"] < 2048,
+        "Root partition did not expand to the end of usable space.",
+    )
+
+
+def check_ext4(partition):
+    result = subprocess.run(["e2fsck", "-f", "-p", str(partition)], check=False)
+    require(
+        result.returncode in (0, 1),
+        f"Filesystem check failed ({result.returncode}); stopping.",
+    )
+
+
+def expand_provisioned_root(device, serial, backup_base):
+    """Grow the newly written seed, offline, before any personalization."""
+    root_only()
+    target, info = usb_disk(device)
+    require(info["serial"] == serial, "USB serial changed before root expansion.")
+    partition = Path(device + "-part2").resolve(strict=True)
+    before = json.loads(output("sfdisk", "--json", str(target)))["partitiontable"]
+    checked_growth_layout(before, target, partition, int(info["size"]))
+    require(
+        output("blkid", "-s", "TYPE", "-o", "value", str(partition)) == "ext4",
+        "Expected ext4 root.",
+    )
+    require(
+        output("blkid", "-s", "LABEL", "-o", "value", str(partition)) == "airlock-usb",
+        "Expected airlock-usb root label.",
+    )
+    filesystem_uuid = output("blkid", "-s", "UUID", "-o", "value", str(partition))
+    # noload prevents this validation mount from replaying the journal.
+    with tempfile.TemporaryDirectory(
+        prefix="airlock-grow-check-", dir="/run"
+    ) as directory:
+        run("mount", "-o", "ro,noload,nosuid,nodev,noexec", str(partition), directory)
+        try:
+            require(
+                (Path(directory) / "airlock-usb-image").read_text() == MARKER,
+                "Missing Airlock image marker.",
+            )
+        finally:
+            run("umount", directory)
+
+    backup_base = Path(backup_base).resolve()
+    existing = backup_base
+    while not existing.exists():
+        existing = existing.parent
+    target_devices = {Path(child["name"]).stat().st_rdev for child in flatten([info])}
+    require(
+        existing.stat().st_dev not in target_devices,
+        "Save expansion backups off the target USB.",
+    )
+    backup_base.mkdir(parents=True, exist_ok=True)
+    backup = Path(tempfile.mkdtemp(prefix="grow-", dir=backup_base))
+    (backup / "before.json").write_text(json.dumps(before, indent=2) + "\n")
+    (backup / "partition-table.sfdisk").write_text(
+        output("sfdisk", "--dump", str(target)) + "\n"
+    )
+    run(
+        "sfdisk",
+        "--backup-file",
+        str(backup / "partition-table"),
+        "--backup-pt-sectors",
+        str(target),
+    )
+    run("sync", "-f", str(backup))
+    print(f"Root expansion recovery metadata: {backup}", flush=True)
+
+    def recheck():
+        again, latest = usb_disk(device)
+        require(
+            again == target and latest["serial"] == serial,
+            "USB identity changed during expansion.",
+        )
+
+    recheck()
+    check_ext4(partition)
+    recheck()
+    # The seed GPT's backup header is still at the 32-GiB image boundary.
+    run("sfdisk", "--lock=yes", "--relocate", "gpt-bak-std", str(target))
+    recheck()
+    run(
+        "sfdisk",
+        "--lock=yes",
+        "--wipe=never",
+        "--wipe-partitions=never",
+        "-N",
+        "2",
+        str(target),
+        input=", +\n",
+        text=True,
+    )
+    run("blockdev", "--rereadpt", str(target))
+    run("udevadm", "settle")
+    after = json.loads(output("sfdisk", "--json", str(target)))["partitiontable"]
+    checked_growth_layout(after, target, partition, int(info["size"]))
+    checked_growth_result(before, after)
+    require(
+        int(output("blockdev", "--getsize64", str(partition)))
+        == after["partitions"][1]["size"] * 512,
+        "Kernel partition size is stale; stopping before filesystem resize.",
+    )
+    recheck()
+    run("resize2fs", str(partition))
+    recheck()
+    check_ext4(partition)
+    require(
+        output("blkid", "-s", "UUID", "-o", "value", str(partition)) == filesystem_uuid,
+        "Filesystem UUID changed.",
+    )
+    run("sync")
+    result = {
+        "schema": "airlock.usb-root-expansion.v1",
+        "serial": serial,
+        "device": str(target),
+        "filesystem_uuid": filesystem_uuid,
+        "root_bytes_before": before["partitions"][1]["size"] * 512,
+        "root_bytes_after": after["partitions"][1]["size"] * 512,
+        "partition_table": after,
+        "status": "complete",
+    }
+    (backup / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+    run("sync", "-f", str(backup))
+    print(
+        f"USB root expanded to {result['root_bytes_after'] / 1024**3:.1f} GiB; filesystem checked.",
+        flush=True,
+    )
+
+
 def provision_latest_image(args):
-    """Write, personalize, sync, and unmount a USB in one explicit action."""
+    """Write, expand root, personalize, sync, and unmount in one explicit action."""
     write_latest_image(args)
     run("udevadm", "settle")
+    expand_provisioned_root(args.device, args.serial, args.resize_backup_dir)
     root = Path(tempfile.mkdtemp(prefix="airlock-usb-", dir="/run"))
     partition = Path(f"{args.device}-part2")
     try:
@@ -762,7 +933,7 @@ def main():
     latest_writer.set_defaults(handler=write_latest_image)
     provisioner = commands.add_parser(
         "provision-latest",
-        help="Write and personalize the image in a build result link",
+        help="Write the image, expand root to the USB capacity, and personalize",
     )
     provisioner.add_argument(
         "--result-link", required=True, help="Result link created by make usb-dev-image"
@@ -780,6 +951,11 @@ def main():
         "--public-key", required=True, help="One SSH public key to authorize"
     )
     provisioner.add_argument("--auth-file", help="Optional existing Codex auth.json")
+    provisioner.add_argument(
+        "--resize-backup-dir",
+        default="/var/log/airlock/usb-root-expansion",
+        help="Off-USB directory for partition-table backups and expansion receipts.",
+    )
     provisioner.add_argument(
         "--amd-vfct",
         help="Optional validated, machine-local AMD VFCT to install before first boot.",

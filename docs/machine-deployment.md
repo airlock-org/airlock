@@ -35,7 +35,11 @@ restricted config-authority/approval workflow described in `config-system.md`.
 At implementation time the live `sys-dev-2` machine's 31-GiB root had only
 about 1.4 GiB free. SSH and the password-protected dom0 control transport were
 tested, but a full live apply/reboot/rollback cannot be validated on that disk
-without provisioning more space. The release build and pytest fault tests are
+without provisioning more space. `make usb-dev-provision USB_SERIAL=...` now
+expands a freshly flashed root filesystem to the USB capacity before
+personalization; see `usb-dev.md`. This erases the old installation as before,
+so back up wanted runtime data first. No larger seed image is necessary.
+The release build and pytest fault tests are
 separate evidence, not a claim of a completed physical deployment. Do not erase
 this distinction when handing off to another agent.
 

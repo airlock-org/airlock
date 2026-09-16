@@ -154,7 +154,7 @@ test-quick: ensure-generated-dirs
 
 .PHONY: usb-dev-image usb-dev-write usb-dev-provision usb-dev-help
 
-USB_DEV_PROVISION = sudo python3 lifecycle/image/tools/usb-dev.py provision-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --repo "$(CURDIR)" --public-key "$(HOME)/.ssh/id_ed25519.pub" --auth-file "$(HOME)/.codex/auth.json" --insecure-dev-password --insecure-plain-codex-auth
+USB_DEV_PROVISION = sudo python3 lifecycle/image/tools/usb-dev.py provision-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --resize-backup-dir "$(CURDIR)/.airlock-logs/usb-root-expansion" --repo "$(CURDIR)" --public-key "$(HOME)/.ssh/id_ed25519.pub" --auth-file "$(HOME)/.codex/auth.json" --insecure-dev-password --insecure-plain-codex-auth
 
 .PHONY: usb-dom0-console-image usb-dom0-console-write
 

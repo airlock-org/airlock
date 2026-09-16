@@ -62,7 +62,8 @@
   boot.loader.efi.canTouchEfiVariables = false;
   boot.initrd.systemd.enable = true;
   boot.kernelParams = [ "console=tty0" "console=hvc0" ];
-  # Keep the POC image fixed-size: it avoids first-boot partition mutation.
+  # Keep the seed fixed-size. Host-side usb-dev-provision grows it to the USB
+  # capacity before personalization; never mutate partitions on first boot.
   boot.growPartition = false;
   fileSystems."/".device = lib.mkForce "/dev/disk/by-label/airlock-usb";
   fileSystems."/".autoResize = lib.mkForce false;
@@ -71,8 +72,8 @@
   # runtime configuration aligned with that build-time filesystem.
   fileSystems."/boot".device = lib.mkForce "/dev/disk/by-label/ESP";
   image = { baseName = "airlock-usb-dev"; format = "raw"; efiSupport = true; };
-  # A fixed 32-GiB developer image: 1 GiB EFI plus roughly 31 GiB root.
-  # Keep headroom for writable VM state and developer updates. Guest backing
+  # A fixed 32-GiB seed: 1 GiB EFI plus roughly 31 GiB root. Provisioning expands
+  # root for writable VM state and staged/retained Nix generations. Guest backing
   # data is already present at its final path; first boot only verifies/adopts it.
   virtualisation.diskSize = 32768;
   system.build.image = lib.mkForce (import "${modulesPath}/../lib/make-disk-image.nix" {
