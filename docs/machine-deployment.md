@@ -49,9 +49,20 @@ host generation. `airlock-machine-autostart` started `usr-home` automatically;
 `machine-verify` returned `complete`, with matching host and running guest
 generations and no failed dom0 units. The browser stayed stopped as configured.
 The earlier image-to-release apply also survived restarting sys-dev/sys-gui.
-Rollback and user-data preservation across rollback remain unverified. GNOME's
-shutdown action was observed stopping only sys-gui, and input forwarding did not
-recover after that VM stopped; these are separate unresolved desktop issues.
+
+Rollback follow-up, 2026-09-16: revision `814b3a4de5d744a5f6d8f83c317166728a097bf3`
+removed the temporary `usr-home` generation marker and switched `usr-home` from
+`hbnf7k25...` to `n911xmhv...`. Rolling back restored both the prior release and
+`hbnf7k25...`, including its marker, while exact sentinels in the persistent
+homes of `usr-home` and `sys-dev` survived. Reapplying `814b3a4...` removed the
+marker again; after reboot, `machine-verify` returned `complete`, both sentinels
+still matched, and dom0 had no failed units. The temporary sentinels were then
+removed. This validates one-generation whole-machine rollback and persistent
+home preservation; it does not claim application-level data migration rollback.
+
+GNOME's shutdown action was observed stopping only sys-gui, and input forwarding
+did not recover after that VM stopped; these are separate unresolved desktop
+issues.
 
 ## Normal loop
 
@@ -215,8 +226,10 @@ Implementation entry points:
 - `lifecycle/misc/modules/machine-deployment.nix`: image/boot integration.
 - `lifecycle/runtime/tools/scripts/nix-domain-storage.py`: staged generation use.
 
-The next physical acceptance run must demonstrate an ordinary VM config change,
+The physical acceptance run has demonstrated an ordinary VM config change,
 unchanged providers staying up, a GUI/provider restart surviving SSH loss,
-reboot preserving selection, and rollback restoring the previous systems while
-preserving home data. Until those pass, describe this as an implemented and
-locally tested development workflow, not a production-proven updater.
+reboot preserving selection, and rollback restoring the previous guest system
+while preserving home data. Treat this as a physically exercised development
+updater, not a production-safe updater: failure injection, power-loss recovery,
+release pruning, schema migrations, and restricted production authority remain
+outside the demonstrated boundary.
