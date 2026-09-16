@@ -166,6 +166,13 @@ retains the full source/closure verification path and payload checks; it can be
 used for an integrity investigation rather than on every deployment. Transport
 checks, generation verification and fail-closed publication remain in place.
 
+Measured on the physical USB laptop on 2026-09-16: incremental re-admission of
+the already deployed sys-gui closure took 2.13 seconds, reusing all 1,578 objects
+(9,488,805,888 logical store bytes) with zero admissions. This was an inactive,
+unretained benchmark generation (sys-gui generation 8), not a VM switch. It tests
+the fully reused case; a changed closure may still need a new EROFS index and VM
+restart, so this is not a two-second end-to-end deployment claim.
+
 The selection survives a normal reboot. Boot setup consumes the selected
 release, not the original image topology. Old images receive a repository-owned
 compatibility drop-in for setup-config; new images include the coordinator and
