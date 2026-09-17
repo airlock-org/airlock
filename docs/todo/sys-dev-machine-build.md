@@ -24,9 +24,10 @@ This is the next small step toward [sys-ctrl](sys-ctrl.md).
   configuration change, then submit it with `airlock-pool-send`. Record the
   source revision, lock hash, system path, and returned pool generation.
 
-Limit this step to checkout, build, and inactive admission. Guest activation,
-whole-machine deployment integration, and creation of `sys-ctrl` remain later
-work. The checkout must remain a reproducible copy of committed machine source;
+Limit this step to checkout, build, and inactive admission. Follow with the
+[guest activation and rollback trial](sys-dev-guest-activation-rollback.md).
+Creation of `sys-ctrl` remains later work. The checkout must remain a
+reproducible copy of committed machine source;
 do not leave the only implementation of a fix on the live machine.
 
 ## Acceptance
