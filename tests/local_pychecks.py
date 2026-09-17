@@ -1738,7 +1738,7 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "VM_SLOW_SELECTED_PARALLEL_TARGETS =",
             "VM_SLOW_SELECTED_SERIAL_TARGETS =",
             "VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow",
-            "VM_SLOW_SERIAL_FLOW_IDS = vm-config-boot-activate-flow",
+            "VM_SLOW_SERIAL_FLOW_IDS = vm-config-boot-activate-flow vm-pool-admission-flow",
             "tests/test_vm.py::test_vm_flow[$(test)]",
             "AIRLOCK_CONFIG_DOM0_SYSTEM_SWITCH_ACTION=boot",
             "AIRLOCK_AUTO_GC_AFTER_RUN=1",
@@ -1754,6 +1754,7 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "vm-warm-test-config",
             "vm-parallel-prebuild-image",
             "AIRLOCK_VM_PARALLEL_IMAGE_LINK",
+            "pool-admission-smoke.py",
         ],
         "boot_flow": [
             "AIRLOCK_RUN_CONFIG_BOOT_VERIFY=1",

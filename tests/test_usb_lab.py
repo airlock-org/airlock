@@ -50,6 +50,9 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         policy = builtins.head (builtins.filter (p:
           (p.name or "") == "airlock-dev-dom0-terminal-policy"
         ) host.virtualisation.qubes.packages);
+        poolSend = builtins.head (builtins.filter (package:
+          (package.pname or package.name) == "airlock-pool-send"
+        ) dev.environment.systemPackages);
       in {{
         domains = builtins.attrNames host.airlock.qubes.domains;
         bootRole = host.environment.etc."airlock/boot-role".text;
@@ -77,6 +80,10 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         setupSync = host.systemd.services.airlock-setup-config.serviceConfig.ExecStartPost;
         callers = host.airlock.devDom0Terminal.callers;
         policy = builtins.readFile "${{policy}}/etc/qubes/policy.d/40-airlock-dev-dom0-terminal.policy";
+        poolAdmission = host.airlock.poolAdmission;
+        poolAdmissionHandler = builtins.readFile host.environment.etc."qubes-rpc/airlock.Pool.Admit".source;
+        poolAdmissionMode = host.environment.etc."qubes-rpc/airlock.Pool.Admit".mode;
+        poolAdmissionPolicy = builtins.readFile "${{host.environment.etc."qubes/policy.d".source}}/42-airlock-pool-admission.policy";
         dev = {{
           role = dev.airlock.qubeGuest.role;
           tailscale = dev.services.tailscale.enable;
@@ -84,6 +91,9 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
           dom0Shell = dev.airlock.devDom0Terminal.guest.enable;
           networkManager = dev.networking.networkmanager.enable;
           packages = map (package: package.pname or package.name) dev.environment.systemPackages;
+          configNixStoreRoot = dev.airlock.qubeGuest.configNixStoreRoot;
+          poolInit = dev.systemd.services.airlock-sys-dev-pool-init.script;
+          poolSend = builtins.readFile "${{poolSend}}/bin/airlock-pool-send";
           userSelection = dev.airlock.qubeGuest.allowQrexecUserSelection;
           providesNetwork = dev.airlock.qubeGuest.role == "sys-dev";
         }};
@@ -163,6 +173,40 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["callers"] == ["sys-dev"]
     assert "airlock.DevDom0Shell + sys-dev dom0 allow" in report["policy"]
     assert "airlock.DevDom0Shell + sys-gui dom0 allow" not in report["policy"]
+    assert report["poolAdmission"] == {
+        "enable": True,
+        "caller": "sys-dev",
+        "targets": ["sys-gui", "sys-dev", "usr-home", "usr-browser"],
+    }
+    assert report["poolAdmissionMode"] == "0555"
+    for target in report["poolAdmission"]["targets"]:
+        assert (
+            f"airlock.Pool.Admit +{target} sys-dev dom0 allow"
+            in report["poolAdmissionPolicy"]
+        )
+    assert "airlock.Pool.Admit * @anyvm @anyvm deny" in report["poolAdmissionPolicy"]
+    for source, target, expected_error in [
+        ("usr-home", "usr-home", "restricted to sys-dev"),
+        ("sys-dev", "dom0", "target is not permitted"),
+    ]:
+        rejected = subprocess.run(
+            ["bash", "-c", report["poolAdmissionHandler"]],
+            env={
+                **os.environ,
+                "QREXEC_REMOTE_DOMAIN": source,
+                "QREXEC_SERVICE_ARGUMENT": target,
+            },
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        assert rejected.returncode == 1
+        assert expected_error in rejected.stderr
+    assert report["dev"]["configNixStoreRoot"].startswith("/rw/")
+    assert report["dev"]["configNixStoreRoot"] in report["dev"]["poolInit"]
+    assert "--physical-store-root" in report["dev"]["poolSend"]
+    assert "--nix-store" in report["dev"]["poolSend"]
+    assert "airlock-pool-send" in report["dev"]["packages"]
     assert {
         key: report["dev"][key]
         for key in (

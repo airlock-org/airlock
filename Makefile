@@ -116,7 +116,7 @@ PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
 PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
-PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_repository_split.py tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py tests/test_usr_home_gnome.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_amd_vbios.py tests/test_amd_vbios_runtime.py tests/test_amd_vbios_libvirt.py tests/test_amd_vbios_events.py tests/test_gui_gpu_assignment.py tests/test_input_events.py tests/test_gui_gpu_boot_order.py tests/test_dev_dom0_terminal.py tests/test_qubes_gui_window_state.py tests/test_boot_framebuffer.py tests/test_boot_entry_labels.py tests/test_boot_menu.py)
+PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_repository_split.py tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py tests/test_usr_home_gnome.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_amd_vbios.py tests/test_amd_vbios_runtime.py tests/test_amd_vbios_libvirt.py tests/test_amd_vbios_events.py tests/test_gui_gpu_assignment.py tests/test_input_events.py tests/test_gui_gpu_boot_order.py tests/test_dev_dom0_terminal.py tests/test_qubes_gui_window_state.py tests/test_boot_framebuffer.py tests/test_boot_entry_labels.py tests/test_boot_menu.py airlock-machine/tests/test_pool_artifact.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 PYTEST_DEFAULT_TARGETS += $(if $(TESTS),,tests/test_machine_deploy.py)
 
@@ -129,7 +129,7 @@ machine-build machine-plan machine-apply machine-status machine-verify machine-r
 VM_STAGED_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm_staged.py::test_staged_vm_step[$(test)]')
 VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow
 VM_SLOW_PARALLEL_FLOW_IDS = $(VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS) vm-config-boot-flow
-VM_SLOW_SERIAL_FLOW_IDS = vm-config-boot-activate-flow
+VM_SLOW_SERIAL_FLOW_IDS = vm-config-boot-activate-flow vm-pool-admission-flow
 VM_SLOW_FLOW_IDS = $(VM_SLOW_PARALLEL_FLOW_IDS) $(VM_SLOW_SERIAL_FLOW_IDS)
 VM_SLOW_SELECTED_PARALLEL_FLOW_IDS = $(filter $(VM_SLOW_PARALLEL_FLOW_IDS),$(TESTS))
 VM_SLOW_SELECTED_SERIAL_FLOW_IDS = $(filter $(VM_SLOW_SERIAL_FLOW_IDS),$(TESTS))
@@ -139,7 +139,7 @@ VM_SLOW_SELECTED_PARALLEL_TARGETS = $(foreach test,$(VM_SLOW_SELECTED_PARALLEL_F
 VM_SLOW_SELECTED_SERIAL_TARGETS = $(foreach test,$(VM_SLOW_SELECTED_SERIAL_FLOW_IDS),'tests/test_vm.py::test_vm_flow[$(test)]')
 VM_SLOW_SERIAL_TARGETS = $(foreach test,$(VM_SLOW_SERIAL_FLOW_IDS),'tests/test_vm.py::test_vm_flow[$(test)]')
 
-.PHONY: ensure-generated-dirs build test-quick test-warm test-slow py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-config-network-debug-image vm-gui-config-network-debug-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-sync-codex-auth vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test-quick test-warm test-slow py-sync py-format py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-config-network-debug-image vm-gui-config-network-debug-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-sync-codex-auth vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-nix-closure-flow vm-nix-closure-warm-flow vm-pool-admission-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(AIRLOCK_DATA_ROOT)),)
@@ -345,6 +345,10 @@ vm-nix-closure-flow: ensure-generated-dirs gc-auto
 
 vm-nix-closure-warm-flow: ensure-generated-dirs gc-auto
 	AIRLOCK_AUTO_GC_AFTER_RUN=1 AIRLOCK_KEEP_VM=1 AIRLOCK_SYNC_DOM0_TOOLS=1 AIRLOCK_VM_SKIP_BASE_BUILD=1 AIRLOCK_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" AIRLOCK_VM_DISPLAY=none AIRLOCK_VM_FRESH=0 AIRLOCK_BOOTSTRAP_QUBES=0 AIRLOCK_RUN_SETUP_CONFIG=1 AIRLOCK_RUN_CONFIG_VMS_SMOKE=0 AIRLOCK_RUN_NIX_CLOSURE_SMOKE=1 AIRLOCK_RUN_QUBES_SMOKE=0 AIRLOCK_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
+
+vm-pool-admission-flow: ensure-generated-dirs gc-auto
+	AIRLOCK_KEEP_VM=1 AIRLOCK_VM_IMAGE_ATTR=airlock-vm-pool-admission-test-image AIRLOCK_VM_DISPLAY=none AIRLOCK_VM_FRESH=1 AIRLOCK_BOOTSTRAP_QUBES=0 AIRLOCK_RUN_SETUP_CONFIG=1 AIRLOCK_RUN_CONFIG_INPUTS_IMPORT=0 AIRLOCK_RUN_CONFIG_VMS_SMOKE=0 AIRLOCK_RUN_NIX_CLOSURE_SMOKE=0 AIRLOCK_RUN_QUBES_SMOKE=0 AIRLOCK_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh
+	uv run python lifecycle/misc/tools/scripts/pool-admission-smoke.py
 
 disk-usage:
 	./lifecycle/misc/tools/scripts/clean-generated.sh disk-usage

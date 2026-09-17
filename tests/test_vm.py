@@ -31,6 +31,12 @@ VM_FLOWS = (
     ),
     VmFlow("vm-config-flow", "vm-config-flow"),
     VmFlow("vm-nix-closure-flow", "vm-nix-closure-flow"),
+    VmFlow(
+        "vm-pool-admission-flow",
+        "vm-pool-admission-flow",
+        (pytest.mark.serial_vm,),
+        serial=True,
+    ),
     VmFlow("vm-config-boot-flow", "vm-config-boot-flow"),
     VmFlow(
         "vm-config-boot-activate-flow",

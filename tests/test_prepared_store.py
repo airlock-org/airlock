@@ -21,7 +21,13 @@ ENGINE_SOURCE = (
 )
 sys.path.insert(0, str(ENGINE_SOURCE))
 
-from airlock_qubes_storage._engine import core, objects, prepared, views  # noqa: E402
+from airlock_qubes_storage._engine import (  # noqa: E402
+    artifacts,
+    core,
+    objects,
+    prepared,
+    views,
+)
 
 
 def test_incremental_reuse_needs_no_source_or_payload_read(seed, monkeypatch):
@@ -201,6 +207,48 @@ def test_incremental_generation_verifies_only_additions(
     args.closure_source = specs[0]["closure_source"]
     generations.admit_generation(args)
     assert calls[2] == ([], {"recursive": False})
+
+
+def test_transferred_artifact_builds_a_real_pool_view(seed_inputs, tmp_path):
+    specs, systems, source = seed_inputs
+    common = "/nix/store/" + "a" * 32 + "-shared-package"
+    output = io.BytesIO()
+    artifacts.write_artifact(
+        output,
+        domain="usr-home",
+        system=systems[0],
+        closure_source=specs[0]["closure_source"],
+        root_source=specs[0]["root_source"],
+        kernel_name=specs[0]["kernel_name"],
+        source_revision="1" * 40,
+        lock_hash="2" * 64,
+        physical_store_root=source,
+        path_info={
+            common: {"references": [], "narHash": "sha256-common", "narSize": 1},
+            systems[0]: {
+                "references": [common],
+                "narHash": "sha256-system",
+                "narSize": 2,
+            },
+        },
+    )
+    result = artifacts.receive_artifact(
+        io.BytesIO(output.getvalue()),
+        pool_root=tmp_path / "pool",
+        expected_domain="usr-home",
+        approved_by="sys-dev",
+    )
+    manifest = core.read_json(result["manifest"])
+    assert result["activated"] is False
+    assert result["objects_admitted"] == 2
+    assert Path(manifest["store"]["canonical_image"]).is_file()
+    blob_map = core.read_json(manifest["store"]["canonical_blob_map"])
+    assert blob_map["view_backend"] == "erofs-objectmap"
+    assert {extent["object"] for extent in blob_map["extents"]} == {
+        Path(common).name,
+        Path(systems[0]).name,
+        ".tar-eof",
+    }
 
 
 def test_tar_fragments_ignore_inode_timestamps_and_hardlink_layout(tmp_path):

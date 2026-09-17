@@ -147,6 +147,8 @@ class Machine(deploy.Coordinator):
             return "\n".join(name + "|Running" for name in sorted(self.live))
         if args[0] == "airlock-closure-store":
             assert not any(call[0] == "qvm-shutdown" for call in self.calls)
+            if args[1] == "find-generation":
+                return json.dumps({"status": "missing"})
             return json.dumps({"generation": "staged-generation"})
         if args[0] == "qvm-shutdown":
             self.live.remove(args[-1])

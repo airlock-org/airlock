@@ -1,6 +1,8 @@
 # Send guest packages from sys-dev to the shared pool
 
-Status: proposed, not implemented. Recorded 2026-09-17.
+Status: implemented in the pinned `airlock-machine` component on 2026-09-17.
+The nested flow is available as `vm-pool-admission-flow`; nested execution and
+physical image validation remain pending.
 
 A small first step toward [sys-ctrl](sys-ctrl.md): let `sys-dev` prepare and
 send guest package artifacts to the existing Python `airlock-qubes-storage`
