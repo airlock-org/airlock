@@ -485,63 +485,12 @@ def test_growth_detects_already_expanded_partition(usb, growth_table):
     assert usb.root_fills_disk(growth_table, disk_bytes)
 
 
-@pytest.mark.parametrize(
-    "relative",
-    [
-        "var/lib/airlock/usb/local-password.hash",
-        "home/airlock/dev/nixome",
-        "var/lib/airlock/system/current-topology.json",
-    ],
-)
-def test_resume_rejects_personalized_or_bootstrapped_usb(usb, tmp_path, relative):
-    target = tmp_path / relative
-    target.parent.mkdir(parents=True)
-    target.write_text("existing")
-    with pytest.raises(ValueError, match="unpersonalized"):
-        usb.require_unpersonalized_root(tmp_path)
-
-
-def test_resume_accepts_unpersonalized_image(usb, tmp_path):
-    usb.require_unpersonalized_root(tmp_path)
-
-
-def test_resume_never_calls_image_writer(usb, monkeypatch):
-    calls = []
-    monkeypatch.setattr(usb, "root_only", lambda: None)
-    monkeypatch.setattr(usb, "usb_device_by_serial", lambda serial: "by-id-usb")
-    monkeypatch.setattr(
-        usb, "unmount_usb", lambda device: calls.append(("unmount", device))
-    )
-    monkeypatch.setattr(usb, "run", lambda *args: calls.append(args))
-    monkeypatch.setattr(
-        usb, "write_latest_image", lambda args: pytest.fail("resume must never reflash")
-    )
-
-    def stop_at_expansion(device, serial, backup, *, resume):
-        assert (device, serial, backup, resume) == (
-            "by-id-usb",
-            "serial",
-            "backups",
-            True,
-        )
-        raise ValueError("reached expansion without flashing")
-
-    monkeypatch.setattr(usb, "expand_provisioned_root", stop_at_expansion)
-    with pytest.raises(ValueError, match="without flashing"):
-        usb.provision_latest_image(
-            SimpleNamespace(resume=True, serial="serial", resize_backup_dir="backups")
-        )
-    assert calls == [("unmount", "by-id-usb"), ("udevadm", "settle")]
-
-
-@pytest.mark.parametrize("resume", [False, True])
-def test_provision_make_target_keeps_root_only_backups_outside_repo(resume):
-    target = "usb-dev-provision-resume" if resume else "usb-dev-provision"
+def test_provision_make_target_keeps_root_only_backups_outside_repo():
     result = subprocess.run(
         [
             "make",
             "-n",
-            target,
+            "usb-dev-provision",
             "USB_SERIAL=test-serial",
             "AIRLOCK_DATA_ROOT=",
             "AIRLOCK_LOG_DIR=",
@@ -552,4 +501,3 @@ def test_provision_make_target_keeps_root_only_backups_outside_repo(resume):
         check=True,
     )
     assert '--resize-backup-dir "/var/log/airlock/usb-root-expansion"' in result.stdout
-    assert ("--resume" in result.stdout) is resume

@@ -497,20 +497,6 @@ def check_ext4(partition):
         ) from error
 
 
-def require_unpersonalized_root(root):
-    for relative in (
-        "var/lib/airlock/usb/local-password.hash",
-        "home/airlock/dev/nixome",
-        "var/lib/airlock/system/current-topology.json",
-    ):
-        path = root / relative
-        require(
-            not path.exists() and not path.is_symlink(),
-            "Resume is only for a freshly written, unpersonalized image; "
-            f"found {relative}. Refusing to overwrite an existing installation.",
-        )
-
-
 def root_fills_disk(table, disk_bytes):
     root = table["partitions"][1]
     return (
@@ -525,12 +511,12 @@ def verify_kernel_partition_size(partition, expected_bytes):
     run("udevadm", "settle")
     require(
         int(output("blockdev", "--getsize64", str(partition))) == expected_bytes,
-        "Kernel partition size is stale. Unplug/replug this USB, then run "
-        "usb-dev-provision-resume; no filesystem resize was attempted.",
+        "Kernel partition size is stale. Unplug/replug this USB, then rerun "
+        "usb-dev-provision from scratch; no filesystem resize was attempted.",
     )
 
 
-def expand_provisioned_root(device, serial, backup_base, *, resume=False):
+def expand_provisioned_root(device, serial, backup_base):
     """Grow the newly written seed, offline, before any personalization."""
     root_only()
     target, info = usb_disk(device)
@@ -557,8 +543,6 @@ def expand_provisioned_root(device, serial, backup_base, *, resume=False):
                 (Path(directory) / "airlock-usb-image").read_text() == MARKER,
                 "Missing Airlock image marker.",
             )
-            if resume:
-                require_unpersonalized_root(Path(directory))
         finally:
             run("umount", directory)
 
@@ -645,20 +629,9 @@ def expand_provisioned_root(device, serial, backup_base, *, resume=False):
 
 def provision_latest_image(args):
     """Write, expand root, personalize, sync, and unmount in one explicit action."""
-    resume = getattr(args, "resume", False)
-    if resume:
-        root_only()
-        args.device = usb_device_by_serial(args.serial)
-        unmount_usb(args.device)
-        print(
-            "Resuming the image already on the USB; skipping image write.", flush=True
-        )
-    else:
-        write_latest_image(args)
+    write_latest_image(args)
     run("udevadm", "settle")
-    expand_provisioned_root(
-        args.device, args.serial, args.resize_backup_dir, resume=resume
-    )
+    expand_provisioned_root(args.device, args.serial, args.resize_backup_dir)
     root = Path(tempfile.mkdtemp(prefix="airlock-usb-", dir="/run"))
     partition = Path(f"{args.device}-part2")
     try:
@@ -1031,11 +1004,6 @@ def main():
         "--public-key", required=True, help="One SSH public key to authorize"
     )
     provisioner.add_argument("--auth-file", help="Optional existing Codex auth.json")
-    provisioner.add_argument(
-        "--resume",
-        action="store_true",
-        help="Skip flashing; finish expansion/personalization of an unpersonalized image already on the USB.",
-    )
     provisioner.add_argument(
         "--resize-backup-dir",
         default="/var/log/airlock/usb-root-expansion",

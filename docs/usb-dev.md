@@ -77,25 +77,16 @@ Low-level `write` and `write-latest` remain image-only operations and do not gro
 partitions. `boot.growPartition` and filesystem auto-resize remain disabled:
 partition mutation occurs only in this explicit host-side provisioning command.
 
-If provisioning stops **after flashing but before personalization**, finish the
-already-written image without another build or flash:
-
-```sh
-make usb-dev-provision-resume USB_SERIAL=25110814640207
-```
-
-This resolves/unmounts the USB by serial, validates the image marker, completes
-root expansion and runs the usual personalization. It does not write the image
-from the result link. It refuses an already personalized/bootstrapped installation
-or partially completed personalization; do not use it as an update command.
-
 In particular, `blockdev --rereadpt: Device or resource busy` after sfdisk's
 successful partition update could come from a redundant second kernel refresh
 racing device probing. Provisioning now settles udev and checks the actual
 kernel partition size instead of repeating that refresh. If the size is still
-stale, it stops before filesystem resizing and requests unplug/replug, then
-resume. An already enlarged partition is left unchanged; its filesystem can
-still be grown on the resumed run. A successful resume leaves the USB unmounted.
+stale, it stops before filesystem resizing and requests unplug/replug. Rerun the
+normal provisioning command to start cleanly from a fresh image write; there is
+no partial-provisioning resume path. This is deliberate: resuming requires the
+tool to recognize and safely continue several partially mutated GPT, filesystem
+and personalization states. Rewriting the known image first is slower but keeps
+provisioning reproducible and avoids treating an ambiguous disk state as valid.
 
 The AMD lab now prepares its GPU's VFCT automatically from the booted host's
 firmware during normal Qubes VM startup. No local firmware artifact or
