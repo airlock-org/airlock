@@ -73,6 +73,10 @@ def test_source_archive_preserves_machine_revision_and_lock(tmp_path: Path):
         bundle = source.extractfile("repo.bundle").read()
     bundle_path = tmp_path / "repo.bundle"
     bundle_path.write_bytes(bundle)
+    verifier = tmp_path / "verifier"
+    verifier.mkdir()
+    git(verifier, "init")
+    git(verifier, "bundle", "verify", str(bundle_path))
     clone = tmp_path / "clone"
     git(tmp_path, "clone", "--no-checkout", str(bundle_path), str(clone))
     git(clone, "checkout", "--detach", revision)
