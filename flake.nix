@@ -3,15 +3,15 @@
 
   inputs = {
     self.submodules = true;
-    airlock-os.url = "path:./os";
-    nixpkgs.follows = "airlock-os/nixpkgs";
-    nixos-qubes.follows = "airlock-os/nixos-qubes";
+    airlock-machine.url = "path:./airlock-machine";
+    nixpkgs.follows = "airlock-machine/nixpkgs";
+    nixos-qubes.follows = "airlock-machine/nixos-qubes";
   };
 
   outputs =
     inputs@{
       self,
-      airlock-os,
+      airlock-machine,
       nixpkgs,
       nixos-qubes,
       ...
@@ -23,13 +23,13 @@
 
       mkUsbConfiguration = system:
         let
-          entries = airlock-os.lib.machineGuestEntries system;
+          entries = airlock-machine.lib.machineGuestEntries system;
           pkgs = import nixpkgs {
             inherit system;
             overlays = [
               nixos-qubes.overlays.default
-              airlock-os.overlays.airlockQubesGuiWindowState
-              airlock-os.overlays.airlockImageBuildTools
+              airlock-machine.overlays.airlockQubesGuiWindowState
+              airlock-machine.overlays.airlockImageBuildTools
             ];
             config.allowUnfreePredicate =
               pkg:
@@ -43,7 +43,7 @@
           };
           storeSources = lib.mapAttrs (name: _: "${preparedStore.descriptors}/${name}") entries;
         in
-        airlock-os.lib.mkMachineConfiguration {
+        airlock-machine.lib.mkMachineConfiguration {
           inherit system storeSources;
           includeRelease = false;
           extraSpecialArgs = {
@@ -56,19 +56,19 @@
       usbConfiguration = mkUsbConfiguration "x86_64-linux";
     in
     {
-      lib = airlock-os.lib;
-      overlays = airlock-os.overlays;
-      nixosModules = airlock-os.nixosModules;
-      checks = airlock-os.checks;
-      formatter = airlock-os.formatter;
-      airlock = airlock-os.airlock;
+      lib = airlock-machine.lib;
+      overlays = airlock-machine.overlays;
+      nixosModules = airlock-machine.nixosModules;
+      checks = airlock-machine.checks;
+      formatter = airlock-machine.formatter;
+      airlock = airlock-machine.airlock;
 
-      nixosConfigurations = airlock-os.nixosConfigurations // {
+      nixosConfigurations = airlock-machine.nixosConfigurations // {
         usb-dev = usbConfiguration;
         usb-dom0-console = lib.nixosSystem {
           system = "x86_64-linux";
           modules = [
-            airlock-os.nixosModules.dom0
+            airlock-machine.nixosModules.dom0
             ./lifecycle/image/profiles/usb-dom0-console.nix
           ];
         };
@@ -76,7 +76,7 @@
 
       packages = forAllSystems (
         system:
-        removeAttrs airlock-os.packages.${system} [
+        removeAttrs airlock-machine.packages.${system} [
           "airlock-machine-release-usb-lab"
           "airlock-machine-release-usb-gui-lab"
         ]

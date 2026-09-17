@@ -114,7 +114,7 @@ Known gaps/TODOs found in module/package comments:
   narrow: import missing templates, create missing domains, and set simple
   prefs/features/services.
 
-`airlock-os` consumes its local source fork at `os/vendor/nixos-qubes`. The fork is
+`airlock-machine` consumes its local source fork at `airlock-machine/vendor/nixos-qubes`. The fork is
 justified by concrete compatibility fixes needed for the POC build:
 `qubes-linux-utils.imgconverter` metadata checking and Qubes-patched Xen OCaml
 split-output installation. Keep this fork narrow and upstreamable. The fork's

@@ -10,7 +10,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location(
-    "machine_deploy", ROOT / "os/lifecycle/runtime/tools/machine-deploy.py"
+    "machine_deploy", ROOT / "airlock-machine/lifecycle/runtime/tools/machine-deploy.py"
 )
 deploy = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(deploy)

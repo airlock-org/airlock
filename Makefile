@@ -64,12 +64,12 @@ VM_PREBUILD_ATTRS := \
 	$(VM_GUI_CONFIG_IMAGE_ATTR)
 
 PYTHON_FILES := \
-	os/lifecycle/runtime/tools/machine-deploy.py \
+	airlock-machine/lifecycle/runtime/tools/machine-deploy.py \
 	lifecycle/misc/tools/scripts/machine-deploy.py \
 	tests/test_machine_deploy.py \
-	os/lifecycle/misc/tools/pkgs/airlock-gui-gpu-check/src/check.py \
+	airlock-machine/lifecycle/misc/tools/pkgs/airlock-gui-gpu-check/src/check.py \
 	tests/test_gui_gpu_assignment.py \
-	os/lifecycle/runtime/tools/scripts/input-events.py \
+	airlock-machine/lifecycle/runtime/tools/scripts/input-events.py \
 	tests/test_input_events.py \
 	tests/test_gui_gpu_boot_order.py \
 	tests/test_dev_dom0_terminal.py \
@@ -80,18 +80,18 @@ PYTHON_FILES := \
 	tests/test_boot_entry_labels.py \
 	tests/test_boot_menu.py \
 	tests/test_prepared_store.py \
-	os/lifecycle/runtime/tools/pkgs/airlock-amd-vbios/src/airlock_amd_vbios/*.py \
+	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-amd-vbios/src/airlock_amd_vbios/*.py \
 	lifecycle/image/tools/amd-vbios.py \
 	tests/test_amd_vbios.py \
 	tests/test_amd_vbios_runtime.py \
 	tests/test_amd_vbios_libvirt.py \
 	tests/test_amd_vbios_events.py \
-	os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/__init__.py \
-	os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/cli.py \
-	os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/engine.py \
-	os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/*.py \
-	os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/qubes.py \
-	os/lifecycle/runtime/tools/scripts/nix-domain-storage.py \
+	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/__init__.py \
+	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/cli.py \
+	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/engine.py \
+	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/*.py \
+	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/qubes.py \
+	airlock-machine/lifecycle/runtime/tools/scripts/nix-domain-storage.py \
 	tests/conftest.py \
 	tests/local_harness.py \
 	tests/local_pychecks.py \
@@ -104,7 +104,7 @@ PYTHON_FILES := \
 	tests/test_usb_dev.py \
 	lifecycle/image/tools/usb-dev.py \
 	lifecycle/image/tools/amd-preflight.py \
-	os/lifecycle/misc/tools/pkgs/airlock-gpu-probe/src/gpu-probe.py
+	airlock-machine/lifecycle/misc/tools/pkgs/airlock-gpu-probe/src/gpu-probe.py
 
 PYTEST_LOG_DIR = $${AIRLOCK_LOG_DIR:-.airlock-logs}
 TEST_JOBS ?= 4

@@ -7,7 +7,7 @@ This is not automatic hardware discovery, reset certification, or Hyprland.
 
 ## Configuration boundary
 
-`os/lifecycle/misc/modules/gui-gpu.nix` is reusable. A machine configuration supplies
+`airlock-machine/lifecycle/misc/modules/gui-gpu.nix` is reusable. A machine configuration supplies
 `airlock.guiGpu.device`: the host PCI `bdf`, Qubes topology `port`, expected
 four-digit `vendor` and `device` IDs, and dom0 `driver`. Declaring this inventory
 alone does not reserve or assign anything. Enable ownership separately:
@@ -21,7 +21,7 @@ airlock.guiGpu = {
 ```
 
 The ThinkPad selection lives in
-`os/lifecycle/image/hardware/thinkpad-t14-gen3-amd.nix`; only `usb-gui-lab` enables
+`airlock-machine/lifecycle/image/hardware/thinkpad-t14-gen3-amd.nix`; only `usb-gui-lab` enables
 it. The normal USB still uses the hybrid dom0-driven display. The existing USB
 flake imports this ThinkPad hardware fixture: it is not yet a universal USB
 installer. Future installation/provisioning should generate machine-local

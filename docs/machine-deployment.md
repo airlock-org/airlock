@@ -2,7 +2,7 @@
 
 ## The development contract
 
-The committed `airlock-os` repository and the parent repository's pinned `os/`
+The committed `airlock-machine` repository and the parent repository's pinned `airlock-machine/`
 submodule pointer are the source of truth. A running machine is a
 deployment target, not a second configuration repository. Implement fixes here,
 test and commit them, then deploy those artifacts. Do not copy hand-edited GUI
@@ -26,8 +26,8 @@ restricted config-authority/approval workflow described in `config-system.md`.
   `sys-dev-2`); its Qubes name remains `sys-dev`.
 - Keep a physical dom0 console available for the first trials. Restarting
   sys-dev removes the remote connection; failures may require local recovery.
-- Clean, committed `airlock-os` and `airlock-dev` repositories, an initialized
-  `os/` submodule at the committed pointer, and the guarded Airlock Nix store
+- Clean, committed `airlock-machine` and parent `airlock` repositories, an initialized
+  `airlock-machine/` submodule at the committed pointer, and the guarded Airlock Nix store
   under `/run/media/user/data/airlock`.
 - Free space in dom0 **and** sys-dev. The initial deployment imports ordinary
   Nix closures in addition to the image's packed guest store. Budget substantial
@@ -110,7 +110,7 @@ post-install normalizer applies these names after image builds and deployments.
 Recovery is pinned as a separate Nix system profile, so it remains available
 when the original image generation falls outside the retained history.
 
-The `airlock-os` revision and lock-file hash are recorded in the release. The
+The `airlock-machine` revision and lock-file hash are recorded in the release. The
 development-side receipt also records the parent revision. Local build receipts
 and GC roots are under `.airlock-logs/machine-deploy/<airlock-dev-commit>/`.
 Runtime journals are in `/var/lib/airlock/machine/transactions/<id>/`, including
@@ -122,14 +122,14 @@ Runtime journals are in `/var/lib/airlock/machine/transactions/<id>/`, including
 The flake output is:
 
 ```text
-./os#airlock-machine-release-usb-lab
+./airlock-machine#airlock-machine-release-usb-lab
 ```
 
 It contains `release.json` (host system, exact setup/coordinator binaries,
 profile, commit and lock hash) and `topology.json` (all declared VMs, policies,
 preferences, devices and exact VM systems/root/store sources).
 
-The release is built directly from the pinned `airlock-os` checkout. The USB
+The release is built directly from the pinned `airlock-machine` checkout. The USB
 image calls the same OS construction function, then substitutes prepared-store
 descriptors only for the topology embedded in the image. Release construction
 canonicalizes those entries to ordinary closure manifests for transport and
@@ -246,12 +246,12 @@ feedback loop is `make test-quick`; focused tests are
 
 Implementation entry points:
 
-- `os/lifecycle/misc/modules/machine-release.nix`: standalone release construction.
+- `airlock-machine/lifecycle/misc/modules/machine-release.nix`: standalone release construction.
 - `lifecycle/image/profiles/usb-prepared-store.nix`: prepared USB topology adapter.
 - `lifecycle/misc/tools/scripts/machine-deploy.py`: build/provenance/SSH transport.
-- `os/lifecycle/runtime/tools/machine-deploy.py`: dom0 planning and journalled apply.
-- `os/lifecycle/misc/modules/machine-deployment.nix`: image/boot integration.
-- `os/lifecycle/runtime/tools/scripts/nix-domain-storage.py`: staged generation use.
+- `airlock-machine/lifecycle/runtime/tools/machine-deploy.py`: dom0 planning and journalled apply.
+- `airlock-machine/lifecycle/misc/modules/machine-deployment.nix`: image/boot integration.
+- `airlock-machine/lifecycle/runtime/tools/scripts/nix-domain-storage.py`: staged generation use.
 
 The physical acceptance run has demonstrated an ordinary VM config change,
 unchanged providers staying up, a GUI/provider restart surviving SSH loss,

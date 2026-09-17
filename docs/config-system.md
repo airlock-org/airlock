@@ -6,7 +6,7 @@ come from a Nix flake edited inside dedicated config VMs.
 
 ## Declared Objects
 
-`os/lifecycle/bootstrap/config-system.nix` declares:
+`airlock-machine/lifecycle/bootstrap/config-system.nix` declares:
 
 - `sys-config-vault`, an offline closure-backed NixOS `StandaloneVM`.
 - `sys-config-staging`, an offline closure-backed NixOS `StandaloneVM`.
@@ -329,13 +329,13 @@ the ordinary generation and Qubes volume state remain authoritative. Reimaging
 installs a fresh seed. Runtime writable VM state and future updates still need
 free space even though the initial package-conversion workspace is eliminated.
 
-Implementation references: [closure manifest construction](../os/lifecycle/misc/lib/qube-template.nix)
-(`mkNixStoreClosureManifest`), [domain admission](../os/lifecycle/runtime/tools/scripts/nix-domain-storage.py)
-(`ensure_shared_store`), and [object reuse and copying](../os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/objects.py)
+Implementation references: [closure manifest construction](../airlock-machine/lifecycle/misc/lib/qube-template.nix)
+(`mkNixStoreClosureManifest`), [domain admission](../airlock-machine/lifecycle/runtime/tools/scripts/nix-domain-storage.py)
+(`ensure_shared_store`), and [object reuse and copying](../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/objects.py)
 (`admit_object_tar_fragment`, `append_file_to_open_segment_blob`).
 Prepared images use [the seed builder](../lifecycle/image/prepared-guest-store.nix),
 [USB dependencies](../lifecycle/image/profiles/usb-prepared-store.nix), and
-[preparation/verification](../os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/prepared.py).
+[preparation/verification](../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/prepared.py).
 
 ### What closure and VM storage sharing saves
 

@@ -13,7 +13,10 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-PROBE = ROOT / "os/lifecycle/misc/tools/pkgs/airlock-gpu-probe/src/gpu-probe.py"
+PROBE = (
+    ROOT
+    / "airlock-machine/lifecycle/misc/tools/pkgs/airlock-gpu-probe/src/gpu-probe.py"
+)
 
 
 @pytest.fixture

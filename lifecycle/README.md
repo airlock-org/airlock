@@ -1,7 +1,7 @@
 # Lifecycle Layers
 
 This directory contains development-owned lifecycle support. Deployable
-bootstrap, runtime, modules, and libraries live under `../os/lifecycle`.
+bootstrap, runtime, modules, and libraries live under `../airlock-machine/lifecycle`.
 
 - `image/`: builds the bootable artifact.
 - `misc/tools/scripts/`: development-host and lab orchestration.
@@ -15,4 +15,4 @@ sys-config-staging imports current config from sys-config-vault for editing
 ```
 
 Runtime commands, schemas, builder libraries, and NixOS modules belong in
-`airlock-os`.
+`airlock-machine`.

@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "os/lifecycle/runtime/tools/scripts/input-events.py"
+SOURCE = ROOT / "airlock-machine/lifecycle/runtime/tools/scripts/input-events.py"
 SPEC = importlib.util.spec_from_file_location("input_events", SOURCE)
 INPUT_EVENTS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(INPUT_EVENTS)

@@ -14,7 +14,7 @@ from test_amd_vbios import firmware
 @pytest.fixture
 def runtime(monkeypatch):
     source = Path(__file__).resolve().parents[1] / (
-        "os/lifecycle/runtime/tools/pkgs/airlock-amd-vbios/src"
+        "airlock-machine/lifecycle/runtime/tools/pkgs/airlock-amd-vbios/src"
     )
     monkeypatch.syspath_prepend(str(source))
     return importlib.import_module("airlock_amd_vbios.runtime")

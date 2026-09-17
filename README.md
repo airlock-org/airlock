@@ -6,7 +6,8 @@ dom0 while retaining Qubes' Xen, qrexec, QubesDB, policy, libvirt, and VM
 lifecycle machinery.
 
 This is the `airlock-dev` repository. It pins the independently buildable
-`airlock-os` repository as the real Git submodule at `os/`. The OS repository
+`airlock-machine` repository as the real Git submodule at `airlock-machine/`.
+The machine repository
 contains the local [`CertainLach/nixos-qubes`](https://github.com/CertainLach/nixos-qubes)
 source input and all deployable host, guest, bootstrap, and runtime code.
 This parent repository supplies USB image assembly, provisioning, lab tooling,
@@ -22,7 +23,7 @@ and cross-repository integration tests.
 
 ## Repository Layout
 
-- `os/`: pinned `airlock-os` submodule; the deployable OS source of truth.
+- `airlock-machine/`: pinned machine source; the deployable whole-machine source of truth.
 - `lifecycle/image/`: prepared-store USB assembly and image-only tools.
 - `lifecycle/misc/tools/scripts/`: development-host and lab orchestration.
 - `docs/`: design notes, config authority details, and test documentation.

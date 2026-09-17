@@ -38,7 +38,7 @@ NixOS package alone would not establish kernel/module compatibility.
 The separate `vm-gpu-lab` image adds an on-demand NixOS StandaloneVM named
 `sys-gpu`. Its configuration is in
 [`sys-gpu.nix`](../lifecycle/misc/experiments/sys-gpu.nix), and the guest module
-is [`sys-gpu-guest.nix`](../os/lifecycle/misc/modules/sys-gpu-guest.nix).
+is [`sys-gpu-guest.nix`](../airlock-machine/lifecycle/misc/modules/sys-gpu-guest.nix).
 
 - No physical PCI devices are assigned yet.
 - HVM mode with fixed 2048 MiB RAM prepares the domain for PCI experiments.
