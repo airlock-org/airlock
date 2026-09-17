@@ -120,7 +120,7 @@ def build(profile):
     os_revision = command("git", "-C", "os", "rev-parse", "HEAD", cwd=ROOT)
     attr = f"airlock-machine-release-{profile}"
     result = json.loads(
-        command(str(NIX), "build", "os#" + attr, "--json", "--no-link", cwd=ROOT)
+        command(str(NIX), "build", "./os#" + attr, "--json", "--no-link", cwd=ROOT)
     )
     if (
         command("git", "rev-parse", "HEAD", cwd=ROOT) != dev_revision

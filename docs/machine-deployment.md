@@ -122,7 +122,7 @@ Runtime journals are in `/var/lib/airlock/machine/transactions/<id>/`, including
 The flake output is:
 
 ```text
-os#airlock-machine-release-usb-lab
+./os#airlock-machine-release-usb-lab
 ```
 
 It contains `release.json` (host system, exact setup/coordinator binaries,
