@@ -15,7 +15,7 @@ releases canonicalize those sources back to the same OS-owned guest closure
 artifacts.
 
 The current `.gitmodules` URL is the local-only path
-`/home/user/dev/airlock/airlock-machine`; no remote has been selected or published.
+`/home/user/dev/airlock-org/airlock-machine`; no remote has been selected or published.
 An existing local checkout initializes with:
 
 ```bash
@@ -37,9 +37,9 @@ Make machine changes and commits in the standalone checkout first. Then update t
 parent pointer and commit its integration changes:
 
 ```bash
-git -C /home/user/dev/airlock/airlock-machine switch main
+git -C /home/user/dev/airlock-org/airlock-machine switch main
 # edit, test, and commit airlock-machine
-git -C airlock-machine fetch /home/user/dev/airlock/airlock-machine main
+git -C airlock-machine fetch /home/user/dev/airlock-org/airlock-machine main
 git -C airlock-machine checkout <airlock-machine-commit>
 git add airlock-machine
 git commit

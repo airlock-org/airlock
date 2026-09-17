@@ -24,7 +24,7 @@ def test_machine_is_a_real_pinned_submodule():
     assert modules['submodule "airlock-machine"']["path"] == "airlock-machine"
     assert (
         modules['submodule "airlock-machine"']["url"]
-        == "/home/user/dev/airlock/airlock-machine"
+        == "/home/user/dev/airlock-org/airlock-machine"
     )
 
 

@@ -5,7 +5,7 @@ The first milestone is narrow: run the Qubes control stack with NixOS as Xen
 dom0 while retaining Qubes' Xen, qrexec, QubesDB, policy, libvirt, and VM
 lifecycle machinery.
 
-This is the `airlock-dev` repository. It pins the independently buildable
+This is the main `airlock` repository. It pins the independently buildable
 `airlock-machine` repository as the real Git submodule at `airlock-machine/`.
 The machine repository
 contains the local [`CertainLach/nixos-qubes`](https://github.com/CertainLach/nixos-qubes)
