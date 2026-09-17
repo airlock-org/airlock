@@ -28,10 +28,10 @@ def run(*args, **kwargs):
 
 def report_command(*args, ok=(0,), **kwargs):
     """Show successful command diagnostics normally; reserve stderr for failure."""
+    kwargs.setdefault("text", True)
     result = subprocess.run(
         args,
         check=False,
-        text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         **kwargs,

@@ -358,6 +358,19 @@ def test_successful_command_stderr_is_reported_as_normal_output(
     assert captured.err == ""
 
 
+def test_reported_command_accepts_explicit_text_input(usb, monkeypatch):
+    observed = {}
+
+    def run(*args, **kwargs):
+        observed.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(usb.subprocess, "run", run)
+    usb.report_command("example", input=", +\n", text=True)
+    assert observed["input"] == ", +\n"
+    assert observed["text"] is True
+
+
 def test_failed_command_diagnostics_remain_on_stderr(usb, monkeypatch, capsys):
     monkeypatch.setattr(
         usb.subprocess,
