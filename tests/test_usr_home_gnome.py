@@ -102,6 +102,8 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
             "airlock.AppSessionReady is restricted to sys-gui" in guest["sessionReady"]
         )
         assert "/bin/xdpyinfo -display" in guest["sessionReady"]
+        assert "systemctl --user show-environment" in guest["sessionReady"]
+        assert "s/^DISPLAY=//p" in guest["sessionReady"]
         assert guest["sessionReadyConfig"] == "force-user='user'\n"
         assert guest["scale"] == 3
         assert "/bin/qrexec-fork-server" in guest["forkAutostart"]
@@ -169,6 +171,7 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
     assert "airlock-qubes-start-app" in report["workspaceStartApp"]
     assert "force-user=" in report["workspaceStartAppConfig"]
     assert "airlock.AppSessionReady" in report["launchHelper"]
+    assert "--auto --gui --pass-io --service" in report["launchHelper"]
     assert "--foreground --signal=TERM --kill-after=5s 90s" in report["launchHelper"]
     assert "notify-send" in report["launchHelper"]
     assert "ding@rastersoft.com" in report["workspaceGSettings"]

@@ -47,7 +47,7 @@ let
 
     ${pkgs.coreutils}/bin/timeout --foreground --signal=TERM --kill-after=5s 90s \
       ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
-      --auto --gui --service "$target" airlock.AppSessionReady \
+      --auto --gui --pass-io --service "$target" airlock.AppSessionReady \
       >"$log" 2>&1
     ready_status=$?
     if [ "$ready_status" -ne 0 ]; then

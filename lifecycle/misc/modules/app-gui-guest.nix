@@ -61,13 +61,15 @@ let
     }
 
     # force-user routes this service through the graphical user's
-    # qrexec-fork-server.  Also prove that the inherited session environment
-    # can reach X and D-Bus before a pending StartApp request is released.
-    [ -n "''${DISPLAY:-}" ]
-    [ -n "''${XDG_RUNTIME_DIR:-}" ]
+    # qrexec-fork-server.  The first server can race environment import, so
+    # read the authoritative environment from the user systemd manager rather
+    # than rejecting a request whose qrexec process inherited it too early.
+    uid="$(${pkgs.coreutils}/bin/id -u)"
+    export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/$uid}"
+    export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
     exec ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=5s 60s \
       ${pkgs.bash}/bin/bash -c \
-      'until [ -S "$XDG_RUNTIME_DIR/bus" ] && ${pkgs.xdpyinfo}/bin/xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; do ${pkgs.coreutils}/bin/sleep 0.2; done'
+      'until display="$(${pkgs.systemd}/bin/systemctl --user show-environment 2>/dev/null | ${pkgs.gnused}/bin/sed -n "s/^DISPLAY=//p" | ${pkgs.coreutils}/bin/head -n 1)" && [ -n "$display" ] && [ -S "$XDG_RUNTIME_DIR/bus" ] && DISPLAY="$display" ${pkgs.xdpyinfo}/bin/xdpyinfo -display "$display" >/dev/null 2>&1; do ${pkgs.coreutils}/bin/sleep 0.2; done'
   '';
 in
 {
