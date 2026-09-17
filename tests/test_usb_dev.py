@@ -292,13 +292,46 @@ def test_provision_stops_before_personalization_if_expansion_fails(usb, monkeypa
 )
 def test_filesystem_check_exit_statuses(usb, monkeypatch, code, ok):
     monkeypatch.setattr(
-        usb.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=code)
+        usb.subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(returncode=code, stdout="", stderr=""),
     )
     if ok:
         usb.check_ext4("partition")
     else:
         with pytest.raises(ValueError, match="Filesystem check failed"):
             usb.check_ext4("partition")
+
+
+def test_successful_command_stderr_is_reported_as_normal_output(
+    usb, monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        usb.subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(
+            returncode=0, stdout="normal output\n", stderr="expected warning\n"
+        ),
+    )
+    usb.report_command("example")
+    captured = capsys.readouterr()
+    assert captured.out == "normal output\nexpected warning\n"
+    assert captured.err == ""
+
+
+def test_failed_command_diagnostics_remain_on_stderr(usb, monkeypatch, capsys):
+    monkeypatch.setattr(
+        usb.subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(
+            returncode=2, stdout="failure context\n", stderr="action required\n"
+        ),
+    )
+    with pytest.raises(subprocess.CalledProcessError):
+        usb.report_command("example")
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "failure context\naction required\n"
 
 
 def test_gpt_expansion_on_regular_file_preserves_partition_identities(usb, tmp_path):

@@ -53,7 +53,9 @@ checks the Airlock image marker and ext4 label, backs up the **newly written**
 partition table, checks the filesystem offline, relocates the backup GPT header,
 and grows only partition 2. The EFI partition, root start, partition UUIDs and
 filesystem UUID remain unchanged. It checks the grown filesystem again before
-personalization. Unexpected layouts or filesystem errors stop provisioning.
+personalization. Successful low-level diagnostics, including the expected GPT
+relocation notices, are reported on stdout; stderr is reserved for command
+failures that stop provisioning. Unexpected layouts or filesystem errors stop it.
 Raw table backups, `before.json`, and a successful `result.json` are stored in
 `$AIRLOCK_LOG_DIR/usb-root-expansion/grow-*/` on the development host (root-owned),
 or `/var/log/airlock/usb-root-expansion/grow-*/` without a configured log directory.

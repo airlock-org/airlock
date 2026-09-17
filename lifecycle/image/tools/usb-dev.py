@@ -26,8 +26,50 @@ def run(*args, **kwargs):
     return subprocess.run(args, check=True, **kwargs)
 
 
+def report_command(*args, ok=(0,), **kwargs):
+    """Show successful command diagnostics normally; reserve stderr for failure."""
+    result = subprocess.run(
+        args,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        **kwargs,
+    )
+    destination = sys.stdout if result.returncode in ok else sys.stderr
+    for content in (result.stdout, result.stderr):
+        if content:
+            print(content, end="" if content.endswith("\n") else "\n", file=destination)
+    if result.returncode not in ok:
+        raise subprocess.CalledProcessError(
+            result.returncode, args, output=result.stdout, stderr=result.stderr
+        )
+    return result
+
+
 def output(*args):
-    return run(*args, text=True, stdout=subprocess.PIPE).stdout.strip()
+    result = subprocess.run(
+        args,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode:
+        for content in (result.stdout, result.stderr):
+            if not content:
+                continue
+            print(
+                content,
+                end="" if content.endswith("\n") else "\n",
+                file=sys.stderr,
+            )
+        raise subprocess.CalledProcessError(
+            result.returncode, args, output=result.stdout, stderr=result.stderr
+        )
+    if result.stderr:
+        print(result.stderr, end="" if result.stderr.endswith("\n") else "\n")
+    return result.stdout.strip()
 
 
 def require(condition, message):
@@ -136,7 +178,7 @@ def unmount_usb(device):
     for child in flatten([disk]):
         if child["name"] == str(resolved) or not any(child.get("mountpoints") or []):
             continue
-        print(f"Unmounting {child['name']}…", file=sys.stderr, flush=True)
+        print(f"Unmounting {child['name']}…", flush=True)
         run("umount", "--all-targets", child["name"])
 
 
@@ -207,7 +249,6 @@ def progress_reporter(label, total):
         percent = 100 if total == 0 else current * 100 // total
         print(
             f"{label}: {current / 1024**3:.1f} / {total / 1024**3:.1f} GiB ({percent}%)",
-            file=sys.stderr,
             flush=True,
         )
         last_bytes, last_time = current, now
@@ -348,9 +389,9 @@ def write_image(args):
             written = copy_sparse_image(
                 image, destination, progress_reporter("Writing sparse extents", total)
             )
-        print("Flushing USB device…", file=sys.stderr, flush=True)
+        print("Flushing USB device…", flush=True)
         os.fsync(destination.fileno())
-    print("Refreshing USB partition table…", file=sys.stderr, flush=True)
+    print("Refreshing USB partition table…", flush=True)
     run("blockdev", "--rereadpt", str(target))
     if args.verify:
         # Verify only the image prefix; a larger USB may have unused trailing space.
@@ -448,11 +489,12 @@ def checked_growth_result(before, after):
 
 
 def check_ext4(partition):
-    result = subprocess.run(["e2fsck", "-f", "-p", str(partition)], check=False)
-    require(
-        result.returncode in (0, 1),
-        f"Filesystem check failed ({result.returncode}); stopping.",
-    )
+    try:
+        report_command("e2fsck", "-f", "-p", str(partition), ok=(0, 1))
+    except subprocess.CalledProcessError as error:
+        raise ValueError(
+            f"Filesystem check failed ({error.returncode}); stopping."
+        ) from error
 
 
 def require_unpersonalized_root(root):
@@ -535,7 +577,7 @@ def expand_provisioned_root(device, serial, backup_base, *, resume=False):
     (backup / "partition-table.sfdisk").write_text(
         output("sfdisk", "--dump", str(target)) + "\n"
     )
-    run(
+    report_command(
         "sfdisk",
         "--backup-file",
         str(backup / "partition-table"),
@@ -557,9 +599,9 @@ def expand_provisioned_root(device, serial, backup_base, *, resume=False):
     recheck()
     if not root_fills_disk(before, int(info["size"])):
         # The seed GPT's backup header is still at the image boundary.
-        run("sfdisk", "--lock=yes", "--relocate", "gpt-bak-std", str(target))
+        report_command("sfdisk", "--lock=yes", "--relocate", "gpt-bak-std", str(target))
         recheck()
-        run(
+        report_command(
             "sfdisk",
             "--lock=yes",
             "--wipe=never",
@@ -575,7 +617,7 @@ def expand_provisioned_root(device, serial, backup_base, *, resume=False):
     checked_growth_result(before, after)
     verify_kernel_partition_size(partition, after["partitions"][1]["size"] * 512)
     recheck()
-    run("resize2fs", str(partition))
+    report_command("resize2fs", str(partition))
     recheck()
     check_ext4(partition)
     require(
@@ -636,11 +678,11 @@ def provision_latest_image(args):
                 insecure_plain_codex_auth=args.insecure_plain_codex_auth,
             )
         )
-        print("Flushing personalized USB filesystem…", file=sys.stderr, flush=True)
+        print("Flushing personalized USB filesystem…", flush=True)
         run("sync")
     finally:
         if os.path.ismount(root):
-            print("Unmounting personalized USB…", file=sys.stderr, flush=True)
+            print("Unmounting personalized USB…", flush=True)
             run("umount", str(root))
         root.rmdir()
 
@@ -765,8 +807,7 @@ def personalize(args):
         # or put it in the reusable image.
         password = "password"
         print(
-            "WARNING: using the insecure literal development password for dom0 and sys-gui.",
-            file=sys.stderr,
+            "DEVELOPMENT MODE: using the insecure literal password for dom0 and sys-gui."
         )
     else:
         password = getpass.getpass("New local dom0 password (sys-gui uses password): ")
@@ -787,7 +828,7 @@ def personalize(args):
     key_target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     # --no-local copies through Git's transport, not hardlinks, alternates,
     # local hooks, untracked files, build artifacts or local configuration.
-    run(
+    report_command(
         "git",
         "-c",
         f"safe.directory={repo}",
@@ -796,7 +837,7 @@ def personalize(args):
         str(repo),
         str(repo_target),
     )
-    run("git", "-C", str(repo_target), "checkout", "-B", "usb-dev", commit)
+    report_command("git", "-C", str(repo_target), "checkout", "-B", "usb-dev", commit)
     run("git", "-C", str(repo_target), "remote", "remove", "origin")
     private_file(key_target, key if key.endswith(b"\n") else key + b"\n", UID, GID)
     private_file(password_file, password_hash)
@@ -823,8 +864,7 @@ def personalize(args):
             private_file(codex_home / "auth.json", auth_data, UID, GID)
             private_file(marker, b"plaintext-codex-auth-v1\n")
             print(
-                f"WARNING: Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}); Codex auth is stored unencrypted.",
-                file=sys.stderr,
+                f"DEVELOPMENT MODE: Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}); Codex auth is stored unencrypted."
             )
         else:
             # Keep the cache outside the raw filesystem. vault-create opens a
@@ -845,8 +885,7 @@ def personalize(args):
         )
     if vfct_data is not None:
         print(
-            "Installed the machine-local AMD VFCT at /var/lib/airlock/amd-lab/sys-gui.vfct.",
-            file=sys.stderr,
+            "Installed the machine-local AMD VFCT at /var/lib/airlock/amd-lab/sys-gui.vfct."
         )
 
 
