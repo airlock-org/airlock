@@ -1,11 +1,10 @@
 # Lifecycle Layers
 
-This directory contains the Airlock lifecycle layers.
+This directory contains development-owned lifecycle support. Deployable
+bootstrap, runtime, modules, and libraries live under `../os/lifecycle`.
 
 - `image/`: builds the bootable artifact.
-- `bootstrap/`: first-boot wiring that makes the image manageable.
-- `runtime/`: code used after bootstrap to operate the running system.
-- `misc/`: shared libraries, modules, and cross-stage tooling.
+- `misc/tools/scripts/`: development-host and lab orchestration.
 
 The important config handoff is:
 
@@ -15,7 +14,5 @@ sys-config-vault creates the first current baseline from it
 sys-config-staging imports current config from sys-config-vault for editing
 ```
 
-`runtime/tools/` contains runtime-only operational commands. If a tool is used
-by more than one lifecycle layer, it belongs under `misc/tools/`. Shared Nix
-schemas, builder libraries, and modules belong under `misc/lib/` and
-`misc/modules/`.
+Runtime commands, schemas, builder libraries, and NixOS modules belong in
+`airlock-os`.

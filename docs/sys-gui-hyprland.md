@@ -7,7 +7,7 @@ work. See [the GPU investigation](amd-gpu-investigation.md).
 
 ## Repository layout
 
-`lifecycle/misc/modules/sys-gui/base.nix` contains the shared Qubes sys-gui
+`os/lifecycle/misc/modules/sys-gui/base.nix` contains the shared Qubes sys-gui
 role. `desktop/selector.nix` chooses the desktop implementation; it supports
 `xfce`, `gnome`, and `hyprland`. The Hyprland/DMS implementation, its AMD-lab
 HiDPI profile, and its DMS package customization live together under

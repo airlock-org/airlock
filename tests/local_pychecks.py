@@ -737,7 +737,7 @@ def check_system_schema(repo_root: Path, log_dir: Path) -> None:
         target = work_dir / name / "airlock"
         target.mkdir(parents=True)
         shutil.copy(
-            repo_root / "lifecycle/misc/lib/system.nix",
+            repo_root / "os/lifecycle/misc/lib/system.nix",
             target / "system-schema.nix",
         )
 
@@ -929,7 +929,7 @@ def check_topology_schema(repo_root: Path, log_dir: Path) -> None:
     ):
         path.mkdir(parents=True)
     shutil.copy(
-        repo_root / "lifecycle/misc/lib/topology.nix",
+        repo_root / "os/lifecycle/misc/lib/topology.nix",
         valid_dir / "airlock/topology.nix",
     )
 
@@ -1109,7 +1109,7 @@ def check_topology_schema(repo_root: Path, log_dir: Path) -> None:
         case_dir = work_dir / name
         (case_dir / "airlock").mkdir(parents=True)
         shutil.copy(
-            repo_root / "lifecycle/misc/lib/topology.nix",
+            repo_root / "os/lifecycle/misc/lib/topology.nix",
             case_dir / "airlock/topology.nix",
         )
         _write_flake(
@@ -1285,7 +1285,7 @@ def check_config_boot_verify(repo_root: Path, log_dir: Path) -> None:
     _run(
         [
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/config-boot-verify.sh"),
+            str(repo_root / "os/lifecycle/runtime/tools/scripts/config-boot-verify.sh"),
         ],
         cwd=repo_root,
         env=env,
@@ -1331,7 +1331,7 @@ def check_config_boot_verify(repo_root: Path, log_dir: Path) -> None:
     result = _run(
         [
             "bash",
-            str(repo_root / "lifecycle/runtime/tools/scripts/config-boot-verify.sh"),
+            str(repo_root / "os/lifecycle/runtime/tools/scripts/config-boot-verify.sh"),
         ],
         cwd=repo_root,
         env=env,
@@ -1652,9 +1652,9 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
         "lifecycle/misc/tools/scripts/sync-nested-dom0-tools.sh",
         "lifecycle/misc/tools/scripts/sync-nested-codex-auth.sh",
         "lifecycle/misc/tools/scripts/run-config-boot-activation-flow.sh",
-        "lifecycle/runtime/tools/scripts/apply-config-candidate.sh",
+        "os/lifecycle/runtime/tools/scripts/apply-config-candidate.sh",
         "lifecycle/misc/tools/scripts/nixos-config-vms-smoke.sh",
-        "lifecycle/runtime/tools/scripts/config-boot-verify.sh",
+        "os/lifecycle/runtime/tools/scripts/config-boot-verify.sh",
         "lifecycle/misc/tools/scripts/resolve-vm-image-result.sh",
     ):
         _run(["bash", "-n", str(repo_root / rel_path)], cwd=repo_root)
@@ -1687,14 +1687,14 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
         "config_inputs_import": (
             repo_root / "lifecycle/misc/tools/scripts/import-config-inputs.sh"
         ).read_text(encoding="utf-8"),
-        "qube_guest": (repo_root / "lifecycle/misc/modules/qube-guest.nix").read_text(
-            encoding="utf-8"
-        ),
+        "qube_guest": (
+            repo_root / "os/lifecycle/misc/modules/qube-guest.nix"
+        ).read_text(encoding="utf-8"),
         "ssh_vm": (
             repo_root / "lifecycle/misc/tools/scripts/ssh-nested-vm.sh"
         ).read_text(encoding="utf-8"),
         "apply_candidate": (
-            repo_root / "lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
+            repo_root / "os/lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
         ).read_text(encoding="utf-8"),
         "closure_smoke": (
             repo_root / "lifecycle/misc/tools/scripts/nix-closure-domain-smoke.sh"
@@ -1914,10 +1914,10 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
 
 def check_qubes_vm_kernel_stubdomain_boot(repo_root: Path, log_dir: Path) -> None:
     del log_dir
-    repack = repo_root / "vendor/nixos-qubes/nix/repackRpmKernel.nix"
+    repack = repo_root / "os/vendor/nixos-qubes/nix/repackRpmKernel.nix"
     install = (
         repo_root
-        / "vendor/nixos-qubes/pkgs/by-name/ni/nixos-qubes-tools/src/nixos-qubes-install-kernel-rpm"
+        / "os/vendor/nixos-qubes/pkgs/by-name/ni/nixos-qubes-tools/src/nixos-qubes-install-kernel-rpm"
     )
 
     repack_text = repack.read_text(encoding="utf-8")
@@ -1954,7 +1954,8 @@ def check_qubes_vm_kernel_stubdomain_boot(repo_root: Path, log_dir: Path) -> Non
 def check_qubes_libvirt_hvm_pirq_patch(repo_root: Path, log_dir: Path) -> None:
     del log_dir
     package = (
-        repo_root / "vendor/nixos-qubes/pkgs/by-name/qu/qubes-core-libvirt/package.nix"
+        repo_root
+        / "os/vendor/nixos-qubes/pkgs/by-name/qu/qubes-core-libvirt/package.nix"
     )
     patch = package.with_name("0019-libxl-enable-hvm-pirq-for-pci-passthrough.patch")
 
@@ -1998,23 +1999,23 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
     assert browser["backend"]["state"]["persistent"] == "usr-browser-private"
     assert browser["features"]["menu-items"] == ""
 
-    home_guest = (repo_root / "lifecycle/misc/modules/usr-home-guest.nix").read_text(
+    home_guest = (repo_root / "os/lifecycle/misc/modules/usr-home-guest.nix").read_text(
         encoding="utf-8"
     )
     home_applications = (
-        repo_root / "lifecycle/misc/lib/usr-home-applications.nix"
+        repo_root / "os/lifecycle/misc/lib/usr-home-applications.nix"
     ).read_text(encoding="utf-8")
     browser_guest = (
-        repo_root / "lifecycle/misc/modules/usr-browser-guest.nix"
+        repo_root / "os/lifecycle/misc/modules/usr-browser-guest.nix"
     ).read_text(encoding="utf-8")
-    sys_gui_guest = (repo_root / "lifecycle/misc/modules/sys-gui/base.nix").read_text(
-        encoding="utf-8"
-    )
-    qube_guest = (repo_root / "lifecycle/misc/modules/qube-guest.nix").read_text(
+    sys_gui_guest = (
+        repo_root / "os/lifecycle/misc/modules/sys-gui/base.nix"
+    ).read_text(encoding="utf-8")
+    qube_guest = (repo_root / "os/lifecycle/misc/modules/qube-guest.nix").read_text(
         encoding="utf-8"
     )
     runtime = (
-        repo_root / "lifecycle/bootstrap/initial-runtime-config/airlock/runtime.nix"
+        repo_root / "os/lifecycle/bootstrap/initial-runtime-config/airlock/runtime.nix"
     ).read_text(encoding="utf-8")
 
     assert "usr-home-applications.nix" in home_guest
@@ -2061,14 +2062,14 @@ def check_cmd_role(repo_root: Path, log_dir: Path) -> None:
       dom0Cfg = flake.nixosConfigurations."vm-gui-config-dev".config;
       releaseDom0Cfg = flake.nixosConfigurations."vm-gui-config-release".config;
       nonDevDom0Cfg = flake.nixosConfigurations.test.config;
-      builders = import {repo_root}/lifecycle/misc/lib/qube-template.nix {{
+      builders = import {repo_root}/os/lifecycle/misc/lib/qube-template.nix {{
         nixpkgs = flake.inputs.nixpkgs;
         nixpkgsLibvirt105Source = "${{flake.inputs.nixpkgs-libvirt_10_5}}";
         nixosQubesSource = "${{flake.inputs.nixos-qubes}}";
-        airlockSupport = "{repo_root}";
+        airlockSupport = "{repo_root}/os";
         system = "x86_64-linux";
       }};
-      defaultRuntime = import {repo_root}/lifecycle/bootstrap/initial-runtime-config/airlock/runtime.nix {{
+      defaultRuntime = import {repo_root}/os/lifecycle/bootstrap/initial-runtime-config/airlock/runtime.nix {{
         appliedMessage = "test";
         pkgs = builders.pkgs;
         system = "x86_64-linux";
@@ -2617,7 +2618,7 @@ def check_config_candidate_nix_native(repo_root: Path, log_dir: Path) -> None:
     shutil.rmtree(result_dir, ignore_errors=True)
     (work_dir / "airlock").mkdir(parents=True)
 
-    initial_config = repo_root / "lifecycle/bootstrap/initial-runtime-config"
+    initial_config = repo_root / "os/lifecycle/bootstrap/initial-runtime-config"
     shutil.copytree(initial_config / "dom0-profile", work_dir / "dom0-profile")
     for name in (
         "flake.nix",
@@ -2629,11 +2630,11 @@ def check_config_candidate_nix_native(repo_root: Path, log_dir: Path) -> None:
     ):
         shutil.copy(initial_config / name, work_dir / name)
     shutil.copy(
-        repo_root / "lifecycle/misc/lib/system.nix",
+        repo_root / "os/lifecycle/misc/lib/system.nix",
         work_dir / "airlock/system-schema.nix",
     )
     shutil.copy(
-        repo_root / "lifecycle/misc/lib/topology.nix",
+        repo_root / "os/lifecycle/misc/lib/topology.nix",
         work_dir / "airlock/topology.nix",
     )
 
@@ -5445,7 +5446,8 @@ def check_config_apply_template_build_ref(repo_root: Path, log_dir: Path) -> Non
         [
             "bash",
             str(
-                repo_root / "lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
+                repo_root
+                / "os/lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
             ),
             "--apply",
         ],
@@ -5881,7 +5883,7 @@ def check_config_control(repo_root: Path, log_dir: Path) -> None:
             "ACTIVATION_MARKER": str(activation_marker),
         }
     )
-    script = repo_root / "lifecycle/runtime/tools/scripts/config-control.sh"
+    script = repo_root / "os/lifecycle/runtime/tools/scripts/config-control.sh"
     _run(
         ["bash", str(script), "status"],
         cwd=repo_root,
@@ -6301,7 +6303,7 @@ def check_config_archive_domain_references(repo_root: Path, log_dir: Path) -> No
                 "bash",
                 str(
                     repo_root
-                    / "lifecycle/runtime/tools/scripts/archive-config-candidate.sh"
+                    / "os/lifecycle/runtime/tools/scripts/archive-config-candidate.sh"
                 ),
                 "--candidate-tar",
                 str(staged_tar),
@@ -6492,7 +6494,7 @@ def check_config_apply_domain_references(repo_root: Path, log_dir: Path) -> None
                 "bash",
                 str(
                     repo_root
-                    / "lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
+                    / "os/lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
                 ),
                 "--apply",
             ],
@@ -6849,7 +6851,8 @@ def check_config_apply_nix_domain_materialization(
         [
             "bash",
             str(
-                repo_root / "lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
+                repo_root
+                / "os/lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
             ),
             "--apply",
         ],
@@ -7171,7 +7174,9 @@ def check_closure_volume_filtered_device(repo_root: Path, log_dir: Path) -> None
     result_path = log_dir / "result.json"
     shutil.rmtree(log_dir, ignore_errors=True)
     (work_dir / "pool/objects/segments").mkdir(parents=True)
-    storage_src = repo_root / "lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src"
+    storage_src = (
+        repo_root / "os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src"
+    )
     sys.path.insert(0, str(storage_src))
     original_modules = {
         name: sys.modules.get(name) for name in ("qubes", "qubes.exc", "qubes.storage")
@@ -7423,7 +7428,7 @@ def check_config_system_apply_boot(repo_root: Path, log_dir: Path) -> None:
         path.mkdir(parents=True)
     capabilities.write_text("control_d\n", encoding="utf-8")
     shutil.copy2(
-        repo_root / "lifecycle/misc/lib/system.nix",
+        repo_root / "os/lifecycle/misc/lib/system.nix",
         candidate_dir / "airlock/system-schema.nix",
     )
     _write_executable(
@@ -7618,7 +7623,8 @@ def check_config_system_apply_boot(repo_root: Path, log_dir: Path) -> None:
         [
             "bash",
             str(
-                repo_root / "lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
+                repo_root
+                / "os/lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
             ),
             "--apply",
         ],
@@ -9148,7 +9154,7 @@ def check_config_system_apply(repo_root: Path, log_dir: Path) -> None:
                 "bash",
                 str(
                     repo_root
-                    / "lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
+                    / "os/lifecycle/runtime/tools/scripts/apply-config-candidate.sh"
                 ),
                 "--apply",
             ],
@@ -10800,7 +10806,7 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
         "airlock/prebuilt-template-sources.nix",
         "airlock/system.nix",
     ):
-        source = repo_root / "lifecycle/bootstrap/initial-runtime-config" / relative
+        source = repo_root / "os/lifecycle/bootstrap/initial-runtime-config" / relative
         target = work_dir / relative
         if source.is_dir():
             shutil.copytree(source, target)
@@ -10808,11 +10814,11 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
     shutil.copy2(
-        repo_root / "lifecycle/misc/lib/system.nix",
+        repo_root / "os/lifecycle/misc/lib/system.nix",
         work_dir / "airlock/system-schema.nix",
     )
     shutil.copy2(
-        repo_root / "lifecycle/misc/lib/topology.nix",
+        repo_root / "os/lifecycle/misc/lib/topology.nix",
         work_dir / "airlock/topology.nix",
     )
 
@@ -11060,7 +11066,7 @@ def check_config_candidate_flake(repo_root: Path, log_dir: Path) -> None:
 def _storage_env(repo_root: Path, extra_path: str = "") -> dict[str, str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(
-        repo_root / "lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src"
+        repo_root / "os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src"
     )
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     path_parts = [extra_path] if extra_path else []
@@ -12072,7 +12078,7 @@ def check_nix_domain_storage_helper_shared(repo_root: Path, log_dir: Path) -> No
     env = _storage_env(repo_root, str(fake_bin))
     env.update(
         {
-            "PYTHONPATH": f"{fake_root}:{repo_root / 'lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src'}",
+            "PYTHONPATH": f"{fake_root}:{repo_root / 'os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src'}",
             "AIRLOCK_NIX_ROOT": str(nix_root),
             "AIRLOCK_CLOSURE_STORE_VERIFY": "tree",
             "AIRLOCK_FAKE_QUBES_DOMAIN": "nix-native-work",
@@ -12096,7 +12102,8 @@ def check_nix_domain_storage_helper_shared(repo_root: Path, log_dir: Path) -> No
             [
                 "python3",
                 str(
-                    repo_root / "lifecycle/runtime/tools/scripts/nix-domain-storage.py"
+                    repo_root
+                    / "os/lifecycle/runtime/tools/scripts/nix-domain-storage.py"
                 ),
                 *args,
             ],

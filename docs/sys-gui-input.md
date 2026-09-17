@@ -1,6 +1,6 @@
 # Physical GUI input
 
-The reusable module `lifecycle/misc/modules/qubes-input-proxy.nix` forwards
+The reusable module `os/lifecycle/misc/modules/qubes-input-proxy.nix` forwards
 selected physical input devices from dom0 to a GUI domain. It packages
 [upstream Qubes input proxy 1.0.46](https://github.com/QubesOS/qubes-app-linux-input-proxy/tree/ea8710166c6ac29dd4183cdf155bc9a1da34cf4a),
 without changing its event protocol or filtering. It contains no GPU address,

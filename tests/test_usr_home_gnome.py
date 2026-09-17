@@ -16,7 +16,7 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
       let
         f = builtins.getFlake "{ROOT}";
         pkgs = import f.inputs.nixpkgs {{ system = "x86_64-linux"; }};
-        applications = import {ROOT}/lifecycle/misc/lib/usr-home-applications.nix {{ inherit pkgs; }};
+        applications = import {ROOT}/os/lifecycle/misc/lib/usr-home-applications.nix {{ inherit pkgs; }};
         workspace = (f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.extendModules {{
           modules = [ ({{ lib, ... }}: {{
             airlock.sysGuiGuest.personalLaunchers.enable = lib.mkForce true;

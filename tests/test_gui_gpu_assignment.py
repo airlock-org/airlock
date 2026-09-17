@@ -11,7 +11,7 @@ from types import SimpleNamespace as NS
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "lifecycle/misc/tools/pkgs/airlock-gui-gpu-check/src/check.py"
+SOURCE = ROOT / "os/lifecycle/misc/tools/pkgs/airlock-gui-gpu-check/src/check.py"
 spec = importlib.util.spec_from_file_location("gui_gpu_check", SOURCE)
 checker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checker)

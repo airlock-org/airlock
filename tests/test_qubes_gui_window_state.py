@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-PATCH_ROOT = ROOT / "lifecycle/misc/patches"
+PATCH_ROOT = ROOT / "os/lifecycle/misc/patches"
 
 
 def patch_text(package: str, name: str) -> str:

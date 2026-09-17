@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-ENGINE_SOURCE = ROOT / "lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src"
+ENGINE_SOURCE = ROOT / "os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src"
 sys.path.insert(0, str(ENGINE_SOURCE))
 
 from airlock_qubes_storage._engine import core, objects, prepared, views  # noqa: E402
@@ -296,7 +296,7 @@ def test_prepared_adoption_without_sources_or_repacking(seed, monkeypatch):
         assert "build-pool" not in path.read_text()
     helper_spec = importlib.util.spec_from_file_location(
         "prepared_storage_helper",
-        ROOT / "lifecycle/runtime/tools/scripts/nix-domain-storage.py",
+        ROOT / "os/lifecycle/runtime/tools/scripts/nix-domain-storage.py",
     )
     helper = importlib.util.module_from_spec(helper_spec)
     helper_spec.loader.exec_module(helper)

@@ -4,7 +4,7 @@
   entries,
 }:
 let
-  engine = pkgs.python3.pkgs.callPackage ../runtime/tools/pkgs/airlock-qubes-storage { };
+  engine = pkgs.python3.pkgs.callPackage ../../os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage { };
   python = pkgs.python3.withPackages (_: [ engine ]);
   specs = lib.mapAttrsToList (name: entry: {
     inherit name;

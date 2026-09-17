@@ -2,6 +2,12 @@
 
 Status: agreed direction, not implemented. Recorded 2026-09-17.
 
+Repository boundary established 2026-09-17: deployable configuration now lives
+in the standalone `airlock-os` repository. `airlock-dev` pins it as the `os/`
+Git submodule and owns USB/lab integration. The future controller will check out
+`airlock-os` directly rather than treating the development repository or USB
+image source as its configuration repository.
+
 This document is an implementation handoff. Creating this document does not
 change the running machine. Read [machine-deployment.md](../machine-deployment.md)
 before implementing or deploying, and follow the repository's `AGENTS.md`.
@@ -31,8 +37,9 @@ archival. Moving this work does not make a compromised controller harmless.
 
 ## Current behavior and the duplication problem
 
-The current `make machine-*` flow builds from the committed development
-repository, transfers artifacts through `sys-dev`, and uses its development-only
+The current `make machine-*` flow builds the release from the exact
+`airlock-os` commit pinned at `airlock-dev/os`, records both repository
+revisions, transfers artifacts through `sys-dev`, and uses its development-only
 dom0 administrative access to run the machine coordinator. It bypasses the
 separate `sys-config-*` candidate workflow. Do not describe those VMs as the
 current authority for machine deployments.
@@ -85,10 +92,12 @@ Use qrexec and Qubes policy for inter-domain requests. A controller proposal mus
 not override dom0's checks of actual machine state. Keep Nix as the configuration
 source of truth and retain existing Qubes runtime state where required.
 
-The development repository remains the place to implement and commit Airlock
-changes. Specify how committed candidates reach the persistent controller
-repository, preserving source revision and lock-file provenance. Do not create
-an independently maintained configuration on the live machine.
+Implement OS changes in `airlock-os` and commit them there first; use
+`airlock-dev` for USB, lab, and cross-repository integration changes and its
+pinned submodule update. Specify how an approved `airlock-os` commit reaches
+the persistent controller repository, preserving its source revision and
+lock-file provenance. Do not create an independently maintained configuration
+on the live machine.
 
 ## Implementation stages
 
@@ -107,7 +116,9 @@ an independently maintained configuration on the live machine.
 
 ### 2. Move configuration and release preparation
 
-- Route normal deployment submissions from `sys-dev` to `sys-ctrl`.
+- Route normal deployment submissions from `sys-dev` to `sys-ctrl`. The
+  controller's candidate repository is a direct `airlock-os` checkout; it does
+  not require an `airlock-dev` checkout or USB assembly sources.
 - Move evaluation, validation, builds/imports, candidate archives, and release
   preparation into `sys-ctrl`; reuse existing implementations where practical.
 - Retain dom0-side checks and the existing journalled whole-machine activation,
@@ -196,14 +207,15 @@ segments to make space.
 
 - [Machine deployment contract and current limitations](../machine-deployment.md)
 - [Config VMs, storage format, admission and bootstrap](../config-system.md)
+- [Repository boundary and workflow](../repositories.md)
 - [Development-side machine transport](../../lifecycle/misc/tools/scripts/machine-deploy.py)
-- [Dom0 machine coordinator](../../lifecycle/runtime/tools/machine-deploy.py)
-- [Machine boot integration](../../lifecycle/misc/modules/machine-deployment.nix)
-- [Release construction](../../lifecycle/image/profiles/usb-prepared-store.nix)
+- [Dom0 machine coordinator](../../os/lifecycle/runtime/tools/machine-deploy.py)
+- [Machine boot integration](../../os/lifecycle/misc/modules/machine-deployment.nix)
+- [Release construction](../../os/lifecycle/misc/modules/machine-release.nix)
 - [Prepared guest store](../../lifecycle/image/prepared-guest-store.nix)
-- [Storage engine](../../lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/)
-- [Bootstrap config system](../../lifecycle/bootstrap/config-system.nix)
-- [Initial runtime configuration](../../lifecycle/bootstrap/initial-runtime-config/flake.nix)
+- [Storage engine](../../os/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/)
+- [Bootstrap config system](../../os/lifecycle/bootstrap/config-system.nix)
+- [Initial runtime configuration](../../os/lifecycle/bootstrap/initial-runtime-config/flake.nix)
 - [Machine deployment tests](../../tests/test_machine_deploy.py)
 
 ## Outside this goal

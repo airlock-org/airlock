@@ -1,0 +1,3 @@
+[submodule "os"]
+	path = os
+	url = /home/user/dev/airlock/airlock-os

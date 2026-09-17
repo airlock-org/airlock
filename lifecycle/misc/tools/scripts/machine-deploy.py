@@ -116,27 +116,36 @@ def build(profile):
         raise RuntimeError(
             "commit repository changes before deployment (including new files)"
         )
-    revision = command("git", "rev-parse", "HEAD", cwd=ROOT)
-    attr = f"nixosConfigurations.usb-dev.config.specialisation.{profile}.configuration.system.build.airlockMachineRelease"
+    dev_revision = command("git", "rev-parse", "HEAD", cwd=ROOT)
+    os_revision = command("git", "-C", "os", "rev-parse", "HEAD", cwd=ROOT)
+    attr = f"airlock-machine-release-{profile}"
     result = json.loads(
-        command(str(NIX), "build", ".#" + attr, "--json", "--no-link", cwd=ROOT)
+        command(str(NIX), "build", "os#" + attr, "--json", "--no-link", cwd=ROOT)
     )
-    if command("git", "rev-parse", "HEAD", cwd=ROOT) != revision or command(
-        "git", "status", "--porcelain", cwd=ROOT
+    if (
+        command("git", "rev-parse", "HEAD", cwd=ROOT) != dev_revision
+        or command("git", "status", "--porcelain", cwd=ROOT)
+        or command("git", "-C", "os", "rev-parse", "HEAD", cwd=ROOT) != os_revision
     ):
         raise RuntimeError("repository changed during build; retry from a clean commit")
     release = result[0]["outputs"]["out"]
     # Pin the output in the guarded Airlock store, not the host store.
-    log = ROOT / ".airlock-logs" / "machine-deploy" / revision
+    log = ROOT / ".airlock-logs" / "machine-deploy" / dev_revision
     log.mkdir(parents=True, exist_ok=True)
     command(str(NIX), "build", release, "--out-link", str(log / "release"), cwd=ROOT)
     (log / "build.json").write_text(
         json.dumps(
-            {"revision": revision, "profile": profile, "release": release}, indent=2
+            {
+                "devRevision": dev_revision,
+                "osRevision": os_revision,
+                "profile": profile,
+                "release": release,
+            },
+            indent=2,
         )
         + "\n"
     )
-    return release, revision
+    return release, os_revision, dev_revision
 
 
 def transfer(target, bridge_vm, release, session):
@@ -257,8 +266,17 @@ def main(argv=None):
     session = None
     try:
         if args.action in ("build", "plan", "apply"):
-            release, revision = build(args.profile)
-            print(json.dumps({"release": release, "revision": revision}), flush=True)
+            release, os_revision, dev_revision = build(args.profile)
+            print(
+                json.dumps(
+                    {
+                        "release": release,
+                        "osRevision": os_revision,
+                        "devRevision": dev_revision,
+                    }
+                ),
+                flush=True,
+            )
             if args.action == "build":
                 return 0
         session = Dom0(args.target)
@@ -267,7 +285,10 @@ def main(argv=None):
             manifest = json.loads(
                 session.run("cat " + shlex.quote(release + "/release.json"))
             )
-            if manifest["revision"] != revision or manifest["profile"] != args.profile:
+            if (
+                manifest["revision"] != os_revision
+                or manifest["profile"] != args.profile
+            ):
                 raise RuntimeError(
                     "built release provenance does not match the requested commit/profile"
                 )

@@ -5,10 +5,12 @@ The first milestone is narrow: run the Qubes control stack with NixOS as Xen
 dom0 while retaining Qubes' Xen, qrexec, QubesDB, policy, libvirt, and VM
 lifecycle machinery.
 
-This repository vendors a local source fork of
-[`CertainLach/nixos-qubes`](https://github.com/CertainLach/nixos-qubes) under
-`vendor/nixos-qubes` and consumes it as a flake input. Airlock adds a thin
-integration layer for:
+This is the `airlock-dev` repository. It pins the independently buildable
+`airlock-os` repository as the real Git submodule at `os/`. The OS repository
+contains the local [`CertainLach/nixos-qubes`](https://github.com/CertainLach/nixos-qubes)
+source input and all deployable host, guest, bootstrap, and runtime code.
+This parent repository supplies USB image assembly, provisioning, lab tooling,
+and cross-repository integration tests.
 
 - a POC NixOS dom0 configuration,
 - closure-backed NixOS Qubes domains,
@@ -20,16 +22,14 @@ integration layer for:
 
 ## Repository Layout
 
-- `lifecycle/`: image, bootstrap, runtime, and shared lifecycle support.
-- `lifecycle/image/`: image build profiles, overlays, and image-only tools.
-- `lifecycle/bootstrap/`: first-boot wiring and the starting runtime config bundled into an image.
-- `lifecycle/bootstrap/initial-runtime-config/`: starter runtime config that `sys-config-vault` turns into the first current baseline.
-- `lifecycle/bootstrap/tools/`: bootstrap-only first-boot and handoff tools.
-- `lifecycle/runtime/`: code used after bootstrap to operate the running system.
-- `lifecycle/runtime/tools/`: runtime-only operational packages and scripts.
-- `lifecycle/misc/`: shared schemas, NixOS modules, libraries, cross-stage tools, and local test helpers.
+- `os/`: pinned `airlock-os` submodule; the deployable OS source of truth.
+- `lifecycle/image/`: prepared-store USB assembly and image-only tools.
+- `lifecycle/misc/tools/scripts/`: development-host and lab orchestration.
 - `docs/`: design notes, config authority details, and test documentation.
-- `vendor/`: upstream source inputs carried locally for the POC.
+- `tests/`: cross-repository, image, and deployment integration tests.
+
+See [repository workflow](docs/repositories.md) for clone, edit, and submodule
+update commands.
 
 ## Bootstrap
 

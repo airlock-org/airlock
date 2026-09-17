@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_boot_labels_repair_retained_entries_and_are_idempotent(tmp_path):
-    source = (ROOT / "lifecycle/misc/modules/dom0.nix").read_text()
+    source = (ROOT / "os/lifecycle/misc/modules/dom0.nix").read_text()
     hook = source.split(
         "boot.loader.systemd-boot.extraInstallCommands = lib.mkAfter ''", 1
     )[1].split("\n    '';", 1)[0]

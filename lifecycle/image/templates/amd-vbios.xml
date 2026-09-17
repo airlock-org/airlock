@@ -1,4 +1,0 @@
-{# Preserve upstream Qubes' complete definition; the startup extension validates
-   and adds only the GPU guest address and the prepared ACPI table. #}
-{% set upstream = vm.app.env.get_template('libvirt/xen.xml').render(vm=vm, bug=bug) %}
-{{ upstream | airlock_amd_vbios(vm) }}

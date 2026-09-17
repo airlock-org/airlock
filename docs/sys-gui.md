@@ -75,8 +75,8 @@ existing Nix-native guest builder. The full image profiles remain unchanged.
 - The full development toolset and the proxy targeting `sys-firewall` are
   disabled. Existing Qubes administration tools/policy are retained.
 
-The topology is defined in `lifecycle/bootstrap/gui-minimal.nix`; the nested
-harness settings are in `lifecycle/image/profiles/vm-gui-minimal.nix`.
+The topology is defined in `os/lifecycle/bootstrap/gui-minimal.nix`; the nested
+harness settings are in `os/lifecycle/image/profiles/vm-gui-minimal.nix`.
 
 ## Build and launch when ready
 

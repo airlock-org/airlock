@@ -10,7 +10,7 @@ import pytest
 @pytest.fixture
 def vbios():
     path = Path(__file__).resolve().parents[1] / (
-        "lifecycle/runtime/tools/pkgs/airlock-amd-vbios/src/airlock_amd_vbios/firmware.py"
+        "os/lifecycle/runtime/tools/pkgs/airlock-amd-vbios/src/airlock_amd_vbios/firmware.py"
     )
     spec = importlib.util.spec_from_file_location("amd_vbios", path)
     module = importlib.util.module_from_spec(spec)

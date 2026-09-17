@@ -4,7 +4,7 @@ Airlock can prepare an AMD GPU's VBIOS from the booted host's ACPI VFCT table
 during ordinary Qubes VM startup. There is no laptop address, product ID,
 pre-extracted firmware file, or source-table hash in the configuration.
 
-The opt-in Nix module is `lifecycle/misc/modules/amd-vbios.nix`:
+The opt-in Nix module is `os/lifecycle/misc/modules/amd-vbios.nix`:
 
 ```nix
 airlock.amdVbios = {

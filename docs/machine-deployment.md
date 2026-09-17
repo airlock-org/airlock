@@ -2,7 +2,8 @@
 
 ## The development contract
 
-The committed local repository is the source of truth. A running machine is a
+The committed `airlock-os` repository and the parent repository's pinned `os/`
+submodule pointer are the source of truth. A running machine is a
 deployment target, not a second configuration repository. Implement fixes here,
 test and commit them, then deploy those artifacts. Do not copy hand-edited GUI
 scripts into `/run`, edit guest store paths, or leave systemd overrides as the
@@ -25,7 +26,9 @@ restricted config-authority/approval workflow described in `config-system.md`.
   `sys-dev-2`); its Qubes name remains `sys-dev`.
 - Keep a physical dom0 console available for the first trials. Restarting
   sys-dev removes the remote connection; failures may require local recovery.
-- A clean, committed repository and its existing guarded Airlock Nix store.
+- Clean, committed `airlock-os` and `airlock-dev` repositories, an initialized
+  `os/` submodule at the committed pointer, and the guarded Airlock Nix store
+  under `/run/media/user/data/airlock`.
 - Free space in dom0 **and** sys-dev. The initial deployment imports ordinary
   Nix closures in addition to the image's packed guest store. Budget substantial
   development space, not just space for the compressed USB image. The client
@@ -107,8 +110,9 @@ post-install normalizer applies these names after image builds and deployments.
 Recovery is pinned as a separate Nix system profile, so it remains available
 when the original image generation falls outside the retained history.
 
-The source revision and lock-file hash are recorded in the release. Local build
-receipts and GC roots are under `.airlock-logs/machine-deploy/<commit>/`.
+The `airlock-os` revision and lock-file hash are recorded in the release. The
+development-side receipt also records the parent revision. Local build receipts
+and GC roots are under `.airlock-logs/machine-deploy/<airlock-dev-commit>/`.
 Runtime journals are in `/var/lib/airlock/machine/transactions/<id>/`, including
 `status.json`, `staged.json`, and setup's JSON/command logs. Use
 `journalctl -u 'airlock-machine-deploy-*'` in dom0 for worker output.
@@ -118,21 +122,20 @@ Runtime journals are in `/var/lib/airlock/machine/transactions/<id>/`, including
 The flake output is:
 
 ```text
-nixosConfigurations.usb-dev.config.specialisation.usb-lab.configuration.system.build.airlockMachineRelease
+os#airlock-machine-release-usb-lab
 ```
 
 It contains `release.json` (host system, exact setup/coordinator binaries,
 profile, commit and lock hash) and `topology.json` (all declared VMs, policies,
 preferences, devices and exact VM systems/root/store sources).
 
-The release reuses the USB profile's evaluated host and guest systems. The
-image uses prepared-store descriptors to avoid first-boot package import; the
-deployment topology uses ordinary closure manifests for transport/admission.
-These name the **same VM system paths**, not independently maintained VM configs.
-The release is a separate build output and does not build/write a disk image.
-The host still references seed descriptors: guest changes can consequently
-rebuild prepared-store artifacts. Eliminating that build-time cost is a future
-optimization, not a reason to fork the configuration.
+The release is built directly from the pinned `airlock-os` checkout. The USB
+image calls the same OS construction function, then substitutes prepared-store
+descriptors only for the topology embedded in the image. Release construction
+canonicalizes those entries to ordinary closure manifests for transport and
+admission. Both paths name the same VM system paths and cannot drift into
+independently maintained host or guest configurations. A standalone release
+does not evaluate or build the prepared store or disk image.
 
 The coordinator:
 
@@ -243,11 +246,12 @@ feedback loop is `make test-quick`; focused tests are
 
 Implementation entry points:
 
-- `lifecycle/image/profiles/usb-prepared-store.nix`: shared release construction.
+- `os/lifecycle/misc/modules/machine-release.nix`: standalone release construction.
+- `lifecycle/image/profiles/usb-prepared-store.nix`: prepared USB topology adapter.
 - `lifecycle/misc/tools/scripts/machine-deploy.py`: build/provenance/SSH transport.
-- `lifecycle/runtime/tools/machine-deploy.py`: dom0 planning and journalled apply.
-- `lifecycle/misc/modules/machine-deployment.nix`: image/boot integration.
-- `lifecycle/runtime/tools/scripts/nix-domain-storage.py`: staged generation use.
+- `os/lifecycle/runtime/tools/machine-deploy.py`: dom0 planning and journalled apply.
+- `os/lifecycle/misc/modules/machine-deployment.nix`: image/boot integration.
+- `os/lifecycle/runtime/tools/scripts/nix-domain-storage.py`: staged generation use.
 
 The physical acceptance run has demonstrated an ordinary VM config change,
 unchanged providers staying up, a GUI/provider restart surviving SSH loss,

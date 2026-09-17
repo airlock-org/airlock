@@ -1,10 +1,28 @@
 {
   "nodes": {
+    "airlock-os": {
+      "inputs": {
+        "dank-material-shell": "dank-material-shell",
+        "nixos-qubes": "nixos-qubes",
+        "nixpkgs": "nixpkgs",
+        "nixpkgs-libvirt_10_5": "nixpkgs-libvirt_10_5"
+      },
+      "locked": {
+        "path": "./os",
+        "type": "path"
+      },
+      "original": {
+        "path": "./os",
+        "type": "path"
+      },
+      "parent": []
+    },
     "dank-material-shell": {
       "inputs": {
         "dank-qml-common": "dank-qml-common",
         "flake-compat": "flake-compat",
         "nixpkgs": [
+          "airlock-os",
           "nixpkgs"
         ]
       },
@@ -58,6 +76,7 @@
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": [
+          "airlock-os",
           "nixos-qubes",
           "nixpkgs"
         ]
@@ -79,9 +98,11 @@
       "inputs": {
         "flake-parts": "flake-parts",
         "nixpkgs": [
+          "airlock-os",
           "nixpkgs"
         ],
         "nixpkgs-libvirt_10_5": [
+          "airlock-os",
           "nixpkgs-libvirt_10_5"
         ],
         "shelly": "shelly",
@@ -95,7 +116,9 @@
         "path": "./vendor/nixos-qubes",
         "type": "path"
       },
-      "parent": []
+      "parent": [
+        "airlock-os"
+      ]
     },
     "nixpkgs": {
       "locked": {
@@ -131,10 +154,15 @@
     },
     "root": {
       "inputs": {
-        "dank-material-shell": "dank-material-shell",
-        "nixos-qubes": "nixos-qubes",
-        "nixpkgs": "nixpkgs",
-        "nixpkgs-libvirt_10_5": "nixpkgs-libvirt_10_5"
+        "airlock-os": "airlock-os",
+        "nixos-qubes": [
+          "airlock-os",
+          "nixos-qubes"
+        ],
+        "nixpkgs": [
+          "airlock-os",
+          "nixpkgs"
+        ]
       }
     },
     "shelly": {
@@ -154,6 +182,7 @@
     "treefmt-nix": {
       "inputs": {
         "nixpkgs": [
+          "airlock-os",
           "nixos-qubes",
           "nixpkgs"
         ]
