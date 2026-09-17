@@ -1,6 +1,7 @@
 # Move configuration work into sys-ctrl
 
-Status: agreed direction, not implemented. Recorded 2026-09-17.
+Status: controller architecture not implemented; direct pool admission foundation
+implemented and physically smoke-tested from `sys-dev`. Updated 2026-09-17.
 
 Repository boundary established 2026-09-17: deployable configuration now lives
 in the standalone `airlock-machine` repository. The parent `airlock` repository pins it as the `airlock-machine/`
@@ -44,22 +45,47 @@ dom0 administrative access to run the machine coordinator. It bypasses the
 separate `sys-config-*` candidate workflow. Do not describe those VMs as the
 current authority for machine deployments.
 
+The narrower [sys-dev pool admission step](../completed/sys-dev-pool-admission.md)
+is now implemented. `sys-dev` has a private writable Nix store and
+`airlock-pool-send`, which streams `airlock.pool-artifact.v1` artifacts through
+`airlock.Pool.Admit+TARGET`. The dom0 receiver validates artifacts and closure
+completeness, reuses pool objects, and publishes retained, inactive generations.
+The physical image permits `sys-dev` to submit for `sys-gui`, `sys-dev`,
+`usr-home`, and `usr-browser`.
+
+The receiver uses a narrowly permitted sudo helper to access the root-owned
+pool, with caller/target checks in the handler and helper. Qubes policy remains
+the remote caller authority; the helper's caller argument is not independent
+proof of caller identity. A policy `user=root` option did not elevate this dom0
+service in the live test and is not the implemented fix.
+
+After rebuilding and flashing the fix, a tiny synthetic object was admitted
+through qrexec as retained generation 2 while generation 1 remained current
+(`activated=false`). The quick suite passed 329 tests, with 23 skipped.
+This establishes the admission path, not a complete guest update or rollback;
+the nested `vm-pool-admission-flow` has not yet been executed.
+
+There is no `sys-ctrl` in the tested physical topology: it contains `sys-dev`,
+`sys-gui`, `usr-home`, and `usr-browser`. The existing `make machine-*` workflow
+has not yet been switched to this direct admission interface.
+
 There are two distinct stores on dom0:
 
 1. The ordinary `/nix/store`, into which machine deployment imports Nix closures.
 2. `/var/lib/airlock/closure-store`, a shared package pool serving filtered,
    read-only guest `/nix/store` views.
 
-Ordinary admission reads guest packages from the first store and writes their
+The existing machine deployment admission path reads guest packages from the first store and writes their
 contents into the second representation. The imported source closures remain
 retained, so guest package payloads can occupy space in both. The pool shares
 objects across guests; this is not a full additional package copy for every VM.
 Prepared USB images already omit guest-only source packages from the ordinary
 dom0 store, but machine updates use ordinary closure imports.
 
-Moving builds to `sys-ctrl` alone does not fix this. The final design must admit
-transferred guest artifacts directly into the pool without requiring a retained
-guest-only source closure in dom0's ordinary `/nix/store`.
+Direct artifact admission now provides the pool-side capability needed to avoid
+this duplication. The remaining work is to integrate it into controller-prepared
+releases and machine deployment without requiring a retained guest-only source
+closure in dom0's ordinary `/nix/store`.
 
 **Removing that required duplicate copy is part of this goal, not an optional
 future optimization.** Temporary transfer/staging space is acceptable. Packages
@@ -109,6 +135,8 @@ on the live machine.
 - Define typed/versioned deployment requests and responses, permitted callers,
   artifact validation, target restrictions, and failure behavior. Do not expose
   an arbitrary dom0 shell as the normal controller interface.
+  Reuse the existing artifact schema and admission response; deployment and
+  activation requests still need their own contract.
 - Decide controller network/fetch access explicitly; do not inherit `sys-dev`'s
   physical NIC or networking role merely because it is the submission endpoint.
 - Ensure dom0 can boot, start `sys-ctrl`, and recover without asking a running
@@ -121,6 +149,9 @@ on the live machine.
   not require a parent `airlock` checkout or USB assembly sources.
 - Move evaluation, validation, builds/imports, candidate archives, and release
   preparation into `sys-ctrl`; reuse existing implementations where practical.
+  Move the existing pool sender and private writable store setup into the
+  controller role. Change the admission policy and configured caller to
+  `sys-ctrl`, with explicit guest targets, when that path is ready.
 - Retain dom0-side checks and the existing journalled whole-machine activation,
   dependency ordering, persistent guest data handling, and generation checks.
 - Preserve plan/apply/status/verify/resume/rollback capabilities and provenance.
@@ -131,18 +162,17 @@ on the live machine.
 - The existing import-to-dom0 admission path may be an intermediate checkpoint.
   Do not mark the overall goal complete at this point.
 
-### 3. Remove required duplicate guest closures from dom0
+### 3. Integrate direct pool admission into whole-machine deployment
 
-- Design direct artifact admission using the existing object identities,
-  closure format, immutable generations, and filtered guest views. Reuse the
-  prepared-store machinery where it fits; do not assume its image trust model
-  automatically applies to artifacts received from a VM.
-- Validate received artifacts and closure completeness before publishing a
-  usable generation. Hashes identify content; separately define which caller
-  is authorized to request activation. Retain checks even when artifacts come
-  from the trusted controller.
-- Make interrupted/retried transfers and admission safe, and clean up temporary
-  transfer data without deleting retained or running generations.
+- Reuse `airlock-pool-send`, the versioned artifact format, and the existing
+  dom0 admission receiver. Preserve validation, object reuse, filtered guest
+  views, and retained inactive generation publication.
+- Connect admission results to the machine coordinator's release planning,
+  activation, and rollback. Verify that admitted generations match the intended
+  guest and release provenance before activation. Admission success alone is
+  not deployment success; define activation authority separately.
+- Exercise interruption, retry, and temporary-data cleanup through the complete
+  controller/deployment path, preserving retained and running generations.
 - Remove references in deployment releases/GC roots that would otherwise retain
   whole guest source closures in dom0's ordinary store. Keep dom0's actual
   runtime dependencies and boot/recovery artifacts intact.
@@ -205,6 +235,10 @@ segments to make space.
 
 ## Starting points
 
+- [Completed sys-dev admission step and validation scope](../completed/sys-dev-pool-admission.md)
+- [Admission policy, handler, and root helper](../../airlock-machine/lifecycle/misc/modules/pool-admission.nix)
+- [Artifact sender and receiver CLI](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/artifact_cli.py)
+- [Artifact validation and pool admission](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/artifacts.py)
 - [Machine deployment contract and current limitations](../machine-deployment.md)
 - [Config VMs, storage format, admission and bootstrap](../config-system.md)
 - [Repository boundary and workflow](../repositories.md)
@@ -222,6 +256,7 @@ segments to make space.
 
 Moving the shared closure pool into `sys-ctrl`, introducing a new Xen storage
 backend, making dom0 boot from controller-served storage, replacing Qubes control
-mechanisms, and full GUI completion are outside this goal. Exact request schemas,
-artifact transport format, network access, and migration mechanics remain
-implementation decisions to resolve within the boundaries above.
+mechanisms, and full GUI completion are outside this goal. Deployment request
+schemas, controller network access, and migration mechanics remain implementation
+decisions. The artifact transport format and admission service already exist;
+reuse them and version any necessary extensions.
