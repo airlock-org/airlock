@@ -1,6 +1,7 @@
 # Build guest updates from airlock-machine in sys-dev
 
-Status: planned. Recorded 2026-09-17.
+Status: implemented locally on 2026-09-17; image build and physical validation
+remain pending.
 
 Put a usable standalone `airlock-machine` Git checkout on the physical machine
 in `sys-dev`, then build a small guest configuration change there and send its
@@ -11,7 +12,9 @@ This is the next small step toward [sys-ctrl](sys-ctrl.md).
 
 - Provide a repeatable way to seed and update a persistent checkout at
   `/home/user/dev/airlock-machine`, initially at the machine revision pinned by
-  the parent repository. Transfer Git history and any required submodules;
+  the parent repository. Transfer Git history; the current source has no Git
+  submodules, and setup must fail clearly if that changes until submodule
+  transfer is implemented;
   do not depend on development-host filesystem paths or a parent `airlock`
   checkout. Preserve local edits when updating an existing checkout.
 - Supply the tools and documented command needed to evaluate and build from
@@ -29,6 +32,19 @@ Limit this step to checkout, build, and inactive admission. Follow with the
 Creation of `sys-ctrl` remains later work. The checkout must remain a
 reproducible copy of committed machine source;
 do not leave the only implementation of a fix on the live machine.
+
+The intended operator loop after flashing an image containing this change is:
+
+```bash
+make sys-dev-machine-source DEPLOY_TARGET=sys-dev
+ssh sys-dev airlock-sys-dev-machine-source status
+ssh sys-dev airlock-sys-dev-machine-build preflight
+ssh sys-dev airlock-sys-dev-machine-build build
+ssh sys-dev airlock-sys-dev-machine-build admit usr-home
+```
+
+The last command is for a real, committed `usr-home` configuration change and
+returns an inactive pool generation. It does not activate that generation.
 
 ## Acceptance
 
