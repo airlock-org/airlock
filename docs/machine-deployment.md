@@ -21,9 +21,11 @@ restricted config-authority/approval workflow described in `config-system.md`.
 
 ## Prerequisites and current validation boundary
 
-- A bootstrapped `usb-lab` machine, sys-dev reachable over SSH/Tailscale, and
-  access to the dom0 development password. Use the Tailscale name (which can be
-  `sys-dev-2`); its Qubes name remains `sys-dev`.
+- A bootstrapped machine started from the `Airlock` boot-menu entry, with
+  sys-dev reachable over SSH/Tailscale and access to the dom0 development
+  password. The internal deployment profile remains named `usb-lab`; it is not
+  a boot-menu label. Use the Tailscale name (which can be `sys-dev-2`); its
+  Qubes name remains `sys-dev`.
 - Keep a physical dom0 console available for the first trials. Restarting
   sys-dev removes the remote connection; failures may require local recovery.
 - Clean, committed `airlock-machine` and parent `airlock` repositories, an initialized
@@ -82,7 +84,8 @@ make machine-status DEPLOY_TARGET=sys-dev-2
 make machine-verify DEPLOY_TARGET=sys-dev-2
 ```
 
-`machine-build` needs no remote machine. All commands default to `usb-lab`.
+`machine-build` needs no remote machine. All commands default to the internal
+`usb-lab` deployment profile; this is not a boot-menu entry.
 `DEPLOY_PROFILE=usb-gui-lab` builds that complete profile instead, but its usual
 topology has no sys-dev bridge; use the dom0 coordinator directly if artifacts
 are provisioned by another authorized transport. A deployment cannot silently

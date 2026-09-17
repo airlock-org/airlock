@@ -101,8 +101,9 @@ make usb-dev-image
 make usb-dev-provision USB_SERIAL=25110814640207
 ```
 
-Boot **usb-gui-lab with Xen**. No manual `qvm-device` or firmware copy should
-be needed. Reconnect with SSH and inspect:
+Boot the normal **Airlock** entry. `usb-gui-lab` is an internal profile name,
+not a user-facing boot-menu entry. No manual `qvm-device` or firmware copy
+should be needed. Reconnect with SSH and inspect:
 
 ```sh
 sudo systemctl status airlock-setup-config airlock-start-gui-gpu --no-pager

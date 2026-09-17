@@ -12,10 +12,11 @@ development machine --Tailnet SSH--> sys-dev --airlock-dom0-shell--> dom0
                            usr-browser; usr-home stays offline
 ```
 
-The `usb-lab` boot entry starts `sys-dev`, physical-GPU `sys-gui`, offline
-`usr-home`, and `usr-browser`. `sys-dev` owns the physical network devices
-until a later profile introduces `sys-net` and `sys-firewall`. Dom0's direct
-NetworkManager, Tailscale, and SSH services are disabled in this entry.
+The user-facing `Airlock` boot entry uses this topology and starts `sys-dev`,
+physical-GPU `sys-gui`, offline `usr-home`, and `usr-browser`. `usb-lab` is only
+the internal profile name. `sys-dev` owns the physical network devices until a
+later profile introduces `sys-net` and `sys-firewall`. Dom0's direct
+NetworkManager, Tailscale, and SSH services are disabled in this profile.
 
 ## First boot
 

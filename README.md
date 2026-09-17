@@ -43,7 +43,7 @@ re-running bootstrap.
 
 ## Commands
 
-For physical USB-lab iteration without reflashing, use the repository-owned
+For physical Airlock USB iteration without reflashing, use the repository-owned
 [whole-machine deployment workflow](docs/machine-deployment.md):
 
 ```bash

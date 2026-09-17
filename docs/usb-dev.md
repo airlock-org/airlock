@@ -1,8 +1,8 @@
 # Persistent USB developer system
 
 Physical USB boot is still being validated. This is a writable disk image, not
-a live ISO or an installer. The normal `Airlock` entry uses the `usb-lab` GNOME
-topology. Normal VM targets are unchanged.
+a live ISO or an installer. The normal `Airlock` entry uses the internal
+`usb-lab` GNOME topology. Normal VM targets are unchanged.
 
 The USB developer profile disables USBGuard so the inherited dom0 default-block
 policy cannot disconnect its USB root disk. This development-only exception also

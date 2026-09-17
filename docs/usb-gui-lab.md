@@ -3,7 +3,8 @@
 An experimental physical GPU profile, with a successful automatic laptop desktop
 boot; **not general hardware or reset certification**. The default USB
 configuration still runs the hybrid XFCE desktop with AMD driven by dom0.
-The lab is a separate boot specialisation, not a runtime toggle.
+The historical lab name remains an internal Nix specialisation/profile name;
+it is not a user-facing boot-menu entry or a runtime toggle.
 Its current milestone is reproducible boot-time GPU assignment and automatic
 firmware delivery, checked over SSH. The lab now also enables automatic
 XFCE/LightDM login and selected input forwarding. Boot
@@ -34,7 +35,7 @@ The user-facing systemd-boot menu is intentionally limited to:
 
 | Entry | Behavior |
 | --- | --- |
-| `Airlock` | Latest `usb-lab` Xen generation; normal sys-gui, sys-dev and desktop-VM startup |
+| `Airlock` | Latest normal Xen generation (internal profile: `usb-lab`); normal sys-gui, sys-dev and desktop-VM startup |
 | `Airlock (recovery)` | Xen text console; no topology setup, guest startup, GPU handoff or automatic networking |
 | `Airlock (generation N)` | A retained older normal Xen generation |
 
@@ -59,7 +60,7 @@ affected, stopped guest before its next cold start; this does not remove its
 virtual disks.
 Do not activate a specialisation with `switch-to-configuration switch`: GPU
 ownership is established during boot. The Airlock menu normalizer makes the
-latest normal `usb-lab` Xen generation the saved `Airlock` default.
+latest normal Xen generation (internally `usb-lab`) the saved `Airlock` default.
 
 After a fresh flash, log in with `user` / `password` and open **dom0 Terminal
 (Development)** from the applications menu to configure dom0 networking and
