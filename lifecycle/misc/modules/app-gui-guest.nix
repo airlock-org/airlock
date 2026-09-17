@@ -20,7 +20,11 @@ let
     cp ${agent}/bin/qubes-session "$out"
     chmod u+w "$out"
     substituteInPlace "$out" \
-      --replace-fail /usr/bin/qubes-session-autostart ${autostart}
+      --replace-fail /usr/bin/qubes-session-autostart ${autostart} \
+      --replace-fail '# Wait some time to pick up zombie children' \
+        '${pkgs.coreutils}/bin/touch "''${XDG_RUNTIME_DIR:-/run/user/$UID}/airlock-app-session-ready"
+
+# Wait some time to pick up zombie children'
   '';
   session = pkgs.writeShellScript "airlock-qubes-scaled-session" ''
     # Export before upstream imports the environment into D-Bus/systemd and
@@ -28,6 +32,8 @@ let
     export GDK_SCALE=${toString config.airlock.appGui.scale}
     export GDK_DPI_SCALE=1
     export XCURSOR_SIZE=${toString (24 * config.airlock.appGui.scale)}
+    ${pkgs.coreutils}/bin/rm -f \
+      "''${XDG_RUNTIME_DIR:-/run/user/$UID}/airlock-app-session-ready"
     exec ${upstreamSession}
   '';
   monitorLayout = pkgs.writeShellScript "airlock-qubes-set-monitor-layout" ''
@@ -69,7 +75,7 @@ let
     export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
     exec ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=5s 60s \
       ${pkgs.bash}/bin/bash -c \
-      'until display="$(${pkgs.systemd}/bin/systemctl --user show-environment 2>/dev/null | ${pkgs.gnused}/bin/sed -n "s/^DISPLAY=//p" | ${pkgs.coreutils}/bin/head -n 1)" && [ -n "$display" ] && [ -S "$XDG_RUNTIME_DIR/bus" ] && DISPLAY="$display" ${pkgs.xdpyinfo}/bin/xdpyinfo -display "$display" >/dev/null 2>&1; do ${pkgs.coreutils}/bin/sleep 0.2; done'
+      'until display="$(${pkgs.systemd}/bin/systemctl --user show-environment 2>/dev/null | ${pkgs.gnused}/bin/sed -n "s/^DISPLAY=//p" | ${pkgs.coreutils}/bin/head -n 1)" && [ -n "$display" ] && [ -S "$XDG_RUNTIME_DIR/bus" ] && [ -e "$XDG_RUNTIME_DIR/airlock-app-session-ready" ] && DISPLAY="$display" ${pkgs.xdpyinfo}/bin/xdpyinfo -display "$display" >/dev/null 2>&1; do ${pkgs.coreutils}/bin/sleep 0.2; done'
   '';
 in
 {

@@ -62,7 +62,7 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
           forkAutostart = cfg.environment.etc."xdg/autostart/qubes-qrexec-fork-server.desktop".text;
           wantedBy = cfg.systemd.services.qubes-gui-agent.wantedBy;
           pam = cfg.security.pam.services.qubes-gui-agent.startSession;
-          session = cfg.environment.etc."X11/xinit/xinitrc".source;
+          session = builtins.readFile cfg.environment.etc."X11/xinit/xinitrc".source;
           xorg = cfg.environment.etc."X11/xorg-qubes.conf.template".source;
           networkBoot = cfg.systemd.services.qubes-network-uplink.wantedBy;
           networkReconcile = cfg.systemd.services.qubes-network-uplink.script;
@@ -104,13 +104,16 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         assert "/bin/xdpyinfo -display" in guest["sessionReady"]
         assert "systemctl --user show-environment" in guest["sessionReady"]
         assert "s/^DISPLAY=//p" in guest["sessionReady"]
+        assert '"$XDG_RUNTIME_DIR/airlock-app-session-ready"' in guest["sessionReady"]
         assert guest["sessionReadyConfig"] == "force-user='user'\n"
         assert guest["scale"] == 3
         assert "/bin/qrexec-fork-server" in guest["forkAutostart"]
         assert "Exec=/usr/bin/" not in guest["forkAutostart"]
         assert guest["enabled"] and guest["pam"]
         assert "multi-user.target" in guest["wantedBy"]
-        assert guest["session"] and guest["xorg"]
+        assert "rm -f" in guest["session"]
+        assert "airlock-app-session-ready" in guest["session"]
+        assert guest["xorg"]
         assert "multi-user.target" in guest["networkBoot"]
         assert "/sys/class/net/*" in guest["networkReconcile"]
     assert report["appGuestDhcp"] is False
