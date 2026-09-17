@@ -393,6 +393,45 @@ def test_client_refuses_uncommitted_sources(monkeypatch):
         client.build("usb-lab")
 
 
+def test_client_builds_the_pinned_airlock_machine_checkout(monkeypatch, tmp_path):
+    monkeypatch.setattr(client, "ROOT", tmp_path)
+    calls = []
+
+    def command(*args, **kwargs):
+        calls.append((args, kwargs))
+        if args == ("git", "status", "--porcelain"):
+            return ""
+        if args == ("git", "rev-parse", "HEAD"):
+            return "dev-revision"
+        if args == ("git", "-C", "airlock-machine", "rev-parse", "HEAD"):
+            return "machine-revision"
+        if args[1:3] == ("build", "./airlock-machine#airlock-machine-release-usb-lab"):
+            return json.dumps([{"outputs": {"out": "/nix/store/release"}}])
+        if args[1:] == (
+            "build",
+            "/nix/store/release",
+            "--out-link",
+            str(
+                tmp_path
+                / ".airlock-logs"
+                / "machine-deploy"
+                / "dev-revision"
+                / "release"
+            ),
+        ):
+            return ""
+        raise AssertionError(f"unexpected command: {args}")
+
+    monkeypatch.setattr(client, "command", command)
+
+    assert client.build("usb-lab") == (
+        "/nix/store/release",
+        "machine-revision",
+        "dev-revision",
+    )
+    assert all("os" not in args for args, _ in calls)
+
+
 def test_low_space_stops_transfer_before_any_write(monkeypatch):
     paths = {"/nix/store/new": {"narSize": 1024**3}}
     monkeypatch.setattr(client, "command", lambda *args: json.dumps(paths))

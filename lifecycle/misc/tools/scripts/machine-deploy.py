@@ -117,15 +117,23 @@ def build(profile):
             "commit repository changes before deployment (including new files)"
         )
     dev_revision = command("git", "rev-parse", "HEAD", cwd=ROOT)
-    os_revision = command("git", "-C", "os", "rev-parse", "HEAD", cwd=ROOT)
+    os_revision = command("git", "-C", "airlock-machine", "rev-parse", "HEAD", cwd=ROOT)
     attr = f"airlock-machine-release-{profile}"
     result = json.loads(
-        command(str(NIX), "build", "./os#" + attr, "--json", "--no-link", cwd=ROOT)
+        command(
+            str(NIX),
+            "build",
+            "./airlock-machine#" + attr,
+            "--json",
+            "--no-link",
+            cwd=ROOT,
+        )
     )
     if (
         command("git", "rev-parse", "HEAD", cwd=ROOT) != dev_revision
         or command("git", "status", "--porcelain", cwd=ROOT)
-        or command("git", "-C", "os", "rev-parse", "HEAD", cwd=ROOT) != os_revision
+        or command("git", "-C", "airlock-machine", "rev-parse", "HEAD", cwd=ROOT)
+        != os_revision
     ):
         raise RuntimeError("repository changed during build; retry from a clean commit")
     release = result[0]["outputs"]["out"]
