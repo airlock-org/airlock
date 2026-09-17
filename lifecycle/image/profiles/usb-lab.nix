@@ -30,6 +30,4 @@
     sys-dev owns physical networking and provides Tailnet development access
     run: tailscale ssh user@sys-dev; then airlock-dom0-shell
   '';
-  systemd.services.airlock-start-gui-gpu.serviceConfig.ExecStartPost =
-    "${pkgs.systemd}/bin/systemctl start airlock-gui-input.target";
 }

@@ -269,6 +269,18 @@ def test_nix_selection_drives_reservation_assignment_and_start():
       in {{
         normal = report normal; lab = report lab; alternate = report alternate;
         service = {{ inherit (lab.systemd.services.airlock-start-gui-gpu) requires wants after serviceConfig; }};
+        inputEvents = {{ inherit (lab.systemd.services.airlock-gui-input-events) wantedBy requires wants after serviceConfig; }};
+        inputConnect = lab.systemd.services.airlock-gui-input-connect.serviceConfig // {{
+          script = builtins.readFile lab.systemd.services.airlock-gui-input-connect.serviceConfig.ExecStart;
+        }};
+        inputReceiverReady = builtins.readFile guestBase.config.environment.etc."qubes-rpc/airlock.InputReceiverReady".source;
+        inputReceiverReadyConfig = guestBase.config.environment.etc."qubes/rpc-config/airlock.InputReceiverReady".text;
+        inputPolicy = let
+          package = builtins.head (builtins.filter
+            (candidate: (candidate.name or "") == "airlock-gui-input-policy")
+            lab.virtualisation.qubes.packages);
+        in builtins.readFile "${{package}}/etc/qubes/policy.d/40-airlock-gui-input.policy";
+        senderRestarts = map (name: lab.systemd.services.${{"airlock-gui-input-" + name}}.serviceConfig.Restart) [ "keyboard" "pointingstick" "touchpad" ];
         noBypass = !lab.systemd.services."qubes-vm@sys-gui".enable;
         normalGuard = builtins.fromJSON normal.environment.etc."airlock/gui-gpu.json".text;
         framebuffer = {{
@@ -358,11 +370,46 @@ def test_nix_selection_drives_reservation_assignment_and_start():
         "boot-framebuffer.py --gpu 0000:04:00.0"
         in service["serviceConfig"]["ExecStartPre"][2]
     )
-    assert service["serviceConfig"]["ExecStartPost"].endswith(
-        "/bin/systemctl start airlock-gui-input.target"
-    )
+    assert "ExecStartPost" not in service["serviceConfig"]
     assert report["inputTarget"] == []  # Only pulled in after successful VM start.
     assert report["inputServices"]
+    assert report["inputEvents"]["wantedBy"] == ["multi-user.target"]
+    assert report["inputEvents"]["requires"] == ["airlock-setup-config.service"]
+    assert report["inputEvents"]["wants"] == ["qubesd.service"]
+    assert report["inputEvents"]["after"] == [
+        "airlock-setup-config.service",
+        "qubesd.service",
+    ]
+    assert (
+        "input-events.py --target sys-gui"
+        in report["inputEvents"]["serviceConfig"]["ExecStart"]
+    )
+    assert report["inputEvents"]["serviceConfig"]["Restart"] == "on-failure"
+    assert report["inputConnect"]["Type"] == "oneshot"
+    assert report["inputConnect"]["TimeoutStartSec"] == 75
+    assert "airlock-connect-gui-input" in report["inputConnect"]["ExecStart"]
+    connect_script = report["inputConnect"]["script"]
+    assert connect_script.count("airlock.InputReceiverReady dom0") == 1
+    assert "-T -w 60" in connect_script
+    assert connect_script.count("qvm-check --running sys-gui") == 2
+    assert 'xid_after" = "$xid_before' in connect_script
+    assert "systemctl restart airlock-gui-input.target" in connect_script
+    for name in ("keyboard", "pointingstick", "touchpad"):
+        assert f"is-active --quiet airlock-gui-input-{name}.service" in connect_script
+    assert report["senderRestarts"] == ["no", "no", "no"]
+    assert (
+        "airlock.InputReceiverReady is restricted to dom0"
+        in report["inputReceiverReady"]
+    )
+    assert "-c /dev/uinput" in report["inputReceiverReady"]
+    for service_name in (
+        "qubes.InputKeyboard",
+        "qubes.InputMouse",
+        "qubes.InputTablet",
+    ):
+        assert f"/etc/qubes-rpc/{service_name}" in report["inputReceiverReady"]
+    assert report["inputReceiverReadyConfig"] == "force-user='root'\n"
+    assert "airlock.InputReceiverReady * @anyvm sys-gui deny" in report["inputPolicy"]
     assert report["touchpadPath"] == (
         "/dev/input/by-path/platform-AMDI0010:01-event-touchpad"
     )

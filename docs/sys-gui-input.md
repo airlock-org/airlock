@@ -38,15 +38,22 @@ stable device paths without modifying the shared implementation.
 
 In the receiving guest, enable `airlock.inputProxy.receiver.enable`. The
 physical GUI lab does this by default; the hybrid guest does not. This loads
-`uinput` and installs root RPC handlers with the source check above.
+`uinput` and installs root RPC handlers with the source check above. It also
+provides `airlock.InputReceiverReady`, restricted to dom0, which succeeds only
+when `/dev/uinput` and all three upstream receiver handlers are available.
 
-The USB AMD lab now activates the target automatically in the successful
-GPU guest startup service's `ExecStartPost`. The shared sender module itself
-remains manual; other profiles do not gain automatic forwarding. If debugging
-an already-running physical guest, activate forwarding **in dom0**:
+The sender subscribes to Qubes lifecycle events. When its selected GUI domain
+starts, one bounded coordinator call waits for `airlock.InputReceiverReady`,
+confirms that the same domain is still running, and starts all declared sender
+services. A domain stop releases the devices. This one path covers normal boot,
+manual VM starts and deployment-driven replacement; deployment code has no
+input-specific repair step. The coordinator never starts or retries the VM.
+
+If debugging an already-running physical guest, run the same coordinator in
+**dom0**:
 
 ```sh
-sudo systemctl start airlock-gui-input.target
+sudo systemctl start airlock-gui-input-connect.service
 sudo systemctl status 'airlock-gui-input-*.service'
 ```
 
@@ -58,11 +65,11 @@ cause selection of another device. Stopping the target releases the grabs:
 sudo systemctl stop airlock-gui-input.target
 ```
 
-Losing the qrexec connection also ends the sender and releases its device.
-After a connection failure, explicitly restart the target once the guest is
-ready. Automatic reconnection and hotplug remain future work. Never enable
-forwarding alongside the hybrid
-desktop's existing input path.
+Losing the qrexec connection ends the sender and releases its device. Sender
+services use `Restart=no`: a later failure remains visible rather than entering
+an endless retry loop. A subsequent Qubes start event runs the bounded
+coordinator again. Automatic physical-device hotplug remains future work.
+Never enable forwarding alongside the hybrid desktop's existing input path.
 
 ## Laptop result — 2026-09-13
 
