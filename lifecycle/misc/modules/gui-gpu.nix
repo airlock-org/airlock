@@ -144,8 +144,12 @@ in
                 "${pkgs.systemd}/bin/systemctl is-active --quiet qubesd.service"
                 "${checker}/bin/airlock-gui-gpu-check --phase start"
               ]
-              ++ lib.optional cfg.bootFramebuffer.enable "${pkgs.python3}/bin/python3 ${../tools/scripts/boot-framebuffer.py} --gpu ${gpu.bdf} --report /var/log/airlock/boot-framebuffer-handoff.json";
+              ++ lib.optional cfg.bootFramebuffer.enable "${pkgs.python3}/bin/python3 ${../tools/scripts/boot-framebuffer.py} --gpu ${gpu.bdf} --report /var/log/airlock/boot-framebuffer-handoff.json"
+              # Preserve the last visible bootstrap milestone before qvm-start
+              # takes over the physical GPU and the console stops updating.
+              ++ [ "${pkgs.systemd}/bin/journalctl --sync" ];
               ExecStart = "${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-start sys-gui";
+              ExecStartPost = "${pkgs.systemd}/bin/journalctl --sync";
               # Never loop over GPU resets, restart the VM on exit, or hide failure.
               Restart = "no";
             };

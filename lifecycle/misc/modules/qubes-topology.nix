@@ -910,6 +910,9 @@ in
         ExecStart =
           "${setupConfig}/bin/airlock-setup-config --apply"
           + lib.optionalString (cfg.setupConfigOnBoot.scope == "boot-critical") " --boot-critical";
+        # Persist the completed topology milestone before later boot services
+        # can hand physical devices to guests.
+        ExecStartPost = "${pkgs.systemd}/bin/journalctl --sync";
       };
     };
 

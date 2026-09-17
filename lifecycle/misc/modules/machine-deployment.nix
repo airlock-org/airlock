@@ -41,6 +41,7 @@ in
             Type = "oneshot";
             RemainAfterExit = true;
             ExecStart = "${engine}/bin/airlock-machine-deploy boot-start${lib.optionalString guardedGui " --require-running sys-gui"}";
+            ExecStartPost = "${pkgs.systemd}/bin/journalctl --sync";
           };
         };
         airlock-setup-config.serviceConfig.ExecStart = lib.mkForce "${engine}/bin/airlock-machine-deploy boot-setup ${setup}/bin/airlock-setup-config --apply${

@@ -7,6 +7,10 @@ The USB developer profile disables USBGuard so the inherited dom0 default-block
 policy cannot disconnect its USB root disk. This development-only exception also
 applies to its recovery modes, not normal installed-system profiles. Persistent
 journals synchronize every second to reduce lost diagnostics after forced shutdown.
+Topology setup, physical-GPU handoff and declared-VM autostart also force a journal
+sync at their successful boundaries; the GPU path syncs immediately before the
+visible bootstrap console is released as well. A sudden power cut can still lose
+the final in-flight messages, but completed boot milestones are explicitly durable.
 Before a physical GUI test, validate the image with a virtual USB boot disk;
 virtio-only testing does not exercise USB root access. Use the default hybrid GUI
 entry for this checkpoint, not the experimental AMD passthrough entry.

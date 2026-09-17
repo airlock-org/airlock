@@ -71,7 +71,9 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         autostart = {{
           inherit (host.systemd.services.airlock-machine-autostart) after requires wantedBy;
           command = host.systemd.services.airlock-machine-autostart.serviceConfig.ExecStart;
+          sync = host.systemd.services.airlock-machine-autostart.serviceConfig.ExecStartPost;
         }};
+        setupSync = host.systemd.services.airlock-setup-config.serviceConfig.ExecStartPost;
         callers = host.airlock.devDom0Terminal.callers;
         policy = builtins.readFile "${{policy}}/etc/qubes/policy.d/40-airlock-dev-dom0-terminal.policy";
         dev = {{
@@ -109,6 +111,8 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["autostart"]["command"].endswith(
         "boot-start --require-running sys-gui"
     )
+    assert report["autostart"]["sync"].endswith("/bin/journalctl --sync")
+    assert report["setupSync"].endswith("/bin/journalctl --sync")
 
     assert report["domains"] == ["sys-dev", "sys-gui", "usr-browser", "usr-home"]
     assert report["default_netvm"] == "sys-dev"

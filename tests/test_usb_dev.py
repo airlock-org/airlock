@@ -125,6 +125,8 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
           rootHash = host.users.users.root.hashedPassword;
         }};
       in {{
+        specialisations = builtins.attrNames config.specialisation;
+        journal = config.services.journald.settings.Journal;
         dom0Logins = [ (dom0Login config) ] ++ builtins.map
           (name: dom0Login config.specialisation.${{name}}.configuration)
           (builtins.attrNames config.specialisation);
@@ -146,6 +148,13 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
         check=True,
     )
     configuration = json.loads(result.stdout)
+    assert configuration["specialisations"] == [
+        "usb-gui-lab",
+        "usb-lab",
+        "usb-text-recovery",
+    ]
+    assert configuration["journal"]["Storage"] == "persistent"
+    assert configuration["journal"]["SyncIntervalSec"] == "1s"
     for login in configuration["dom0Logins"]:
         assert login == {
             "mutable": False,

@@ -370,7 +370,10 @@ def test_nix_selection_drives_reservation_assignment_and_start():
         "boot-framebuffer.py --gpu 0000:04:00.0"
         in service["serviceConfig"]["ExecStartPre"][2]
     )
-    assert "ExecStartPost" not in service["serviceConfig"]
+    assert service["serviceConfig"]["ExecStartPre"][3].endswith(
+        "/bin/journalctl --sync"
+    )
+    assert service["serviceConfig"]["ExecStartPost"].endswith("/bin/journalctl --sync")
     assert report["inputTarget"] == []  # Only pulled in after successful VM start.
     assert report["inputServices"]
     assert report["inputEvents"]["wantedBy"] == ["multi-user.target"]
