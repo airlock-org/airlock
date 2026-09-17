@@ -30,4 +30,5 @@
     sys-dev owns physical networking and provides Tailnet development access
     run: tailscale ssh user@sys-dev; then airlock-dom0-shell
   '';
+  environment.etc."airlock/boot-role".text = "normal\n";
 }

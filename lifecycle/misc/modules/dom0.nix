@@ -11,6 +11,12 @@ let
   qubeGuiSmoke = pkgs.callPackage ../tools/pkgs/airlock-qube-gui-smoke { };
   qubesStorage = pkgs.python3.pkgs.callPackage ../../runtime/tools/pkgs/airlock-qubes-storage { };
   observeDom0 = pkgs.callPackage ../../runtime/tools/pkgs/airlock-observe { };
+  bootMenu = pkgs.writeShellScript "airlock-boot-menu" ''
+    exec ${pkgs.python3}/bin/python3 ${../tools/scripts/boot-menu.py} \
+      --esp ${lib.escapeShellArg config.boot.loader.efi.efiSysMountPoint} \
+      --recovery-profile /nix/var/nix/profiles/system-profiles/airlock-recovery \
+      --nix-env ${config.nix.package}/bin/nix-env
+  '';
   qubesSmoke = pkgs.callPackage ../tools/pkgs/airlock-qubes-smoke { };
   qrexecDom0 = pkgs.python3.pkgs.qubes-core-qrexec.dom0;
   qubesAdminClient = pkgs.python3.pkgs.qubes-core-admin-client;
@@ -241,6 +247,8 @@ in
 
     gui.enable = lib.mkEnableOption "Qubes GUI integration in dom0";
 
+    bootMenu.enable = lib.mkEnableOption "the concise Airlock USB boot menu";
+
     observability.enable = lib.mkOption {
       type = lib.types.bool;
       default = imageCfg.devMode.enable;
@@ -429,6 +437,7 @@ in
           -e 's/^title \(.*\)$/title \1 (Recovery: without Xen)/' \
           "$entry"
       done
+      ${lib.optionalString cfg.bootMenu.enable bootMenu}
     '';
 
     virtualisation.libvirtd.firewallBackend = lib.mkForce cfg.libvirtFirewallBackend;

@@ -407,7 +407,7 @@
             airlock.machineDeployment.enable = true;
             airlock.machineDeployment.profile = "usb-dev";
             specialisation.usb-text-recovery.configuration = {
-              imports = [ ./lifecycle/image/profiles/usb-headless.nix ];
+              imports = [ ./lifecycle/image/profiles/usb-recovery.nix ];
               # Do not reconcile or start VMs from possibly changed qubes.xml.
               airlock.qubes.setupConfigOnBoot.enable = lib.mkForce false;
             };

@@ -30,18 +30,17 @@ is impossible, and successful guest startup would not prove safe reset.
 
 ## Boot choices
 
-The USB currently contains four Xen boot choices, plus upstream non-Xen recovery
-entries. Verify the generated entries before the first hardware experiment:
+The user-facing systemd-boot menu is intentionally limited to:
 
-| Xen entry | Display | VM startup |
-| --- | --- | --- |
-| Default | Existing hybrid XFCE | sys-gui started by the desktop relay after setup |
-| `usb-text-recovery` | dom0 text console, AMD not hidden | No setup or guest autostart |
-| `usb-gui-lab` | Temporary dom0 bootstrap text, then stock sys-gui GNOME login | Validated assignment, framebuffer release, one sys-gui start, then input forwarding |
-| `usb-lab` | Temporary dom0 bootstrap text, then sys-gui GNOME | General development topology, with sys-dev Tailnet access |
+| Entry | Behavior |
+| --- | --- |
+| `Airlock` | Latest `usb-lab` Xen generation; normal sys-gui, sys-dev and desktop-VM startup |
+| `Airlock (recovery)` | Xen text console; no topology setup, guest startup, GPU handoff or automatic networking |
+| `Airlock (generation N)` | A retained older normal Xen generation |
 
-The Hyprland and XFCE physical-GUI builders remain in the source tree, but their
-boot entries are disabled until those experiments resume.
+`Airlock` is always the default. The configured five-generation limit is retained;
+only the newest recovery entry is shown. The old hybrid, GUI-only, Hyprland and
+XFCE builders remain in the source tree but do not clutter the boot menu.
 
 GNOME and Hyprland are not yet hardware-verified. The successful desktop evidence
 above is for XFCE. See [the Hyprland milestone](sys-gui-hyprland.md) for its
@@ -59,16 +58,15 @@ configuration. Existing saved memory must be inspected and discarded for the
 affected, stopped guest before its next cold start; this does not remove its
 virtual disks.
 Do not activate a specialisation with `switch-to-configuration switch`: GPU
-ownership is established during boot. The upstream systemd-boot/Xen builder
-keeps the normal generation as the default; do not manually make the lab entry
-the saved default.
+ownership is established during boot. The Airlock menu normalizer makes the
+latest normal `usb-lab` Xen generation the saved `Airlock` default.
 
 After a fresh flash, log in with `user` / `password` and open **dom0 Terminal
 (Development)** from the applications menu to configure dom0 networking and
 Tailscale. Follow [the USB setup commands and security caveat](usb-dev.md#first-boot).
-The ordinary terminal remains a sys-gui shell. If desktop/input fails, use
-`usb-text-recovery` with Xen to establish networking, then reboot into the lab
-**without reflashing**.
+The ordinary terminal remains a sys-gui shell. If desktop/input fails, select
+`Airlock (recovery)`, log in as `airlock`, and run
+`sudo airlock-recovery-network`; then reboot into `Airlock` **without reflashing**.
 The lab now attempts to show bootstrap progress on dom0's firmware console.
 There is still a display gap after framebuffer release while the guest starts.
 If firmware-console initialization fails, it may remain blank throughout;
@@ -149,11 +147,12 @@ images assign and start the reviewed GPU on lab boot; use the
 
 1. Boot the default USB. Confirm the laptop's internal filesystems are not
    mounted, Xen is running, XFCE/input works and Tailscale SSH reconnects.
-2. An optional recovery rehearsal is to boot **`usb-text-recovery` with Xen**,
+2. An optional recovery rehearsal is to boot **`Airlock (recovery)`**,
    verify console login and remote access, then return to the default entry.
    This rehearsal was skipped for the current experiment; see the plan's
    recovery notes before any persistent device assignment.
-3. Select **`usb-gui-lab` with Xen** once from the boot menu.
+3. Older images exposed **`usb-gui-lab` with Xen** directly. Current images
+   retain that builder in source but hide it from the concise boot menu.
    Expect a blank panel. Reconnect over SSH and collect evidence:
 
    ```sh
@@ -224,7 +223,7 @@ Upstream's permissive PCI suggestion is deliberately not enabled here.
 ## Recovery
 
 If the GPU or the host wedges, a cold power cycle may be necessary. Select
-`usb-text-recovery` **with Xen**, not the AMD entry. The profile does not hide
+`Airlock (recovery)`. This is the Xen text-recovery profile; it does not hide
 the GPU and masks guest autostart even if Qubes' mutable state has stale links.
 To return to the hybrid profile after a physical-GPU boot, inspect
 `qvm-pci list --assignments` and unassign only the verified experimental

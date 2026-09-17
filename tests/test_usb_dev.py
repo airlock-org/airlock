@@ -127,6 +127,8 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
       in {{
         specialisations = builtins.attrNames config.specialisation;
         journal = config.services.journald.settings.Journal;
+        conciseBootMenu = config.airlock.dom0.bootMenu.enable;
+        bootHook = config.boot.loader.systemd-boot.extraInstallCommands;
         dom0Logins = [ (dom0Login config) ] ++ builtins.map
           (name: dom0Login config.specialisation.${{name}}.configuration)
           (builtins.attrNames config.specialisation);
@@ -138,6 +140,23 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
         normalPassword = configs.airlock-domain-sys-gui.config.users.users.user.initialPassword;
         labHasPasswordService = builtins.hasAttr "airlock-usb-gui-password"
           config.specialisation.usb-gui-lab.configuration.systemd.services;
+        recovery = let
+          recoveryConfig = config.specialisation.usb-text-recovery.configuration;
+          command = builtins.head (builtins.filter (package:
+            (package.pname or package.name) == "airlock-recovery-network"
+          ) recoveryConfig.environment.systemPackages);
+        in {{
+          role = recoveryConfig.environment.etc."airlock/boot-role".text;
+          xen = recoveryConfig.virtualisation.xen.enable;
+          display = recoveryConfig.services.xserver.enable;
+          setup = recoveryConfig.airlock.qubes.setupConfigOnBoot.enable;
+          networkManager = recoveryConfig.networking.networkmanager.enable;
+          networkManagerWantedBy = recoveryConfig.systemd.services.NetworkManager.wantedBy;
+          tailscale = recoveryConfig.services.tailscale.enable;
+          tailscaleWantedBy = recoveryConfig.systemd.services.tailscaled.wantedBy;
+          ssh = recoveryConfig.services.openssh.enable;
+          command = builtins.readFile "${{command}}/bin/airlock-recovery-network";
+        }};
       }}
     """
     result = subprocess.run(
@@ -155,6 +174,26 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
     ]
     assert configuration["journal"]["Storage"] == "persistent"
     assert configuration["journal"]["SyncIntervalSec"] == "1s"
+    assert configuration["conciseBootMenu"] is True
+    assert "-airlock-boot-menu" in configuration["bootHook"]
+    recovery = configuration["recovery"]
+    assert recovery["role"] == "recovery\n"
+    assert recovery["xen"] is True
+    assert recovery["display"] is False
+    assert recovery["setup"] is False
+    assert recovery["networkManager"] is True
+    assert recovery["networkManagerWantedBy"] == []
+    assert recovery["tailscale"] is True
+    assert recovery["tailscaleWantedBy"] == []
+    assert recovery["ssh"] is True
+    assert (
+        "systemctl start NetworkManager.service" in configuration["recovery"]["command"]
+    )
+    assert "systemctl start tailscaled.service" in configuration["recovery"]["command"]
+    assert (
+        "tailscale up --ssh --hostname=airlock-recovery"
+        in configuration["recovery"]["command"]
+    )
     for login in configuration["dom0Logins"]:
         assert login == {
             "mutable": False,

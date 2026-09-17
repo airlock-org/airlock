@@ -75,8 +75,10 @@ PYTHON_FILES := \
 	tests/test_dev_dom0_terminal.py \
 	tests/test_qubes_gui_window_state.py \
 	lifecycle/misc/tools/scripts/boot-framebuffer.py \
+	lifecycle/misc/tools/scripts/boot-menu.py \
 	tests/test_boot_framebuffer.py \
 	tests/test_boot_entry_labels.py \
+	tests/test_boot_menu.py \
 	tests/test_prepared_store.py \
 	lifecycle/runtime/tools/pkgs/airlock-amd-vbios/src/airlock_amd_vbios/*.py \
 	lifecycle/image/tools/amd-vbios.py \
@@ -114,7 +116,7 @@ PYTEST_DISTRIBUTION = $(if $(TEST_JOBS),--dist loadgroup,)
 PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_LOG_DIR)/pytest-junit.xml" --json-report --json-report-file "$(PYTEST_LOG_DIR)/pytest-report.json"
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
-PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py tests/test_usr_home_gnome.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_amd_vbios.py tests/test_amd_vbios_runtime.py tests/test_amd_vbios_libvirt.py tests/test_amd_vbios_events.py tests/test_gui_gpu_assignment.py tests/test_input_events.py tests/test_gui_gpu_boot_order.py tests/test_dev_dom0_terminal.py tests/test_qubes_gui_window_state.py tests/test_boot_framebuffer.py tests/test_boot_entry_labels.py)
+PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,tests/test_local.py tests/test_gpu.py tests/test_gui_minimal.py tests/test_usr_home_gnome.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_amd_vbios.py tests/test_amd_vbios_runtime.py tests/test_amd_vbios_libvirt.py tests/test_amd_vbios_events.py tests/test_gui_gpu_assignment.py tests/test_input_events.py tests/test_gui_gpu_boot_order.py tests/test_dev_dom0_terminal.py tests/test_qubes_gui_window_state.py tests/test_boot_framebuffer.py tests/test_boot_entry_labels.py tests/test_boot_menu.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_local.py::test_local_check[$(test)]')
 PYTEST_DEFAULT_TARGETS += $(if $(TESTS),,tests/test_machine_deploy.py)
 

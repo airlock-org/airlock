@@ -52,6 +52,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         ) host.virtualisation.qubes.packages);
       in {{
         domains = builtins.attrNames host.airlock.qubes.domains;
+        bootRole = host.environment.etc."airlock/boot-role".text;
         inherit (host.airlock.qubes.prefs) default_netvm;
         browserNetvm = host.airlock.qubes.domains.usr-browser.netvm;
         guiPci = host.airlock.qubes.domains.sys-gui.devices.pci;
@@ -115,6 +116,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["setupSync"].endswith("/bin/journalctl --sync")
 
     assert report["domains"] == ["sys-dev", "sys-gui", "usr-browser", "usr-home"]
+    assert report["bootRole"] == "normal\n"
     assert report["default_netvm"] == "sys-dev"
     assert report["browserNetvm"] == "sys-dev"
     assert report["guiHostname"] == "sys-gui"

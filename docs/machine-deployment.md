@@ -99,13 +99,13 @@ After reboot, run `machine-verify` again. Only `complete` means both host and
 guest generation checks passed. Window behavior still needs its own functional
 test; generation equality alone is not a GUI acceptance test.
 
-At the boot menu, use the default Xen entry for the newest generation. A deployed
-profile is a standalone generation and may be titled simply `NixOS (with Xen
-Hypervisor)`; the `usb-lab` specialisation entry can belong to the original image
-generation instead. Check the generation number, not just the profile name.
-Entries marked `Recovery: without Xen` are not normal Qubes boot targets. The
-post-install label hook strips that marker from Xen entries, including retained
-older generations whose titles upstream copied from recovery entries.
+At the boot menu, use `Airlock`, which points to the newest selected normal Xen
+generation. Retained normal generations are titled `Airlock (generation N)`.
+`Airlock (recovery)` is the newest Xen text-recovery entry and does not start
+VMs, hand off the GPU or bring up networking automatically. The repository-owned
+post-install normalizer applies these names after image builds and deployments.
+Recovery is pinned as a separate Nix system profile, so it remains available
+when the original image generation falls outside the retained history.
 
 The source revision and lock-file hash are recorded in the release. Local build
 receipts and GC roots are under `.airlock-logs/machine-deploy/<commit>/`.

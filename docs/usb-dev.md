@@ -1,7 +1,8 @@
 # Persistent USB developer system
 
 Physical USB boot is still being validated. This is a writable disk image, not
-a live ISO or an installer. XFCE remains the desktop. Normal VM targets are unchanged.
+a live ISO or an installer. The normal `Airlock` entry uses the `usb-lab` GNOME
+topology. Normal VM targets are unchanged.
 
 The USB developer profile disables USBGuard so the inherited dom0 default-block
 policy cannot disconnect its USB root disk. This development-only exception also
@@ -12,8 +13,7 @@ sync at their successful boundaries; the GPU path syncs immediately before the
 visible bootstrap console is released as well. A sudden power cut can still lose
 the final in-flight messages, but completed boot milestones are explicitly durable.
 Before a physical GUI test, validate the image with a virtual USB boot disk;
-virtio-only testing does not exercise USB root access. Use the default hybrid GUI
-entry for this checkpoint, not the experimental AMD passthrough entry.
+virtio-only testing does not exercise USB root access.
 
 ## Build and provision on the development host
 
@@ -205,6 +205,13 @@ codex
 Complete the Tailscale authentication link on another connected device if
 needed. This works from the physical AMD lab without a recovery boot once its
 desktop/input works. The ordinary guest terminal is still a sys-gui shell.
+
+The boot menu also provides `Airlock (recovery)`: a Xen text console that skips
+topology setup, all guest startup and GPU handoff. It starts offline. Log in as
+`airlock`, then run `sudo airlock-recovery-network` to start NetworkManager and
+Tailscale SSH in dom0. With no saved Wi-Fi connection, use the `nmcli --ask`
+command printed by the launcher and invoke it again. `Airlock` remains the
+default latest generation; older normal generations remain directly selectable.
 
 The launcher uses a byte stream over [Qubes qrexec](https://github.com/QubesOS/qubes-doc/blob/main/developer/services/qrexec.rst),
 not a dom0 X server, SSH listener or general `qubes.VMShell` permission. The

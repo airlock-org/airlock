@@ -13,6 +13,7 @@
     enable = true;
     user = "airlock";
     gui.enable = true;
+    bootMenu.enable = true;
     devModeNetworkProxy.enable = false;
     dom0Resources = { memoryMiB = 8192; maxMemoryMiB = 8192; };
   };

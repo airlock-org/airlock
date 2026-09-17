@@ -12,9 +12,11 @@ def test_boot_labels_repair_retained_entries_and_are_idempotent(tmp_path):
     hook = source.split(
         "boot.loader.systemd-boot.extraInstallCommands = lib.mkAfter ''", 1
     )[1].split("\n    '';", 1)[0]
-    hook = hook.replace(
-        "${config.boot.loader.efi.efiSysMountPoint}", str(tmp_path)
-    ).replace("${pkgs.gnused}/bin/sed", shutil.which("sed"))
+    hook = (
+        hook.replace("${config.boot.loader.efi.efiSysMountPoint}", str(tmp_path))
+        .replace("${pkgs.gnused}/bin/sed", shutil.which("sed"))
+        .replace("${lib.optionalString cfg.bootMenu.enable bootMenu}", "")
+    )
     entries = tmp_path / "loader/entries"
     entries.mkdir(parents=True)
     recovery = " (Recovery: without Xen)"
