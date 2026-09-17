@@ -2032,8 +2032,9 @@ def check_personal_domains(repo_root: Path, log_dir: Path) -> None:
     assert "homeApplicationLauncher" in sys_gui_guest
     assert "homeApplicationDesktop" in sys_gui_guest
     assert "qubes.StartApp+firefox" in sys_gui_guest
-    assert "--auto --service usr-home" in sys_gui_guest
-    assert "--auto --service usr-browser" in sys_gui_guest
+    assert "airlock-launch-qube-app" in sys_gui_guest
+    assert "usr-home qubes.StartApp+${application.application}" in sys_gui_guest
+    assert "Firefox usr-browser qubes.StartApp+firefox" in sys_gui_guest
     assert '"inode/directory" = "airlock-files.desktop"' in sys_gui_guest
     assert '"x-scheme-handler/https" = "firefox.desktop"' in sys_gui_guest
     assert "airlock-bootstrap-desktop-launchers" in sys_gui_guest

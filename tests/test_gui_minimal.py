@@ -135,6 +135,17 @@ def test_gui_minimal_topology_and_desktop():
     assert poweroff_rules[0]["commands"][0]["options"] == ["NOPASSWD"]
     assert "airlock.Dom0Poweroff + sys-gui dom0 allow" in report["hostPoweroffPolicy"]
     assert "airlock.Dom0Poweroff * @anyvm @anyvm deny" in report["hostPoweroffPolicy"]
+    assert (
+        "airlock.AppSessionReady + sys-gui usr-home allow"
+        in report["hostPoweroffPolicy"]
+    )
+    assert (
+        "airlock.AppSessionReady + sys-gui usr-browser allow"
+        in report["hostPoweroffPolicy"]
+    )
+    assert (
+        "airlock.AppSessionReady * @anyvm @anyvm deny" in report["hostPoweroffPolicy"]
+    )
     # Exercise the packaged handler's boundary without powering off the test host.
     handler = re.sub(
         r"/run/wrappers/bin/sudo -n /nix/store/[^/]+/bin/systemctl poweroff",

@@ -83,6 +83,11 @@ let
     qubes.WindowIconUpdater * @tag:guivm-sys-gui dom0 allow target=sys-gui
     qubes.Notifications * @tag:guivm-sys-gui @default allow target=sys-gui autostart=no
     qubes.WaitForSession * sys-gui @tag:guivm-sys-gui allow
+    # Cross-VM desktop launchers use this narrow barrier before StartApp.  The
+    # guest handler proves its graphical user session can open X and D-Bus.
+    airlock.AppSessionReady + sys-gui usr-home allow
+    airlock.AppSessionReady + sys-gui usr-browser allow
+    airlock.AppSessionReady * @anyvm @anyvm deny
     admin.vm.List * sys-gui dom0 allow
     admin.vm.List * sys-gui @tag:guivm-sys-gui allow target=dom0
     admin.Events * sys-gui dom0 allow

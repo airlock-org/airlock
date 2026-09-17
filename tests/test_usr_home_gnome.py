@@ -38,6 +38,9 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         workspaceEtc = builtins.attrNames workspace.environment.etc;
         workspaceStartApp = workspace.environment.etc."qubes-rpc/qubes.StartApp".source;
         workspaceStartAppConfig = workspace.environment.etc."qubes/rpc-config/qubes.StartApp".text;
+        launchHelper = builtins.readFile "${{builtins.head (builtins.filter
+          (package: (package.name or "") == "airlock-launch-qube-app")
+          workspace.environment.systemPackages)}}/bin/airlock-launch-qube-app";
         workspaceGSettings = workspace.services.desktopManager.gnome.extraGSettingsOverrides;
         guiLogRules = workspace.systemd.tmpfiles.rules;
         mutterFlags = workspace.nixpkgs.pkgs.mutter.mesonFlags;
@@ -53,6 +56,8 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
           startLimit = cfg.systemd.services.qubes-gui-agent.unitConfig.StartLimitIntervalSec;
           packages = map (package: package.pname or package.name or "") cfg.environment.systemPackages;
           monitorLayout = builtins.readFile cfg.environment.etc."qubes-rpc/qubes.SetMonitorLayout".source;
+          sessionReady = builtins.readFile cfg.environment.etc."qubes-rpc/airlock.AppSessionReady".source;
+          sessionReadyConfig = cfg.environment.etc."qubes/rpc-config/airlock.AppSessionReady".text;
           scale = cfg.airlock.appGui.scale;
           forkAutostart = cfg.environment.etc."xdg/autostart/qubes-qrexec-fork-server.desktop".text;
           wantedBy = cfg.systemd.services.qubes-gui-agent.wantedBy;
@@ -93,6 +98,11 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
         assert "export PATH=" in guest["monitorLayout"]
         assert "timeout --signal=TERM --kill-after=5s 60s" in guest["monitorLayout"]
         assert "/bin/qubes-set-monitor-layout" in guest["monitorLayout"]
+        assert (
+            "airlock.AppSessionReady is restricted to sys-gui" in guest["sessionReady"]
+        )
+        assert "/bin/xdpyinfo -display" in guest["sessionReady"]
+        assert guest["sessionReadyConfig"] == "force-user='user'\n"
         assert guest["scale"] == 3
         assert "/bin/qrexec-fork-server" in guest["forkAutostart"]
         assert "Exec=/usr/bin/" not in guest["forkAutostart"]
@@ -158,6 +168,9 @@ def test_gnome_desktop_work_applications_are_routed_to_usr_home():
     )
     assert "airlock-qubes-start-app" in report["workspaceStartApp"]
     assert "force-user=" in report["workspaceStartAppConfig"]
+    assert "airlock.AppSessionReady" in report["launchHelper"]
+    assert "--foreground --signal=TERM --kill-after=5s 90s" in report["launchHelper"]
+    assert "notify-send" in report["launchHelper"]
     assert "ding@rastersoft.com" in report["workspaceGSettings"]
 
     packages = set(report["workspacePackages"])

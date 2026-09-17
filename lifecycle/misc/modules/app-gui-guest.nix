@@ -48,6 +48,27 @@ let
     exec ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=5s 60s \
       ${agent}/bin/qubes-set-monitor-layout "$@"
   '';
+  sessionReady = pkgs.writeShellScript "airlock-app-session-ready" ''
+    set -eu
+
+    [ "''${QREXEC_REMOTE_DOMAIN:-}" = sys-gui ] || {
+      echo "airlock.AppSessionReady is restricted to sys-gui" >&2
+      exit 1
+    }
+    [ -z "''${QREXEC_SERVICE_ARGUMENT:-}" ] || {
+      echo "airlock.AppSessionReady does not accept arguments" >&2
+      exit 1
+    }
+
+    # force-user routes this service through the graphical user's
+    # qrexec-fork-server.  Also prove that the inherited session environment
+    # can reach X and D-Bus before a pending StartApp request is released.
+    [ -n "''${DISPLAY:-}" ]
+    [ -n "''${XDG_RUNTIME_DIR:-}" ]
+    exec ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=5s 60s \
+      ${pkgs.bash}/bin/bash -c \
+      'until [ -S "$XDG_RUNTIME_DIR/bus" ] && ${pkgs.xdpyinfo}/bin/xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; do ${pkgs.coreutils}/bin/sleep 0.2; done'
+  '';
 in
 {
   options.airlock.appGui.scale = lib.mkOption {
@@ -69,6 +90,7 @@ in
       pkgs.libxcvt
       pkgs.xrandr
       pkgs.xsetroot
+      pkgs.xdpyinfo
     ];
     services.udev.packages = [ agent ];
     services.dbus.enable = true;
@@ -128,6 +150,14 @@ in
       "X11/xinit/xinitrc".source = session;
       "qubes-rpc/qubes.SetMonitorLayout".source = monitorLayout;
       "qubes/rpc-config/qubes.SetMonitorLayout".text = "force-user='${config.airlock.qubeGuest.user}'\n";
+      "qubes-rpc/airlock.AppSessionReady" = {
+        source = sessionReady;
+        mode = "0555";
+      };
+      "qubes/rpc-config/airlock.AppSessionReady" = {
+        text = "force-user='${config.airlock.qubeGuest.user}'\n";
+        mode = "0444";
+      };
     };
   };
 }

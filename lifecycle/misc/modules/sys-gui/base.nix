@@ -36,11 +36,48 @@ let
     export LD_PRELOAD=${pkgs.qubes-gui-daemon}/lib/qubes-gui-daemon/shmoverride.so
     exec ${pkgs.xorg-server}/bin/Xorg "$@"
   '';
+  appLauncher = pkgs.writeShellScriptBin "airlock-launch-qube-app" ''
+    set -u
+
+    label="$1"
+    target="$2"
+    service="$3"
+    log="$(${pkgs.coreutils}/bin/mktemp --tmpdir="''${XDG_RUNTIME_DIR:-/tmp}" airlock-app-launch.XXXXXX)"
+    trap '${pkgs.coreutils}/bin/rm -f "$log"' EXIT
+
+    ${pkgs.coreutils}/bin/timeout --foreground --signal=TERM --kill-after=5s 90s \
+      ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
+      --auto --gui --service "$target" airlock.AppSessionReady \
+      >"$log" 2>&1
+    ready_status=$?
+    if [ "$ready_status" -ne 0 ]; then
+      ${pkgs.systemd}/bin/systemd-cat -t airlock-app-launch <"$log" || true
+      if [ "$ready_status" -eq 124 ]; then
+        detail="$target did not become ready within 90 seconds."
+      else
+        detail="$target could not start its graphical session."
+      fi
+      ${pkgs.libnotify}/bin/notify-send --app-name=Airlock \
+        "Could not start $label" "$detail" || true
+      exit "$ready_status"
+    fi
+
+    ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
+      --auto --gui --service "$target" "$service" >"$log" 2>&1
+    app_status=$?
+    if [ "$app_status" -ne 0 ]; then
+      ${pkgs.systemd}/bin/systemd-cat -t airlock-app-launch <"$log" || true
+      ${pkgs.libnotify}/bin/notify-send --app-name=Airlock \
+        "Could not start $label" \
+        "$target rejected the application request." || true
+    fi
+    exit "$app_status"
+  '';
   homeApplicationLauncher = application:
     pkgs.writeShellScriptBin "airlock-launch-${application.launcher}" ''
       set -eu
-      exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
-        --auto --service usr-home qubes.StartApp+${application.application}
+      exec ${appLauncher}/bin/airlock-launch-qube-app ${lib.escapeShellArg application.desktopName} \
+        usr-home qubes.StartApp+${application.application}
     '';
   homeApplicationDesktop = application:
     pkgs.makeDesktopItem {
@@ -63,13 +100,11 @@ let
   browserLauncher = pkgs.writeShellScriptBin "airlock-launch-browser" ''
     set -eu
     if [ "$#" -eq 0 ]; then
-      exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
-        --auto --service usr-browser qubes.StartApp+firefox
+      exec ${appLauncher}/bin/airlock-launch-qube-app Firefox usr-browser qubes.StartApp+firefox
     fi
     # URI activation is deliberately a separate fixed RPC, rather than a
     # general shell capability from sys-gui into the browser domain.
-    exec ${pkgs.python3.pkgs.qubes-core-admin-client}/bin/qvm-run \
-      --auto --service usr-browser "airlock.OpenUrl+$1"
+    exec ${appLauncher}/bin/airlock-launch-qube-app Firefox usr-browser "airlock.OpenUrl+$1"
   '';
   browserDesktop = pkgs.makeDesktopItem {
     name = "firefox";
@@ -286,6 +321,7 @@ in
       pkgs.xorgserver
       pkgs.xdotool
       pkgs.xterm
+      appLauncher
     ]
     ++ lib.optionals cfg.personalLaunchers.enable (
       (map homeApplicationLauncher homeApplications)
