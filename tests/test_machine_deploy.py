@@ -1,6 +1,7 @@
 """Whole-machine deployment contracts, including interrupted transactions."""
 
 from copy import deepcopy
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -462,6 +463,37 @@ def test_existing_closure_requires_no_upload(monkeypatch):
             return "/nix/store/present"
 
     client.transfer("sys-dev-2", "sys-dev", "/nix/store/present", Session())
+
+
+def test_guest_receipt_is_read_from_sys_dev_and_installed_for_dom0(monkeypatch):
+    receipt = {
+        "schema": "airlock.closure-store.admission.v1",
+        "domain": "usr-home",
+        "generation": 2,
+    }
+    monkeypatch.setattr(client, "command", lambda *args: json.dumps(receipt))
+    assert (
+        client.remote_receipt("sys-dev", "/home/user/.local/share/airlock/receipt.json")
+        == receipt
+    )
+
+    class Session:
+        def __init__(self):
+            self.scripts = []
+
+        def run(self, script, **kwargs):
+            self.scripts.append(script)
+            return ""
+
+    session = Session()
+    destination = client.install_receipt(session, receipt)
+    expected = hashlib.sha256(
+        (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode()
+    ).hexdigest()
+    assert destination == f"/var/lib/airlock/machine/receipts/{expected}.json"
+    assert len(session.scripts) == 1
+    assert destination in session.scripts[0]
+    assert "usr-home" not in session.scripts[0]
 
 
 @pytest.mark.parametrize(

@@ -255,11 +255,51 @@ def transfer(target, bridge_vm, release, session):
     subprocess.run(["ssh", target, "rm -- " + shlex.quote(remote)], check=True)
 
 
+def remote_receipt(target, path):
+    payload = command("ssh", target, "cat -- " + shlex.quote(path))
+    receipt = json.loads(payload)
+    if not isinstance(receipt, dict):
+        raise RuntimeError("sys-dev admission receipt is not a JSON object")
+    return receipt
+
+
+def install_receipt(session, receipt):
+    payload = (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode()
+    digest = hashlib.sha256(payload).hexdigest()
+    encoded = base64.b64encode(payload).decode()
+    destination = f"/var/lib/airlock/machine/receipts/{digest}.json"
+    temporary = destination + ".new"
+    session.run(
+        "umask 077; mkdir -p /var/lib/airlock/machine/receipts; "
+        f"printf %s {shlex.quote(encoded)} | base64 -d > {shlex.quote(temporary)}; "
+        f"mv {shlex.quote(temporary)} {shlex.quote(destination)}"
+    )
+    return destination
+
+
+def deployed_engine(session):
+    return session.run(
+        "if [ -x /var/lib/airlock/machine/controller ]; then "
+        "printf %s /var/lib/airlock/machine/controller; else "
+        "printf %s /run/current-system/sw/bin/airlock-machine-deploy; fi"
+    )
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "action",
-        choices=["build", "plan", "apply", "status", "verify", "resume", "rollback"],
+        choices=[
+            "build",
+            "plan",
+            "apply",
+            "status",
+            "verify",
+            "resume",
+            "rollback",
+            "guest-plan",
+            "guest-apply",
+        ],
     )
     parser.add_argument("--target", help="sys-dev SSH/Tailscale name, e.g. sys-dev-2")
     parser.add_argument(
@@ -268,9 +308,14 @@ def main(argv=None):
     parser.add_argument(
         "--profile", default="usb-lab", choices=["usb-lab", "usb-gui-lab"]
     )
+    parser.add_argument(
+        "--receipt", help="path to the inactive admission receipt inside sys-dev"
+    )
     args = parser.parse_args(argv)
     if args.action != "build" and not args.target:
         parser.error("--target is required")
+    if args.action.startswith("guest-") and not args.receipt:
+        parser.error("--receipt is required for guest activation")
     session = None
     try:
         if args.action in ("build", "plan", "apply"):
@@ -288,7 +333,25 @@ def main(argv=None):
             if args.action == "build":
                 return 0
         session = Dom0(args.target)
-        if args.action in ("plan", "apply"):
+        if args.action in ("guest-plan", "guest-apply"):
+            receipt = remote_receipt(args.target, args.receipt)
+            receipt_path = install_receipt(session, receipt)
+            engine = deployed_engine(session)
+            preview = session.run(
+                shlex.join([engine, "guest-plan", receipt_path]), timeout=900
+            )
+            print(preview, flush=True)
+            if args.action == "guest-plan":
+                return 0
+            if (
+                input(
+                    "Activate this admitted guest generation (restarts affected VMs)? [y/N] "
+                ).lower()
+                != "y"
+            ):
+                return 0
+            action = [engine, "guest-apply", receipt_path]
+        elif args.action in ("plan", "apply"):
             transfer(args.target, args.bridge_vm, release, session)
             manifest = json.loads(
                 session.run("cat " + shlex.quote(release + "/release.json"))

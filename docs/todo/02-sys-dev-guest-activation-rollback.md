@@ -1,6 +1,7 @@
 # Activate and roll back a guest built in sys-dev
 
-Status: planned. Prerequisite [building and admitting a guest in sys-dev](../completed/01-sys-dev-machine-build.md) is complete.
+Status: implemented locally; fresh-image activation, reboot and rollback
+validation remain pending. Prerequisite [building and admitting a guest in sys-dev](../completed/01-sys-dev-machine-build.md) is complete.
 
 Take a real guest update built from the standalone `airlock-machine` checkout
 in sys-dev, activate its admitted pool generation, and prove that rollback
@@ -26,8 +27,9 @@ the new machine's baseline for rollback.
   pool generation, and retain that baseline for rollback. Never activate the
   synthetic single-object artifacts used for admission smoke tests.
 - Connect the admitted generation to the existing machine coordinator's
-  plan/apply/verify/rollback workflow. This connection is remaining work; do not
-  assume an admission response is already a deployable release. Validate the
+  plan/apply/verify/rollback workflow. The coordinator derives a persistent
+  whole-machine candidate from the currently selected release and changes only
+  the receipt's target guest. Validate the
   target, system path, source revision, lock hash, and required root/kernel
   artifacts before selecting it.
 - Keep whole-machine planning and journalled recovery. The plan must show only
@@ -36,6 +38,30 @@ the new machine's baseline for rollback.
 - Document the commands and recovery procedure. Keep this step within the
   existing development administration workflow; creating `sys-ctrl` and a new
   production activation interface belong to the broader plan.
+
+System-only admission now inherits the target's root and kernel identity from
+its current committed pool generation. The coordinator compares the receipt
+with the dom0-owned generation manifest, requires sys-dev/qrexec approval,
+passed verification and retention, and binds the exact generation into the
+candidate. Boot setup preserves that binding, so it does not need the original
+closure descriptor in sys-dev after activation.
+
+After recording the receipt path printed/stored by the build workflow, preview
+and apply it from the development checkout:
+
+```bash
+make machine-guest-plan DEPLOY_TARGET=sys-dev \
+  ADMISSION_RECEIPT=/home/user/.local/share/airlock/machine-build/admissions/<receipt>.json
+make machine-guest-apply DEPLOY_TARGET=sys-dev \
+  ADMISSION_RECEIPT=/home/user/.local/share/airlock/machine-build/admissions/<receipt>.json
+make machine-status DEPLOY_TARGET=sys-dev
+make machine-verify DEPLOY_TARGET=sys-dev
+```
+
+`machine-guest-plan` copies only the small receipt, validates it against the
+pool and shows the complete machine plan. `machine-guest-apply` asks before
+launching the existing detached, journalled coordinator. Use the normal
+`machine-resume` and `machine-rollback` commands for recovery.
 
 ## Acceptance
 
@@ -58,3 +84,8 @@ extend the existing nested flow where practical, and follow
 machine-readable results under `.airlock-logs/` and remove the test sentinel
 after verification; preserve retained generations through the normal pool
 retention/GC mechanisms.
+
+Local pytest coverage exercises exact-generation binding, rejected identity,
+provenance, verification and retention, persistence of the binding at boot,
+and both resume and rollback after an interrupted activation. These tests do
+not satisfy the remaining physical acceptance criteria above.

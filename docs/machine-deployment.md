@@ -84,6 +84,20 @@ make machine-status DEPLOY_TARGET=sys-dev-2
 make machine-verify DEPLOY_TARGET=sys-dev-2
 ```
 
+For a guest closure already built and admitted by sys-dev, the development
+coordinator can derive a one-guest candidate without building or transferring a
+second whole-machine release:
+
+```bash
+make machine-guest-plan DEPLOY_TARGET=sys-dev-2 ADMISSION_RECEIPT=/home/user/.local/share/airlock/machine-build/admissions/<receipt>.json
+make machine-guest-apply DEPLOY_TARGET=sys-dev-2 ADMISSION_RECEIPT=/home/user/.local/share/airlock/machine-build/admissions/<receipt>.json
+```
+
+The receipt path is inside sys-dev. Dom0 validates it against the retained pool
+generation and keeps the resulting candidate and exact generation binding in
+the machine journal. Apply, verify, reboot handling, resume and rollback then
+use the same coordinator flow as an ordinary whole-machine release.
+
 `machine-build` needs no remote machine. All commands default to the internal
 `usb-lab` deployment profile; this is not a boot-menu entry.
 `DEPLOY_PROFILE=usb-gui-lab` builds that complete profile instead, but its usual
