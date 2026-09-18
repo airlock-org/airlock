@@ -1,7 +1,7 @@
 # Remove Dom0 development tools through sys-dev deployment
 
-Status: planned. Depends on the sys-dev guest activation/rollback work and a
-sys-dev-originated whole-machine release/plan/apply path.
+Status: planned. Depends on [sys-dev guest activation/rollback](02-sys-dev-guest-activation-rollback.md)
+and [sys-dev whole-machine deployment](03-sys-dev-machine-deployment.md).
 
 Remove the development-only Dom0 Nix packages (`codex`, `git`, and `zellij`)
 from `airlock-machine/lifecycle/misc/modules/dom0.nix`. Make and commit that

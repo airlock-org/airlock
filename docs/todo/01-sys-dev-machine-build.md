@@ -6,7 +6,7 @@ remain pending.
 Put a usable standalone `airlock-machine` Git checkout on the physical machine
 in `sys-dev`, then build a small guest configuration change there and send its
 closure through the [existing pool admission path](../completed/sys-dev-pool-admission.md).
-This is the next small step toward [sys-ctrl](sys-ctrl.md).
+This is the next small step toward [sys-ctrl](05-sys-ctrl.md).
 
 ## Scope
 
@@ -28,7 +28,7 @@ This is the next small step toward [sys-ctrl](sys-ctrl.md).
   source revision, lock hash, system path, and returned pool generation.
 
 Limit this step to checkout, build, and inactive admission. Follow with the
-[guest activation and rollback trial](sys-dev-guest-activation-rollback.md).
+[guest activation and rollback trial](02-sys-dev-guest-activation-rollback.md).
 Creation of `sys-ctrl` remains later work. The checkout must remain a
 reproducible copy of committed machine source;
 do not leave the only implementation of a fix on the live machine.

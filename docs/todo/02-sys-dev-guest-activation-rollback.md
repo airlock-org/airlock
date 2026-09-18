@@ -1,6 +1,6 @@
 # Activate and roll back a guest built in sys-dev
 
-Status: planned. Depends on [building and admitting a guest in sys-dev](sys-dev-machine-build.md).
+Status: planned. Depends on [building and admitting a guest in sys-dev](01-sys-dev-machine-build.md).
 
 Take a real guest update built from the standalone `airlock-machine` checkout
 in sys-dev, activate its admitted pool generation, and prove that rollback
