@@ -26,7 +26,9 @@
           seedPath = builtins.getEnv "AIRLOCK_MACHINE_SEED_ARCHIVE";
           airlockMachineSeedArchive =
             if seedPath == "" then null else builtins.path { path = seedPath; name = "airlock-machine-seed.tar.gz"; };
-          entries = airlock-machine.lib.machineGuestEntries system;
+          entries = airlock-machine.lib.mkMachineGuestEntries system {
+            inherit airlockMachineSeedArchive;
+          };
           pkgs = import nixpkgs {
             inherit system;
             overlays = [
@@ -49,6 +51,9 @@
         airlock-machine.lib.mkMachineConfiguration {
           inherit system storeSources;
           includeRelease = false;
+          extraGuestSpecialArgs = {
+            inherit airlockMachineSeedArchive;
+          };
           extraSpecialArgs = {
             airlockUsbPreparedStore = preparedStore;
             airlockUsbGuestEntries = entries;
