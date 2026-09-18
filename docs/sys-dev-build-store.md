@@ -1,6 +1,9 @@
 # sys-dev's pool-backed build store
 
-Implemented locally; fresh-image boot/build/restart validation is still pending.
+Implemented and physically validated on 2026-09-18: fresh-image boot, build,
+repeat-build reuse and inactive admission passed. Earlier whole-machine reboot
+testing established persistence; isolated sys-dev restart was waived for this
+milestone after an unresolved black-screen incident.
 No sys-ctrl or activation changes are included.
 
 The USB seed supplies a frozen `sys-dev-builder` pool generation containing the
@@ -47,13 +50,16 @@ local-only store. Missing build-only dependencies still require downloads/builds
    and no `builder-metadata` volume or `xvdi` dependency remains.
 2. Query an existing guest system through `airlock-config-nix path-info`, build
    a small change, and confirm unchanged input paths are absent from `upper`.
-3. Restart sys-dev and repeat the build: base identity and prior output must
+3. Reboot the machine and repeat the build: base identity and prior output must
    survive, with no input copying. Confirm the persistent pin remains in dom0.
-4. Resume the real guest build/inactive-admission trial in
-   [01-sys-dev-machine-build.md](todo/01-sys-dev-machine-build.md).
+4. Build and admit a real guest change; see the completed trial and evidence in
+   [01-sys-dev-machine-build.md](completed/01-sys-dev-machine-build.md).
 
 Pytest reads back the combined EROFS image with its external payload device,
 checks registration and package contents, and rejects missing external data.
 It also covers metadata/view consistency, shared-object counts, offline pin
 retention, Qubes volume serialization, and rejection of a changed/missing base
-identity. These checks are not a substitute for the pending physical boot test.
+identity. Physical testing also demonstrated reuse of read-only inputs without
+copying them into the private upper layer, retention during a running-VM GC
+trial, and full-machine reboot persistence. Offline pin retention is covered
+by automated tests, not a physical offline-GC trial.

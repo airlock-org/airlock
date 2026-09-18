@@ -182,8 +182,10 @@ records `objects_transferred`, `payload_bytes_transferred`, and reuse counts.
 Admission, GC, compaction, and recovery share a lock to protect negotiated reuse.
 Both sys-dev and dom0 need the updated image; the original full-artifact service
 remains available, but the new sender does not silently fall back to a full upload.
-Local protocol and prepared-pool tests cover this path; fresh-image physical
-validation remains pending.
+Fresh-image physical validation passed on 2026-09-18: a committed usr-home
+change built in sys-dev admitted 4 new objects (434,176 bytes) and reused 978.
+Generation 2 was retained but inactive; generation 1 and the running guest
+stayed unchanged. See the [completed build/admission trial](completed/01-sys-dev-machine-build.md).
 
 Measured on the physical USB laptop on 2026-09-16: incremental re-admission of
 the already deployed sys-gui closure took 2.13 seconds, reusing all 1,578 objects
