@@ -251,6 +251,63 @@ def test_transferred_artifact_builds_a_real_pool_view(seed_inputs, tmp_path):
     }
 
 
+def test_negotiated_admission_reuses_usb_seed_without_payload(
+    seed_inputs, tmp_path, monkeypatch
+):
+    specs, systems, source = seed_inputs
+    pool = tmp_path / "pool"
+    prepared.prepare_pool(pool, tmp_path / "descriptors", specs, str(pool))
+    common = "/nix/store/" + "a" * 32 + "-shared-package"
+    inventory_stream = io.BytesIO()
+    payload = io.BytesIO()
+
+    def negotiate(inventory):
+        artifacts.write_message(inventory_stream, inventory)
+        return {"schema": artifacts.SCHEMA_REQUEST, "missing": []}
+
+    monkeypatch.setattr(
+        artifacts,
+        "create_tar_fragment",
+        lambda *args: pytest.fail("USB-seeded objects must not be packaged"),
+    )
+    artifacts.write_artifact(
+        payload,
+        domain="usr-home",
+        system=systems[0],
+        closure_source=specs[0]["closure_source"],
+        root_source=specs[0]["root_source"],
+        kernel_name=specs[0]["kernel_name"],
+        source_revision="1" * 40,
+        lock_hash="2" * 64,
+        physical_store_root=source,
+        negotiate=negotiate,
+        path_info={
+            common: {"references": [], "narHash": "sha256-common", "narSize": 1},
+            systems[0]: {
+                "references": [common],
+                "narHash": "sha256-system",
+                "narSize": 2,
+            },
+        },
+    )
+    response = io.BytesIO()
+    result = artifacts.receive_incremental(
+        io.BytesIO(inventory_stream.getvalue() + payload.getvalue()),
+        response,
+        pool_root=pool,
+        expected_domain="usr-home",
+        approved_by="sys-dev",
+    )
+    assert json.loads(response.getvalue())["missing"] == []
+    assert result["objects_reused"] == 2
+    assert result["objects_transferred"] == result["objects_admitted"] == 0
+    assert result["payload_bytes_transferred"] == 0
+    assert result["activated"] is False
+    assert result["retained"] is True
+    manifest = core.read_json(result["manifest"])
+    assert Path(manifest["store"]["canonical_image"]).is_file()
+
+
 def test_tar_fragments_ignore_inode_timestamps_and_hardlink_layout(tmp_path):
     source = tmp_path / ("a" * 32 + "-package")
     source.mkdir()

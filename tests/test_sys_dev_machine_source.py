@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -142,3 +143,37 @@ def test_shallow_seed_archive_contains_only_the_pinned_checkout(tmp_path: Path):
     assert git(checkout, "rev-parse", "HEAD") == revision
     assert git(checkout, "rev-parse", "--is-shallow-repository") == "true"
     assert git(checkout, "rev-list", "--count", "HEAD") == "1"
+
+    # Exercise the rendered first-boot script in an isolated home. Ownership
+    # uses the test runner's UID/GID so this check needs no root privileges.
+    expression = f"""
+      let flake = builtins.getFlake "{ROOT}/airlock-machine";
+          entries = flake.lib.mkMachineGuestEntries "x86_64-linux" {{
+            airlockMachineSeedArchive = "/seed.tar.gz";
+          }};
+      in entries.lab-sys-dev.configuration.config.systemd.services.airlock-sys-dev-machine-seed.script
+    """
+    evaluated = subprocess.run(
+        ["nix", "eval", "--impure", "--raw", "--expr", expression],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    guest_home = tmp_path / "guest-home"
+    guest_home.mkdir()
+    script = (
+        evaluated.stdout.replace("/home/user", str(guest_home))
+        .replace("/seed.tar.gz", str(archive))
+        .replace("-o user -g users", f"-o {os.getuid()} -g {os.getgid()}")
+        .replace("chown -R user:users", f"chown -R {os.getuid()}:{os.getgid()}")
+    )
+    subprocess.run(["bash", "-c", script], check=True, capture_output=True, text=True)
+    seeded = guest_home / "dev/airlock-machine"
+    assert git(seeded, "config", "airlock.seedRevision") == revision
+    assert git(seeded, "config", "airlock.seedLockHash") == manifest["lock_hash"]
+    assert git(seeded, "rev-parse", "--is-shallow-repository") == "true"
+    assert git(seeded, "status", "--porcelain") == ""
+    assert (guest_home / ".cache").stat().st_mode & 0o777 == 0o700
+    (seeded / "local-work").write_text("preserve me")
+    subprocess.run(["bash", "-c", script], check=True, capture_output=True, text=True)
+    assert (seeded / "local-work").read_text() == "preserve me"

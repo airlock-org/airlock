@@ -172,6 +172,19 @@ retains the full source/closure verification path and payload checks; it can be
 used for an integrity investigation rather than on every deployment. Transport
 checks, generation verification and fail-closed publication remain in place.
 
+Sys-dev's `airlock-pool-send` now uses `airlock.Pool.AdmitIncremental+TARGET`.
+It sends a closure inventory with source tree hashes first. Dom0 checks its
+existing pool records (including the prepared USB seed), requests missing
+objects, then verifies only the transferred payloads before publishing a retained,
+inactive generation. Reused objects are neither packaged nor uploaded; sys-dev
+still reads their local contents to compute the inventory hashes. The response
+records `objects_transferred`, `payload_bytes_transferred`, and reuse counts.
+Admission, GC, compaction, and recovery share a lock to protect negotiated reuse.
+Both sys-dev and dom0 need the updated image; the original full-artifact service
+remains available, but the new sender does not silently fall back to a full upload.
+Local protocol and prepared-pool tests cover this path; fresh-image physical
+validation remains pending.
+
 Measured on the physical USB laptop on 2026-09-16: incremental re-admission of
 the already deployed sys-gui closure took 2.13 seconds, reusing all 1,578 objects
 (9,488,805,888 logical store bytes) with zero admissions. This was an inactive,
