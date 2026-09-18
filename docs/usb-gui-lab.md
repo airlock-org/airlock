@@ -1,5 +1,10 @@
 # AMD ownership experiment
 
+This records the earlier standalone GPU experiment. The current USB image ships
+the normal GNOME Airlock configuration and text recovery only; standalone and
+hybrid GUI builders remain in source but their closures are no longer embedded.
+References below to hybrid defaults and XFCE validation describe that earlier work.
+
 An experimental physical GPU profile, with a successful automatic laptop desktop
 boot; **not general hardware or reset certification**. The default USB
 configuration still runs the hybrid XFCE desktop with AMD driven by dom0.

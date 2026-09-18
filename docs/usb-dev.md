@@ -303,13 +303,9 @@ that same data root. No full-store garbage collection is done automatically.
 
 ## Evidence and next experiment
 
-Store notes/logs under the repo's `.airlock-logs/usb-dev/`. Confirm networking,
-Xen, sys-gui lifecycle, input and persistence before trying the GPU experiment.
-See [the plan](usb-dev-plan.md) for the acceptance gates. Do not infer AMD
-passthrough from a working hybrid desktop: in default mode dom0 still drives
-the physical AMD GPU.
-
-The image includes manual [text-recovery and GUI-lab boot entries](usb-gui-lab.md),
-plus the [general USB development lab](usb-lab.md).
-The AMD entry is scaffolding for remote diagnostics, not a working physical
-desktop yet; input forwarding and reset safety remain open.
+Store notes/logs under the repo's `.airlock-logs/usb-dev/`. The image contains the
+[normal Airlock configuration](usb-lab.md) and text recovery. Its prepared pool
+includes only `sys-gui` (GNOME), `sys-dev`, `usr-home`, and `usr-browser`.
+Standalone GUI and hybrid GUI configurations remain available as source builders
+but are excluded from the USB image, including their guest stores.
+See [the historical GPU experiment](usb-gui-lab.md) for earlier validation work.

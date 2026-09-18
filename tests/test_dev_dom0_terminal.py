@@ -24,7 +24,9 @@ def terminal_config():
     expression = f"""
       let
         f = builtins.getFlake "{ROOT}";
-        usb = f.nixosConfigurations.usb-dev;
+        # The direct sys-gui terminal is retained for standalone development,
+        # while the shipped USB uses sys-dev as its administrative entry point.
+        usb = f.inputs.airlock-machine.nixosConfigurations.usb-dev;
         host = usb.config;
         lab = host.specialisation.usb-gui-lab.configuration;
         guest = f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.config;

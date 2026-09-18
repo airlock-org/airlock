@@ -114,6 +114,11 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
       let
         configs = (builtins.getFlake "{root}").nixosConfigurations;
         config = configs.usb-dev.config;
+        labels = (configs.usb-dev.extendModules {{ modules = [
+          ({{ airlockUsbGuestEntries, ... }}: {{
+            system.build.testGuestLabels = builtins.attrNames airlockUsbGuestEntries;
+          }})
+        ]; }}).config.system.build.testGuestLabels;
         login = guest: {{
           password = guest.users.users.user.initialPassword;
           initialHash = guest.users.users.user.initialHashedPassword;
@@ -126,6 +131,9 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
         }};
       in {{
         specialisations = builtins.attrNames config.specialisation;
+        guestLabels = labels;
+        baseSetup = config.airlock.qubes.setupConfigOnBoot.enable;
+        normalSetup = config.specialisation.usb-lab.configuration.airlock.qubes.setupConfigOnBoot.enable;
         journal = config.services.journald.settings.Journal;
         conciseBootMenu = config.airlock.dom0.bootMenu.enable;
         bootHook = config.boot.loader.systemd-boot.extraInstallCommands;
@@ -139,7 +147,7 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
         labLogin = login configs.airlock-domain-sys-gui-usb-gui-lab.config;
         normalPassword = configs.airlock-domain-sys-gui.config.users.users.user.initialPassword;
         labHasPasswordService = builtins.hasAttr "airlock-usb-gui-password"
-          config.specialisation.usb-gui-lab.configuration.systemd.services;
+          config.specialisation.usb-lab.configuration.systemd.services;
         recovery = let
           recoveryConfig = config.specialisation.usb-text-recovery.configuration;
           command = builtins.head (builtins.filter (package:
@@ -168,10 +176,17 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
     )
     configuration = json.loads(result.stdout)
     assert configuration["specialisations"] == [
-        "usb-gui-lab",
         "usb-lab",
         "usb-text-recovery",
     ]
+    assert configuration["guestLabels"] == [
+        "sys-dev",
+        "sys-gui",
+        "usr-browser",
+        "usr-home",
+    ]
+    assert configuration["baseSetup"] is False
+    assert configuration["normalSetup"] is True
     assert configuration["journal"]["Storage"] == "persistent"
     assert configuration["journal"]["SyncIntervalSec"] == "1s"
     assert configuration["conciseBootMenu"] is True
