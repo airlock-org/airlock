@@ -96,6 +96,7 @@ PYTHON_FILES := \
 	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/*.py \
 	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/qubes.py \
 	airlock-machine/lifecycle/runtime/tools/scripts/nix-domain-storage.py \
+	airlock-machine/lifecycle/runtime/tools/scripts/sys-dev-build-store.py \
 	tests/conftest.py \
 	tests/local_harness.py \
 	tests/local_pychecks.py \

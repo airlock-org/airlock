@@ -18,7 +18,8 @@ This is the next small step toward [sys-ctrl](05-sys-ctrl.md).
   do not depend on development-host filesystem paths or a parent `airlock`
   checkout. Preserve local edits when updating an existing checkout.
 - Supply the tools and documented command needed to evaluate and build from
-  that checkout using sys-dev's existing private writable Nix store. Adapt the
+  that checkout using sys-dev's [pool-backed build store](../sys-dev-build-store.md),
+  with a persistent private writable layer for additions. Adapt the
   repository's Nix wrapper to this guest environment without weakening the
   development host's external-store guard. Use the committed `flake.lock`.
 - Check available space and input/cache access before building. Reuse existing

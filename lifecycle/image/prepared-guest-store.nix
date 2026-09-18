@@ -6,7 +6,7 @@
 let
   engine = pkgs.python3.pkgs.callPackage ../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage { };
   python = pkgs.python3.withPackages (_: [ engine ]);
-  specs = lib.mapAttrsToList (name: entry: {
+  guestSpecs = lib.mapAttrsToList (name: entry: {
     inherit name;
     domain = entry.preparedDomainName or "sys-gui";
     system = toString entry.configuration.config.system.build.toplevel;
@@ -14,6 +14,25 @@ let
     kernel_name = entry.domain.backend.kernel.name;
     closure_source = toString entry.storeArtifact;
   }) entries;
+  # A stable builder view shares the already admitted objects, including other
+  # guests' software. It is independent of sys-dev's own boot generation.
+  buildClosure = pkgs.closureInfo {
+    rootPaths = map (entry: entry.configuration.config.system.build.toplevel) (builtins.attrValues entries);
+  };
+  buildManifest = pkgs.runCommand "sys-dev-builder-closure" { } ''
+    mkdir -p "$out"
+    cp ${buildClosure}/store-paths ${buildClosure}/registration "$out/"
+    echo '{}' > "$out/manifest.json"
+  '';
+  specs = guestSpecs ++ lib.optional (entries ? sys-dev) {
+    name = "sys-dev-builder";
+    domain = "sys-dev-builder";
+    system = toString entries.sys-dev.configuration.config.system.build.toplevel;
+    root_source = "";
+    kernel_name = "";
+    closure_source = toString buildManifest;
+    builder = true;
+  };
   seed =
     pkgs.runCommand "airlock-usb-prepared-guest-store"
       {

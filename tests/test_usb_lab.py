@@ -92,7 +92,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
           networkManager = dev.networking.networkmanager.enable;
           packages = map (package: package.pname or package.name) dev.environment.systemPackages;
           configNixStoreRoot = dev.airlock.qubeGuest.configNixStoreRoot;
-          poolInit = dev.systemd.services.airlock-sys-dev-pool-init.script;
+          poolInit = dev.systemd.services.airlock-sys-dev-build-store.serviceConfig;
           poolSend = builtins.readFile "${{poolSend}}/bin/airlock-pool-send";
           userSelection = dev.airlock.qubeGuest.allowQrexecUserSelection;
           providesNetwork = dev.airlock.qubeGuest.role == "sys-dev";
@@ -202,10 +202,13 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         )
         assert rejected.returncode == 1
         assert expected_error in rejected.stderr
-    assert report["dev"]["configNixStoreRoot"].startswith("/rw/")
-    assert report["dev"]["configNixStoreRoot"] in report["dev"]["poolInit"]
+    assert report["dev"]["configNixStoreRoot"] == "/rw/airlock-builder/merged"
+    assert report["dev"]["poolInit"]["ExecStart"].endswith(" start")
+    assert report["dev"]["poolInit"]["RemainAfterExit"] is True
     assert "--physical-store-root" in report["dev"]["poolSend"]
-    assert "--nix-store" in report["dev"]["poolSend"]
+    assert (
+        "--nix-store" not in report["dev"]["poolSend"]
+    )  # Query through the overlay-aware wrapper.
     assert "airlock-pool-send" in report["dev"]["packages"]
     assert {
         key: report["dev"][key]
