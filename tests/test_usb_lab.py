@@ -93,6 +93,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
           packages = map (package: package.pname or package.name) dev.environment.systemPackages;
           configNixStoreRoot = dev.airlock.qubeGuest.configNixStoreRoot;
           poolInit = dev.systemd.services.airlock-sys-dev-build-store.serviceConfig;
+          poolDevices = dev.systemd.services.airlock-sys-dev-build-store.requires;
           poolSend = builtins.readFile "${{poolSend}}/bin/airlock-pool-send";
           userSelection = dev.airlock.qubeGuest.allowQrexecUserSelection;
           providesNetwork = dev.airlock.qubeGuest.role == "sys-dev";
@@ -205,6 +206,9 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["dev"]["configNixStoreRoot"] == "/rw/airlock-builder/merged"
     assert report["dev"]["poolInit"]["ExecStart"].endswith(" start")
     assert report["dev"]["poolInit"]["RemainAfterExit"] is True
+    assert {
+        unit for unit in report["dev"]["poolDevices"] if unit.endswith(".device")
+    } == {"dev-xvdg.device", "dev-xvdh.device"}
     assert "--physical-store-root" in report["dev"]["poolSend"]
     assert (
         "--nix-store" not in report["dev"]["poolSend"]

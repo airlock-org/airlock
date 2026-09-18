@@ -96,7 +96,9 @@ def seed_inputs(tmp_path, monkeypatch):
         views,
         "run_checked",
         lambda command, **kwargs: core.run_checked(
-            ["nix", "shell", "nixpkgs#erofs-utils", "-c"] + command, **kwargs
+            ["nix", "shell", "path:./airlock-machine#airlock-erofs-utils", "-c"]
+            + command,
+            **kwargs,
         ),
     )
     monkeypatch.setenv("AIRLOCK_CLOSURE_STORE_INDEX_SOURCE", "file")
@@ -166,7 +168,7 @@ def tree_fingerprints(root):
 
 
 @pytest.fixture
-def builder_seed(seed_inputs, tmp_path):
+def builder_seed(seed_inputs, tmp_path, request):
     specs, systems, _ = seed_inputs
     closure = tmp_path / "builder-closure"
     closure.mkdir()
@@ -182,8 +184,13 @@ def builder_seed(seed_inputs, tmp_path):
     (closure / "store-paths").write_text("\n".join(paths) + "\n")
     (closure / "manifest.json").write_text("{}")
     # Real closureInfo framing; these synthetic payloads use tree verification.
+    references = paths * getattr(request, "param", 0)
+    reference_text = "".join(path + "\n" for path in references)
     (closure / "registration").write_text(
-        "".join(f"{path}\nsha256:{'0' * 52}\n1\n\n0\n" for path in paths)
+        "".join(
+            f"{path}\nsha256:{'0' * 52}\n1\n\n{len(references)}\n{reference_text}"
+            for path in paths
+        )
     )
     builder = dict(
         specs[0],
@@ -207,7 +214,7 @@ def test_builder_seed_shares_payload_and_retains_frozen_view_offline(builder_see
     assert prepared.verify_outputs(root, descriptors)["status"] == "passed"
     assert len(list((root / "objects/metadata").glob("*.json"))) == len(paths)
     configs = builder.builder_volume_configs(root, "airlock-closure")
-    assert list(configs) == ["builder-store", "builder-data", "builder-metadata"]
+    assert list(configs) == ["builder-store", "builder-data"]
     assert all(not cfg["rw"] and cfg["save_on_stop"] for cfg in configs.values())
     # There is no running VM, no current generation, and no retention fallback.
     for domain, generation in (("sys-gui", 1), ("sys-gui", 2), ("sys-dev-builder", 1)):
@@ -242,7 +249,7 @@ def test_builder_seed_validates_metadata_and_physical_pin(builder_seed):
 
     root, descriptors, _ = builder_seed
     metadata = Path(
-        builder.builder_volume_configs(root, "airlock-closure")["builder-metadata"][
+        builder.builder_volume_configs(root, "airlock-closure")["builder-store"][
             "view_path"
         ]
     )
@@ -260,6 +267,54 @@ def test_builder_seed_validates_metadata_and_physical_pin(builder_seed):
         prepared.verify_outputs(root, descriptors)
 
 
+@pytest.mark.parametrize("builder_seed", [0, 80], indirect=True)
+def test_builder_combined_index_reads_metadata_and_external_packages(
+    builder_seed, tmp_path
+):
+    from airlock_qubes_storage._engine import builder
+
+    root, _, paths = builder_seed
+    configs = builder.builder_volume_configs(root, "airlock-closure")
+    image = Path(configs["builder-store"]["view_path"])
+    blob_map = core.read_json(configs["builder-data"]["blob_map_path"])
+    manifest = core.read_json(configs["builder-store"]["manifest_path"])
+    canonical = Path(manifest["store"]["canonical_metadata_image"])
+    # The canonical guest index remains separate and unmodified. Only the
+    # builder-specific index grows; payload extents still come from one device.
+    assert image != canonical
+    assert image.stat().st_size < canonical.stat().st_size + 65536
+    canonical_hash = core.hash_file(canonical)
+    blob = tmp_path / "external-payload"
+    views.reconstruct_blob_view(blob_map, blob)
+    extracted = tmp_path / "extracted"
+    views.run_checked(
+        ["fsck.erofs", f"--device={blob}", f"--extract={extracted}", str(image)]
+    )
+    identity, registration = load_builder_guest().read_identity(
+        extracted / ".airlock-builder"
+    )
+    assert identity["closure_hash"] == configs["builder-store"]["closure_hash"]
+    assert builder.registration_paths(registration.decode()) == set(paths)
+    assert (extracted / ".links").is_dir()
+    for path in paths:
+        assert (extracted / Path(path).name / "payload").read_text() == path * 20
+    # No embedded fallback copy: the combined index cannot supply packages
+    # without the external pool data device.
+    with pytest.raises(core.EngineError):
+        views.run_checked(["fsck.erofs", "--extract", str(image)])
+    # Preparing the same frozen view again must be deterministic and must not
+    # mutate the canonical index shared with normal guest views.
+    image_hash = core.hash_file(image)
+    image.rename(image.with_suffix(".previous"))
+    builder.prepare_builder(
+        root,
+        {"manifest": configs["builder-store"]["manifest_path"]},
+        extracted / ".airlock-builder/registration",
+    )
+    assert core.hash_file(image) == image_hash
+    assert core.hash_file(canonical) == canonical_hash
+
+
 def load_builder_guest():
     spec = importlib.util.spec_from_file_location(
         "builder_guest",
@@ -271,7 +326,7 @@ def load_builder_guest():
 
 
 def test_builder_qubes_attachment_is_stable_after_serialization(
-    builder_seed, monkeypatch
+    builder_seed, monkeypatch, capsys
 ):
     root, _, _ = builder_seed
     spec = importlib.util.spec_from_file_location(
@@ -308,7 +363,9 @@ def test_builder_qubes_attachment_is_stable_after_serialization(
     )
     asyncio.run(helper.ensure_builder_store(args))
     assert len(saves) == 1
-    assert helper.qubes_boot_frontends(list(vm.volumes))["builder-metadata"] == "xvdi"
+    assert len(vm.volumes) == 8
+    assert helper.qubes_boot_frontends(list(vm.volumes))["builder-data"] == "xvdh"
+    assert "builder-metadata" not in vm.volumes
     # Match upstream Qubes XML serialization: omit False, stringify numbers,
     # omit source=None, read True back as a boolean.
     vm.volume_config = {
@@ -322,6 +379,11 @@ def test_builder_qubes_attachment_is_stable_after_serialization(
     vm.is_running = lambda: True
     asyncio.run(helper.ensure_builder_store(args))
     assert len(saves) == 1  # Restart/update does not replace the base.
+    vm.volumes["builder-metadata"] = object()
+    with pytest.raises(SystemExit):
+        asyncio.run(helper.ensure_builder_store(args))
+    assert "offline migration" in capsys.readouterr().err
+    del vm.volumes["builder-metadata"]
     vm.volume_config["builder-store"]["generation"] = "2"
     with pytest.raises(SystemExit):
         asyncio.run(helper.ensure_builder_store(args))
@@ -352,7 +414,6 @@ def test_builder_guest_mount_lifecycle_preserves_upper(
         state=str(tmp_path / "state"),
         runtime=str(tmp_path / "run"),
         user=guest.pwd.getpwuid(os.getuid()).pw_name,
-        metadata_device="metadata-device",
         store_device="store-device",
         blob_device="blob-device",
         nix_store="nix-store",
@@ -395,6 +456,8 @@ def test_builder_guest_mount_lifecycle_preserves_upper(
         assert not (Path(args.runtime) / "ready.json").exists()
         return
     guest.start(args)
+    assert sum(call[:3] == ("mount", "-t", "erofs") for call in calls) == 1
+    assert any("ro,nodev,nosuid,device=blob-device" in call for call in calls)
     ready = json.loads((Path(args.runtime) / "ready.json").read_text())
     assert ready["uri"].startswith("local-overlay://")
     assert "read-only%3Dtrue" in ready["uri"]
