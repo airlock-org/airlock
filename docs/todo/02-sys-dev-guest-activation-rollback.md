@@ -6,6 +6,19 @@ Take a real guest update built from the standalone `airlock-machine` checkout
 in sys-dev, activate its admitted pool generation, and prove that rollback
 restores the previous system while preserving private data.
 
+## Starting point
+
+The trial must be reproducible from a freshly flashed image. Use its included
+shallow `airlock-machine` checkout in sys-dev to commit a small `usr-home`
+marker change, build it, and admit it through the completed 01 workflow.
+Record the returned generation and receipt; do not hard-code a generation
+number or depend on a test branch, receipt, or pool state from an earlier boot.
+
+An existing test admission may be reused after checking its source revision,
+lock hash, system path, retention and inactive status against the live pool.
+It is optional: after a reflash, recreate the change and admission, and capture
+the new machine's baseline for rollback.
+
 ## Scope
 
 - Use `usr-home` for the first trial, with a small committed system marker that
