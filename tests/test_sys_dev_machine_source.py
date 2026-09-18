@@ -110,3 +110,35 @@ def test_source_archive_refuses_uncommitted_machine_changes(tmp_path: Path):
     )
     assert result.returncode == 1
     assert "commit or stash changes" in result.stderr
+
+
+def test_shallow_seed_archive_contains_only_the_pinned_checkout(tmp_path: Path):
+    repo = tmp_path / "machine"
+    revision = repository(repo)
+    archive = tmp_path / "machine-seed.tar.gz"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "seed",
+            "--repository",
+            str(repo),
+            "--output",
+            str(archive),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    extracted = tmp_path / "extracted"
+    extracted.mkdir()
+    with tarfile.open(archive, "r:gz") as source:
+        source.extractall(extracted)
+        manifest = json.load(source.extractfile("manifest.json"))
+    checkout = extracted / "repo"
+    assert manifest["schema"] == "airlock.sys-dev-machine-seed.v1"
+    assert manifest["revision"] == revision
+    assert git(checkout, "rev-parse", "HEAD") == revision
+    assert git(checkout, "rev-parse", "--is-shallow-repository") == "true"
+    assert git(checkout, "rev-list", "--count", "HEAD") == "1"

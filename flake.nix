@@ -23,6 +23,9 @@
 
       mkUsbConfiguration = system:
         let
+          seedPath = builtins.getEnv "AIRLOCK_MACHINE_SEED_ARCHIVE";
+          airlockMachineSeedArchive =
+            if seedPath == "" then null else builtins.path { path = seedPath; name = "airlock-machine-seed.tar.gz"; };
           entries = airlock-machine.lib.machineGuestEntries system;
           pkgs = import nixpkgs {
             inherit system;
@@ -49,6 +52,7 @@
           extraSpecialArgs = {
             airlockUsbPreparedStore = preparedStore;
             airlockUsbGuestEntries = entries;
+            inherit airlockMachineSeedArchive;
           };
           extraModules = [ ./lifecycle/image/profiles/usb-image.nix ];
         };

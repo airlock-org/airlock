@@ -13,6 +13,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[4]
 MACHINE = ROOT / "airlock-machine"
 SCHEMA = "airlock.sys-dev-machine-source.v1"
+SEED_SCHEMA = "airlock.sys-dev-machine-seed.v1"
 
 
 def run(*args, cwd=None, input=None):
@@ -90,6 +91,40 @@ def source_archive(destination, repository=MACHINE):
     return {"revision": revision, "lock_hash": lock_hash, "archive": str(destination)}
 
 
+def shallow_seed_archive(destination, repository=MACHINE):
+    repository = Path(repository).resolve()
+    if not (repository / ".git").exists():
+        raise RuntimeError(f"machine source is not a Git checkout: {repository}")
+    clean_repository(repository)
+    revision = output("git", "rev-parse", "HEAD", cwd=repository)
+    lock_hash = sha256(repository / "flake.lock")
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="airlock-machine-seed-") as name:
+        temporary = Path(name)
+        checkout = temporary / "repo"
+        output("git", "clone", "--depth", "1", f"file://{repository}", str(checkout))
+        if output("git", "rev-parse", "HEAD", cwd=checkout) != revision:
+            raise RuntimeError("shallow seed revision differs from source")
+        if (
+            output("git", "rev-parse", "--is-shallow-repository", cwd=checkout)
+            != "true"
+        ):
+            raise RuntimeError("seed checkout is not shallow")
+        manifest = temporary / "manifest.json"
+        manifest.write_text(
+            json.dumps(
+                {"schema": SEED_SCHEMA, "revision": revision, "lock_hash": lock_hash},
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        with tarfile.open(destination, "w:gz", format=tarfile.PAX_FORMAT) as archive:
+            archive.add(checkout, arcname="repo")
+            archive.add(manifest, arcname="manifest.json")
+    return {"revision": revision, "lock_hash": lock_hash, "archive": str(destination)}
+
+
 def push_archive(target, archive):
     archive = Path(archive)
     with tarfile.open(archive, "r:gz") as source:
@@ -116,6 +151,9 @@ def main(argv=None):
     create = commands.add_parser("create")
     create.add_argument("--output", required=True, type=Path)
     create.add_argument("--repository", type=Path, default=MACHINE)
+    seed = commands.add_parser("seed")
+    seed.add_argument("--output", required=True, type=Path)
+    seed.add_argument("--repository", type=Path, default=MACHINE)
     push = commands.add_parser("push")
     push.add_argument("--target", required=True)
     push.add_argument("--output", type=Path)
@@ -125,6 +163,13 @@ def main(argv=None):
         if args.command == "create":
             print(
                 json.dumps(source_archive(args.output, args.repository), sort_keys=True)
+            )
+            return 0
+        if args.command == "seed":
+            print(
+                json.dumps(
+                    shallow_seed_archive(args.output, args.repository), sort_keys=True
+                )
             )
             return 0
         with tempfile.TemporaryDirectory(prefix="airlock-machine-source-push-") as name:
