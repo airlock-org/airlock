@@ -5,6 +5,7 @@
 /__pycache__/
 **/__pycache__/
 /.airlock-logs/
+/.airlock/
 /.airlock-cache/
 /.airlock-vm/
 /.airlock-vm-*/
