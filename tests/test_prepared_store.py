@@ -165,6 +165,53 @@ def tree_fingerprints(root):
     }
 
 
+def test_builder_pin_protects_pool_view_until_released(seed):
+    """A temporary builder lease must outlive ordinary generation retention."""
+    from airlock_qubes_storage._engine import generations, maintenance, segments, state
+
+    args, _, systems = seed
+    root = Path(args.pool_root)
+    assert state.current_generation(root, args.domain) is None
+    for generation in (1, 2):
+        generations.set_retention(
+            SimpleNamespace(**vars(args), generation=generation, retain="false")
+        )
+    pin = SimpleNamespace(**vars(args), generation=1, volume="builder-proof")
+    generations.mark_running(pin)
+    reference = core.read_json(state.running_ref_path(root, args.domain, 1, pin.volume))
+    assert reference["physical_references"]
+    backing = {
+        segments.segment_blob_path(root, ref["segment_id"])
+        for ref in reference["physical_references"]
+    }
+    fingerprints = {path: core.hash_file(path) for path in backing}
+    cleanup = SimpleNamespace(pool_root=str(root), keep_generations=0)
+    result = maintenance.gc(cleanup)
+    assert result["retained_generations"] == [{"domain": args.domain, "generation": 1}]
+    assert not state.generation_manifest_path(root, args.domain, 2).exists()
+    assert objects.reusable_object(root, systems[0])
+    # Exercise actual compaction as well: the mounted view's original physical
+    # extents must survive even if canonical object locations change.
+    maintenance.compact(
+        SimpleNamespace(
+            pool_root=str(root),
+            keep_generations=0,
+            threshold_percent=100,
+            max_segments=20,
+            segment_target_bytes="",
+            dry_run="false",
+        )
+    )
+    maintenance.gc(cleanup)
+    assert fingerprints == {path: core.hash_file(path) for path in backing}
+    assert state.generation_manifest_path(root, args.domain, 1).exists()
+    generations.clear_running(pin)
+    result = maintenance.gc(cleanup)
+    assert result["retained_generations"] == []
+    assert not state.generation_manifest_path(root, args.domain, 1).exists()
+    assert all(not path.exists() for path in backing)
+
+
 def test_incremental_generation_verifies_only_additions(
     seed_inputs, tmp_path, monkeypatch
 ):
