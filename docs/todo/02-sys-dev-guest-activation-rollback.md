@@ -89,3 +89,20 @@ Local pytest coverage exercises exact-generation binding, rejected identity,
 provenance, verification and retention, persistence of the binding at boot,
 and both resume and rollback after an interrupted activation. These tests do
 not satisfy the remaining physical acceptance criteria above.
+
+Physical trial, 2026-09-21: the fresh image built committed usr-home marker
+change `aa19d1e` in sys-dev; a repeat build reused the result. Admission created
+retained generation 2, transferring 4 objects (434,176 bytes) and reusing 978.
+The guest plan correctly limited changes to usr-home, but apply failed during
+configuration: the derived candidate updated `backend.system.source` while
+leaving `airlock.system=` in the kernel arguments pointing at the baseline
+system. Setup rejected the mismatch after pool selection and before guest
+startup. Fix candidate boot-argument consistency and add regression coverage
+before retrying. Evidence is under
+`.airlock-logs/activation-trial-20260921T221830Z/`. This trial does not establish
+successful activation or reboot persistence.
+
+Coordinator rollback recovered the original running usr-home system and pool
+generation 1. Whole-machine verification returned `complete`, and the persistent
+home sentinel hash matched the baseline. The marker was absent as expected.
+The test checkout, retained admission, and sentinel remain for the retry.
