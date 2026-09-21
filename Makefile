@@ -134,7 +134,7 @@ machine-build machine-plan machine-apply machine-status machine-verify machine-r
 machine-guest-plan machine-guest-apply:
 	@test -n "$(DEPLOY_TARGET)" || { echo 'set DEPLOY_TARGET to the Tailscale sys-dev host'; exit 2; }
 	@test -n "$(ADMISSION_RECEIPT)" || { echo 'set ADMISSION_RECEIPT to the receipt path inside sys-dev'; exit 2; }
-	uv run python lifecycle/misc/tools/scripts/machine-deploy.py $(patsubst machine-%,%,$@) --profile "$(DEPLOY_PROFILE)" --target "$(DEPLOY_TARGET)" --receipt "$(ADMISSION_RECEIPT)"
+	uv run python lifecycle/misc/tools/scripts/machine-deploy.py $(patsubst machine-%,%,$@) --profile "$(DEPLOY_PROFILE)" --target "$(DEPLOY_TARGET)" --receipt "$(ADMISSION_RECEIPT)" $(if $(filter 1,$(UPDATE_COORDINATOR)),--update-coordinator)
 sys-dev-machine-source:
 	@test -n "$(DEPLOY_TARGET)" || { echo 'set DEPLOY_TARGET to the Tailscale sys-dev host'; exit 2; }
 	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py push --target "$(DEPLOY_TARGET)"

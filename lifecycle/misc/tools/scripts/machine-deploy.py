@@ -311,11 +311,18 @@ def main(argv=None):
     parser.add_argument(
         "--receipt", help="path to the inactive admission receipt inside sys-dev"
     )
+    parser.add_argument(
+        "--update-coordinator",
+        action="store_true",
+        help="build and transfer the committed coordinator for guest activation",
+    )
     args = parser.parse_args(argv)
     if args.action != "build" and not args.target:
         parser.error("--target is required")
     if args.action.startswith("guest-") and not args.receipt:
         parser.error("--receipt is required for guest activation")
+    if args.update_coordinator and not args.action.startswith("guest-"):
+        parser.error("--update-coordinator requires guest-plan or guest-apply")
     session = None
     try:
         if args.action in ("build", "plan", "apply"):
@@ -334,9 +341,28 @@ def main(argv=None):
                 return 0
         session = Dom0(args.target)
         if args.action in ("guest-plan", "guest-apply"):
+            engine = deployed_engine(session)
+            if args.update_coordinator:
+                if command("git", "status", "--porcelain", cwd=ROOT):
+                    raise RuntimeError(
+                        "commit repository changes before updating the coordinator"
+                    )
+                result = json.loads(
+                    command(
+                        str(NIX),
+                        "build",
+                        "./airlock-machine#airlock-machine-deploy",
+                        "--json",
+                        "--out-link",
+                        str(ROOT / ".airlock-logs" / "machine-coordinator"),
+                        cwd=ROOT,
+                    )
+                )
+                package = result[0]["outputs"]["out"]
+                transfer(args.target, args.bridge_vm, package, session)
+                engine = package + "/bin/airlock-machine-deploy"
             receipt = remote_receipt(args.target, args.receipt)
             receipt_path = install_receipt(session, receipt)
-            engine = deployed_engine(session)
             preview = session.run(
                 shlex.join([engine, "guest-plan", receipt_path]), timeout=900
             )

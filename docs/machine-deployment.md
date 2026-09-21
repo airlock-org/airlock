@@ -98,6 +98,13 @@ generation and keeps the resulting candidate and exact generation binding in
 the machine journal. Apply, verify, reboot handling, resume and rollback then
 use the same coordinator flow as an ordinary whole-machine release.
 
+For a coordinator fix on an already flashed image, add `UPDATE_COORDINATOR=1`
+to `machine-guest-plan` and `machine-guest-apply`. This builds the standalone
+coordinator from the committed local submodule and transfers only missing Nix
+paths through the existing development transport. The candidate records that
+coordinator, and apply roots it against GC. This avoids rebuilding/flashing the
+USB for a coordinator-only fix; it does not update other host components.
+
 `machine-build` needs no remote machine. All commands default to the internal
 `usb-lab` deployment profile; this is not a boot-menu entry.
 `DEPLOY_PROFILE=usb-gui-lab` builds that complete profile instead, but its usual

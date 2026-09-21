@@ -301,6 +301,10 @@ def test_native_boot_hooks_do_not_write_readonly_systemd_tree(
 
     def command(*args):
         calls.append(args)
+        if args[0] == "nix-store":
+            assert args[-1] == "/nix/store/new-engine"
+            assert args[1] == "--add-root"
+            return ""
         assert args[:2] == ("systemctl", "show")
         if args[3] == "--property=LoadState":
             return (
@@ -527,6 +531,54 @@ def test_bridge_space_check_does_not_require_python(monkeypatch, report, error):
     with pytest.raises(RuntimeError, match=error):
         client.transfer("sys-dev", "sys-dev", "/nix/store/release", Session())
     assert len(calls) == 2
+
+
+def test_guest_plan_can_transfer_committed_coordinator(monkeypatch):
+    events = []
+
+    class Session:
+        def __init__(self, target):
+            assert target == "sys-dev"
+
+        def run(self, script, **kwargs):
+            events.append(script)
+            return "{}"
+
+        def close(self):
+            pass
+
+    def command(*args, **kwargs):
+        if args[0] == "git":
+            return ""
+        return json.dumps([{"outputs": {"out": "/nix/store/fixed-coordinator"}}])
+
+    monkeypatch.setattr(client, "Dom0", Session)
+    monkeypatch.setattr(client, "command", command)
+    monkeypatch.setattr(client, "deployed_engine", lambda session: "/old-engine")
+    monkeypatch.setattr(client, "remote_receipt", lambda *args: {})
+    monkeypatch.setattr(client, "install_receipt", lambda *args: "/receipt.json")
+    monkeypatch.setattr(
+        client,
+        "transfer",
+        lambda target, bridge, package, session: events.append(package),
+    )
+    assert (
+        client.main(
+            [
+                "guest-plan",
+                "--target",
+                "sys-dev",
+                "--receipt",
+                "/receipt.json",
+                "--update-coordinator",
+            ]
+        )
+        == 0
+    )
+    assert events == [
+        "/nix/store/fixed-coordinator",
+        "/nix/store/fixed-coordinator/bin/airlock-machine-deploy guest-plan /receipt.json",
+    ]
 
 
 @pytest.mark.parametrize("controller", ["absent", "present", "broken", "failed"])
