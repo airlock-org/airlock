@@ -84,6 +84,25 @@ make machine-status DEPLOY_TARGET=sys-dev-2
 make machine-verify DEPLOY_TARGET=sys-dev-2
 ```
 
+The same whole-machine release can be built and submitted directly from the
+clean committed checkout included in sys-dev, without a parent `airlock`
+checkout or development-host build artifacts:
+
+```bash
+airlock-sys-dev-machine-deploy build
+airlock-sys-dev-machine-deploy plan
+airlock-sys-dev-machine-deploy apply
+airlock-sys-dev-machine-deploy status
+airlock-sys-dev-machine-deploy verify
+```
+
+The sys-dev client uses its pinned pool-backed build store and persistent
+private upper layer. It records the Git revision and lock hash, exports only
+closure paths absent from Dom0's ordinary Nix store, and then invokes the same
+Dom0 coordinator used by the development-host client. `plan` never activates;
+`apply`, `resume`, and `rollback` start detached workers so losing sys-dev's
+connection does not stop an in-progress transaction.
+
 For a guest closure already built and admitted by sys-dev, the development
 coordinator can derive a one-guest candidate without building or transferring a
 second whole-machine release:
@@ -289,6 +308,7 @@ Implementation entry points:
 - `lifecycle/image/profiles/usb-prepared-store.nix`: prepared USB topology adapter.
 - `lifecycle/misc/tools/scripts/machine-deploy.py`: build/provenance/SSH transport.
 - `airlock-machine/lifecycle/runtime/tools/machine-deploy.py`: dom0 planning and journalled apply.
+- `airlock-machine/lifecycle/runtime/tools/sys-dev-machine-deploy.py`: direct sys-dev build/transport client.
 - `airlock-machine/lifecycle/misc/modules/machine-deployment.nix`: image/boot integration.
 - `airlock-machine/lifecycle/runtime/tools/scripts/nix-domain-storage.py`: staged generation use.
 
