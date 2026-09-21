@@ -31,7 +31,7 @@ This is a completed step toward [sys-ctrl](../todo/05-sys-ctrl.md).
   source revision, lock hash, system path, and returned pool generation.
 
 Limit this step to checkout, build, and inactive admission. Follow with the
-[guest activation and rollback trial](../todo/02-sys-dev-guest-activation-rollback.md).
+[guest activation and rollback trial](02-sys-dev-guest-activation-rollback.md).
 Creation of `sys-ctrl` remains later work. The checkout must remain a
 reproducible copy of committed machine source;
 do not leave the only implementation of a fix on the live machine.

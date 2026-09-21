@@ -1,7 +1,7 @@
 # Deploy a whole-machine release from sys-dev
 
 Status: planned. Depends on [building and admitting a guest in sys-dev](../completed/01-sys-dev-machine-build.md)
-and [guest activation/rollback](02-sys-dev-guest-activation-rollback.md).
+and [guest activation/rollback](../completed/02-sys-dev-guest-activation-rollback.md).
 
 Extend the existing development-only sys-dev-to-Dom0 coordinator transport so
 a clean, committed `airlock-machine` checkout in sys-dev can build a complete

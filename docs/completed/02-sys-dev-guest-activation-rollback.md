@@ -1,9 +1,9 @@
 # Activate and roll back a guest built in sys-dev
 
-Status: live activation and reboot persistence passed after a committed
-coordinator repair on 2026-09-21. Live rollback also passed; only rollback
-persistence across a second reboot and final sentinel cleanup remain.
-Prerequisite [building and admitting a guest in sys-dev](../completed/01-sys-dev-machine-build.md) is complete.
+Status: completed, 2026-09-22. Build, admission, activation, reboot persistence,
+rollback, rollback persistence and sentinel cleanup passed. An intermittent
+boot stall remains unresolved; see the physical results below.
+Prerequisite [building and admitting a guest in sys-dev](01-sys-dev-machine-build.md) is complete.
 
 Take a real guest update built from the standalone `airlock-machine` checkout
 in sys-dev, activate its admitted pool generation, and prove that rollback
@@ -89,8 +89,8 @@ retention/GC mechanisms.
 
 Local pytest coverage exercises exact-generation binding, rejected identity,
 provenance, verification and retention, persistence of the binding at boot,
-and both resume and rollback after an interrupted activation. These tests do
-not satisfy the remaining physical acceptance criteria above.
+and both resume and rollback after an interrupted activation. Physical evidence
+for the acceptance criteria is recorded below.
 
 Physical trial, 2026-09-21: the fresh image built committed usr-home marker
 change `aa19d1e` in sys-dev; a repeat build reused the result. Admission created
@@ -101,8 +101,8 @@ leaving `airlock.system=` in the kernel arguments pointing at the baseline
 system. Setup rejected the mismatch after pool selection and before guest
 startup. This required a candidate boot-argument fix and regression coverage
 before retrying. Evidence is under
-`.airlock-logs/activation-trial-20260921T221830Z/`. This trial does not establish
-successful activation or reboot persistence.
+`.airlock-logs/activation-trial-20260921T221830Z/`. This initial failed attempt
+did not establish successful activation or reboot persistence.
 
 Coordinator rollback recovered the original running usr-home system and pool
 generation 1. Whole-machine verification returned `complete`, and the persistent
@@ -117,9 +117,8 @@ reflashing. Its package is rooted against GC and recorded in the candidate.
 The retry reused generation 2 and reached `complete`; the running system was
 `rhz04xhp8cvi31vp9711qs0rjzlja0pd-nixos-system-usr-home-26.11`, the marker was
 present, and the sentinel hash matched. Evidence is in
-`fixed-activation-observation.json` in the trial directory. Next: reboot this
-installation, verify selection and sentinel, then roll back and verify again
-before and after a second reboot. Do not reflash between these checks.
+`fixed-activation-observation.json` in the trial directory. Subsequent checks
+used the same installation without reflashing.
 
 The subsequent normal `Airlock` boot preserved the selected update. On boot
 `f0a51e62-ad34-4129-96d9-d2d69fb4599e`, whole-machine verification returned
@@ -130,5 +129,22 @@ Coordinator rollback from that successfully booted update restored generation 1
 and the original running system, with the marker absent and the sentinel
 unchanged. Verification returned `complete`, dom0 had no failed units, and
 generation 2 remained retained but inactive. See `rollback-before-reboot.json`.
-Reboot through `Airlock` once more to verify this rollback selection persists;
-then remove the sentinel and complete this document.
+
+Rollback persistence passed on boot `61453301-1808-4452-9d28-31486da9cb52`:
+generation 1 and the original running system matched, the marker was absent,
+the sentinel hash was unchanged, generation 2 remained retained and inactive,
+and whole-machine verification returned `complete` with no failed dom0 units.
+See `rollback-after-reboot.json`. The sentinel was then hash-checked, removed,
+and confirmed absent. The test commit and retained generations remain available.
+Local checks passed: 112 machine quick tests and 375 parent quick tests
+(23 skipped).
+
+One intervening boot stalled during sys-dev/sys-gui startup and required a
+forced shutdown. Its saved topology setup result passed using the rollback
+baseline and generation 1; the dom0 journal ended about 85 seconds into boot,
+and the guest console logs contained no readable output from that boot. The
+user reported waiting 5–10 minutes. A subsequent cold boot succeeded without
+configuration changes. Cause is unknown; neither a rollback-induced failure
+nor its exclusion has been established. The successful trial demonstrates the
+update/rollback workflow, not general boot reliability. Diagnostic copies are
+under `.airlock-logs/usb-boot-inspection/`.

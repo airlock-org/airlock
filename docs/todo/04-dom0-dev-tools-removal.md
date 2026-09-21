@@ -1,6 +1,6 @@
 # Remove Dom0 development tools through sys-dev deployment
 
-Status: planned. Depends on [sys-dev guest activation/rollback](02-sys-dev-guest-activation-rollback.md)
+Status: planned. Depends on [sys-dev guest activation/rollback](../completed/02-sys-dev-guest-activation-rollback.md)
 and [sys-dev whole-machine deployment](03-sys-dev-machine-deployment.md).
 
 Remove the development-only Dom0 Nix packages (`codex`, `git`, and `zellij`)
