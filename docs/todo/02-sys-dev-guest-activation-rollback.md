@@ -1,7 +1,8 @@
 # Activate and roll back a guest built in sys-dev
 
-Status: implemented locally; fresh-image activation, reboot and rollback
-validation remain pending. Prerequisite [building and admitting a guest in sys-dev](../completed/01-sys-dev-machine-build.md) is complete.
+Status: live activation passed after a committed coordinator repair on
+2026-09-21; reboot persistence and rollback from the successful update remain
+pending. Prerequisite [building and admitting a guest in sys-dev](../completed/01-sys-dev-machine-build.md) is complete.
 
 Take a real guest update built from the standalone `airlock-machine` checkout
 in sys-dev, activate its admitted pool generation, and prove that rollback
@@ -106,3 +107,15 @@ Coordinator rollback recovered the original running usr-home system and pool
 generation 1. Whole-machine verification returned `complete`, and the persistent
 home sentinel hash matched the baseline. The marker was absent as expected.
 The test checkout, retained admission, and sentinel remain for the retry.
+
+The fix in machine commit `6785324` updates the explicit `airlock.system=` boot
+argument, rejects inconsistent baseline arguments, and gives corrected candidates
+their own identity. `UPDATE_COORDINATOR=1` on the guest plan/apply commands built
+and transferred the committed coordinator (only two missing Nix paths) without
+reflashing. Its package is rooted against GC and recorded in the candidate.
+The retry reused generation 2 and reached `complete`; the running system was
+`rhz04xhp8cvi31vp9711qs0rjzlja0pd-nixos-system-usr-home-26.11`, the marker was
+present, and the sentinel hash matched. Evidence is in
+`fixed-activation-observation.json` in the trial directory. Next: reboot this
+installation, verify selection and sentinel, then roll back and verify again
+before and after a second reboot. Do not reflash between these checks.
