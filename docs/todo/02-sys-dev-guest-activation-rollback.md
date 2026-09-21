@@ -1,8 +1,9 @@
 # Activate and roll back a guest built in sys-dev
 
-Status: live activation passed after a committed coordinator repair on
-2026-09-21; reboot persistence and rollback from the successful update remain
-pending. Prerequisite [building and admitting a guest in sys-dev](../completed/01-sys-dev-machine-build.md) is complete.
+Status: live activation and reboot persistence passed after a committed
+coordinator repair on 2026-09-21. Live rollback also passed; only rollback
+persistence across a second reboot and final sentinel cleanup remain.
+Prerequisite [building and admitting a guest in sys-dev](../completed/01-sys-dev-machine-build.md) is complete.
 
 Take a real guest update built from the standalone `airlock-machine` checkout
 in sys-dev, activate its admitted pool generation, and prove that rollback
@@ -98,7 +99,7 @@ The guest plan correctly limited changes to usr-home, but apply failed during
 configuration: the derived candidate updated `backend.system.source` while
 leaving `airlock.system=` in the kernel arguments pointing at the baseline
 system. Setup rejected the mismatch after pool selection and before guest
-startup. Fix candidate boot-argument consistency and add regression coverage
+startup. This required a candidate boot-argument fix and regression coverage
 before retrying. Evidence is under
 `.airlock-logs/activation-trial-20260921T221830Z/`. This trial does not establish
 successful activation or reboot persistence.
@@ -106,7 +107,7 @@ successful activation or reboot persistence.
 Coordinator rollback recovered the original running usr-home system and pool
 generation 1. Whole-machine verification returned `complete`, and the persistent
 home sentinel hash matched the baseline. The marker was absent as expected.
-The test checkout, retained admission, and sentinel remain for the retry.
+The test checkout, retained admission, and sentinel were preserved for the retry.
 
 The fix in machine commit `6785324` updates the explicit `airlock.system=` boot
 argument, rejects inconsistent baseline arguments, and gives corrected candidates
@@ -119,3 +120,15 @@ present, and the sentinel hash matched. Evidence is in
 `fixed-activation-observation.json` in the trial directory. Next: reboot this
 installation, verify selection and sentinel, then roll back and verify again
 before and after a second reboot. Do not reflash between these checks.
+
+The subsequent normal `Airlock` boot preserved the selected update. On boot
+`f0a51e62-ad34-4129-96d9-d2d69fb4599e`, whole-machine verification returned
+`complete`, usr-home ran generation 2 with its marker, the sentinel matched,
+and dom0 had no failed units. See `activation-reboot.json` in the trial directory.
+
+Coordinator rollback from that successfully booted update restored generation 1
+and the original running system, with the marker absent and the sentinel
+unchanged. Verification returned `complete`, dom0 had no failed units, and
+generation 2 remained retained but inactive. See `rollback-before-reboot.json`.
+Reboot through `Airlock` once more to verify this rollback selection persists;
+then remove the sentinel and complete this document.
