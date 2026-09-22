@@ -1,8 +1,8 @@
 # Deploy a whole-machine release from sys-dev
 
-Status: implemented locally; physical acceptance pending. Depends on
-[building and admitting a guest in sys-dev](../completed/01-sys-dev-machine-build.md)
-and [guest activation/rollback](../completed/02-sys-dev-guest-activation-rollback.md).
+Status: completed and physically accepted on 2026-09-22. Depends on
+[building and admitting a guest in sys-dev](01-sys-dev-machine-build.md)
+and [guest activation/rollback](02-sys-dev-guest-activation-rollback.md).
 
 Extend the existing development-only sys-dev-to-Dom0 coordinator transport so
 a clean, committed `airlock-machine` checkout in sys-dev can build a complete
@@ -28,5 +28,19 @@ bridge.
    `airlock` checkout or development-host build artifacts on sys-dev.
 
 Local tests cover committed provenance, private-overlay access, missing-path
-transfer, and the no-activation plan boundary. Keep this document in `todo`
-until a fresh image completes the acceptance sequence above.
+transfer, and the no-activation plan boundary.
+
+## Physical acceptance
+
+A clean checkout in fresh-image sys-dev built revision `a82bdd1`, produced a
+no-activation Dom0 plan, applied it through the detached coordinator, and
+verified the selected Dom0 and guest generations after reboot. Transaction
+`1790084751462767355` then restored the booted-image baseline and verified it
+after a second reboot.
+
+Sys-dev subsequently committed `ba8aa94`, adding only an acceptance marker to
+usr-home. Against the managed `a82bdd1` release, its plan reported only
+usr-home in `changed`, `affected`, `stage`, and `stop`. Transaction
+`1790086780417620020` applied that release, verified the exact usr-home system,
+and completed after reboot; the marker was read successfully from the running
+guest. No parent checkout or development-host build artifact was used.
