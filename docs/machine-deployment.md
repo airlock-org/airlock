@@ -160,7 +160,9 @@ declared autostart guest must answer qrexec and report the exact
 timeouts and failures capture the journal, Xen state, Qubes state, memory, and
 guest console logs under `/var/log/airlock/boot-attempts/<boot-id>/`. The
 machine-readable attempt state is under
-`/var/lib/airlock/boot-attempts/<boot-id>/`.
+`/var/lib/airlock/boot-attempts/<boot-id>/`. A detected failure replaces the
+bootstrap display with an actionable tty1 diagnostic login instead of leaving
+a stale completion message onscreen.
 
 If a hard reset interrupts a supervised boot, the next boot preserves the old
 logs before Xen or Qubes can reopen them. It then deliberately enters a safe

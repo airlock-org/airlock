@@ -85,6 +85,8 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
             inherit (host.systemd.services.airlock-boot-attempt-prepare) before wantedBy;
           }};
           recoveryCondition = host.systemd.services.airlock-boot-recovery-console.unitConfig.ConditionPathExists;
+          failureCapture = host.systemd.services."airlock-boot-failure@".serviceConfig.ExecStart;
+          failureConsole = host.systemd.services.airlock-boot-failure-console.serviceConfig;
           setup = {{
             inherit (host.systemd.services.airlock-setup-config) unitConfig serviceConfig;
           }};
@@ -153,6 +155,10 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     for dependency in ("xenconsoled.service", "qubesd.service"):
         assert dependency in supervisor["prepare"]["before"]
     assert supervisor["recoveryCondition"].endswith("/recovery-required.json")
+    assert "airlock-boot-supervisor fail" in supervisor["failureCapture"][0]
+    assert "airlock-boot-failure-console.service" in supervisor["failureCapture"][1]
+    assert supervisor["failureConsole"]["TTYPath"] == "/dev/tty1"
+    assert supervisor["failureConsole"]["Restart"] == "always"
     for service, timeout in (("network", 300), ("gui", 300), ("autostart", 600)):
         assert supervisor[service]["serviceConfig"]["TimeoutStartSec"] == timeout
         assert supervisor[service]["serviceConfig"]["ExecCondition"][0].endswith(
