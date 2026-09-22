@@ -2311,12 +2311,12 @@ def check_cmd_role(repo_root: Path, log_dir: Path) -> None:
       dom0_dev_mode_marker = dom0Cfg.environment.etc."airlock/dev-mode".text;
       dom0_observability_enabled = dom0Cfg.airlock.dom0.observability.enable;
       dom0_testing_tools_enabled = dom0Cfg.airlock.dom0.testingTools.enable;
-      dom0_dev_tools_present = lib.all (name: has name dom0Packages) [
+      dom0_dev_tools_absent = lib.all (name: !(has name dom0Packages)) [
         "codex"
         "git"
         "zellij"
       ];
-      legacy_dev_tools_present = lib.all (name: has name legacyDevDom0Packages) [
+      legacy_dev_tools_absent = lib.all (name: !(has name legacyDevDom0Packages)) [
         "codex"
         "git"
         "zellij"
@@ -2529,8 +2529,8 @@ def check_cmd_role(repo_root: Path, log_dir: Path) -> None:
     assert data["dom0_dev_mode_marker"] == "enabled\n"
     assert data["dom0_observability_enabled"] is True
     assert data["dom0_testing_tools_enabled"] is True
-    assert data["dom0_dev_tools_present"] is True
-    assert data["legacy_dev_tools_present"] is True
+    assert data["dom0_dev_tools_absent"] is True
+    assert data["legacy_dev_tools_absent"] is True
     assert data["release_image_dev_mode_enabled"] is False
     assert data["release_dom0_dhcp_enabled"] is False
     assert data["release_dom0_dhcpcd_no_gateway"] is False

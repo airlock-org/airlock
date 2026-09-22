@@ -1,7 +1,8 @@
 # Remove Dom0 development tools through sys-dev deployment
 
-Status: planned. Depends on [sys-dev guest activation/rollback](../completed/02-sys-dev-guest-activation-rollback.md)
-and [sys-dev whole-machine deployment](03-sys-dev-machine-deployment.md).
+Status: implementation committed; physical acceptance pending. Depends on
+[sys-dev guest activation/rollback](../completed/02-sys-dev-guest-activation-rollback.md)
+and [sys-dev whole-machine deployment](../completed/03-sys-dev-machine-deployment.md).
 
 Remove the development-only Dom0 Nix packages (`codex`, `git`, and `zellij`)
 from `airlock-machine/lifecycle/misc/modules/dom0.nix`. Make and commit that
@@ -19,5 +20,5 @@ part of this Nix-generation change.
 2. The plan shows only the intended Dom0 package removal and requires a reboot;
    no guest generation is activated unnecessarily.
 3. After reboot, Dom0 is running the selected generation and its Nix system
-   path no longer contains those packages. Roll back once and verify the prior
-   generation remains bootable.
+   path no longer contains those packages. The separate whole-machine trial
+   already physically verified host rollback, so this trial does not repeat it.
