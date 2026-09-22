@@ -616,6 +616,7 @@ def check_start_network_providers(repo_root: Path, log_dir: Path) -> None:
     qvm_start = log_dir / "qvm-start"
     qvm_start_log = log_dir / "qvm-start.log"
     qvm_start_log.write_text("", encoding="utf-8")
+    start_ready = log_dir / "airlock-start-qube-ready"
 
     out = _run(
         [
@@ -638,6 +639,7 @@ def check_start_network_providers(repo_root: Path, log_dir: Path) -> None:
                 "schema": "airlock.qubes-topology.v1",
                 "domains": {
                     "sys-net": {
+                        "backend": {"system": {"source": "/nix/store/sys-net"}},
                         "netvm": None,
                         "prefs": {
                             "autostart": True,
@@ -645,6 +647,7 @@ def check_start_network_providers(repo_root: Path, log_dir: Path) -> None:
                         },
                     },
                     "sys-firewall": {
+                        "backend": {"system": {"source": "/nix/store/sys-firewall"}},
                         "netvm": "sys-net",
                         "prefs": {
                             "autostart": True,
@@ -652,6 +655,7 @@ def check_start_network_providers(repo_root: Path, log_dir: Path) -> None:
                         },
                     },
                     "sys-vpn": {
+                        "backend": {"system": {"source": "/nix/store/sys-vpn"}},
                         "netvm": None,
                         "prefs": {
                             "autostart": False,
@@ -659,6 +663,7 @@ def check_start_network_providers(repo_root: Path, log_dir: Path) -> None:
                         },
                     },
                     "dev": {
+                        "backend": {"system": {"source": "/nix/store/dev"}},
                         "netvm": "sys-net",
                         "prefs": {
                             "autostart": True,
@@ -666,6 +671,7 @@ def check_start_network_providers(repo_root: Path, log_dir: Path) -> None:
                         },
                     },
                     "sys-none": {
+                        "backend": {"system": {"source": "/nix/store/sys-none"}},
                         "netvm": "none",
                         "prefs": {
                             "autostart": True,
@@ -686,11 +692,19 @@ def check_start_network_providers(repo_root: Path, log_dir: Path) -> None:
         printf '%s\n' "$*" >> "$QVM_START_LOG"
         """,
     )
+    _write_executable(
+        start_ready,
+        """
+        #!/usr/bin/env bash
+        "$AIRLOCK_QVM_START" --skip-if-running -- "$1"
+        """,
+    )
     env = os.environ.copy()
     env.update(
         {
             "AIRLOCK_QUBES_TOPOLOGY": str(topology),
             "AIRLOCK_QVM_START": str(qvm_start),
+            "AIRLOCK_START_QUBE_READY": str(start_ready),
             "AIRLOCK_LOG_DIR": str(log_dir),
             "QVM_START_LOG": str(qvm_start_log),
         }
@@ -720,12 +734,14 @@ def check_start_network_providers(repo_root: Path, log_dir: Path) -> None:
         encoding="utf-8"
     )
     command_lines = [
-        line for line in command_log.splitlines() if line.startswith("+ qvm-start ")
+        line
+        for line in command_log.splitlines()
+        if line.startswith("+ airlock-start-qube-ready ")
     ]
     assert command_lines == [
-        "+ qvm-start --skip-if-running -- sys-net",
-        "+ qvm-start --skip-if-running -- sys-firewall",
-        "+ qvm-start --skip-if-running -- sys-none",
+        f"+ airlock-start-qube-ready sys-net {topology}",
+        f"+ airlock-start-qube-ready sys-firewall {topology}",
+        f"+ airlock-start-qube-ready sys-none {topology}",
     ]
 
 
@@ -4626,14 +4642,13 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     assert "+ qvm-prefs sys-gui netvm none" in boot_command_lines
     completed_screen = status_device.read_text(encoding="utf-8")
     assert "Airlock | Bootstrap" in completed_screen
-    assert "Startup preparation complete" in completed_screen
+    assert "Topology configured; verifying required VMs next" in completed_screen
     assert "3 startup VMs prepared." in completed_screen
     assert completed_screen.count("[done]") == 4
     assert "[working]" not in completed_screen
     assert "Elapsed:" in completed_screen
-    assert "Enter your account password" in completed_screen
-    assert "Bootstrap is complete" in completed_screen
-    assert "Later boots reuse the prepared system" in completed_screen
+    assert "VM startup is not yet complete" in completed_screen
+    assert "waiting for required guests" in completed_screen
 
     _run(
         [
@@ -4727,7 +4742,7 @@ def check_setup_config_sys_net_order(repo_root: Path, log_dir: Path) -> None:
     assert full_result["scope"] == "all"
     assert full_result["status"] == "passed"
     full_screen = status_device.read_text(encoding="utf-8")
-    assert "Startup preparation complete" in full_screen
+    assert "Topology configured; verifying required VMs next" in full_screen
     assert "5 startup VMs prepared." in full_screen
     assert full_screen.count("[done]") == 4
 

@@ -350,17 +350,18 @@ def test_nix_selection_drives_reservation_assignment_and_start():
     assert "qubesd.service" in service["after"]
     assert "airlock-setup-config.service" in service["after"]
     assert service["serviceConfig"]["Restart"] == "no"
-    assert (
-        "is-active --quiet qubesd.service"
-        in service["serviceConfig"]["ExecStartPre"][0]
-    )
-    assert "--phase start" in service["serviceConfig"]["ExecStartPre"][1]
+    pre = service["serviceConfig"]["ExecStartPre"]
+    assert any("airlock-boot-supervisor stage gui" in command for command in pre)
+    assert any("is-active --quiet qubesd.service" in command for command in pre)
+    assert any("--phase start" in command for command in pre)
     assert report["noBypass"] is True
     assert report["framebuffer"]["enabled"] is True
     assert report["framebuffer"]["statusDevice"] == "/dev/tty1"
     assert report["framebuffer"]["getty"] is False
     assert report["framebuffer"]["displayManager"] is False
-    assert report["framebuffer"]["prepare"][0].endswith("/bin/chvt 1")
+    assert any(
+        command.endswith("/bin/chvt 1") for command in report["framebuffer"]["prepare"]
+    )
     assert "initcall_blacklist=sysfb_init" not in report["lab"]["params"]
     assert "video=efifb:off" not in report["lab"]["params"]
     assert "fbcon=nodefer" in report["lab"]["params"]
@@ -370,13 +371,9 @@ def test_nix_selection_drives_reservation_assignment_and_start():
     )
     assert "initcall_blacklist=sysfb_init" in report["dark"]["params"]
     assert "video=efifb:off" in report["dark"]["params"]
-    assert (
-        "boot-framebuffer.py --gpu 0000:04:00.0"
-        in service["serviceConfig"]["ExecStartPre"][2]
-    )
-    assert service["serviceConfig"]["ExecStartPre"][3].endswith(
-        "/bin/journalctl --sync"
-    )
+    assert "boot-framebuffer.py --gpu 0000:04:00.0" in "\n".join(pre)
+    assert any(command.endswith("/bin/journalctl --sync") for command in pre)
+    assert "airlock-start-qube-ready sys-gui" in service["serviceConfig"]["ExecStart"]
     assert service["serviceConfig"]["ExecStartPost"].endswith("/bin/journalctl --sync")
     assert report["inputTarget"] == []  # Only pulled in after successful VM start.
     assert report["inputServices"]

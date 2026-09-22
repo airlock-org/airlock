@@ -79,6 +79,25 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
           command = host.systemd.services.airlock-machine-autostart.serviceConfig.ExecStart;
           sync = host.systemd.services.airlock-machine-autostart.serviceConfig.ExecStartPost;
         }};
+        bootSupervisor = {{
+          enabled = host.airlock.bootSupervisor.enable;
+          prepare = {{
+            inherit (host.systemd.services.airlock-boot-attempt-prepare) before wantedBy;
+          }};
+          recoveryCondition = host.systemd.services.airlock-boot-recovery-console.unitConfig.ConditionPathExists;
+          setup = {{
+            inherit (host.systemd.services.airlock-setup-config) unitConfig serviceConfig;
+          }};
+          network = {{
+            inherit (host.systemd.services.airlock-start-network-providers) unitConfig serviceConfig;
+          }};
+          gui = {{
+            inherit (host.systemd.services.airlock-start-gui-gpu) unitConfig serviceConfig;
+          }};
+          autostart = {{
+            inherit (host.systemd.services.airlock-machine-autostart) unitConfig serviceConfig;
+          }};
+        }};
         setupSync = host.systemd.services.airlock-setup-config.serviceConfig.ExecStartPost;
         callers = host.airlock.devDom0Terminal.callers;
         policy = builtins.readFile "${{policy}}/etc/qubes/policy.d/40-airlock-dev-dom0-terminal.policy";
@@ -125,8 +144,26 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["autostart"]["command"].endswith(
         "boot-start --require-running sys-gui"
     )
-    assert report["autostart"]["sync"].endswith("/bin/journalctl --sync")
+    assert report["autostart"]["sync"][-1].endswith("/bin/journalctl --sync")
+    assert "airlock-boot-supervisor complete" in report["autostart"]["sync"][0]
     assert report["setupSync"].endswith("/bin/journalctl --sync")
+    supervisor = report["bootSupervisor"]
+    assert supervisor["enabled"] is True
+    assert "multi-user.target" in supervisor["prepare"]["wantedBy"]
+    for dependency in ("xenconsoled.service", "qubesd.service"):
+        assert dependency in supervisor["prepare"]["before"]
+    assert supervisor["recoveryCondition"].endswith("/recovery-required.json")
+    for service, timeout in (("network", 300), ("gui", 300), ("autostart", 600)):
+        assert supervisor[service]["serviceConfig"]["TimeoutStartSec"] == timeout
+        assert supervisor[service]["serviceConfig"]["ExecCondition"][0].endswith(
+            "test ! -e /run/airlock/boot-supervisor/recovery-required.json"
+        )
+        assert supervisor[service]["unitConfig"]["OnFailure"] == [
+            "airlock-boot-failure@%n.service"
+        ]
+    assert supervisor["setup"]["serviceConfig"]["ExecCondition"][0].endswith(
+        "test ! -e /run/airlock/boot-supervisor/recovery-required.json"
+    )
 
     assert report["domains"] == ["sys-dev", "sys-gui", "usr-browser", "usr-home"]
     assert report["bootRole"] == "normal\n"

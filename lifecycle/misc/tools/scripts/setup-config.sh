@@ -338,7 +338,7 @@ stop_boot_status() {
 render_boot_status() {
   local title="$1"
   local line phase marker elapsed
-  local -a phases=("Check system and VM configuration" "Prepare system images" "Prepare startup VMs" "Save settings and hand over to login")
+  local -a phases=("Check system and VM configuration" "Prepare system images" "Prepare startup VMs" "Save topology before VM health checks")
   shift
 
   elapsed=$((SECONDS - boot_started_at))
@@ -365,10 +365,10 @@ render_boot_status() {
         printf '\033[K  This can take several minutes on the first boot while VM files are prepared.\n'
         printf '\033[K  Bootstrap runs once; later boots reuse the completed system.\n'
         ;;
-      complete)
-        printf '\033[K  Bootstrap is complete. Later boots reuse the prepared system.\n'
-        printf '\033[K  The desktop login starts next.\n'
-        printf '\033[K  Enter your account password if a login prompt appears.\n'
+      configured)
+        printf '\033[K  Topology configuration is complete; VM startup is not yet complete.\n'
+        printf '\033[K  Airlock is now waiting for required guests to answer health checks.\n'
+        printf '\033[K  The desktop appears only after those checks pass.\n'
         ;;
       failed)
         printf '\033[K  Bootstrap could not finish. Switch to a console with Ctrl+Alt+F2.\n'
@@ -2262,6 +2262,6 @@ done
 write_result passed "Qubes config setup completed"
 persist_setup_state
 boot_phase=5
-boot_status_state=complete
-show_boot_status "Startup preparation complete" "$boot_domain_total startup VMs prepared."
+boot_status_state=configured
+show_boot_status "Topology configured; verifying required VMs next" "$boot_domain_total startup VMs prepared."
 cat "$RESULT_JSON"

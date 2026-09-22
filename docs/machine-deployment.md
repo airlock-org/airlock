@@ -153,6 +153,22 @@ post-install normalizer applies these names after image builds and deployments.
 Recovery is pinned as a separate Nix system profile, so it remains available
 when the original image generation falls outside the retained history.
 
+Normal USB boots are guarded by a persistent boot-attempt supervisor. A VM is
+not ready merely because Xen created it: network providers, sys-gui, and every
+declared autostart guest must answer qrexec and report the exact
+`/run/current-system` selected by the topology. Startup stages have hard
+timeouts and failures capture the journal, Xen state, Qubes state, memory, and
+guest console logs under `/var/log/airlock/boot-attempts/<boot-id>/`. The
+machine-readable attempt state is under
+`/var/lib/airlock/boot-attempts/<boot-id>/`.
+
+If a hard reset interrupts a supervised boot, the next boot preserves the old
+logs before Xen or Qubes can reopen them. It then deliberately enters a safe
+local recovery boot: PCI-backed VMs, GPU handoff, networking, and guest
+autostart remain disabled, and tty1 explains where the evidence lives. Inspect
+that evidence and reboot once more for a normal retry. This recovery boot is
+distinct from the boot-menu `Airlock (recovery)` generation.
+
 The `airlock-machine` revision and lock-file hash are recorded in the release. The
 development-side receipt also records the parent revision. Local build receipts
 and GC roots are under `.airlock-logs/machine-deploy/<airlock-dev-commit>/`.

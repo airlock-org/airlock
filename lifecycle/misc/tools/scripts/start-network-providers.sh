@@ -4,6 +4,7 @@ set -euo pipefail
 TOPOLOGY_PATH="${AIRLOCK_QUBES_TOPOLOGY:-/etc/airlock/qubes-topology.json}"
 LOG_DIR="${AIRLOCK_LOG_DIR:-/var/log/airlock}"
 QVM_START="${AIRLOCK_QVM_START:-qvm-start}"
+START_QUBE_READY="${AIRLOCK_START_QUBE_READY:-airlock-start-qube-ready}"
 RESULT_JSON="$LOG_DIR/start-network-providers.json"
 COMMAND_LOG="$LOG_DIR/start-network-providers.commands.log"
 
@@ -113,8 +114,8 @@ status="passed"
   printf 'topology: %s\n' "$TOPOLOGY_PATH"
   while IFS= read -r vm; do
     [ -n "$vm" ] || continue
-    printf '+ qvm-start --skip-if-running -- %s\n' "$vm"
-    if "$QVM_START" --skip-if-running -- "$vm"; then
+    printf '+ airlock-start-qube-ready %s %s\n' "$vm" "$TOPOLOGY_PATH"
+    if AIRLOCK_QVM_START="$QVM_START" "$START_QUBE_READY" "$vm" "$TOPOLOGY_PATH"; then
       printf '%s\n' "$vm" >> "$started_file"
     else
       rc=$?
