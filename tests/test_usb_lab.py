@@ -58,6 +58,8 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         bootRole = host.environment.etc."airlock/boot-role".text;
         inherit (host.airlock.qubes.prefs) default_netvm;
         browserNetvm = host.airlock.qubes.domains.usr-browser.netvm;
+        devMemory = host.airlock.qubes.domains.sys-dev.prefs.memory;
+        devMaxmem = host.airlock.qubes.domains.sys-dev.prefs.maxmem;
         guiPci = host.airlock.qubes.domains.sys-gui.devices.pci;
         guiHostname = gui.networking.hostName;
         labGuiHasDom0Terminal = labGui.airlock.devDom0Terminal.guest.enable;
@@ -130,6 +132,8 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["bootRole"] == "normal\n"
     assert report["default_netvm"] == "sys-dev"
     assert report["browserNetvm"] == "sys-dev"
+    assert report["devMemory"] == 8192
+    assert report["devMaxmem"] == 8192
     assert report["guiHostname"] == "sys-gui"
     assert not report["labGuiHasDom0Terminal"]
     assert "airlock-start-sys-dev-tailscale" in report["labGuiPackages"]
