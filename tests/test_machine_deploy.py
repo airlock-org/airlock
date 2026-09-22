@@ -138,6 +138,9 @@ class Machine(deploy.Coordinator):
         }
         self.initial = baseline
         self.fail = None
+        self.generations = {name: 1 for name in topology["domains"]}
+        self.tags = {name: set() for name in topology["domains"]}
+        self.uuids = {name: "uuid-" + name for name in topology["domains"]}
         super().__init__(state, self.execute)
 
     def execute(self, *args, **kwargs):
@@ -145,9 +148,26 @@ class Machine(deploy.Coordinator):
         if self.fail and args[0] == self.fail:
             raise deploy.DeploymentError("simulated failure")
         if args[0] == "qvm-ls":
+            if "--raw-list" in args:
+                return "\n".join(sorted(self.selected))
             return "\n".join(name + "|Running" for name in sorted(self.live))
         if args[0] == "airlock-closure-store":
-            assert not any(call[0] == "qvm-shutdown" for call in self.calls)
+            if args[1] in ("admit", "describe-generation", "find-generation"):
+                assert not any(call[0] == "qvm-shutdown" for call in self.calls)
+            if args[1] == "describe-generation":
+                name = args[args.index("--domain") + 1]
+                generation = int(args[args.index("--generation") + 1])
+                return json.dumps(
+                    {
+                        "schema": deploy.GENERATION_INFO_SCHEMA,
+                        "status": "passed",
+                        "domain": name,
+                        "generation": generation,
+                        "system": self.selected[name],
+                        "manifest": f"/pool/{name}/{generation}/manifest.json",
+                        "retention": {"retain": True},
+                    }
+                )
             if args[1] == "find-generation":
                 return json.dumps({"status": "missing"})
             return json.dumps({"generation": "staged-generation"})
@@ -155,17 +175,38 @@ class Machine(deploy.Coordinator):
             self.live.remove(args[-1])
         if args[0] == "qvm-start":
             self.live.add(args[-1])
+        if args[0] == "qvm-prefs":
+            if args[2] == "uuid":
+                return self.uuids[args[1]]
+            return ""
+        if args[0] == "qvm-tags":
+            name, action = args[1:3]
+            if action == "list":
+                return "\n".join(sorted(self.tags[name]))
+            if action == "add":
+                self.tags[name].add(args[3])
+            elif action == "del":
+                self.tags[name].discard(args[3])
+            return ""
         if args[0].endswith("/airlock-setup-config"):
             target = deploy.read_json(args[-1])
-            self.selected = {
-                name: vm["backend"]["system"]["source"]
-                for name, vm in target["domains"].items()
-            }
+            for name in target["domains"]:
+                self.generations.setdefault(name, 1)
+                self.tags.setdefault(name, set())
+                self.uuids.setdefault(name, "uuid-" + name)
+            self.selected.update(
+                {
+                    name: vm["backend"]["system"]["source"]
+                    for name, vm in target["domains"].items()
+                }
+            )
             deploy.atomic_json(
                 Path(kwargs["env"]["AIRLOCK_LOG_DIR"]) / "setup-config.json",
                 {"restart_required": False},
             )
         if args[0] == "qvm-features":
+            if args[2] == "airlock-store-generation":
+                return str(self.generations[args[1]])
             return self.selected[args[1]]
         if args[0] == "qrexec-client":
             return self.selected[args[2]]

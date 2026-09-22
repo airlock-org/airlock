@@ -50,6 +50,9 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         policy = builtins.head (builtins.filter (p:
           (p.name or "") == "airlock-dev-dom0-terminal-policy"
         ) host.virtualisation.qubes.packages);
+        retiredPolicy = builtins.head (builtins.filter (p:
+          builtins.pathExists "${{p}}/etc/qubes/policy.d/05-airlock-retired.policy"
+        ) host.virtualisation.qubes.packages);
         poolSend = builtins.head (builtins.filter (package:
           (package.pname or package.name) == "airlock-pool-send"
         ) dev.environment.systemPackages);
@@ -106,6 +109,9 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         setupSync = host.systemd.services.airlock-setup-config.serviceConfig.ExecStartPost;
         callers = host.airlock.devDom0Terminal.callers;
         policy = builtins.readFile "${{policy}}/etc/qubes/policy.d/40-airlock-dev-dom0-terminal.policy";
+        retiredPolicy = builtins.readFile "${{retiredPolicy}}/etc/qubes/policy.d/05-airlock-retired.policy";
+        retireDomains = host.airlock.machineDeployment.retireDomains;
+        trashRetentionDays = host.airlock.machineDeployment.trashRetentionDays;
         poolAdmission = host.airlock.poolAdmission;
         poolAdmissionHandler = builtins.readFile host.environment.etc."qubes-rpc/airlock.Pool.Admit".source;
         poolAdmissionMode = host.environment.etc."qubes-rpc/airlock.Pool.Admit".mode;
@@ -152,6 +158,9 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["autostart"]["sync"][-1].endswith("/bin/journalctl --sync")
     assert "airlock-boot-supervisor complete" in report["autostart"]["sync"][0]
     assert report["setupSync"].endswith("/bin/journalctl --sync")
+    assert report["retireDomains"] == []
+    assert report["trashRetentionDays"] == 30
+    assert "* * @anyvm @tag:airlock-retired deny" in report["retiredPolicy"]
     supervisor = report["bootSupervisor"]
     assert supervisor["enabled"] is True
     assert "multi-user.target" in supervisor["prepare"]["wantedBy"]

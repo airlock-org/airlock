@@ -1,6 +1,7 @@
 # Recoverable VM retirement and trash
 
-Status: proposed.
+Status: implemented locally; focused pytest coverage passes. Physical retirement,
+reboot, restore, pool-GC, and purge acceptance remain pending.
 
 ## Goal
 
@@ -68,3 +69,18 @@ require the same deployment authorization as other topology changes.
 In a separate follow-up after this mechanism is verified, retire `sys-config-*`
 through an ordinary committed machine release and record the disposition of
 each role's persistent data in the `sys-ctrl` work.
+
+## Implementation
+
+The release manifest now carries an exact `retireDomains` delta and a bounded
+`trashRetentionDays` setting. The coordinator keeps retired domains registered
+under their original names, stops them, disables autostart, tags them
+`airlock-retired`, pins their selected pool generation, and writes durable trash
+metadata. A static early qrexec rule denies calls to tagged targets. Committed
+deployment or rollback restores the same UUID and private storage identity.
+
+`trash-list` exposes the audit records. `trash-purge ID --confirm ID` is
+restartable, requires expiry and absence from the current/previous release pair,
+checks the recorded UUID, removes the Qubes domain, and makes its pool generation
+eligible for GC. The pool refuses retirement while a running-volume reference
+exists.
