@@ -86,6 +86,9 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
           }};
           recoveryCondition = host.systemd.services.airlock-boot-recovery-console.unitConfig.ConditionPathExists;
           failureCapture = host.systemd.services."airlock-boot-failure@".serviceConfig.ExecStart;
+          failureFinally = host.systemd.services."airlock-boot-failure@".serviceConfig.ExecStopPost;
+          tty1 = host.systemd.units."getty@tty1.service".enable;
+          autoTty1 = host.systemd.units."autovt@tty1.service".enable;
           failureConsole = host.systemd.services.airlock-boot-failure-console.serviceConfig;
           setup = {{
             inherit (host.systemd.services.airlock-setup-config) unitConfig serviceConfig;
@@ -155,8 +158,10 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     for dependency in ("xenconsoled.service", "qubesd.service"):
         assert dependency in supervisor["prepare"]["before"]
     assert supervisor["recoveryCondition"].endswith("/recovery-required.json")
-    assert "airlock-boot-supervisor fail" in supervisor["failureCapture"][0]
-    assert "airlock-boot-failure-console.service" in supervisor["failureCapture"][1]
+    assert "airlock-boot-supervisor fail" in supervisor["failureCapture"]
+    assert "airlock-boot-failure-console.service" in supervisor["failureFinally"]
+    assert supervisor["tty1"] is False
+    assert supervisor["autoTty1"] is False
     assert supervisor["failureConsole"]["TTYPath"] == "/dev/tty1"
     assert supervisor["failureConsole"]["Restart"] == "always"
     for service, timeout in (("network", 300), ("gui", 300), ("autostart", 600)):

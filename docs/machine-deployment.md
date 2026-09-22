@@ -171,6 +171,16 @@ autostart remain disabled, and tty1 explains where the evidence lives. Inspect
 that evidence and reboot once more for a normal retry. This recovery boot is
 distinct from the boot-menu `Airlock (recovery)` generation.
 
+The 2026-09-22 physical trial exposed three integration defects before any guest
+started: the readiness package omitted its supervisor dependency, concurrent
+failure handlers collided on the state file, and logind's `autovt@tty1` login
+competed with the diagnostic console. The local fixes declare the dependency,
+serialize state/event/marker updates with unique temporary files, and mask both
+standard tty1 login names during supervised boots. Diagnostic login is also
+requested if capture fails. Regression checks run the built readiness package
+with an empty search path, launch concurrent failure handlers, and evaluate both
+tty1 masks. A fresh physical boot and failure-console trial remain required.
+
 The `airlock-machine` revision and lock-file hash are recorded in the release. The
 development-side receipt also records the parent revision. Local build receipts
 and GC roots are under `.airlock-logs/machine-deploy/<airlock-dev-commit>/`.
