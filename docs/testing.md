@@ -12,7 +12,13 @@ Airlock exposes three test-suite targets. They are intentionally not aliases:
 make test-quick
 ```
 
-Runs local checks:
+Component checks run directly from `airlock-machine/tests/` against that
+checkout's runtime sources and flake. Parent tests cover image assembly,
+deployment transport, repository boundaries, and nested-VM orchestration.
+The `TESTS="..."` names below still select component checks in the submodule;
+`run-nested-gui-smoke-static` selects the parent orchestration check.
+
+The checks include:
 
 - `nix flake check --no-build`
 - topology and system schema tests,

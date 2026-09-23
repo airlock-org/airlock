@@ -110,7 +110,7 @@ dom0 retains DHCP/SSH for the test harness, the `airlock` account uses password
 `airlock` and passwordless sudo, and the `sys-gui` login is `user` with password
 `airlock`. Do not deploy these credentials or network settings on hardware.
 
-Pytest configuration coverage is in `tests/test_gui_minimal.py` and included
+Pytest configuration coverage is in `airlock-machine/tests/test_gui_minimal.py` and included
 in `make test-quick`. No tests, builds or VM boots were run for this change,
 as requested. Physical display ownership and boot behavior remain unverified.
 

@@ -262,7 +262,7 @@ segments to make space.
 - [Storage engine](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/)
 - [Bootstrap config system](../../airlock-machine/lifecycle/bootstrap/config-system.nix)
 - [Initial runtime configuration](../../airlock-machine/lifecycle/bootstrap/initial-runtime-config/flake.nix)
-- [Machine deployment tests](../../tests/test_machine_deploy.py)
+- [Machine deployment tests](../../airlock-machine/tests/test_machine_deploy.py)
 
 ## Outside this goal
 

@@ -162,7 +162,7 @@ ordering. It still requires successful bootstrap, and an explicit
 daemon did not return. No guest retries, reset changes, or laptop-specific
 workarounds were added.
 
-`tests/test_gui_gpu_boot_order.py` reproduces the cancellation with inert,
+`airlock-machine/tests/test_gui_gpu_boot_order.py` reproduces the cancellation with inert,
 uniquely named local user-systemd units and verifies the corrected dependency.
 It also verifies that failed bootstrap or an unavailable daemon blocks the
 guest. The fixture deliberately uses separate **stop and start** operations,
@@ -171,7 +171,7 @@ cancelled job. Run it explicitly with:
 
 ```sh
 AIRLOCK_RUN_SYSTEMD_ORDER_TEST=1 make test-quick PYTEST_DEFAULT_TARGETS= \
-  PYTEST_SELECTED='tests/test_gui_gpu_boot_order.py tests/test_gui_gpu_assignment.py'
+  PYTEST_SELECTED='airlock-machine/tests/test_gui_gpu_boot_order.py airlock-machine/tests/test_gui_gpu_assignment.py'
 ```
 
 Result: 31 passed, one optional SSH check skipped. Evidence is under

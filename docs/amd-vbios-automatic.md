@@ -143,9 +143,9 @@ Nix assertions passed and the default hybrid profile retained automation disable
 
 ```sh
 make test-quick PYTEST_DEFAULT_TARGETS= \
-  PYTEST_SELECTED='tests/test_amd_vbios.py tests/test_amd_vbios_runtime.py'
+  PYTEST_SELECTED='airlock-machine/tests/test_amd_vbios.py airlock-machine/tests/test_amd_vbios_runtime.py'
 AIRLOCK_VBIOS_LIBVIRT_SSH=root@HOST \
-  uv run pytest tests/test_amd_vbios_libvirt.py
+  uv run pytest airlock-machine/tests/test_amd_vbios_libvirt.py
 make usb-dev-image
 make usb-dev-provision USB_SERIAL=YOUR_SERIAL
 ```

@@ -14,6 +14,14 @@ only substitutes prepared descriptor sources for image assembly. Deployable
 releases canonicalize those sources back to the same OS-owned guest closure
 artifacts.
 
+Runtime helper sources and component tests live only in `airlock-machine`.
+The parent quick suite runs those tests directly from the pinned submodule;
+it must not keep editable copies of setup, config import, network startup,
+component smoke scripts, or boot helpers. Parent-only tests cover USB assembly,
+deployment transport, and nested-VM orchestration. Both repositories retain
+their own guarded development-store wrappers so they can initialize their
+development environments independently.
+
 The current `.gitmodules` URL is the local-only path
 `/home/user/dev/airlock-org/airlock-machine`; no remote has been selected or published.
 An existing local checkout initializes with:

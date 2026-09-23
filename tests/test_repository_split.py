@@ -4,7 +4,35 @@ import configparser
 from pathlib import Path
 import subprocess
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "setup-config.sh",
+        "start-network-providers.sh",
+        "import-config-inputs.sh",
+        "nixos-config-vms-smoke.sh",
+        "nix-closure-domain-smoke.sh",
+        "boot-framebuffer.py",
+        "boot-menu.py",
+    ],
+)
+def test_runtime_scripts_have_one_machine_owned_source(name):
+    relative = Path("lifecycle/misc/tools/scripts") / name
+    assert (ROOT / "airlock-machine" / relative).is_file()
+    assert not (ROOT / relative).exists()
+
+
+def test_component_test_modules_are_not_copied_into_parent():
+    parent = {path.name for path in (ROOT / "tests").glob("test_*.py")}
+    machine = {
+        path.name for path in (ROOT / "airlock-machine/tests").glob("test_*.py")
+    }
+    assert not parent & machine, "run canonical machine tests instead of copying them"
 
 
 def test_machine_is_a_real_pinned_submodule():

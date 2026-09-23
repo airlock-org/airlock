@@ -420,7 +420,7 @@ Start with `git status`, this guide, and the last deployment journal. Keep four
 claims separate: source committed, release built, guests verified, host verified.
 Add pytest regression coverage before declaring an incident fixed. The primary
 feedback loop is `make test-quick`; focused tests are
-`uv run pytest tests/test_machine_deploy.py`.
+`uv run pytest airlock-machine/tests/test_machine_deploy.py tests/test_machine_deploy_client.py`.
 
 Implementation entry points:
 
