@@ -416,6 +416,30 @@ on its host `/nix/store`. Do not manually delete runtime closure-store segments.
 
 ## For the next agent
 
+### Deployment diagnostics
+
+New apply/resume/rollback transactions capture evidence under
+`/var/lib/airlock/machine/transactions/<id>/diagnostics/` in dom0. `events.jsonl`
+records phases, exact command arguments, elapsed time, failures/timeouts, and
+observed Qubes/input service-state changes. Numbered `.stdout` and `.stderr`
+files remain readable while commands run and are fsynced approximately every
+half-second while waiting. PCI assignments are queried from Qubes before VM
+stop/start, including assignments discovered automatically at setup time.
+
+A background observer samples the dom0 journal and Xen/guest/device-model
+console tails throughout deployment, independently of sys-dev or SSH. Journal
+collection stops after reaching 32 MiB (the final batch may exceed this); console
+snapshots keep the last 64 KiB per file. Observer commands have three-second
+timeouts and failures are diagnostic only. Sampling runs about every two seconds
+plus collection time. These are bounded best-effort observations, not a guarantee
+against lost evidence on hardware failure. Existing console files are also
+fsynced when sampled. The collector stops when the deployment command exits.
+
+Storage-helper stderr additionally records the beginning/end/failure of each
+`qubesd` stop/start and socket existence afterward. Socket presence and systemd
+active states do **not** establish RPC or physical-input readiness. This logging
+does not retry starts, reset hardware, change policy, or repair services.
+
 Start with `git status`, this guide, and the last deployment journal. Keep four
 claims separate: source committed, release built, guests verified, host verified.
 Add pytest regression coverage before declaring an incident fixed. The primary
