@@ -38,9 +38,11 @@ provides guarded release pruning and purge; live deployment/testing is the next 
   views still work. Exercise shared pool data, not only unique objects.
 
 The earlier `lab-retire` test VM was restored and halted on the previous USB
-installation; that installation was replaced by a fresh image. The image does
-not declare `lab-retire`, so its recovery topology cannot retain the disposable
-VM. A committed machine release introduces it for the next physical trial.
+installation; that installation was replaced by a fresh image. The normal image
+and release sources no longer declare this disposable VM. A temporary committed
+trial release must introduce a disposable VM after image boot, so the recovery
+image cannot retain it during the purge trial. Keep the trial commits available
+through physical acceptance.
 
 ## Local implementation and next test
 
@@ -59,9 +61,10 @@ Tests cover interrupted pruning/purge, exact targets, ownership conflicts,
 retention, and shared objects surviving GC for a second VM or retained builder
 generation. These are local results; no live prune or purge has been performed.
 
-After the fresh image boots, deploy the committed release that introduces
-`lab-retire`, create and check private-data markers, then retire it to capture
-its volume snapshot. Verify refusals before expiry, run the retired-VM
+After the fresh image boots, create and deploy a committed trial release that
+introduces a disposable VM. Create and check private-data markers, then deploy
+another committed release that explicitly retires it and captures its volume
+snapshot. Verify refusals before expiry, run the retired-VM
 pool-cleanup/restore trial, then retire again for the purge trial. Use the
 configured retention period (minimum one day); do not accelerate expiry by
 changing the clock or record. Advance the rollback choice with a later committed

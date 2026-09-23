@@ -222,7 +222,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["poolAdmission"] == {
         "enable": True,
         "caller": "sys-dev",
-        "targets": ["sys-gui", "sys-dev", "usr-home", "usr-browser", "lab-retire"],
+        "targets": ["sys-gui", "sys-dev", "usr-home", "usr-browser"],
     }
     assert report["poolAdmissionMode"] == "0555"
     for target in report["poolAdmission"]["targets"]:
