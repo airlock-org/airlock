@@ -427,7 +427,8 @@ Implementation entry points:
 - `airlock-machine/lifecycle/misc/modules/machine-release.nix`: standalone release construction.
 - `lifecycle/image/profiles/usb-prepared-store.nix`: prepared USB topology adapter.
 - `lifecycle/misc/tools/scripts/machine-deploy.py`: build/provenance/SSH transport.
-- `airlock-machine/lifecycle/runtime/tools/machine-deploy.py`: dom0 planning and journalled apply.
+- `airlock-machine/lifecycle/runtime/tools/machine-deploy.py`: dom0 command-line entry point.
+- `airlock-machine/lifecycle/runtime/tools/airlock_machine_deploy/`: planning, journalled apply/recovery, retirement, and release pruning; see its `README.md` for module and locking boundaries.
 - `airlock-machine/lifecycle/runtime/tools/sys-dev-machine-deploy.py`: direct sys-dev build/transport client.
 - `airlock-machine/lifecycle/misc/modules/machine-deployment.nix`: image/boot integration.
 - `airlock-machine/lifecycle/runtime/tools/scripts/nix-domain-storage.py`: staged generation use.

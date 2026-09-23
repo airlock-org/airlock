@@ -65,6 +65,7 @@ VM_PREBUILD_ATTRS := \
 
 PYTHON_FILES := \
 	airlock-machine/lifecycle/runtime/tools/machine-deploy.py \
+	airlock-machine/lifecycle/runtime/tools/airlock_machine_deploy/*.py \
 	airlock-machine/lifecycle/runtime/tools/sys-dev-machine-deploy.py \
 	lifecycle/misc/tools/scripts/machine-deploy.py \
 	lifecycle/misc/tools/scripts/sys-dev-machine-source.py \
