@@ -1,5 +1,12 @@
 # AMD ownership experiment
 
+Status: **historical experiment and evidence**, not current boot/recovery
+instructions. References below to experimental menu entries, direct dom0
+networking, passwords, and pending desktop validation belong to those trials.
+Use [USB development and recovery](usb-dev.md) and [USB lab](usb-lab.md) for
+current operations. [GNOME was subsequently verified](sys-gui-gnome.md); GPU
+reset effectiveness and broader hardware compatibility remain unproven.
+
 This records the earlier standalone GPU experiment. The current USB image ships
 the normal GNOME Airlock configuration and text recovery only; standalone and
 hybrid GUI builders remain in source but their closures are no longer embedded.
@@ -48,8 +55,9 @@ The user-facing systemd-boot menu is intentionally limited to:
 only the newest recovery entry is shown. The old hybrid, GUI-only, Hyprland and
 XFCE builders remain in the source tree but do not clutter the boot menu.
 
-GNOME and Hyprland are not yet hardware-verified. The successful desktop evidence
-above is for XFCE. See [the Hyprland milestone](sys-gui-hyprland.md) for its
+At the time of this experiment, GNOME and Hyprland were not hardware-verified.
+The successful desktop evidence above is for XFCE; later GNOME evidence is
+recorded separately in [the GNOME milestone](sys-gui-gnome.md). See [the Hyprland milestone](sys-gui-hyprland.md) for its
 build, boot, shortcuts and diagnostic commands.
 
 All manual entries retain direct dom0 networking, SSH and Tailscale. The lab

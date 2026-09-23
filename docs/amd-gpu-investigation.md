@@ -1,18 +1,26 @@
 # AMD GPU ownership investigation
 
+Status reviewed 2026-09-23: historical investigation with unresolved reset and
+hardware-lifecycle questions. Physical GUI/input and later GNOME cross-VM
+windows have been demonstrated; see [GNOME evidence](sys-gui-gnome.md) and
+[deployment evidence](machine-deployment.md). The dated gates below retain
+their original evidence boundaries. Successful later boots do not establish
+safe GPU reset, suspend/resume, or support for other machines.
+
 Establish whether this laptop can give its internal GPU to `sys-gui` and run
 a usable physical desktop through the existing Xen/Qubes architecture.
 Progress is measured by evidence and completed gates, not elapsed time.
 Keep the initial desktop on XFCE/Xorg; Hyprland, inference and `sys-gpu` are
 outside this investigation.
 
-## Current milestone — 2026-09-14
+<a id="current-milestone--2026-09-14"></a>
 
-Follow-up: [GNOME](sys-gui-gnome.md) is now configured as the `usb-gui-lab`
-desktop, pending build and hardware validation. [Hyprland +
-DankMaterialShell](sys-gui-hyprland.md) remains available as
-`usb-gui-lab-hyprland`; the XFCE baseline described below remains available as
-`usb-gui-lab-xfce`.
+## Recorded milestone — 2026-09-14
+
+Later follow-up: [GNOME](sys-gui-gnome.md) and forwarded application windows
+were verified on the physical lab. The normal USB entry now uses GNOME.
+Hyprland and XFCE builders remain in source; the experimental boot-menu
+choices described by older reports are no longer the normal image menu.
 
 The rebuilt USB's **usb-gui-lab with Xen** now boots into a physical sys-gui
 desktop with hardware-accelerated AMD rendering. Boot ID:
@@ -41,11 +49,10 @@ is not a claim of universal hardware compatibility or safe GPU reset.
 The handoff log proves release, not that every bootstrap status update was
 visible. Per-device input behavior and suspend/resume remain separate checks.
 
-The next desktop experiment can trial **GNOME**, while retaining Hyprland and
-XFCE as separate fallbacks. GNOME startup and displaying other Qubes VMs'
-windows need their own validation; the OpenGL result does not prove those
-integrations. AI inference and sys-gpu remain deferred. The sections below
-preserve the earlier investigation and its evidence.
+The next desktop experiment at this point was GNOME; its later results are
+linked above. This OpenGL result alone does not prove those integrations.
+AI inference and sys-gpu remain separate work. The sections below preserve
+the earlier investigation and its evidence.
 
 ## Verified starting point — 2026-09-13
 

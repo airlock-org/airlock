@@ -1,7 +1,15 @@
 # Move configuration work into sys-ctrl
 
 Status: controller architecture not implemented; direct pool admission foundation
-implemented and physically smoke-tested from `sys-dev`. Updated 2026-09-17.
+implemented and physically smoke-tested from `sys-dev`. Baseline refreshed
+2026-09-23; controller migration remains planned.
+
+Since the original September 17 plan, the [pool-backed builder](../sys-dev-build-store.md),
+[guest activation/rollback](../completed/02-sys-dev-guest-activation-rollback.md),
+and [sys-dev whole-machine deployment](../completed/03-sys-dev-machine-deployment.md)
+have been implemented and physically accepted within their stated boundaries.
+Reuse these capabilities; they do not implement sys-ctrl or eliminate the
+whole-machine path's imports into dom0's ordinary Nix store.
 
 Repository boundary established 2026-09-17: deployable configuration now lives
 in the standalone `airlock-machine` repository. The parent `airlock` repository pins it as the `airlock-machine/`
@@ -62,12 +70,16 @@ service in the live test and is not the implemented fix.
 After rebuilding and flashing the fix, a tiny synthetic object was admitted
 through qrexec as retained generation 2 while generation 1 remained current
 (`activated=false`). The quick suite passed 329 tests, with 23 skipped.
-This establishes the admission path, not a complete guest update or rollback;
-the nested `vm-pool-admission-flow` has not yet been executed.
+That original trial established admission only. Later guest activation and
+rollback evidence is linked above. It does not establish that the separate
+nested `vm-pool-admission-flow` was executed.
 
 There is no `sys-ctrl` in the tested physical topology: it contains `sys-dev`,
-`sys-gui`, `usr-home`, and `usr-browser`. The existing `make machine-*` workflow
-has not yet been switched to this direct admission interface.
+`sys-gui`, `usr-home`, and `usr-browser`. The host `make machine-*` workflow remains available, and releases can now
+also be built/submitted directly from sys-dev through the narrow deployment
+interface. The whole-machine release path still imports missing closures into
+dom0's ordinary store; direct guest admission does not yet eliminate that
+duplication for whole-machine updates.
 
 There are two distinct stores on dom0:
 

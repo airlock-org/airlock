@@ -1,5 +1,10 @@
 # sys-gui desktop and login
 
+Scope: this document describes the **nested/hybrid XFCE GUI path** and its
+historical physical-GPU roadmap. It is not the current physical USB desktop
+runbook. The USB lab uses physical-GPU GNOME; see [USB lab](usb-lab.md),
+[GNOME evidence](sys-gui-gnome.md), and [input forwarding](sys-gui-input.md).
+
 `sys-gui` owns LightDM's login screen, desktop session, Qubes Manager,
 application menus, tray widgets, notifications, and graphical settings tools.
 The offline `usr-home` desktop-work VM owns the Files and Terminal processes
@@ -109,7 +114,7 @@ Pytest configuration coverage is in `tests/test_gui_minimal.py` and included
 in `make test-quick`. No tests, builds or VM boots were run for this change,
 as requested. Physical display ownership and boot behavior remain unverified.
 
-## Next hardware milestone
+## Historical physical-GPU milestone
 
 Keep the hybrid image as a development/recovery path. A separate, explicit
 AMD direct-display configuration still needs:

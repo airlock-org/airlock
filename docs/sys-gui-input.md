@@ -1,5 +1,11 @@
 # Physical GUI input
 
+Scope: implemented forwarding for explicitly declared physical input paths.
+The dated laptop experiment below records its original validation, while
+[later GNOME evidence](sys-gui-gnome.md) and [deployment results](machine-deployment.md)
+record subsequent desktop work. Generic USB discovery, input enrollment, and
+timed recovery remain in the [USB input plan](todo/usb-input-setup.md).
+
 The reusable module `airlock-machine/lifecycle/misc/modules/qubes-input-proxy.nix` forwards
 selected physical input devices from dom0 to a GUI domain. It packages
 [upstream Qubes input proxy 1.0.46](https://github.com/QubesOS/qubes-app-linux-input-proxy/tree/ea8710166c6ac29dd4183cdf155bc9a1da34cf4a),
@@ -11,7 +17,8 @@ Dom0 reads selected evdev devices. Qubes qrexec transports their events to
 domain. The receiver creates Linux uinput devices, which the guest's normal
 input stack detects, including before login. Touchpads need the tablet filter
 because they produce absolute events. This kernel interface is usable by Xorg
-and Wayland compositors; only XFCE/Xorg has been exercised here.
+and Wayland compositors; this document's original input experiment exercised
+XFCE/Xorg. It does not certify every compositor's input behavior.
 
 The sender uses upstream's dom0 `qrexec-client -l` administrative interface.
 That interface does not consult qrexec policy. Separate policy denies

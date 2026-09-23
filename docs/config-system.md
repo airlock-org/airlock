@@ -1,5 +1,13 @@
 # Config System
 
+Scope: the separate `sys-config-*` candidate workflow and shared storage
+architecture. This is **not the active physical-lab deployment authority**.
+Use [machine deployment](machine-deployment.md) for the host/sys-dev deployment
+paths and [sys-ctrl](todo/05-sys-ctrl.md) for the proposed successor.
+This parent-repository integration copy adapts component links from
+[airlock-machine documentation](../airlock-machine/docs/config-system.md);
+neither copy should be read as proof of the current lab topology.
+
 The config system is Airlock's first self-hosted topology slice. Dom0 still owns
 Qubes control authority, but the desired Qubes topology and dom0 system plan
 come from a Nix flake edited inside dedicated config VMs.

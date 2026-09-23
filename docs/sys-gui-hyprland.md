@@ -1,5 +1,10 @@
 # Hyprland and Quickshell milestone
 
+Scope: **deferred experimental desktop**, not the current USB boot workflow.
+The old build/menu procedure below is historical: normal images ship GNOME
+and text recovery, not the Hyprland/XFCE experiment entries. A new trial needs
+an explicit image configuration and validation plan. See [USB development](usb-dev.md).
+
 Status: image configuration added; no physical Hyprland boot verified yet.
 The preceding XFCE milestone verified AMD hardware-accelerated OpenGL in
 sys-gui. That is a prerequisite, not evidence that Wayland or cross-VM windows
@@ -14,7 +19,7 @@ HiDPI profile, and its DMS package customization live together under
 `sys-gui/desktop/hyprland/`. GNOME lives in the sibling
 `sys-gui/desktop/gnome/` implementation.
 
-## Build and boot
+## Historical build and boot procedure
 
 ```console
 make usb-dev-image

@@ -1,5 +1,13 @@
 # Repository-first whole-machine deployment
 
+Reading guide (2026-09-23): both development-host and sys-dev release
+submission paths exist. See **Normal loop** for commands and the completed
+[sys-dev deployment trial](completed/03-sys-dev-machine-deployment.md) for its
+physical acceptance. Older space limits and trial outcomes below are dated
+evidence, not a statement that all deployment remains untested. The host
+transport uses the development shell; the sys-dev client uses its narrow
+deployment interface. Neither is the planned sys-ctrl architecture.
+
 ## The development contract
 
 The committed `airlock-machine` repository and the parent repository's pinned `airlock-machine/`
@@ -14,7 +22,7 @@ The coordinator covers the whole declared machine, not one application/VM.
 It uses the existing Xen/Qubes lifecycle, setup-config converger, policy, and
 immutable closure-store engine. It does not replace those mechanisms.
 
-The current transport uses sys-dev's existing **development-only full dom0
+The development-host transport uses sys-dev's existing **development-only full dom0
 administrative access**, with a password-protected sudo session. It adds no
 dom0 SSH listener or new production qrexec capability. This is not yet the
 restricted config-authority/approval workflow described in `config-system.md`.

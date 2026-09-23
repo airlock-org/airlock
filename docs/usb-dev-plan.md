@@ -1,5 +1,13 @@
 # USB development track
 
+Status: **historical, superseded plan**. Retained at this path for existing links.
+Use [USB development](usb-dev.md), [current lab topology](usb-lab.md), and the
+[documentation index](README.md) for current work. The status, restrictions,
+and unrun gates below describe the original planning session, not current
+authorization or project status.
+
+## Original plan
+
 Status: USB profile, provisioning tools and AMD lab scaffolding implemented,
 unbuilt and untested. Actual assignment, reset safety and upstream input-proxy
 integration remain hardware-development follow-ups.

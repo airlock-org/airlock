@@ -1,5 +1,12 @@
 # Isolated shared-pool build proof
 
+Status: **historical proof**, superseded as an implementation plan by the
+[pool-backed build store](sys-dev-build-store.md) and completed
+[sys-dev machine build](completed/01-sys-dev-machine-build.md) and
+[whole-machine deployment](completed/03-sys-dev-machine-deployment.md).
+The probe limits and next steps below apply to that experiment; consult those
+follow-ups for implemented behavior and remaining validation gaps.
+
 Live probe on `sys-dev`, image seed `a26b5c0`: passed. The preceding cold
 guest build was interrupted before admission. No generation was deployed.
 

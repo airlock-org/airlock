@@ -26,7 +26,7 @@ and cross-repository integration tests.
 - `airlock-machine/`: pinned machine source; the deployable whole-machine source of truth.
 - `lifecycle/image/`: prepared-store USB assembly and image-only tools.
 - `lifecycle/misc/tools/scripts/`: development-host and lab orchestration.
-- `docs/`: design notes, config authority details, and test documentation.
+- [`docs/`](docs/README.md): current runbooks, active plans, and historical evidence.
 - `tests/`: cross-repository, image, and deployment integration tests.
 
 See [repository workflow](docs/repositories.md) for clone, edit, and submodule

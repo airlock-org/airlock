@@ -1,5 +1,9 @@
 # Seed a small build-tool baseline
 
+Status: planned; reviewed 2026-09-23. Extends the implemented
+[pool-backed build store](../sys-dev-build-store.md). No additional baseline
+selection or fresh-image acceptance is recorded here.
+
 Use the sys-dev guest-build trial's download list to select a modest baseline
 of tools needed for routine configuration changes. Declare it in Nix and seed
 its complete dependency closure into the USB's shared pool, extending the

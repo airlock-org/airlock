@@ -1,17 +1,17 @@
 # GNOME sys-gui milestone
 
 Status: GNOME and forwarded Firefox/Calculator windows verified live on the
-physical lab machine; declarative fixes still need a fresh-image boot check.
+physical lab machine. The report below originally called for fresh-image
+verification of its declarative fixes. Later whole-machine boot/deployment
+evidence is in [machine deployment](machine-deployment.md); do not infer that
+every appearance, login/lock, and window-integration check below is complete.
 
-`usb-gui-lab with Xen` is the primary physical-GPU sys-gui experiment. It uses
-the stock GNOME desktop from the pinned Nixpkgs package set, without additional
-GNOME Shell extensions.
-
-Hyprland + DankMaterialShell remains available at
-`usb-gui-lab-hyprland with Xen`; the known-good XFCE fallback is
-`usb-gui-lab-xfce with Xen`. The three choices share the same GPU assignment,
-firmware preparation, input forwarding, guest kernel, and sys-gui role. They
-differ only in the selected desktop implementation.
+The normal **Airlock** USB entry now uses the physical-GPU GNOME desktop
+(internal profile: `usb-lab`). See [USB development](usb-dev.md) for build,
+boot, and recovery instructions. Hyprland and XFCE builders remain in source,
+but the older experimental menu entries are no longer shipped as desktop
+choices. The evidence below records the GNOME integration milestone; it does
+not establish general hardware compatibility or close every lifecycle check.
 
 GNOME's ordinary host-facing convenience services are explicitly disabled in
 sys-gui: NetworkManager, Bluetooth, Avahi, GNOME Remote Desktop, user sharing,

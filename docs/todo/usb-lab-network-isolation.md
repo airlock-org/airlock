@@ -1,6 +1,15 @@
 # USB lab network isolation
 
 Status: planned; implementation, deployment, and physical acceptance pending.
+Reviewed against the checked-in lab topology on 2026-09-23.
+
+Follow the [hardware usability policy](../hardware-usability-policy.md). This
+plan describes an operator-assisted lab migration with a physical recovery
+console, not an unattended first-run transition. Before exposing this change
+through the [setup wizard](first-run-setup-wizard.md), add its bounded trial,
+live connectivity confirmation, and automatic rollback independently of the
+network connection being changed. USB Wi-Fi routing is separate work; do not
+assume PCI NIC discovery covers it or disrupt an existing USB connection.
 
 ## Goal and scope
 
