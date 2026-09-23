@@ -1,6 +1,10 @@
 # Preserve and verify input during USB setup
 
-Status: planned; no implementation. Created 2026-09-23.
+Status: controller setup and recovery trials planned. Created 2026-09-23.
+Generic dom0 input discovery and automatic trust enrollment are implemented in
+source; physical validation is pending. See [physical GUI input](../sys-gui-input.md).
+That baseline accepts existing and newly connected supported input devices;
+selective approval and controller ownership trials below remain future work.
 
 Follow the [hardware usability policy](../hardware-usability-policy.md).
 Use the [first-run wizard](first-run-setup-wizard.md) to establish a working

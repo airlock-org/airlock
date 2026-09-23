@@ -1,92 +1,95 @@
 # Physical GUI input
 
-Scope: implemented forwarding for explicitly declared physical input paths.
-The dated laptop experiment below records its original validation, while
-[later GNOME evidence](sys-gui-gnome.md) and [deployment results](machine-deployment.md)
-record subsequent desktop work. Generic USB discovery, input enrollment, and
-timed recovery remain in the [USB input plan](todo/usb-input-setup.md).
+The reusable module `airlock-machine/lifecycle/misc/modules/qubes-input-proxy.nix` discovers
+local input devices in dom0 and forwards each independently to the GUI domain.
+It uses [upstream Qubes input proxy 1.0.46](https://github.com/QubesOS/qubes-app-linux-input-proxy/tree/ea8710166c6ac29dd4183cdf155bc9a1da34cf4a)
+without changing its event protocol. There is no machine-specific input list,
+required TrackPoint, device model match, or custom touchpad symlink.
 
-The reusable module `airlock-machine/lifecycle/misc/modules/qubes-input-proxy.nix` forwards
-selected physical input devices from dom0 to a GUI domain. It packages
-[upstream Qubes input proxy 1.0.46](https://github.com/QubesOS/qubes-app-linux-input-proxy/tree/ea8710166c6ac29dd4183cdf155bc9a1da34cf4a),
-without changing its event protocol or filtering. It contains no GPU address,
-AMD condition, laptop model or hardcoded input-device path.
+Controller ownership trials and timed recovery remain in the
+[USB input setup plan](todo/usb-input-setup.md).
 
-Dom0 reads selected evdev devices. Qubes qrexec transports their events to
-`qubes.InputKeyboard`, `qubes.InputMouse` or `qubes.InputTablet` in the GUI
-domain. The receiver creates Linux uinput devices, which the guest's normal
-input stack detects, including before login. Touchpads need the tablet filter
-because they produce absolute events. This kernel interface is usable by Xorg
-and Wayland compositors; this document's original input experiment exercised
-XFCE/Xorg. It does not certify every compositor's input behavior.
+## Discovery and initial trust
 
-The sender uses upstream's dom0 `qrexec-client -l` administrative interface.
-That interface does not consult qrexec policy. Separate policy denies
-VM-originated input requests to the selected GUI domain, and each receiver
-checks that `QREXEC_REMOTE_DOMAIN` is dom0 before running as root. This does
-not grant application VMs input injection or access to physical devices.
-Future forwarding from a dedicated input VM requires an explicit extension
-of the trusted-source configuration and policy.
+`airlock.inputProxy.sender.enable` defaults to false; `sender.target` defaults
+to `sys-gui`. The physical GUI profile enables discovery. Hybrid desktops,
+console profiles and text recovery do not start a second input path.
 
-## Configuration and activation
+Once the GUI receiver is ready, the discovery service subscribes to udev events
+before enumerating existing `/dev/input/event*` devices. It accepts devices by
+udev input capabilities: keyboards and key devices, mice and pointing sticks,
+touchpads, touchscreens, tablets and joystick devices. USB and internal devices
+use the same path. Locally synthesized `/sys/devices/virtual/input/` devices
+are excluded to avoid recirculating input; switches and sensors without a
+supported key or pointer capability are not forwarded.
 
-`airlock.inputProxy.sender.enable` defaults to false. When enabled, it
-requires `sender.devices`: named entries with a stable `/dev/input/by-id/`
-or `/dev/input/by-path/` evdev symlink and a `keyboard`, `mouse` or `tablet`
-filter. `sender.target` defaults to `sys-gui` and can name another GUI domain.
-It must already be running. There is no automatic device discovery, USB
-controller assignment, guest startup or retry loop.
+All discovered supported devices are trusted automatically, including devices
+connected later. There is currently no approval or rejection policy. Dom0
+records their descriptors and first-seen time in
+`/var/lib/airlock/input/trusted-devices.json`, retaining that inventory across
+reboots and ignoring changing event numbers for identity. This is an observed
+trust inventory, not a cryptographic identity or enforced allowlist. A recording
+failure is logged and does not disable input. A fresh USB flash resets the
+inventory with the rest of the installation.
 
-Device selection belongs to the machine configuration. The ThinkPad profile
-declares its keyboard, TrackPoint and Synaptics touchpad; its touchscreen is
-not selected. The TrackPoint is optional because its PS/2 mouse path can be
-absent on a boot. The keyboard and touchpad remain required. Only the AMD lab
-enables this sender. Normal hybrid USB, console and VM profiles do not start it.
-Another machine supplies its own stable device paths without modifying the
-shared implementation.
+Each evdev node gets one Qubes forwarding process. A missing, removed or failed
+device cannot stop other devices. Duplicate udev notifications do not duplicate
+forwarding; unplugging and reconnecting starts a new attempt. Sender failure is
+logged and does not trigger an endless retry loop. The discovery service itself
+restarts on failure. No USB controllers are reassigned by discovery.
 
-In the receiving guest, enable `airlock.inputProxy.receiver.enable`. The
-physical GUI lab does this by default; the hybrid guest does not. This loads
-`uinput` and installs root RPC handlers with the source check above. It also
-provides `airlock.InputReceiverReady`, restricted to dom0, which succeeds only
-when `/dev/uinput` and all three upstream receiver handlers are available.
+## Transport and lifecycle
 
-The sender subscribes to Qubes lifecycle events. When its selected GUI domain
-starts, one bounded coordinator call waits for `airlock.InputReceiverReady`,
-confirms that the same domain is still running, and starts all declared sender
-services. A domain stop releases the devices. This one path covers normal boot,
-manual VM starts and deployment-driven replacement; deployment code has no
-input-specific repair step. The coordinator never starts or retries the VM.
+The dom0-only `airlock.InputDevice` RPC invokes the existing upstream receiver
+with `--keyboard --mouse --tablet` together. This preserves supported key,
+relative and absolute capabilities on composite devices without trying to grab
+one device multiple times. The existing `qubes.InputKeyboard`, `qubes.InputMouse`
+and `qubes.InputTablet` handlers remain available for older senders. Upstream
+protocol limits still apply; discovery does not add force feedback or sensor
+transport.
 
-If debugging an already-running physical guest, run the same coordinator in
-**dom0**:
+Dom0 uses Qubes' `qrexec-client -l` administrative interface. This interface does
+not consult qrexec policy. Receivers require `QREXEC_REMOTE_DOMAIN=dom0`, and
+policy denies VM-originated input requests. This grants no new input authority
+to application VMs. A future dedicated input VM requires an explicit change to
+the trusted source and policy.
+
+In the receiving guest, `airlock.inputProxy.receiver.enable` loads `uinput` and
+installs the root RPC handlers. `airlock.InputReceiverReady` checks the device
+and handlers. The existing Qubes lifecycle listener requests one bounded
+readiness check when the GUI starts, verifies that the same VM instance remains
+running, then activates `airlock-gui-input.target` and its discovery service.
+A GUI stop releases all forwarding; a GUI restart enumerates again. This covers
+boot, manual VM starts and deployment replacements without a separate input
+repair path. The coordinator never starts or retries the VM itself.
+
+For diagnostics in **dom0**:
 
 ```sh
 sudo systemctl start airlock-gui-input-connect.service
-sudo systemctl status 'airlock-gui-input-*.service'
+sudo systemctl status airlock-gui-input-discovery.service
+sudo journalctl -u airlock-gui-input-discovery.service
+sudo cat /var/lib/airlock/input/trusted-devices.json
 ```
 
-Inspect individual services: the target being active alone does not prove
-that every device connected. A missing required path fails the connection;
-a missing optional path skips its sender without selecting another device.
-Stopping the target releases the grabs:
+The journal identifies each forwarding attempt, removal and sender exit. An
+active discovery service or a trusted inventory entry does not prove physical
+input reached the desktop. Stop forwarding and release device grabs with:
 
 ```sh
 sudo systemctl stop airlock-gui-input.target
 ```
 
-Losing the qrexec connection ends the sender and releases its device. Sender
-services use `Restart=no`: a later failure remains visible rather than entering
-an endless retry loop. A subsequent Qubes start event runs the bounded
-coordinator again. Automatic physical-device hotplug remains future work.
-Never enable forwarding alongside the hybrid desktop's existing input path.
+## Validation boundary — 2026-09-23
 
-On the 2026-09-23 fresh USB boot `1150b9af-b7e3-4b84-bfb5-ba6e6301a76f`,
-the supervisor completed and sys-gui was qrexec-ready, but input connection
-failed because the TrackPoint's PS/2 mouse path was absent. The kernel had
-enumerated the internal keyboard and I2C touchpad. The optional TrackPoint
-change addresses this observed failure; physical login remains to be checked
-on an image built with the change.
+Boot `1150b9af-b7e3-4b84-bfb5-ba6e6301a76f` completed VM startup, but the old
+input coordinator aborted all forwarding because the configured TrackPoint
+path was missing even though the keyboard and touchpad were enumerated.
+Discovery replaces that fixed list and the interim optional-TrackPoint fix.
+Focused pytest coverage checks generic selection, composite devices, persistent
+inventory, late arrivals, reconnects and independent failures. Nix checks cover
+service wiring and receiver restrictions. Physical login, hotplug and reboot
+still need checking on an image rebuilt from this change.
 
 ## Laptop result — 2026-09-13
 

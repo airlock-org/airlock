@@ -78,6 +78,8 @@ PYTHON_FILES := \
 	airlock-machine/tests/test_gui_gpu_assignment.py \
 	airlock-machine/lifecycle/runtime/tools/scripts/input-events.py \
 	airlock-machine/tests/test_input_events.py \
+	airlock-machine/lifecycle/runtime/tools/scripts/input-discovery.py \
+	airlock-machine/tests/test_input_discovery.py \
 	airlock-machine/tests/test_gui_gpu_boot_order.py \
 	airlock-machine/tests/test_dev_dom0_terminal.py \
 	airlock-machine/tests/test_qubes_gui_window_state.py \
