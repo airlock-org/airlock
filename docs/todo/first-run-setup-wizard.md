@@ -13,6 +13,12 @@ Keep **desktop ready for setup** distinct from **setup complete**: starting
 sys-gui does not complete setup, and the wizard cannot be responsible for the
 input needed to operate its own first screen.
 
+Follow the [hardware usability policy](../hardware-usability-policy.md): users
+must be able to test proposed hardware changes live, and failed or unconfirmed
+trials must return automatically to a working configuration. This is a core
+wizard requirement, implemented after the initial welcome/completion shell and
+before enabling any disruptive hardware page.
+
 ## First implementation
 
 Provide a welcome screen explaining first-run setup and an explicit **Finish
@@ -72,14 +78,71 @@ The [configuration system](../config-system.md),
 assume sys-ctrl already exists or make this minimal wizard depend on that
 migration. Do not grant sys-gui general dom0 administrative access.
 
+## Live trials and automatic rollback
+
+Keep wizard completion separate from configuration trial state. Finish setup
+must not confirm a pending hardware trial. Reopening an already completed
+wizard must offer the same recovery protections for subsequent changes.
+
+Before a disruptive change, show its purpose, the devices affected, the test
+the user must perform, and the countdown/automatic recovery behavior. Save a
+complete known-good baseline and durably record the candidate and trial identity.
+Arm a bounded rollback supervisor before applying the change; if that cannot
+be done, do not start the trial.
+
+The intended sequence is:
+
+```text
+working baseline -> armed trial -> candidate applied -> live user tests
+  -> explicit confirmation: retain verified candidate
+  -> timeout, cancellation, or failure: restore baseline and verify recovery
+```
+
+The GUI presents the countdown, but the deadline and rollback belong to a
+privileged supervisor outside sys-gui and the affected service VM. Use existing
+deployment machinery with narrow, policy-controlled trial operations. The
+supervisor must not depend on keyboard input, pointer input, networking, or a
+responsive wizard to restore the baseline.
+
+Require fresh exercises for every affected essential capability. For input,
+require both keyboard and pointing-device interaction followed by an explicit
+keep/confirm action. Raw activity, a detected device, or a running VM is not
+confirmation. No input, only one working input type, or no final confirmation
+by the fixed deadline triggers rollback. Background events must not extend the
+deadline. Specify accessible instructions and a reasonable bounded test period
+during implementation.
+
+Only confirmation for the current trial, received before its deadline and
+after required checks, may retain the candidate. Handle timeout/confirmation
+races atomically; stale or duplicate messages cannot confirm a later trial.
+Allow explicit cancellation to request immediate rollback.
+
+For changes requiring reboot, persist the baseline, candidate, and unconfirmed
+state before reboot. Define bounded boot/startup and interactive confirmation
+windows so failure to reach the GUI also recovers. A reboot must not clear the
+trial or reset its budget indefinitely. Provide boot fallback for a candidate
+that never reaches the supervisor; do not rely solely on a GUI-session timer.
+
+Restore the whole affected configuration, including device ownership and
+forwarding where relevant, not just its source files. Verify restoration before
+reporting rollback success. Prevent repeated failed trials or reboot loops,
+retain failure details, and present the outcome when the desktop returns.
+Document recovery for host hangs, power loss, or restoration failures; automatic
+rollback cannot guarantee recovery from a wedged host without a restart.
+
+Do not enable a disruptive page until its apply, confirmation, timeout, and
+recovery paths are implemented and tested. The initial welcome shell can ship
+without making hardware changes.
+
 ## Future pages and separate work
 
 Trusted-input identification and USB controller planning motivate this setup
 stage: a future page could ask the user to use their keyboard and pointing
-device, then present an ownership proposal. Track that work in a separate TODO
-covering discovery, controller suitability, input preservation, declarative
-assignments, verification, and rollback. None of it is required to complete
-this wizard milestone.
+device, then present an ownership proposal. The separate
+[USB input TODO](usb-input-setup.md) covers discovery, controller suitability,
+input preservation, declarative assignments, verification, and rollback. It is
+the first intended consumer of live trials; it is not required for the initial
+welcome/completion shell.
 
 USB Wi-Fi, networking, advanced device routing, stronger input isolation, and
 general hardware configuration are outside this document's implementation
@@ -103,9 +166,24 @@ a general workflow engine now.
 - [ ] Any cross-domain interface has a narrow operation and explicit caller
   policy; the GUI receives no general dom0 command authority.
 
+Before shipping disruptive setup pages:
+
+- [ ] A live trial exposes a countdown and requires capability tests and an
+  explicit timely confirmation to retain changes.
+- [ ] No input, partial input, no confirmation, GUI crash, and affected service
+  failure trigger automatic rollback independently of the wizard.
+- [ ] Failure to arm recovery prevents applying a candidate; stale confirmation
+  and timeout races cannot retain an unconfirmed configuration.
+- [ ] Reboot, power interruption, and failure to reach the GUI preserve recovery
+  state and return to the baseline without an endless retry/reboot loop.
+- [ ] Rollback restores and verifies the full affected configuration; failed
+  restoration is reported accurately and has a documented recovery procedure.
+
 Use focused pytest coverage for state transitions and startup behavior, plus a
-GUI smoke test for the actual launch, finish, reopen, and reboot flow. Report
-automated checks and observed GUI behavior separately.
+GUI smoke test for the actual launch, finish, reopen, and reboot flow. Add
+failure-injection checks for the trial protocol and physical verification of
+hardware rollback before enabling hardware changes. Report automated checks
+and observed GUI behavior separately.
 
 ## Implementation location
 
