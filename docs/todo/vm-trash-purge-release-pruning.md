@@ -37,9 +37,10 @@ provides guarded release pruning and purge; live deployment/testing is the next 
   and verify only its owned resources disappear; other VMs and pinned builder
   views still work. Exercise shared pool data, not only unique objects.
 
-The existing `lab-retire` test VM is currently restored and halted, with its
-diagnostic markers removed. It has not been purged. Recheck its live identity
-and state before any destructive trial.
+The earlier `lab-retire` test VM was restored and halted on the previous USB
+installation; that installation was replaced by a fresh image. The image does
+not declare `lab-retire`, so its recovery topology cannot retain the disposable
+VM. A committed machine release introduces it for the next physical trial.
 
 ## Local implementation and next test
 
@@ -58,10 +59,12 @@ Tests cover interrupted pruning/purge, exact targets, ownership conflicts,
 retention, and shared objects surviving GC for a second VM or retained builder
 generation. These are local results; no live prune or purge has been performed.
 
-After deploying, restore/re-retire the disposable VM to capture its volume
-snapshot. Verify refusals before expiry, run the retired-VM pool-cleanup/restore
-trial, then retire again for the purge trial. Use the configured retention
-period (minimum one day); do not accelerate expiry by changing the clock or
-record. Advance the rollback choice with a later committed release, inspect
-and prune eligible references, and explicitly purge only the test record.
+After the fresh image boots, deploy the committed release that introduces
+`lab-retire`, create and check private-data markers, then retire it to capture
+its volume snapshot. Verify refusals before expiry, run the retired-VM
+pool-cleanup/restore trial, then retire again for the purge trial. Use the
+configured retention period (minimum one day); do not accelerate expiry by
+changing the clock or record. Advance the rollback choice with a later committed
+release, inspect and prune eligible references, and explicitly purge only the
+test record.
 Physical results must be recorded before marking this follow-up complete.
