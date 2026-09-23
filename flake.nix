@@ -70,7 +70,6 @@
       overlays = airlock-machine.overlays;
       nixosModules = airlock-machine.nixosModules;
       checks = airlock-machine.checks;
-      formatter = airlock-machine.formatter;
       airlock = airlock-machine.airlock;
 
       nixosConfigurations = airlock-machine.nixosConfigurations // {

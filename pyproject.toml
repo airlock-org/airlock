@@ -10,7 +10,6 @@ package = false
 
 [dependency-groups]
 dev = [
-    "black>=25.1.0",
     "pytest>=8.3.0",
     "pytest-json-report>=1.5.0",
     "pytest-timeout>=2.3.0",
@@ -37,20 +36,6 @@ markers = [
     "warm_extra: additional warm VM coverage beyond the config staged path",
     "xdist_group: pytest-xdist worker group",
 ]
-
-[tool.black]
-line-length = 88
-target-version = ["py311"]
-extend-exclude = '''
-/(
-    \.git
-  | \.venv
-  | \.airlock-.*
-  | result-.*
-  | result
-  | vendor
-)/
-'''
 
 [tool.ruff]
 line-length = 88
