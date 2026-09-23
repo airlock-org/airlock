@@ -58,7 +58,6 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         ) dev.environment.systemPackages);
       in {{
         domains = builtins.attrNames host.airlock.qubes.domains;
-        retireDomains = host.airlock.machineDeployment.retireDomains;
         bootRole = host.environment.etc."airlock/boot-role".text;
         inherit (host.airlock.qubes.prefs) default_netvm;
         browserNetvm = host.airlock.qubes.domains.usr-browser.netvm;
@@ -138,8 +137,9 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         cwd=ROOT,
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
+    assert result.returncode == 0, result.stderr
     log_dir = Path(os.environ["AIRLOCK_LOG_DIR"]) / "usb-lab"
     log_dir.mkdir(parents=True, exist_ok=True)
     (log_dir / "topology.json").write_text(result.stdout)
@@ -159,7 +159,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["autostart"]["sync"][-1].endswith("/bin/journalctl --sync")
     assert "airlock-boot-supervisor complete" in report["autostart"]["sync"][0]
     assert report["setupSync"].endswith("/bin/journalctl --sync")
-    assert report["retireDomains"] == []
+    assert report["retireDomains"] == ["lab-retire"]
     assert report["trashRetentionDays"] == 30
     assert "* * @anyvm @tag:airlock-retired deny" in report["retiredPolicy"]
     supervisor = report["bootSupervisor"]
@@ -187,7 +187,6 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     )
 
     assert report["domains"] == ["sys-dev", "sys-gui", "usr-browser", "usr-home"]
-    assert report["retireDomains"] == ["lab-retire"]
     assert report["bootRole"] == "normal\n"
     assert report["default_netvm"] == "sys-dev"
     assert report["browserNetvm"] == "sys-dev"
