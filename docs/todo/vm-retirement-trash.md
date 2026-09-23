@@ -1,8 +1,8 @@
 # Recoverable VM retirement and trash
 
-Status: implemented locally; focused pytest coverage and a live disposable-VM
-retire/restore trial pass. Retired-state reboot, pool-GC, and purge acceptance
-remain pending.
+Status: implemented locally; focused pytest coverage and live disposable-VM
+retirement, retired-state reboot, and restore trials pass. Pool-GC and purge
+acceptance remain pending.
 
 ## Goal
 
@@ -106,6 +106,17 @@ tag, and booted the VM with the original home marker intact. The diagnostic
 marker was removed and the VM was shut down. Both deployment workers finished
 successfully. After reboot, `machine-verify` reported `complete`: dom0 ran the
 selected restored generation, `lab-retire` remained halted with the same UUID,
-and its retired tag was absent. This trial does not yet prove retired-state
-behavior across a host reboot or after pool GC. No purge was attempted;
-retained release roots currently prevent an eligible purge.
+and its retired tag was absent.
+
+In a second trial, a new private-home marker was written, then committed
+release `d19c259` retired `lab-retire` again under trash ID
+`1790163352245734564-lab-retire`. After reboot, `machine-verify` reported
+`complete` with the retired release as both selected and running host
+generation. The VM remained registered, halted, tagged `airlock-retired`,
+and non-autostarting with the same UUID. Dom0's policy evaluator attributed
+denials in both directions to `05-airlock-retired.policy`. Release `a259e78`
+then restored the same VM; its marker survived, was removed, and the VM was
+shut down. The restore worker finished at `reboot-required`, so the final
+restored host-generation reboot remains to be checked. Pool-GC was not run,
+and no purge was attempted; retained release roots currently prevent an
+eligible purge.
