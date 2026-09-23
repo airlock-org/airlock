@@ -1,7 +1,8 @@
 # Recoverable VM retirement and trash
 
-Status: implemented locally; focused pytest coverage passes. Physical retirement,
-reboot, restore, pool-GC, and purge acceptance remain pending.
+Status: implemented locally; focused pytest coverage and a live disposable-VM
+retire/restore trial pass. Retired-state reboot, pool-GC, and purge acceptance
+remain pending.
 
 ## Goal
 
@@ -88,3 +89,22 @@ checks the recorded UUID, removes the Qubes domain, and makes its pool generatio
 eligible for GC. The pool refuses retirement while a running-volume reference
 exists. Historical release roots currently remain pinned; safe pruning is needed
 before eligible records can be purged.
+
+## Physical trial, 2026-09-23
+
+On the USB `usb-lab` machine, `lab-retire` was started, given a marker in its
+persistent home, shut down, and retired by committed release `d19c259`.
+Dom0 recorded trash ID `1790159152093003635-lab-retire`, the original UUID
+`8479f087-ea5f-4bb3-9fac-e3f2c89f6fa1`, private storage
+`lab-retire-private`, pool generation 1, and 30-day retention. The VM remained
+registered but halted, with autostart disabled and the `airlock-retired` tag.
+A plan for committed diagnostic release `7815b2e` was rejected because
+`usr-browser` referred to the retired VM; that release was not applied.
+
+Committed release `a259e78` restored the same UUID, removed the retirement
+tag, and booted the VM with the original home marker intact. The diagnostic
+marker was removed and the VM was shut down. Both deployment workers finished
+successfully, but the selected host generation still reports
+`reboot-required`: this trial does not yet prove retired-state behavior across
+a host reboot or after pool GC. No purge was attempted; retained release roots
+currently prevent an eligible purge.
