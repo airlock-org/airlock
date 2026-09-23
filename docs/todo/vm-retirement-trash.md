@@ -78,7 +78,8 @@ under their original names, stops them, disables autostart, tags them
 `airlock-retired`, pins their selected pool generation, and writes durable trash
 metadata. Static early qrexec rules deny calls from and to tagged domains. The
 preflight also rejects references in VM preferences, machine defaults, and
-topology-managed qrexec policy. Committed
+topology-managed qrexec policy, including in later releases while the VM
+remains in trash. Committed
 deployment or rollback restores the same UUID and private storage identity.
 
 `trash-list` exposes the audit records. `trash-purge ID --confirm ID` is

@@ -324,6 +324,8 @@ To retire a domain, remove it from the topology and list its name in
 list must exactly match domains removed relative to the selected release; clear
 it again in later releases. Preflight rejects removal while surviving domains,
 machine defaults, or topology-managed qrexec rules still refer to the domain.
+Later releases are held to the same rule while the name remains in trash;
+reintroducing the VM through a validated restore is the exception.
 Apply stops the domain, disables
 autostart, applies the `airlock-retired` tag, pins its selected pool generation,
 and records its UUID, private storage identity, source release, and expiry under
