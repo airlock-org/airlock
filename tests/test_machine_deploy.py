@@ -216,6 +216,12 @@ class Machine(deploy.Coordinator):
         selection = self.pointer()
         return Path(selection["release"]) if selection else self.initial
 
+    def volume_inventory(self):
+        return {
+            name: {"private": {"pool": "test", "vid": name + "/private"}}
+            for name in self.selected
+        }
+
     def install_boot_hook(self, release, baseline):
         self.calls.append(("boot-hook",))
 
@@ -223,6 +229,9 @@ class Machine(deploy.Coordinator):
 @pytest.fixture
 def machine(tmp_path, topology, monkeypatch):
     monkeypatch.setattr(deploy, "active_profile", lambda: "usb-lab")
+    policy = tmp_path / "05-airlock-retired.policy"
+    policy.write_text("* * @anyvm @tag:airlock-retired deny\n")
+    monkeypatch.setattr(deploy, "RETIRED_POLICY", str(policy))
     baseline = write_release(tmp_path / "baseline", topology, "old")
     return Machine(tmp_path / "state", baseline, topology)
 

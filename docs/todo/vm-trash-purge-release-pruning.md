@@ -1,13 +1,13 @@
 # VM trash purge and release pruning
 
-Status: pending. Follow-up to [completed VM retirement and restoration](../completed/vm-retirement-trash.md).
+Status: implemented locally; physical acceptance pending. Follow-up to
+[completed VM retirement and restoration](../completed/vm-retirement-trash.md).
 
 ## Goal
 
 Safely release obsolete machine generations and permanently delete eligible
-trashed VMs. Recoverable retirement and restoration already work; an initial
-guarded `trash-purge ID --confirm ID` exists, but historical release roots remain
-pinned and there is no supported release-pruning command.
+trashed VMs. Recoverable retirement and restoration already work. Local code now
+provides guarded release pruning and purge; live deployment/testing is the next step.
 
 ## Required work
 
@@ -40,3 +40,28 @@ pinned and there is no supported release-pruning command.
 The existing `lab-retire` test VM is currently restored and halted, with its
 diagnostic markers removed. It has not been purged. Recheck its live identity
 and state before any destructive trial.
+
+## Local implementation and next test
+
+`release-list`, `release-prune-plan`, `release-retain`, and `release-prune` expose
+protected releases and journal exact root/profile removals. Pruning preserves
+audit records and blocks reuse of the old release. Purge checks actual volume
+ownership and can resume after VM removal or pool GC. Pool retirement shares
+the maintenance lock, retains an audit receipt, and prevents generation-ID reuse.
+The sys-dev client starts destructive maintenance in detached dom0 workers.
+Commands and limitations are in [machine deployment](../machine-deployment.md).
+
+Local verification: component `make test-quick` passed 177 tests; parent
+`make test-quick` passed 397 with 23 skipped. The standalone coordinator built,
+and its packaged Python environment successfully imported the Qubes client.
+Tests cover interrupted pruning/purge, exact targets, ownership conflicts,
+retention, and shared objects surviving GC for a second VM or retained builder
+generation. These are local results; no live prune or purge has been performed.
+
+After deploying, restore/re-retire the disposable VM to capture its volume
+snapshot. Verify refusals before expiry, run the retired-VM pool-cleanup/restore
+trial, then retire again for the purge trial. Use the configured retention
+period (minimum one day); do not accelerate expiry by changing the clock or
+record. Advance the rollback choice with a later committed release, inspect
+and prune eligible references, and explicitly purge only the test record.
+Physical results must be recorded before marking this follow-up complete.

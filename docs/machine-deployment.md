@@ -345,20 +345,62 @@ sudo /var/lib/airlock/machine/controller trash-list
 Trash is retained for at least
 `airlock.machineDeployment.trashRetentionDays` (30 days by default). Expiry only
 makes it eligible for permanent deletion. Purge also requires every retained
-release declaring that VM to be unpinned, including older transaction releases;
-there is not yet a release-pruning command. Do not remove roots by hand merely
-to make a purge pass. Once those releases have been safely pruned, purge one
-exact record with:
+release and bootable host profile referencing that VM to have been safely
+pruned. Use the deployed coordinator to inspect all recorded releases, their
+roots, removable Nix boot generations, and protection reasons:
+
+```bash
+airlock-sys-dev-machine-deploy release-list
+airlock-sys-dev-machine-deploy release-prune-plan --release /nix/store/RELEASE
+airlock-sys-dev-machine-deploy release-retain --release /nix/store/RELEASE --retain true
+airlock-sys-dev-machine-deploy release-prune --release /nix/store/RELEASE \
+  --confirm /nix/store/RELEASE
+```
+
+Replace `RELEASE` with the exact release path shown by `release-list`.
+The selected release, its immediate rollback choice, the running/booted host,
+recovery profiles, unfinished transactions, and unexpired trash requirements
+are protected. Additional rollback choices can be protected with
+`release-retain`; `--retain false` removes only that explicit protection.
+To move the immediate rollback choice beyond a retirement, deploy another
+committed release that still omits the VM and clears `retireDomains`. A
+confirmation cannot override any protection. Legacy failed transaction records
+without a recorded recovery remain protected and require investigation.
+Boot into the selected retirement generation before testing purge: a running
+host whose embedded topology still references the VM also blocks deletion.
+Recovery images remain protected; use a disposable VM added after image boot
+for the first purge trial so the image's recovery topology does not declare it.
+
+Pruning journals the exact roots and profile generation numbers before deleting
+them, refreshes the boot menu, and preserves deployment audit files. It does
+not run Nix or pool GC. Repeat the same command after an interruption; deployment
+and purge refuse to proceed while pruning is unfinished. Inspect
+`release-prune-plan` for the durable status and the reported systemd unit journal
+for errors. Pruned releases cannot be applied again through the coordinator;
+reintroducing a VM requires a new committed release. Once references have been
+pruned, old software may be collected and that rollback choice is lost.
+
+After expiry and pruning, purge one exact trash record:
 
 ```bash
 sudo /var/lib/airlock/machine/controller trash-purge TRANSACTION-VM \
   --confirm TRANSACTION-VM
 ```
 
-Purge checks the recorded UUID, refuses running or release-referenced domains,
-removes the Qubes domain and private volumes, and retires its selected pool
-generation. The audit record remains with status `purged`. This operation is
-permanent.
+The sys-dev equivalent is `airlock-sys-dev-machine-deploy trash-purge
+--identity TRANSACTION-VM --confirm TRANSACTION-VM`. Prune and purge use detached
+dom0 workers and survive SSH disconnection; `trash-list` reports purge status.
+
+Purge checks the UUID, actual volume identities, sharing/source relationships,
+retirement tag, stopped state, and recorded pool generation before removing
+the Qubes domain. Trash created before volume snapshots were introduced must
+be restored and retired again before purge. Do not edit its metadata to bypass
+the check. The private volumes are permanently removed through Qubes, while the
+pool generation becomes eligible for ordinary GC. Shared objects remain subject
+to other generations' and builder views' retention. Durable pool retirement
+receipts allow retries even if GC runs before the coordinator records completion.
+The audit record remains with status `purged`; repeating a finished purge is a
+no-op. No expiration or purge automatically deletes unrelated pool objects.
 
 There is no automatic old-release pruning. Retained releases cost disk space.
 Only use the guarded Airlock GC targets on the development host; never run GC
