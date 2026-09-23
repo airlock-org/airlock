@@ -116,7 +116,8 @@ generation. The VM remained registered, halted, tagged `airlock-retired`,
 and non-autostarting with the same UUID. Dom0's policy evaluator attributed
 denials in both directions to `05-airlock-retired.policy`. Release `a259e78`
 then restored the same VM; its marker survived, was removed, and the VM was
-shut down. The restore worker finished at `reboot-required`, so the final
-restored host-generation reboot remains to be checked. Pool-GC was not run,
-and no purge was attempted; retained release roots currently prevent an
-eligible purge.
+shut down. After the final reboot, `machine-verify` reported `complete` with
+the restored release as both selected and running host generation. The VM was
+still halted with the same UUID and no retired tag; `trash_active` was empty.
+Pool-GC was not run, and no purge was attempted; retained release roots
+currently prevent an eligible purge.
