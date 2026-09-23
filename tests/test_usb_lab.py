@@ -58,11 +58,10 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         ) dev.environment.systemPackages);
       in {{
         domains = builtins.attrNames host.airlock.qubes.domains;
+        retireDomains = host.airlock.machineDeployment.retireDomains;
         bootRole = host.environment.etc."airlock/boot-role".text;
         inherit (host.airlock.qubes.prefs) default_netvm;
         browserNetvm = host.airlock.qubes.domains.usr-browser.netvm;
-        retireAutostart = host.airlock.qubes.domains.lab-retire.prefs.autostart;
-        retirePrivate = host.airlock.qubes.domains.lab-retire.backend.state.persistent;
         devMemory = host.airlock.qubes.domains.sys-dev.prefs.memory;
         devMaxmem = host.airlock.qubes.domains.sys-dev.prefs.maxmem;
         guiPci = host.airlock.qubes.domains.sys-gui.devices.pci;
@@ -187,18 +186,11 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         "test ! -e /run/airlock/boot-supervisor/recovery-required.json"
     )
 
-    assert report["domains"] == [
-        "lab-retire",
-        "sys-dev",
-        "sys-gui",
-        "usr-browser",
-        "usr-home",
-    ]
+    assert report["domains"] == ["sys-dev", "sys-gui", "usr-browser", "usr-home"]
+    assert report["retireDomains"] == ["lab-retire"]
     assert report["bootRole"] == "normal\n"
     assert report["default_netvm"] == "sys-dev"
     assert report["browserNetvm"] == "sys-dev"
-    assert report["retireAutostart"] is False
-    assert report["retirePrivate"] == "lab-retire-private"
     assert report["devMemory"] == 8192
     assert report["devMaxmem"] == 8192
     assert report["guiHostname"] == "sys-gui"
