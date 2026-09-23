@@ -1,8 +1,9 @@
 # Recoverable VM retirement and trash
 
-Status: implemented locally; focused pytest coverage and live disposable-VM
-retirement, retired-state reboot, and restore trials pass. Pool-GC and purge
-acceptance remain pending.
+Status: complete for recoverable retirement and restoration, 2026-09-23.
+Focused pytest coverage and live disposable-VM retirement, retired-state reboot,
+and restore trials pass. Permanent purge, release pruning, and physical pool-GC
+acceptance are tracked in [the follow-up TODO](../todo/vm-trash-purge-release-pruning.md).
 
 ## Goal
 
@@ -37,12 +38,10 @@ Restore through a committed deployment that reintroduces the VM, or through
 whole-machine rollback, keeping configuration and runtime topology consistent.
 Restoration must fail safely on name, identity, storage, or topology conflicts.
 Use a configurable minimum retention window, initially 30 days from retirement.
-Expiry only makes trash eligible for a separate explicit guarded purge; retained
-deployment or rollback references protect it for longer. Purge may permanently
-remove only unreferenced resources owned by the named trash record, never shared
-pool objects still needed elsewhere.
+Expiry must not automatically delete trash. Permanent purge and removal of
+retained deployment or rollback references belong to the follow-up TODO.
 Record the original name, VM identity, source deployment, retirement time,
-expiry, storage disposition, and final purge outcome.
+expiry, and storage disposition.
 
 Do not silently trash unexpected domains. The plan must distinguish declared
 retirements from unknown unmanaged domains, show the affected storage, and
@@ -51,20 +50,18 @@ require the same deployment authorization as other topology changes.
 ## Acceptance
 
 - Pytest coverage exercises plan, dependency rejection, apply,
-  interruption/resume, restore, conflicting restore, retention, and guarded
-  purge behavior.
+  interruption/resume, restore, conflicting restore, and retention.
 - Removing one test VM leaves it stopped and inaccessible but recoverable with
   its private data intact.
-- Deployment-based restore and rollback recover the same VM identity and data,
-  including across a Dom0 reboot and after pool GC; required software remains
-  available.
+- Pytest covers deployment-based restore and rollback preserving VM identity
+  and storage. Physical deployment-based restore preserves identity and private
+  data across a Dom0 reboot; required software remains available. Physical
+  recovery after pool GC belongs to the follow-up TODO.
 - Retirement prevents ordinary startup and access before and after the host
   policy reboot, including interruption/resume of that transition.
-- Expiry alone cannot purge data still referenced by a retained release; an
-  eligible explicit purge permanently removes only the named trash record.
 - A physical deployment retires and restores a disposable VM before this path
   is used to retire `sys-config-*`.
-- Operator documentation explains active, trashed, restored, and purged states,
+- Operator documentation explains active, trashed, and restored states,
   including the retention window and recovery commands.
 
 In a separate follow-up after this mechanism is verified, retire `sys-config-*`
@@ -83,12 +80,9 @@ topology-managed qrexec policy, including in later releases while the VM
 remains in trash. Committed
 deployment or rollback restores the same UUID and private storage identity.
 
-`trash-list` exposes the audit records. `trash-purge ID --confirm ID` is
-restartable, requires expiry and absence from every pinned machine release,
-checks the recorded UUID, removes the Qubes domain, and makes its pool generation
-eligible for GC. The pool refuses retirement while a running-volume reference
-exists. Historical release roots currently remain pinned; safe pruning is needed
-before eligible records can be purged.
+`trash-list` exposes the audit records. Required software and private data are
+retained for recovery. An initial guarded `trash-purge` implementation exists,
+but its physical acceptance and safe release pruning remain follow-up work.
 
 ## Physical trial, 2026-09-23
 
