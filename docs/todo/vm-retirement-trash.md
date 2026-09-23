@@ -104,7 +104,8 @@ A plan for committed diagnostic release `7815b2e` was rejected because
 Committed release `a259e78` restored the same UUID, removed the retirement
 tag, and booted the VM with the original home marker intact. The diagnostic
 marker was removed and the VM was shut down. Both deployment workers finished
-successfully, but the selected host generation still reports
-`reboot-required`: this trial does not yet prove retired-state behavior across
-a host reboot or after pool GC. No purge was attempted; retained release roots
-currently prevent an eligible purge.
+successfully. After reboot, `machine-verify` reported `complete`: dom0 ran the
+selected restored generation, `lab-retire` remained halted with the same UUID,
+and its retired tag was absent. This trial does not yet prove retired-state
+behavior across a host reboot or after pool GC. No purge was attempted;
+retained release roots currently prevent an eligible purge.
