@@ -308,8 +308,9 @@ sudo /var/lib/airlock/machine/controller rollback
 Do this from the matching lab profile. Text recovery can inspect files and boot
 entries, but is deliberately not an alternative configuration apply target.
 Rollback reselects systems, not user-data snapshots; application data migrations
-are not undone. A VM introduced by the rolled-back release is stopped and left
-on disk with its private data, and reported as `retained_undeclared`.
+are not undone. A VM introduced by the rolled-back release is stopped,
+quarantined in recoverable trash with its private data, and reported as
+`retained_undeclared`.
 
 Automatic deployment currently supports Nix-closure/shared-closure VMs and
 recoverable domain retirement. It still rejects class/template/storage-layout
@@ -321,12 +322,13 @@ Unsupported changes fail preflight rather than being silently ignored.
 To retire a domain, remove it from the topology and list its name in
 `airlock.machineDeployment.retireDomains` in the same committed release. The
 list must exactly match domains removed relative to the selected release; clear
-it again in later releases. Preflight rejects removal while surviving domains
-or machine defaults still refer to the domain. Apply stops the domain, disables
+it again in later releases. Preflight rejects removal while surviving domains,
+machine defaults, or topology-managed qrexec rules still refer to the domain.
+Apply stops the domain, disables
 autostart, applies the `airlock-retired` tag, pins its selected pool generation,
 and records its UUID, private storage identity, source release, and expiry under
-`/var/lib/airlock/machine/trash/`. Early qrexec policy denies ordinary calls to
-tagged targets. The domain remains registered under its original name so Qubes
+`/var/lib/airlock/machine/trash/`. Early qrexec policy denies ordinary calls
+from or to tagged domains. The domain remains registered under its original name so Qubes
 and the shared pool retain their existing identity bindings.
 
 Whole-machine rollback, or a later committed release that reintroduces the same
@@ -340,8 +342,10 @@ sudo /var/lib/airlock/machine/controller trash-list
 
 Trash is retained for at least
 `airlock.machineDeployment.trashRetentionDays` (30 days by default). Expiry only
-makes it eligible for permanent deletion. After a later deployment has moved
-the retiring release outside the current/previous rollback pair, purge one
+makes it eligible for permanent deletion. Purge also requires every retained
+release declaring that VM to be unpinned, including older transaction releases;
+there is not yet a release-pruning command. Do not remove roots by hand merely
+to make a purge pass. Once those releases have been safely pruned, purge one
 exact record with:
 
 ```bash
@@ -349,7 +353,7 @@ sudo /var/lib/airlock/machine/controller trash-purge TRANSACTION-VM \
   --confirm TRANSACTION-VM
 ```
 
-Purge checks the recorded UUID, refuses running or rollback-referenced domains,
+Purge checks the recorded UUID, refuses running or release-referenced domains,
 removes the Qubes domain and private volumes, and retires its selected pool
 generation. The audit record remains with status `purged`. This operation is
 permanent.
