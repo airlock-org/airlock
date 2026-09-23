@@ -55,6 +55,12 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
         "qube_guest": (
             repo_root / "airlock-machine/lifecycle/misc/modules/qube-guest.nix"
         ).read_text(encoding="utf-8"),
+        "guest_config_inputs": (
+            repo_root / "airlock-machine/lifecycle/misc/modules/qube-guest/config-inputs.nix"
+        ).read_text(encoding="utf-8"),
+        "guest_network": (
+            repo_root / "airlock-machine/lifecycle/misc/modules/qube-guest/network.nix"
+        ).read_text(encoding="utf-8"),
         "ssh_vm": (
             repo_root / "lifecycle/misc/tools/scripts/ssh-nested-vm.sh"
         ).read_text(encoding="utf-8"),
@@ -230,12 +236,14 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             'nix-store --export $(cat "$inputs_store_paths")',
             "store_export_bytes",
         ],
-        "qube_guest": [
+        "qube_guest": ["ps.dbus-python"],
+        "guest_config_inputs": [
             'nix-store --store "$store_root" --import',
             "input_relative_path=",
             '${input_path#"$input_store_path"}',
             'mount --bind "$physical_path" "$mountpoint_path"',
-            "ps.dbus-python",
+        ],
+        "guest_network": [
             "airlock-qubes-setup-dnat-to-ns",
             "airlock-qubes-network-proxy-setup",
         ],
