@@ -267,8 +267,9 @@ def test_builder_seed_validates_metadata_and_physical_pin(builder_seed):
         prepared.verify_outputs(root, descriptors)
 
 
+@pytest.mark.parametrize("source_suffix", ["", "/vendor/nixos-qubes"])
 def test_builder_offline_input_manifest_is_bound_to_registered_paths(
-    builder_seed, tmp_path
+    builder_seed, tmp_path, source_suffix
 ):
     from airlock_qubes_storage._engine import builder
 
@@ -280,7 +281,7 @@ def test_builder_offline_input_manifest_is_bound_to_registered_paths(
             {
                 "schema": "airlock.sys-dev-offline-inputs.v1",
                 "lock_hash": "a" * 64,
-                "inputs": {"nixpkgs": paths[0]},
+                "inputs": {"nixpkgs": paths[0] + source_suffix},
             }
         )
     )
@@ -327,6 +328,25 @@ def test_builder_offline_input_manifest_is_bound_to_registered_paths(
         builder.prepare_builder(
             root, {"manifest": config["manifest_path"]}, registration, manifest
         )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        None,
+        [],
+        "/tmp/source",
+        "/nix/store/" + "a" * 32 + "-source/../other",
+        "/nix/store/" + "a" * 32 + "-source/vendor/./qubes",
+        "/nix/store/" + "a" * 32 + "-source//vendor",
+        "/nix/store/" + "a" * 32 + "-source/vendor/",
+    ],
+)
+def test_builder_offline_source_rejects_noncanonical_paths(source):
+    from airlock_qubes_storage._engine import builder
+
+    with pytest.raises(core.EngineError, match="invalid offline flake source"):
+        builder.offline_source_root(source)
 
 
 @pytest.mark.parametrize("builder_seed", [0, 80], indirect=True)
