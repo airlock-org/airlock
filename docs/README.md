@@ -1,6 +1,6 @@
 # Documentation map
 
-Reviewed 2026-09-23 against repository documents and selected configuration;
+Reviewed 2026-09-24 against repository documents and selected configuration;
 this review did not inspect or test the live machine.
 
 ## Current operating guides
@@ -8,7 +8,8 @@ this review did not inspect or test the live machine.
 - [Repository boundaries](repositories.md): source ownership and submodule workflow.
 - [USB development](usb-dev.md) and [USB lab](usb-lab.md): current image,
   provisioning, recovery, and physical topology. The normal Airlock entry uses
-  physical-GPU GNOME; sys-dev currently owns physical networking.
+  physical-GPU GNOME; the new checked-in profile routes sys-dev through
+  sys-firewall and sys-net. The deployed baseline has not been migrated.
 - [Machine deployment](machine-deployment.md): host and sys-dev submission,
   whole-machine activation, verification, rollback, and maintenance.
 - [Pool-backed builder](sys-dev-build-store.md): implemented build-store behavior
@@ -25,7 +26,7 @@ this review did not inspect or test the live machine.
 | --- | --- |
 | [First-run wizard](todo/first-run-setup-wizard.md) | Planned. Welcome/completion shell first; timed trials and rollback before disruptive pages. |
 | [USB input setup](todo/usb-input-setup.md) | Planned. First hardware trial consumer; preserve storage and existing connectivity. Ownership depends on hardware. |
-| [USB lab network isolation](todo/usb-lab-network-isolation.md) | Planned operator-assisted migration to sys-net/sys-firewall. User-facing wizard integration requires automatic recovery. |
+| [USB lab network isolation](todo/usb-lab-network-isolation.md) | Configuration and release built; live plan, deployment, and physical acceptance pending. User-facing wizard integration requires automatic recovery. |
 | [sys-ctrl](todo/05-sys-ctrl.md) | Planned controller migration; reuse completed sys-dev build/deployment capabilities. |
 | [Cached offline builder check](completed/07-cached-offline-builder-check.md) | Completed image prerequisite that reuses passing offline acceptance for unchanged inputs. |
 
