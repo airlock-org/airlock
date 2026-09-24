@@ -24,10 +24,15 @@
       mkUsbConfiguration = system:
         let
           seedPath = builtins.getEnv "AIRLOCK_MACHINE_SEED_ARCHIVE";
+          offlineInputsPath = builtins.getEnv "AIRLOCK_MACHINE_OFFLINE_INPUTS";
           airlockMachineSeedArchive =
             if seedPath == "" then null else builtins.path { path = seedPath; name = "airlock-machine-seed.tar.gz"; };
+          offlineInputs =
+            if offlineInputsPath == "" then null
+            else builtins.fromJSON (builtins.readFile offlineInputsPath);
           entries = builtins.removeAttrs (airlock-machine.lib.mkMachineGuestEntries system {
             inherit airlockMachineSeedArchive;
+            airlockMachineOfflineInputs = offlineInputs;
           }) [ "sys-gui-hybrid" "sys-gui-standalone" ];
           pkgs = import nixpkgs {
             inherit system;
@@ -44,7 +49,7 @@
               ];
           };
           preparedStore = import ./lifecycle/image/prepared-guest-store.nix {
-            inherit lib entries pkgs;
+            inherit lib entries pkgs offlineInputs;
           };
           storeSources = lib.mapAttrs (name: _: "${preparedStore.descriptors}/${name}") entries;
         in
@@ -54,6 +59,7 @@
           includeAlternativeGuiProfiles = false;
           extraGuestSpecialArgs = {
             inherit airlockMachineSeedArchive;
+            airlockMachineOfflineInputs = offlineInputs;
           };
           extraSpecialArgs = {
             airlockUsbPreparedStore = preparedStore;

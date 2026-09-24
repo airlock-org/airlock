@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[4]
 MACHINE = ROOT / "airlock-machine"
 SCHEMA = "airlock.sys-dev-machine-source.v1"
 SEED_SCHEMA = "airlock.sys-dev-machine-seed.v1"
+OFFLINE_SCHEMA = "airlock.sys-dev-offline-inputs.v1"
 
 
 def run(*args, cwd=None, input=None):
@@ -125,6 +127,42 @@ def shallow_seed_archive(destination, repository=MACHINE):
     return {"revision": revision, "lock_hash": lock_hash, "archive": str(destination)}
 
 
+def offline_inputs(destination, repository=MACHINE, archive=None):
+    """Record every archived flake input against the committed machine lock."""
+    repository = Path(repository).resolve()
+    clean_repository(repository)
+    archive = json.load(sys.stdin) if archive is None else archive
+    if not isinstance(archive, dict) or not isinstance(archive.get("inputs"), dict):
+        raise RuntimeError("invalid nix flake archive JSON")
+    inputs = {}
+
+    def collect(nodes, prefix=""):
+        for name, node in nodes.items():
+            if not isinstance(node, dict):
+                raise RuntimeError(f"invalid archived input: {name}")
+            input_name = f"{prefix}/{name}" if prefix else name
+            path = node.get("path")
+            if not isinstance(path, str) or not re.fullmatch(
+                r"/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^/]+", path
+            ):
+                raise RuntimeError(f"archived input lacks a store path: {input_name}")
+            inputs[input_name] = path
+            collect(node.get("inputs", {}), input_name)
+
+    collect(archive["inputs"])
+    if not inputs:
+        raise RuntimeError("machine flake archive has no inputs")
+    data = {
+        "schema": OFFLINE_SCHEMA,
+        "lock_hash": sha256(repository / "flake.lock"),
+        "inputs": inputs,
+    }
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(data, sort_keys=True) + "\n")
+    return {"manifest": str(destination), "inputs": len(inputs)}
+
+
 def push_archive(target, archive):
     archive = Path(archive)
     with tarfile.open(archive, "r:gz") as source:
@@ -154,6 +192,9 @@ def main(argv=None):
     seed = commands.add_parser("seed")
     seed.add_argument("--output", required=True, type=Path)
     seed.add_argument("--repository", type=Path, default=MACHINE)
+    offline = commands.add_parser("offline-inputs")
+    offline.add_argument("--output", required=True, type=Path)
+    offline.add_argument("--repository", type=Path, default=MACHINE)
     push = commands.add_parser("push")
     push.add_argument("--target", required=True)
     push.add_argument("--output", type=Path)
@@ -172,13 +213,18 @@ def main(argv=None):
                 )
             )
             return 0
+        if args.command == "offline-inputs":
+            print(
+                json.dumps(offline_inputs(args.output, args.repository), sort_keys=True)
+            )
+            return 0
         with tempfile.TemporaryDirectory(prefix="airlock-machine-source-push-") as name:
             archive = args.output or Path(name) / "source.tar.gz"
             result = source_archive(archive, args.repository)
             push_archive(args.target, archive)
             print(json.dumps(result, sort_keys=True))
             return 0
-    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
         print(f"sys-dev-machine-source: {exc}", file=sys.stderr)
         return 1
 

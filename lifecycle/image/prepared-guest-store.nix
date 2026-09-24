@@ -2,6 +2,7 @@
   pkgs,
   lib,
   entries,
+  offlineInputs ? null,
 }:
 let
   engine = pkgs.python3.pkgs.callPackage ../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage { };
@@ -14,15 +15,39 @@ let
     kernel_name = entry.domain.backend.kernel.name;
     closure_source = toString entry.storeArtifact;
   }) entries;
+  # These roots cover the build hooks and tools missing from the first sys-dev
+  # guest change. The view shares objects already present in guest closures.
+  routineBuildInputs = with pkgs; [
+    composefs
+    composefs.lib
+    composefs.dev
+    dieHook
+    file
+    gnu-config
+    libcap
+    pkgs."libcap-text-verifier"
+    makeShellWrapper
+    patchelf
+    stdenvNoCC
+    updateAutotoolsGnuConfigScriptsHook
+  ];
+  sourcePaths =
+    if offlineInputs == null then [ ]
+    else map builtins.storePath (lib.unique (lib.mapAttrsToList (_: source: source) offlineInputs.inputs));
   # A stable builder view shares the already admitted objects, including other
   # guests' software. It is independent of sys-dev's own boot generation.
   buildClosure = pkgs.closureInfo {
-    rootPaths = map (entry: entry.configuration.config.system.build.toplevel) (builtins.attrValues entries);
+    rootPaths =
+      map (entry: entry.configuration.config.system.build.toplevel) (builtins.attrValues entries)
+      ++ lib.optionals (entries ? sys-dev) (routineBuildInputs ++ sourcePaths);
   };
   buildManifest = pkgs.runCommand "sys-dev-builder-closure" { } ''
     mkdir -p "$out"
     cp ${buildClosure}/store-paths ${buildClosure}/registration "$out/"
     echo '{}' > "$out/manifest.json"
+    ${lib.optionalString (offlineInputs != null) ''
+      cp ${pkgs.writeText "airlock-offline-inputs.json" (builtins.toJSON offlineInputs)} "$out/flake-inputs.json"
+    ''}
   '';
   specs = guestSpecs ++ lib.optional (entries ? sys-dev) {
     name = "sys-dev-builder";

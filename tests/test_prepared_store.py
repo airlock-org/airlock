@@ -267,6 +267,68 @@ def test_builder_seed_validates_metadata_and_physical_pin(builder_seed):
         prepared.verify_outputs(root, descriptors)
 
 
+def test_builder_offline_input_manifest_is_bound_to_registered_paths(
+    builder_seed, tmp_path
+):
+    from airlock_qubes_storage._engine import builder
+
+    root, _, paths = builder_seed
+    config = builder.builder_volume_configs(root, "airlock-closure")["builder-store"]
+    manifest = tmp_path / "flake-inputs.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema": "airlock.sys-dev-offline-inputs.v1",
+                "lock_hash": "a" * 64,
+                "inputs": {"nixpkgs": paths[0]},
+            }
+        )
+    )
+    registration = tmp_path / "registration"
+    # Use the registration embedded in the original combined index.
+    image = Path(config["view_path"])
+    blob_map = core.read_json(
+        builder.builder_volume_configs(root, "airlock-closure")["builder-data"][
+            "blob_map_path"
+        ]
+    )
+    blob = tmp_path / "payload"
+    views.reconstruct_blob_view(blob_map, blob)
+    original = tmp_path / "original"
+    views.run_checked(
+        ["fsck.erofs", f"--device={blob}", f"--extract={original}", str(image)]
+    )
+    registration.write_bytes((original / ".airlock-builder/registration").read_bytes())
+    image.rename(image.with_suffix(".previous"))
+    builder.prepare_builder(
+        root, {"manifest": config["manifest_path"]}, registration, manifest
+    )
+    updated = tmp_path / "updated"
+    views.run_checked(
+        ["fsck.erofs", f"--device={blob}", f"--extract={updated}", str(image)]
+    )
+    metadata = updated / ".airlock-builder"
+    identity, _ = load_builder_guest().read_identity(metadata)
+    assert identity["flake_inputs_sha256"] == core.hash_file(manifest)
+    (metadata / "flake-inputs.json").write_text("{}")
+    with pytest.raises(RuntimeError, match="flake inputs"):
+        load_builder_guest().read_identity(metadata)
+
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema": "airlock.sys-dev-offline-inputs.v1",
+                "lock_hash": "a" * 64,
+                "inputs": {"nixpkgs": "/nix/store/" + "z" * 32 + "-missing"},
+            }
+        )
+    )
+    with pytest.raises(core.EngineError, match="do not match"):
+        builder.prepare_builder(
+            root, {"manifest": config["manifest_path"]}, registration, manifest
+        )
+
+
 @pytest.mark.parametrize("builder_seed", [0, 80], indirect=True)
 def test_builder_combined_index_reads_metadata_and_external_packages(
     builder_seed, tmp_path
@@ -987,9 +1049,9 @@ def test_prepared_usb_runtime_closure():
     for path in (payload, descriptors):
         info = json.loads(nix("path-info", "--json", path))
         item = info[0] if isinstance(info, list) else info[path]
-        assert (
-            item["references"] == []
-        ), "seed must not retain its original source closure"
+        assert item["references"] == [], (
+            "seed must not retain its original source closure"
+        )
     report = {
         "system": system,
         "payload": payload,

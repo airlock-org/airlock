@@ -36,6 +36,46 @@ def repository(path: Path) -> str:
     return git(path, "rev-parse", "HEAD")
 
 
+def test_offline_input_manifest_records_nested_sources_and_lock(tmp_path: Path):
+    repo = tmp_path / "machine"
+    repository(repo)
+    source_a = "/nix/store/" + "a" * 32 + "-source"
+    source_b = "/nix/store/" + "b" * 32 + "-source"
+    archive = {
+        "path": "/nix/store/" + "c" * 32 + "-machine",
+        "inputs": {
+            "nixos-qubes": {
+                "path": source_a,
+                "inputs": {"shelly": {"path": source_b, "inputs": {}}},
+            }
+        },
+    }
+    manifest = tmp_path / "offline-inputs.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "offline-inputs",
+            "--repository",
+            str(repo),
+            "--output",
+            str(manifest),
+        ],
+        input=json.dumps(archive),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(manifest.read_text())
+    assert data["schema"] == "airlock.sys-dev-offline-inputs.v1"
+    assert (
+        data["lock_hash"]
+        == hashlib.sha256((repo / "flake.lock").read_bytes()).hexdigest()
+    )
+    assert data["inputs"] == {"nixos-qubes": source_a, "nixos-qubes/shelly": source_b}
+
+
 def test_source_archive_preserves_machine_revision_and_lock(tmp_path: Path):
     repo = tmp_path / "machine"
     revision = repository(repo)

@@ -192,9 +192,14 @@ usb-dom0-console-write:
 	sudo python3 lifecycle/image/tools/usb-dev.py write-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dom0-console-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --write
 
 usb-dev-image: ensure-generated-dirs
-	@seed_archive="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-seed.tar.gz"; \
+	@set -eu; \
+	seed_archive="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-seed.tar.gz"; \
+	offline_inputs="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-offline-inputs.json"; \
+	archive_json="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-flake-archive.json"; \
 	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py seed --output "$$seed_archive" >/dev/null; \
-	AIRLOCK_MACHINE_SEED_ARCHIVE="$$seed_archive" $(AIRLOCK_NIX) build --impure .#airlock-usb-dev-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --print-build-logs
+	$(AIRLOCK_NIX) flake archive --json path:./airlock-machine > "$$archive_json"; \
+	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py offline-inputs --repository airlock-machine --output "$$offline_inputs" < "$$archive_json"; \
+	AIRLOCK_MACHINE_SEED_ARCHIVE="$$seed_archive" AIRLOCK_MACHINE_OFFLINE_INPUTS="$$offline_inputs" $(AIRLOCK_NIX) build --impure .#airlock-usb-dev-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --print-build-logs
 
 usb-dev-write:
 	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-write USB_SERIAL=25110814640207" >&2; exit 2)
