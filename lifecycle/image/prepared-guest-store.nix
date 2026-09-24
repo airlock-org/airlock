@@ -76,6 +76,8 @@ let
         # Like NixOS image artifacts, neither output should retain those sources.
         unsafeDiscardReferences.out = true;
         unsafeDiscardReferences.descriptors = true;
+        passthru.builderInputClosure = buildClosure;
+        passthru.builderNix = entries.sys-dev.configuration.pkgs.nix;
         AIRLOCK_CLOSURE_STORE_INDEX_SOURCE = "file";
         # Execute this in the consuming image derivation too: a cached receipt
         # cannot attest to payload bytes rebuilt after that receipt was made.

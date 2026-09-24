@@ -178,7 +178,7 @@ test-quick: ensure-generated-dirs
 
 .PHONY: vm-gui-minimal-image vm-gui-minimal-run vm-gui-minimal-ssh
 
-.PHONY: usb-dev-image usb-dev-write usb-dev-provision usb-dev-help
+.PHONY: usb-dev-prepare-inputs usb-builder-offline-gate usb-dev-image usb-dev-write usb-dev-provision usb-dev-help
 
 USB_DEV_PROVISION = sudo python3 lifecycle/image/tools/usb-dev.py provision-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --resize-backup-dir "$(or $(AIRLOCK_LOG_DIR),/var/log/airlock)/usb-root-expansion" --repo "$(CURDIR)" --public-key "$(HOME)/.ssh/id_ed25519.pub" --auth-file "$(HOME)/.codex/auth.json" --insecure-dev-password --insecure-plain-codex-auth
 
@@ -191,14 +191,30 @@ usb-dom0-console-write:
 	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial" >&2; exit 2)
 	sudo python3 lifecycle/image/tools/usb-dev.py write-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dom0-console-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --write
 
-usb-dev-image: ensure-generated-dirs
+usb-dev-prepare-inputs: ensure-generated-dirs
 	@set -eu; \
 	seed_archive="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-seed.tar.gz"; \
 	offline_inputs="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-offline-inputs.json"; \
 	archive_json="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-flake-archive.json"; \
 	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py seed --output "$$seed_archive" >/dev/null; \
 	$(AIRLOCK_NIX) flake archive --json path:./airlock-machine > "$$archive_json"; \
-	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py offline-inputs --repository airlock-machine --output "$$offline_inputs" < "$$archive_json"; \
+	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py offline-inputs --repository airlock-machine --output "$$offline_inputs" < "$$archive_json"
+
+usb-builder-offline-gate: usb-dev-prepare-inputs
+	@set -eu; \
+	seed_archive="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-seed.tar.gz"; \
+	offline_inputs="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-offline-inputs.json"; \
+	closure="$$(AIRLOCK_MACHINE_SEED_ARCHIVE="$$seed_archive" AIRLOCK_MACHINE_OFFLINE_INPUTS="$$offline_inputs" $(AIRLOCK_NIX) build --impure .#airlock-usb-builder-input-closure --no-link --print-out-paths)"; \
+	nix_bin="$$(AIRLOCK_MACHINE_SEED_ARCHIVE="$$seed_archive" AIRLOCK_MACHINE_OFFLINE_INPUTS="$$offline_inputs" $(AIRLOCK_NIX) eval --impure --raw .#airlock-usb-builder-nix.outPath)/bin/nix"; \
+	uv run python lifecycle/image/tools/offline-builder-gate.py \
+	  --closure "$$closure" --machine airlock-machine --manifest "$$offline_inputs" \
+	  --source-store-root "$(if $(filter 1,$(AIRLOCK_USE_HOST_NIX_STORE)),/,$(AIRLOCK_NIX_ROOT))" --nix-bin "$$nix_bin" \
+	  --log-dir "$(or $(AIRLOCK_LOG_DIR),$(CURDIR)/.airlock-logs)/offline-builder-gate" \
+	  --temporary-root "$(or $(AIRLOCK_TMPDIR),$(TMPDIR),$(CURDIR)/.airlock)"
+
+usb-dev-image: usb-builder-offline-gate
+	@seed_archive="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-seed.tar.gz"; \
+	offline_inputs="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-offline-inputs.json"; \
 	AIRLOCK_MACHINE_SEED_ARCHIVE="$$seed_archive" AIRLOCK_MACHINE_OFFLINE_INPUTS="$$offline_inputs" $(AIRLOCK_NIX) build --impure .#airlock-usb-dev-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --print-build-logs
 
 usb-dev-write:

@@ -83,6 +83,26 @@ establish that the supported examples work offline until the fresh-image
 acceptance below passes. Inspect missing inputs during that trial and adjust
 the declared roots before marking this task complete.
 
+## Local gate before image assembly
+
+`make usb-dev-image` now runs `make usb-builder-offline-gate` before assembling
+the USB disk. The gate can also be run by itself. It prepares the pinned flake
+sources and builder input closure, then tries two committed-source variants of
+usr-home: one adds an `/etc` marker and one changes an existing service setting.
+Each trial starts with a separate empty writable store and cache. Only paths in
+the declared builder closure are registered as baseline inputs. Bubblewrap
+exposes those paths to Nix and removes network access; Nix also runs with
+substitutes disabled. The gate rejects a preseeded final system result and
+stops the image build if either trial fails. Results and stderr are saved as
+JSON and text under `.airlock-logs/offline-builder-gate/`, or the configured
+`AIRLOCK_LOG_DIR`.
+
+This gate runs before the disk-image build, after the guest and builder input
+closures needed for the check have been built. It may still take time and
+temporary disk space. It exercises the Nix inputs and example builds; the
+fresh-USB trial below remains necessary to check the actual mounted pool,
+sys-dev startup, pin retention and reboot behavior.
+
 ## Storage and lifecycle
 
 Declare the selected baseline in Nix and seed its complete closure into the

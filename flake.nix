@@ -96,6 +96,8 @@
           "airlock-machine-release-usb-gui-lab"
         ]
         // {
+          airlock-usb-builder-input-closure = usbConfiguration.config.system.build.usbPreparedGuestStore.builderInputClosure;
+          airlock-usb-builder-nix = usbConfiguration.config.system.build.usbPreparedGuestStore.builderNix;
           airlock-usb-dev-image = usbConfiguration.config.system.build.image;
           airlock-usb-dom0-console-image =
             self.nixosConfigurations.usb-dom0-console.config.system.build.image;
