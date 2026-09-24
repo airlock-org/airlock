@@ -163,14 +163,21 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
     assert supervisor["autoTty1"] is False
     assert supervisor["failureConsole"]["TTYPath"] == "/dev/tty1"
     assert supervisor["failureConsole"]["Restart"] == "always"
-    for service, timeout in (("network", 300), ("gui", 300), ("autostart", 600)):
+    for service, timeout in (("network", 300), ("gui", 300), ("autostart", 1800)):
         assert supervisor[service]["serviceConfig"]["TimeoutStartSec"] == timeout
         assert supervisor[service]["serviceConfig"]["ExecCondition"][0].endswith(
             "test ! -e /run/airlock/boot-supervisor/recovery-required.json"
         )
-        assert supervisor[service]["unitConfig"]["OnFailure"] == [
-            "airlock-boot-failure@%n.service"
-        ]
+        expected_failure = (
+            "airlock-boot-background-failure.service"
+            if service == "autostart"
+            else "airlock-boot-failure@%n.service"
+        )
+        assert supervisor[service]["unitConfig"]["OnFailure"] == [expected_failure]
+    assert any(
+        "desktop-ready" in command
+        for command in supervisor["autostart"]["serviceConfig"]["ExecStartPre"]
+    )
     assert supervisor["setup"]["serviceConfig"]["ExecCondition"][0].endswith(
         "test ! -e /run/airlock/boot-supervisor/recovery-required.json"
     )
