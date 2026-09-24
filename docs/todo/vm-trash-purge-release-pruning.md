@@ -99,8 +99,30 @@ the check. This validates restore after supported pool cleanup for this VM;
 the command reported no removed generations or segments, so it does not prove
 shared-segment reclamation in this physical run.
 
-Remaining physical acceptance: retire the VM again, advance the rollback
-choice with a later release, confirm protected prune/purge refusals, and after
-the new record's actual one-day deadline prune eligible references and purge
-that exact record. Check that other VMs and retained builder views still work.
-Do not reuse the expired first record: restoration removed it.
+The VM was shut down and retired again with `4b09749`. After reboot,
+`machine-verify` returned `complete` with active trash record
+`1790210515141062431-trash-probe` and expiry 2026-09-25
+00:41:57.140376 UTC (01:41:57 BST). Its UUID and private volume still matched
+the first trial.
+An immediate prune of source release
+`/nix/store/7n1pvjahxklmmc5h5wamf3vcsjhk3r03-airlock-machine-release`
+refused because it was the running host, the selected previous release, and a
+recovery requirement for unexpired trash. Purge refused on retention.
+
+The later committed release `11a7f00` (parent `7dce3d5`) kept the VM absent
+and cleared `retireDomains`. Its plan affected no guests and required no
+reboot. After apply, `machine-verify` returned `complete`; the retirement
+release became the immediate rollback choice. `release-prune-plan` then listed
+only the unexpired trash record as a blocker for the source release. A temporary
+explicit retain added `explicitly retained rollback choice` to the blockers;
+removing that retain restored the single unexpired-trash blocker. `qvm-ls`
+showed `trash-probe` halted, other expected VMs running, and the retained
+`sys-dev-builder` generation-1 manifest was present.
+
+Remaining physical acceptance after **2026-09-25 00:41:57.140376 UTC**: inspect the
+prune plan again, prune the exact eligible source release and its boot profile
+generations, then purge only `1790210515141062431-trash-probe`. Confirm the
+VM and its owned private volumes disappear, its pool generation becomes
+eligible for GC, and other VMs plus pinned builder views still work. Do not
+use the older restored trash record for this purge. The retention deadline is
+real elapsed time; do not change the machine clock or the record to advance it.
