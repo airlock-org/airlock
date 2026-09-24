@@ -302,6 +302,19 @@ identity. Use its reported address from the host:
 laptop console. SSH password/root login and non-Tailscale port 22 are disabled.
 Do not disable host-key verification to reuse the Ubuntu identity.
 
+The desktop's Tailscale launcher checks the route, DNS and HTTPS connectivity
+from sys-dev before requesting login. Failed checks print a specific error;
+interactive login has a two-minute timeout and can be retried. Offline use does
+not require passing this check to reach GNOME. Network-provider startup checks
+the firewall and forwarding services as well as qrexec readiness.
+
+Following an observed sys-net out-of-memory failure, sys-net starts with 1 GiB
+RAM and sys-firewall with 512 MiB (maximum 1 GiB). Both restart their Qubes
+firewall updater after failure. Qubes owns DNS configuration in guests with a
+Qubes uplink; sys-net retains NetworkManager/resolvconf and includes
+redistributable hardware firmware. These changes still require physical
+verification on a rebuilt image.
+
 The vault must be unlocked after each reboot; the `codex` wrapper refuses to
 run while it is locked. Tokens can refresh inside the mounted vault normally.
 Close Codex before `sudo airlock-usb vault-lock`. Losing the passphrase loses

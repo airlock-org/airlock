@@ -111,6 +111,7 @@ PYTHON_FILES := \
 	airlock-machine/tests/test_machine_local.py \
 	airlock-machine/tests/test_machine_deploy.py \
 	airlock-machine/tests/test_bootstrap_network.py \
+	airlock-machine/tests/test_network_reliability.py \
 	tests/test_vm.py \
 	tests/test_vm_staged.py \
 	tests/test_gpu.py \
