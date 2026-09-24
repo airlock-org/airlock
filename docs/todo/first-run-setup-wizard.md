@@ -37,6 +37,14 @@ Provide a welcome screen explaining first-run setup and an explicit **Finish
 setup** action. This first milestone establishes the lifecycle without adding
 hardware configuration or unrelated settings.
 
+Build the sys-gui application with GTK 4, libadwaita, and PyGObject so it follows
+the GNOME desktop's controls, window styling, and color preference. Use the
+mockup as a visual reference for the welcome message and clear completion
+action. Show only the welcome page in this milestone. Do not display USB,
+internet, storage, or graphics steps, cards, or navigation until those pages
+are implemented. Do not promise hardware testing or automatic rollback in the
+initial screen while no hardware changes are available.
+
 - Launch automatically once the graphical desktop session in sys-gui is ready
   to display the wizard, while setup is incomplete. A running VM alone is not
   sufficient readiness. Do not gate launch on user input exercises or device
