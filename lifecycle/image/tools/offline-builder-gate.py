@@ -14,6 +14,9 @@ import time
 
 
 STORE_PATH = re.compile(r"/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^/]+")
+SOURCE_PATH = re.compile(
+    r"/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^/]+(?:/[^/.][^/]*)*"
+)
 INSTALLABLE = "nixosConfigurations.airlock-domain-usr-home.config.system.build.toplevel"
 GUEST_MODULE = Path("lifecycle/misc/modules/usr-home-guest.nix")
 PACKAGE_LINE = "  environment.systemPackages = map (application: application.package) applications;"
@@ -82,7 +85,7 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
     trial = temporary / name
     trial.mkdir()
     store = trial / "store"
-    flake_sources = set(inputs.values())
+    flake_sources = {store_root(path) for path in inputs.values()}
     prepare_store(store, args.source_store_root, paths, registration, flake_sources)
     checkout = trial / "machine"
     checkout_with_change(args.machine, checkout, change)
@@ -230,7 +233,7 @@ def main():
         if any(
             not isinstance(name, str)
             or not isinstance(path, str)
-            or not STORE_PATH.fullmatch(path)
+            or not SOURCE_PATH.fullmatch(path)
             for name, path in inputs.items()
         ):
             raise RuntimeError("offline input manifest has invalid paths")
@@ -241,7 +244,7 @@ def main():
         )
         if not paths or any(not STORE_PATH.fullmatch(path) for path in paths):
             raise RuntimeError("invalid builder input closure")
-        if any(path not in paths for path in inputs.values()):
+        if any(store_root(path) not in paths for path in inputs.values()):
             raise RuntimeError("flake source is absent from builder input closure")
         nix_path = store_root(args.nix_bin)
         if nix_path not in paths or not args.nix_bin.as_posix().endswith("/bin/nix"):

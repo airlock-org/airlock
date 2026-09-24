@@ -39,6 +39,21 @@ def repository(path: Path) -> str:
 def test_offline_input_manifest_records_nested_sources_and_lock(tmp_path: Path):
     repo = tmp_path / "machine"
     repository(repo)
+    (repo / "flake.lock").write_text(
+        json.dumps(
+            {
+                "root": "root",
+                "nodes": {
+                    "root": {"inputs": {"nixos-qubes": "nixos-qubes"}},
+                    "nixos-qubes": {"inputs": {"shelly": "shelly"}},
+                    "shelly": {},
+                },
+            }
+        )
+        + "\n"
+    )
+    git(repo, "add", "flake.lock")
+    git(repo, "commit", "-m", "lock inputs")
     source_a = "/nix/store/" + "a" * 32 + "-source"
     source_b = "/nix/store/" + "b" * 32 + "-source"
     archive = {
@@ -74,6 +89,61 @@ def test_offline_input_manifest_records_nested_sources_and_lock(tmp_path: Path):
         == hashlib.sha256((repo / "flake.lock").read_bytes()).hexdigest()
     )
     assert data["inputs"] == {"nixos-qubes": source_a, "nixos-qubes/shelly": source_b}
+
+
+def test_offline_input_manifest_resolves_local_input_in_machine_archive(tmp_path: Path):
+    repo = tmp_path / "machine"
+    repository(repo)
+    (repo / "flake.lock").write_text(
+        json.dumps(
+            {
+                "root": "root",
+                "nodes": {
+                    "root": {"inputs": {"nixos-qubes": "nixos-qubes"}},
+                    "nixos-qubes": {
+                        "locked": {"path": "./vendor/nixos-qubes"},
+                        "inputs": {"shelly": "shelly"},
+                    },
+                    "shelly": {},
+                },
+            }
+        )
+        + "\n"
+    )
+    git(repo, "add", "flake.lock")
+    git(repo, "commit", "-m", "lock local input")
+    machine_path = "/nix/store/" + "c" * 32 + "-machine"
+    shelly_path = "/nix/store/" + "b" * 32 + "-source"
+    manifest = tmp_path / "offline-inputs.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "offline-inputs",
+            "--repository",
+            str(repo),
+            "--output",
+            str(manifest),
+        ],
+        input=json.dumps(
+            {
+                "path": machine_path,
+                "inputs": {
+                    "nixos-qubes": {
+                        "inputs": {"shelly": {"path": shelly_path, "inputs": {}}}
+                    }
+                },
+            }
+        ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(manifest.read_text())["inputs"] == {
+        "nixos-qubes": machine_path + "/vendor/nixos-qubes",
+        "nixos-qubes/shelly": shelly_path,
+    }
 
 
 def test_source_archive_preserves_machine_revision_and_lock(tmp_path: Path):

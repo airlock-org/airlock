@@ -33,7 +33,14 @@ let
   ];
   sourcePaths =
     if offlineInputs == null then [ ]
-    else map builtins.storePath (lib.unique (lib.mapAttrsToList (_: source: source) offlineInputs.inputs));
+    else
+      map builtins.storePath (
+        lib.unique (
+          lib.mapAttrsToList (
+            _: source: builtins.elemAt (builtins.match "(/nix/store/[^/]+)(/.*)?" source) 0
+          ) offlineInputs.inputs
+        )
+      );
   # A stable builder view shares the already admitted objects, including other
   # guests' software. It is independent of sys-dev's own boot generation.
   buildClosure = pkgs.closureInfo {

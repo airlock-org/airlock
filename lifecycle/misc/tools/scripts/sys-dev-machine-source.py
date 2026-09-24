@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import posixpath
 import re
 from pathlib import Path
 import subprocess
@@ -134,22 +135,46 @@ def offline_inputs(destination, repository=MACHINE, archive=None):
     archive = json.load(sys.stdin) if archive is None else archive
     if not isinstance(archive, dict) or not isinstance(archive.get("inputs"), dict):
         raise RuntimeError("invalid nix flake archive JSON")
+    lock = json.loads((repository / "flake.lock").read_text())
+    nodes = lock["nodes"]
     inputs = {}
 
-    def collect(nodes, prefix=""):
-        for name, node in nodes.items():
+    def collect(archived, parent_path, parent_id, prefix=""):
+        for name, node in archived.items():
             if not isinstance(node, dict):
                 raise RuntimeError(f"invalid archived input: {name}")
             input_name = f"{prefix}/{name}" if prefix else name
             path = node.get("path")
+            node_id = nodes[parent_id]["inputs"][name]
+            if not isinstance(node_id, str):
+                raise RuntimeError(f"unexpected followed archived input: {input_name}")
+            if path is None:
+                relative = nodes[node_id].get("locked", {}).get("path")
+                if not isinstance(relative, str) or not relative.startswith("./"):
+                    raise RuntimeError(
+                        f"archived input lacks a store path: {input_name}"
+                    )
+                path = posixpath.normpath(posixpath.join(parent_path, relative))
+                parent_root = parent_path.split("/", 4)[:4]
+                root = "/".join(parent_root)
+                if not path.startswith(root + "/"):
+                    raise RuntimeError(
+                        f"local input escapes archived source: {input_name}"
+                    )
             if not isinstance(path, str) or not re.fullmatch(
-                r"/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^/]+", path
+                r"/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^/]+(?:/[^/.][^/]*)*",
+                path,
             ):
                 raise RuntimeError(f"archived input lacks a store path: {input_name}")
             inputs[input_name] = path
-            collect(node.get("inputs", {}), input_name)
+            collect(node.get("inputs", {}), path, node_id, input_name)
 
-    collect(archive["inputs"])
+    root_path = archive.get("path")
+    if not isinstance(root_path, str) or not re.fullmatch(
+        r"/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^/]+", root_path
+    ):
+        raise RuntimeError("machine flake archive lacks a store path")
+    collect(archive["inputs"], root_path, lock["root"])
     if not inputs:
         raise RuntimeError("machine flake archive has no inputs")
     data = {
