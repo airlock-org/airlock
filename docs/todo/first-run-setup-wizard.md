@@ -46,6 +46,9 @@ internet, storage, or graphics steps, cards, or navigation until those pages
 are implemented. Do not promise hardware testing or automatic rollback in the
 initial screen while no hardware changes are available.
 
+Exclude GNOME Tour from sys-gui so GNOME Shell does not offer its own first-login
+tour alongside AirlockOS Setup. GNOME Initial Setup remains disabled.
+
 - Launch automatically once the graphical desktop session in sys-gui is ready
   to display the wizard, while setup is incomplete. A running VM alone is not
   sufficient readiness. Do not gate launch on user input exercises or device
@@ -186,7 +189,8 @@ a general workflow engine now.
 
 ## Acceptance criteria
 
-- [ ] A fresh boot reaches a usable sys-gui desktop and shows one welcome wizard.
+- [ ] A fresh boot reaches a usable sys-gui desktop and shows one AirlockOS
+  welcome wizard, without a GNOME first-login tour.
 - [ ] Initial keyboard and pointing-device input is owned by dom0 and forwarded
   to sys-gui before setup starts; the wizard appears when the desktop is ready
   without requiring a preliminary input exercise or device handoff.
