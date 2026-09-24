@@ -27,6 +27,7 @@ this review did not inspect or test the live machine.
 | [USB input setup](todo/usb-input-setup.md) | Planned. First hardware trial consumer; preserve storage and existing connectivity. Ownership depends on hardware. |
 | [USB lab network isolation](todo/usb-lab-network-isolation.md) | Planned operator-assisted migration to sys-net/sys-firewall. User-facing wizard integration requires automatic recovery. |
 | [sys-ctrl](todo/05-sys-ctrl.md) | Planned controller migration; reuse completed sys-dev build/deployment capabilities. |
+| [Cached offline builder check](todo/07-cached-offline-builder-check.md) | Planned image prerequisite that reuses passing offline acceptance for unchanged inputs. |
 
 Wizard and input work do not depend on implementing sys-ctrl. Network isolation
 and sys-ctrl are distinct changes to the current lab. USB Wi-Fi routing has no
