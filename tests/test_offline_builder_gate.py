@@ -46,7 +46,9 @@ def test_isolated_store_registers_only_selected_paths(tmp_path):
     gate.prepare_store(trial, source, set(paths), registration, {paths[0]})
     assert (trial / paths[0].lstrip("/")).is_dir()
     assert not (trial / paths[0].lstrip("/")).is_symlink()
-    assert (trial / paths[1].lstrip("/")).is_symlink()
+    assert (trial / paths[1].lstrip("/")).is_dir()
+    assert not (trial / paths[1].lstrip("/")).is_symlink()
+    assert not any((trial / paths[1].lstrip("/")).iterdir())
     for path in paths:
         result = subprocess.run(
             [

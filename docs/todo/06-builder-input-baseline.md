@@ -91,11 +91,14 @@ sources and builder input closure, then tries two committed-source variants of
 usr-home: one adds an `/etc` marker and one changes an existing service setting.
 Each trial starts with a separate empty writable store and cache. Only paths in
 the declared builder closure are registered as baseline inputs. Bubblewrap
-exposes those paths to Nix and removes network access; Nix also runs with
-substitutes disabled. The trial disables Nix's inner build sandbox because its
-staged paths are symlinks into the guarded build store; bubblewrap supplies the
-network and trial-store isolation. The gate rejects a preseeded final system
-result and stops the image build if either trial fails. Results and stderr are saved as
+mounts each selected store object read-only at its logical and temporary-store
+paths and removes network access. Nix runs with substitutes disabled and its
+build sandbox enabled, with sandbox fallback disabled. This lets builders read
+their inputs without following staging links outside the sandbox. All mounts
+exist only inside the trial's mount namespace; the host's main `/nix/store`
+and Nix configuration are not changed. New outputs and registration data go to
+the temporary store. The gate rejects a preseeded final system result and stops
+the image build if either trial fails. Results and stderr are saved as
 JSON and text under `.airlock-logs/offline-builder-gate/`, or the configured
 `AIRLOCK_LOG_DIR`.
 

@@ -49,17 +49,23 @@ def prepare_store(store, source_root, paths, registration, flake_sources):
     target.mkdir(parents=True)
     for logical in paths:
         original = physical(source_root, logical)
-        if not original.exists():
+        if not original.exists() and not original.is_symlink():
             raise RuntimeError(
                 f"pinned input is absent from the build store: {logical}"
             )
         staged = target / Path(logical).name
-        if logical in flake_sources:
-            if not original.is_dir():
-                raise RuntimeError(f"flake input is not a directory: {logical}")
+        if logical in flake_sources and not original.is_dir():
+            raise RuntimeError(f"flake input is not a directory: {logical}")
+        # These are mount points, not links to the host's physical store.
+        # Preserve genuine store-root symlinks with their original targets.
+        if original.is_symlink():
+            staged.symlink_to(original.readlink())
+        elif original.is_dir():
             staged.mkdir()
+        elif original.is_file():
+            staged.touch()
         else:
-            staged.symlink_to(original, target_is_directory=original.is_dir())
+            raise RuntimeError(f"unsupported pinned input type: {logical}")
     checked(["nix-store", "--store", str(store), "--load-db"], input=registration)
 
 
@@ -94,11 +100,16 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
     overrides = []
     for input_name, path in sorted(inputs.items()):
         overrides.extend(("--override-input", input_name, f"path:{path}"))
-    flake_mounts = []
-    for path in sorted(flake_sources):
-        source = str(physical(args.source_store_root, path))
-        flake_mounts.extend(("--ro-bind", source, str(store / path.lstrip("/"))))
-        flake_mounts.extend(("--ro-bind", source, path))
+    input_mounts = []
+    for path in sorted(paths):
+        original = physical(args.source_store_root, path)
+        if original.is_symlink():
+            continue
+        source = str(original)
+        # Nix reads the physical store, while evaluation reads /nix/store.
+        # Mount each selected object at both locations inside bubblewrap only.
+        input_mounts.extend(("--ro-bind", source, str(store / path.lstrip("/"))))
+        input_mounts.extend(("--ro-bind", source, path))
     command = [
         "bwrap",
         "--die-with-parent",
@@ -112,7 +123,7 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
         "--bind",
         str(store / "nix/store"),
         "/nix/store",
-        *flake_mounts,
+        *input_mounts,
         "--dev-bind",
         "/dev",
         "/dev",
@@ -140,12 +151,15 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
         "--option",
         "build-hook",
         "",
-        # The staged inputs are symlinks into the guarded source store. Nix's
-        # own build sandbox cannot resolve their physical targets; bubblewrap
-        # already isolates the trial's store and network.
         "--option",
         "sandbox",
+        "true",
+        "--option",
+        "sandbox-fallback",
         "false",
+        "--option",
+        "extra-sandbox-paths",
+        "",
         "build",
         "--offline",
         "--no-write-lock-file",
@@ -189,10 +203,21 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
         raise RuntimeError(f"{name} returned an invalid system path: {system}")
     for logical in paths:
         staged = store / logical.lstrip("/")
-        if logical in flake_sources:
-            unchanged = staged.is_dir() and not any(staged.iterdir())
+        original = physical(args.source_store_root, logical)
+        if original.is_symlink():
+            unchanged = staged.is_symlink() and staged.readlink() == original.readlink()
+        elif original.is_dir():
+            unchanged = (
+                not staged.is_symlink()
+                and staged.is_dir()
+                and not any(staged.iterdir())
+            )
         else:
-            unchanged = staged.is_symlink()
+            unchanged = (
+                not staged.is_symlink()
+                and staged.is_file()
+                and staged.stat().st_size == 0
+            )
         if not unchanged:
             raise RuntimeError(f"{name} replaced a pinned input: {logical}")
     return {"system": system, "elapsed_seconds": round(time.monotonic() - started, 2)}
