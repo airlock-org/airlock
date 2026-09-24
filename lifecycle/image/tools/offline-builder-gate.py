@@ -5,6 +5,7 @@ import argparse
 from io import BytesIO
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -170,9 +171,20 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
     ]
     started = time.monotonic()
     try:
-        result = subprocess.run(
-            command, capture_output=True, text=True, timeout=args.timeout
-        )
+        # Bubblewrap caps its command-line argument count at 9000. A complete
+        # builder closure needs more mount arguments, so pass them by fd.
+        with tempfile.TemporaryFile(dir=trial) as arguments:
+            arguments.write(
+                b"\0".join(os.fsencode(part) for part in command[1:]) + b"\0"
+            )
+            arguments.seek(0)
+            result = subprocess.run(
+                ["bwrap", "--args", str(arguments.fileno())],
+                pass_fds=(arguments.fileno(),),
+                capture_output=True,
+                text=True,
+                timeout=args.timeout,
+            )
     except subprocess.TimeoutExpired as exc:
 
         def decoded(output):
@@ -190,8 +202,9 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
     (log_dir / f"{name}.stdout").write_text(result.stdout)
     (log_dir / f"{name}.stderr").write_text(result.stderr)
     if result.returncode:
+        detail = "\n".join(result.stderr.rstrip().splitlines()[-12:])
         raise RuntimeError(
-            f"{name} offline build failed; see {log_dir / f'{name}.stderr'}"
+            f"{name} offline build failed; see {log_dir / f'{name}.stderr'}\n{detail}"
         )
     try:
         system = json.loads(result.stdout)[0]["outputs"]["out"]
