@@ -180,6 +180,7 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
         "usb-text-recovery",
     ]
     assert configuration["guestLabels"] == [
+        "sys-ctrl",
         "sys-dev",
         "sys-gui",
         "usr-browser",

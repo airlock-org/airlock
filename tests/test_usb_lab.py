@@ -165,6 +165,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     )
 
     assert report["domains"] == [
+        "sys-ctrl",
         "sys-dev",
         "sys-gui",
         "usr-browser",

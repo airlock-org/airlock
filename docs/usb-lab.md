@@ -13,7 +13,8 @@ development machine --Tailnet SSH--> sys-dev --airlock-dom0-shell--> dom0
 ```
 
 The user-facing `Airlock` boot entry uses this topology and starts `sys-dev`,
-physical-GPU `sys-gui`, offline `usr-home`, and `usr-browser`. `usb-lab` is only
+the offline `sys-ctrl` bootstrap, physical-GPU `sys-gui`, offline `usr-home`,
+and `usr-browser`. `sys-ctrl` is not yet a deployment authority. `usb-lab` is only
 the internal profile name. `sys-dev` owns the physical network devices until a
 [planned change to this same profile](todo/usb-lab-network-isolation.md)
 introduces `sys-net` and `sys-firewall`. Dom0's direct

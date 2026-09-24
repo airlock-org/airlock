@@ -1,8 +1,9 @@
 # Move configuration work into sys-ctrl
 
-Status: controller architecture not implemented; direct pool admission foundation
-implemented and physically smoke-tested from `sys-dev`. Baseline refreshed
-2026-09-23; controller migration remains planned.
+Status: controller migration remains planned. A first `sys-ctrl` guest bootstrap
+is implemented in the `feat/sys-ctrl-bootstrap` worktree and its guest system
+builds locally, but it has not been tested on the physical machine. Direct
+pool admission remains physically smoke-tested only from `sys-dev`.
 
 Since the original September 17 plan, the [pool-backed builder](../sys-dev-build-store.md),
 [guest activation/rollback](../completed/02-sys-dev-guest-activation-rollback.md),
@@ -138,6 +139,21 @@ lock-file provenance. Do not create an independently maintained configuration
 on the live machine.
 
 ## Implementation stages
+
+Bootstrap progress (2026-09-24): the machine topology now declares an offline,
+autostarting `sys-ctrl` with a persistent private volume and a writable Nix
+store. USB assembly supplies a direct `airlock-machine` checkout from the same
+revision- and lock-checked source archive as `sys-dev`; the source-seeding
+module is shared between the two guests. A standalone machine release does
+not yet supply that seed, so existing installations need a source import path
+before the controller can own deployments. The existing guest construction and
+pool sender are also reused. `sys-ctrl` currently has no controller deployment
+service or dom0 policy authority. Its private store is not yet the pinned
+pool-backed builder used by `sys-dev`; generalizing that builder, including its fixed storage
+attachments and offline input view, is the next implementation step. No
+candidate history has been moved and the `sys-config-*` declarations remain.
+`sys-dev` remains in the topology and still uses its existing deployment path;
+rerouting its normal submissions through `sys-ctrl` is part of stage 2.
 
 ### 1. Specify boundaries and bootstrap sys-ctrl
 

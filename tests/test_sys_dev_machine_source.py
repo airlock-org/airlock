@@ -270,7 +270,7 @@ def test_shallow_seed_archive_contains_only_the_pinned_checkout(tmp_path: Path):
           entries = flake.lib.mkMachineGuestEntries "x86_64-linux" {{
             airlockMachineSeedArchive = "/seed.tar.gz";
           }};
-      in entries.sys-dev.configuration.config.systemd.services.airlock-sys-dev-machine-seed.script
+      in entries.sys-dev.configuration.config.systemd.services.airlock-machine-source-seed.script
     """
     evaluated = subprocess.run(
         ["nix", "eval", "--impure", "--raw", "--expr", expression],

@@ -57,6 +57,10 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
         ).read_text(encoding="utf-8"),
         "guest_config_inputs": (
             repo_root / "airlock-machine/lifecycle/misc/modules/qube-guest/config-inputs.nix"
+        ).read_text(encoding="utf-8") + (
+            repo_root / "airlock-machine/lifecycle/misc/modules/qube-guest/scripts/airlock-config-inputs-import-qrexec.sh"
+        ).read_text(encoding="utf-8") + (
+            repo_root / "airlock-machine/lifecycle/misc/modules/qube-guest/scripts/airlock-config-inputs-mount.sh"
         ).read_text(encoding="utf-8"),
         "guest_network": (
             repo_root / "airlock-machine/lifecycle/misc/modules/qube-guest/network.nix"
