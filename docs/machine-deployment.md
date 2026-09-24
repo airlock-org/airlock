@@ -512,3 +512,27 @@ running-generation verification. Validation is limited to the quick test suite;
 image rebuilding and physical boot verification are left to the operator.
 The USB was inspected without configuration edits. The operator granted read
 ACLs on its logs and Qubes/Airlock state directories for offline inspection.
+
+### Desktop readiness and requested shutdown, 2026-09-24
+
+A later USB boot marked sys-dev failed one second before its qrexec agent became
+ready. GNOME's power-off request reached dom0, but the leftover startup marker
+forced recovery on the next boot. The new source waits up to 180 seconds for each
+started guest to reach Running and answer qrexec with the expected generation.
+Start commands remain separately bounded; a wrong generation fails immediately.
+
+After guarded hardware and GUI startup succeeds, background-service startup no
+longer controls the forced-recovery marker. Failures remain recorded as degraded
+and appear in GNOME as a notification with Retry and Dismiss. The fixed
+`airlock.BootStatus` and `airlock.BootRetry` RPCs are limited to sys-gui; Retry can
+only restart the declared boot-autostart unit after a degraded desktop startup.
+It cannot run arbitrary commands or bypass the earlier hardware guards.
+
+System shutdown records `shutdown_requested_at` separately from startup status.
+A cancelled startup is not subsequently reported as an unexpected interruption;
+known critical hardware/GUI failures still require recovery. Power loss before
+the desktop boundary retains guarded recovery. Shutdown records express a
+request, not proof that every VM and filesystem finished shutting down.
+
+These changes require a newly built image and physical validation. No image was
+rebuilt or live system modified during this change; validation uses quick tests.
