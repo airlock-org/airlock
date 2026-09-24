@@ -117,6 +117,10 @@ results, not a live deployment. The documented `sys-dev-2` target is absent
 from the current Tailnet; `sys-dev` is reachable, but the existing dom0
 development transport requires the operator's sudo password. No live machine
 plan or apply ran.
+Read-only inspection of the reachable `sys-dev` shows its current default route
+on `ens6` through wired DHCP, with NetworkManager reporting `ens6` as connected
+Ethernet. This does not identify dom0's PCI assignment or prove the new provider
+can connect; those checks remain at the physical console.
 
 - [ ] Add focused pytest coverage for topology, exclusive PCI ownership,
   startup dependencies, and migration/rollback behavior, including interruption
