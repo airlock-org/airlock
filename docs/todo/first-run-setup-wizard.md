@@ -1,6 +1,7 @@
 # First-run setup wizard
 
-Status: planned; no implementation. Created 2026-09-23.
+Status: welcome/completion shell implemented in source; physical GUI and reboot
+verification pending. Created 2026-09-23.
 
 ## Purpose
 
@@ -227,3 +228,8 @@ Deployable wizard packaging, desktop integration, and persistent state support
 belong in `airlock-machine`. The parent `airlock` repository owns this plan and
 image/lab integration. Follow the
 [repository boundaries](../repositories.md) when implementing and validating.
+
+The first milestone implementation lives in
+`airlock-machine/lifecycle/runtime/tools/pkgs/airlock-setup/` for the GUI,
+`airlock-machine/lifecycle/runtime/tools/pkgs/airlock-setup-state/` for dom0
+state, and their Nix modules under `airlock-machine/lifecycle/misc/modules/`.
