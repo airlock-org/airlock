@@ -10,14 +10,20 @@ let
   };
   installRuntime = ''
     echo "Installing prepared Qubes runtime state"
-    test ! -e /mnt/var/lib/qubes/qubes.xml
+    if test -e /mnt/var/lib/qubes/qubes.xml; then
+      echo "Refusing to replace an existing Qubes database during image preparation" >&2
+      exit 1
+    fi
     mkdir -p /mnt/var/lib/qubes
     cp -a --sparse=always ${preparedRuntime}/qubes/. /mnt/var/lib/qubes/
     cp -a ${preparedRuntime}/pool-selections/. /mnt/var/lib/airlock/closure-store/
     chmod -R u+rwX /mnt/var/lib/qubes
+    cp ${preparedRuntime}/receipt.json /mnt/var/lib/airlock/prepared-runtime.json
+  '';
+  ownRuntime = ''
+    # Activation creates the qubes group; only then resolve its installed GID.
     nixos-enter --root /mnt -- chown -R root:qubes /var/lib/qubes
     chmod 0660 /mnt/var/lib/qubes/qubes.xml
-    cp ${preparedRuntime}/receipt.json /mnt/var/lib/airlock/prepared-runtime.json
   '';
 in
 {
@@ -47,11 +53,18 @@ in
         mode = config.airlock.image.preparedStoreMode;
       }
     ];
-  }) (old: assert lib.hasInfix "umount -R /mnt" old.buildCommand; {
+  }) (old:
+    assert lib.hasInfix "mount $rootDisk $mountPoint" old.buildCommand;
+    assert lib.hasInfix "umount -R /mnt" old.buildCommand;
+  {
     # Sparse writable disks belong in their final filesystem, never in the
     # installed Nix store. Keep upstream assembly and bootloader installation.
-    buildCommand = lib.replaceStrings [ "umount -R /mnt" ]
-      [ (installRuntime + "\numount -R /mnt") ] old.buildCommand;
+    # Seed before activation: upstream qubes-create initializes an empty
+    # database when none exists. Set ownership after activation creates users.
+    buildCommand = lib.replaceStrings
+      [ "mount $rootDisk $mountPoint" "umount -R /mnt" ]
+      [ ("mount $rootDisk $mountPoint\n" + installRuntime)
+        (ownRuntime + "\numount -R /mnt") ] old.buildCommand;
     preVM = ''
       echo "Validating prepared guest store before image assembly"
       ${config.system.build.usbPreparedGuestStore.checkCommand}

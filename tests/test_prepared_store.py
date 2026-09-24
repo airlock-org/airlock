@@ -1005,9 +1005,16 @@ def test_usb_prepared_store_preserves_sealed_view_mode(seed):
         "cp -a --sparse=always " + prepared["runtimeSeed"] + "/qubes/."
         in prepared["imageCommand"]
     )
-    assert prepared["imageCommand"].index(
-        "Installing prepared Qubes runtime state"
-    ) < prepared["imageCommand"].index("umount -R /mnt")
+    command = prepared["imageCommand"]
+    # Activation runs upstream qubes-create when qubes.xml is absent. Seed
+    # before it, but resolve root:qubes ownership only after users exist.
+    assert (
+        command.index("mount $rootDisk $mountPoint")
+        < command.index("Installing prepared Qubes runtime state")
+        < command.index("switch-to-configuration boot")
+        < command.index("chown -R root:qubes /var/lib/qubes")
+        < command.index("umount -R /mnt")
+    )
     assert prepared["validation"] in prepared["dependencies"]
     # The command must execute in the disk-image build, not only in a separately
     # cacheable validation derivation. Fail before copying or partitioning.
