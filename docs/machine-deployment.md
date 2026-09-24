@@ -379,6 +379,24 @@ host whose embedded topology still references the VM also blocks deletion.
 Recovery images remain protected; use a disposable VM added after image boot
 for the first purge trial so the image's recovery topology does not declare it.
 
+To empty a specific trash record before its deadline, inspect the effective
+prune plan and prune each release that references the VM:
+
+```bash
+airlock-sys-dev-machine-deploy release-prune-plan --release /nix/store/RELEASE \
+  --allow-unexpired-trash TRANSACTION-VM
+airlock-sys-dev-machine-deploy release-prune --release /nix/store/RELEASE \
+  --confirm /nix/store/RELEASE --allow-unexpired-trash TRANSACTION-VM
+```
+
+The override waives only `unexpired trash TRANSACTION-VM` for that release.
+It cannot bypass a selected or running host, rollback/recovery reference,
+unfinished transaction or purge, or explicit retain. Each additional unexpired
+record needs its own `--allow-unexpired-trash` argument. Pruning the source
+release gives up restoration from that release; its exact roots and boot
+generations are still journalled before removal. Repeat an interrupted prune
+with the same override.
+
 Pruning journals the exact roots and profile generation numbers before deleting
 them, refreshes the boot menu, and preserves deployment audit files. It does
 not run Nix or pool GC. Repeat the same command after an interruption; deployment
@@ -398,6 +416,9 @@ sudo /var/lib/airlock/machine/controller trash-purge TRANSACTION-VM \
 The sys-dev equivalent is `airlock-sys-dev-machine-deploy trash-purge
 --identity TRANSACTION-VM --confirm TRANSACTION-VM`. Prune and purge use detached
 dom0 workers and survive SSH disconnection; `trash-list` reports purge status.
+Before expiry, add `--before-expiry` to that exact purge command. This waives
+only the deadline; the retained-release, profile, VM identity, ownership, and
+stopped-state checks still apply. The trash audit record notes early purging.
 
 Purge checks the UUID, actual volume identities, sharing/source relationships,
 retirement tag, stopped state, and recorded pool generation before removing

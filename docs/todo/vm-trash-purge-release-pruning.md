@@ -14,10 +14,12 @@ provides guarded release pruning and purge; live deployment/testing is the next 
 - Add an explicit pruning plan and operation that identifies obsolete release
   roots and explains blockers. Protect the running and selected generations,
   retained rollback/recovery choices, unfinished transactions, and unexpired
-  trash recovery requirements. Preserve audit records and make interruption
+  trash recovery requirements unless the operator explicitly waives the deadline
+  for the exact trash record. Preserve audit records and make interruption
   recoverable; do not require manual deletion of roots.
 - Keep purge explicit and limited to one confirmed trash record. Enforce its
-  retention deadline (30 days by default), remaining release references, VM
+  retention deadline (30 days by default) unless the operator explicitly requests
+  early purge. Always enforce remaining release references, VM
   UUID, storage ownership, and stopped state. Expiry alone never deletes data.
 - Permanently remove only the eligible VM's owned private resources. Release
   its pool retention safely; shared software still needed by other VMs,
@@ -32,9 +34,10 @@ provides guarded release pruning and purge; live deployment/testing is the next 
   or edit trash records to bypass retention.
 - On a disposable VM, run supported pool cleanup while it is retired, then
   restore it and verify the same identity, private data, and required software.
-- Verify purge refusal before expiry and while retained releases reference the
-  VM. After expiry and supported pruning, explicitly purge the eligible record
-  and verify only its owned resources disappear; other VMs and pinned builder
+- Verify purge refusal before expiry without an override and while retained
+  releases reference the VM even with an override. Use an exact-record override
+  to prune and purge before expiry, then verify only its owned resources
+  disappear; other VMs and pinned builder
   views still work. Exercise shared pool data, not only unique objects.
 
 The earlier `lab-retire` test VM was restored and halted on the previous USB
@@ -68,8 +71,8 @@ snapshot. Verify refusals before expiry, run the retired-VM
 pool-cleanup/restore trial, then retire again for the purge trial. Use the
 configured retention period (minimum one day); do not accelerate expiry by
 changing the clock or record. Advance the rollback choice with a later committed
-release, inspect and prune eligible references, and explicitly purge only the
-test record.
+release, inspect and prune eligible references with the exact-record override,
+and explicitly purge only the test record before expiry.
 Physical results must be recorded before marking this follow-up complete.
 
 ## Physical trial — 2026-09-24
@@ -119,10 +122,12 @@ removing that retain restored the single unexpired-trash blocker. `qvm-ls`
 showed `trash-probe` halted, other expected VMs running, and the retained
 `sys-dev-builder` generation-1 manifest was present.
 
-Remaining physical acceptance after **2026-09-25 00:41:57.140376 UTC**: inspect the
-prune plan again, prune the exact eligible source release and its boot profile
-generations, then purge only `1790210515141062431-trash-probe`. Confirm the
+Remaining physical acceptance: deploy the early-purge coordinator change,
+inspect the prune plan with an override for only
+`1790210515141062431-trash-probe`, prune the exact eligible source release and
+its boot profile generations, then purge only that record before expiry. Confirm the
 VM and its owned private volumes disappear, its pool generation becomes
 eligible for GC, and other VMs plus pinned builder views still work. Do not
 use the older restored trash record for this purge. The retention deadline is
-real elapsed time; do not change the machine clock or the record to advance it.
+real elapsed time; use the explicit override rather than changing the machine
+clock or the record.
