@@ -35,8 +35,10 @@ before enabling any disruptive hardware page.
 ## First implementation
 
 Provide a welcome screen explaining first-run setup and an explicit **Finish
-setup** action. This first milestone establishes the lifecycle without adding
-hardware configuration or unrelated settings.
+setup** action. After completion succeeds, offer an optional **Take a desktop
+tour** action that launches GNOME Tour. Skipping the tour or failing to launch
+it does not undo setup completion. This first milestone establishes the
+lifecycle without adding hardware configuration or unrelated settings.
 
 Build the sys-gui application with GTK 4, libadwaita, and PyGObject so it follows
 the GNOME desktop's controls, window styling, and color preference. Use the
@@ -47,7 +49,8 @@ are implemented. Do not promise hardware testing or automatic rollback in the
 initial screen while no hardware changes are available.
 
 Exclude GNOME Tour from sys-gui so GNOME Shell does not offer its own first-login
-tour alongside AirlockOS Setup. GNOME Initial Setup remains disabled.
+tour alongside AirlockOS Setup. Make its executable available to the wizard for
+the optional post-completion launch. GNOME Initial Setup remains disabled.
 
 - Launch automatically once the graphical desktop session in sys-gui is ready
   to display the wizard, while setup is incomplete. A running VM alone is not
@@ -199,6 +202,8 @@ a general workflow engine now.
 - [ ] Closing, crashing, or rebooting before completion allows setup to resume
   without falsely recording success or repeatedly opening windows.
 - [ ] The desktop launcher reopens setup before and after completion.
+- [ ] The completed screen offers GNOME Tour on request; skipping it or a
+  launch failure does not change completion state.
 - [ ] State read/write failures are visible and do not report completion.
 - [ ] Completion survives a sys-gui system replacement and an ordinary update;
   missing-state behavior on existing installations is documented and checked.
