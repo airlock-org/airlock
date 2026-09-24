@@ -9,6 +9,18 @@ starts. This establishes an installation stage for decisions that need user
 interaction, with a persistent completion state and a way to reopen setup.
 
 Bootstrap must provide working display and basic input before the wizard runs.
+For initial setup, dom0 owns the physical keyboard and pointing device and
+forwards their input to sys-gui. Show the wizard once the graphical desktop
+session is ready; no separate input exercise or ownership trial is required
+before showing its first screen. Working initial input is bootstrap's
+responsibility.
+
+Future hardware pages progressively trial handing devices or their controllers
+to suitable service VMs. Retain a handoff only after the user verifies that it
+works; otherwise restore the working baseline. Keep devices with dom0 when no
+supported handoff works. The initial dom0 baseline does not override previously
+confirmed ownership choices on later boots.
+
 Keep **desktop ready for setup** distinct from **setup complete**: starting
 sys-gui does not complete setup, and the wizard cannot be responsible for the
 input needed to operate its own first screen.
@@ -25,8 +37,10 @@ Provide a welcome screen explaining first-run setup and an explicit **Finish
 setup** action. This first milestone establishes the lifecycle without adding
 hardware configuration or unrelated settings.
 
-- Launch automatically in the first usable interactive sys-gui session while
-  setup is incomplete. A running VM alone is not sufficient readiness.
+- Launch automatically once the graphical desktop session in sys-gui is ready
+  to display the wizard, while setup is incomplete. A running VM alone is not
+  sufficient readiness. Do not gate launch on user input exercises or device
+  handoff checks.
 - Show one wizard instance per session; repeated startup triggers must not
   create duplicate windows.
 - Persist completion only after the user selects Finish setup and the state
@@ -164,7 +178,9 @@ a general workflow engine now.
 ## Acceptance criteria
 
 - [ ] A fresh boot reaches a usable sys-gui desktop and shows one welcome wizard.
-- [ ] Keyboard and pointing-device interaction work before setup starts.
+- [ ] Initial keyboard and pointing-device input is owned by dom0 and forwarded
+  to sys-gui before setup starts; the wizard appears when the desktop is ready
+  without requiring a preliminary input exercise or device handoff.
 - [ ] Finish setup durably records completion; the next login and reboot do not
   automatically show the wizard.
 - [ ] Closing, crashing, or rebooting before completion allows setup to resume
