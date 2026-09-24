@@ -3,7 +3,7 @@
 Status: complete for recoverable retirement and restoration, 2026-09-23.
 Focused pytest coverage and live disposable-VM retirement, retired-state reboot,
 and restore trials pass. Permanent purge, release pruning, and physical pool-GC
-acceptance are tracked in [the follow-up TODO](../todo/vm-trash-purge-release-pruning.md).
+acceptance passed in [the completed follow-up](vm-trash-purge-release-pruning.md).
 
 ## Goal
 
@@ -81,8 +81,8 @@ remains in trash. Committed
 deployment or rollback restores the same UUID and private storage identity.
 
 `trash-list` exposes the audit records. Required software and private data are
-retained for recovery. An initial guarded `trash-purge` implementation exists,
-but its physical acceptance and safe release pruning remain follow-up work.
+retained for recovery. Permanent purge and safe release pruning passed in the
+completed follow-up.
 
 ## Physical trial, 2026-09-23
 

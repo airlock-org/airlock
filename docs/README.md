@@ -28,14 +28,15 @@ this review did not inspect or test the live machine.
 | [USB lab network isolation](todo/usb-lab-network-isolation.md) | Planned operator-assisted migration to sys-net/sys-firewall. User-facing wizard integration requires automatic recovery. |
 | [sys-ctrl](todo/05-sys-ctrl.md) | Planned controller migration; reuse completed sys-dev build/deployment capabilities. |
 | [Builder input baseline](todo/06-builder-input-baseline.md) | Planned extension of the existing frozen builder view. Independent of sys-ctrl. |
-| [Trash purge/release pruning](todo/vm-trash-purge-release-pruning.md) | Implemented locally; physical acceptance remains. Destructive trials have explicit retention and recovery requirements. |
 
 Wizard and input work do not depend on implementing sys-ctrl. Network isolation
 and sys-ctrl are distinct changes to the current lab. USB Wi-Fi routing has no
 implementation plan yet; preserving existing USB connectivity is required,
 but that does not promise support for new adapters.
 
-The [completed plans](completed/) record acceptance evidence for earlier work.
+The [completed trash purge and release pruning trial](completed/vm-trash-purge-release-pruning.md)
+records the physical early-purge result and its shared-pool GC limit. The
+[completed plans](completed/) record acceptance evidence for earlier work.
 Completion is limited to each document's stated scope, not universal hardware
 support. A successful build is not physical acceptance.
 

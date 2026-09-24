@@ -1,13 +1,13 @@
 # VM trash purge and release pruning
 
-Status: physical restore-after-GC trial passed; final purge acceptance pending. Follow-up to
-[completed VM retirement and restoration](../completed/vm-retirement-trash.md).
+Status: complete for explicit VM purge and release pruning, 2026-09-24.
+Follow-up to [recoverable VM retirement and restoration](vm-retirement-trash.md).
 
 ## Goal
 
 Safely release obsolete machine generations and permanently delete eligible
-trashed VMs. Recoverable retirement and restoration already work. Local code now
-provides guarded release pruning and purge; live deployment/testing is the next step.
+trashed VMs. Recoverable retirement and restoration already work. Guarded release
+pruning and purge passed local and physical trials, including early purge.
 
 ## Required work
 
@@ -42,12 +42,10 @@ provides guarded release pruning and purge; live deployment/testing is the next 
 
 The earlier `lab-retire` test VM was restored and halted on the previous USB
 installation; that installation was replaced by a fresh image. The normal image
-and release sources no longer declare this disposable VM. A temporary committed
-trial release must introduce a disposable VM after image boot, so the recovery
-image cannot retain it during the purge trial. Keep the trial commits available
-through physical acceptance.
+and release sources do not declare the disposable VM. Committed trial releases
+introduced `trash-probe` after image boot, so the recovery image never retained it.
 
-## Local implementation and next test
+## Implementation and local verification
 
 `release-list`, `release-prune-plan`, `release-retain`, and `release-prune` expose
 protected releases and journal exact root/profile removals. Pruning preserves
@@ -57,23 +55,14 @@ the maintenance lock, retains an audit receipt, and prevents generation-ID reuse
 The sys-dev client starts destructive maintenance in detached dom0 workers.
 Commands and limitations are in [machine deployment](../machine-deployment.md).
 
-Local verification: component `make test-quick` passed 177 tests; parent
-`make test-quick` passed 397 with 23 skipped. The standalone coordinator built,
-and its packaged Python environment successfully imported the Qubes client.
-Tests cover interrupted pruning/purge, exact targets, ownership conflicts,
-retention, and shared objects surviving GC for a second VM or retained builder
-generation. These are local results; no live prune or purge has been performed.
-
-After the fresh image boots, create and deploy a committed trial release that
-introduces a disposable VM. Create and check private-data markers, then deploy
-another committed release that explicitly retires it and captures its volume
-snapshot. Verify refusals before expiry, run the retired-VM
-pool-cleanup/restore trial, then retire again for the purge trial. Use the
-configured retention period (minimum one day); do not accelerate expiry by
-changing the clock or record. Advance the rollback choice with a later committed
-release, inspect and prune eligible references with the exact-record override,
-and explicitly purge only the test record before expiry.
-Physical results must be recorded before marking this follow-up complete.
+Local verification: component `make test-quick` passed 400 tests with 21
+skipped after the early-purge change. The earlier parent `make test-quick`
+passed 397 with 23 skipped. The standalone coordinator built, and its packaged
+Python environment successfully imported the Qubes client. Tests cover
+interrupted pruning/purge, exact targets, ownership conflicts, retention,
+early overrides, and shared objects surviving GC for a second VM or retained
+builder generation. Focused checks passed 20 prune/purge cases and 5
+maintenance-client cases.
 
 ## Physical trial — 2026-09-24
 
@@ -122,12 +111,33 @@ removing that retain restored the single unexpired-trash blocker. `qvm-ls`
 showed `trash-probe` halted, other expected VMs running, and the retained
 `sys-dev-builder` generation-1 manifest was present.
 
-Remaining physical acceptance: deploy the early-purge coordinator change,
-inspect the prune plan with an override for only
-`1790210515141062431-trash-probe`, prune the exact eligible source release and
-its boot profile generations, then purge only that record before expiry. Confirm the
-VM and its owned private volumes disappear, its pool generation becomes
-eligible for GC, and other VMs plus pinned builder views still work. Do not
-use the older restored trash record for this purge. The retention deadline is
-real elapsed time; use the explicit override rather than changing the machine
-clock or the record.
+The early-purge coordinator change `28d0578` (parent `5893585`) was applied as
+release `/nix/store/w1n83vx6hhsaigpzgv9wnykygwc7z64i-airlock-machine-release`.
+After reboot, `machine-verify` returned `complete` with matching host and guest
+generations. The active trash record still had the original VM UUID and a real
+deadline of 2026-09-25 00:41:57.140376 UTC.
+
+With `--allow-unexpired-trash 1790210515141062431-trash-probe`, the source
+release's prune plan reported no blockers and exactly one waived blocker. It
+named roots `1790208418722591516`, `1790209845672888216`, and the active
+trash root, plus Nix boot generations 2 and 4. The confirmed prune removed
+those targets and recorded `status: pruned`. No other release was pruned.
+
+The exact-record `trash-purge --before-expiry` completed at 2026-09-24
+01:36:02 UTC, preserving `purged_before_expiry: true` in its audit record.
+Repeating purge without the flag returned the same purged record. `trash-probe`
+was absent from `qvm-ls` and `qvm-volume list`; its private Qubes volume was
+gone. The older restored trash record remained audit-only. The pool generation's
+retention flag became false and its current link was absent.
+
+Supported pool GC returned `status: passed`, with no removed generations,
+views, or segments under its default two-generation history policy. This run
+therefore proves purge released the VM's retention, but it does not prove
+physical reclamation of shared segments. `trash-probe` and `usr-browser`
+generation 2 had the same guest system, closure hash, and all 827 store paths.
+After GC, `usr-browser`'s store view remained present; sys-dev's pinned builder
+generation 1 remained mounted and an existing `coreutils` executable and Nix
+path-info query worked through it. `machine-verify` still returned `complete`:
+sys-dev, sys-gui, and usr-home matched their selected generations;
+usr-browser remained halted as configured. No machine clock or trash metadata
+was changed to advance expiry.
