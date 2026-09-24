@@ -1,7 +1,8 @@
 # Build routine guest configuration changes offline
 
-Status: local implementation in progress; fresh-image offline acceptance is
-pending. Extends the implemented [pool-backed build store](../sys-dev-build-store.md).
+Status: implemented and physically accepted for the two documented guest
+changes on the 2026-09-24 USB image. Extends the implemented
+[pool-backed build store](../sys-dev-build-store.md).
 
 ## Goal and boundary
 
@@ -78,10 +79,9 @@ airlock-sys-dev-machine-build preflight --offline
 airlock-sys-dev-machine-build build --offline
 ```
 
-The initial roots are candidates derived from the earlier trial. They do not
-establish that the supported examples work offline until the fresh-image
-acceptance below passes. Inspect missing inputs during that trial and adjust
-the declared roots before marking this task complete.
+The selected roots were qualified by the isolated check and the fresh-USB
+trial below. This supports the two documented changes at the image's pins;
+changes outside that set may need more inputs.
 
 ## Input preparation before image assembly
 
@@ -171,3 +171,41 @@ separate work.
 Any input that still requires an external fetch for a supported example is an
 acceptance failure. Document downloads needed by changes outside the supported
 set as limits of that image's offline capability.
+
+## Acceptance record: 2026-09-24
+
+The provisioned USB ran machine revision
+`7905339d474a5cc0a1accf93d09237c5ce4d9121` with lock hash
+`8437acbbe9c01d499002691ede6647a9b5ec9bddf053e53ef210ac95ec8fa71e`.
+Both supported changes were committed in separate disposable checkouts and
+built in separate empty writable stores over the image's pinned read-only
+builder view. Each build ran inside a network namespace with no external
+network route and with Nix substitutes disabled. Neither resulting system was
+present in the baseline; both appeared in their respective writable stores.
+None of those stores' top-level objects duplicated a baseline object.
+
+| Change | Built guest system | Writable store after build |
+| --- | --- | ---: |
+| `/etc` marker | `racn34by9qywri0ppfg8w73v3nl16xwi` | 28,218,574 bytes |
+| Existing service setting | `1aas16n9zjsrscg0zgs3pnj2harr5zr6` | 28,246,125 bytes |
+
+The pinned builder view registered 1,728 distinct store paths. Compared with
+the four ordinary guest views on that USB, it added 26 distinct store objects,
+whose recorded pool fragment sizes total 11,832,320 bytes. Its separate
+builder metadata image was 52,672,000 bytes. These are measured pool costs;
+an isolated whole-USB image-size delta was not measured because the available
+older images also differ in other configuration.
+
+With sys-dev stopped, `airlock-closure-store gc --keep-generations 0` returned
+`status: passed` and retained `sys-dev-builder` generation 1. A fresh offline
+`/etc` build then passed. After a whole-machine reboot, the builder mounted the
+same base identity and another fresh offline `/etc` build passed. The current
+local source revision `42ce4161617b81a135f638a04e38765d1d64ef3d` also
+passed `make usb-builder-offline-check` for both examples; that check is
+separate from the physical trial on the installed revision.
+
+The live trial's report, complete baseline path manifest, input manifest and
+build logs are under `.airlock-logs/offline-builder-live-20260924/`. The
+independent check writes `.airlock-logs/offline-builder-gate/` or the configured
+`AIRLOCK_LOG_DIR`; the dom0 cleanup result is
+`/var/log/airlock/offline-builder-gc.json` on the USB.
