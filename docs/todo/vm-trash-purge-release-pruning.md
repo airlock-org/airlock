@@ -1,6 +1,6 @@
 # VM trash purge and release pruning
 
-Status: implemented locally; physical acceptance pending. Follow-up to
+Status: physical restore-after-GC trial passed; final purge acceptance pending. Follow-up to
 [completed VM retirement and restoration](../completed/vm-retirement-trash.md).
 
 ## Goal
@@ -71,3 +71,36 @@ changing the clock or record. Advance the rollback choice with a later committed
 release, inspect and prune eligible references, and explicitly purge only the
 test record.
 Physical results must be recorded before marking this follow-up complete.
+
+## Physical trial — 2026-09-24
+
+The latest USB image booted with working GUI input and sys-dev at `sys-dev-1`.
+The committed trial release `18ef40f` (parent `0626d3f`) introduced
+`trash-probe` after image boot and set one-day retention. The first deployment
+restarted affected guests, selected a host generation, and reached `complete`
+after reboot. The disposable VM was UUID
+`cf7c5bef-33b8-4d3f-959e-8ff117c5a2f6`, with private volume
+`varlibqubes:appvms/trash-probe/private`. A marker in its private home had
+SHA-256 `c283a6a303cd0dc7377fb53d810dc172c88527b8dab8dfa9401e9b8363e03a14`.
+
+The committed retirement release `4b09749` (parent `d56b5e1`) removed the
+VM and explicitly retired it. Its plan named the same UUID and pool generation
+1. After applying and rebooting, `machine-verify` returned `complete` and
+`trash-list` showed record `1790208942071199999-trash-probe` with expiry
+2026-09-25 00:15:43 UTC. An immediate `trash-purge` refused with
+`trash retention window has not expired`. `release-list` protected the source
+release as the selected previous release and for unexpired trash.
+
+While retired, `airlock-closure-store gc` returned `status: passed` and retained
+`trash-probe` generation 1. Reapplying `18ef40f` restored the record; after
+reboot, `machine-verify` returned `complete`, the UUID and private volume were
+unchanged, and the marker's SHA-256 matched exactly. The VM was shut down after
+the check. This validates restore after supported pool cleanup for this VM;
+the command reported no removed generations or segments, so it does not prove
+shared-segment reclamation in this physical run.
+
+Remaining physical acceptance: retire the VM again, advance the rollback
+choice with a later release, confirm protected prune/purge refusals, and after
+the new record's actual one-day deadline prune eligible references and purge
+that exact record. Check that other VMs and retained builder views still work.
+Do not reuse the expired first record: restoration removed it.
