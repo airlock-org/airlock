@@ -45,23 +45,35 @@ required for this milestone.
 
 ## State and ownership
 
-Treat completion as persistent machine setup state, not a temporary file in
-the guest root filesystem or an incidental desktop preference. Specify its
-authoritative owner and storage location during implementation, with one
-source of truth. It must survive sys-gui replacement and normal OS updates.
-Use an atomic state update and distinguish unreadable state from a fresh
-installation; a read error must not silently become successful completion.
+Dom0 owns the authoritative completion record at
+`/var/lib/airlock/setup/state.json` on its persistent filesystem. The record
+contains a schema version and an explicit completed state. It is machine setup
+state, not a file in the sys-gui root filesystem or a desktop preference.
+Replacing sys-gui or updating the OS must preserve it. Keep this as the single
+source of truth; do not mirror completion into QubesDB or guest state.
 
-Fresh images start incomplete. Define how an existing installation with no
-record enters setup, without modifying its configuration merely by showing the
-wizard. Ordinary updates must not reset completion. Future required steps need
-an explicit state migration policy; changing an application version alone must
-not rerun setup.
+A missing record means incomplete for both fresh images and existing
+installations first receiving the wizard. Reading status or showing the wizard
+must not create the record or change machine configuration. An unreadable,
+malformed, or unsupported record is an error reported to the user, not a fresh
+installation or successful completion. Ordinary updates must not reset the
+record. Future required steps need an explicit state migration policy; changing
+an application version alone must not rerun setup.
 
-Package and enable the wizard declaratively in Nix. Keep its presentation in
-sys-gui and preserve existing Qubes authority boundaries. If completion storage
-requires an inter-domain operation, use a narrow qrexec service with explicit
-caller policy, not arbitrary commands or filesystem writes.
+Provide two fixed dom0 qrexec operations: read setup status and mark setup
+complete. The read operation returns the explicit state or an error. The write
+operation accepts no path, command, or configuration payload; it atomically
+writes the completed record and reports success only after the new file and its
+parent directory are durable. It must refuse to overwrite an unreadable or
+invalid existing record. A write error is shown in the wizard and must not be
+reported as completion; read status again to resolve a failure after replacement
+of the file. Repeating a successful completion operation is safe. Keep the record
+and its directory root-owned and inaccessible for direct guest writes.
+
+Package and enable the wizard, dom0 handlers, and qrexec policy declaratively
+in Nix. Permit only `sys-gui` to call these operations in dom0, with no general
+dom0 command or filesystem authority. The wizard's presentation remains in
+sys-gui. Closing or reopening it does not call the completion operation.
 
 ## Configuration authority
 
