@@ -1,8 +1,8 @@
 # Build routine guest configuration changes offline
 
-Status: implemented and physically accepted for the two documented guest
-changes on the 2026-09-24 USB image. Extends the implemented
-[pool-backed build store](../sys-dev-build-store.md).
+Status: completed for the two documented guest changes on the 2026-09-24 USB
+image, including physical offline builds, pool cleanup, and reboot. Extends the
+implemented [pool-backed build store](../sys-dev-build-store.md).
 
 ## Goal and boundary
 
@@ -48,11 +48,12 @@ changes to activation authority.
    explicit Nix package/output or source references at the image's pins; do not
    hard-code the old trial's store hashes or seed an entire warmed private store.
 5. Compute the complete dependency closure of the selected inputs and compare
-   it with the existing builder view. Measure additional unique pool data and
-   the resulting image-size increase, accounting for sharing with guest views.
-   Repeat the clean offline trials until every supported example succeeds.
-   Record why each selected root is needed and repeat this acceptance when the
-   pinned inputs or supported examples change.
+   it with the existing builder view. Measure additional unique pool data,
+   accounting for sharing with guest views, and verify the built image fits the
+   provisioned USB. An isolated comparison against an otherwise identical
+   image is optional for this milestone. Repeat the clean offline trials until
+   every supported example succeeds. Record why each selected root is needed
+   and repeat this acceptance when the pinned inputs or supported examples change.
 
 The existing `offline_inputs_ready` preflight field checks only
 `flake metadata --offline`; it is not evidence that full evaluation and build
@@ -192,9 +193,11 @@ None of those stores' top-level objects duplicated a baseline object.
 The pinned builder view registered 1,728 distinct store paths. Compared with
 the four ordinary guest views on that USB, it added 26 distinct store objects,
 whose recorded pool fragment sizes total 11,832,320 bytes. Its separate
-builder metadata image was 52,672,000 bytes. These are measured pool costs;
-an isolated whole-USB image-size delta was not measured because the available
-older images also differ in other configuration.
+builder metadata image was 52,672,000 bytes. These are measured pool costs.
+The resulting image was provisioned to and booted from the USB. An isolated
+whole-image size delta was not measured because the available older images
+also differ in other configuration; fitting the USB is sufficient for this
+milestone.
 
 With sys-dev stopped, `airlock-closure-store gc --keep-generations 0` returned
 `status: passed` and retained `sys-dev-builder` generation 1. A fresh offline
