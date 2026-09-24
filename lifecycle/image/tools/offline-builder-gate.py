@@ -140,6 +140,12 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
         "--option",
         "build-hook",
         "",
+        # The staged inputs are symlinks into the guarded source store. Nix's
+        # own build sandbox cannot resolve their physical targets; bubblewrap
+        # already isolates the trial's store and network.
+        "--option",
+        "sandbox",
+        "false",
         "build",
         "--offline",
         "--no-write-lock-file",
