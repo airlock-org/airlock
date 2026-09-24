@@ -56,9 +56,12 @@ The sys-dev client starts destructive maintenance in detached dom0 workers.
 Commands and limitations are in [machine deployment](../machine-deployment.md).
 
 Local verification: component `make test-quick` passed 400 tests with 21
-skipped after the early-purge change. The earlier parent `make test-quick`
-passed 397 with 23 skipped. The standalone coordinator built, and its packaged
-Python environment successfully imported the Qubes client. Tests cover
+skipped after the early-purge change. The parent suite passed 501 tests with
+23 skipped; one unrelated simulated-terminal timing test failed under parallel
+load and passed when rerun alone. The parent image flake check passed after the
+new pinned submodule commit was fetched into the local standalone repository.
+The standalone coordinator built, and its packaged Python environment
+successfully imported the Qubes client. Tests cover
 interrupted pruning/purge, exact targets, ownership conflicts, retention,
 early overrides, and shared objects surviving GC for a second VM or retained
 builder generation. Focused checks passed 20 prune/purge cases and 5
