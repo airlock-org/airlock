@@ -1,4 +1,4 @@
-"""Focused checks for the image's pre-assembly offline build gate."""
+"""Focused checks for the explicit offline build acceptance command."""
 
 import importlib.util
 from pathlib import Path

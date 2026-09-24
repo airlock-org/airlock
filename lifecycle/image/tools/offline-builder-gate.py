@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build representative guest changes using only the image's pinned inputs."""
+"""Explicit offline acceptance trials using only the image's pinned inputs."""
 
 import argparse
 from io import BytesIO

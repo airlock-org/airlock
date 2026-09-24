@@ -83,12 +83,36 @@ establish that the supported examples work offline until the fresh-image
 acceptance below passes. Inspect missing inputs during that trial and adjust
 the declared roots before marking this task complete.
 
-## Local gate before image assembly
+## Input preparation before image assembly
 
-`make usb-dev-image` now runs `make usb-builder-offline-gate` before assembling
-the USB disk. The gate can also be run by itself. It prepares the pinned flake
-sources and builder input closure, then tries two committed-source variants of
-usr-home: one adds an `/etc` marker and one changes an existing service setting.
+`make usb-dev-image` runs `make usb-dev-prepare-inputs`, then builds the image.
+Preparation requires a clean committed machine checkout, archives its pinned
+flake sources without updating the lock, validates their manifest entries and
+records the lock hash. It stops before image assembly if preparation fails.
+The normal image build realizes and includes the declared builder input closure
+as part of its dependency graph.
+
+This preparation may fetch pinned sources that are not available locally. It
+does not run example guest builds or prove that arbitrary guest changes work
+offline. Image creation can still take time to build dependencies and assemble
+the disk; shipping offline inputs does not eliminate that work.
+
+## Separate offline acceptance check
+
+Run `make usb-builder-offline-check` explicitly after changes to the machine
+configuration, flake pins, declared builder inputs, or the acceptance examples
+and their runner. Use it to qualify the offline capability before claiming it
+for an image. Ordinary image builds do not run these trials, and a successful
+image build is not an offline acceptance result. The former command
+`make usb-builder-offline-gate` remains an alias for this explicit check.
+
+The check prepares the pinned flake sources and builder input closure, then
+tries two committed-source variants of usr-home: one adds an `/etc` marker and
+one changes an existing service setting. These build changed guest
+configuration outputs using the seeded software; they do not assemble USB
+images. They establish support for the documented examples, not every possible
+configuration change.
+
 Each trial starts with a separate empty writable store and cache. Only paths in
 the declared builder closure are registered as baseline inputs. Bubblewrap
 maps the entire temporary Nix store and database under `/nix`, mounts each
@@ -98,14 +122,13 @@ enabled, with sandbox fallback disabled. This lets builders read
 their inputs without following staging links outside the sandbox. All mounts
 exist only inside the trial's mount namespace; the host's main `/nix/store`
 and Nix configuration are not changed. New outputs and registration data go to
-the temporary store. The gate rejects a preseeded final system result and stops
-the image build if either trial fails. Results and stderr are saved as
+the temporary store. The check rejects a preseeded final system result and
+returns failure if either trial fails. Results and stderr are saved as
 JSON and text under `.airlock-logs/offline-builder-gate/`, or the configured
 `AIRLOCK_LOG_DIR`.
 
-This gate runs before the disk-image build, after the guest and builder input
-closures needed for the check have been built. It may still take time and
-temporary disk space. It exercises the Nix inputs and example builds; the
+The check builds any guest and builder input closures it needs, so it may take
+time and temporary disk space. It exercises the Nix inputs and example builds; the
 fresh-USB trial below remains necessary to check the actual mounted pool,
 sys-dev startup, pin retention and reboot behavior.
 
