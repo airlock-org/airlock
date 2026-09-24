@@ -94,7 +94,7 @@ def source_archive(destination, repository=MACHINE):
     return {"revision": revision, "lock_hash": lock_hash, "archive": str(destination)}
 
 
-def shallow_seed_archive(destination, repository=MACHINE):
+def shallow_seed_archive(destination, repository=MACHINE, reuse=False):
     repository = Path(repository).resolve()
     if not (repository / ".git").exists():
         raise RuntimeError(f"machine source is not a Git checkout: {repository}")
@@ -103,6 +103,28 @@ def shallow_seed_archive(destination, repository=MACHINE):
     lock_hash = sha256(repository / "flake.lock")
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if reuse and destination.is_file():
+        try:
+            with tempfile.TemporaryDirectory(prefix="airlock-machine-seed-verify-") as name:
+                with tarfile.open(destination, "r:gz") as archive:
+                    manifest = json.load(archive.extractfile("manifest.json"))
+                    if manifest != {
+                        "schema": SEED_SCHEMA,
+                        "revision": revision,
+                        "lock_hash": lock_hash,
+                    }:
+                        raise ValueError("seed identity changed")
+                    archive.extractall(name, filter="data")
+                checkout = Path(name) / "repo"
+                if output("git", "rev-parse", "HEAD", cwd=checkout) != revision:
+                    raise ValueError("seed checkout changed")
+                if output("git", "status", "--porcelain", cwd=checkout):
+                    raise ValueError("seed checkout is dirty")
+                if output("git", "rev-parse", "--is-shallow-repository", cwd=checkout) != "true":
+                    raise ValueError("seed checkout is not shallow")
+            return {"revision": revision, "lock_hash": lock_hash, "archive": str(destination)}
+        except (OSError, RuntimeError, ValueError, tarfile.TarError):
+            pass
     with tempfile.TemporaryDirectory(prefix="airlock-machine-seed-") as name:
         temporary = Path(name)
         checkout = temporary / "repo"
@@ -217,6 +239,7 @@ def main(argv=None):
     seed = commands.add_parser("seed")
     seed.add_argument("--output", required=True, type=Path)
     seed.add_argument("--repository", type=Path, default=MACHINE)
+    seed.add_argument("--reuse", action="store_true")
     offline = commands.add_parser("offline-inputs")
     offline.add_argument("--output", required=True, type=Path)
     offline.add_argument("--repository", type=Path, default=MACHINE)
@@ -234,7 +257,7 @@ def main(argv=None):
         if args.command == "seed":
             print(
                 json.dumps(
-                    shallow_seed_archive(args.output, args.repository), sort_keys=True
+                    shallow_seed_archive(args.output, args.repository, reuse=args.reuse), sort_keys=True
                 )
             )
             return 0

@@ -1,6 +1,6 @@
 # Cache offline acceptance before USB image assembly
 
-Status: planned. Builds on the
+Status: completed on 2026-09-24. Builds on the
 [completed offline builder baseline](../completed/06-builder-input-baseline.md).
 
 ## Goal and scope
@@ -75,20 +75,37 @@ mounts correctly, pins survive cleanup, or the machine works after reboot.
 
 ## Acceptance
 
-- [ ] An image build with no receipt runs both examples before image assembly.
-- [ ] An unchanged image build reuses its passing receipt without running the
+- [x] An image build with no receipt runs both examples before image assembly.
+- [x] An unchanged image build reuses its passing receipt without running the
   example builds again.
-- [ ] Changing any fingerprint input causes a fresh check.
-- [ ] A failed check stops image assembly and cannot publish or leave a usable
+- [x] Changing any fingerprint input causes a fresh check.
+- [x] A failed check stops image assembly and cannot publish or leave a usable
   success receipt for that fingerprint.
-- [ ] The explicit check runs fresh even when a matching receipt exists.
-- [ ] Invalid receipts and interrupted or concurrent runs cannot bypass checks.
-- [ ] The image consumes the exact inputs identified by the accepted receipt.
-- [ ] Focused pytest coverage exercises cache validity, invalidation, failure,
+- [x] The explicit check runs fresh even when a matching receipt exists.
+- [x] Invalid receipts and interrupted or concurrent runs cannot bypass checks.
+- [x] The image consumes the exact inputs identified by the accepted receipt.
+- [x] Focused pytest coverage exercises cache validity, invalidation, failure,
   forced runs and ordering; existing isolated offline acceptance still passes.
-- [ ] Update the image-build documentation to explain automatic checking,
+- [x] Update the image-build documentation to explain automatic checking,
   cache reuse, forced checks and the bounded offline capability.
 
 Implementation entry points: `Makefile`,
 `lifecycle/image/tools/offline-builder-gate.py`,
 `tests/test_offline_builder_gate.py`, and `docs/usb-dev.md`.
+
+## Acceptance record: 2026-09-24
+
+The forced check passed both isolated guest builds using the 1,728-path builder
+closure for machine revision `42ce4161617b81a135f638a04e38765d1d64ef3d`.
+The next `make usb-dev-image` reported a cache hit, skipped the trials, validated
+the prepared guest store, assembled the image, and published its result link.
+After adding the snapshot recheck, a second forced check and cached image build
+also passed. The current receipt and results are under the configured Airlock
+cache and log directories.
+
+Seven focused pytest checks passed, including seed reuse and image snapshot
+tampering, and Ruff passed. `make test-quick` reported 513 passed, 23 skipped,
+and one unrelated failure in `test_local_check[run-nested-gui-smoke-static]`:
+that test expects an import command string absent from an untouched machine
+file. The image build is local validation; no new physical USB boot was run for
+this cache change.

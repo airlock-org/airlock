@@ -196,11 +196,11 @@ usb-dev-prepare-inputs: ensure-generated-dirs
 	seed_archive="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-seed.tar.gz"; \
 	offline_inputs="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-offline-inputs.json"; \
 	archive_json="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-flake-archive.json"; \
-	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py seed --output "$$seed_archive" >/dev/null; \
+	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py seed --reuse --output "$$seed_archive" >/dev/null; \
 	$(AIRLOCK_NIX) flake archive --no-update-lock-file --json path:./airlock-machine > "$$archive_json"; \
 	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py offline-inputs --repository airlock-machine --output "$$offline_inputs" < "$$archive_json"
 
-# Explicit acceptance check; ordinary image builds only prepare their inputs.
+# Force both offline trials and publish a fresh passing receipt.
 usb-builder-offline-check: usb-dev-prepare-inputs
 	@set -eu; \
 	seed_archive="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-seed.tar.gz"; \
@@ -208,18 +208,28 @@ usb-builder-offline-check: usb-dev-prepare-inputs
 	closure="$$(AIRLOCK_MACHINE_SEED_ARCHIVE="$$seed_archive" AIRLOCK_MACHINE_OFFLINE_INPUTS="$$offline_inputs" $(AIRLOCK_NIX) build --impure .#airlock-usb-builder-input-closure --no-link --print-out-paths)"; \
 	nix_bin="$$(AIRLOCK_MACHINE_SEED_ARCHIVE="$$seed_archive" AIRLOCK_MACHINE_OFFLINE_INPUTS="$$offline_inputs" $(AIRLOCK_NIX) eval --impure --raw .#airlock-usb-builder-nix.outPath)/bin/nix"; \
 	uv run python lifecycle/image/tools/offline-builder-gate.py \
-	  --closure "$$closure" --machine airlock-machine --manifest "$$offline_inputs" \
+	  --closure "$$closure" --machine airlock-machine --manifest "$$offline_inputs" --seed-archive "$$seed_archive" \
 	  --source-store-root "$(if $(filter 1,$(AIRLOCK_USE_HOST_NIX_STORE)),/,$(AIRLOCK_NIX_ROOT))" --nix-bin "$$nix_bin" \
 	  --log-dir "$(or $(AIRLOCK_LOG_DIR),$(CURDIR)/.airlock-logs)/offline-builder-gate" \
-	  --temporary-root "$(or $(AIRLOCK_TMPDIR),$(TMPDIR),$(CURDIR)/.airlock)"
+	  --cache-dir "$(or $(AIRLOCK_DATA_ROOT),$(CURDIR)/.airlock)/cache/offline-builder-gate" \
+	  --temporary-root "$(or $(AIRLOCK_TMPDIR),$(TMPDIR),$(CURDIR)/.airlock)" --force
 
-# Retain the former command name for callers, without gating image assembly.
+# Retain the former command name for callers.
 usb-builder-offline-gate: usb-builder-offline-check
 
 usb-dev-image: usb-dev-prepare-inputs
-	@seed_archive="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-seed.tar.gz"; \
+	@set -eu; \
+	seed_archive="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-seed.tar.gz"; \
 	offline_inputs="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-offline-inputs.json"; \
-	AIRLOCK_MACHINE_SEED_ARCHIVE="$$seed_archive" AIRLOCK_MACHINE_OFFLINE_INPUTS="$$offline_inputs" $(AIRLOCK_NIX) build --impure .#airlock-usb-dev-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --print-build-logs
+	closure="$$(AIRLOCK_MACHINE_SEED_ARCHIVE="$$seed_archive" AIRLOCK_MACHINE_OFFLINE_INPUTS="$$offline_inputs" $(AIRLOCK_NIX) build --impure .#airlock-usb-builder-input-closure --no-link --print-out-paths)"; \
+	nix_bin="$$(AIRLOCK_MACHINE_SEED_ARCHIVE="$$seed_archive" AIRLOCK_MACHINE_OFFLINE_INPUTS="$$offline_inputs" $(AIRLOCK_NIX) eval --impure --raw .#airlock-usb-builder-nix.outPath)/bin/nix"; \
+	uv run python lifecycle/image/tools/offline-builder-gate.py \
+	  --closure "$$closure" --machine airlock-machine --manifest "$$offline_inputs" --seed-archive "$$seed_archive" \
+	  --source-store-root "$(if $(filter 1,$(AIRLOCK_USE_HOST_NIX_STORE)),/,$(AIRLOCK_NIX_ROOT))" --nix-bin "$$nix_bin" \
+	  --log-dir "$(or $(AIRLOCK_LOG_DIR),$(CURDIR)/.airlock-logs)/offline-builder-gate" \
+	  --cache-dir "$(or $(AIRLOCK_DATA_ROOT),$(CURDIR)/.airlock)/cache/offline-builder-gate" \
+	  --temporary-root "$(or $(AIRLOCK_TMPDIR),$(TMPDIR),$(CURDIR)/.airlock)" \
+	  --image-command $(AIRLOCK_NIX) build --impure .#airlock-usb-dev-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --print-build-logs
 
 usb-dev-write:
 	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-write USB_SERIAL=25110814640207" >&2; exit 2)

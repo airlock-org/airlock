@@ -254,6 +254,15 @@ def test_shallow_seed_archive_contains_only_the_pinned_checkout(tmp_path: Path):
     assert git(checkout, "rev-parse", "--is-shallow-repository") == "true"
     assert git(checkout, "rev-list", "--count", "HEAD") == "1"
 
+    original = archive.read_bytes()
+    reused = subprocess.run(
+        [sys.executable, str(SCRIPT), "seed", "--reuse", "--repository", str(repo), "--output", str(archive)],
+        capture_output=True,
+        text=True,
+    )
+    assert reused.returncode == 0, reused.stderr
+    assert archive.read_bytes() == original
+
     # Exercise the rendered first-boot script in an isolated home. Ownership
     # uses the test runner's UID/GID so this check needs no root privileges.
     expression = f"""

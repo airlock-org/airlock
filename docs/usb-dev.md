@@ -17,7 +17,18 @@ virtio-only testing does not exercise USB root access.
 
 ## Build and provision on the development host
 
-Run `make usb-dev-image`. Its result link identifies the current image without
+Run `make usb-dev-image`. It prepares the committed machine source and pinned
+flake inputs, realizes the declared builder closure, then checks two isolated
+offline guest builds before assembling the image. A matching passing receipt
+skips the two trials on later builds with the same inputs. The receipt and
+machine-readable results live under the configured Airlock cache and log
+directories. Run `make usb-builder-offline-check` to force both trials and
+refresh the receipt; `make usb-builder-offline-gate` is its legacy alias.
+Failures stop image assembly. The examples add an `/etc` marker and change an
+existing usr-home service setting using the image's pinned software. They do
+not establish offline support for arbitrary new packages or versions.
+
+The image result link identifies the current image without
 exposing its changing Nix store path. The current image is a fixed 32 GiB
 seed image, so it fits a nominal 64 GB USB. `usb-dev-provision` expands its
 root partition and ext4 filesystem to the USB's capacity after writing, before

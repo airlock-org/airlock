@@ -86,26 +86,27 @@ changes outside that set may need more inputs.
 
 ## Input preparation before image assembly
 
-`make usb-dev-image` runs `make usb-dev-prepare-inputs`, then builds the image.
+`make usb-dev-image` runs `make usb-dev-prepare-inputs`, then checks the
+realized builder closure before building the image. The automatic cached
+acceptance was added in [task 07](07-cached-offline-builder-check.md).
 Preparation requires a clean committed machine checkout, archives its pinned
 flake sources without updating the lock, validates their manifest entries and
 records the lock hash. It stops before image assembly if preparation fails.
 The normal image build realizes and includes the declared builder input closure
 as part of its dependency graph.
 
-This preparation may fetch pinned sources that are not available locally. It
-does not run example guest builds or prove that arbitrary guest changes work
-offline. Image creation can still take time to build dependencies and assemble
-the disk; shipping offline inputs does not eliminate that work.
+This preparation may fetch pinned sources that are not available locally. The
+following cached acceptance checks the two documented examples; it does not
+prove that arbitrary guest changes work offline. Image creation can still take
+time to build dependencies and assemble the disk.
 
 ## Separate offline acceptance check
 
-Run `make usb-builder-offline-check` explicitly after changes to the machine
-configuration, flake pins, declared builder inputs, or the acceptance examples
-and their runner. Use it to qualify the offline capability before claiming it
-for an image. Ordinary image builds do not run these trials, and a successful
-image build is not an offline acceptance result. The former command
-`make usb-builder-offline-gate` remains an alias for this explicit check.
+Run `make usb-builder-offline-check` to force fresh trials after changes to the
+machine configuration, flake pins, declared builder inputs, or the acceptance
+examples and their runner. Ordinary image builds reuse a matching passing
+receipt or run both trials before image assembly. The former command
+`make usb-builder-offline-gate` remains an alias for the forced check.
 
 The check prepares the pinned flake sources and builder input closure, then
 tries two committed-source variants of usr-home: one adds an `/etc` marker and
