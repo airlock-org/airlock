@@ -5,7 +5,6 @@ import argparse
 from io import BytesIO
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import subprocess
@@ -175,19 +174,9 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
         )
     started = time.monotonic()
     try:
-        # Keep the long mount path list out of execve's command-line size limit.
-        with tempfile.TemporaryFile(dir=trial) as arguments:
-            arguments.write(
-                b"\0".join(os.fsencode(part) for part in command[1:]) + b"\0"
-            )
-            arguments.seek(0)
-            result = subprocess.run(
-                ["bwrap", "--args", str(arguments.fileno())],
-                pass_fds=(arguments.fileno(),),
-                capture_output=True,
-                text=True,
-                timeout=args.timeout,
-            )
+        result = subprocess.run(
+            command, capture_output=True, text=True, timeout=args.timeout
+        )
     except subprocess.TimeoutExpired as exc:
 
         def decoded(output):
