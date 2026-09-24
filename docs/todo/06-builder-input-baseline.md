@@ -91,9 +91,10 @@ sources and builder input closure, then tries two committed-source variants of
 usr-home: one adds an `/etc` marker and one changes an existing service setting.
 Each trial starts with a separate empty writable store and cache. Only paths in
 the declared builder closure are registered as baseline inputs. Bubblewrap
-mounts each selected store object read-only at its logical and temporary-store
-paths and removes network access. Nix runs with substitutes disabled and its
-build sandbox enabled, with sandbox fallback disabled. This lets builders read
+maps the entire temporary Nix store and database under `/nix`, mounts each
+selected store object read-only once, and removes network access. Nix runs
+against that temporary store with substitutes disabled and its build sandbox
+enabled, with sandbox fallback disabled. This lets builders read
 their inputs without following staging links outside the sandbox. All mounts
 exist only inside the trial's mount namespace; the host's main `/nix/store`
 and Nix configuration are not changed. New outputs and registration data go to

@@ -107,9 +107,8 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
         if original.is_symlink():
             continue
         source = str(original)
-        # Nix reads the physical store, while evaluation reads /nix/store.
-        # Mount each selected object at both locations inside bubblewrap only.
-        input_mounts.extend(("--ro-bind", source, str(store / path.lstrip("/"))))
+        # /nix is the trial's entire store and database inside bubblewrap.
+        # Each selected object needs only one read-only mount under it.
         input_mounts.extend(("--ro-bind", source, path))
     command = [
         "bwrap",
@@ -122,8 +121,8 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
         str(trial),
         str(trial),
         "--bind",
-        str(store / "nix/store"),
-        "/nix/store",
+        str(store / "nix"),
+        "/nix",
         *input_mounts,
         "--dev-bind",
         "/dev",
@@ -142,13 +141,13 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
         str(trial / "tmp"),
         "--setenv",
         "NIX_CONFIG",
-        f"store = {store}\nsubstituters = \n",
+        "store = /\nsubstituters = \n",
         "--",
         str(args.nix_bin),
         "--extra-experimental-features",
         "nix-command flakes",
         "--store",
-        str(store),
+        "/",
         "--option",
         "build-hook",
         "",
@@ -169,10 +168,14 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
         "--no-link",
         "--json",
     ]
+    if len(command) - 1 >= 9000:
+        raise RuntimeError(
+            f"{name} needs too many bubblewrap arguments for "
+            f"{len(paths)} pinned store paths"
+        )
     started = time.monotonic()
     try:
-        # Bubblewrap caps its command-line argument count at 9000. A complete
-        # builder closure needs more mount arguments, so pass them by fd.
+        # Keep the long mount path list out of execve's command-line size limit.
         with tempfile.TemporaryFile(dir=trial) as arguments:
             arguments.write(
                 b"\0".join(os.fsencode(part) for part in command[1:]) + b"\0"
