@@ -1,6 +1,6 @@
 # USB lab network isolation
 
-Status: implementation in progress; deployment and physical acceptance pending.
+Status: configuration and release built; live plan, deployment, and physical acceptance pending.
 Reviewed against the checked-in lab topology on 2026-09-24.
 
 Follow the [hardware usability policy](../hardware-usability-policy.md). This
@@ -46,7 +46,8 @@ features, and services explicitly. The deployable release's coordinator plans a
 provider's network controllers after dependent VMs stop. Qubes setup then
 assigns them to the new provider. The same operation runs in reverse for
 rollback. The prepared USB guest-store entries follow the same machine guest
-list. These changes still require a release build and physical validation.
+list. The release build passed on 2026-09-24; fresh USB image and physical
+validation remain.
 
 - [ ] Include sys-net and sys-firewall in the existing USB lab machine topology
   and prepared image closures. Keep deployable releases and fresh USB images
@@ -54,10 +55,10 @@ list. These changes still require a release build and physical validation.
 - [ ] Move physical network PCI ownership and automatic network-device
   discovery from sys-dev to sys-net. Ensure the same NIC cannot be claimed by
   both domains. Preserve required device options and account for reset behavior.
-- [ ] Set sys-net's NetVM to none, sys-firewall's to sys-net, and sys-dev's and
+- [x] Set sys-net's NetVM to none, sys-firewall's to sys-net, and sys-dev's and
   usr-browser's to sys-firewall. Set the profile's default NetVM to sys-firewall
   and retain usr-home's explicit offline configuration.
-- [ ] Remove sys-dev's network-provider role and associated forwarding,
+- [x] Remove sys-dev's network-provider role and associated forwarding,
   firewall-provider, and physical-interface management services. Keep the Qubes
   networking services it needs as a client.
 - [ ] Preserve Tailscale identity and persistent state in sys-dev. Move or
@@ -107,6 +108,15 @@ and auto-assigns the network NICs. Check the resulting assignments and
 Qubes assignments as the final fix.
 
 ## Acceptance
+
+Local checks on 2026-09-24: `make test-quick` passed (519 passed, 23 skipped)
+and `make machine-build` produced release
+`/nix/store/4wgc0jsq5r1ijfr57lk8b4s9ldqy83ph-airlock-machine-release`
+from machine revision `dc2a9b4` and parent revision `6b7deb4`. These are build
+results, not a live deployment. The documented `sys-dev-2` target is absent
+from the current Tailnet; `sys-dev` is reachable, but the existing dom0
+development transport requires the operator's sudo password. No live machine
+plan or apply ran.
 
 - [ ] Add focused pytest coverage for topology, exclusive PCI ownership,
   startup dependencies, and migration/rollback behavior, including interruption
