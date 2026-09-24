@@ -1,7 +1,7 @@
 # USB lab network isolation
 
-Status: planned; implementation, deployment, and physical acceptance pending.
-Reviewed against the checked-in lab topology on 2026-09-23.
+Status: implementation in progress; deployment and physical acceptance pending.
+Reviewed against the checked-in lab topology on 2026-09-24.
 
 Follow the [hardware usability policy](../hardware-usability-policy.md). This
 plan describes an operator-assisted lab migration with a physical recovery
@@ -18,10 +18,10 @@ Transition the existing `usb-lab` profile to dedicated `sys-net` and
 experimental profile or a new boot entry. Preserve the current sys-dev
 Tailscale development workflow and dom0 control access.
 
-Today, sys-dev owns the physical NICs and provides networking to usr-browser.
-usr-home stays offline. Definitions for sys-net and sys-firewall already exist
-in airlock-machine's fuller bootstrap topology, but the USB lab does not use
-them. Reuse those definitions and the existing Qubes networking machinery.
+The deployed baseline still gives sys-dev the physical NICs and routes
+usr-browser through it. The new checked-in USB lab profile uses the existing
+sys-net and sys-firewall definitions and Qubes networking machinery. No physical
+machine has been migrated or accepted yet. usr-home remains offline.
 
 Target traffic paths:
 
@@ -38,6 +38,15 @@ access. Removing that privilege, introducing sys-ctrl, and USB isolation are
 separate work.
 
 ## Configuration work
+
+The checked-in configuration now includes both providers, routes sys-dev and
+usr-browser through sys-firewall, and clears sys-dev's provider preferences,
+features, and services explicitly. The deployable release's coordinator plans a
+`pci_handoff`, checks ownership before stopping VMs, and unassigns the old
+provider's network controllers after dependent VMs stop. Qubes setup then
+assigns them to the new provider. The same operation runs in reverse for
+rollback. The prepared USB guest-store entries follow the same machine guest
+list. These changes still require a release build and physical validation.
 
 - [ ] Include sys-net and sys-firewall in the existing USB lab machine topology
   and prepared image closures. Keep deployable releases and fresh USB images
@@ -73,6 +82,10 @@ Follow the [repository workflow](../repositories.md) and
 - [ ] Build and stage the required closures while sys-dev still has working
   networking. Review a concrete deployment plan showing device transfers,
   NetVM changes, service changes, and required stops/restarts.
+- [ ] Inspect `pci_handoff` in the machine plan and confirm it names
+  `sys-dev` as `from` and `sys-net` as `to`. Preflight must find a network
+  controller assigned to one of those domains before stopping VMs. Record the
+  actual `qvm-device pci list --assignments dom0` output at the physical console.
 - [ ] Specify the apply order and how deployment continues after sys-dev loses
   its connection. Confirm the worker survives the transport loss and that
   resume/reboot handling cannot leave NIC ownership ambiguous.
@@ -81,6 +94,17 @@ Follow the [repository workflow](../repositories.md) and
   sys-dev's former PCI ownership and network-provider settings.
 - [ ] Apply through the existing committed whole-machine deployment path,
   reconnect through sys-dev, and verify selected and running generations.
+
+At the physical dom0 console, inspect `sudo /var/lib/airlock/machine/controller
+status` and the transaction's `setup/setup-config.json`. If the handoff was
+interrupted, run `sudo /var/lib/airlock/machine/controller resume` to finish the
+selected release, or `sudo /var/lib/airlock/machine/controller rollback` to
+reselect the previous whole-machine release. The rollback plan must show
+`pci_handoff` from `sys-net` to `sys-dev`; its coordinator releases the NICs
+from sys-net, then the previous setup re-enables sys-dev's provider settings
+and auto-assigns the network NICs. Check the resulting assignments and
+`machine-verify` before restoring remote development access. Do not hand-edit
+Qubes assignments as the final fix.
 
 ## Acceptance
 

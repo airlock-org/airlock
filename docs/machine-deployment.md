@@ -322,10 +322,17 @@ quarantined in recoverable trash with its private data, and reported as
 
 Automatic deployment currently supports Nix-closure/shared-closure VMs and
 recoverable domain retirement. It still rejects class/template/storage-layout
-changes, physical device reassignment, and deletion of
+changes, arbitrary physical device reassignment, and deletion of
 preference/feature/service keys without explicit reset values. A rollback that
 removes newly introduced settings can likewise require explicit reset values.
 Unsupported changes fail preflight rather than being silently ignored.
+
+The USB lab `sys-dev`/`sys-net` automatic network PCI handoff is a scoped
+exception: the release coordinator reports `pci_handoff`, checks current
+network-controller assignments before stopping VMs, and releases the former
+owner after the dependent VMs stop. Setup assigns the new owner. The same
+sequence supports rollback; confirm it on hardware before relying on remote
+access through sys-dev.
 
 To retire a domain, remove it from the topology and list its name in
 `airlock.machineDeployment.retireDomains` in the same committed release. The

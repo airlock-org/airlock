@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.nix
-def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint():
+def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access():
     expression = f"""
       let
         f = builtins.getFlake "{ROOT}";
@@ -39,6 +39,17 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         bootRole = host.environment.etc."airlock/boot-role".text;
         inherit (host.airlock.qubes.prefs) default_netvm;
         browserNetvm = host.airlock.qubes.domains.usr-browser.netvm;
+        devNetvm = host.airlock.qubes.domains.sys-dev.netvm;
+        firewallNetvm = host.airlock.qubes.domains.sys-firewall.netvm;
+        netNetvm = host.airlock.qubes.domains.sys-net.netvm;
+        homeNetvm = host.airlock.qubes.domains.usr-home.netvm;
+        devProvider = host.airlock.qubes.domains.sys-dev.prefs.provides_network;
+        netProvider = host.airlock.qubes.domains.sys-net.prefs.provides_network;
+        firewallProvider = host.airlock.qubes.domains.sys-firewall.prefs.provides_network;
+        devPci = host.airlock.qubes.domains.sys-dev.devices.pci;
+        netPci = host.airlock.qubes.domains.sys-net.devices.pci;
+        devAutoPci = host.airlock.qubes.domains.sys-dev.features."airlock-auto-network-pci";
+        netAutoPci = host.airlock.qubes.domains.sys-net.features."airlock-auto-network-pci";
         devMemory = host.airlock.qubes.domains.sys-dev.prefs.memory;
         devMaxmem = host.airlock.qubes.domains.sys-dev.prefs.maxmem;
         guiPci = host.airlock.qubes.domains.sys-gui.devices.pci;
@@ -106,7 +117,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
           poolDevices = dev.systemd.services.airlock-sys-dev-build-store.requires;
           poolSend = builtins.readFile "${{poolSend}}/bin/airlock-pool-send";
           userSelection = dev.airlock.qubeGuest.allowQrexecUserSelection;
-          providesNetwork = dev.airlock.qubeGuest.role == "sys-dev";
+          providesNetwork = host.airlock.qubes.domains.sys-dev.prefs.provides_network;
         }};
       }}
     """
@@ -167,13 +178,24 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["domains"] == [
         "sys-ctrl",
         "sys-dev",
+        "sys-firewall",
         "sys-gui",
+        "sys-net",
         "usr-browser",
         "usr-home",
     ]
     assert report["bootRole"] == "normal\n"
-    assert report["default_netvm"] == "sys-dev"
-    assert report["browserNetvm"] == "sys-dev"
+    assert report["default_netvm"] == "sys-firewall"
+    assert report["browserNetvm"] == "sys-firewall"
+    assert report["devNetvm"] == "sys-firewall"
+    assert report["firewallNetvm"] == "sys-net"
+    assert report["netNetvm"] is None
+    assert report["homeNetvm"] is None
+    assert not report["devProvider"]
+    assert report["netProvider"] and report["firewallProvider"]
+    assert report["devPci"] == report["netPci"] == []
+    assert report["devAutoPci"] == "0"
+    assert report["netAutoPci"] == "1"
     assert report["devMemory"] == 8192
     assert report["devMaxmem"] == 8192
     assert report["guiHostname"] == "sys-gui"
@@ -223,7 +245,7 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
     assert report["poolAdmission"] == {
         "enable": True,
         "caller": "sys-dev",
-        "targets": ["sys-gui", "sys-dev", "usr-home", "usr-browser"],
+        "targets": ["sys-gui", "sys-dev", "sys-net", "sys-firewall", "usr-home", "usr-browser"],
     }
     assert report["poolAdmissionMode"] == "0555"
     for target in report["poolAdmission"]["targets"]:
@@ -276,8 +298,8 @@ def test_usb_lab_uses_sys_dev_as_the_tailscale_network_and_dom0_shell_entrypoint
         "tailscale": True,
         "tailscaleSsh": ["--ssh"],
         "dom0Shell": True,
-        "networkManager": True,
+        "networkManager": False,
         "userSelection": True,
-        "providesNetwork": True,
+        "providesNetwork": False,
     }
     assert "jq" in report["dev"]["packages"]
