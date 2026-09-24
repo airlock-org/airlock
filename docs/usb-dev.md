@@ -35,11 +35,16 @@ root partition and ext4 filesystem to the USB's capacity after writing, before
 personalization. The build/flash does not need to write a larger empty image.
 Larger media provides more headroom for longer-lived development.
 
-The build now prepares the shared guest package store for both sys-gui boot
-variants and places it at its final location in the image. Guest-only source
-packages are omitted from dom0's ordinary store. First setup trusts the prepared
-image payload, checks metadata and backing-file presence and sizes, and attaches
-the store without scanning or repackaging gigabytes of packages on the USB.
+The build prepares the shared guest package store and places it at its final
+location in the image. It also creates all seven VMs' initial root and private
+disks, kernel files, Qubes configuration and shared-store registrations using
+Qubes' offline API. Sparse disks are installed directly into `/var/lib/qubes`;
+guest-only source packages and root-image copies are omitted from dom0's ordinary
+store. First setup reconciles this existing state and performs hardware-dependent
+assignments. It does not import the seven root disks again or register unchanged
+store volumes. Hardware discovery, VM startup and readiness checks still happen
+on the machine. The prepared configuration uses the normal `usb-lab` topology;
+no hardware assignments or native Qubes autostart links are baked into the image.
 Full checksums run directly before each image assembly, even if the separate
 validation receipt is cached. Startup timing needs
 to be measured on a rebuilt image; see [storage details](config-system.md#admission-and-prepared-usb-stores).

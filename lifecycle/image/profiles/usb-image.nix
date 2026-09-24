@@ -1,4 +1,25 @@
 { config, lib, pkgs, modulesPath, ... }:
+let
+  preparedRuntime = import ../prepared-runtime.nix {
+    inherit pkgs;
+    # Seed the normal boot profile, not the base console carrier or recovery.
+    topology = if config.specialisation ? usb-lab
+      then config.specialisation.usb-lab.configuration.airlock.qubes.topology
+      else config.airlock.qubes.topology;
+    preparedStore = config.system.build.usbPreparedGuestStore;
+  };
+  installRuntime = ''
+    echo "Installing prepared Qubes runtime state"
+    test ! -e /mnt/var/lib/qubes/qubes.xml
+    mkdir -p /mnt/var/lib/qubes
+    cp -a --sparse=always ${preparedRuntime}/qubes/. /mnt/var/lib/qubes/
+    cp -a ${preparedRuntime}/pool-selections/. /mnt/var/lib/airlock/closure-store/
+    chmod -R u+rwX /mnt/var/lib/qubes
+    nixos-enter --root /mnt -- chown -R root:qubes /var/lib/qubes
+    chmod 0660 /mnt/var/lib/qubes/qubes.xml
+    cp ${preparedRuntime}/receipt.json /mnt/var/lib/airlock/prepared-runtime.json
+  '';
+in
 {
   imports = [
     "${modulesPath}/virtualisation/disk-image.nix"
@@ -7,6 +28,7 @@
 
   image = { baseName = "airlock-usb-dev"; format = "raw"; efiSupport = true; };
   virtualisation.diskSize = 32768;
+  system.build.usbPreparedRuntime = preparedRuntime;
   system.build.image = lib.mkForce (lib.overrideDerivation (import "${modulesPath}/../lib/make-disk-image.nix" {
     inherit config lib pkgs;
     inherit (config.image) baseName format;
@@ -25,7 +47,11 @@
         mode = config.airlock.image.preparedStoreMode;
       }
     ];
-  }) (old: {
+  }) (old: assert lib.hasInfix "umount -R /mnt" old.buildCommand; {
+    # Sparse writable disks belong in their final filesystem, never in the
+    # installed Nix store. Keep upstream assembly and bootloader installation.
+    buildCommand = lib.replaceStrings [ "umount -R /mnt" ]
+      [ (installRuntime + "\numount -R /mnt") ] old.buildCommand;
     preVM = ''
       echo "Validating prepared guest store before image assembly"
       ${config.system.build.usbPreparedGuestStore.checkCommand}

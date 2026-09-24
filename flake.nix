@@ -96,6 +96,7 @@
           "airlock-machine-release-usb-gui-lab"
         ]
         // {
+          airlock-prepare-runtime = import ./lifecycle/image/tools/prepare-runtime.nix { pkgs = usbConfiguration.pkgs; };
           airlock-usb-builder-input-closure = usbConfiguration.config.system.build.usbPreparedGuestStore.builderInputClosure;
           airlock-usb-builder-nix = usbConfiguration.config.system.build.usbPreparedGuestStore.builderNix;
           airlock-usb-dev-image = usbConfiguration.config.system.build.image;

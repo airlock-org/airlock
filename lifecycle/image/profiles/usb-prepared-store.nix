@@ -36,7 +36,6 @@ in
       airlockUsbPreparedStore.descriptors
       airlockUsbPreparedStore.validation
     ]
-    ++ map (entry: entry.rootImage) (builtins.attrValues airlockUsbGuestEntries)
     ++ map (kernel: kernel.source) (builtins.attrValues config.airlock.qubes.kernels);
     # Only the disk builder consumes this output, placing it at its final path.
     # Do not add the payload to extraDependencies: that would copy it twice.

@@ -64,6 +64,7 @@ VM_PREBUILD_ATTRS := \
 	$(VM_GUI_CONFIG_IMAGE_ATTR)
 
 PYTHON_FILES := \
+	lifecycle/image/tools/prepare-runtime.py \
 	airlock-machine/lifecycle/runtime/tools/machine-deploy.py \
 	airlock-machine/lifecycle/runtime/tools/airlock_machine_deploy/*.py \
 	airlock-machine/lifecycle/runtime/tools/sys-dev-machine-deploy.py \

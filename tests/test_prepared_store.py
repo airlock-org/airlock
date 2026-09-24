@@ -244,6 +244,27 @@ def test_builder_seed_shares_payload_and_retains_frozen_view_offline(builder_see
     assert all(not p.exists() for p in fingerprints)
 
 
+def test_builder_registration_accepts_build_time_pool_location(builder_seed):
+    from airlock_qubes_storage._engine import builder
+
+    root, _, _ = builder_seed
+    runtime = "/var/lib/airlock/closure-store"
+    expected = prepared.relocate(
+        builder.builder_volume_configs(root, "airlock-closure"), str(root), runtime
+    )
+    for path in root.rglob("*.json"):
+        if not path.is_symlink():
+            path.write_text(
+                json.dumps(
+                    prepared.relocate(json.loads(path.read_text()), str(root), runtime)
+                )
+            )
+    assert (
+        builder.builder_volume_configs(runtime, "airlock-closure", physical_root=root)
+        == expected
+    )
+
+
 def test_builder_seed_validates_metadata_and_physical_pin(builder_seed):
     from airlock_qubes_storage._engine import builder, state
 
@@ -964,6 +985,8 @@ def test_usb_prepared_store_preserves_sealed_view_mode(seed):
         validation = config.system.build.usbPreparedGuestStore.validation.outPath;
         checkCommand = config.system.build.usbPreparedGuestStore.checkCommand;
         preVM = config.system.build.image.preVM;
+        imageCommand = config.system.build.image.buildCommand;
+        runtimeSeed = config.system.build.usbPreparedRuntime.outPath;
         dependencies = map toString config.system.extraDependencies;
       }}
     """
@@ -977,6 +1000,14 @@ def test_usb_prepared_store_preserves_sealed_view_mode(seed):
     prepared = json.loads(result.stdout)
     assert prepared["mode"] == "go-rwx"
     assert prepared["image"].endswith(".drv")
+    assert prepared["runtimeSeed"] not in prepared["dependencies"]
+    assert (
+        "cp -a --sparse=always " + prepared["runtimeSeed"] + "/qubes/."
+        in prepared["imageCommand"]
+    )
+    assert prepared["imageCommand"].index(
+        "Installing prepared Qubes runtime state"
+    ) < prepared["imageCommand"].index("umount -R /mnt")
     assert prepared["validation"] in prepared["dependencies"]
     # The command must execute in the disk-image build, not only in a separately
     # cacheable validation derivation. Fail before copying or partitioning.
@@ -1062,7 +1093,9 @@ def test_prepared_usb_runtime_closure():
     assert guest_paths
     domain = topology["domains"]["sys-gui"]
     root_artifact = domain["backend"]["root"]["source"].removesuffix("/root.img")
-    assert root_artifact in runtime
+    assert root_artifact not in runtime, (
+        "root disks are installed directly into Qubes storage"
+    )
     assert domain["backend"]["system"]["source"] not in runtime
     for kernel in topology["kernels"].values():
         assert kernel["source"] in runtime
@@ -1085,3 +1118,91 @@ def test_prepared_usb_runtime_closure():
     (ROOT / ".airlock-logs/prepared-usb-closure.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
+
+
+@pytest.mark.nix
+def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs):
+    from xml.etree import ElementTree as ET
+
+    specs, _, _ = seed_inputs
+    root_image = tmp_path / "root.img"
+    with root_image.open("wb") as stream:
+        stream.truncate(16 * 1024 * 1024)
+    subprocess.run(["mkfs.ext4", "-q", "-F", str(root_image)], check=True)
+    spec = {**specs[0], "root_source": str(root_image)}
+    pool = tmp_path / "pool"
+    descriptors = tmp_path / "descriptors"
+    prepared.prepare_pool(pool, descriptors, [spec], "/var/lib/airlock/closure-store")
+    kernel = tmp_path / "kernel"
+    kernel.mkdir()
+    (kernel / "vmlinuz").write_bytes(b"fixture")
+    (kernel / "modules.img").write_bytes(b"fixture")
+    topology = {
+        "kernels": {"test-kernel": {"source": str(kernel)}},
+        "prefs": {"default_netvm": None},
+        "domains": {
+            "sys-gui": {
+                "class": "StandaloneVM",
+                "label": "red",
+                "netvm": None,
+                "prefs": {"autostart": False, "guivm": None, "virt_mode": "hvm"},
+                "features": {"qrexec": True},
+                "services": {"test-service": False},
+                "devices": {"pci": [{"backend": "dom0", "id": "00_08.1"}]},
+                "backend": {
+                    "type": "nix-closure",
+                    "system": {"source": spec["system"]},
+                    "root": {"source": str(root_image)},
+                    "kernel": {"name": "test-kernel"},
+                    "state": {"persistentSize": 32 * 1024 * 1024},
+                    "store": {"source": str(descriptors / spec["name"])},
+                },
+            }
+        },
+    }
+    config = tmp_path / "topology.json"
+    config.write_text(json.dumps(topology))
+    output = tmp_path / "runtime"
+    command = [
+        "nix",
+        "shell",
+        "path:.#airlock-prepare-runtime",
+        "-c",
+        "airlock-prepare-runtime",
+        str(config),
+        str(pool),
+        str(output),
+    ]
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    xml = (output / "qubes/qubes.xml").read_text()
+    tree = ET.fromstring(xml)
+    assert str(output) not in xml
+    assert "/var/lib/qubes" in xml
+    guest = next(
+        vm
+        for vm in tree.findall("./domains/domain")
+        if vm.findtext("./properties/property[@name='name']") == "sys-gui"
+    )
+    assert guest.findtext("./features/feature[@name='airlock-root-source']") == str(
+        root_image
+    )
+    volumes = {
+        v.attrib["name"]: v.attrib for v in guest.findall("./volume-config/volume")
+    }
+    assert volumes["store"]["pool"] == "airlock-closure"
+    assert volumes["store-data"]["view_kind"] == "erofs-blob-map"
+    assert not guest.findall("./devices/device")  # hardware remains boot-time work
+    installed_root = output / "qubes/appvms/sys-gui/root.img"
+    private = output / "qubes/appvms/sys-gui/private.img"
+    assert core.hash_file(installed_root) == core.hash_file(root_image)
+    assert installed_root.stat().st_blocks * 512 < installed_root.stat().st_size
+    assert private.stat().st_size == 32 * 1024 * 1024
+    assert (
+        os.readlink(output / "pool-selections/domains/sys-gui/current")
+        == "generations/1"
+    )
+    # Never overwrite a pre-existing VM installation.
+    again = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+    assert again.returncode != 0
+    assert "must not already exist" in again.stderr
