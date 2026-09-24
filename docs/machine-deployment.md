@@ -492,3 +492,23 @@ while preserving home data. Treat this as a physically exercised development
 updater, not a production-safe updater: failure injection, power-loss recovery,
 release pruning, schema migrations, and restricted production authority remain
 outside the demonstrated boundary.
+
+### USB boot diagnosis, 2026-09-24
+
+Offline inspection of boot `bc87160c-094d-4bd4-9f73-d482571da2a6` found:
+
+- GNOME rejected the setup wizard's legacy `X-GNOME-Autostart-Phase` entry.
+- sys-firewall uplink setup could not find `nft`. It also ran on downstream
+  `vif*` interfaces, conflicting with Xen's hotplug address configuration.
+  Tailscale received its enrollment request but DNS and control-server requests
+  timed out through this broken network path.
+- A desktop enrollment request started sys-dev during boot autostart; the
+  coordinator then failed because the VM was already running.
+
+The machine source fixes remove the wizard's legacy autostart phase, supply
+nftables to uplink setup, exclude downstream Xen interfaces from both udev
+startup and reconciliation, and tolerate concurrent VM starts while retaining
+running-generation verification. Validation is limited to the quick test suite;
+image rebuilding and physical boot verification are left to the operator.
+The USB was inspected without configuration edits. The operator granted read
+ACLs on its logs and Qubes/Airlock state directories for offline inspection.
