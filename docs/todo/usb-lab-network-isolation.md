@@ -1,7 +1,8 @@
 # USB lab network isolation
 
-Status: configuration and release built; live plan, deployment, and physical acceptance pending.
-Reviewed against the checked-in lab topology on 2026-09-24.
+Status: fresh USB image booted with the target topology; physical acceptance is
+in progress. Migration, fail-closed recovery, and rollback remain unverified.
+Reviewed against the checked-in lab topology on 2026-09-25.
 
 Follow the [hardware usability policy](../hardware-usability-policy.md). This
 plan describes an operator-assisted lab migration with a physical recovery
@@ -18,10 +19,10 @@ Transition the existing `usb-lab` profile to dedicated `sys-net` and
 experimental profile or a new boot entry. Preserve the current sys-dev
 Tailscale development workflow and dom0 control access.
 
-The deployed baseline still gives sys-dev the physical NICs and routes
-usr-browser through it. The new checked-in USB lab profile uses the existing
-sys-net and sys-firewall definitions and Qubes networking machinery. No physical
-machine has been migrated or accepted yet. usr-home remains offline.
+The previous deployed baseline gave sys-dev the physical NICs and routed
+usr-browser through it. The fresh USB image now boots with sys-net and
+sys-firewall using Qubes networking machinery. This is not evidence that the
+in-place migration or rollback works. usr-home remains offline.
 
 Target traffic paths:
 
@@ -113,21 +114,48 @@ Local checks on 2026-09-24: `make test-quick` passed (519 passed, 23 skipped)
 and `make machine-build` produced release
 `/nix/store/4wgc0jsq5r1ijfr57lk8b4s9ldqy83ph-airlock-machine-release`
 from machine revision `dc2a9b4` and parent revision `6b7deb4`. These are build
-results, not a live deployment. The documented `sys-dev-2` target is absent
-from the current Tailnet; `sys-dev` is reachable, but the existing dom0
-development transport requires the operator's sudo password. No live machine
-plan or apply ran.
-Read-only inspection of the reachable `sys-dev` shows its current default route
-on `ens6` through wired DHCP, with NetworkManager reporting `ens6` as connected
-Ethernet. This does not identify dom0's PCI assignment or prove the new provider
-can connect; those checks remain at the physical console.
+results, not a live deployment. At that time `sys-dev-2` was absent from the
+Tailnet and `sys-dev` was reachable; the dom0 development transport required
+the operator's sudo password. No live machine plan or apply ran.
+Fresh USB image checks on 2026-09-25 via Tailscale SSH to `sys-dev-2` and the
+dom0 development shell: `sys-net` exclusively has the Realtek wired and Qualcomm
+Wi-Fi controllers assigned and attached; sys-dev has neither. sys-net's
+NetworkManager reports `ens6` connected via wired DHCP, with a default route
+through `192.168.1.1` and working DNS. sys-firewall routes through sys-net;
+sys-dev and usr-browser route through sys-firewall; usr-home has no NetVM and
+could not resolve an external host. Dom0 has no active NetworkManager,
+tailscaled, or sshd service and no default route. Both sys-dev and usr-browser
+received HTTP 200 from `https://example.com`. A temporary Qubes firewall drop
+rule blocked usr-browser's pinned HTTPS destination; removing the rule restored
+HTTP 200 and the original accept policy.
+
+After a physical reboot, Tailscale SSH and the dom0 development shell returned.
+sys-net and sys-firewall were running, their NetVM chain and PCI assignments
+were intact, sys-net regained wired DHCP and DNS, and sys-dev and a newly
+started usr-browser again received HTTP 200. The boot setup, provider startup,
+and autostart units became active in that order and remained active.
+`airlock-machine-deploy status` reported
+`phase=image-baseline` with no selected whole-machine release, as expected for
+a fresh image; whole-machine generation agreement has not been exercised.
+
+A detached test attempted to stop the providers and completed, but it cut off
+remote access. Tailscale access had not returned more than three minutes after
+the unit finished; an operator reboot restored it. Its detailed log was stored
+in `/run`, which the reboot erased, so the individual stop, connectivity, and
+restart results are unverified. The previous boot's qubesd journal shows
+sys-firewall starting at 01:14:49 UTC and sys-net starting at 01:15:05 UTC
+during the test. This is a recovery issue to investigate. The
+installed updates-proxy policy permits template VMs to target sys-net, but this
+image has no template VMs; no actual updates-proxy request was tested. The
+in-place PCI handoff, whole-machine apply, and rollback were not exercised on
+this fresh flash.
 
 - [ ] Add focused pytest coverage for topology, exclusive PCI ownership,
   startup dependencies, and migration/rollback behavior, including interruption
   during the handoff. Run the required repository checks and build the release.
-- [ ] On hardware, confirm sys-net exclusively owns the intended NICs and
-  establishes the required wired/Wi-Fi connections with working DNS.
-- [ ] Confirm usr-browser and sys-dev reach the network through sys-firewall;
+- [x] On hardware, confirm sys-net exclusively owns the intended NICs and
+  establishes the required wired connection with working DNS.
+- [x] Confirm usr-browser and sys-dev reach the network through sys-firewall;
   exercise an explicit Qubes deny rule and verify enforcement before restoring
   the intended policy.
 - [ ] Confirm usr-home stays offline and stopping either provider prevents
