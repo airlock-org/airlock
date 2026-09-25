@@ -168,8 +168,28 @@ USB-lab release built from machine revision `96f908c` and parent revision
 `a7bed89` at `/nix/store/gzkl20hy69pgi4m8pamsbmsx37vxxys5-airlock-machine-release`.
 The full quick suite had 558 passed, 23 skipped, and two stale assertions
 unrelated to the hotplug change; both assertions passed after correction in
-focused reruns. The fix still needs a fresh USB boot and both provider restart
-tests before recovery can be accepted.
+focused reruns. Review superseded that candidate with machine revision `eca7b84`: udev now
+queues service jobs with `--no-block`, and the uplink service follows upstream
+Qubes by leaving interface lifecycle handling to udev rather than binding to a
+device unit. An isolated NixOS VM demonstrated that the earlier dependency
+could fail startup before systemd processed the device event; adding
+`--no-block` alone still failed interface recreation. The corrected service
+passed three interface removal/recreation cycles, each with a new service
+invocation and the expected interface address. A control with the previous
+synchronous command and device dependency reproduced a dependency failure.
+This refines the review's predicted deadlock: the tested systemd version
+rejected the dependency immediately instead of waiting indefinitely.
+
+Run the behavioral regression with
+`AIRLOCK_RUN_UPLINK_VM=1 uv run pytest -q airlock-machine/tests/test_network_uplink_vm.py`.
+Its build log and result path are under `$AIRLOCK_LOG_DIR/uplink-hotplug/`;
+the result contains the guest journal and JUnit report. The test uses real
+udev/systemd events, dummy interfaces, and a substitute address-setup command;
+it does not verify Xen reconnection, QubesDB, provider forwarding, or Tailscale.
+The existing USB can boot as a deployment target. Deploy the corrected
+whole-machine release before repeating both provider restart tests, collecting
+persistent guest interface, route, uplink-unit, and provider diagnostics as well
+as traffic results. Hardware recovery remains unverified.
 
 - [ ] Add focused pytest coverage for topology, exclusive PCI ownership,
   startup dependencies, and migration/rollback behavior, including interruption
