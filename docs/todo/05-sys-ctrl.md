@@ -203,22 +203,8 @@ declarations remain.
 
 ### 3. Integrate direct pool admission into whole-machine deployment
 
-- Reuse `airlock-pool-send`, the versioned artifact format, and the existing
-  dom0 admission receiver. Preserve validation, object reuse, filtered guest
-  views, and retained inactive generation publication.
-- Connect admission results to the machine coordinator's release planning,
-  activation, and rollback. Verify that admitted generations match the intended
-  guest and release provenance before activation. Admission success alone is
-  not deployment success; define activation authority separately.
-- Exercise interruption, retry, and temporary-data cleanup through the complete
-  controller/deployment path, preserving retained and running generations.
-- Remove references in deployment releases/GC roots that would otherwise retain
-  whole guest source closures in dom0's ordinary store. Keep dom0's actual
-  runtime dependencies and boot/recovery artifacts intact.
-- Keep retention and rollback working through pool objects and generation
-  metadata. Do not require controller availability to keep running guests alive.
-- Measure allocated storage and reference retention after repeated updates.
-  Moving a duplicate elsewhere on dom0 does not satisfy this requirement.
+Tracked in [Direct pool admission for whole-machine updates](06-direct-pool-machine-deployment.md).
+Completing that TODO remains required for this controller migration.
 
 ### 4. Retire sys-config-* from the active topology
 
