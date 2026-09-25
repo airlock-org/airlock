@@ -1,9 +1,10 @@
 # Move configuration work into sys-ctrl
 
-Status (2026-09-25): local implementation is ready for review; validation remains
-outstanding. This pass made source changes only: no tests, Nix builds, image
-builds, or live deployments were run. Do not treat this document as physical
-acceptance.
+Status (2026-09-25): local implementation passes the quick checks: 579 passed,
+24 skipped, two existing warnings. The machine and parent image flake checks
+were run separately with `--no-build`; the remaining quick suite passed with
+those two checks excluded. No image build or live deployment was performed.
+Physical acceptance remains outstanding.
 
 Airlock is unreleased. Backwards compatibility and migration from the old
 `sys-config-*` workflow are not requirements. Those roles have been removed
@@ -58,9 +59,11 @@ from normal deployment authority.
 
 ## Remaining acceptance work
 
-All checks below remain open until actually exercised and recorded.
-
-- [ ] Run `make test-quick` and the relevant controller/storage integration tests.
+- [x] Run the quick suite, including machine and parent image flake evaluation.
+  Evidence: `.airlock-logs/pytest-report.json`,
+  `.airlock-logs/flake-check-no-build/pytest-command.log`, and
+  `.airlock-logs/controller-image-check-junit.xml`.
+- [ ] Run the controller/storage integration tests on a booted image.
 - [ ] Build and inspect the host transport closure: no retained guest-only
   source closures in dom0's ordinary store.
 - [ ] Cold boot starts the controller and required machine topology without a

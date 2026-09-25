@@ -1,8 +1,10 @@
 # Direct pool admission for whole-machine updates
 
-Status (2026-09-25): local code is implemented for review; tests, builds and
-physical acceptance have not been run in this pass. This remains an acceptance
-dependency of the [sys-ctrl work](05-sys-ctrl.md).
+Status (2026-09-25): local code passes the quick suite and both flake checks
+(579 passed, 24 skipped, two existing warnings across separate runs). See
+[sys-ctrl validation evidence](05-sys-ctrl.md#remaining-acceptance-work). No image
+build or live deployment was performed. Physical acceptance and performance
+measurements remain dependencies of the [sys-ctrl work](05-sys-ctrl.md).
 
 The controller keeps a full release/build root and sends a separate transport
 output containing host dependencies and detached guest topology metadata.
@@ -78,7 +80,7 @@ physical deployment separately. Use only guarded Airlock GC targets.
 
 ## Starting points
 
-- [Sys-ctrl migration and ownership](05-sys-ctrl.md)
+- [Sys-ctrl ownership](05-sys-ctrl.md)
 - [Completed direct admission work](../completed/sys-dev-pool-admission.md)
 - [Pool-backed builder](../sys-dev-build-store.md)
 - [Admission policy and receiver](../../airlock-machine/lifecycle/misc/modules/pool-admission.nix)
