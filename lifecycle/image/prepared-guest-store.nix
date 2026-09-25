@@ -56,15 +56,15 @@ let
       cp ${pkgs.writeText "airlock-offline-inputs.json" (builtins.toJSON offlineInputs)} "$out/flake-inputs.json"
     ''}
   '';
-  specs = guestSpecs ++ lib.optional (entries ? sys-dev) {
-    name = "sys-dev-builder";
-    domain = "sys-dev-builder";
-    system = toString entries.sys-dev.configuration.config.system.build.toplevel;
+  specs = guestSpecs ++ lib.map (role: {
+    name = "${role}-builder";
+    domain = "${role}-builder";
+    system = toString entries.${role}.configuration.config.system.build.toplevel;
     root_source = "";
     kernel_name = "";
     closure_source = toString buildManifest;
     builder = true;
-  };
+  }) (builtins.filter (role: builtins.hasAttr role entries) [ "sys-dev" "sys-ctrl" ]);
   seed =
     pkgs.runCommand "airlock-usb-prepared-guest-store"
       {
