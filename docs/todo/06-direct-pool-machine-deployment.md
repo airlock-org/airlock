@@ -1,6 +1,11 @@
 # Direct pool admission for whole-machine updates
 
-Status (2026-09-25): the earlier implementation passed the quick suite and
+Status (2026-09-25): local implementation now includes the root-image reuse
+work described below. The new code and pytest coverage have **not been run**;
+no image was built and no live session was changed for this work. Physical
+acceptance and performance measurements remain open.
+
+Earlier evidence: the earlier implementation passed the quick suite and
 both flake checks (579 passed, 24 skipped, two existing warnings across
 separate runs). The subsequent controller network change passed nine focused
 tests; the full quick suite has not been rerun at that revision. See
@@ -78,9 +83,9 @@ being on the same physical disk does not make them admitted shared objects.
 ## Reuse guest root images across image creation and deployment
 
 The USB image seeds runnable guest storage and omits the original root-image
-Nix outputs from dom0's retained dependencies. Machine releases currently add
+Nix outputs from dom0's retained dependencies. Before this change, machine releases added
 those outputs through `system.extraDependencies` in `machine-release.nix`.
-The receiver checks only registered Nix-store paths, so it imports the original
+That receiver checked only registered Nix-store paths, so it imported the original
 image files even when working VM disks already exist. The observed export
 included seven root-image outputs. Their logical filesystem sizes include
 empty space; this is separate from guest package duplication.
@@ -109,6 +114,55 @@ empty space; this is separate from guest package duplication.
 - Cover image seeding, admission, activation, interrupted retries, rollback
   and GC with the same ownership and retention rules. Avoid merely relocating
   duplicate images to another dom0 directory.
+
+## Root-image implementation recorded locally
+
+- The generic boot-image builder fixes its filesystem UUID, hash seed and inode
+  timestamps, removes the VM name from its derivation identity, and emits a
+  separate small descriptor output. Its contents contain boot scaffolding, not
+  VM-specific secrets or writable guest state. Filesystem size, format and boot
+  ABI are part of the validated descriptor.
+- `root_format.py` defines a versioned canonical sparse representation and hashes
+  its complete contents, including the logical size and positions of nonzero
+  blocks. Holes and allocated zero blocks have the same identity. Receivers
+  reject malformed, overlapping, truncated, oversized or corrupt payloads.
+- Image preparation and deployment retain one verified immutable `root.img` per
+  content hash under `closure-store/root-artifacts/`. Generation manifests bind
+  each domain to its root descriptor and original source identity. The prepared
+  pool checks these roots; offline Qubes preparation copies from the retained
+  base into independent native root volumes and creates separate private disks.
+  Image installation explicitly restores sparse allocation even if a substituted
+  Nix seed materialized its holes.
+- Incremental admission uses `airlock.pool-artifact.v3` with a versioned
+  missing-object/root response. Reused roots send no payload. New roots travel
+  as sparse extents alongside missing package fragments, with bounded sizes and
+  durable publication before generation commit. Retries reuse verified roots;
+  recovery removes temporary files and generation GC removes unreferenced bases.
+- Release transport carries a small `root-artifacts.json` catalog instead of
+  unconditional root-image Nix dependencies. Dom0 keeps its kernel dependencies.
+  The coordinator independently describes admitted generations and compares
+  their verified root descriptors with the release catalog before planning and
+  activation. Candidate manifests preserve those bindings for later activation.
+- Runtime setup resolves retained roots by domain, source and staged generation,
+  checks that root/private volume identities are independent and unreferenced
+  by other VMs, then uses native `qvm-volume import` into that VM's own root.
+  Roots are rechecked when loading or switching generations, including rollback.
+  The VM records its selected root content hash as well as its source identity;
+  an existing disk is treated as current only when both match. Existing retention
+  and running-generation protection pin their immutable bases.
+- Reports separate package and sparse-root payload bytes, root logical and
+  allocated bytes, unique root inventory, host NAR and compressed wire bytes,
+  build time, inventory validation, payload reception, root admission, package
+  admission and machine binding/planning. Host reception additionally reports
+  read/decompression, importer pipe-write and final importer wait durations;
+  these are wall-time phases of a pipeline, not independent CPU measurements.
+  Guest payloads use uncompressed tar with sparse roots, so their payload byte
+  counts exclude only tar/protocol framing rather than a compression ratio.
+- Pytest source coverage was added for sparse identity, corruption, independent
+  copied disks, retention, changed-root admission, retry, rollback and release
+  binding. Existing prepared-image fixtures now provide root artifacts. None of
+  this new coverage has been executed. Real Qubes volume isolation, reproducible
+  rebuilds and the performance criteria below still require validation.
 
 ## Completion criteria and evidence
 

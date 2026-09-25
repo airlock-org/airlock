@@ -14,6 +14,13 @@ let
       echo "Refusing to replace an existing Qubes database during image preparation" >&2
       exit 1
     fi
+    # NAR substitution can materialize holes in seed files. Always reconstruct
+    # sparse allocation in the installed pool, even from a dense cached seed.
+    mkdir -p /mnt/var/lib/airlock/closure-store
+    cp -a --sparse=always ${config.system.build.usbPreparedGuestStore}/pool/. \
+      /mnt/var/lib/airlock/closure-store/
+    chmod -R ${lib.escapeShellArg config.airlock.image.preparedStoreMode} \
+      /mnt/var/lib/airlock/closure-store
     mkdir -p /mnt/var/lib/qubes
     cp -a --sparse=always ${preparedRuntime}/qubes/. /mnt/var/lib/qubes/
     cp -a ${preparedRuntime}/pool-selections/. /mnt/var/lib/airlock/closure-store/
@@ -46,11 +53,6 @@ in
       {
         source = pkgs.writeText "airlock-usb-image" "airlock-usb-dev-v2\n";
         target = "/airlock-usb-image";
-      }
-      {
-        source = "${config.system.build.usbPreparedGuestStore}/pool";
-        target = "/var/lib/airlock/closure-store";
-        mode = config.airlock.image.preparedStoreMode;
       }
     ];
   }) (old:

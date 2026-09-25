@@ -46,6 +46,7 @@ def kernelopts(domain):
 
 def admission_for(name, domain, physical_pool):
     from airlock_qubes_storage._engine import state
+    from airlock_qubes_storage._engine.root_images import verify_generation_root
 
     backend = domain["backend"]
     descriptor = read(Path(backend["store"]["source"]) / "prepared.json")
@@ -69,10 +70,15 @@ def admission_for(name, domain, physical_pool):
         raise ValueError(f"uncommitted generation for {name}")
     if manifest["system"] != expected["system"] or manifest["domain"] != name:
         raise ValueError(f"manifest identity mismatch for {name}")
+    if manifest.get("root", {}).get("source") != expected["root_source"]:
+        raise ValueError(f"root source mismatch for {name}")
+    root_image = verify_generation_root(physical_pool, manifest)
     store = manifest["store"]
     if store["closure_hash"] != descriptor["closure_hash"]:
         raise ValueError(f"closure mismatch for {name}")
     admission = {
+        "root_image": str(root_image),
+        "root_artifact": manifest["root"]["artifact"],
         "generation": generation,
         "manifest": str(RUNTIME_POOL / relative),
         "closure_hash": store["closure_hash"],
@@ -167,9 +173,8 @@ async def prepare(topology, physical_pool, output, storage_helper):
             vm.features[key] = feature(value)
         for key, value in domain.get("services", {}).items():
             vm.features["service." + key] = feature(value)
-        root_source = Path(backend["root"]["source"])
-        if root_source.is_dir():
-            root_source /= "root.img"
+        admission, metadata_size = admission_for(name, domain, physical_pool)
+        root_source = Path(admission.pop("root_image"))
         vm_dir = Path(vm.dir_path)
         vm_dir.mkdir(parents=True)
         # Use Qubes' file-volume implementation to create correctly sized sparse
@@ -201,7 +206,6 @@ async def prepare(topology, physical_pool, output, storage_helper):
                 )
             else:
                 subprocess.run(["mkfs.ext4", "-q", "-F", volume.path], check=True)
-        admission, metadata_size = admission_for(name, domain, physical_pool)
         configs = helper.shared_volume_configs(
             "airlock-closure", name, admission, metadata_size=metadata_size
         )
@@ -221,6 +225,7 @@ async def prepare(topology, physical_pool, output, storage_helper):
             {
                 "airlock-backend": "nix-closure",
                 "airlock-root-source": backend["root"]["source"],
+                "airlock-root-artifact": admission["root_artifact"]["sha256"],
                 "airlock-system-source": backend["system"]["source"],
                 "airlock-store-source": backend["store"]["source"],
                 "airlock-store-mode": "shared-closure",
@@ -254,6 +259,7 @@ async def prepare(topology, physical_pool, output, storage_helper):
     checked = qubes.Qubes(str(qubes_root / "qubes.xml"), offline_mode=True)
     for name, domain in topology["domains"].items():
         vm = checked.domains[name]
+        helper.validate_native_volume_isolation(checked, vm)
         if vm.features["airlock-root-source"] != domain["backend"]["root"]["source"]:
             raise ValueError(f"root identity did not survive reload: {name}")
         helper.validate_shared_store_frontends(

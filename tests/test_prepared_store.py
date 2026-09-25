@@ -110,6 +110,12 @@ def seed_inputs(tmp_path, monkeypatch):
         tree = source / Path(path).name
         tree.mkdir()
         (tree / "payload").write_text(path * 20)
+    root_image = source / ("d" * 32 + "-root") / "root.img"
+    root_image.parent.mkdir()
+    with root_image.open("wb") as stream:
+        stream.truncate(16 * 1024 * 1024)
+        stream.seek(1080)
+        stream.write(b"\x53\xef")
     specs = []
     for i, system in enumerate(systems):
         manifest = tmp_path / f"closure-{i}"
@@ -1217,6 +1223,9 @@ def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs):
     assert not guest.findall("./devices/device")  # hardware remains boot-time work
     installed_root = output / "qubes/appvms/sys-gui/root.img"
     private = output / "qubes/appvms/sys-gui/private.img"
+    from airlock_qubes_storage.root_format import encode
+
+    assert guest.findtext("./features/feature[@name='airlock-root-artifact']") == encode(root_image)["sha256"]
     assert core.hash_file(installed_root) == core.hash_file(root_image)
     assert installed_root.stat().st_blocks * 512 < installed_root.stat().st_size
     assert private.stat().st_size == 32 * 1024 * 1024

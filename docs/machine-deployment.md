@@ -114,7 +114,8 @@ The sys-dev client sends a versioned source bundle to `sys-ctrl`. The
 controller verifies the Git revision and lock hash and builds from the locked
 source, fetching missing inputs or substitutes through sys-firewall. It sends
 guest manifests to the shared pool receiver, which
-requests only missing objects, then streams missing host/transport dependencies
+requests only missing package objects and immutable root artifacts, then streams
+missing host/transport dependencies
 to dom0's ordinary store. Dom0 binds independently checked admission receipts
 to the release and invokes its journalled coordinator. `plan` never activates;
 `apply` starts a detached worker so restarting sys-ctrl or sys-dev cannot cancel
@@ -125,7 +126,13 @@ selected `--legacy-dom0` development route remains separate.
 The controller records source archives and requests in
 `~/.local/share/airlock/controller/candidates/<revision>/`; its observation timer
 records actual dom0 outcomes. Submission is not success. The final report
-includes guest object/byte counts, host import counts and elapsed transfer time.
+includes package and sparse-root payload counts, root logical/allocated bytes,
+host NAR/compressed bytes, build time and transfer/admission/validation timings.
+The unique root inventory avoids counting a shared immutable base once per VM.
+Unchanged roots seeded by image creation are verified and reused without another
+Nix-store import. Root artifacts live in dom0’s pool and are pinned by guest
+generations; Qubes imports them into separate per-VM writable root disks.
+Private disks remain per VM. Host kernels stay available through the host closure.
 Stopped sys-ctrl does not own the serving guest pool, and dom0 retains the host
 and controller boot artifacts independently.
 
