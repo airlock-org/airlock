@@ -1,7 +1,9 @@
 # USB lab network isolation
 
 Status: fresh USB image booted with the target topology; physical acceptance is
-in progress. Migration, fail-closed recovery, and rollback remain unverified.
+in progress. The sys-firewall fail-closed check passed, but restart did not
+restore downstream traffic. A guest hotplug fix is built locally and awaits a
+new image and physical retest. Migration and rollback remain unverified.
 Reviewed against the checked-in lab topology on 2026-09-25.
 
 Follow the [hardware usability policy](../hardware-usability-policy.md). This
@@ -149,6 +151,25 @@ installed updates-proxy policy permits template VMs to target sys-net, but this
 image has no template VMs; no actual updates-proxy request was tested. The
 in-place PCI handoff, whole-machine apply, and rollback were not exercised on
 this fresh flash.
+
+Provider recovery follow-up on 2026-09-25: a persistent dom0 JSONL probe
+confirmed `sys-firewall` halted while both usr-browser and sys-dev failed a
+pinned HTTPS request, with no alternate route. `qvm-start sys-firewall` then
+succeeded, but both downstream requests still failed for 70 seconds. A separate
+recovery timer found both providers running, restarted sys-dev's tailscaled,
+and still could not connect from usr-browser. The logs were copied from the USB
+to `.airlock-logs/network-provider/`; the sys-net shutdown was not attempted
+after this failure. The pinned upstream Qubes agent disables Xen interface
+renaming and explicitly restarts the uplink service on udev add; the old Airlock
+configuration applied that naming rule only to sys-net and used `SYSTEMD_WANTS`
+for all guest frontends. Revision `96f908c` applies the upstream hotplug pattern
+to all guests. Focused configuration checks passed (2 tests), and a committed
+USB-lab release built from machine revision `96f908c` and parent revision
+`a7bed89` at `/nix/store/gzkl20hy69pgi4m8pamsbmsx37vxxys5-airlock-machine-release`.
+The full quick suite had 558 passed, 23 skipped, and two stale assertions
+unrelated to the hotplug change; both assertions passed after correction in
+focused reruns. The fix still needs a fresh USB boot and both provider restart
+tests before recovery can be accepted.
 
 - [ ] Add focused pytest coverage for topology, exclusive PCI ownership,
   startup dependencies, and migration/rollback behavior, including interruption
