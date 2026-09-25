@@ -255,6 +255,7 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
         "targets": [
             "sys-gui",
             "sys-dev",
+            "sys-ctrl",
             "sys-net",
             "sys-firewall",
             "usr-home",
