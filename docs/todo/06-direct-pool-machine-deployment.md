@@ -1,9 +1,20 @@
 # Direct pool admission for whole-machine updates
 
-Status (2026-09-25): outstanding. Direct guest admission exists, but the
-whole-machine update path still imports guest packages into dom0's ordinary
-Nix store. Controller integration has local validation and still needs physical
-acceptance. This work is required by the [sys-ctrl migration](05-sys-ctrl.md).
+Status (2026-09-25): local code is implemented for review; tests, builds and
+physical acceptance have not been run in this pass. This remains an acceptance
+dependency of the [sys-ctrl work](05-sys-ctrl.md).
+
+The controller keeps a full release/build root and sends a separate transport
+output containing host dependencies and detached guest topology metadata.
+Guest artifacts use the existing incremental manifest/missing-object exchange;
+dom0 binds the receipts to exact verified pool generations. The host transport
+also negotiates missing ordinary-store paths before streaming its Nix export.
+Retries reuse an exact retained admission with the same provenance. Admission
+cleans fragment directories abandoned by process death under the pool lock.
+Plans retain host transport roots; applying moves protection to transaction
+roots, and release inventory/pruning tracks planned candidates.
+
+No migration or compatibility protocol is required for this unreleased software.
 
 ## Goal
 

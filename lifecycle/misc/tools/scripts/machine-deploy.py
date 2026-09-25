@@ -316,6 +316,8 @@ def main(argv=None):
         action="store_true",
         help="build and transfer the committed coordinator for guest activation",
     )
+    parser.add_argument("--legacy-dom0", action="store_true",
+                        help="use the development shell and host-built closure transport")
     args = parser.parse_args(argv)
     if args.action != "build" and not args.target:
         parser.error("--target is required")
@@ -323,6 +325,17 @@ def main(argv=None):
         parser.error("--receipt is required for guest activation")
     if args.update_coordinator and not args.action.startswith("guest-"):
         parser.error("--update-coordinator requires guest-plan or guest-apply")
+    if (not args.legacy_dom0 and args.profile == "usb-lab"
+            and args.action in {"plan", "apply", "status", "verify", "resume", "rollback"}):
+        try:
+            if args.action in {"plan", "apply"}:
+                subprocess.run([sys.executable, str(ROOT / "lifecycle/misc/tools/scripts/sys-dev-machine-source.py"),
+                                "push", "--target", args.target], check=True)
+            return subprocess.call(["ssh", args.target,
+                                    "airlock-sys-dev-machine-deploy", args.action])
+        except (OSError, subprocess.SubprocessError) as exc:
+            print(f"machine-deploy: controller submission failed: {exc}", file=sys.stderr)
+            return 1
     session = None
     try:
         if args.action in ("build", "plan", "apply"):

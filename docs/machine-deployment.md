@@ -1,14 +1,11 @@
 # Repository-first whole-machine deployment
 
-Reading guide (2026-09-23): both development-host and sys-dev release
-submission paths exist. See **Normal loop** for commands and the completed
-[sys-dev deployment trial](completed/03-sys-dev-machine-deployment.md) for its
-physical acceptance. Older space limits and trial outcomes below are dated
-evidence, not a statement that all deployment remains untested. The host
-transport uses the development shell. The sys-dev client's `build`, `plan`,
-`apply`, and guest actions now submit through sys-ctrl, but this controller
-path has only local validation. Whole-machine releases still import guest
-closures into dom0's ordinary store.
+Reading guide (2026-09-25): the current source uses sys-ctrl and direct pool
+admission for normal whole-machine submissions. These newest changes have not
+been tested, built or deployed in this pass. Dated acceptance evidence below
+applies to earlier revisions. See [the controller TODO](todo/05-sys-ctrl.md)
+and [direct pool admission TODO](todo/06-direct-pool-machine-deployment.md) for
+remaining validation.
 
 ## The development contract
 
@@ -24,8 +21,10 @@ The coordinator covers the whole declared machine, not one application/VM.
 It uses the existing Xen/Qubes lifecycle, setup-config converger, policy, and
 immutable closure-store engine. It does not replace those mechanisms.
 
-The development-host transport uses sys-dev's existing **development-only full dom0
-administrative access**, with a password-protected sudo session. It adds no
+For `usb-lab`, host-side plan/apply commands push committed source to sys-dev
+and use the typed controller route. The explicitly selected development-host
+transport (`DEPLOY_LEGACY_DOM0=1`) uses sys-dev's existing **development-only
+full dom0 administrative access**, with a password-protected sudo session. It adds no
 dom0 SSH listener or new production qrexec capability. This is not yet the
 restricted config-authority/approval workflow described in `config-system.md`.
 
@@ -41,11 +40,10 @@ restricted config-authority/approval workflow described in `config-system.md`.
 - Clean, committed `airlock-machine` and parent `airlock` repositories, an initialized
   `airlock-machine/` submodule at the committed pointer, and the guarded Airlock Nix store
   under `/run/media/user/data/airlock`.
-- Free space in dom0 **and** sys-dev. The initial deployment imports ordinary
-  Nix closures in addition to the image's packed guest store. Budget substantial
-  development space, not just space for the compressed USB image. The client
-  checks conservative space estimates before uploading. It never resizes
-  partitions, runs GC, or deletes retained generations to make an update fit.
+- Free space in sys-ctrl's writable build store and dom0's shared pool and
+  ordinary store. Normal updates transfer missing guest objects to the pool
+  and missing host dependencies to the ordinary store. Space checks never
+  resize partitions, run GC or delete retained generations to make an update fit.
 
 At implementation time the live `sys-dev-2` machine's 31-GiB root had only
 about 1.4 GiB free. SSH and the password-protected dom0 control transport were
@@ -107,14 +105,22 @@ airlock-sys-dev-machine-deploy verify
 ```
 
 The sys-dev client sends a versioned source bundle to `sys-ctrl`. The
-controller verifies the Git revision and lock hash, builds from its pinned
-offline inputs, and streams the whole-machine release closure to a restricted
-dom0 receiver. Dom0 checks provenance after import and invokes its journalled
-coordinator; `plan` never activates and `apply` starts a detached worker so a
-VM restart cannot cancel the transaction. This intermediate route still
-imports guest packages into dom0's ordinary Nix store. `status`, `verify`,
-`resume`, and `rollback` currently use the development-only dom0 transport;
-`--legacy-dom0` makes `build`, `plan`, or `apply` use it for recovery as well.
+controller verifies the Git revision and lock hash and builds from its pinned
+offline inputs. It sends guest manifests to the shared pool receiver, which
+requests only missing objects, then streams missing host/transport dependencies
+to dom0's ordinary store. Dom0 binds independently checked admission receipts
+to the release and invokes its journalled coordinator. `plan` never activates;
+`apply` starts a detached worker so restarting sys-ctrl or sys-dev cannot cancel
+activation. Normal status/verify/resume/rollback and retention commands use a
+typed dom0 interface, including when sys-ctrl is unavailable. The explicitly
+selected `--legacy-dom0` development route remains separate.
+
+The controller records source archives and requests in
+`~/.local/share/airlock/controller/candidates/<revision>/`; its observation timer
+records actual dom0 outcomes. Submission is not success. The final report
+includes guest object/byte counts, host import counts and elapsed transfer time.
+Stopped sys-ctrl does not own the serving guest pool, and dom0 retains the host
+and controller boot artifacts independently.
 
 For a committed single-guest update, the controller route is:
 
@@ -130,11 +136,10 @@ inputs in its pool-backed private store, and sends the resulting guest closure
 to dom0's shared pool. Dom0 accepts admission only from `sys-ctrl`, validates
 the inactive generation receipt, and runs its existing journalled guest
 plan/apply coordinator. The controller cannot submit an arbitrary release path
-or shell command to this interface. The `apply` command can lose its qrexec
-connection when the target is `sys-dev`; inspect dom0's machine deployment
-status to establish the outcome. This route has local tests and evaluation,
-not physical acceptance. The sys-ctrl TODO remains open until direct guest
-admission is integrated into whole-machine releases and the physical checks pass.
+or shell command to this interface. Guest activation also uses a detached dom0 worker, so updating sys-dev or
+sys-ctrl can disconnect the submitting client without cancelling activation.
+Inspect dom0's machine deployment status to establish the outcome. The newest whole-machine integration has not been tested or built in this
+pass; the sys-ctrl TODO remains open for automated and physical validation.
 
 For a guest closure already built and admitted by sys-dev, the development
 coordinator can derive a one-guest candidate without building or transferring a
@@ -166,7 +171,7 @@ change the active boot profile.
 
 `plan` builds/imports missing immutable artifacts and displays the complete
 change/restart plan; it does **not** activate a generation or restart VMs.
-`apply` asks for confirmation and launches a detached systemd worker in dom0.
+`apply` submits the requested release and launches a detached systemd worker in dom0.
 Closing the terminal or losing SSH does not terminate that worker. Reconnect
 and inspect status; do not interpret a disconnected SSH session as failure.
 
@@ -245,7 +250,7 @@ The coordinator:
 
 1. Captures the booted image/current topology as the first rollback baseline.
 2. Validates the whole topology and calculates dependency-ordered restarts.
-3. Pins artifacts and admits changed guest closures without selecting them.
+3. Pins host artifacts and checks the controller-admitted guest generations without selecting them.
 4. Records the desired release before stopping affected VMs, dependants first.
 5. Runs the release's exact setup-config binary over the complete topology,
    reusing its staged admissions; private/home volumes are not replaced.

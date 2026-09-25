@@ -239,7 +239,7 @@ def test_client_status_before_and_after_first_deployment(
             pass
 
     monkeypatch.setattr(client, "Dom0", Session)
-    result = client.main(["status", "--target", "sys-dev"])
+    result = client.main(["status", "--target", "sys-dev", "--legacy-dom0"])
     output = capsys.readouterr().out
     if controller == "absent":
         assert result == 0 and "image-baseline" in output

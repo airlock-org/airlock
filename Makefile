@@ -68,6 +68,8 @@ PYTHON_FILES := \
 	airlock-machine/lifecycle/runtime/tools/machine-deploy.py \
 	airlock-machine/lifecycle/runtime/tools/airlock_machine_deploy/*.py \
 	airlock-machine/lifecycle/runtime/tools/sys-dev-machine-deploy.py \
+	airlock-machine/lifecycle/runtime/tools/sys-ctrl-*.py \
+	airlock-machine/tests/test_sys_ctrl_*.py \
 	lifecycle/misc/tools/scripts/machine-deploy.py \
 	lifecycle/misc/tools/scripts/sys-dev-machine-source.py \
 	tests/test_machine_deploy_client.py \
@@ -138,10 +140,11 @@ PYTEST_SELECTED = $(foreach test,$(TESTS),'$(if $(filter run-nested-gui-smoke-st
 
 # One committed configuration, one whole-machine release. No per-VM switches.
 DEPLOY_PROFILE ?= usb-lab
+DEPLOY_LEGACY_DOM0 ?= 0
 DEPLOY_TARGET ?=
 .PHONY: machine-build machine-plan machine-apply machine-status machine-verify machine-resume machine-rollback machine-guest-plan machine-guest-apply sys-dev-machine-source
 machine-build machine-plan machine-apply machine-status machine-verify machine-resume machine-rollback:
-	uv run python lifecycle/misc/tools/scripts/machine-deploy.py $(patsubst machine-%,%,$@) --profile "$(DEPLOY_PROFILE)" $(if $(DEPLOY_TARGET),--target "$(DEPLOY_TARGET)",)
+	uv run python lifecycle/misc/tools/scripts/machine-deploy.py $(patsubst machine-%,%,$@) --profile "$(DEPLOY_PROFILE)" $(if $(DEPLOY_TARGET),--target "$(DEPLOY_TARGET)",) $(if $(filter 1,$(DEPLOY_LEGACY_DOM0)),--legacy-dom0,)
 machine-guest-plan machine-guest-apply:
 	@test -n "$(DEPLOY_TARGET)" || { echo 'set DEPLOY_TARGET to the Tailscale sys-dev host'; exit 2; }
 	@test -n "$(ADMISSION_RECEIPT)" || { echo 'set ADMISSION_RECEIPT to the receipt path inside sys-dev'; exit 2; }
