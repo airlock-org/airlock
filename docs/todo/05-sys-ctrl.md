@@ -11,9 +11,13 @@ committed `airlock-machine` source bundle from `sys-dev` to `sys-ctrl`; the
 controller imports it, builds with pinned offline inputs, admits the guest
 closure, and asks dom0's constrained guest plan/apply service to act on the
 receipt. The USB profile changes the pool admission caller to `sys-ctrl`.
-These changes are not yet physically tested. Whole-machine `sys-dev` deployment
-still uses the development shell and imports into dom0's ordinary store;
-candidate history migration and `sys-config-*` retirement remain outstanding.
+The normal whole-machine `build`/`plan`/`apply` commands now also send that
+source to `sys-ctrl`. The controller builds the release and streams its closure
+to a restricted dom0 receiver for provenance checking and journalled
+plan/apply. These changes are not yet physically tested. Whole-machine updates
+still import guest packages into dom0's ordinary store; status/recovery
+commands still use the development shell. Direct whole-machine pool admission,
+candidate history migration, and `sys-config-*` retirement remain outstanding.
 
 Since the original September 17 plan, the [pool-backed builder](../sys-dev-build-store.md),
 [guest activation/rollback](../completed/02-sys-dev-guest-activation-rollback.md),

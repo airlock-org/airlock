@@ -5,10 +5,10 @@ submission paths exist. See **Normal loop** for commands and the completed
 [sys-dev deployment trial](completed/03-sys-dev-machine-deployment.md) for its
 physical acceptance. Older space limits and trial outcomes below are dated
 evidence, not a statement that all deployment remains untested. The host
-transport uses the development shell; the sys-dev client uses its narrow
-deployment interface. The controller guest path below is locally implemented
-but has not been exercised on the physical machine. Whole-machine deployment
-still uses the earlier development path.
+transport uses the development shell. The sys-dev client's `build`, `plan`,
+`apply`, and guest actions now submit through sys-ctrl, but this controller
+path has only local validation. Whole-machine releases still import guest
+closures into dom0's ordinary store.
 
 ## The development contract
 
@@ -106,12 +106,15 @@ airlock-sys-dev-machine-deploy status
 airlock-sys-dev-machine-deploy verify
 ```
 
-The sys-dev client uses its pinned pool-backed build store and persistent
-private upper layer. It records the Git revision and lock hash, exports only
-closure paths absent from Dom0's ordinary Nix store, and then invokes the same
-Dom0 coordinator used by the development-host client. `plan` never activates;
-`apply`, `resume`, and `rollback` start detached workers so losing sys-dev's
-connection does not stop an in-progress transaction.
+The sys-dev client sends a versioned source bundle to `sys-ctrl`. The
+controller verifies the Git revision and lock hash, builds from its pinned
+offline inputs, and streams the whole-machine release closure to a restricted
+dom0 receiver. Dom0 checks provenance after import and invokes its journalled
+coordinator; `plan` never activates and `apply` starts a detached worker so a
+VM restart cannot cancel the transaction. This intermediate route still
+imports guest packages into dom0's ordinary Nix store. `status`, `verify`,
+`resume`, and `rollback` currently use the development-only dom0 transport;
+`--legacy-dom0` makes `build`, `plan`, or `apply` use it for recovery as well.
 
 For a committed single-guest update, the controller route is:
 
@@ -130,9 +133,8 @@ plan/apply coordinator. The controller cannot submit an arbitrary release path
 or shell command to this interface. The `apply` command can lose its qrexec
 connection when the target is `sys-dev`; inspect dom0's machine deployment
 status to establish the outcome. This route has local tests and evaluation,
-not physical acceptance. The older whole-machine command above remains a
-development/recovery path and still imports guest closures into dom0's ordinary
-store; the sys-ctrl TODO remains open.
+not physical acceptance. The sys-ctrl TODO remains open until direct guest
+admission is integrated into whole-machine releases and the physical checks pass.
 
 For a guest closure already built and admitted by sys-dev, the development
 coordinator can derive a one-guest candidate without building or transferring a
