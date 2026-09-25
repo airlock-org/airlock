@@ -1,15 +1,15 @@
 # Documentation map
 
-Reviewed 2026-09-24 against repository documents and selected configuration;
-this review did not inspect or test the live machine.
+Updated 2026-09-25 with physical network-isolation deployment and rollback
+results. Other document summaries retain their stated validation boundaries.
 
 ## Current operating guides
 
 - [Repository boundaries](repositories.md): source ownership and submodule workflow.
 - [USB development](usb-dev.md) and [USB lab](usb-lab.md): current image,
   provisioning, recovery, and physical topology. The normal Airlock entry uses
-  physical-GPU GNOME; the new checked-in profile routes sys-dev through
-  sys-firewall and sys-net. The deployed baseline has not been migrated.
+  physical-GPU GNOME; the deployed USB lab release routes sys-dev through
+  sys-firewall and sys-net.
 - [Machine deployment](machine-deployment.md): host and sys-dev submission,
   whole-machine activation, verification, rollback, and maintenance.
 - [Pool-backed builder](sys-dev-build-store.md): implemented build-store behavior
@@ -26,7 +26,7 @@ this review did not inspect or test the live machine.
 | --- | --- |
 | [First-run wizard](todo/first-run-setup-wizard.md) | Planned. Welcome/completion shell first; timed trials and rollback before disruptive pages. |
 | [USB input setup](todo/usb-input-setup.md) | Planned. First hardware trial consumer; preserve storage and existing connectivity. Ownership depends on hardware. |
-| [USB lab network isolation](todo/usb-lab-network-isolation.md) | Configuration and release built; live plan, deployment, and physical acceptance pending. User-facing wizard integration requires automatic recovery. |
+| [USB lab network follow-ups](todo/usb-lab-network-followups.md) | Focused tests, updates proxy, PCI Wi-Fi traffic, and an exact persistence sentinel remain. The wired topology passed physical acceptance. |
 | [sys-ctrl](todo/05-sys-ctrl.md) | Planned controller migration; reuse completed sys-dev build/deployment capabilities. |
 | [Cached offline builder check](completed/07-cached-offline-builder-check.md) | Completed image prerequisite that reuses passing offline acceptance for unchanged inputs. |
 
@@ -35,6 +35,8 @@ and sys-ctrl are distinct changes to the current lab. USB Wi-Fi routing has no
 implementation plan yet; preserving existing USB connectivity is required,
 but that does not promise support for new adapters.
 
+The [completed network isolation trial](completed/usb-lab-network-isolation.md)
+records wired provider recovery and whole-machine apply, rollback, and reapply.
 The [completed trash purge and release pruning trial](completed/vm-trash-purge-release-pruning.md)
 records the physical early-purge result and its shared-pool GC limit. The
 [completed offline builder baseline](completed/06-builder-input-baseline.md)

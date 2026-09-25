@@ -22,7 +22,7 @@ The user-facing `Airlock` boot entry uses this topology and starts `sys-dev`,
 default. `sys-ctrl` is not yet a deployment authority. `usb-lab` is only the
 internal profile name. The checked-in profile assigns physical network
 devices to `sys-net`, with `sys-dev` and `usr-browser` routed through
-`sys-firewall`. See the [migration checklist](todo/usb-lab-network-isolation.md)
+`sys-firewall`. See the [completed migration trial](completed/usb-lab-network-isolation.md)
 for deployment and physical acceptance. A booted image or selected release
 still needs its running host and guest generations verified after a reboot.
 Dom0's direct NetworkManager, Tailscale, and SSH services are disabled in this
@@ -63,5 +63,6 @@ USB laptop. Each selection was followed by a normal reboot and
 `phase=complete` with matching host and running guest generations. Tailscale
 SSH and HTTPS through `sys-firewall` and `sys-net` returned after each reboot.
 The NIC assignments remained with `sys-net`; dom0 had no default route and
-`usr-home` remained offline. The [network isolation checklist](todo/usb-lab-network-isolation.md)
-records transaction IDs, diagnostics, and the remaining proxy and Wi-Fi checks.
+`usr-home` remained offline. The [network isolation trial](completed/usb-lab-network-isolation.md)
+records transaction IDs and diagnostics; the [follow-up TODO](todo/usb-lab-network-followups.md)
+tracks the remaining proxy, Wi-Fi, and test checks.

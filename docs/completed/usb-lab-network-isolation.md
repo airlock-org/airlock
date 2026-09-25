@@ -1,15 +1,15 @@
 # USB lab network isolation
 
-Status: fresh USB image booted with the target topology; physical acceptance is
-in progress. The sys-firewall fail-closed check passed, but restart did not
-restore downstream traffic. A guest hotplug fix is built locally and awaits a
-new image and physical retest. Migration and rollback remain unverified.
-Reviewed against the checked-in lab topology on 2026-09-25.
+Status: completed and physically accepted for the wired USB lab topology on
+2026-09-25. Provider recovery, whole-machine apply, rollback to the booted
+image baseline, and reapply passed. [Follow-up checks](../todo/usb-lab-network-followups.md)
+track focused tests, updates proxy, Wi-Fi traffic, and an exact persistence
+sentinel. Earlier failed trials below are retained as dated history.
 
 Follow the [hardware usability policy](../hardware-usability-policy.md). This
-plan describes an operator-assisted lab migration with a physical recovery
+record describes an operator-assisted lab migration with a physical recovery
 console, not an unattended first-run transition. Before exposing this change
-through the [setup wizard](first-run-setup-wizard.md), add its bounded trial,
+through the [setup wizard](../todo/first-run-setup-wizard.md), add its bounded trial,
 live connectivity confirmation, and automatic rollback independently of the
 network connection being changed. USB Wi-Fi routing is separate work; do not
 assume PCI NIC discovery covers it or disrupt an existing USB connection.
@@ -22,9 +22,10 @@ experimental profile or a new boot entry. Preserve the current sys-dev
 Tailscale development workflow and dom0 control access.
 
 The previous deployed baseline gave sys-dev the physical NICs and routed
-usr-browser through it. The fresh USB image now boots with sys-net and
-sys-firewall using Qubes networking machinery. This is not evidence that the
-in-place migration or rollback works. usr-home remains offline.
+usr-browser through it. The fresh USB image and the subsequently deployed
+release boot with sys-net and sys-firewall using Qubes networking machinery.
+The release was applied, rolled back to the booted-image baseline, and
+reapplied on hardware. usr-home remains offline.
 
 Target traffic paths:
 
@@ -49,29 +50,13 @@ features, and services explicitly. The deployable release's coordinator plans a
 provider's network controllers after dependent VMs stop. Qubes setup then
 assigns them to the new provider. The same operation runs in reverse for
 rollback. The prepared USB guest-store entries follow the same machine guest
-list. The release build passed on 2026-09-24; fresh USB image and physical
-validation remain.
+list. The release build passed on 2026-09-24; the dated physical validation follows.
 
-- [ ] Include sys-net and sys-firewall in the existing USB lab machine topology
-  and prepared image closures. Keep deployable releases and fresh USB images
-  consistent.
-- [ ] Move physical network PCI ownership and automatic network-device
-  discovery from sys-dev to sys-net. Ensure the same NIC cannot be claimed by
-  both domains. Preserve required device options and account for reset behavior.
-- [x] Set sys-net's NetVM to none, sys-firewall's to sys-net, and sys-dev's and
-  usr-browser's to sys-firewall. Set the profile's default NetVM to sys-firewall
-  and retain usr-home's explicit offline configuration.
-- [x] Remove sys-dev's network-provider role and associated forwarding,
-  firewall-provider, and physical-interface management services. Keep the Qubes
-  networking services it needs as a client.
-- [ ] Preserve Tailscale identity and persistent state in sys-dev. Move or
-  reprovision physical connection settings needed by sys-net without embedding
-  credentials in Nix closures or source control.
-- [ ] Audit updates-proxy consumers and qrexec policy; configure only the access
-  required by the USB lab. Keep dom0's direct networking disabled.
-- [ ] Make startup readiness follow sys-net, sys-firewall, then networked
-  clients. Include both providers in boot supervision, generation verification,
-  and deployment restart/dependency handling.
+The physical checks below confirmed the declared NetVM chain, sys-net's
+exclusive PCI NIC assignments, sys-dev's continued Tailscale enrollment, and
+startup after cold boot and deployment. An exact private-data sentinel and an
+end-to-end updates-proxy request remain in the
+[follow-up TODO](../todo/usb-lab-network-followups.md).
 
 Machine configuration and component tests belong in `airlock-machine`; image
 seeding, deployment orchestration, and integration checks belong in `airlock`.
@@ -80,24 +65,13 @@ Follow the [repository workflow](../repositories.md) and
 
 ## Migration and recovery
 
-- [ ] Inspect the actual deployed topology, PCI assignments, connection state,
-  and available storage before preparing the migration. Record the starting
-  release and a usable rollback generation.
-- [ ] Build and stage the required closures while sys-dev still has working
-  networking. Review a concrete deployment plan showing device transfers,
-  NetVM changes, service changes, and required stops/restarts.
-- [ ] Inspect `pci_handoff` in the machine plan and confirm it names
-  `sys-dev` as `from` and `sys-net` as `to`. Preflight must find a network
-  controller assigned to one of those domains before stopping VMs. Record the
-  actual `qvm-device pci list --assignments dom0` output at the physical console.
-- [ ] Specify the apply order and how deployment continues after sys-dev loses
-  its connection. Confirm the worker survives the transport loss and that
-  resume/reboot handling cannot leave NIC ownership ambiguous.
-- [ ] Have a physical dom0 console available for the NIC handoff. Document exact
-  recovery and rollback commands before applying, including restoration of
-  sys-dev's former PCI ownership and network-provider settings.
-- [ ] Apply through the existing committed whole-machine deployment path,
-  reconnect through sys-dev, and verify selected and running generations.
+The operator used the existing committed whole-machine deployment path with
+a physical recovery console available. The plan staged the missing store paths
+before activation, and the coordinator continued through the temporary loss
+of sys-dev transport. The dated acceptance results below record apply,
+rollback to the image baseline, and reapply. Automated coverage of an
+interrupted PCI handoff remains in the
+[follow-up TODO](../todo/usb-lab-network-followups.md).
 
 At the physical dom0 console, inspect `sudo /var/lib/airlock/machine/controller
 status` and the transaction's `setup/setup-config.json`. If the handoff was
@@ -138,7 +112,7 @@ started usr-browser again received HTTP 200. The boot setup, provider startup,
 and autostart units became active in that order and remained active.
 `airlock-machine-deploy status` reported
 `phase=image-baseline` with no selected whole-machine release, as expected for
-a fresh image; whole-machine generation agreement has not been exercised.
+a fresh image; whole-machine generation agreement had not yet been exercised.
 
 A detached test attempted to stop the providers and completed, but it cut off
 remote access. Tailscale access had not returned more than three minutes after
@@ -189,7 +163,7 @@ it does not verify Xen reconnection, QubesDB, provider forwarding, or Tailscale.
 The existing USB can boot as a deployment target. Deploy the corrected
 whole-machine release before repeating both provider restart tests, collecting
 persistent guest interface, route, uplink-unit, and provider diagnostics as well
-as traffic results. Hardware recovery remains unverified.
+as traffic results. At that point, hardware recovery remained unverified.
 
 Validation of the corrected release: `make test-quick` passed with 560 passed
 and 24 skipped; the opt-in VM regression passed separately. `make machine-build`
@@ -235,8 +209,8 @@ Safety timers were stopped before firing; neither safety service ran. The
 browser VM was restored to its initially halted state. Persistent diagnostic
 logs were retained. No guest configuration overrides were introduced.
 This accepts provider recovery for the tested wired connection and supersedes
-the earlier unverified recovery status. It does not establish Wi-Fi recovery,
-whole-machine deployment/rollback, or the remaining acceptance items below.
+the earlier unverified recovery status. The whole-machine deployment and
+rollback were validated in the subsequent trial below; Wi-Fi remains open.
 
 Whole-machine update and rollback acceptance on 2026-09-25: the
 repository's `make machine-plan DEPLOY_TARGET=sys-dev` imported 954 missing
@@ -270,9 +244,6 @@ the corrected image before whole-machine apply, and do not claim a second
 provider disruption after final reapply. The configured updates-proxy path and
 Wi-Fi traffic remain untested.
 
-- [ ] Add focused pytest coverage for topology, exclusive PCI ownership,
-  startup dependencies, and migration/rollback behavior, including interruption
-  during the handoff. Run the required repository checks and build the release.
 - [x] On hardware, confirm sys-net exclusively owns the intended NICs and
   establishes the required wired connection with working DNS.
 - [x] Confirm usr-browser and sys-dev reach the network through sys-firewall;
@@ -280,8 +251,8 @@ Wi-Fi traffic remain untested.
   the intended policy.
 - [x] Confirm usr-home stays offline and stopping either provider prevents
   downstream connectivity without a direct-network fallback.
-- [ ] Verify Tailscale SSH into sys-dev, the existing dom0 development shell,
-  and the build/deployment workflow. Check any configured updates-proxy path.
+- [x] Verify Tailscale SSH into sys-dev, the existing dom0 development shell,
+  and the build/deployment workflow.
 - [x] Cold boot and verify provider ordering, connection persistence, remote
   access, and whole-machine generation agreement.
 - [x] Exercise whole-machine rollback on hardware and verify that the previous
@@ -290,3 +261,7 @@ Wi-Fi traffic remain untested.
 - [x] Update the USB lab runbook and topology diagram. Record implementation
   checks, deployed revision, hardware results, and remaining issues separately;
   a passing build alone does not complete this transition.
+
+Focused automated coverage, an end-to-end updates-proxy request, Wi-Fi
+traffic and recovery, and an exact persistence sentinel are tracked in the
+[network follow-up TODO](../todo/usb-lab-network-followups.md).
