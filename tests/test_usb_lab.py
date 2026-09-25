@@ -251,7 +251,7 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
     assert "airlock.DevDom0Shell + sys-gui dom0 allow" not in report["policy"]
     assert report["poolAdmission"] == {
         "enable": True,
-        "caller": "sys-dev",
+        "caller": "sys-ctrl",
         "targets": [
             "sys-gui",
             "sys-dev",
@@ -264,13 +264,14 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
     assert report["poolAdmissionMode"] == "0555"
     for target in report["poolAdmission"]["targets"]:
         assert (
-            f"airlock.Pool.Admit +{target} sys-dev dom0 allow"
+            f"airlock.Pool.Admit +{target} sys-ctrl dom0 allow"
             in report["poolAdmissionPolicy"]
         )
     assert "airlock.Pool.Admit * @anyvm @anyvm deny" in report["poolAdmissionPolicy"]
     for source, target, expected_error in [
-        ("usr-home", "usr-home", "restricted to sys-dev"),
-        ("sys-dev", "dom0", "target is not permitted"),
+        ("usr-home", "usr-home", "restricted to sys-ctrl"),
+        ("sys-dev", "usr-home", "restricted to sys-ctrl"),
+        ("sys-ctrl", "dom0", "target is not permitted"),
     ]:
         rejected = subprocess.run(
             ["bash", "-c", report["poolAdmissionHandler"]],
