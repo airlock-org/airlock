@@ -195,7 +195,7 @@ Validation of the corrected release: `make test-quick` passed with 560 passed
 and 24 skipped; the opt-in VM regression passed separately. `make machine-build`
 succeeded from machine revision `eca7b84` and parent revision `0a9598c`, producing
 `/nix/store/8g8fncff0wl21p3dr7lf033wfd024pqb-airlock-machine-release`.
-The release has not been deployed. The local sibling Git origin now retains
+At that build stage, the release had not yet been deployed. The local sibling Git origin now retains
 `eca7b84` on `airlock-uplink-recovery`, allowing Nix to fetch the committed
 submodule revision for parent image evaluation.
 
@@ -238,6 +238,38 @@ This accepts provider recovery for the tested wired connection and supersedes
 the earlier unverified recovery status. It does not establish Wi-Fi recovery,
 whole-machine deployment/rollback, or the remaining acceptance items below.
 
+Whole-machine update and rollback acceptance on 2026-09-25: the
+repository's `make machine-plan DEPLOY_TARGET=sys-dev` imported 954 missing
+Nix store paths into dom0, then planned changes to all seven declared VMs and
+a host reboot. It did not activate a generation. The corrected release had
+machine revision `eca7b84` and path
+`/nix/store/8g8fncff0wl21p3dr7lf033wfd024pqb-airlock-machine-release`.
+The detached apply captured the booted image as
+`/var/lib/airlock/machine/baseline`. The three dom0 transaction IDs were:
+
+| Step | Transaction | Selected host after required reboot | Result |
+| --- | --- | --- | --- |
+| Apply | `1790346138424497909` | `xhzw4k3k5km91wjjwybwpr18n640kfdi` | `complete` |
+| Roll back to image baseline | `1790346850485981231` | `r15hbxshrmcy0p92yrkqxrdqa4qnxpd6` | `complete` |
+| Reapply | `1790347498036225770` | `xhzw4k3k5km91wjjwybwpr18n640kfdi` | `complete` |
+
+The full host store paths are in the transaction status files under
+`.airlock-logs/network-provider/deployment-rollback-20260925/` and in the
+dom0 journal. Each step reported all running guests on its selected system
+and dom0 on the selected host system after reboot. The browser remained halted
+as configured. After rollback and final reapply, external Tailscale SSH to
+sys-dev returned and HTTPS to `example.com` returned HTTP 200. Rollback
+transaction diagnostics show both physical NICs assigned to sys-net during
+the change; the final `qvm-device pci list --assignments dom0` again showed
+Realtek Ethernet and Qualcomm Wi-Fi attached and required on sys-net. Dom0
+had no default route and its NetworkManager, tailscaled, and sshd were inactive;
+usr-home had loopback only and no IPv4 route. Private user data was not checked
+with an exact sentinel in this trial; preserved Tailscale enrollment is partial
+evidence of persistence. Provider stop/restart results above were measured on
+the corrected image before whole-machine apply, and do not claim a second
+provider disruption after final reapply. The configured updates-proxy path and
+Wi-Fi traffic remain untested.
+
 - [ ] Add focused pytest coverage for topology, exclusive PCI ownership,
   startup dependencies, and migration/rollback behavior, including interruption
   during the handoff. Run the required repository checks and build the release.
@@ -250,11 +282,11 @@ whole-machine deployment/rollback, or the remaining acceptance items below.
   downstream connectivity without a direct-network fallback.
 - [ ] Verify Tailscale SSH into sys-dev, the existing dom0 development shell,
   and the build/deployment workflow. Check any configured updates-proxy path.
-- [ ] Cold boot and verify provider ordering, connection persistence, remote
+- [x] Cold boot and verify provider ordering, connection persistence, remote
   access, and whole-machine generation agreement.
-- [ ] Exercise whole-machine rollback on hardware and verify that the previous
+- [x] Exercise whole-machine rollback on hardware and verify that the previous
   topology restores NIC ownership and remote access, then reapply and verify
   the new topology.
-- [ ] Update the USB lab runbook and topology diagram. Record implementation
+- [x] Update the USB lab runbook and topology diagram. Record implementation
   checks, deployed revision, hardware results, and remaining issues separately;
   a passing build alone does not complete this transition.
