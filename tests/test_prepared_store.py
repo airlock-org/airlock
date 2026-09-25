@@ -170,6 +170,8 @@ def tree_fingerprints(root):
 @pytest.fixture
 def builder_seed(seed_inputs, tmp_path, request):
     specs, systems, _ = seed_inputs
+    parameter = getattr(request, "param", 0)
+    builder_domain = parameter.get("domain", "sys-dev-builder") if isinstance(parameter, dict) else "sys-dev-builder"
     closure = tmp_path / "builder-closure"
     closure.mkdir()
     paths = sorted(
@@ -184,7 +186,7 @@ def builder_seed(seed_inputs, tmp_path, request):
     (closure / "store-paths").write_text("\n".join(paths) + "\n")
     (closure / "manifest.json").write_text("{}")
     # Real closureInfo framing; these synthetic payloads use tree verification.
-    references = paths * getattr(request, "param", 0)
+    references = paths * (parameter if isinstance(parameter, int) else 0)
     reference_text = "".join(path + "\n" for path in references)
     (closure / "registration").write_text(
         "".join(
@@ -194,8 +196,8 @@ def builder_seed(seed_inputs, tmp_path, request):
     )
     builder = dict(
         specs[0],
-        name="sys-dev-builder",
-        domain="sys-dev-builder",
+        name=builder_domain,
+        domain=builder_domain,
         builder=True,
         closure_source=str(closure),
     )
@@ -205,6 +207,19 @@ def builder_seed(seed_inputs, tmp_path, request):
     prepared.prepare_pool(build_root, descriptors, [*specs, builder], str(root))
     build_root.rename(root)
     return root, descriptors, paths
+
+
+@pytest.mark.parametrize("builder_seed", [{"domain": "sys-ctrl-builder"}], indirect=True)
+def test_sys_ctrl_builder_has_its_own_pinned_view(builder_seed):
+    from airlock_qubes_storage._engine import builder
+
+    root, descriptors, _ = builder_seed
+    assert prepared.verify_outputs(root, descriptors)["status"] == "passed"
+    assert not (root / "builders/sys-dev.json").exists()
+    assert (root / "builders/sys-ctrl.json").exists()
+    configs = builder.builder_volume_configs(root, "airlock-closure", domain="sys-ctrl")
+    assert set(configs) == {"builder-store", "builder-data"}
+    assert all(config["domain_name"] == "sys-ctrl-builder" for config in configs.values())
 
 
 def test_builder_seed_shares_payload_and_retains_frozen_view_offline(builder_seed):
@@ -534,7 +549,7 @@ def test_builder_guest_mount_lifecycle_preserves_upper(
     monkeypatch.setattr(guest.os, "chown", lambda *_: None)
     monkeypatch.setattr(guest.os.path, "ismount", lambda path: str(path) in mounted)
     monkeypatch.setattr(
-        guest, "read_identity", lambda _: ({"base": "fixed"}, b"registration")
+        guest, "read_identity", lambda _, domain="sys-dev": ({"base": "fixed"}, b"registration")
     )
 
     def command(*argv, **kwargs):

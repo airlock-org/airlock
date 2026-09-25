@@ -1,9 +1,19 @@
 # Move configuration work into sys-ctrl
 
-Status: controller migration remains planned. A first `sys-ctrl` guest bootstrap
-is implemented in the `feat/sys-ctrl-bootstrap` worktree and its guest system
-builds locally, but it has not been tested on the physical machine. Direct
-pool admission remains physically smoke-tested only from `sys-dev`.
+Status: controller migration remains in progress. The first `sys-ctrl` guest
+bootstrap is merged on main and its guest system evaluates locally, but it has
+not been tested on the physical machine. Direct pool admission remains
+physically smoke-tested only from `sys-dev`.
+
+Local implementation update (2026-09-25): `sys-ctrl` now has the same pinned,
+pool-backed builder layout as `sys-dev`. A typed qrexec guest request sends a
+committed `airlock-machine` source bundle from `sys-dev` to `sys-ctrl`; the
+controller imports it, builds with pinned offline inputs, admits the guest
+closure, and asks dom0's constrained guest plan/apply service to act on the
+receipt. The USB profile changes the pool admission caller to `sys-ctrl`.
+These changes are not yet physically tested. Whole-machine `sys-dev` deployment
+still uses the development shell and imports into dom0's ordinary store;
+candidate history migration and `sys-config-*` retirement remain outstanding.
 
 Since the original September 17 plan, the [pool-backed builder](../sys-dev-build-store.md),
 [guest activation/rollback](../completed/02-sys-dev-guest-activation-rollback.md),

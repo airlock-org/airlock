@@ -6,7 +6,9 @@ submission paths exist. See **Normal loop** for commands and the completed
 physical acceptance. Older space limits and trial outcomes below are dated
 evidence, not a statement that all deployment remains untested. The host
 transport uses the development shell; the sys-dev client uses its narrow
-deployment interface. Neither is the planned sys-ctrl architecture.
+deployment interface. The controller guest path below is locally implemented
+but has not been exercised on the physical machine. Whole-machine deployment
+still uses the earlier development path.
 
 ## The development contract
 
@@ -110,6 +112,27 @@ closure paths absent from Dom0's ordinary Nix store, and then invokes the same
 Dom0 coordinator used by the development-host client. `plan` never activates;
 `apply`, `resume`, and `rollback` start detached workers so losing sys-dev's
 connection does not stop an in-progress transaction.
+
+For a committed single-guest update, the controller route is:
+
+```bash
+# Run inside sys-dev from its clean airlock-machine checkout.
+airlock-sys-dev-machine-deploy guest-plan --target usr-home
+airlock-sys-dev-machine-deploy guest-apply --target usr-home
+```
+
+The client sends a versioned source archive over qrexec. `sys-ctrl` verifies
+the revision and lock hash, imports the checkout, builds from pinned offline
+inputs in its pool-backed private store, and sends the resulting guest closure
+to dom0's shared pool. Dom0 accepts admission only from `sys-ctrl`, validates
+the inactive generation receipt, and runs its existing journalled guest
+plan/apply coordinator. The controller cannot submit an arbitrary release path
+or shell command to this interface. The `apply` command can lose its qrexec
+connection when the target is `sys-dev`; inspect dom0's machine deployment
+status to establish the outcome. This route has local tests and evaluation,
+not physical acceptance. The older whole-machine command above remains a
+development/recovery path and still imports guest closures into dom0's ordinary
+store; the sys-ctrl TODO remains open.
 
 For a guest closure already built and admitted by sys-dev, the development
 coordinator can derive a one-guest candidate without building or transferring a
