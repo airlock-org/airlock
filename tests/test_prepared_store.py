@@ -766,7 +766,7 @@ def test_negotiated_admission_reuses_usb_seed_without_payload(
 
     def negotiate(inventory):
         artifacts.write_message(inventory_stream, inventory)
-        return {"schema": artifacts.SCHEMA_REQUEST, "missing": []}
+        return {"schema": artifacts.SCHEMA_REQUEST, "missing": [], "missing_root": False}
 
     monkeypatch.setattr(
         artifacts,
@@ -802,6 +802,9 @@ def test_negotiated_admission_reuses_usb_seed_without_payload(
         approved_by="sys-dev",
     )
     assert json.loads(response.getvalue())["missing"] == []
+    assert json.loads(response.getvalue())["missing_root"] is False
+    assert result["root_reused"] is True
+    assert result["root_payload_bytes_transferred"] == 0
     assert result["objects_reused"] == 2
     assert result["objects_transferred"] == result["objects_admitted"] == 0
     assert result["payload_bytes_transferred"] == 0

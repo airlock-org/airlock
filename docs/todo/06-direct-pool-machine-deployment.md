@@ -1,8 +1,12 @@
 # Direct pool admission for whole-machine updates
 
 Status (2026-09-25): local implementation now includes the root-image reuse
-work described below. The new code and pytest coverage have **not been run**;
-no image was built and no live session was changed for this work. Physical
+work described below. The user subsequently ran `make test-quick`: 594 passed, 24 skipped, three
+failed and two warnings. Two missed fixtures needed a root image and the new
+`missing_root` response field; the parent flake check could not fetch the machine
+commit from its local sibling origin. The fixtures are corrected and the machine
+commit is now retained in that origin. These fixes have not been retested.
+No image was built and no live session was changed for this work. Physical
 acceptance and performance measurements remain open.
 
 Earlier evidence: the earlier implementation passed the quick suite and
@@ -160,8 +164,9 @@ empty space; this is separate from guest package duplication.
   counts exclude only tar/protocol framing rather than a compression ratio.
 - Pytest source coverage was added for sparse identity, corruption, independent
   copied disks, retention, changed-root admission, retry, rollback and release
-  binding. Existing prepared-image fixtures now provide root artifacts. None of
-  this new coverage has been executed. Real Qubes volume isolation, reproducible
+  binding. Existing prepared-image fixtures now provide root artifacts. The user
+  ran the quick suite with the result recorded above; the follow-up fixture fixes
+  have not been retested. Real Qubes volume isolation, reproducible
   rebuilds and the performance criteria below still require validation.
 
 ## Completion criteria and evidence
