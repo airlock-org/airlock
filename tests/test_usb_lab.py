@@ -17,6 +17,7 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
         f = builtins.getFlake "{ROOT}";
         host = f.nixosConfigurations.usb-dev.config.specialisation.usb-lab.configuration;
         dev = f.nixosConfigurations.airlock-domain-sys-dev.config;
+        ctrl = f.nixosConfigurations.airlock-domain-sys-ctrl.config;
         gui = f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.config;
         labGui = f.nixosConfigurations.airlock-domain-sys-gui-usb-lab.config;
         tailscaleLauncher = builtins.head (builtins.filter (package:
@@ -52,6 +53,9 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
         netAutoPci = host.airlock.qubes.domains.sys-net.features."airlock-auto-network-pci";
         devMemory = host.airlock.qubes.domains.sys-dev.prefs.memory;
         devMaxmem = host.airlock.qubes.domains.sys-dev.prefs.maxmem;
+        ctrlMemory = host.airlock.qubes.domains.sys-ctrl.prefs.memory;
+        ctrlMaxmem = host.airlock.qubes.domains.sys-ctrl.prefs.maxmem;
+        ctrlBuildJobs = ctrl.nix.settings.max-jobs;
         guiPci = host.airlock.qubes.domains.sys-gui.devices.pci;
         guiHostname = gui.networking.hostName;
         labGuiHasDom0Terminal = labGui.airlock.devDom0Terminal.guest.enable;
@@ -205,6 +209,9 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
     assert report["netAutoPci"] == "1"
     assert report["devMemory"] == 8192
     assert report["devMaxmem"] == 8192
+    assert report["ctrlMemory"] == 8192
+    assert report["ctrlMaxmem"] == 8192
+    assert report["ctrlBuildJobs"] == 1
     assert report["guiHostname"] == "sys-gui"
     assert not report["labGuiHasDom0Terminal"]
     assert "airlock-start-sys-dev-tailscale" in report["labGuiPackages"]

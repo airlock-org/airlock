@@ -2,9 +2,10 @@
 
 Status (2026-09-25): local code passes the quick suite and both flake checks
 (579 passed, 24 skipped, two existing warnings across separate runs). See
-[sys-ctrl validation evidence](05-sys-ctrl.md#remaining-acceptance-work). No image
-build or live deployment was performed. Physical acceptance and performance
-measurements remain dependencies of the [sys-ctrl work](05-sys-ctrl.md).
+[sys-ctrl validation evidence](05-sys-ctrl.md#remaining-acceptance-work).
+The first image was booted, but the controller build was killed before pool
+transfer began. Physical acceptance and performance measurements remain
+dependencies of the [sys-ctrl work](05-sys-ctrl.md).
 
 The controller keeps a full release/build root and sends a separate transport
 output containing host dependencies and detached guest topology metadata.

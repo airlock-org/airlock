@@ -3,8 +3,12 @@
 Status (2026-09-25): local implementation passes the quick checks: 579 passed,
 24 skipped, two existing warnings. The machine and parent image flake checks
 were run separately with `--no-build`; the remaining quick suite passed with
-those two checks excluded. No image build or live deployment was performed.
-Physical acceptance remains outstanding.
+those two checks excluded. The first physical image boot reached sys-dev,
+but its initial controller plan failed with exit 137 during sys-ctrl's offline
+release build in the 4 GiB VM. Dom0 still reported `image-baseline` with no recorded releases. Source now
+allocates 8 GiB and caps controller builds at one job; this needs a new image
+and retest. No release was selected or applied. Physical acceptance remains
+outstanding.
 
 Airlock is unreleased. Backwards compatibility and migration from the old
 `sys-config-*` workflow are not requirements. Those roles have been removed
@@ -56,6 +60,21 @@ from normal deployment authority.
 - Host-side `make machine-plan` / `make machine-apply` for `usb-lab` push the
   committed source through sys-dev and invoke the controller client. The
   explicitly selected development transport remains a diagnostic tool.
+
+## First physical trial
+
+The booted sys-dev checkout matched the committed machine revision. Typed dom0
+status and release inventory worked, and the restricted pool RPC refused a
+request from sys-dev. The first `airlock-sys-dev-machine-deploy plan` reached
+sys-ctrl, imported the committed source and pinned inputs, then its Nix build
+exited 137. The controller remained responsive and rejected a malformed request
+after the failed plan. Evidence is in
+`.airlock-logs/physical-controller-2026-09-25/`. Exit 137 indicates SIGKILL;
+controller memory pressure is the likely cause: local evaluation of the same
+release derivation peaked at 5,693,196 KiB resident memory. The VM journal was
+not accessible through the typed observation interface. The controller sizing
+change passed the machine flake check, controller bootstrap candidate check and
+USB lab topology check.
 
 ## Remaining acceptance work
 
