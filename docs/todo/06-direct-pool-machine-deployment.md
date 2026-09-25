@@ -10,9 +10,14 @@ transfer. An 8 GiB controller later completed a diagnostic network-assisted
 whole-machine build from the previous source revision, but that build did not
 submit guest manifests or a machine plan. A separate guest-only trial built
 and admitted a candidate, then dom0 rejected `GuestPlan`. The newly committed
-source was pushed to sys-dev, and a whole-machine plan is running; pool reuse,
-transfer bytes, storage use and performance remain unmeasured. No release has
-been selected or applied. Physical acceptance remains open.
+source was pushed to sys-dev. The first whole-machine plan stopped before pool
+transfer because the booted controller's offline build produced a `dirty`
+manifest revision. A guest-only sys-ctrl update was then planned, applied and
+verified complete. Its Qubes preferences reverted to the old image's 4 GiB and
+no NetVM, so the next whole-machine build exited 137. Live preferences were
+restored to 8 GiB and sys-firewall; another whole-machine plan is running.
+Pool reuse, transfer bytes, storage use and performance remain unmeasured. No
+whole-machine release has been applied. Physical acceptance remains open.
 
 The controller keeps a full release/build root and sends a separate transport
 output containing host dependencies and detached guest topology metadata.

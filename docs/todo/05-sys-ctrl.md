@@ -9,9 +9,10 @@ plan failed with exit 137 in the 4 GiB controller. An 8 GiB live controller
 subsequently built the whole-machine release with network access, but only as
 a diagnostic build from the previous source revision. The current source
 declares 8 GiB, one build job, sys-firewall routing and online fetching. It
-was pushed to sys-dev; a `make machine-plan DEPLOY_TARGET=sys-dev` for that
-revision is running. No release has been selected or applied. Physical
-acceptance remains outstanding.
+was pushed to sys-dev. A guest-only update then installed that sys-ctrl system;
+dom0 status and verify reported `complete` with its selected and running guest
+generation matching. Whole-machine planning still has not succeeded. No
+whole-machine release has been applied. Physical acceptance remains outstanding.
 
 Airlock is unreleased. Backwards compatibility and migration from the old
 `sys-config-*` workflow are not requirements. Those roles have been removed
@@ -101,11 +102,21 @@ controller service, pool transfer or dom0 planning. The live sys-ctrl NetVM
 setting now matches the committed source; the booted image still packages the
 old controller code, which passes `--offline` to Nix. The new source revision
 `d78f134` was pushed to sys-dev with a clean checkout and matching lock hash.
-The committed-source whole-machine plan was started in the background; its
-result must be recorded before claiming a successful plan. Build evidence is
-under `.airlock-logs/physical-controller-2026-09-25/` and in sys-ctrl's
-`~/.local/share/airlock/physical-tests/warm-build.{log,exit}`. The plan writes
-`committed-network-plan.{log,exit}` in that local evidence directory.
+The first committed-source plan built a release, but the old controller's
+`--offline` input overrides made its manifest revision `dirty`; its lock hash
+still matched. A manual build without `--offline` produced a release manifest
+with the exact `d78f134` revision and lock hash. The guest-only sys-ctrl plan
+and apply then succeeded through the supported route. Dom0 reported `complete`
+and `machine-verify` passed for the selected and running sys-ctrl generation.
+This updated the controller code, but the guest-only candidate inherited the
+booted image's old Qubes preferences: 4 GiB and no NetVM. The next whole-machine
+plan reached the updated controller but its build exited 137. The live sys-ctrl
+preferences were restored to 8 GiB and sys-firewall, sys-ctrl was restarted,
+and a new plan was started. It has no recorded result yet. No host reboot or
+whole-machine apply has occurred. Evidence is under
+`.airlock-logs/physical-controller-2026-09-25/`, including the plan and guest
+logs; the original diagnostic build log and exit marker are in sys-ctrl's
+`~/.local/share/airlock/physical-tests/`.
 
 ## Remaining acceptance work
 
