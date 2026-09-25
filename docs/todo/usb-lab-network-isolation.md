@@ -191,6 +191,14 @@ whole-machine release before repeating both provider restart tests, collecting
 persistent guest interface, route, uplink-unit, and provider diagnostics as well
 as traffic results. Hardware recovery remains unverified.
 
+Validation of the corrected release: `make test-quick` passed with 560 passed
+and 24 skipped; the opt-in VM regression passed separately. `make machine-build`
+succeeded from machine revision `eca7b84` and parent revision `0a9598c`, producing
+`/nix/store/8g8fncff0wl21p3dr7lf033wfd024pqb-airlock-machine-release`.
+The release has not been deployed. The local sibling Git origin now retains
+`eca7b84` on `airlock-uplink-recovery`, allowing Nix to fetch the committed
+submodule revision for parent image evaluation.
+
 - [ ] Add focused pytest coverage for topology, exclusive PCI ownership,
   startup dependencies, and migration/rollback behavior, including interruption
   during the handoff. Run the required repository checks and build the release.
