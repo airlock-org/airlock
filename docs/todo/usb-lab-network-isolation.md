@@ -199,6 +199,45 @@ The release has not been deployed. The local sibling Git origin now retains
 `eca7b84` on `airlock-uplink-recovery`, allowing Nix to fetch the committed
 submodule revision for parent image evaluation.
 
+Hardware recovery acceptance on 2026-09-25, after the operator booted a new
+image: Tailscale SSH at `sys-dev` and the dom0 development shell worked.
+Both sys-dev and sys-firewall had the corrected asynchronous udev rules and
+no uplink device binding. Running systems were:
+
+- dom0: `/nix/store/r15hbxshrmcy0p92yrkqxrdqa4qnxpd6-nixos-system-dom0-efi-raw-26.11.20260904.801bef6`
+- sys-net: `/nix/store/0995az8rlhp8ln8c97cydsii7cwlfss6-nixos-system-sys-net-26.11`
+- sys-firewall: `/nix/store/h03a1gq4bn3237v9hms0s1dydnanz5nf-nixos-system-sys-firewall-26.11`
+- sys-dev: `/nix/store/p67l6d2b2ch8sgwldav056yi21m5xzms-nixos-system-sys-dev-26.11`
+
+A detached dom0 diagnostic recorded JSONL under
+`/var/lib/airlock/provider-recovery-corrected-{sys-firewall,sys-net}.jsonl`.
+Copies and the probe source are in `.airlock-logs/network-provider/live-corrected/`.
+Each phase recorded domain state, addresses, routes, resolvers, uplink service
+invocations, QubesDB gateways, recent uplink journal entries, and nftables rules.
+
+- sys-firewall was confirmed halted at 13:49:06 UTC. Both sys-dev and
+  usr-browser failed pinned IPv4 HTTPS twice while it remained halted.
+  Restart completed at 13:49:16; both clients returned HTTP 200 by 13:49:18.
+- sys-net was confirmed halted at 13:50:26 UTC. Both clients failed the same
+  requests twice while it remained halted. Restart completed at 13:50:43;
+  both returned HTTP 200 by 13:50:51. sys-net regained wired DHCP
+  `192.168.1.24` and its gateway `192.168.1.1`.
+- Ordinary DNS-based HTTPS also returned HTTP 200 from both clients after
+  each restart. Fresh external Tailscale SSH connections and the existing
+  dom0 shell worked after each outage. Tailscaled remained on its original
+  13:43:02 invocation with `NRestarts=0`; no machine reboot was needed.
+- sys-net retained exclusive assignments for both physical NICs. Dom0 had no
+  default route and inactive NetworkManager, tailscaled, and sshd. usr-home
+  had only loopback, no IPv4 route, and failed a pinned HTTPS request.
+
+The temporary probe in `/var/tmp` and transfer copies in sys-dev were removed.
+Safety timers were stopped before firing; neither safety service ran. The
+browser VM was restored to its initially halted state. Persistent diagnostic
+logs were retained. No guest configuration overrides were introduced.
+This accepts provider recovery for the tested wired connection and supersedes
+the earlier unverified recovery status. It does not establish Wi-Fi recovery,
+whole-machine deployment/rollback, or the remaining acceptance items below.
+
 - [ ] Add focused pytest coverage for topology, exclusive PCI ownership,
   startup dependencies, and migration/rollback behavior, including interruption
   during the handoff. Run the required repository checks and build the release.
@@ -207,7 +246,7 @@ submodule revision for parent image evaluation.
 - [x] Confirm usr-browser and sys-dev reach the network through sys-firewall;
   exercise an explicit Qubes deny rule and verify enforcement before restoring
   the intended policy.
-- [ ] Confirm usr-home stays offline and stopping either provider prevents
+- [x] Confirm usr-home stays offline and stopping either provider prevents
   downstream connectivity without a direct-network fallback.
 - [ ] Verify Tailscale SSH into sys-dev, the existing dom0 development shell,
   and the build/deployment workflow. Check any configured updates-proxy path.
