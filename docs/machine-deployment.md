@@ -5,7 +5,9 @@ admission for normal whole-machine submissions. The first physical boot reached
 sys-dev, but its initial controller plan was killed during the offline release
 build in the 4 GiB sys-ctrl VM. No release was selected. The repository now allocates
 8 GiB to sys-ctrl and limits it to one concurrent build; physical validation
-of that fix remains pending. Earlier dated acceptance evidence below applies to
+of that fix remains pending. A guest-only trial reached pool admission, then
+dom0 rejected planning; its reason was masked by the old client and is being
+exposed in the next image. Earlier dated acceptance evidence below applies to
 older revisions. See [the controller TODO](todo/05-sys-ctrl.md)
 and [direct pool admission TODO](todo/06-direct-pool-machine-deployment.md) for
 remaining validation.

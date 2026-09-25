@@ -73,8 +73,12 @@ after the failed plan. Evidence is in
 controller memory pressure is the likely cause: local evaluation of the same
 release derivation peaked at 5,693,196 KiB resident memory. The VM journal was
 not accessible through the typed observation interface. The controller sizing
-change passed the machine flake check, controller bootstrap candidate check and
-USB lab topology check.
+change passed the machine flake check, controller bootstrap candidate check, USB
+lab topology check, and parent image flake check. A guest-only `usr-home` plan
+subsequently built and admitted a candidate, but dom0 rejected `GuestPlan`.
+The unchanged guest system may have caused this, but the old qrexec client
+concealed the receiver error. The client and receiver now report bounded
+stderr for a conclusive diagnosis on the next image. No guest apply ran.
 
 ## Remaining acceptance work
 
