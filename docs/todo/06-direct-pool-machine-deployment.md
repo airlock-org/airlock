@@ -15,9 +15,15 @@ transfer because the booted controller's offline build produced a `dirty`
 manifest revision. A guest-only sys-ctrl update was then planned, applied and
 verified complete. Its Qubes preferences reverted to the old image's 4 GiB and
 no NetVM, so the next whole-machine build exited 137. Live preferences were
-restored to 8 GiB and sys-firewall; another whole-machine plan is running.
-Pool reuse, transfer bytes, storage use and performance remain unmeasured. No
-whole-machine release has been applied. Physical acceptance remains open.
+restored to 8 GiB and sys-firewall; the next whole-machine plan succeeded.
+Guest admission transferred only 11 objects (1,907,712 payload bytes), all for
+sys-dev; every other guest reused all its package objects. The host transport
+imported 28 Nix objects in a 5,915,115,984-byte uncompressed export stream,
+including VM root images. Admission, host transfer and planning together took
+594.76 seconds after the build. These figures do not measure compressed wire
+bytes, allocated disk use or the time spent in each step. Evidence:
+`.airlock-logs/physical-controller-2026-09-25/updated-controller-restored-prefs-plan.log`.
+No whole-machine release has been applied. Physical acceptance remains open.
 
 The controller keeps a full release/build root and sends a separate transport
 output containing host dependencies and detached guest topology metadata.
@@ -35,9 +41,11 @@ No migration or compatibility protocol is required for this unreleased software.
 
 Have sys-ctrl submit a guest package manifest, let dom0 reuse objects already
 in the shared pool, and transfer only missing objects directly into that pool.
-Dom0 still imports its own runtime dependencies and boot/recovery artifacts
-into its ordinary Nix store. Existing guest packages should need validation and
-generation metadata, without another payload transfer or ordinary-store import.
+Dom0 still imports its own runtime dependencies into its ordinary Nix store.
+Guest boot/root images must remain available under dom0's control, with reuse
+of verified retained artifacts rather than a mandatory additional Nix-store
+copy. Existing guest packages and unchanged root images should need validation
+and generation metadata without another payload transfer.
 
 Keep the shared pool at `/var/lib/airlock/closure-store` in dom0 and preserve
 Xen, qrexec, QubesDB, qubesd, libvirt, and Qubes policy. Packages built in
@@ -67,7 +75,55 @@ being on the same physical disk does not make them admitted shared objects.
   extensions. Measure transferred bytes and elapsed admission time as well as
   storage use to show that unchanged payloads are reused.
 
+## Reuse guest root images across image creation and deployment
+
+The USB image seeds runnable guest storage and omits the original root-image
+Nix outputs from dom0's retained dependencies. Machine releases currently add
+those outputs through `system.extraDependencies` in `machine-release.nix`.
+The receiver checks only registered Nix-store paths, so it imports the original
+image files even when working VM disks already exist. The observed export
+included seven root-image outputs. Their logical filesystem sizes include
+empty space; this is separate from guest package duplication.
+
+- Define a shared artifact identity and inventory for image creation and
+  deployment. Record and verify content hashes, format, logical size and boot
+  compatibility. An unchanged root artifact must retain its identity across
+  unrelated repository, package or VM preference changes; control filesystem
+  UUIDs and timestamps where they would otherwise make rebuilds differ.
+- Seed a verified immutable root artifact in dom0-managed storage and bind it
+  to guest generations. Reuse it only after validation. A running VM's writable
+  root volume is not automatically an unchanged, reusable build artifact.
+  Preserve the existing Qubes/Xen volume and boot mechanisms.
+- Reuse must never alias writable volumes across VMs. Only an immutable base
+  whose complete contents and boot requirements match may be shared; preserve
+  separate per-VM writable layers, private volumes and ownership records.
+  Keep VM-specific secrets and mutable identity out of shared bases, and bind
+  each guest's generation to its validated artifact and volume identities.
+- Negotiate missing root artifacts alongside package admission. Transfer only
+  absent or genuinely changed roots, and preserve sparse allocation or use an
+  equivalent representation that avoids streaming the full empty disk area.
+- Replace unconditional guest root-image dependencies in the host transport
+  with validated artifact identities only once dom0 durably retains the
+  required boot and rollback artifacts. Keep dom0's own runtime, kernel and
+  recovery dependencies available, including while sys-ctrl is stopped.
+- Cover image seeding, admission, activation, interrupted retries, rollback
+  and GC with the same ownership and retention rules. Avoid merely relocating
+  duplicate images to another dom0 directory.
+
 ## Completion criteria and evidence
+
+- [ ] On the first deployment from a newly booted image and on repeated updates,
+  unchanged root images transfer no payload and require no extra ordinary-store
+  copy. Test a memory/NetVM-only change and a guest package-only change.
+- [ ] A genuine boot/root-image change admits the required new artifact;
+  corrupt or incomplete artifacts are rejected. Boot and rollback work with
+  sys-ctrl stopped, and GC preserves roots required by retained generations.
+- [ ] Two VMs using the same immutable base retain distinct writable and
+  private volumes. Writes, rollback and deletion in one VM cannot alter the
+  other's data; updating one VM cannot switch the other's selected artifact.
+- [ ] Measure root-image and package bytes separately, including compressed
+  transfer bytes, logical image sizes and allocated storage. Record build,
+  validation, transfer and import times separately to explain remaining cost.
 
 - [ ] A whole-machine update prepared by sys-ctrl reuses existing pool objects
   and transfers only missing guest objects; record bytes and elapsed time for
