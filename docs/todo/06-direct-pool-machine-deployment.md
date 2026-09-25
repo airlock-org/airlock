@@ -1,13 +1,18 @@
 # Direct pool admission for whole-machine updates
 
-Status (2026-09-25): local code passes the quick suite and both flake checks
-(579 passed, 24 skipped, two existing warnings across separate runs). See
+Status (2026-09-25): the earlier implementation passed the quick suite and
+both flake checks (579 passed, 24 skipped, two existing warnings across
+separate runs). The subsequent controller network change passed nine focused
+tests; the full quick suite has not been rerun at that revision. See
 [sys-ctrl validation evidence](05-sys-ctrl.md#remaining-acceptance-work).
-The first image was booted. Its whole-machine controller build was killed
-before pool transfer began; a separate guest-only trial built and admitted a
-candidate but dom0 rejected `GuestPlan`. Physical acceptance and performance
-measurements remain
-dependencies of the [sys-ctrl work](05-sys-ctrl.md).
+The first image's whole-machine controller build was killed before pool
+transfer. An 8 GiB controller later completed a diagnostic network-assisted
+whole-machine build from the previous source revision, but that build did not
+submit guest manifests or a machine plan. A separate guest-only trial built
+and admitted a candidate, then dom0 rejected `GuestPlan`. The newly committed
+source was pushed to sys-dev, and a whole-machine plan is running; pool reuse,
+transfer bytes, storage use and performance remain unmeasured. No release has
+been selected or applied. Physical acceptance remains open.
 
 The controller keeps a full release/build root and sends a separate transport
 output containing host dependencies and detached guest topology metadata.

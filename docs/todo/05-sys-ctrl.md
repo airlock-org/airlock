@@ -1,16 +1,17 @@
 # Move configuration work into sys-ctrl
 
-Status (2026-09-25): local implementation passes the quick checks: 579 passed,
-24 skipped, two existing warnings. The machine and parent image flake checks
-were run separately with `--no-build`; the remaining quick suite passed with
-those two checks excluded. The first physical image boot reached sys-dev,
-but its initial controller plan failed with exit 137 during the release build
-in the 4 GiB VM. Dom0 still reported `image-baseline` with no recorded releases.
-The live VM was raised to 8 GiB and the next plan reached missing fixed-output
-sources (libssh2 patch, then Python tarball). The repository now allocates 8 GiB,
-caps controller builds at one job, routes it through sys-firewall and allows Nix
-to fetch missing inputs. This needs a committed-generation retest. No release was
-selected or applied. Physical acceptance remains outstanding.
+Status (2026-09-25): the earlier implementation passed the quick checks:
+579 passed, 24 skipped, two existing warnings. The machine and parent image
+flake checks ran separately with `--no-build`. After the network change, the
+focused controller, candidate, topology and USB-lab checks passed (nine tests);
+the full quick suite has not been rerun at this revision. The first physical
+plan failed with exit 137 in the 4 GiB controller. An 8 GiB live controller
+subsequently built the whole-machine release with network access, but only as
+a diagnostic build from the previous source revision. The current source
+declares 8 GiB, one build job, sys-firewall routing and online fetching. It
+was pushed to sys-dev; a `make machine-plan DEPLOY_TARGET=sys-dev` for that
+revision is running. No release has been selected or applied. Physical
+acceptance remains outstanding.
 
 Airlock is unreleased. Backwards compatibility and migration from the old
 `sys-config-*` workflow are not requirements. Those roles have been removed
@@ -89,6 +90,22 @@ confirmed network access, but the installed controller still passed `--offline`
 to Nix. The declared network route and controller build arguments now permit
 fetches. These live changes and diagnostic imports do not constitute verified
 deployment of the new source generation.
+
+## Current physical trial
+
+The one-time diagnostic build without `--offline` finished successfully in the
+live 8 GiB controller and produced an `airlock-machine-release` store path. It
+used the previously submitted source revision `18c0b99`; this proves the VM can
+build when missing inputs may be fetched, but does not test the newly packaged
+controller service, pool transfer or dom0 planning. The live sys-ctrl NetVM
+setting now matches the committed source; the booted image still packages the
+old controller code, which passes `--offline` to Nix. The new source revision
+`d78f134` was pushed to sys-dev with a clean checkout and matching lock hash.
+The committed-source whole-machine plan was started in the background; its
+result must be recorded before claiming a successful plan. Build evidence is
+under `.airlock-logs/physical-controller-2026-09-25/` and in sys-ctrl's
+`~/.local/share/airlock/physical-tests/warm-build.{log,exit}`. The plan writes
+`committed-network-plan.{log,exit}` in that local evidence directory.
 
 ## Remaining acceptance work
 
