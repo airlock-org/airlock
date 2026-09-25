@@ -28,6 +28,9 @@ Failures stop image assembly. The examples add an `/etc` marker and change an
 existing usr-home service setting using the image's pinned software. They do
 not establish offline support for arbitrary new packages or versions.
 
+The v2 USB image marker requires the matching provisioner. Older v1 images
+retain their `airlock` dom0 account; this change does not migrate them.
+
 The image result link identifies the current image without
 exposing its changing Nix store path. The current image is a fixed 32 GiB
 seed image, so it fits a nominal 64 GB USB. `usb-dev-provision` expands its
@@ -135,7 +138,7 @@ sudo python3 lifecycle/image/tools/usb-dev.py personalize \
   --insecure-dev-password --insecure-plain-codex-auth
 ```
 
-This asks for a new local password for dom0 `airlock`, installs one public SSH
+This asks for a new local password for dom0 `user`, installs one public SSH
 key and clones the clean committed repository onto a writable
 `usb-dev` branch. By default, `--auth-file` creates an encrypted Codex vault,
 imports only that cache, then locks the vault. No private keys, untracked files,
@@ -196,16 +199,16 @@ Qubes kernel is already installed. The detailed setup log is
 `/var/log/airlock/setup-config.json`.
 
 Both USB graphics modes configure the guest login as `user` / `password`.
-Dom0's local console uses `airlock` and the password supplied during
+Dom0's local console uses `user` and the password supplied during
 personalization (`password` with `--insecure-dev-password`). The development USB
 also supplies **dom0 Terminal (Development)** in sys-gui's applications menu
 (or run `airlock-dom0-terminal` from a guest terminal). It opens a shell as
-dom0's `airlock` account; `sudo` uses the dom0 password. In that terminal:
+dom0's `user` account; `sudo` uses the dom0 password. In that terminal:
 
 ```sh
 sudo nmcli --ask device wifi connect YOUR_SSID
 sudo tailscale up --ssh --hostname=airlock-usb
-cd /home/airlock/dev/nixome
+cd /home/user/dev/nixome
 codex
 ```
 
@@ -215,7 +218,7 @@ desktop/input works. The ordinary guest terminal is still a sys-gui shell.
 
 The boot menu also provides `Airlock (recovery)`: a Xen text console that skips
 topology setup, all guest startup and GPU handoff. It starts offline. Log in as
-`airlock`, then run `sudo airlock-recovery-network` to start NetworkManager and
+`user`, then run `sudo airlock-recovery-network` to start NetworkManager and
 Tailscale SSH in dom0. With no saved Wi-Fi connection, use the `nmcli --ask`
 command printed by the launcher and invoke it again. `Airlock` remains the
 default latest generation; older normal generations remain directly selectable.
@@ -224,7 +227,7 @@ The launcher uses a byte stream over [Qubes qrexec](https://github.com/QubesOS/q
 not a dom0 X server, SSH listener or general `qubes.VMShell` permission. The
 dedicated `airlock.DevDom0Shell` RPC allows only sys-gui with no argument. Its
 handler verifies the source and requires Qubes to invoke it as the declared
-dom0 `airlock` user before opening a PTY. No passwordless sudo is added. **This grants any process in sys-gui
+dom0 `user` account before opening a PTY. No passwordless sudo is added. **This grants any process in sys-gui
 access to the dom0 user account and its files, including development secrets.**
 It is an intentional development exception, not a secure administrative
 boundary against a compromised sys-gui; both policy and launcher are absent
@@ -278,10 +281,10 @@ Evidence is under `.airlock-logs/dev-dom0-terminal-diagnostics/`.
 ### Direct dom0-user execution — 2026-09-14
 
 The first diagnostic image showed the handler ran as UID 1000 and then failed:
-`runuser: may not be used by non-root user`. That is the expected ordinary
-dom0 `airlock` account, so the extra `runuser` was both unnecessary and
-incorrect. The service now explicitly expects that user, opens `script`'s PTY
-directly, and the policy no longer requests `user=root`. `sudo` continues to
+`runuser: may not be used by non-root user`. On that image, UID 1000 belonged
+to dom0's `airlock` account, so the extra `runuser` was unnecessary and failed.
+The service now expects the configured dom0 user and opens `script`'s PTY
+directly. The policy no longer requests `user=root`. `sudo` continues to
 prompt for the dom0 password. This is still a development-only capability.
 
 35 focused checks passed, with one optional check skipped, including the
@@ -298,7 +301,7 @@ starting Codex. It is not needed for `--insecure-plain-codex-auth`.
 Wired Ethernet can simplify first boot. Join Tailscale interactively; no auth
 key is in the image. This is a **new Tailscale node**, not the laptop's Ubuntu
 identity. Use its reported address from the host:
-`ssh airlock@NEW_USB_TAILSCALE_ADDRESS`. Verify the new SSH host key at the
+`ssh user@NEW_USB_TAILSCALE_ADDRESS`. Verify the new SSH host key at the
 laptop console. SSH password/root login and non-Tailscale port 22 are disabled.
 Do not disable host-key verification to reuse the Ubuntu identity.
 
@@ -324,7 +327,7 @@ Keep physical custody of this development USB. Tailscale's machine identity,
 Wi-Fi settings, logs, repository and VM state persist on the **unencrypted** root.
 
 For builds on the USB, keep the custom store off the host store, for example:
-`AIRLOCK_DATA_ROOT=/home/airlock/airlock-data make usb-dev-image`.
+`AIRLOCK_DATA_ROOT=/home/user/airlock-data make usb-dev-image`.
 The image has approximately 31 GiB of root filesystem capacity. The prepared
 guest store eliminates initial admission's temporary copies, but local builds
 and VM updates can still fill the disk. Use the guarded `make gc-auto` with

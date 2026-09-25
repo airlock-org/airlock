@@ -219,7 +219,7 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
         in report["tailscalePolicy"]
     )
     assert "airlock.DevTailscaleUp * @anyvm @anyvm deny" in report["tailscalePolicy"]
-    assert "/bin/tailscale up --ssh" in report["tailscaleHandler"]
+    assert "120s tailscale up --ssh" in report["tailscaleHandler"]
     # Rejected requests must exit before executing Tailscale on the test host.
     for source, argument in [("usr-browser", ""), ("sys-gui", "unexpected")]:
         rejected = subprocess.run(
@@ -252,7 +252,14 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
     assert report["poolAdmission"] == {
         "enable": True,
         "caller": "sys-dev",
-        "targets": ["sys-gui", "sys-dev", "sys-net", "sys-firewall", "usr-home", "usr-browser"],
+        "targets": [
+            "sys-gui",
+            "sys-dev",
+            "sys-net",
+            "sys-firewall",
+            "usr-home",
+            "usr-browser",
+        ],
     }
     assert report["poolAdmissionMode"] == "0555"
     for target in report["poolAdmission"]["targets"]:

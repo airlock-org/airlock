@@ -6,7 +6,7 @@
   # topology or desktop. Do not import USB dev or a laptop hardware profile.
   airlock.dom0 = {
     enable = true;
-    user = "airlock";
+    user = "user";
     gui.enable = false;
     devModeNetworkProxy.enable = false;
     dom0Resources = { memoryMiB = 4096; maxMemoryMiB = 4096; };
@@ -19,7 +19,7 @@
   # Keep USB storage accessible in this diagnostic image only.
   services.usbguard.enable = lib.mkForce false;
 
-  users.users.airlock = {
+  users.users.user = {
     isNormalUser = true;
     uid = 1000;
     extraGroups = [ "wheel" "qubes" "networkmanager" ];
@@ -82,7 +82,7 @@
   environment.etc."airlock/usb-dom0-console".text = "airlock-usb-dom0-console-v1\n";
   environment.loginShellInit = ''
     if [ -t 1 ]; then
-      echo 'Airlock dom0 console baseline. Local login: airlock / password'
+      echo 'Airlock dom0 console baseline. Local login: user / password'
       echo 'Check Xen: cat /proc/xen/capabilities; sudo xl list'
     fi
   '';

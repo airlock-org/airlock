@@ -15,7 +15,7 @@ import sys
 import tempfile
 import time
 
-MARKER = "airlock-usb-dev-v1\n"
+MARKER = "airlock-usb-dev-v2\n"
 MAPPER = "airlock-codex"
 UID, GID = 1000, 100
 COPY_CHUNK = 8 * 1024 * 1024
@@ -747,8 +747,8 @@ def personalize(args):
     root = checked_root(args.root)
     require(root != Path("/"), "Personalize offline, before the first USB boot.")
     password_file = beneath(root, "var/lib/airlock/usb/local-password.hash")
-    repo_target = beneath(root, "home/airlock/dev/nixome")
-    key_target = beneath(root, "home/airlock/.ssh/authorized_keys")
+    repo_target = beneath(root, "home/user/dev/nixome")
+    key_target = beneath(root, "home/user/.ssh/authorized_keys")
     vfct_target = beneath(root, "var/lib/airlock/amd-lab/sys-gui.vfct")
     require(
         not any(
@@ -817,16 +817,14 @@ def personalize(args):
     if vfct_data is not None:
         vfct_target.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
         readonly_root_file(vfct_target, vfct_data)
-    for current, directories, files in os.walk(
-        root / "home/airlock", followlinks=False
-    ):
+    for current, directories, files in os.walk(root / "home/user", followlinks=False):
         os.chown(current, UID, GID)
         for name in directories + files:
             os.chown(Path(current) / name, UID, GID, follow_symlinks=False)
     os.chmod(key_target.parent, 0o700)
     if auth_data is not None:
         if args.insecure_plain_codex_auth:
-            codex_home = beneath(root, "home/airlock/.codex")
+            codex_home = beneath(root, "home/user/.codex")
             marker = beneath(root, "var/lib/airlock/usb/insecure-codex-auth")
             require(
                 not codex_home.exists() and not marker.exists(),
@@ -837,7 +835,7 @@ def personalize(args):
             private_file(codex_home / "auth.json", auth_data, UID, GID)
             private_file(marker, b"plaintext-codex-auth-v1\n")
             print(
-                f"DEVELOPMENT MODE: Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}); Codex auth is stored unencrypted."
+                f"DEVELOPMENT MODE: Personalized USB; writable repo at /home/user/dev/nixome ({commit}); Codex auth is stored unencrypted."
             )
         else:
             # Keep the cache outside the raw filesystem. vault-create opens a
@@ -850,11 +848,11 @@ def personalize(args):
             finally:
                 vault(argparse.Namespace(action="vault-lock", root=str(root)))
             print(
-                f"Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}); Codex auth is in the locked encrypted vault."
+                f"Personalized USB; writable repo at /home/user/dev/nixome ({commit}); Codex auth is in the locked encrypted vault."
             )
     else:
         print(
-            f"Personalized USB; writable repo at /home/airlock/dev/nixome ({commit}). No credentials copied."
+            f"Personalized USB; writable repo at /home/user/dev/nixome ({commit}). No credentials copied."
         )
     if vfct_data is not None:
         print(
@@ -865,7 +863,7 @@ def personalize(args):
 def vault_paths(root):
     return (
         beneath(root, "var/lib/airlock/usb/codex.luks"),
-        beneath(root, "home/airlock/.codex"),
+        beneath(root, "home/user/.codex"),
     )
 
 
@@ -931,7 +929,7 @@ def vault(args):
         run("cryptsetup", "close", MAPPER)
     elif args.action == "auth-import":
         require_vault(mount)
-        target = beneath(root, "home/airlock/.codex/auth.json")
+        target = beneath(root, "home/user/.codex/auth.json")
         data = read_auth_cache(args.auth_file)
         private_file(target, data, UID, GID)
         print("Auth imported into the encrypted vault; contents were not logged.")

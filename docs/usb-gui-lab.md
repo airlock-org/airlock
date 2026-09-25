@@ -170,8 +170,8 @@ images assign and start the reviewed GPU on lab boot; use the
    Expect a blank panel. Reconnect over SSH and collect evidence:
 
    ```sh
-   mkdir -p /home/airlock/dev/nixome/.airlock-logs/usb-dev
-   sudo airlock-usb-amd-preflight > /home/airlock/dev/nixome/.airlock-logs/usb-dev/amd-preflight.json
+   mkdir -p /home/user/dev/nixome/.airlock-logs/usb-dev
+   sudo airlock-usb-amd-preflight > /home/user/dev/nixome/.airlock-logs/usb-dev/amd-preflight.json
    sudo lspci -nnk -s 04:00.0
    sudo journalctl -b -k --no-pager
    ```

@@ -31,7 +31,37 @@ def test_writer_requires_explicit_usb_identity(usb, device):
 def test_mutable_destination_rejects_symlinks(usb, tmp_path):
     (tmp_path / "home").symlink_to("/tmp")
     with pytest.raises(ValueError, match="symlink"):
-        usb.beneath(tmp_path, "home/airlock/.codex")
+        usb.beneath(tmp_path, "home/user/.codex")
+
+
+def test_provisioner_rejects_prior_dom0_username_image(usb, tmp_path, monkeypatch):
+    device = tmp_path / "usb-root-device"
+    device.touch()
+    marker = tmp_path / "airlock-usb-image"
+    marker.write_text("airlock-usb-dev-v1\n")
+    monkeypatch.setattr(usb, "root_only", lambda: None)
+    monkeypatch.setattr(
+        usb,
+        "output",
+        lambda *args: json.dumps(
+            {"filesystems": [{"fstype": "ext4", "source": str(device)}]}
+        ),
+    )
+    monkeypatch.setattr(
+        usb,
+        "disks",
+        lambda: [
+            {
+                "tran": "usb",
+                "name": "/dev/test-usb",
+                "children": [{"name": str(device), "label": "airlock-usb"}],
+            }
+        ],
+    )
+    with pytest.raises(ValueError, match="Missing USB image marker"):
+        usb.checked_root(tmp_path)
+    marker.write_text(usb.MARKER)
+    assert usb.checked_root(tmp_path) == tmp_path
 
 
 def test_private_file_never_overwrites(usb, tmp_path):
@@ -126,7 +156,11 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
         }};
         dom0Login = host: {{
           mutable = host.users.mutableUsers;
-          passwordFile = host.users.users.airlock.hashedPasswordFile;
+          passwordFile = host.users.users.user.hashedPasswordFile;
+          account = host.airlock.dom0.user;
+          terminalAccount = host.airlock.devDom0Terminal.user;
+          uid = host.users.users.user.uid;
+          home = host.users.users.user.home;
           rootHash = host.users.users.root.hashedPassword;
         }};
       in {{
@@ -136,6 +170,7 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
         normalSetup = config.specialisation.usb-lab.configuration.airlock.qubes.setupConfigOnBoot.enable;
         journal = config.services.journald.settings.Journal;
         conciseBootMenu = config.airlock.dom0.bootMenu.enable;
+        imageMarker = config.environment.etc."airlock/usb-dev".text;
         bootHook = config.boot.loader.systemd-boot.extraInstallCommands;
         dom0Logins = [ (dom0Login config) ] ++ builtins.map
           (name: dom0Login config.specialisation.${{name}}.configuration)
@@ -193,6 +228,7 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
     assert configuration["journal"]["Storage"] == "persistent"
     assert configuration["journal"]["SyncIntervalSec"] == "1s"
     assert configuration["conciseBootMenu"] is True
+    assert configuration["imageMarker"] == "airlock-usb-dev-v2\n"
     assert "-airlock-boot-menu" in configuration["bootHook"]
     recovery = configuration["recovery"]
     assert recovery["role"] == "recovery\n"
@@ -215,6 +251,10 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
     for login in configuration["dom0Logins"]:
         assert login == {
             "mutable": False,
+            "account": "user",
+            "terminalAccount": "user",
+            "uid": 1000,
+            "home": "/home/user",
             "passwordFile": "/var/lib/airlock/usb/local-password.hash",
             "rootHash": "!",
         }
