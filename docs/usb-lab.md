@@ -17,9 +17,9 @@ usr-home stays offline
 ```
 
 The user-facing `Airlock` boot entry uses this topology and starts `sys-dev`,
-`sys-net`, `sys-firewall`, the offline `sys-ctrl` bootstrap, physical-GPU
+`sys-net`, `sys-firewall`, `sys-ctrl` routed through sys-firewall, physical-GPU
 `sys-gui`, and offline `usr-home`. `usr-browser` is available but halted by
-default. `sys-ctrl` is not yet a deployment authority. `usb-lab` is only the
+default. `sys-ctrl` prepares deployment candidates. `usb-lab` is only the
 internal profile name. The checked-in profile assigns physical network
 devices to `sys-net`, with `sys-dev` and `usr-browser` routed through
 `sys-firewall`. See the [completed migration trial](completed/usb-lab-network-isolation.md)

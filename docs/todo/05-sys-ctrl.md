@@ -4,11 +4,13 @@ Status (2026-09-25): local implementation passes the quick checks: 579 passed,
 24 skipped, two existing warnings. The machine and parent image flake checks
 were run separately with `--no-build`; the remaining quick suite passed with
 those two checks excluded. The first physical image boot reached sys-dev,
-but its initial controller plan failed with exit 137 during sys-ctrl's offline
-release build in the 4 GiB VM. Dom0 still reported `image-baseline` with no recorded releases. Source now
-allocates 8 GiB and caps controller builds at one job; this needs a new image
-and retest. No release was selected or applied. Physical acceptance remains
-outstanding.
+but its initial controller plan failed with exit 137 during the release build
+in the 4 GiB VM. Dom0 still reported `image-baseline` with no recorded releases.
+The live VM was raised to 8 GiB and the next plan reached missing fixed-output
+sources (libssh2 patch, then Python tarball). The repository now allocates 8 GiB,
+caps controller builds at one job, routes it through sys-firewall and allows Nix
+to fetch missing inputs. This needs a committed-generation retest. No release was
+selected or applied. Physical acceptance remains outstanding.
 
 Airlock is unreleased. Backwards compatibility and migration from the old
 `sys-config-*` workflow are not requirements. Those roles have been removed
@@ -28,8 +30,9 @@ service or compatibility deployment protocol is added.
 
 Normal submission is `sys-dev -> sys-ctrl -> dom0`. Preserve Xen, qrexec,
 QubesDB, qubesd, libvirt and Qubes policy. Sys-ctrl is highly trusted because it
-prepares executable systems. It has no physical NIC or network VM by default;
-builds use the pinned offline inputs and the pool-backed private store. A lock
+prepares executable systems. It has no physical NIC; its network VM is
+sys-firewall. Builds use the committed lock file and the pool-backed private
+store, fetching missing inputs or substitutes as needed. A lock
 serializes candidate import, build and submission in the controller.
 
 The normal machine client uses typed qrexec commands. Status, verification,
@@ -79,6 +82,13 @@ subsequently built and admitted a candidate, but dom0 rejected `GuestPlan`.
 The unchanged guest system may have caused this, but the old qrexec client
 concealed the receiver error. The client and receiver now report bounded
 stderr for a conclusive diagnosis on the next image. No guest apply ran.
+The 8 GiB live plan progressed to missing fixed-output sources. A diagnostic
+Nix archive imported the libssh2 patch, then the next missing source was a
+Python tarball. Temporarily assigning sys-firewall to the live controller
+confirmed network access, but the installed controller still passed `--offline`
+to Nix. The declared network route and controller build arguments now permit
+fetches. These live changes and diagnostic imports do not constitute verified
+deployment of the new source generation.
 
 ## Remaining acceptance work
 

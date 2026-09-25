@@ -41,6 +41,7 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
         inherit (host.airlock.qubes.prefs) default_netvm;
         browserNetvm = host.airlock.qubes.domains.usr-browser.netvm;
         devNetvm = host.airlock.qubes.domains.sys-dev.netvm;
+        ctrlNetvm = host.airlock.qubes.domains.sys-ctrl.netvm;
         firewallNetvm = host.airlock.qubes.domains.sys-firewall.netvm;
         netNetvm = host.airlock.qubes.domains.sys-net.netvm;
         homeNetvm = host.airlock.qubes.domains.usr-home.netvm;
@@ -199,6 +200,7 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
     assert report["default_netvm"] == "sys-firewall"
     assert report["browserNetvm"] == "sys-firewall"
     assert report["devNetvm"] == "sys-firewall"
+    assert report["ctrlNetvm"] == "sys-firewall"
     assert report["firewallNetvm"] == "sys-net"
     assert report["netNetvm"] is None
     assert report["homeNetvm"] is None

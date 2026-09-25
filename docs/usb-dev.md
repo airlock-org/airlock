@@ -337,7 +337,7 @@ that same data root. No full-store garbage collection is done automatically.
 
 Store notes/logs under the repo's `.airlock-logs/usb-dev/`. The image contains the
 [normal Airlock configuration](usb-lab.md) and text recovery. Its prepared pool
-includes `sys-gui` (GNOME), `sys-dev`, the offline `sys-ctrl` bootstrap,
+includes `sys-gui` (GNOME), `sys-dev`, `sys-ctrl` routed through sys-firewall,
 `usr-home`, and `usr-browser`.
 Standalone GUI and hybrid GUI configurations remain available as source builders
 but are excluded from the USB image, including their guest stores.

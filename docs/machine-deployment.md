@@ -2,10 +2,11 @@
 
 Reading guide (2026-09-25): the current source uses sys-ctrl and direct pool
 admission for normal whole-machine submissions. The first physical boot reached
-sys-dev, but its initial controller plan was killed during the offline release
+sys-dev, but its initial controller plan was killed during the release
 build in the 4 GiB sys-ctrl VM. No release was selected. The repository now allocates
-8 GiB to sys-ctrl and limits it to one concurrent build; physical validation
-of that fix remains pending. A guest-only trial reached pool admission, then
+8 GiB to sys-ctrl, limits it to one concurrent build, and routes it through
+sys-firewall so Nix can fetch missing locked inputs; physical validation of
+the committed configuration remains pending. A guest-only trial reached pool admission, then
 dom0 rejected planning; its reason was masked by the old client and is being
 exposed in the next image. Earlier dated acceptance evidence below applies to
 older revisions. See [the controller TODO](todo/05-sys-ctrl.md)
@@ -110,8 +111,9 @@ airlock-sys-dev-machine-deploy verify
 ```
 
 The sys-dev client sends a versioned source bundle to `sys-ctrl`. The
-controller verifies the Git revision and lock hash and builds from its pinned
-offline inputs. It sends guest manifests to the shared pool receiver, which
+controller verifies the Git revision and lock hash and builds from the locked
+source, fetching missing inputs or substitutes through sys-firewall. It sends
+guest manifests to the shared pool receiver, which
 requests only missing objects, then streams missing host/transport dependencies
 to dom0's ordinary store. Dom0 binds independently checked admission receipts
 to the release and invokes its journalled coordinator. `plan` never activates;
@@ -136,8 +138,8 @@ airlock-sys-dev-machine-deploy guest-apply --target usr-home
 ```
 
 The client sends a versioned source archive over qrexec. `sys-ctrl` verifies
-the revision and lock hash, imports the checkout, builds from pinned offline
-inputs in its pool-backed private store, and sends the resulting guest closure
+the revision and lock hash, imports the checkout, builds from locked inputs
+in its pool-backed private store, and sends the resulting guest closure
 to dom0's shared pool. Dom0 accepts admission only from `sys-ctrl`, validates
 the inactive generation receipt, and runs its existing journalled guest
 plan/apply coordinator. The controller cannot submit an arbitrary release path
