@@ -154,20 +154,17 @@ on the live machine.
 
 ## Implementation stages
 
-Bootstrap progress (2026-09-24): the machine topology now declares an offline,
+Bootstrap history (2026-09-24): the machine topology declared an offline,
 autostarting `sys-ctrl` with a persistent private volume and a writable Nix
 store. USB assembly supplies a direct `airlock-machine` checkout from the same
 revision- and lock-checked source archive as `sys-dev`; the source-seeding
 module is shared between the two guests. A standalone machine release does
 not yet supply that seed, so existing installations need a source import path
-before the controller can own deployments. The existing guest construction and
-pool sender are also reused. `sys-ctrl` currently has no controller deployment
-service or dom0 policy authority. Its private store is not yet the pinned
-pool-backed builder used by `sys-dev`; generalizing that builder, including its fixed storage
-attachments and offline input view, is the next implementation step. No
-candidate history has been moved and the `sys-config-*` declarations remain.
-`sys-dev` remains in the topology and still uses its existing deployment path;
-rerouting its normal submissions through `sys-ctrl` is part of stage 2.
+before the controller could own deployments. The existing guest construction
+and pool sender were reused. The 2026-09-25 local changes described above add
+the pool-backed builder, controller services, and normal sys-dev submission
+route. No candidate history has been migrated and the `sys-config-*`
+declarations remain.
 
 ### 1. Specify boundaries and bootstrap sys-ctrl
 
