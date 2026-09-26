@@ -39,7 +39,7 @@ let
     nixos-enter --root /mnt -- chown -R root:qubes /var/lib/qubes
     chmod 0660 /mnt/var/lib/qubes/qubes.xml
     PYTHONPATH=${../../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src} \
-      ${pkgs.python3}/bin/python ${../tools/install-host-store.py} /mnt ${recoveryClosure}/store-paths
+      ${pkgs.python3}/bin/python ${../tools/install-host-store.py} /mnt ${recoveryClosure}/store-paths ${config.specialisation.usb-text-recovery.configuration.system.build.toplevel}
   '';
 in
 {

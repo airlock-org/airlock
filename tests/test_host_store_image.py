@@ -62,7 +62,7 @@ def image(tmp_path):
     (entries / "xen-0123456789abcdef.conf").write_text("title Airlock (recovery)\nefi /EFI/nixos/xen-0123456789abcdef.efi\n")
     for name in ("xen-0123456789abcdef.efi", "kernel", "initrd"):
         (efi / name).write_bytes(b"boot artifact")
-    (efi / "xen-0123456789abcdef.cfg").write_text(f"kernel=kernel init={paths[1]}/init\nramdisk=initrd\n")
+    write_xen_efi(efi / "xen-0123456789abcdef.efi", f"kernel=kernel init={paths[1]}/init\nramdisk=initrd\n")
     recovery = tmp_path / "recovery-paths"
     recovery.write_text(paths[1] + "\n")
     return recovery, paths
@@ -71,7 +71,7 @@ def image(tmp_path):
 def test_seed_removal_keeps_recovery_without_second_host_copy(tmp_path, monkeypatch):
     recovery, paths = image(tmp_path)
     monkeypatch.setattr(installer.os, "sync", lambda: None)
-    installer.install(tmp_path, recovery)
+    installer.install(tmp_path, recovery, paths[1])
     assert not list((tmp_path / "nix/store").iterdir())
     retained = tmp_path / "var/lib/airlock/recovery-store"
     assert [p.name for p in retained.iterdir()] == [Path(paths[1]).name]
@@ -82,15 +82,28 @@ def test_seed_removal_refuses_unpublished_objects(tmp_path):
     extra = tmp_path / "nix/store/unpublished"
     extra.mkdir()
     with pytest.raises(ValueError, match="inventory"):
-        installer.install(tmp_path, recovery)
+        installer.install(tmp_path, recovery, paths[1])
     assert extra.exists()
     assert (tmp_path / paths[0].lstrip("/")).exists()
 
 
 def test_seed_removal_refuses_entry_for_wrong_system(tmp_path):
     recovery, paths = image(tmp_path)
-    config = tmp_path / "boot/EFI/nixos/xen-0123456789abcdef.cfg"
-    config.write_text(f"kernel=kernel init={paths[0]}/init\nramdisk=initrd\n")
+    config = tmp_path / "boot/EFI/nixos/xen-0123456789abcdef.efi"
+    write_xen_efi(config, f"kernel=kernel init={paths[0]}/init\nramdisk=initrd\n")
     with pytest.raises(ValueError, match="recovery boot entry"):
-        installer.install(tmp_path, recovery)
+        installer.install(tmp_path, recovery, paths[1])
     assert (tmp_path / paths[1].lstrip("/")).exists()
+
+
+def write_xen_efi(path, config):
+    import struct
+    payload = config.encode() + b"\0"
+    data = bytearray(512)
+    data[:2] = b"MZ"
+    struct.pack_into("<I", data, 60, 64)
+    data[64:68] = b"PE\0\0"
+    struct.pack_into("<H", data, 70, 1)
+    data[88:96] = b".config\0"
+    struct.pack_into("<II", data, 104, len(payload), 512)
+    path.write_bytes(data + payload)

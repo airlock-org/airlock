@@ -6,7 +6,7 @@ import shutil
 import sys
 
 
-def install(root, recovery_paths):
+def install(root, recovery_paths, recovery_system):
     root = Path(root)
     pool = root / "var/lib/airlock/closure-store"
     recovery = set(Path(recovery_paths).read_text().splitlines())
@@ -23,14 +23,11 @@ def install(root, recovery_paths):
     if not recovery <= ordinary or not ordinary <= admitted:
         raise ValueError("image store differs from published host/recovery inventory")
     from airlock_qubes_storage.host_artifacts import inventory, seal
-    recovery_systems = []
-    for system in sorted(recovery):
-        marker = root / system.lstrip("/") / "etc/airlock/boot-role"
-        if marker.is_file() and marker.read_text().strip() == "recovery":
-            recovery_systems.append(system)
-    # Xen entry filenames are hashes, not specialisation names. Verify the
-    # init target and its installed EFI/kernel/initrd artifacts instead.
-    if not any(inventory(root / "boot", system) for system in recovery_systems):
+    # Use the configured system directly: absolute store symlinks inside the
+    # mounted image must not be resolved against the build VM's root.
+    if recovery_system not in recovery:
+        raise ValueError("recovery system is absent from its closure")
+    if not inventory(root / "boot", recovery_system):
         raise ValueError("independent recovery boot entry was not installed")
     from airlock_qubes_storage._engine.host import allocated
     staging_bytes = allocated(store)
