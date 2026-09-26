@@ -1,8 +1,15 @@
 # Share immutable store objects between dom0 and guests
 
-Status (2026-09-26): local implementation added; validation pending. No tests,
-Nix evaluation, image builds or live-session operations were performed for this
-change, as requested. The acceptance checklist below remains unchecked.
+Status (2026-09-26): image assembly succeeded after seed permission and Xen
+EFI validation fixes. The first laptop boot hung after the host store's saved
+assembly checkpoint; no persistent journal was available. Runtime acceptance
+remains incomplete. Local follow-up explicitly orders NixOS closure discovery
+after pool assembly and enables USB boot diagnostics (including recovery):
+`/var/log/airlock-boot/*-initrd.log` for early boot and `/var/log/journal` for
+stage 2. Early log lines are synced to disk as received; failures before the
+root filesystem mounts still require a screen photo. The ordering race is a
+concrete source defect, not yet a confirmed explanation of the laptop hang.
+The follow-up image has not been built or booted.
 This extends [direct pool deployment](06-direct-pool-machine-deployment.md);
 TODOs 05, 06 and 07 must be validated together on the next fresh image.
 

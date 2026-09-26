@@ -48,6 +48,8 @@ in
     ./usb-prepared-store.nix
   ];
 
+  airlock.bootDiagnostics.enable = true;
+
   image = { baseName = "airlock-usb-dev"; format = "raw"; efiSupport = true; };
   virtualisation.diskSize = 32768;
   system.build.usbPreparedRuntime = preparedRuntime;

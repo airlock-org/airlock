@@ -1012,6 +1012,10 @@ def test_usb_prepared_store_preserves_sealed_view_mode(seed):
         imageCommand = config.system.build.image.buildCommand;
         runtimeSeed = config.system.build.usbPreparedRuntime.outPath;
         dependencies = map toString config.system.extraDependencies;
+        hostOrdering = config.boot.initrd.systemd.services.initrd-find-nixos-closure.after;
+        earlyLogs = config.boot.initrd.systemd.services.airlock-boot-journal.serviceConfig.ExecStart;
+        recoveryLogs = config.specialisation.usb-text-recovery.configuration.airlock.bootDiagnostics.enable;
+        journalConfig = config.services.journald.extraConfig;
       }}
     """
     result = subprocess.run(
@@ -1023,6 +1027,11 @@ def test_usb_prepared_store_preserves_sealed_view_mode(seed):
     )
     prepared = json.loads(result.stdout)
     assert prepared["mode"] == "go-rwx"
+    assert "airlock-host-store.service" in prepared["hostOrdering"]
+    assert "boot-journal.py" in prepared["earlyLogs"]
+    assert prepared["recoveryLogs"] is True
+    assert "Storage=persistent" in prepared["journalConfig"]
+
     assert prepared["image"].endswith(".drv")
     assert prepared["runtimeSeed"] not in prepared["dependencies"]
     assert (
