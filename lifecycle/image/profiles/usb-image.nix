@@ -1,12 +1,19 @@
 { config, lib, pkgs, modulesPath, ... }:
 let
+  unifiedStore = import ../unified-host-store.nix {
+    inherit pkgs lib config;
+    guestStore = config.system.build.usbPreparedGuestStore;
+  };
+  recoveryClosure = pkgs.closureInfo {
+    rootPaths = [ config.specialisation.usb-text-recovery.configuration.system.build.toplevel ];
+  };
   preparedRuntime = import ../prepared-runtime.nix {
     inherit pkgs;
     # Seed the normal boot profile, not the base console carrier or recovery.
     topology = if config.specialisation ? usb-lab
       then config.specialisation.usb-lab.configuration.airlock.qubes.topology
       else config.airlock.qubes.topology;
-    preparedStore = config.system.build.usbPreparedGuestStore;
+    preparedStore = unifiedStore;
   };
   installRuntime = ''
     echo "Installing prepared Qubes runtime state"
@@ -17,7 +24,7 @@ let
     # NAR substitution can materialize holes in seed files. Always reconstruct
     # sparse allocation in the installed pool, even from a dense cached seed.
     mkdir -p /mnt/var/lib/airlock/closure-store
-    cp -a --sparse=always ${config.system.build.usbPreparedGuestStore}/pool/. \
+    cp -a --sparse=always ${unifiedStore}/pool/. \
       /mnt/var/lib/airlock/closure-store/
     chmod -R ${lib.escapeShellArg config.airlock.image.preparedStoreMode} \
       /mnt/var/lib/airlock/closure-store
@@ -31,6 +38,8 @@ let
     # Activation creates the qubes group; only then resolve its installed GID.
     nixos-enter --root /mnt -- chown -R root:qubes /var/lib/qubes
     chmod 0660 /mnt/var/lib/qubes/qubes.xml
+    PYTHONPATH=${../../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src} \
+      ${pkgs.python3}/bin/python ${../tools/install-host-store.py} /mnt ${recoveryClosure}/store-paths
   '';
 in
 {
@@ -45,6 +54,7 @@ in
   system.build.image = lib.mkForce (lib.overrideDerivation (import "${modulesPath}/../lib/make-disk-image.nix" {
     inherit config lib pkgs;
     inherit (config.image) baseName format;
+    copyChannel = false;
     diskSize = config.virtualisation.diskSize;
     partitionTableType = "efi";
     bootSize = "1G";
@@ -64,12 +74,13 @@ in
     # Seed before activation: upstream qubes-create initializes an empty
     # database when none exists. Set ownership after activation creates users.
     buildCommand = lib.replaceStrings
-      [ "mount $rootDisk $mountPoint" "umount -R /mnt" ]
+      [ "mount $rootDisk $mountPoint" "umount -R /mnt" "-- /nix/var/nix/profiles/system/bin/switch-to-configuration boot" ]
       [ ("mount $rootDisk $mountPoint\n" + installRuntime)
-        (ownRuntime + "\numount -R /mnt") ] old.buildCommand;
+        (ownRuntime + "\numount -R /mnt")
+        "-- env NIX_REMOTE=local /nix/var/nix/profiles/system/bin/switch-to-configuration boot" ] old.buildCommand;
     preVM = ''
       echo "Validating prepared guest store before image assembly"
-      ${config.system.build.usbPreparedGuestStore.checkCommand}
+      ${unifiedStore.checkCommand}
     '' + old.preVM;
   }));
 

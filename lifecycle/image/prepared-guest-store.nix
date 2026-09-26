@@ -43,10 +43,11 @@ let
       );
   # A stable builder view shares the already admitted objects, including other
   # guests' software. It is independent of sys-dev's own boot generation.
-  buildClosure = pkgs.closureInfo {
-    rootPaths =
+  builderInputRoots =
       map (entry: entry.configuration.config.system.build.toplevel) (builtins.attrValues entries)
       ++ lib.optionals (entries ? sys-dev) (routineBuildInputs ++ sourcePaths);
+  buildClosure = pkgs.closureInfo {
+    rootPaths = builderInputRoots;
   };
   buildManifest = pkgs.runCommand "sys-dev-builder-closure" { } ''
     mkdir -p "$out"
@@ -84,6 +85,7 @@ let
         unsafeDiscardReferences.out = true;
         unsafeDiscardReferences.descriptors = true;
         passthru.builderInputClosure = buildClosure;
+        passthru.builderInputRoots = builderInputRoots;
         passthru.builderNix = entries.sys-dev.configuration.pkgs.nix;
         AIRLOCK_CLOSURE_STORE_INDEX_SOURCE = "file";
         # Execute this in the consuming image derivation too: a cached receipt

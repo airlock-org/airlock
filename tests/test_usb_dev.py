@@ -174,7 +174,7 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
         bootHook = config.boot.loader.systemd-boot.extraInstallCommands;
         dom0Logins = [ (dom0Login config) ] ++ builtins.map
           (name: dom0Login config.specialisation.${{name}}.configuration)
-          (builtins.attrNames config.specialisation);
+          (builtins.filter (name: name != "usb-text-recovery") (builtins.attrNames config.specialisation));
         hasPasswordService = builtins.hasAttr "airlock-usb-gui-password" config.systemd.services;
         displayRequires = config.systemd.services.display-manager.requires;
         displayAfter = config.systemd.services.display-manager.after;
@@ -185,20 +185,17 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
           config.specialisation.usb-lab.configuration.systemd.services;
         recovery = let
           recoveryConfig = config.specialisation.usb-text-recovery.configuration;
-          command = builtins.head (builtins.filter (package:
-            (package.pname or package.name) == "airlock-recovery-network"
-          ) recoveryConfig.environment.systemPackages);
         in {{
           role = recoveryConfig.environment.etc."airlock/boot-role".text;
           xen = recoveryConfig.virtualisation.xen.enable;
           display = recoveryConfig.services.xserver.enable;
-          setup = recoveryConfig.airlock.qubes.setupConfigOnBoot.enable;
+          setup = recoveryConfig.airlock.qubes.setupConfigOnBoot.enable or false;
           networkManager = recoveryConfig.networking.networkmanager.enable;
-          networkManagerWantedBy = recoveryConfig.systemd.services.NetworkManager.wantedBy;
           tailscale = recoveryConfig.services.tailscale.enable;
-          tailscaleWantedBy = recoveryConfig.systemd.services.tailscaled.wantedBy;
           ssh = recoveryConfig.services.openssh.enable;
-          command = builtins.readFile "${{command}}/bin/airlock-recovery-network";
+          poolRecovery = recoveryConfig.environment.etc."airlock/pool-recovery".text;
+          store = recoveryConfig.fileSystems."/nix/store".device;
+          passwordFile = recoveryConfig.users.users.user.hashedPasswordFile;
         }};
       }}
     """
@@ -235,19 +232,12 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
     assert recovery["xen"] is True
     assert recovery["display"] is False
     assert recovery["setup"] is False
-    assert recovery["networkManager"] is True
-    assert recovery["networkManagerWantedBy"] == []
-    assert recovery["tailscale"] is True
-    assert recovery["tailscaleWantedBy"] == []
-    assert recovery["ssh"] is True
-    assert (
-        "systemctl start NetworkManager.service" in configuration["recovery"]["command"]
-    )
-    assert "systemctl start tailscaled.service" in configuration["recovery"]["command"]
-    assert (
-        "tailscale up --ssh --hostname=airlock-recovery"
-        in configuration["recovery"]["command"]
-    )
+    assert recovery["networkManager"] is False
+    assert recovery["tailscale"] is False
+    assert recovery["ssh"] is False
+    assert "Independent pool recovery" in recovery["poolRecovery"]
+    assert recovery["store"] == "/var/lib/airlock/recovery-store"
+    assert recovery["passwordFile"] == "/var/lib/airlock/usb/local-password.hash"
     for login in configuration["dom0Logins"]:
         assert login == {
             "mutable": False,

@@ -1,15 +1,14 @@
 # sys-dev's pool-backed build store
 
-Implemented and physically validated on 2026-09-18: fresh-image boot, build,
-repeat-build reuse and inactive admission passed. Earlier whole-machine reboot
-testing established persistence; isolated sys-dev restart was waived for this
-milestone after an unresolved black-screen incident.
-No sys-ctrl or activation changes are included.
+The original frozen sys-dev builder passed fresh-image/build/reuse checks on
+2026-09-18. TODO 07 now extends the local source to both builder roles with host
+inputs and approved offline base transitions. These changes have not been tested
+or booted; the earlier results do not validate the new transition path.
 
-The USB seed supplies a frozen `sys-dev-builder` pool generation containing the
-union of the image's guest closures. This is a **view**, not another VM or a
-second copy of the packages. Its small EROFS index and Nix registration metadata
-are additional; its package extents are shared with the ordinary guest views.
+The USB seed supplies a builder view containing guest closures, selected build
+inputs, offline sources and the approved host closure. Its EROFS index and Nix
+registration are additional metadata; package extents are shared with other
+pool views rather than copied into the builder's writable layer.
 
 Qubes attaches two read-only volumes to sys-dev: `builder-store` (`xvdg`) and
 `builder-data` (`xvdh`). The builder-specific index contains `.airlock-builder/`
@@ -18,13 +17,15 @@ It is created by copying only the canonical index and adding these small files
 with EROFS incremental image construction; shared package extents are unchanged.
 The image tools include upstream's incremental-data fix for erofs-utils 1.9.
 The ordinary guest index is not modified. A persistent physical pin
-protects this generation even while sys-dev is stopped. Guest OS upgrades do not
-replace the builder base. No new guest-to-dom0 control service is added.
+protects this generation even while the VM is stopped. Host publication can
+prepare a successor that retains every registered predecessor object. Qubes
+attaches its two volumes atomically during a stopped setup; a running controller
+continues using its current base until the next stopped setup. No new
+guest-to-dom0 control service is added.
 
 This keeps sys-dev at eight boot disks, avoiding the invalid SCSI address 8
 observed with the previous nine-disk layout, without changing Xen or Qubes.
-Existing three-disk installations are refused rather than silently migrated;
-this change targets a freshly built/flashed USB.
+This change targets a freshly built/flashed USB; there is no migration path.
 
 At boot, `airlock-sys-dev-build-store.service` mounts the base and registers its
 metadata in a read-only lower Nix database. Normal `nix`, `airlock-config-nix`
@@ -35,13 +36,16 @@ and machine-build/admission commands use Nix's experimental local overlay store:
 - `/rw/airlock-builder/merged`: combined store and persistent writable Nix state.
 - `/rw/airlock-builder/base.json`: root-owned base identity, checked at each boot.
 
-A missing base or changed identity fails closed; no silent empty-store fallback
-or automatic rebase. Shutdown unmounts the view but keeps the upper and pin.
-Do not release `builder-persistent` while any saved upper still depends on it.
-Base replacement/cache disposal is intentionally an explicit future operation.
-An older private store at `/rw/home/user/airlock-config-nix-root` is left untouched;
-there is no bulk-copy migration. Remote Nix build hooks are disabled for this
-local-only store. Missing build-only dependencies still require downloads/builds.
+A missing base or an identity change without a matching dom0-issued predecessor
+binding fails closed. An approved additive transition is accepted before mounting
+the saved upper; its registration remains valid against the larger lower view.
+Shutdown keeps the upper and physical pin. A stopped attachment transfers the
+old base's physical retention to the successor, which includes all prior inputs.
+This does not shrink a controller's approved input set or erase saved outputs.
+Missing build-only dependencies still require downloads/builds.
+
+See [TODO 07](todo/07-unified-host-guest-store.md) for host boot, independent
+recovery, publication ordering and the pending combined acceptance run.
 
 ## Fresh-image acceptance
 

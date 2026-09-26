@@ -1,8 +1,74 @@
 # Share immutable store objects between dom0 and guests
 
-Status (2026-09-26): proposed design; not implemented or validated. This extends
-[direct pool deployment](06-direct-pool-machine-deployment.md) to dom0's own
-Nix objects. TODO 06's physical acceptance remains separate.
+Status (2026-09-26): local implementation added; validation pending. No tests,
+Nix evaluation, image builds or live-session operations were performed for this
+change, as requested. The acceptance checklist below remains unchecked.
+This extends [direct pool deployment](06-direct-pool-machine-deployment.md);
+TODOs 05, 06 and 07 must be validated together on the next fresh image.
+
+## Local implementation recorded
+
+- The image first prepares the existing guest seed, then admits the complete
+  host closure into a final unified seed. This ordering avoids a host/seed Nix
+  dependency cycle. Exact store identities reuse existing object extents.
+- Dom0 has a systemd initramfs service that validates the kernel-command-line
+  host identity, registration, index, blob map and physical pin, then assembles
+  EROFS bases and a private OverlayFS upper before stage 2. Python storage
+  primitives, Nix registration tools, loop and device-mapper tools are carried
+  in the initramfs; Qubes services and networking are not dependencies.
+- Normal Nix clients use the daemon, whose backend is the local overlay store.
+  Imports and builds write into `/var/lib/airlock/host-store/upper`. Pool
+  publication verifies and admits these additions before exposing boot records.
+- Planning binds host pool identity as well as guest generation receipts.
+  Applying publishes before guest disruption, installs the boot entries, seals
+  the exact Xen/kernel/initramfs artifacts, and records selection. Running and
+  selected host records remain separate. Publication does not mount a new base
+  over an active host or controller.
+- The recovery specialisation has `inheritParentConfig = false`. Its conventional
+  closure lives in `/var/lib/airlock/recovery-store`, independently of the pool.
+  It includes console authentication, disk tools and retained-host selection,
+  without desktop, guest services or networking. Image assembly removes the
+  ordinary full host-store copy only after installing boot entries. Channels
+  are not copied; locked build inputs already belong to the builder seed.
+- Image builder views include the approved host closure. Runtime host publication
+  prepares an additive sys-ctrl successor containing its prior registered inputs.
+  Qubes replaces both builder volumes in a stopped setup; an active controller
+  continues using its previous volumes. Root-owned predecessor bindings authorize
+  the guest's offline transition while preserving its upper and Nix database.
+  Superseded physical pins are released after the new volumes are saved.
+- Early boot removes identical published host-upper copies, rebuilds registration
+  using Nix's dump/load format, preserves trust/output metadata, and uses a
+  recoverable directory-rename sequence for the database. Saved upper references
+  retain any older host bases they still need. Release pruning retires host boot
+  choices; old physical pins are dropped only after the offline reference
+  transition. Existing pool GC/compaction handles the resulting unreferenced
+  generations and extents under the same pool lock.
+- Added pytest source coverage for registration conflicts, boot identity,
+  publication interruption, metadata damage, authorized builder transitions,
+  database recovery, Xen artifact corruption and image-copy removal. Existing
+  recovery/coordinator test expectations were updated. None were executed.
+
+### Storage and operational boundaries
+
+Builder transitions are additive: objects in the approved builder input set are
+retained even if the host release that introduced them is retired. Retiring a
+host is not authority to discard a controller's saved build dependencies.
+Independent recovery and initramfs/ESP artifacts deliberately duplicate a subset
+of payloads. Build-time guest/unified seeds and image installation also have
+transient copies; they are not a second retained ordinary host store.
+
+Image assembly records `host-store-install.json` with recovery bytes, pool bytes,
+zero remaining ordinary host objects, and pool-plus-store installation allocation.
+`airlock-host-store status` reports pool, upper and recovery allocation. These are
+measurement hooks, not measured performance claims; full peak allocation and
+cold/repeat timings still need the acceptance run.
+
+Recovery is operator-selected from the boot menu, including if normal pool
+assembly fails. In recovery, `sudo airlock-host-store recover SYSTEM` checks the
+retained pool binding and installed EFI artifact hashes before choosing the Xen
+entry. It does not reboot automatically. Normal recovery selection, ordinary Nix
+operations, the exact pinned SQLite schema, daemon mount namespaces and power-loss
+ordering all require validation on the rebuilt image.
 
 ## Goal and expected gains
 
@@ -29,19 +95,12 @@ needed to rebuild their packages. Reuse requires matching Nix object identities;
 similar package names or versions are insufficient. A unified pool alone will
 not accelerate the controller if its builder view still excludes those objects.
 
-## Current implementation and reusable components
+## Reused components
 
-- Dom0 uses an ordinary Nix store for its running system, kernel, boot/recovery
-  dependencies and host deployment imports.
-- Guest packages are admitted to the shared pool and served through EROFS
-  metadata views backed by shared object segments. Guest root artifacts have
-  separate verified identities and remain bound to guest generations.
-- Sys-ctrl and sys-dev use an image-seeded, frozen builder view containing the
-  union of guest runtime closures, selected build tools and offline flake inputs.
-  Each has its own persistent writable layer and Nix state.
-- That builder view does not automatically include dom0's ordinary store or
-  objects admitted after the image was prepared. Changing the base identity is
-  currently rejected to protect the persistent upper layer.
+The implementation extends guest EROFS object maps, admission and physical pins
+to the `dom0` pool domain. Guest root artifacts and Qubes-owned writable root and
+private volumes retain their existing identities and lifecycle. Builder metadata
+uses the existing two read-only Qubes volumes and a separate persistent upper.
 
 Reuse existing object admission, verification, closure indexing, generation
 publication, retention, segment pinning and Qubes volume mechanisms. Preserve
@@ -71,7 +130,7 @@ as an architectural starting point. Prefer assembling the final view in the
 initramfs, avoiding a replacement of `/nix/store` underneath running services
 and active Nix operations.
 
-## Implementation stages
+## Implementation stages (local source added; validation pending)
 
 1. **Establish the storage and boot contract.** Inventory the host closure,
    bootstrap/recovery requirements and overlap with guest/builder closures.
@@ -165,3 +224,15 @@ A successful build or pool mount does not establish boot, recovery or GC safety.
 - [Pool views and backing devices](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/views.py)
 - [Builder generation metadata](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/builder.py)
 - [Nix local overlay store documentation](https://nix.dev/manual/nix/2.34/store/types/experimental-local-overlay-store)
+
+## Additional implementation entry points
+
+- `airlock-machine/lifecycle/misc/modules/host-store.nix`
+- `airlock-machine/lifecycle/image/profiles/usb-recovery.nix`
+- `airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/host.py`
+- `airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/host_boot.py`
+- `airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/host_state.py`
+- `airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/host_artifacts.py`
+- `lifecycle/image/unified-host-store.nix`
+- `lifecycle/image/tools/prepare-host-store.py`
+- `lifecycle/image/tools/install-host-store.py`

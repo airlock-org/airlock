@@ -13,6 +13,11 @@ older revisions. See [the controller TODO](todo/05-sys-ctrl.md)
 and [direct pool admission TODO](todo/06-direct-pool-machine-deployment.md) for
 remaining validation.
 
+Local source update (2026-09-26): [TODO 07](todo/07-unified-host-guest-store.md)
+adds pool-backed dom0 boot, independent conventional recovery, host publication
+and offline builder transitions. This update has not been tested or built; use
+a fresh image for combined TODO 05/06/07 validation.
+
 ## The development contract
 
 The committed `airlock-machine` repository and the parent repository's pinned `airlock-machine/`
@@ -116,7 +121,9 @@ source, fetching missing inputs or substitutes through sys-firewall. It sends
 guest manifests to the shared pool receiver, which
 requests only missing package objects and immutable root artifacts, then streams
 missing host/transport dependencies
-to dom0's ordinary store. Dom0 binds independently checked admission receipts
+to dom0's private host-store upper. The TODO 07 implementation then publishes
+verified host objects into the same pool and prepares an approved sys-ctrl base
+for its next stopped setup. Dom0 binds independently checked admission receipts
 to the release and invokes its journalled coordinator. `plan` never activates;
 `apply` starts a detached worker so restarting sys-ctrl or sys-dev cannot cancel
 activation. Normal status/verify/resume/rollback and retention commands use a
