@@ -1016,6 +1016,7 @@ def test_usb_prepared_store_preserves_sealed_view_mode(seed):
         earlyLogs = config.boot.initrd.systemd.services.airlock-boot-journal.serviceConfig.ExecStart;
         recoveryLogs = config.specialisation.usb-text-recovery.configuration.airlock.bootDiagnostics.enable;
         journalConfig = config.services.journald.settings.Journal;
+        daemonConfig = config.systemd.services.nix-daemon.environment.NIX_CONFIG;
       }}
     """
     result = subprocess.run(
@@ -1033,6 +1034,8 @@ def test_usb_prepared_store_preserves_sealed_view_mode(seed):
     assert prepared["journalConfig"]["Storage"] == "persistent"
     assert prepared["journalConfig"]["SystemMaxUse"] == "1G"
     assert prepared["journalConfig"]["SyncIntervalSec"] == "1s"
+    assert prepared["daemonConfig"].startswith("store = local-overlay://?")
+    assert "local%%3Froot%%3D" in prepared["daemonConfig"]
 
     assert prepared["image"].endswith(".drv")
     assert prepared["runtimeSeed"] not in prepared["dependencies"]
