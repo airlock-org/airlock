@@ -5,7 +5,11 @@ let
   system = config.system.build.toplevel;
   closure = pkgs.closureInfo { rootPaths = [ system ]; };
   choices = lib.mapAttrs' (name: value: lib.nameValuePair
-    "${system}/specialisation/${name}" (toString value.configuration.system.build.toplevel)
+    # Attribute names cannot carry Nix store dependency context. The system
+    # and closure inputs below retain the dependency on the parent system;
+    # each value also retains its specialisation's dependency context.
+    (builtins.unsafeDiscardStringContext "${system}/specialisation/${name}")
+    (toString value.configuration.system.build.toplevel)
   ) config.specialisation;
   seed = pkgs.runCommand "airlock-unified-store-seed" {
     __structuredAttrs = true;
