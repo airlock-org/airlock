@@ -1030,6 +1030,7 @@ def test_usb_prepared_store_preserves_sealed_view_mode(seed):
         in prepared["imageCommand"]
     )
     command = prepared["imageCommand"]
+    assert "env NIX_REMOTE=local NIX_CONFIG='store = local' /nix/var/nix/profiles/system/bin/switch-to-configuration boot" in command
     # Activation runs upstream qubes-create when qubes.xml is absent. Seed
     # before it, but resolve root:qubes ownership only after users exist.
     assert (

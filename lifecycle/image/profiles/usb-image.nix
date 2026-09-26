@@ -77,7 +77,10 @@ in
       [ "mount $rootDisk $mountPoint" "umount -R /mnt" "-- /nix/var/nix/profiles/system/bin/switch-to-configuration boot" ]
       [ ("mount $rootDisk $mountPoint\n" + installRuntime)
         (ownRuntime + "\numount -R /mnt")
-        "-- env NIX_REMOTE=local /nix/var/nix/profiles/system/bin/switch-to-configuration boot" ] old.buildCommand;
+        # NIX_REMOTE supplies a default; the installed `store = daemon`
+        # setting overrides it. NIX_CONFIG overrides nix.conf for this
+        # chroot invocation and its bootloader/recovery-profile helpers.
+        "-- env NIX_REMOTE=local NIX_CONFIG='store = local' /nix/var/nix/profiles/system/bin/switch-to-configuration boot" ] old.buildCommand;
     preVM = ''
       echo "Validating prepared guest store before image assembly"
       ${unifiedStore.checkCommand}
