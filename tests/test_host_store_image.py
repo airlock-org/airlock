@@ -1,6 +1,8 @@
 """Image bootstrap removal must retain only the independent recovery closure."""
 import importlib.util
 import json
+import fcntl
+import stat
 import sys
 from pathlib import Path
 
@@ -11,6 +13,33 @@ sys.path.insert(0, str(ROOT / "airlock-machine/lifecycle/runtime/tools/pkgs/airl
 spec = importlib.util.spec_from_file_location("install_host_store", ROOT / "lifecycle/image/tools/install-host-store.py")
 installer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(installer)
+spec = importlib.util.spec_from_file_location("prepare_host_store", ROOT / "lifecycle/image/tools/prepare-host-store.py")
+preparer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(preparer)
+
+
+def test_seed_copy_reopens_locks_preserving_sealed_data(tmp_path):
+    seed = tmp_path / "seed"
+    pool = seed / "pool"
+    (pool / "objects").mkdir(parents=True)
+    names = ("admission.lock", "objects/segments.lock", "objects/sealed.blob", "index.erofs")
+    for name in names:
+        path = pool / name
+        path.write_bytes(b"seed")
+        path.chmod(0o444)
+    (pool / "objects").chmod(0o555)
+    pool.chmod(0o555)
+    copied = tmp_path / "copy"
+    preparer.copy_seed(seed, copied)
+    for name in names[:2]:
+        assert stat.S_IMODE((copied / name).stat().st_mode) == 0o600
+        with (copied / name).open("a+") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    for name in names[2:]:
+        assert stat.S_IMODE((copied / name).stat().st_mode) == 0o444
+        assert (copied / name).read_bytes() == b"seed"
+    for name in names:
+        assert stat.S_IMODE((pool / name).stat().st_mode) == 0o444
 
 
 def image(tmp_path):

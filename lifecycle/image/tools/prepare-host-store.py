@@ -7,16 +7,26 @@ from airlock_qubes_storage._engine import core, host, prepared, segments
 from airlock_qubes_storage._engine.core import reproducible_image_build
 
 
-@reproducible_image_build()
-def prepare(seed, output, registration, system, choices):
-    seed, output = Path(seed), Path(output)
-    root = output / "pool"
-    output.mkdir(parents=True)
+def copy_seed(seed, root):
+    """Reopen coordination files in a private copy of an immutable Nix seed."""
     host.command("cp", "-a", "--sparse=always", str(seed / "pool"), str(root))
     root.chmod(0o755)
     for path in root.rglob("*"):
         if path.is_dir() and not path.is_symlink():
             path.chmod(path.stat().st_mode | 0o200)
+    for path in (root / "admission.lock", segments.segment_lock_path(root)):
+        if path.is_symlink():
+            raise ValueError(f"seed coordination lock must not be a symlink: {path}")
+        if path.exists():
+            path.chmod(0o600)
+
+
+@reproducible_image_build()
+def prepare(seed, output, registration, system, choices):
+    seed, output = Path(seed), Path(output)
+    root = output / "pool"
+    output.mkdir(parents=True)
+    copy_seed(seed, root)
     # Existing indices are immutable. Seed segments stay sealed, so new host
     # admission cannot invalidate the descriptors referenced by host closures.
     for path in root.rglob("*.json"):
