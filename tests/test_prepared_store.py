@@ -506,7 +506,7 @@ def test_builder_qubes_attachment_is_stable_after_serialization(
     vm.volumes["builder-metadata"] = object()
     with pytest.raises(SystemExit):
         asyncio.run(helper.ensure_builder_store(args))
-    assert "offline migration" in capsys.readouterr().err
+    assert "unsupported builder volumes: builder-metadata" in capsys.readouterr().err
     del vm.volumes["builder-metadata"]
     vm.volume_config["builder-store"]["generation"] = "2"
     with pytest.raises(SystemExit):
