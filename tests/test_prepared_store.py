@@ -1015,7 +1015,7 @@ def test_usb_prepared_store_preserves_sealed_view_mode(seed):
         hostOrdering = config.boot.initrd.systemd.services.initrd-find-nixos-closure.after;
         earlyLogs = config.boot.initrd.systemd.services.airlock-boot-journal.serviceConfig.ExecStart;
         recoveryLogs = config.specialisation.usb-text-recovery.configuration.airlock.bootDiagnostics.enable;
-        journalConfig = config.services.journald.extraConfig;
+        journalConfig = config.services.journald.settings.Journal;
       }}
     """
     result = subprocess.run(
@@ -1030,7 +1030,9 @@ def test_usb_prepared_store_preserves_sealed_view_mode(seed):
     assert "airlock-host-store.service" in prepared["hostOrdering"]
     assert "boot-journal.py" in prepared["earlyLogs"]
     assert prepared["recoveryLogs"] is True
-    assert "Storage=persistent" in prepared["journalConfig"]
+    assert prepared["journalConfig"]["Storage"] == "persistent"
+    assert prepared["journalConfig"]["SystemMaxUse"] == "128M"
+    assert prepared["journalConfig"]["SyncIntervalSec"] == "5s"
 
     assert prepared["image"].endswith(".drv")
     assert prepared["runtimeSeed"] not in prepared["dependencies"]
