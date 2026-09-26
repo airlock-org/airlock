@@ -1031,7 +1031,7 @@ def test_usb_prepared_store_preserves_sealed_view_mode(seed):
     assert "boot-journal.py" in prepared["earlyLogs"]
     assert prepared["recoveryLogs"] is True
     assert prepared["journalConfig"]["Storage"] == "persistent"
-    assert prepared["journalConfig"]["SystemMaxUse"] == "128M"
+    assert prepared["journalConfig"]["SystemMaxUse"] == "1G"
     assert prepared["journalConfig"]["SyncIntervalSec"] == "1s"
 
     assert prepared["image"].endswith(".drv")
