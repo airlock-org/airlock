@@ -54,7 +54,15 @@ def image(tmp_path):
     (pool / "host/boots/host.json").write_text(json.dumps({"manifest": "/var/lib/airlock/closure-store/generation.json", "system": paths[0], "generation": 1}))
     entries = tmp_path / "boot/loader/entries"
     entries.mkdir(parents=True)
-    (entries / "xen-generation-1-specialisation-usb-text-recovery.conf").write_text("recovery")
+    marker = tmp_path / paths[1].lstrip("/") / "etc/airlock/boot-role"
+    marker.parent.mkdir(parents=True)
+    marker.write_text("recovery\n")
+    efi = tmp_path / "boot/EFI/nixos"
+    efi.mkdir(parents=True)
+    (entries / "xen-0123456789abcdef.conf").write_text("title Airlock (recovery)\nefi /EFI/nixos/xen-0123456789abcdef.efi\n")
+    for name in ("xen-0123456789abcdef.efi", "kernel", "initrd"):
+        (efi / name).write_bytes(b"boot artifact")
+    (efi / "xen-0123456789abcdef.cfg").write_text(f"kernel=kernel init={paths[1]}/init\nramdisk=initrd\n")
     recovery = tmp_path / "recovery-paths"
     recovery.write_text(paths[1] + "\n")
     return recovery, paths
@@ -77,3 +85,12 @@ def test_seed_removal_refuses_unpublished_objects(tmp_path):
         installer.install(tmp_path, recovery)
     assert extra.exists()
     assert (tmp_path / paths[0].lstrip("/")).exists()
+
+
+def test_seed_removal_refuses_entry_for_wrong_system(tmp_path):
+    recovery, paths = image(tmp_path)
+    config = tmp_path / "boot/EFI/nixos/xen-0123456789abcdef.cfg"
+    config.write_text(f"kernel=kernel init={paths[0]}/init\nramdisk=initrd\n")
+    with pytest.raises(ValueError, match="recovery boot entry"):
+        installer.install(tmp_path, recovery)
+    assert (tmp_path / paths[1].lstrip("/")).exists()

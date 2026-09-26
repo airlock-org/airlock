@@ -22,12 +22,19 @@ def install(root, recovery_paths):
     ordinary = {"/nix/store/" + path.name for path in store.iterdir() if not path.name.startswith(".")}
     if not recovery <= ordinary or not ordinary <= admitted:
         raise ValueError("image store differs from published host/recovery inventory")
-    if not any((root / "boot/loader/entries").glob("*recovery*.conf")):
+    from airlock_qubes_storage.host_artifacts import inventory, seal
+    recovery_systems = []
+    for system in sorted(recovery):
+        marker = root / system.lstrip("/") / "etc/airlock/boot-role"
+        if marker.is_file() and marker.read_text().strip() == "recovery":
+            recovery_systems.append(system)
+    # Xen entry filenames are hashes, not specialisation names. Verify the
+    # init target and its installed EFI/kernel/initrd artifacts instead.
+    if not any(inventory(root / "boot", system) for system in recovery_systems):
         raise ValueError("independent recovery boot entry was not installed")
     from airlock_qubes_storage._engine.host import allocated
     staging_bytes = allocated(store)
     pool_bytes = allocated(pool)
-    from airlock_qubes_storage.host_artifacts import seal
     seal(pool, root / "boot")
     destination = root / "var/lib/airlock/recovery-store"
     destination.mkdir(parents=True)
