@@ -46,6 +46,10 @@ roots, and release inventory/pruning tracks planned candidates.
 
 No migration or compatibility protocol is required for this unreleased software.
 
+[TODO 07](07-unified-host-guest-store.md) proposes extending the pool to dom0's
+own Nix objects and enabling builder reuse of selected host objects. That work
+is separate from this TODO's direct admission and root-image reuse criteria.
+
 ## Goal
 
 Have sys-ctrl submit a guest package manifest, let dom0 reuse objects already

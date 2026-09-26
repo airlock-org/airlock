@@ -27,7 +27,9 @@ results. Other document summaries retain their stated validation boundaries.
 | [First-run wizard](todo/first-run-setup-wizard.md) | Planned. Welcome/completion shell first; timed trials and rollback before disruptive pages. |
 | [USB input setup](todo/usb-input-setup.md) | Planned. First hardware trial consumer; preserve storage and existing connectivity. Ownership depends on hardware. |
 | [USB lab network follow-ups](todo/usb-lab-network-followups.md) | Focused tests, updates proxy, PCI Wi-Fi traffic, and an exact persistence sentinel remain. The wired topology passed physical acceptance. |
-| [sys-ctrl](todo/05-sys-ctrl.md) | Planned controller migration; reuse completed sys-dev build/deployment capabilities. |
+| [sys-ctrl](todo/05-sys-ctrl.md) | Controller implementation; physical deployment acceptance remains open. |
+| [Direct pool deployment](todo/06-direct-pool-machine-deployment.md) | Package admission and sparse root reuse; physical acceptance remains open. |
+| [Unified host and guest store](todo/07-unified-host-guest-store.md) | Proposed shared object storage, early-boot host view and builder reuse of host objects. |
 | [Cached offline builder check](completed/07-cached-offline-builder-check.md) | Completed image prerequisite that reuses passing offline acceptance for unchanged inputs. |
 
 Wizard and input work do not depend on implementing sys-ctrl. Network isolation
