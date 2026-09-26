@@ -161,3 +161,36 @@ verification separately.
 
 Moving the pool into sys-ctrl, replacing the Xen storage backend or Qubes control
 mechanisms, and full GUI completion are outside this work.
+
+## Combined physical acceptance, 2026-09-27
+
+The rebuilt image booted successfully and sys-dev was reachable over Tailscale.
+Dom0, sys-dev and sys-ctrl reported no failed services; declared autostart VMs
+were running. Sys-ctrl had 8192 MiB and sys-firewall as NetVM. Both builders
+used their image-seeded generation 2. Sys-ctrl's read-only builder view contained
+the exact running host system, absent from its writable upper. A direct
+sys-dev pool-admission request was refused (exit 126). These are partial
+observations, not completion of the isolation or deployment acceptance criteria.
+
+Persistent boot logs showed pool assembly completing between 6.956 and 8.896
+seconds after boot, followed by closure discovery and successful activation.
+Pool allocation was 14,040,084,480 bytes, recovery 2,943,549,440 bytes, and host
+upper allocation zero at baseline. Dom0 had about 38 GiB free.
+
+The initial source plan built its release but had no successful planning receipt
+at cancellation. Its final client exit was 1 with an empty/invalid JSON response
+(`Expecting value: line 1 column 1`); the typed status remained `image-baseline`
+with no selection. A bounded host Nix query exposed recursive daemon connections:
+its NIX_REMOTE setting was rejected by systemd percent expansion, and nix.conf
+selected `daemon` rather than the intended local overlay backend. Committed
+fix 29bce42 uses an escaped NIX_CONFIG override. A recorded temporary daemon
+override then exposed the missing `.links` directory in the host lower view.
+Fix 944cbb3 adds a read-only administrative layer during early boot. The runtime
+override was removed; the running host view was not replaced. No release was
+applied or selected. The new fixes require a rebuilt image and manual boot;
+reboot, rollback, GC, persistence and update-performance acceptance remain open.
+
+Evidence: `.airlock-logs/physical-20260927/` (boot and daemon logs, store/volume
+observations, source-import receipt, policy rejection, and mutation record).
+The remote initial plan log is in sys-dev at
+`~/.local/share/airlock/physical-tests/todo050607-20260926-232115/`.
