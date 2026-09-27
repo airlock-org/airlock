@@ -154,11 +154,14 @@ logs; the original diagnostic build log and exit marker are in sys-ctrl's
 - [x] Reboot and rollback preserve guest private data and retained generations.
   Both fourth-image reboot directions passed with exact host/guest selection
   and private/builder/host-derivation sentinels retained.
-- [ ] Restart or fail sys-ctrl during its update; recover using sys-dev's typed
+- [x] Restart or fail sys-ctrl during its update; recover using sys-dev's typed
   status/resume/rollback route and, if needed, the physical recovery console.
+  R5 normal apply restarted sys-ctrl and continued independently in dom0;
+  sys-dev status and post-reboot verify passed. R4 also exercised controller
+  outage and rollback/recovery. Abrupt power-cut cases remain separate.
 - [ ] Reject unauthorized/malformed requests and incomplete artifacts; exercise
   interrupted transfers, retries and temporary-data cleanup.
-- [ ] Retention and GC preserve running and rollback generations across updates.
+- [x] Retention and GC preserve running and rollback generations across updates.
 - [x] Host updates preserve the `reboot-required` / `complete` distinction.
   Fourth-image apply and normal reboot verified both states; rollback again
   reports `reboot-required` until its selected host boots.
@@ -791,3 +794,11 @@ Logs: `/var/log/airlock/physical-tests/r5/root-trial`. The memory-only follow-up
 is prepared locally as `3c74286`; neither trial changes the main product config.
 Restore source `fbe6062` and the selected baseline after the trials. Do not count
 these in-progress checks as passes or reboot while they run.
+
+
+R5 maintenance checkpoint: recovery, GC and compaction passed, preserving 29
+retained manifests and all retained host boot records. Only obsolete
+sys-ctrl-builder generation 2 and its view were collected. Compaction was a
+no-work pass (358.84 seconds, 14.48 GB hashed); real relocation/interruption is
+covered by the local regression tests. See TODO 07's updated maintenance
+section for evidence and timing limitations. The root trial is now planning.

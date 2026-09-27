@@ -218,7 +218,7 @@ empty space; this is separate from guest package duplication.
   generations without accumulating unbounded temporary data.
 - [x] Reboot and rollback work with direct admission and preserve guest private
   data; stopping sys-ctrl leaves running guests' storage usable.
-- [ ] Retention and GC preserve active and rollback generations after repeated
+- [x] Retention and GC preserve active and rollback generations after repeated
   deployments.
 
 Read [machine-deployment.md](../machine-deployment.md) before physical work.
@@ -846,3 +846,11 @@ Logs: `/var/log/airlock/physical-tests/r5/root-trial`. The memory-only follow-up
 is prepared locally as `3c74286`; neither trial changes the main product config.
 Restore source `fbe6062` and the selected baseline after the trials. Do not count
 these in-progress checks as passes or reboot while they run.
+
+
+R5 maintenance checkpoint: recovery, GC and compaction passed, preserving 29
+retained manifests and all retained host boot records. Only obsolete
+sys-ctrl-builder generation 2 and its view were collected. Compaction was a
+no-work pass (358.84 seconds, 14.48 GB hashed); real relocation/interruption is
+covered by the local regression tests. See TODO 07's updated maintenance
+section for evidence and timing limitations. The root trial is now planning.

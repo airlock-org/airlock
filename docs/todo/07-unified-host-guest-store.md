@@ -280,7 +280,7 @@ recovery/restoration before resuming normal deployment and TODO 05–07 acceptan
 - [x] Dom0 and a guest can reference the same admitted package without a second
   retained full payload copy. Record allocated bytes and explain deliberate
   bootstrap/recovery exceptions and temporary staging copies.
-- [ ] Closure views expose only their intended objects. Writable layers remain
+- [x] Closure views expose only their intended objects. Writable layers remain
   isolated; a guest cannot modify host/shared objects or publish trusted state.
 - [ ] Nix queries, imports, supported builds, profile selection and GC behave
   correctly against dom0's composed store and registration database.
@@ -293,7 +293,7 @@ recovery/restoration before resuming normal deployment and TODO 05–07 acceptan
   bindings and guest private data, including while sys-ctrl is unavailable.
 - [ ] Interruptions during admission, registration, view publication and boot
   selection cannot expose incomplete generations as successfully deployed.
-- [ ] GC and compaction preserve running, selected, rollback and persistent
+- [x] GC and compaction preserve running, selected, rollback and persistent
   builder dependencies across repeated updates and remove only unreferenced
   objects. Boot selection and GC races are covered explicitly.
 - [ ] Compare cold and repeat planning against TODO 06's measured baseline:
@@ -986,3 +986,53 @@ Logs: `/var/log/airlock/physical-tests/r5/root-trial`. The memory-only follow-up
 is prepared locally as `3c74286`; neither trial changes the main product config.
 Restore source `fbe6062` and the selected baseline after the trials. Do not count
 these in-progress checks as passes or reboot while they run.
+
+
+### Exact guest views and maintenance progress
+
+All six running guests expose exactly their approved manifest's store paths:
+sys-dev 617, sys-ctrl 606, sys-gui 1513, sys-net 639, sys-firewall 597 and usr-home
+977. There are no extra or missing entries (`r5/closure-membership.log`). Combined
+with r4's root/private-write isolation, peer deletion, read-only store rejection
+and denied unauthorized pool request, this closes the closure-view isolation
+criterion. A truncated source upload was rejected before checkout changes
+(`r5/truncated-source.json`); this is source-transport coverage, not a simulated
+power cut during package admission.
+
+Recovery passed in 422.40 seconds, hashing 14,338,229,760 payload bytes with
+11,534 verification-cache hits. GC passed in 358.89 seconds, hashing
+14,475,450,880 bytes with 2,417 cache hits. GC removed only obsolete sys-ctrl-builder
+generation 2 and its view; no root artifacts or payload segments were removed.
+The worker's retained-map/manifests and boot-artifact checks passed after both
+operations. Compaction is still in progress; each operation has its own cache.
+
+The planned memory-only trial is now `8621216`, based directly on `fbe6062`,
+so it can follow rollback of the root trial while keeping the original 1 GiB
+root. Prepared but unused `3c74286` is superseded and will not be deployed.
+
+
+### Updated maintenance passed; root trial planning
+
+R5 recovery, GC and real compaction all passed in 1,162.19 seconds total.
+Compaction completed in 358.84 seconds with `noop: true`: no candidate segments
+or reclaimable segments, no new transaction, no map refresh or segment sealing.
+It hashed 14,475,450,880 bytes and reused 2,417 checksum results. All 29 retained
+manifests, retained host maps/boot records and selected boot artifacts survived
+each operation unchanged. The interrupted old compaction is recovered.
+
+The older r4 dry run took about 760 seconds; the stopped old actual compaction
+read over 61 GB without completing. These are not controlled benchmark runs:
+pool contents and cache state differ, and old physical I/O counters are not the
+same metric as new payload bytes hashed. The updated no-work path completes
+and eliminates repeated hashing within an operation, but still reads about
+14.5 GB per maintenance operation on this pool. Separating routine metadata
+maintenance from full integrity scrubs remains the documented future design.
+
+Physical no-work maintenance/preservation and r4 GC deletion, combined with
+the 67 local maintenance/host tests (real segment relocation, pinned maps,
+interruption/recovery and released-extent collection) and the real lock race
+check, close the maintenance criterion. Actual relocation was tested locally;
+this physical pool had no relocation candidates. Evidence: r5
+`maintenance-progress.log`, `maintenance-results.log`, and dom0's corresponding
+`/var/log/airlock/physical-tests/r5/maintenance/*.json`. The root-image trial has
+advanced to planning; root boot and rollback checks remain pending.
