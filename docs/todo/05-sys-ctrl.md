@@ -7,8 +7,9 @@ was removed, and private data survived. Original source `5c87f84` is restored
 in both builder VMs. Installed validators reject damaged metadata in disposable
 copies. The missing-view recovery console test passed: the user booted recovery,
 confirmed the metadata was absent, restored it, and successfully selected host
-generation 1. A normal reboot, restored-file verification and removal of the
-remaining diagnostic directory are next. Other acceptance criteria remain open.
+generation 1. The subsequent normal reboot passed: exact generations, saved
+data and restored metadata hashes were verified, and the diagnostic directory
+was removed. Other acceptance criteria remain open.
 
 Status (2026-09-25): the earlier implementation passed the quick checks:
 579 passed, 24 skipped, two existing warnings. The machine and parent image
@@ -135,14 +136,14 @@ logs; the original diagnostic build log and exit marker are in sys-ctrl's
   `.airlock-logs/flake-check-no-build/pytest-command.log`, and
   `.airlock-logs/controller-image-check-junit.xml`.
 - [ ] Run the controller/storage integration tests on a booted image.
-- [ ] Build and inspect the host transport closure: no retained guest-only
+- [x] Build and inspect the host transport closure: no retained guest-only
   source closures in dom0's ordinary store.
 - [x] Cold boot starts the controller and required machine topology without a
   controller/store boot dependency cycle. Fourth-image baseline below records
   the healthy host, controller and declared autostart guests.
 - [x] Submit a committed guest change and a whole-machine change through sys-dev;
   verify source provenance, exact generations and controller outcome records.
-- [ ] Repeated updates reuse pool objects; record transferred bytes, elapsed
+- [x] Repeated updates reuse pool objects; record transferred bytes, elapsed
   time, allocated storage and retained references.
 - [x] Reboot and rollback preserve guest private data and retained generations.
   Both fourth-image reboot directions passed with exact host/guest selection
@@ -581,7 +582,7 @@ Original metadata and the bootable store were unchanged by this probe, and its
 temporary directory was removed. Evidence: `metadata-fault-probe.log`.
 This probe does not substitute for a physical recovery boot with a missing view.
 
-### Pending diagnostic mutation: missing-view recovery boot
+### Missing-view recovery fault setup (subsequently restored)
 
 After the checks above, the selected generation-1 host metadata was moved from
 `/var/lib/airlock/closure-store/views/by-closure/27bde8f537a1b1f733fc8046f16307fc98aab16cd6b28ef1c691436ea8e8decc/store.erofs`
@@ -616,6 +617,16 @@ of the retained normal host. The previous repeated photograph was not counted
 as evidence for this fault trial.
 
 Evidence: `.airlock-logs/physical-20260927-r4/missing-view-recovery-console.png`.
-Next: manually reboot normal `Airlock`, verify exact generations, saved data and
-the restored metadata hash, then remove the diagnostic directory's remaining
-symlink and record. That cleanup and return-to-normal verification remain pending.
+The subsequent normal boot passed. Typed verification reports `complete` with
+exact baseline host/guest bindings. Saved guest private data, both builders'
+rooted additions and the host derivation/output survived. Early store assembly
+completed between 7.111 and 13.500 seconds after boot; dom0 has no failed units.
+The selected generation-1 metadata hash and installed boot artifacts were
+verified before removing the diagnostic symlink, record and directory. No
+missing-view diagnostic mutation remains.
+
+Evidence under `.airlock-logs/physical-20260927-r4/`:
+`missing-view-return-verify.json`, `post-missing-view-return.log`, and
+`recovery-fault-cleanup.log`. This closes the physical missing-view recovery
+trial; corrupt-metadata rejection was separately checked with disposable
+metadata copies, not a second physical corrupt-view boot.

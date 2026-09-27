@@ -7,17 +7,16 @@ host reboot. Original source `5c87f84` is restored in both builder VMs; the
 selected machine is the original image baseline with saved private data,
 builder additions and host derivation/output preserved.
 
-The missing-view recovery console test passed: the user booted recovery with
-selected host metadata absent, restored the file, and successfully selected
-host generation 1. **The next boot should select normal `Airlock`.** Verify the
-restored metadata and exact running generations, then remove the remaining
-`/var/lib/airlock/recovery-probe` diagnostic directory. No test worker is running.
-Console evidence is recorded in [TODO 07](todo/07-unified-host-guest-store.md).
+The missing-view recovery trial and subsequent normal boot passed. Exact
+running generations, saved data, restored metadata and installed boot artifacts
+were verified; `/var/lib/airlock/recovery-probe` was removed. No missing-view
+diagnostic mutation or test worker remains. Evidence is recorded in
+[TODO 07](todo/07-unified-host-guest-store.md).
 
 See [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
 [TODO 07](todo/07-unified-host-guest-store.md) for passed checks and remaining
-recovery-fault, retention, interruption/isolation and performance criteria.
+retention, interruption/isolation and performance criteria.
 Earlier dated sections below apply to their stated revisions.
 
 ## The development contract

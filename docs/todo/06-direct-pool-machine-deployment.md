@@ -7,8 +7,9 @@ was removed, and private data survived. Original source `5c87f84` is restored
 in both builder VMs. Installed validators reject damaged metadata in disposable
 copies. The missing-view recovery console test passed: the user booted recovery,
 confirmed the metadata was absent, restored it, and successfully selected host
-generation 1. A normal reboot, restored-file verification and removal of the
-remaining diagnostic directory are next. Other acceptance criteria remain open.
+generation 1. The subsequent normal reboot passed: exact generations, saved
+data and restored metadata hashes were verified, and the diagnostic directory
+was removed. Other acceptance criteria remain open.
 
 Status (2026-09-25): local implementation now includes the root-image reuse
 work described below. The user subsequently ran `make test-quick`: 594 passed, 24 skipped, three
@@ -203,7 +204,7 @@ empty space; this is separate from guest package duplication.
   initial and repeated updates.
 - [ ] Guest-only source closures are not retained in dom0's ordinary store.
   Verify release/GC references and allocated disk usage across repeated updates.
-- [ ] Dom0 runtime and boot/recovery dependencies remain available independently
+- [x] Dom0 runtime and boot/recovery dependencies remain available independently
   of sys-ctrl, and host updates preserve whole-machine generation verification.
 - [ ] Admitted generations match the intended guest and release provenance;
   incomplete or invalid artifacts cannot be activated.
@@ -636,7 +637,7 @@ Original metadata and the bootable store were unchanged by this probe, and its
 temporary directory was removed. Evidence: `metadata-fault-probe.log`.
 This probe does not substitute for a physical recovery boot with a missing view.
 
-### Pending diagnostic mutation: missing-view recovery boot
+### Missing-view recovery fault setup (subsequently restored)
 
 After the checks above, the selected generation-1 host metadata was moved from
 `/var/lib/airlock/closure-store/views/by-closure/27bde8f537a1b1f733fc8046f16307fc98aab16cd6b28ef1c691436ea8e8decc/store.erofs`
@@ -671,6 +672,16 @@ of the retained normal host. The previous repeated photograph was not counted
 as evidence for this fault trial.
 
 Evidence: `.airlock-logs/physical-20260927-r4/missing-view-recovery-console.png`.
-Next: manually reboot normal `Airlock`, verify exact generations, saved data and
-the restored metadata hash, then remove the diagnostic directory's remaining
-symlink and record. That cleanup and return-to-normal verification remain pending.
+The subsequent normal boot passed. Typed verification reports `complete` with
+exact baseline host/guest bindings. Saved guest private data, both builders'
+rooted additions and the host derivation/output survived. Early store assembly
+completed between 7.111 and 13.500 seconds after boot; dom0 has no failed units.
+The selected generation-1 metadata hash and installed boot artifacts were
+verified before removing the diagnostic symlink, record and directory. No
+missing-view diagnostic mutation remains.
+
+Evidence under `.airlock-logs/physical-20260927-r4/`:
+`missing-view-return-verify.json`, `post-missing-view-return.log`, and
+`recovery-fault-cleanup.log`. This closes the physical missing-view recovery
+trial; corrupt-metadata rejection was separately checked with disposable
+metadata copies, not a second physical corrupt-view boot.
