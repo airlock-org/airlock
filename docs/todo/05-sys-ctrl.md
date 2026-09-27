@@ -3,8 +3,9 @@
 Current continuation: maintenance fix `fbe6062` booted successfully; typed
 verification marked transaction `1790546188487824369` complete. Saved data,
 builder additions and boot records passed; installed maintenance code hashes
-match the commit. Detached maintenance and the root-artifact trial are in
-progress. Overall acceptance remains open. See the final continuation.
+match the commit. Recovery, GC and compaction passed. A machine plan for the
+root-artifact trial is running. Overall acceptance remains open. See the final
+continuation.
 
 Latest status (2026-09-27, fourth image): **acceptance incomplete**. Normal
 return from independent recovery passed. A committed usr-home-only update and
@@ -802,3 +803,22 @@ sys-ctrl-builder generation 2 and its view were collected. Compaction was a
 no-work pass (358.84 seconds, 14.48 GB hashed); real relocation/interruption is
 covered by the local regression tests. See TODO 07's updated maintenance
 section for evidence and timing limitations. The root trial is now planning.
+
+
+### Root-trial route corrected
+
+The first r5 root trial used guest-plan, which updates guest packages and
+intentionally inherits the selected root artifact. It admitted usr-home
+generation 6 with the original 1 GiB root and unchanged system, then rejected
+planning with `admitted guest system is already selected`. This was a test-route
+error, not a failed new-root activation: no guest was stopped or switched.
+`root-trial` and its follow-up `root-finish` exited before mutating runtime state.
+Evidence: r5 `root-progress.log`, `root-failure.log` and
+`unchanged-root-rejection.log`.
+
+Detached `airlock-r5-root-machine-plan` now uses the normal machine-plan route
+for committed `da65cc9`, which includes root artifacts and topology changes.
+It checks the 1536 MiB usr-home root and reuse of every other root before
+stopping for plan review. Logs: `/var/log/airlock/physical-tests/r5/root-machine`.
+Do not assume this topology change needs no host reboot; inspect the resulting
+plan before apply. The live maintenance release remains selected and healthy.

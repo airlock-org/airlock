@@ -4,18 +4,20 @@ Current physical acceptance (2026-09-27, fourth image): maintenance fix
 `fbe6062` has booted successfully. Typed verification completed transaction
 `1790546188487824369`; host and running guests match selection. Saved data,
 builder additions, host derivation/output and retained boot records passed.
-Installed maintenance code matches the commit. Detached recovery/GC/compaction
-checks are running, followed conditionally by the isolated usr-home root trial.
-No reboot or new image is currently needed. See TODO 07's final checkpoint.
+Installed maintenance code matches the commit. Recovery, GC and compaction
+passed. The isolated usr-home root-size trial is now being planned through the
+normal machine route; its first guest-only attempt correctly rejected an
+unchanged guest because that route inherits the selected root. No activation
+has occurred for the trial. See TODO 07's final checkpoint.
 
 Earlier forward deployment, rollback, independent recovery, missing-view
 recovery and normal return passed. A committed single-guest marker update and
 rollback also passed without a host reboot. The missing-view diagnostic was
 removed. The stopped old compaction's retained-host map mutation was restored
 to its exact original verified checksum; the committed fix prevents recurrence.
-Recovery of its unfinished zero-candidate transaction is now running with the
-updated code. Compaction measurements and the stopped root-image trial
-remain outstanding. See the final continuation in
+Its unfinished zero-candidate transaction has now been recovered. Updated
+compaction passed in 358.84 seconds; new-root activation and rollback remain
+outstanding. See the final continuation in
 [TODO 07](todo/07-unified-host-guest-store.md) for evidence and next steps.
 
 See [TODO 05](todo/05-sys-ctrl.md),
