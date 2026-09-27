@@ -1,21 +1,18 @@
 # Repository-first whole-machine deployment
 
-Current physical acceptance (2026-09-27, offline USB inspection): release
-`3a6f665` applied and reached `reboot-required`; all expected running guests
-matched their selected generations, followed by an orderly shutdown. The
-subsequent boot failed during host database reconstruction: Nix needed to
-read a saved derivation while the replacement database used an empty store.
-The original database and derivation remain intact on the USB.
+Current physical acceptance (2026-09-27, fourth image): clean machine revision
+`5c87f84` booted successfully at `sys-dev-1`. Host queries/builds, builder-store
+restarts and observation with sys-ctrl stopped passed. A disposable live probe
+using the installed database-transition helper and real read-only binds also
+preserved a saved derivation and output mapping without changing the active
+database. A full host reboot with that saved derivation remains to be tested.
 
-Local fixes `432a2ae` and `5c87f84` expose store payloads during registration
-and keep early-boot diagnostics enabled in deployed USB host releases. The
-failure was reproduced with copied metadata, and registration succeeded with
-the recipe visible. Nineteen focused host-store tests pass; physical boot of
-the fixes has not been verified. The USB was inspected without editing it,
-and no image was built. See [TODO 05](todo/05-sys-ctrl.md),
+Whole-machine planning is running detached from the booted source revision.
+No release has been selected in this trial. See [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
-[TODO 07](todo/07-unified-host-guest-store.md) for detailed evidence and open
-reboot, recovery, rollback, retention and performance criteria.
+[TODO 07](todo/07-unified-host-guest-store.md) for evidence and outstanding
+reboot, recovery, rollback, retention and performance criteria. Earlier dated
+sections below apply to their stated revisions.
 
 ## The development contract
 

@@ -1,13 +1,12 @@
 # Move configuration work into sys-ctrl
 
-Latest status (2026-09-27, USB inspection): **acceptance incomplete**. The
-committed release applied successfully and reached `reboot-required`; all
-expected running guests matched their selected generations. Shutdown was
-orderly. The subsequent boot failed during host database reconstruction.
-Local fixes `432a2ae` and `5c87f84` make stored derivations available during
-registration and preserve early-boot logging in deployed releases. Nineteen
-focused host-store tests pass; a new physical boot remains unverified.
-Earlier status sections below are historical.
+Latest status (2026-09-27, fourth image): **acceptance incomplete**. The
+`5c87f84` image booted successfully at `sys-dev-1`. Host-store queries/builds,
+builder restarts and controller-outage observation checks pass. The installed
+database-reconstruction helper also passed a disposable live probe using real
+read-only bind mounts and a saved derivation. A detached whole-machine plan
+is running; no release has been selected in this trial. Full host reboot,
+rollback, recovery and remaining retention criteria remain open.
 
 Status (2026-09-25): the earlier implementation passed the quick checks:
 579 passed, 24 skipped, two existing warnings. The machine and parent image
@@ -136,8 +135,9 @@ logs; the original diagnostic build log and exit marker are in sys-ctrl's
 - [ ] Run the controller/storage integration tests on a booted image.
 - [ ] Build and inspect the host transport closure: no retained guest-only
   source closures in dom0's ordinary store.
-- [ ] Cold boot starts the controller and required machine topology without a
-  controller/store boot dependency cycle.
+- [x] Cold boot starts the controller and required machine topology without a
+  controller/store boot dependency cycle. Fourth-image baseline below records
+  the healthy host, controller and declared autostart guests.
 - [ ] Submit a committed guest change and a whole-machine change through sys-dev;
   verify source provenance, exact generations and controller outcome records.
 - [ ] Repeated updates reuse pool objects; record transferred bytes, elapsed
@@ -326,3 +326,36 @@ read-only for inspection. No image was built. Evidence is in
 `.airlock-logs/usb-inspection-20260927/`: deployment status/journal, original
 initrd log, failing/successful database reproduction and pytest results.
 Physical reboot, rollback, recovery and remaining acceptance gates stay open.
+
+## Fourth image: boot and isolated transition checks, 2026-09-27
+
+The booted source is clean `5c87f847090724e2fd474076f0c669079cbc1f7f`.
+Host pool assembly completed at 9.484 seconds (started at 7.122); the log shows
+store assembly preceding database replacement. Dom0, sys-dev and sys-ctrl
+had no failed services. Declared guests were running, usr-browser halted, and
+sys-ctrl had 8192 MiB with sys-firewall as NetVM. The host Nix daemon accepted
+queries and a small build. Both the output and derivation are rooted for the
+next reboot, explicitly retaining the case that previously broke early boot.
+
+An isolated mount-namespace probe used the installed storage package, a SQLite
+backup and read-only binds of the store. The actual database replacement helper
+completed with the saved derivation and its output mapping intact. Temporary
+mounts/files were removed; the live database was not replaced. This validates
+the previously failing operation, not a complete host reboot.
+
+Both builder-store services restarted and preserved their base identities and
+added package. Sys-ctrl was then shut down: typed status/release inventory still
+worked through sys-dev, and usr-home/host store contents remained readable.
+Restarting sys-ctrl preserved its private sentinel and added package. The exact
+running host system is present in the controller lower without an upper copy.
+Malformed machine-control input exited 1; sys-dev direct pool admission was
+refused with exit 126. No activation occurred during these checks.
+
+The normal plan runs detached in sys-dev at
+`~/.local/share/airlock/physical-tests/todo050607-r4-plan-20260927-163453/`.
+Evidence and intentional test-state details: `.airlock-logs/physical-20260927-r4/`,
+including `baseline.log`, `persistence.log`, `db-probe.log`,
+`builder-restart.log`, `controller-outage.log`, `policy.log` and `notes.md`.
+A synchronous allocated-byte inventory exceeded the observer's 45-second limit
+and yielded no report; it is not counted as a passed check. No inventory
+process remained at the following observation.
