@@ -1,15 +1,14 @@
 # Share immutable store objects between dom0 and guests
 
 Latest status (2026-09-27, fourth image): **acceptance incomplete**. The
-`5c87f84` image booted successfully at `sys-dev-1`. Host-store queries/builds,
-builder restarts and controller-outage observation checks pass. The installed
-database-reconstruction helper also passed a disposable live probe using real
-read-only bind mounts and a saved derivation. Whole-machine plan and apply
-succeeded; typed verification reports `reboot-required`, with all six running
-guests matching their selected generations. Repeated submission transferred no
-package or root-image payload. Persistent data and builder additions survived,
-and selected boot artifacts and early logging passed verification. Waiting for
-a manual normal reboot; rollback, recovery and retention criteria remain open.
+`5c87f84` release passed a real host reboot: typed verification reported
+`complete`, with exact host/guest generations, saved private data, builder
+additions and the saved host derivation/output mapping intact. Rollback was
+then requested through sys-dev with sys-ctrl stopped. It restored the image's
+guest versions and selected host pool generation 1, reaching `reboot-required`.
+Data and boot-artifact verification passed again. The next step is a manual
+normal reboot to finish rollback acceptance. Recovery, GC/compaction and
+remaining fault/isolation/performance criteria are still open.
 
 Status (2026-09-26): image assembly succeeded after seed permission and Xen
 EFI validation fixes. The first laptop boot hung after the host store's saved
@@ -524,3 +523,47 @@ Evidence in `.airlock-logs/physical-20260927-r4/`: `plan-receipt.json`,
 under `~/.local/share/airlock/physical-tests/todo050607-r4-apply-20260927-164807/`.
 Full host reboot, rollback, independent recovery and remaining retention/fault
 acceptance are still outstanding; these TODOs are not complete.
+
+
+### Selected-host reboot passed; rollback awaits its reboot
+
+The user rebooted into selected host
+`/nix/store/pbd5g5nn8ykzva6vzrw7s1nv0l336bi8-nixos-system-dom0-26.11.20260904.801bef6`.
+Typed verification changed transaction `1790527932393756334` to `complete`:
+the host and all six intended running guests matched, with usr-browser halted.
+There were no failed dom0 units. Sys-dev/sys-ctrl/usr-home sentinels, both saved
+builder objects and the host derivation's validity, exact output mapping and
+output contents survived. Sys-ctrl retained builder base generation 3.
+
+The actual early-boot journal shows host assembly from 7.202 to 27.805 seconds:
+two bases and 1,385 store paths, lower database loading at 12.024 seconds,
+final overlay at 26.146 and host database replacement at 26.255. This directly
+exercises the saved-derivation case that broke the previous image's reboot.
+The mounted host overlay uses final `/var/lib/airlock` paths. This is a passed
+normal reboot, not proof of independent recovery or arbitrary interruption safety.
+
+Release inventory protects the current release through running-host, selected
+profile and selected-release references. The image baseline's prune plan is
+blocked as the selected previous release. No pruning or GC was performed.
+
+Sys-ctrl was deliberately stopped and confirmed halted while sys-dev and
+usr-home remained running. Sys-dev's normal typed rollback command then
+started detached worker `airlock-machine-deploy-2af15f761f7e`. The worker exited 0;
+transaction `1790529121150146796` and typed verification are `reboot-required`.
+The image's sys-dev/sys-ctrl versions were restored and the declared running
+set matches its topology. Sys-ctrl restarted normally. Private sentinels,
+both builder additions and the host derivation/output survived again; builder
+bases remained sys-dev generation 2 and sys-ctrl generation 3.
+
+Host pool generation 1 is now selected:
+`/nix/store/inkmi5z7hcmmka8051kqydgxxbchh31v-nixos-system-dom0-efi-raw-26.11.20260904.801bef6`.
+The installed boot artifacts, default entry and early logging passed verification.
+Dom0 still runs the newer host until a manual normal `Airlock` reboot. No worker
+or diagnostic override remains. Persistence test files and GC roots remain
+intentionally for the rollback reboot. Full rollback acceptance remains pending.
+
+Evidence: `.airlock-logs/physical-20260927-r4/reboot-verify.json`,
+`post-reboot.log`, `rollback-preflight.log`, `reboot-release-list.json`,
+`baseline-prune-plan.json`, `rollback-request.log`, `rollback-status.json`,
+`rollback-verify.json` and `post-rollback.log`. Detached client directory:
+`~/.local/share/airlock/physical-tests/todo050607-r4-rollback-20260927-171200/`.

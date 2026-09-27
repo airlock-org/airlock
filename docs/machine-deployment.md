@@ -1,21 +1,23 @@
 # Repository-first whole-machine deployment
 
-Current physical acceptance (2026-09-27, fourth image): clean machine revision
-`5c87f84` booted successfully at `sys-dev-1`. Host queries/builds, builder-store
-restarts and observation with sys-ctrl stopped passed. A disposable live probe
-using the installed database-transition helper and real read-only binds also
-preserved a saved derivation and output mapping without changing the active
-database. A full host reboot with that saved derivation remains to be tested.
+Current physical acceptance (2026-09-27, fourth image): revision `5c87f84`
+passed plan/apply and a real normal reboot at `sys-dev-1`. Typed verification
+reported `complete` with exact host/guest versions, saved private data, builder
+additions and the host derivation/output mapping intact. The early-boot journal
+confirms database reconstruction completed with two retained host bases.
 
-Whole-machine plan/apply succeeded from the booted source revision. Transaction
-`1790527932393756334` is `reboot-required`; six running guests match selection,
-private data and builder additions survived, and boot artifacts passed verification.
-The repeat submission sent zero package/root payload. The worker finished
-successfully; a manual normal reboot is the next step. See [TODO 05](todo/05-sys-ctrl.md),
+Rollback was then requested through sys-dev with sys-ctrl stopped. Its detached
+worker finished successfully; transaction `1790529121150146796` is
+`reboot-required`. Image guest versions are running, private data and builder
+additions survived, and the image host (pool generation 1) is selected with
+verified boot files and early logging. **A manual normal reboot is the next
+step to finish rollback verification.** No test worker remains running.
+
+See [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
-[TODO 07](todo/07-unified-host-guest-store.md) for evidence and outstanding
-reboot, recovery, rollback, retention and performance criteria. Earlier dated
-sections below apply to their stated revisions.
+[TODO 07](todo/07-unified-host-guest-store.md) for evidence and remaining
+rollback-reboot, recovery, retention, fault/isolation and performance criteria.
+Earlier dated sections below apply to their stated revisions.
 
 ## The development contract
 
