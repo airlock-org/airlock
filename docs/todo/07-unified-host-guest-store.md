@@ -201,6 +201,70 @@ Adding selected host inputs to the existing builder seed is a possible
 intermediate experiment to reduce cold-build time. With dom0 still using its
 ordinary store, that can duplicate payloads and does not complete this TODO.
 
+## Compaction performance implementation
+
+The interrupted physical run read over 60 GB across GC/compaction despite
+finding no compaction candidates. Implement these first without weakening the
+existing checksum or running/retained-reference checks:
+
+- [x] Return before creating a transaction, sealing a segment or refreshing
+  maps when there are no relocation candidates or reclaimable segments.
+- [x] Reuse successful extent verification within one maintenance operation
+  under the admission lock. Cache keys must include backing-file identity and
+  change metadata, offset, length and expected digest. Never persist verification
+  results across operations; changed files and corrupt/truncated data must fail.
+- [x] Refresh only closure maps referencing relocated objects; preserve untouched
+  map files byte-for-byte. Recovery must still repair all potentially interrupted
+  relocations, even when a transaction did not record its final moved-object list.
+- [x] Report elapsed time, payload bytes hashed and verification cache hits in
+  maintenance results. Local fixtures cover zero-work, shared-object and
+  actual-movement cases; physical timing and disk-read measurements remain open.
+- [x] Add regression coverage for no-work behavior, cache invalidation/corruption,
+  selective refresh, retained references, real relocation and interrupted retry.
+
+A later optimization is to separate metadata-based maintenance planning from a
+full integrity scrub, verifying payloads when copying/reusing them. That changes
+when corruption is detected and needs a separate design and acceptance pass;
+it is not part of the first three optimizations. The first implementation will
+still read each unique referenced extent for verification, so a zero-work run
+is not promised to be instant on USB.
+
+Deploy through normal machine updates after local validation; no new USB image
+is required by these Python-only changes. Recover the stopped transaction using
+the updated implementation, then resume the outstanding TODO 05–07 acceptance.
+Previously completed independent tests remain evidence; repeat the affected
+maintenance, retention, interruption and deployment checks. Do not mark these
+TODOs complete solely because the implementation or local tests pass.
+
+Local implementation: machine commit `fbe6062`. In addition to the performance
+changes, compaction/recovery preserve maps protected by `host-retained` and
+`builder-persistent` pins byte-for-byte. Their original payload segments remain
+retained, preventing relocated shared objects from invalidating boot checksums
+or builder pin bindings.
+
+Focused local validation: **67 passed**, including 10 new real-segment pytest
+cases. Coverage includes unchanged no-work pools, one verification per unchanged
+extent per operation, file replacement/overwrite/truncation and changed-digest
+rejection, selective map refresh, actual relocation, running/persistent pins,
+collection after pin release, interruption recovery and retry. These fixtures
+use real segment files and JSON maps, not mounted EROFS views or physical VMs.
+Evidence: `.airlock-logs/compaction-performance/pytest-report.json`.
+
+Reproduce the focused checks:
+
+```bash
+make test-quick PYTEST_DEFAULT_TARGETS='airlock-machine/tests/test_pool_maintenance.py airlock-machine/tests/test_pool_artifact.py airlock-machine/tests/test_host_store.py' PYTEST_LOG_DIR=.airlock-logs/compaction-performance PYTEST_ARGS=-q
+```
+
+The `verification` result records payload bytes hashed by pool verification and
+source-copy routines, cache hits and operation elapsed seconds. This is not a
+block-device read counter or peak allocation measurement. Live acceptance must
+also record physical I/O and storage allocation separately. Cache lifetime ends
+on both successful and failed operations; no verification state is persisted.
+No image was built, and no live deployment or test was performed for this change.
+The stopped transaction and imported trial source still need the documented
+recovery/restoration before resuming normal deployment and TODO 05–07 acceptance.
+
 ## Acceptance criteria
 
 - [ ] A fresh image boots dom0 from its selected pool view with sys-ctrl stopped
