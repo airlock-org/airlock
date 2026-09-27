@@ -10,8 +10,8 @@ base32/hexadecimal Nix hashes were compared as strings.
 
 Committed machine revision `3a6f665` fixes hash identity comparison, builder
 database-bind cleanup on service restart, and machine error reporting. The replacement
-controller plan succeeded; a repeat plan is checking reuse before activation. No release has been selected or applied
-in this image trial. Reboot, rollback, recovery and remaining retention and
+controller plan and repeat reuse check succeeded (zero repeated payload).
+Normal apply is now running detached; its durable outcome is not yet verified. Reboot, rollback, recovery and remaining retention and
 performance acceptance are still required; see [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
 [TODO 07](todo/07-unified-host-guest-store.md). Earlier dated evidence below

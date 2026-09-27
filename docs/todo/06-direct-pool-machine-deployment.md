@@ -4,8 +4,8 @@ Latest status (2026-09-27, third image trial): **acceptance incomplete**. Host
 shared-store query/write/build and guest payload reuse checks now pass. The
 initial plan failed at controller-base publication; committed `3a6f665` corrects
 hash comparison, builder mount cleanup and protocol error reporting. Its
-replacement plan succeeded; repeat-plan reuse is being checked. No release has
-been applied in this trial; reboot, rollback and recovery remain unverified. Detailed evidence is
+replacement and repeat plans succeeded. Apply is running detached; its durable
+outcome is not yet verified; reboot, rollback and recovery remain unverified. Detailed evidence is
 recorded at the end of this document; older status sections are historical.
 
 Status (2026-09-25): local implementation now includes the root-image reuse
@@ -325,3 +325,26 @@ and recovery entry descriptors (seven unique files); recovery has 804 stored
 objects. This is an integrity check, not proof of a successful recovery boot.
 Evidence: `fixed-plan-result.log`, `boot-artifacts.log` and
 `diagnostic-cleanup.log` in the r3 directory.
+
+### Repeat planning and apply request
+
+The repeat plan returned the exact same candidate and change set. All seven
+guests transferred zero package/root payload; host transfer needed zero objects
+and only a 23-byte compressed empty-stream envelope. Build/evaluation took
+46.25 seconds and submission/planning 307.90 seconds. This is **not an
+uncontended speed benchmark**: a concurrent compaction dry run held the pool
+lock, and sys-net negotiation recorded 109.52 seconds. The dry run passed,
+reported nine segments and no candidates/reclaimable bytes, and moved/deleted
+nothing. Remaining time includes rebuilding sender inventories.
+
+The host transport closure has 1,201 objects with no guest root-image or guest
+closure-output dependencies. Sys-dev and sys-ctrl use the same immutable root
+artifact but distinct writable/private volumes; a root-file write in sys-dev
+was absent in sys-ctrl and usr-home and was removed. Deletion/rollback isolation
+still needs separate acceptance.
+
+Normal `airlock-sys-dev-machine-deploy apply` was started detached from clean
+`3a6f665` at `~/.local/share/airlock/physical-tests/todo050607-r3-apply-20260927-011620/`.
+Its durable dom0 result and host reboot still need verification. Evidence:
+`repeat-plan.log`, `transport-closure.log`, `root-isolation.log`,
+`compaction-result.log` and the r3 mutation record.
