@@ -9,8 +9,8 @@ payload bytes), but failed during controller-base publication because equivalent
 base32/hexadecimal Nix hashes were compared as strings.
 
 Committed machine revision `3a6f665` fixes hash identity comparison, builder
-database-bind cleanup on service restart, and machine error reporting. A new
-controller plan is running detached. No release has been selected or applied
+database-bind cleanup on service restart, and machine error reporting. The replacement
+controller plan succeeded; a repeat plan is checking reuse before activation. No release has been selected or applied
 in this image trial. Reboot, rollback, recovery and remaining retention and
 performance acceptance are still required; see [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and

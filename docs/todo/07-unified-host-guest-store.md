@@ -4,8 +4,8 @@ Latest status (2026-09-27, third image trial): **acceptance incomplete**. Host
 shared-store query/write/build and guest payload reuse checks now pass. The
 initial plan failed at controller-base publication; committed `3a6f665` corrects
 hash comparison, builder mount cleanup and protocol error reporting. Its
-replacement plan is running detached. No release has been applied in this
-trial; reboot, rollback and recovery remain unverified. Detailed evidence is
+replacement plan succeeded; repeat-plan reuse is being checked. No release has
+been applied in this trial; reboot, rollback and recovery remain unverified. Detailed evidence is
 recorded at the end of this document; older status sections are historical.
 
 Status (2026-09-26): image assembly succeeded after seed permission and Xen
@@ -366,3 +366,25 @@ a release; its files are recorded under `/var/tmp/airlock-acceptance-bind-probe`
 Evidence: `admission-progress.log`, `bind-probe-result.log`,
 `registration-conflict.log`, `registration-regression.log` and
 `protocol-regression.log` in the r3 evidence directory.
+
+### Fixed-source plan succeeded
+
+Committed `3a6f665` completed normal controller planning in 487 seconds:
+171.90 seconds building and 314.09 seconds admitting/transferring/planning.
+It transferred 38 host objects (117,041,106 compressed bytes; 126,784,376 NAR
+bytes); the host transfer/decompression/import stage took 11.09 seconds.
+Binding, including host publication and additive controller-base creation, took
+74.10 seconds. Guest payload was 5,063,168 bytes, and all seven root artifacts
+were reused without payload transfer. The two unique root bases occupy
+1,925,120 and 2,211,840 allocated bytes, with 512-MiB and 1-GiB logical sizes.
+
+The exact candidate is
+`/var/lib/airlock/machine/candidates/41acc0cba3d02d21fc4ae34870686ea0b2c0f59b365ccaebc8ed3eb8ce926ba2`.
+It changes all seven declared guests, retires none, and requires a host reboot
+after apply. No apply has run yet. A repeat of the same plan runs detached to
+measure reuse before activation. The old binding-diagnostic files were removed;
+dom0 had no failed services. Live boot artifact hashes matched both the normal
+and recovery entry descriptors (seven unique files); recovery has 804 stored
+objects. This is an integrity check, not proof of a successful recovery boot.
+Evidence: `fixed-plan-result.log`, `boot-artifacts.log` and
+`diagnostic-cleanup.log` in the r3 directory.
