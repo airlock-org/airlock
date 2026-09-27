@@ -6,8 +6,10 @@ verification reports `complete`, with exact host/guest generations and saved
 guest data, builder additions and host derivation/output preserved. Rollback
 was requested successfully while sys-ctrl was stopped. Physical probes confirm
 separate writable volumes and identical shared package extents between dom0
-and sys-dev. Independent recovery, actual GC/compaction, interrupted operations
-and remaining root-change/isolation/performance criteria still need acceptance.
+and sys-dev. Independent recovery boot and selection passed at the user console;
+return to normal boot is next. Missing/corrupt-view recovery, actual GC/compaction,
+interrupted operations and remaining root-change/isolation/performance criteria
+still need acceptance.
 
 Status (2026-09-25): local implementation now includes the root-image reuse
 work described below. The user subsequently ran `make test-quick`: 594 passed, 24 skipped, three
@@ -571,3 +573,22 @@ retained normal host. The console procedure is in
 [machine-deployment.md](../machine-deployment.md#independent-recovery-acceptance).
 The recovery profile and boot-menu entry were verified present; independent
 recovery boot and the missing/corrupt-view fault trial have not yet been run.
+
+
+### Independent recovery smoke test passed (user console)
+
+The user booted `Airlock (recovery)` and supplied a console photograph showing:
+
+- `/etc/airlock/pool-recovery` identifies independent recovery with networking
+  and guests disabled.
+- `/nix/store` comes from `/dev/sda2[/var/lib/airlock/recovery-store]`, not the
+  normal pool overlay. The top mount is read-only (`ro,nosuid,nodev`).
+- `sudo airlock-host-store recover "$(readlink -f /nix/var/nix/profiles/system)"`
+  returned a successful host-store record for generation 1 and the original
+  `inkmi5z7hcmmka8051kqydgxxbchh31v` image host, then returned to the prompt.
+
+This verifies independent recovery boot and retained host/EFI selection with
+an intact pool. Missing/corrupt-view recovery is still an outstanding fault
+trial. The next step is a manual normal `Airlock` reboot and typed verification
+after Tailscale reconnects. No reboot was initiated by the agent.
+Evidence: `.airlock-logs/physical-20260927-r4/recovery-console.png`.

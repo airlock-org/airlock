@@ -5,7 +5,9 @@ passed plan/apply, normal reboot, rollback with sys-ctrl initially stopped, and
 rollback reboot at `sys-dev-1`. Typed verification reports `complete` for
 rollback transaction `1790529121150146796`, with exact host/guest versions,
 private data, builder additions and host derivation/output mapping preserved.
-The machine now runs the original image host, selected pool generation 1.
+The user then booted independent recovery and successfully reselected the
+original image host, pool generation 1. A manual normal reboot is now needed
+to verify the return from recovery.
 
 Physical probes confirm isolated writable VM volumes and 496 package objects
 using identical physical extents in dom0 and sys-dev. Current allocation is
@@ -17,10 +19,10 @@ The observation job finished; no test worker remains running.
 See [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
 [TODO 07](todo/07-unified-host-guest-store.md) for evidence and remaining
-recovery, retention, fault/isolation and performance criteria. The next physical
-boot test is the independent `Airlock (recovery)` entry, which has no network
-or guest autostart and therefore requires the user's console. Earlier dated
-sections below apply to their stated revisions.
+missing/corrupt-view recovery, retention, fault/isolation and performance
+criteria. The independent recovery smoke test passed at the user console;
+normal boot after recovery remains to be checked. Earlier dated sections below
+apply to their stated revisions.
 
 ## The development contract
 
