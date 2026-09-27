@@ -1,9 +1,10 @@
 # Share immutable store objects between dom0 and guests
 
-Current continuation: maintenance fix `fbe6062` is applied to the guests and
-selected for dom0; transaction `1790546188487824369` is `reboot-required`.
-Pre-reboot data and boot checks passed. Manual normal boot is next; compaction
-measurement and overall acceptance remain open. See the final continuation.
+Current continuation: maintenance fix `fbe6062` booted successfully; typed
+verification marked transaction `1790546188487824369` complete. Saved data,
+builder additions and boot records passed; installed maintenance code hashes
+match the commit. Detached maintenance and the root-artifact trial are in
+progress. Overall acceptance remains open. See the final continuation.
 
 Latest status (2026-09-27, fourth image): **acceptance incomplete**. Normal
 return from independent recovery passed. A committed usr-home-only update and
@@ -959,3 +960,29 @@ Next: the user reboots into normal Airlock; verify exact host/guest selections
 and installed maintenance code, then recover the stopped compaction transaction
 and measure compaction/GC. The stopped root trial remains stopped. Acceptance
 for TODOs 05–07 is still incomplete.
+
+
+### Maintenance release boot verified; follow-up running
+
+After the manual reboot, typed `verify` completed transaction
+`1790546188487824369`: running and selected dom0 are generation 3 (`vbj6nh1…`),
+and all running guests match selection. The three private-data sentinels, both
+builders' saved objects, host output/derivation and all five retained host boot
+records passed again. Installed `maintenance.py` and `segments.py` hashes match
+committed `fbe6062`. Dom0 has no failed units. Evidence: r5
+`post-reboot-verify.json` and `post-reboot.log`.
+
+Detached unit `airlock-r5-maintenance` runs recovery of the stopped transaction,
+GC, then bounded compaction, validating retained manifests and host boot records
+after each operation and saving verification-byte/timing metrics under
+`/var/log/airlock/physical-tests/r5/maintenance`.
+
+The root trial was rebuilt on the maintenance fix: isolated committed source
+`da65cc9` changes only usr-home's root size from 1024 to 1536 MiB. It is imported
+into sys-dev. Detached `airlock-r5-root-trial` waits for successful maintenance
+before using typed guest-plan/apply, checking that only usr-home changes and no
+host reboot is needed. It stops for root/data verification after activation.
+Logs: `/var/log/airlock/physical-tests/r5/root-trial`. The memory-only follow-up
+is prepared locally as `3c74286`; neither trial changes the main product config.
+Restore source `fbe6062` and the selected baseline after the trials. Do not count
+these in-progress checks as passes or reboot while they run.

@@ -1,20 +1,20 @@
 # Repository-first whole-machine deployment
 
-Current physical acceptance (2026-09-27, fourth image): committed maintenance
-fix `fbe6062` is applied to the six running guests and selected for dom0.
-Transaction `1790546188487824369` is **`reboot-required`**; the running host
-remains the original image. Saved VM data, builder additions, host output and
-derivation, all retained host boot records, and the selected generation 3 boot
-artifacts passed pre-reboot checks. No deployment or maintenance worker remains
-running. A manual normal Airlock reboot is next; no new image is required.
+Current physical acceptance (2026-09-27, fourth image): maintenance fix
+`fbe6062` has booted successfully. Typed verification completed transaction
+`1790546188487824369`; host and running guests match selection. Saved data,
+builder additions, host derivation/output and retained boot records passed.
+Installed maintenance code matches the commit. Detached recovery/GC/compaction
+checks are running, followed conditionally by the isolated usr-home root trial.
+No reboot or new image is currently needed. See TODO 07's final checkpoint.
 
 Earlier forward deployment, rollback, independent recovery, missing-view
 recovery and normal return passed. A committed single-guest marker update and
 rollback also passed without a host reboot. The missing-view diagnostic was
 removed. The stopped old compaction's retained-host map mutation was restored
 to its exact original verified checksum; the committed fix prevents recurrence.
-Its unfinished zero-candidate transaction still needs recovery with the updated
-code after reboot. Compaction measurements and the stopped root-image trial
+Recovery of its unfinished zero-candidate transaction is now running with the
+updated code. Compaction measurements and the stopped root-image trial
 remain outstanding. See the final continuation in
 [TODO 07](todo/07-unified-host-guest-store.md) for evidence and next steps.
 
