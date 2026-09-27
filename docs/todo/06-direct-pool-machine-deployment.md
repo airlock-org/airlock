@@ -685,3 +685,45 @@ Evidence under `.airlock-logs/physical-20260927-r4/`:
 `recovery-fault-cleanup.log`. This closes the physical missing-view recovery
 trial; corrupt-metadata rejection was separately checked with disposable
 metadata copies, not a second physical corrupt-view boot.
+
+
+### Maintenance and interruption acceptance follow-up
+
+After the missing-view recovery return, the focused `make test-quick` selection
+of `test_host_store.py`, `test_pool_artifact.py` and `test_machine_deploy.py`
+passed: **165 tests**. This covers simulated interrupted admission/publication,
+registration recovery, invalid artifacts, changed-root transfer, retention and
+deployment resume. These are automated fixtures, not physical power cuts.
+Evidence: `.airlock-logs/physical-20260927-r4/focused-tests/pytest-report.json`.
+
+A new regression test uses the real pool file lock with concurrent host
+selection and maintenance entry points. Maintenance stays blocked until boot
+selection has written its selected record; the focused check passed. Machine
+commit `089b42b` adds only this test. The live product remains `5c87f84`.
+Evidence: `selection-race-tests/pytest-report.json` in the same evidence directory.
+
+The existing external quick-suite report was located and copied to
+`previous-quick-suite/pytest-report.json`: **616 passed, 24 skipped**, recorded
+2026-09-27 before this follow-up. Its `closure-store-linux-storage` result
+explicitly says **skipped** for lack of privileges, even though the enclosing
+pytest case reports passed. Do not count that case as real loop/device-mapper
+integration evidence.
+
+Actual live pool maintenance was started detached as `airlock-r4-maintenance`
+with default two-generation retention, followed by one bounded compaction run.
+It snapshots manifests, checks retained records after each operation and checks
+selected host/boot artifacts. Results are under
+`/var/log/airlock/physical-tests/r4/maintenance` on dom0; completion and post-run
+guest verification are pending. This operates on the Airlock closure pool, not
+Nix garbage collection of a host `/nix/store`.
+
+
+A follow-up root-image trial is queued as detached unit
+`airlock-r4-root-trial`, waiting for successful maintenance before using the
+normal typed guest-plan/apply route. Isolated committed source `db62fb5` changes
+only usr-home's root size from 1024 to 1536 MiB; it has been imported into
+sys-dev. The worker requires only usr-home to change, no host reboot, exact
+source provenance and unchanged other guest bindings. Its logs and durable
+phase are in `/var/log/airlock/physical-tests/r4/root-trial`. Root/data checks,
+rollback and restoration of original source remain pending. The main product
+configuration is unchanged. Do not reboot while these workers are active.
