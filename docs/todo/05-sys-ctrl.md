@@ -1,14 +1,13 @@
 # Move configuration work into sys-ctrl
 
-Latest status (2026-09-27, fourth image): **acceptance incomplete**. The
-`5c87f84` release passed a real host reboot: typed verification reported
-`complete`, with exact host/guest generations, saved private data, builder
-additions and the saved host derivation/output mapping intact. Rollback was
-then requested through sys-dev with sys-ctrl stopped. It restored the image's
-guest versions and selected host pool generation 1, reaching `reboot-required`.
-Data and boot-artifact verification passed again. The next step is a manual
-normal reboot to finish rollback acceptance. Recovery, GC/compaction and
-remaining fault/isolation/performance criteria are still open.
+Latest status (2026-09-27, fourth image): **acceptance incomplete**. Both
+forward deployment and rollback passed their real host reboots: typed
+verification reports `complete`, with exact host/guest generations and saved
+guest data, builder additions and host derivation/output preserved. Rollback
+was requested successfully while sys-ctrl was stopped. Physical probes confirm
+separate writable volumes and identical shared package extents between dom0
+and sys-dev. Independent recovery, actual GC/compaction, interrupted operations
+and remaining root-change/isolation/performance criteria still need acceptance.
 
 Status (2026-09-25): the earlier implementation passed the quick checks:
 579 passed, 24 skipped, two existing warnings. The machine and parent image
@@ -144,7 +143,9 @@ logs; the original diagnostic build log and exit marker are in sys-ctrl's
   verify source provenance, exact generations and controller outcome records.
 - [ ] Repeated updates reuse pool objects; record transferred bytes, elapsed
   time, allocated storage and retained references.
-- [ ] Reboot and rollback preserve guest private data and retained generations.
+- [x] Reboot and rollback preserve guest private data and retained generations.
+  Both fourth-image reboot directions passed with exact host/guest selection
+  and private/builder/host-derivation sentinels retained.
 - [ ] Restart or fail sys-ctrl during its update; recover using sys-dev's typed
   status/resume/rollback route and, if needed, the physical recovery console.
 - [ ] Reject unauthorized/malformed requests and incomplete artifacts; exercise
@@ -447,3 +448,71 @@ Evidence: `.airlock-logs/physical-20260927-r4/reboot-verify.json`,
 `baseline-prune-plan.json`, `rollback-request.log`, `rollback-status.json`,
 `rollback-verify.json` and `post-rollback.log`. Detached client directory:
 `~/.local/share/airlock/physical-tests/todo050607-r4-rollback-20260927-171200/`.
+
+
+### Rollback reboot and physical storage checks passed
+
+The user rebooted into the image baseline host (pool generation 1). Typed
+verification reports transaction `1790529121150146796` as `complete`, with
+exact host and six running guest identities. Dom0 has no failed units.
+All three private sentinels, both saved builder objects and the saved host
+derivation's validity, output mapping and contents survived. Builder bases
+remain sys-dev generation 2 and sys-ctrl generation 3. Host assembly completed
+from 7.220 to 13.581 seconds, retaining both host bases and 1,385 registered paths.
+
+Live Qubes volume inspection confirms distinct writable root and private
+volume IDs for sys-dev and sys-ctrl, despite their common immutable root artifact.
+A temporary probe wrote different values to the same relative filenames on
+each VM's root filesystem (`/var/tmp`, confirmed on `/`) and private home.
+Each read its own value, and deleting sys-dev's files preserved sys-ctrl's.
+Guest package-store writes were refused and the host system path was absent
+from guest package views. All probe files were removed. This covers writes and
+file deletion; it does not claim a disposable VM's volume deletion or a genuine
+root-artifact change has been exercised.
+
+The first probe attempted `/var/lib` via a requested root shell. Sys-ctrl's
+policy forces that service to its ordinary user, so the write was correctly
+refused; the corrected probe used an ordinary-user-writable root directory.
+No policy or account setting was changed. Sys-dev allowed its development root
+shell, whose write into the read-only package store was also refused.
+
+The selected host and sys-dev views share 496 package objects totaling
+1,674,595,840 bytes of payload extents. Every shared object maps to the exact
+same segment, offset, length and hash in both views; none exists in the host
+upper layer. Fresh allocated-byte measurement reports:
+
+- Shared pool: 14,277,185,536 bytes.
+- Host writable upper: 36,864 bytes.
+- Independent recovery store: 2,943,594,496 bytes.
+
+The recovery store and copied EFI boot artifacts are deliberate duplicates;
+image assembly and admission can also require temporary copies. These figures
+are current allocation, not a measurement of peak temporary storage. The host
+transport has 1,201 requisite paths and contains no guest root-image or guest
+closure outputs; sampled guest-only outputs are absent from the host upper.
+
+Evidence: `.airlock-logs/physical-20260927-r4/rollback-reboot-verify.json`,
+`post-rollback-reboot.log`, `isolation-inspect.log`, `isolation-probe.log`,
+`shared-extents.log`, `recovery-inventory.log` and `storage-observe-summary.log`.
+The reused `post-reboot.log` now also reflects the rollback boot; the earlier
+forward-boot verification remains in `reboot-verify.json` and its boot journal
+in `rollback-preflight.log`.
+
+
+The detached allocation/compaction observation job completed successfully in
+12 minutes 40 seconds, with 21.7 GiB read from disk and a reported 5.6 GiB peak
+memory footprint. Its compaction dry run passed: all nine segments have physical
+references, zero candidate/reclaimable segments, zero objects to move and zero
+bytes immediately reclaimable. No package payload was moved or deleted. Actual
+GC/reclamation and interruption safety remain untested on this installation.
+`compaction-final.log` records per-segment references and the service journal;
+raw reports remain under `/var/log/airlock/physical-tests/r4/` in dom0. The job's
+first attempt lacked PATH and exited 127; the corrected run's command receipts
+both exited 0. No observation worker remains running.
+
+The next user-assisted test is `Airlock (recovery)`: inspect its recovery marker
+and `/nix/store` mount, then use `airlock-host-store recover` to select the
+retained normal host. The console procedure is in
+[machine-deployment.md](../machine-deployment.md#independent-recovery-acceptance).
+The recovery profile and boot-menu entry were verified present; independent
+recovery boot and the missing/corrupt-view fault trial have not yet been run.

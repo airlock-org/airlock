@@ -1,23 +1,26 @@
 # Repository-first whole-machine deployment
 
 Current physical acceptance (2026-09-27, fourth image): revision `5c87f84`
-passed plan/apply and a real normal reboot at `sys-dev-1`. Typed verification
-reported `complete` with exact host/guest versions, saved private data, builder
-additions and the host derivation/output mapping intact. The early-boot journal
-confirms database reconstruction completed with two retained host bases.
+passed plan/apply, normal reboot, rollback with sys-ctrl initially stopped, and
+rollback reboot at `sys-dev-1`. Typed verification reports `complete` for
+rollback transaction `1790529121150146796`, with exact host/guest versions,
+private data, builder additions and host derivation/output mapping preserved.
+The machine now runs the original image host, selected pool generation 1.
 
-Rollback was then requested through sys-dev with sys-ctrl stopped. Its detached
-worker finished successfully; transaction `1790529121150146796` is
-`reboot-required`. Image guest versions are running, private data and builder
-additions survived, and the image host (pool generation 1) is selected with
-verified boot files and early logging. **A manual normal reboot is the next
-step to finish rollback verification.** No test worker remains running.
+Physical probes confirm isolated writable VM volumes and 496 package objects
+using identical physical extents in dom0 and sys-dev. Current allocation is
+14,277,185,536 bytes in the pool, 36,864 bytes in the host upper, and
+2,943,594,496 bytes in the deliberately separate recovery store. A compaction
+dry run passed with nine referenced segments and nothing immediately reclaimable.
+The observation job finished; no test worker remains running.
 
 See [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
 [TODO 07](todo/07-unified-host-guest-store.md) for evidence and remaining
-rollback-reboot, recovery, retention, fault/isolation and performance criteria.
-Earlier dated sections below apply to their stated revisions.
+recovery, retention, fault/isolation and performance criteria. The next physical
+boot test is the independent `Airlock (recovery)` entry, which has no network
+or guest autostart and therefore requires the user's console. Earlier dated
+sections below apply to their stated revisions.
 
 ## The development contract
 
@@ -340,6 +343,32 @@ Reflashing can erase deployment journals and machine data. It does **not** erase
 the committed implementation or configuration in this local repo. Building the
 next image from that commit reproduces its declared configuration. Runtime user
 data, Tailscale enrollment and credentials need separate backups.
+
+## Independent recovery acceptance
+
+Select `Airlock (recovery)` manually from the boot menu and log in as `user`
+with the provisioned local password. This entry deliberately has no networking,
+Qubes guests or main pool-store assembly, so remote Tailscale access is unavailable.
+For the initial healthy-pool recovery smoke test, inspect:
+
+```bash
+cat /etc/airlock/pool-recovery
+findmnt /nix/store
+```
+
+The store should be a read-only bind of `/var/lib/airlock/recovery-store`, not
+the normal host overlay. Then reselect the currently retained normal host:
+
+```bash
+sudo airlock-host-store recover "$(readlink -f /nix/var/nix/profiles/system)"
+```
+
+This validates the retained pool binding and installed EFI artifacts before
+selecting the entry; it does not reboot. Capture the command result at the
+console, then manually boot normal `Airlock` and verify the machine again.
+This smoke test alone does not establish recovery from a missing/corrupt view;
+that fault-injection trial remains separate. Do not use the recovery environment
+to run normal whole-machine apply or garbage-collect its shared Nix database.
 
 ## Failures, recovery, and limits
 
