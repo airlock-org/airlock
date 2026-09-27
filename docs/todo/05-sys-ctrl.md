@@ -937,3 +937,22 @@ builder additions and retained host boot records after activation. It never
 reboots the laptop. Inspect its final result before requesting a manual reboot;
 do not reboot merely because apply was submitted. No model-driven polling.
 Changed-root boot/rollback and memory-only reuse remain pending afterward.
+
+
+### Fixed deployment passed pre-reboot checks (2026-09-28)
+
+The r6 detached batch finished successfully and stopped at
+`awaiting-manual-reboot` for component `ad3dfd6`. Planning took 608.85 seconds;
+apply submission took 442.27 seconds. Coordinator verification reports
+`reboot-required`. All seven guest root/pool bindings match the release;
+usr-home now selects generation 5 with its original 1 GiB root. Actual disk
+sizes and saved data passed for sys-dev, sys-ctrl and usr-home. Both builder
+objects, the host derivation/output, retained boot records and selected boot
+artifacts passed verification.
+
+Evidence: remote `/var/log/airlock/physical-tests/r6/result.json`, captured in
+`.airlock-logs/physical-20260928-r6/status-now.log`. Selected host:
+`/nix/store/nhyj8spd495f9j28fk7wi725jr21yii3-nixos-system-dom0-26.11.20260904.801bef6`.
+The worker has exited; manual physical reboot is the next step. Post-reboot
+verification and remaining changed-root/rollback and memory-only trials are
+still pending; this is not final completion of TODOs 05–07.
