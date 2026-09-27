@@ -1,5 +1,12 @@
 # Repository-first whole-machine deployment
 
+Current checkpoint (2026-09-28): **root-change acceptance failed; active testing
+stopped to reduce cost**. Transaction `1790549788826426596` reached
+`reboot-required`, selecting trial `da65cc9` / host `nnha9msy…`, but usr-home's
+running disk is 1536 MiB while its current pool manifest still describes the
+old 1024 MiB root. Do not count this trial as passed or request a reboot yet.
+See TODO 07’s final failure checkpoint. No fix has been implemented or deployed.
+
 Current physical acceptance (2026-09-27, fourth image): maintenance fix
 `fbe6062` has booted successfully. Typed verification completed transaction
 `1790546188487824369`; host and running guests match selection. Saved data,

@@ -1,5 +1,12 @@
 # Move configuration work into sys-ctrl
 
+Current checkpoint (2026-09-28): **root-change acceptance failed; active testing
+stopped to reduce cost**. Transaction `1790549788826426596` reached
+`reboot-required`, selecting trial `da65cc9` / host `nnha9msy…`, but usr-home's
+running disk is 1536 MiB while its current pool manifest still describes the
+old 1024 MiB root. Do not count this trial as passed or request a reboot yet.
+See the final failure checkpoint. No fix has been implemented or deployed.
+
 Current continuation: maintenance fix `fbe6062` booted successfully; typed
 verification marked transaction `1790546188487824369` complete. Saved data,
 builder additions and boot records passed; installed maintenance code hashes
@@ -822,3 +829,61 @@ It checks the 1536 MiB usr-home root and reuse of every other root before
 stopping for plan review. Logs: `/var/log/airlock/physical-tests/r5/root-machine`.
 Do not assume this topology change needs no host reboot; inspect the resulting
 plan before apply. The live maintenance release remains selected and healthy.
+
+
+### Changed-root machine plan passed; apply submitted
+
+The corrected `da65cc9` machine plan passed in 579.31 seconds: build 61.08
+seconds, submission 516.73 seconds, including 133.36 seconds binding the host
+view. Exact topology comparison against selected `fbe6062` found only one
+change: usr-home's root source. The plan changes/stages/stops only usr-home,
+retires/restores nothing, and requires a host reboot for the updated topology.
+
+The new root is 1,610,612,736 logical bytes (1536 MiB), occupies 2,953,216
+allocated bytes in the pool, and transferred 2,949,690 payload bytes. Its hash
+is `176a3746b7a0f0d0b8facd17de11b504dcd2a913d8f688b7859e846ec021cb81`.
+All other roots were reused with zero payload. All guest package objects were
+reused with zero package payload; dom0 received four missing paths totaling
+113,022 compressed bytes, imported in 0.165 seconds. Guest/root byte counts
+exclude protocol framing. Evidence: r5 `root-plan.json` and
+`root-machine-apply-progress.log`.
+
+Detached `airlock-r5-root-machine-apply` passed the exact topology guard and
+started normal typed apply. It records submission/activation under
+`/var/log/airlock/physical-tests/r5/root-machine-apply`, stops at
+`reboot-required`, and never reboots automatically. New-root runtime checks,
+manual host reboot, rollback and source restoration remain pending.
+
+
+### Root identity mismatch; stop costly monitoring (2026-09-28)
+
+Normal machine apply reached `reboot-required` for transaction
+`1790549788826426596`, revision `da65cc9`. The selected host is
+`/nix/store/nnha9msy1fknv5vyk03f3dr0kim1agx3-nixos-system-dom0-26.11.20260904.801bef6`;
+running dom0 remains the previously verified `vbj6nh1…` maintenance release.
+An independent pre-reboot check found usr-home's actual disk is 1,610,612,736
+bytes, while `domains/usr-home/current/manifest.json` still identifies the old
+1,073,741,824-byte root (hash `dbce21f3…`). This is a failed acceptance check,
+despite the coordinator reporting reboot-required. No physical reboot was
+requested and no live metadata was manually repaired.
+
+Likely cause from source inspection: `ensure_shared_store` returns early when
+the package-store source and volumes are unchanged, before considering staged
+generation/root identity. A root-only change leaves that source unchanged.
+Coordinator verification checks selected/running system paths but does not catch
+this root/generation mismatch. Confirm with a focused regression test, fix the
+helper and verification locally, commit, then deploy through the normal route.
+Avoid forcing generation switches for unchanged running guests merely because
+a new admission receipt has a different generation number.
+
+Evidence: r5 `root-apply-status.json`, `root-pre-reboot-failure.json`, and
+`root-pre-reboot-payload.sh`. Existing compaction, GC, reboot, recovery, isolation
+and package-update results remain valid. Root-change boot/rollback and the
+memory-only reuse trial remain open; do not repeat completed acceptance work.
+
+Cost checkpoint: stop model-driven polling and narrated waits. Next work should
+be a bounded fix plus focused tests, followed by one detached deployment/check
+batch with durable exit/status files. Check only on completion, failure or user
+request. Main product remains pinned to `fbe6062`; trial source `da65cc9` is in
+both builders. The isolated trial must be rolled back and source restored after
+verification. The main repository contains no root-size product change.
