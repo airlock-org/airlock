@@ -5,7 +5,8 @@ stopped to reduce cost**. Transaction `1790549788826426596` reached
 `reboot-required`, selecting trial `da65cc9` / host `nnha9msy…`, but usr-home's
 running disk is 1536 MiB while its current pool manifest still describes the
 old 1024 MiB root. Do not count this trial as passed or request a reboot yet.
-See TODO 07’s final failure checkpoint. No fix has been implemented or deployed.
+See TODO 07’s final failure checkpoint. Fix `ad3dfd6` is implemented and tested locally (163 passed, 1 skipped);
+deployment remains pending.
 
 Current physical acceptance (2026-09-27, fourth image): maintenance fix
 `fbe6062` has booted successfully. Typed verification completed transaction

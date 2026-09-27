@@ -5,7 +5,7 @@ stopped to reduce cost**. Transaction `1790549788826426596` reached
 `reboot-required`, selecting trial `da65cc9` / host `nnha9msy…`, but usr-home's
 running disk is 1536 MiB while its current pool manifest still describes the
 old 1024 MiB root. Do not count this trial as passed or request a reboot yet.
-See the final failure checkpoint. No fix has been implemented or deployed.
+See the final failure checkpoint. Fix `ad3dfd6` is implemented and tested locally; deployment remains pending.
 
 Current continuation: maintenance fix `fbe6062` booted successfully; typed
 verification marked transaction `1790546188487824369` complete. Saved data,
@@ -939,3 +939,32 @@ batch with durable exit/status files. Check only on completion, failure or user
 request. Main product remains pinned to `fbe6062`; trial source `da65cc9` is in
 both builders. The isolated trial must be rolled back and source restored after
 verification. The main repository contains no root-size product change.
+
+
+### Root-generation fix implemented locally (2026-09-28)
+
+Component commit `ad3dfd6` fixes the confirmed early-return bug. The storage
+helper now checks system, root and kernel identity before reusing an attached
+generation, validates staged admission even on the no-change path, and selects
+the matching generation for root changes and rollback. An equivalent newer
+receipt does not force an unchanged running VM to rebind or restart.
+Coordinator verification now checks the VM's store generation against the
+pool's selected generation and expected system/root/kernel/closure identity;
+a matching `/run/current-system` alone no longer passes this mismatch.
+
+Focused `make test-quick` passed **163 tests, 1 skipped** in 15.31 seconds:
+`test_nix_domain_storage_identity.py`, `test_machine_deploy.py`, and
+`test_prepared_store.py` (with `-k "not usb_prepared_store"`). The skipped
+`test_prepared_usb_runtime_closure` is not counted as a pass. Evidence:
+`.airlock-logs/root-identity-fix/pytest-report.json`. Regression cases cover both
+root-size directions, running-VM rejection, malformed staged identity, unstaged
+root changes, equivalent-admission reuse and coordinator mismatch rejection.
+
+This is a local fix only. No live commands, deployment or image build were run
+for this fix; the physical root mismatch recorded above remains unresolved.
+Next agent: deploy the fixed main source through the normal plan/apply route
+first (its 1 GiB usr-home root restores the original topology), then recreate
+the isolated root trial on this fix. Do not reuse old trial commits that omit
+the fix, manually alter live pool metadata, or rerun unrelated passing tests.
+Use detached bounded batches and inspect durable results at completion. Ask for
+a manual reboot only after the fixed deployment's root/pool identity checks pass.
