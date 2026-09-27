@@ -313,7 +313,7 @@ through dom0's actual daemon passed. The written object was verified in its
 persistent upper and rooted for later reboot verification. Sys-ctrl sees the
 exact host system in its lower view, without a duplicate in its upper.
 Host pool assembly completed between 6.942 and 8.631 seconds after boot.
-The initial whole-machine plan runs detached; no release is selected or applied.
+The initial whole-machine plan failed at host binding; no release is selected or applied.
 
 Distinct root/private volume identities were recorded for sys-dev, sys-ctrl and
 usr-home. Private-data sentinels were created in all three. These observations
@@ -335,3 +335,26 @@ Evidence: `.airlock-logs/physical-20260927-r3/`, including `baseline.log`,
 `builder-restart-failure.log`, `builder-recover.log`, `builder-regression.log`
 and `mutations.md`. Reboot, recovery, rollback, GC and full performance
 acceptance remain open.
+
+### Initial third-trial planning result
+
+The c15785b plan failed after 603 seconds, including a 286.81-second build.
+All seven guest root artifacts were reused with zero root payload transfer.
+Only sys-dev and sys-ctrl needed guest packages: four objects each, totalling
+1,626,112 payload bytes; the other five reused every object. Sender inventory
+construction still took 13–81 seconds per guest, so transfer elimination does
+not eliminate planning work. These are partial metrics, not end-to-end success.
+
+Dom0 imported the host transport and published its pool generation, then
+controller-base refresh rejected an unchanged package because image metadata
+uses a Nix base32 hash and live `dump-db` emits hexadecimal. Source now compares
+decoded hash bytes, NAR sizes and reference sets, preserving existing record
+formatting. Real conflicting identities remain rejected. Seventeen focused host
+tests passed. Machine receiver errors now return bounded protocol errors with
+coordinator stderr (15 focused protocol tests passed), avoiding an empty-JSON
+error at the client. Both fixes still need normal committed-source deployment.
+The detached direct binding diagnostic reproduced the failure without selecting
+a release; its files are recorded under `/var/tmp/airlock-acceptance-bind-probe`.
+Evidence: `admission-progress.log`, `bind-probe-result.log`,
+`registration-conflict.log`, `registration-regression.log` and
+`protocol-regression.log` in the r3 evidence directory.

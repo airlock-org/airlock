@@ -206,9 +206,32 @@ image containing that fix.
 The c15785b image boots with valid final-root overlay paths. Queries and a
 small write through the real host Nix daemon succeeded. Controller memory,
 network binding, host dependency visibility and policy rejection checks passed.
-An initial controller plan is running detached; no release is selected yet.
+The initial controller plan failed at host binding; no release is selected.
 A sys-dev builder restart exposed a read-only database bind left mounted by
 `os.path.ismount`; source now checks the kernel mount table. Clearing that stale
 bind restored the original service with its added package and private data
 intact. Deployment of the fix and full reboot/rollback acceptance remain open.
 See TODO 07's third-trial section for evidence and remaining boundaries.
+
+### Initial third-trial planning result
+
+The c15785b plan failed after 603 seconds, including a 286.81-second build.
+All seven guest root artifacts were reused with zero root payload transfer.
+Only sys-dev and sys-ctrl needed guest packages: four objects each, totalling
+1,626,112 payload bytes; the other five reused every object. Sender inventory
+construction still took 13–81 seconds per guest, so transfer elimination does
+not eliminate planning work. These are partial metrics, not end-to-end success.
+
+Dom0 imported the host transport and published its pool generation, then
+controller-base refresh rejected an unchanged package because image metadata
+uses a Nix base32 hash and live `dump-db` emits hexadecimal. Source now compares
+decoded hash bytes, NAR sizes and reference sets, preserving existing record
+formatting. Real conflicting identities remain rejected. Seventeen focused host
+tests passed. Machine receiver errors now return bounded protocol errors with
+coordinator stderr (15 focused protocol tests passed), avoiding an empty-JSON
+error at the client. Both fixes still need normal committed-source deployment.
+The detached direct binding diagnostic reproduced the failure without selecting
+a release; its files are recorded under `/var/tmp/airlock-acceptance-bind-probe`.
+Evidence: `admission-progress.log`, `bind-probe-result.log`,
+`registration-conflict.log`, `registration-regression.log` and
+`protocol-regression.log` in the r3 evidence directory.
