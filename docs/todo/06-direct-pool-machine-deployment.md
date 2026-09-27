@@ -5,11 +5,10 @@ return from independent recovery passed. A committed usr-home-only update and
 rollback also passed without a host reboot; only usr-home changed, the marker
 was removed, and private data survived. Original source `5c87f84` is restored
 in both builder VMs. Installed validators reject damaged metadata in disposable
-copies. **A missing-view recovery boot test is now staged:** selected host
-metadata is safely backed up at `/var/lib/airlock/recovery-probe/store.erofs`.
-The next manual boot must select `Airlock (recovery)` and restore that file
-before returning to normal boot. This diagnostic mutation remains pending
-restoration; see the final section below. Other acceptance criteria remain open.
+copies. The missing-view recovery console test passed: the user booted recovery,
+confirmed the metadata was absent, restored it, and successfully selected host
+generation 1. A normal reboot, restored-file verification and removal of the
+remaining diagnostic directory are next. Other acceptance criteria remain open.
 
 Status (2026-09-25): local implementation now includes the root-image reuse
 work described below. The user subsequently ran `make test-quick`: 594 passed, 24 skipped, three
@@ -659,3 +658,19 @@ Capture the console output before another reboot. A subsequent normal boot
 must verify exact generations and data again. Remove the diagnostic directory
 only after verifying that the original metadata path and hash are restored.
 No deployment/build worker remains running. Fault-test acceptance is pending.
+
+
+### Missing-view recovery console result
+
+The corrected user photograph shows a recovery login followed by
+`MISSING_VIEW_CONFIRMED` from the conditional restoration command. The move
+completed without an error, and `airlock-host-store recover` then returned the
+original generation-1 host record successfully. This establishes recovery boot
+with the selected host metadata absent, followed by restoration and selection
+of the retained normal host. The previous repeated photograph was not counted
+as evidence for this fault trial.
+
+Evidence: `.airlock-logs/physical-20260927-r4/missing-view-recovery-console.png`.
+Next: manually reboot normal `Airlock`, verify exact generations, saved data and
+the restored metadata hash, then remove the diagnostic directory's remaining
+symlink and record. That cleanup and return-to-normal verification remain pending.

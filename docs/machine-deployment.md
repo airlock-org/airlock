@@ -7,13 +7,12 @@ host reboot. Original source `5c87f84` is restored in both builder VMs; the
 selected machine is the original image baseline with saved private data,
 builder additions and host derivation/output preserved.
 
-**A missing-view recovery fault test is now staged. The next boot must select
-`Airlock (recovery)`.** The selected host's EROFS metadata is preserved at
-`/var/lib/airlock/recovery-probe/store.erofs`; its original path is temporarily
-absent. The running host is usable, but normal boot requires restoration first.
-The exact console restoration commands and evidence are in the final section
-of [TODO 07](todo/07-unified-host-guest-store.md). No test worker is running.
-This diagnostic mutation must be restored and cleaned up before final verification.
+The missing-view recovery console test passed: the user booted recovery with
+selected host metadata absent, restored the file, and successfully selected
+host generation 1. **The next boot should select normal `Airlock`.** Verify the
+restored metadata and exact running generations, then remove the remaining
+`/var/lib/airlock/recovery-probe` diagnostic directory. No test worker is running.
+Console evidence is recorded in [TODO 07](todo/07-unified-host-guest-store.md).
 
 See [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
