@@ -4,9 +4,12 @@ Latest status (2026-09-27, fourth image): **acceptance incomplete**. The
 `5c87f84` image booted successfully at `sys-dev-1`. Host-store queries/builds,
 builder restarts and controller-outage observation checks pass. The installed
 database-reconstruction helper also passed a disposable live probe using real
-read-only bind mounts and a saved derivation. A detached whole-machine plan
-is running; no release has been selected in this trial. Full host reboot,
-rollback, recovery and remaining retention criteria remain open.
+read-only bind mounts and a saved derivation. Whole-machine plan and apply
+succeeded; typed verification reports `reboot-required`, with all six running
+guests matching their selected generations. Repeated submission transferred no
+package or root-image payload. Persistent data and builder additions survived,
+and selected boot artifacts and early logging passed verification. Waiting for
+a manual normal reboot; rollback, recovery and retention criteria remain open.
 
 Status (2026-09-25): local implementation now includes the root-image reuse
 work described below. The user subsequently ran `make test-quick`: 594 passed, 24 skipped, three
@@ -410,7 +413,7 @@ running host system is present in the controller lower without an upper copy.
 Malformed machine-control input exited 1; sys-dev direct pool admission was
 refused with exit 126. No activation occurred during these checks.
 
-The normal plan runs detached in sys-dev at
+The normal plan ran detached in sys-dev at
 `~/.local/share/airlock/physical-tests/todo050607-r4-plan-20260927-163453/`.
 Evidence and intentional test-state details: `.airlock-logs/physical-20260927-r4/`,
 including `baseline.log`, `persistence.log`, `db-probe.log`,
@@ -418,3 +421,43 @@ including `baseline.log`, `persistence.log`, `db-probe.log`,
 A synchronous allocated-byte inventory exceeded the observer's 45-second limit
 and yielded no report; it is not counted as a passed check. No inventory
 process remained at the following observation.
+
+
+### Fourth-image plan/apply result: manual reboot required
+
+The normal controller route planned and applied revision `5c87f84` to candidate
+`5266f735601f2bd835b2f411d81710f2bbb9b1fd4a97a04ca513709dd4348f1b`.
+The initial plan took 574 seconds: build 254.43 seconds, submission 318.24 seconds.
+Seven guest root artifacts were reused with zero root payload. Guest package
+payload totaled 1,626,112 bytes; host transfer was 13 objects, 1,029,060 compressed
+bytes (8,022,408 NAR bytes). Sender inventories took 220.76 seconds and binding
+validation 69.86 seconds, so reuse does not yet make planning immediate.
+
+Apply resubmitted the same candidate in 244 seconds: build 45.65 seconds,
+submission 197.58 seconds, including 186.45 seconds of sender inventories.
+It transferred zero guest packages, root payloads or host objects; the empty
+host stream was 23 compressed bytes. Binding validation fell to 2.95 seconds.
+These timings end at worker launch, not completed activation.
+
+The detached worker `airlock-machine-deploy-2b1dcc273e3e` finished successfully
+(exit 0). Transaction `1790527932393756334` and typed verification both report
+`reboot-required`. All six running guests match selected generations and
+usr-browser remains halted. Sys-ctrl's recorded outcome agrees. Dom0 and
+sys-ctrl have no failed units. Sys-dev, sys-ctrl and usr-home private sentinels,
+both builder additions, and the rooted host derivation/output survived.
+The controller builder advanced from base generation 2 to 3; sys-dev stayed at 2.
+
+Selected host pool generation 2 is
+`/nix/store/pbd5g5nn8ykzva6vzrw7s1nv0l336bi8-nixos-system-dom0-26.11.20260904.801bef6`.
+Its installed EFI/kernel/initrd artifacts passed the host artifact verifier;
+the default entry selects it with early logging parameters enabled. Dom0 is
+still running the image baseline until the user reboots into normal `Airlock`.
+No worker or diagnostic override remains; intentional persistence sentinels and
+GC roots are retained for reboot/rollback checks. No reboot was performed.
+
+Evidence in `.airlock-logs/physical-20260927-r4/`: `plan-receipt.json`,
+`apply-receipt.json`, `apply-status.json`, `apply-verify.json`, `post-apply.log`,
+`boot-selection.log` and `final-state.log`. The detached client log is in sys-dev
+under `~/.local/share/airlock/physical-tests/todo050607-r4-apply-20260927-164807/`.
+Full host reboot, rollback, independent recovery and remaining retention/fault
+acceptance are still outstanding; these TODOs are not complete.

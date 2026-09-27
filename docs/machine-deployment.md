@@ -7,8 +7,11 @@ using the installed database-transition helper and real read-only binds also
 preserved a saved derivation and output mapping without changing the active
 database. A full host reboot with that saved derivation remains to be tested.
 
-Whole-machine planning is running detached from the booted source revision.
-No release has been selected in this trial. See [TODO 05](todo/05-sys-ctrl.md),
+Whole-machine plan/apply succeeded from the booted source revision. Transaction
+`1790527932393756334` is `reboot-required`; six running guests match selection,
+private data and builder additions survived, and boot artifacts passed verification.
+The repeat submission sent zero package/root payload. The worker finished
+successfully; a manual normal reboot is the next step. See [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
 [TODO 07](todo/07-unified-host-guest-store.md) for evidence and outstanding
 reboot, recovery, rollback, retention and performance criteria. Earlier dated
