@@ -968,3 +968,24 @@ the isolated root trial on this fix. Do not reuse old trial commits that omit
 the fix, manually alter live pool metadata, or rerun unrelated passing tests.
 Use detached bounded batches and inspect durable results at completion. Ask for
 a manual reboot only after the fixed deployment's root/pool identity checks pass.
+
+
+### Fixed deployment started (2026-09-28)
+
+Imported committed component `ad3dfd6` into sys-dev and launched the bounded
+normal plan/apply batch on dom0 as `airlock-r6-fixed-deployment.service`.
+Launch check confirmed active/running, phase `planning`; no deployment pass
+is claimed yet. This supersedes the local-only checkpoint above.
+
+Durable remote evidence: `/var/log/airlock/physical-tests/r6/`, including
+`phase`, command stdout/stderr/exit/elapsed files, and either `result.json`
+or `failure.txt`. Local harness, source receipt and launch evidence:
+`.airlock-logs/physical-20260928-r6/`. The diagnostic worker is stored at
+`/var/log/airlock/physical-tests/r6-worker.py` (compressed transfer companion
+`r6-worker.b64`); these are test artifacts, not production overrides.
+
+The batch checks root/pool identities, actual guest disk sizes, saved data,
+builder additions and retained host boot records after activation. It never
+reboots the laptop. Inspect its final result before requesting a manual reboot;
+do not reboot merely because apply was submitted. No model-driven polling.
+Changed-root boot/rollback and memory-only reuse remain pending afterward.
