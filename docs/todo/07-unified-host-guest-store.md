@@ -276,3 +276,32 @@ Evidence: `.airlock-logs/physical-20260927/` (boot and daemon logs, store/volume
 observations, source-import receipt, policy rejection, and mutation record).
 The remote initial plan log is in sys-dev at
 `~/.local/share/airlock/physical-tests/todo050607-20260926-232115/`.
+
+## Second image trial: overlay path validation
+
+The image containing 944cbb3 booted at `sys-dev-1`. The corrected daemon
+configuration and `.links` layer were present; dom0 and sys-dev had no failed
+units. A host Nix query exposed a third integration defect: OverlayFS retained
+`/sysroot/...` lower/upper option strings after switch-root, while Nix correctly
+expected `/var/lib/airlock/...`. Nix refused the mismatched mount.
+
+The new implementation mounts the final overlay in a chrooted child during
+stage 1, using libc loaded before entering the future root. It shares the
+initramfs mount namespace but records final-root paths, keeping Nix's mount
+validation enabled. It neither needs an executable in the not-yet-mounted
+store nor replaces the store under running host processes.
+
+An isolated mount-namespace probe on the laptop executed the exact new mount
+helper with the existing read-only lower view, a copied lower database and a
+fresh disposable upper. It reproduced the stage-2 read-only bind mount. The
+pinned Nix successfully queried the running host system's hash and added a
+small object; the object was verified in the disposable upper. Probe mounts
+vanished on namespace exit and temporary files were removed. The active host
+store and daemon configuration were unchanged. Evidence:
+`.airlock-logs/physical-20260927-r2/nix-mount-probe.log`.
+
+This validates query/write behavior and the corrected mount strings in the
+probe, not a completed deployment. A new image boot, daemon query, plan/apply,
+reboot, rollback and the remaining acceptance checklist are still required.
+Regression tests for the chroot-before-mount ordering and syscall failure were
+added, but not run in this session. No image was built by the agent.

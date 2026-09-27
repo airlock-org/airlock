@@ -254,3 +254,9 @@ Evidence: `.airlock-logs/physical-20260927/` (boot and daemon logs, store/volume
 observations, source-import receipt, policy rejection, and mutation record).
 The remote initial plan log is in sys-dev at
 `~/.local/share/airlock/physical-tests/todo050607-20260926-232115/`.
+
+Follow-up: the second image booted but host Nix rejected stale `/sysroot`
+overlay option paths. The corrected mount helper passed an isolated live
+query/write probe without modifying the active store. See TODO 07's “Second
+image trial” section; full deployment acceptance remains blocked on a rebuilt
+image containing that fix.
