@@ -1,22 +1,21 @@
 # Repository-first whole-machine deployment
 
-Reading guide (2026-09-25): the current source uses sys-ctrl and direct pool
-admission for normal whole-machine submissions. The first physical boot reached
-sys-dev, but its initial controller plan was killed during the release
-build in the 4 GiB sys-ctrl VM. No release was selected. The repository now allocates
-8 GiB to sys-ctrl, limits it to one concurrent build, and routes it through
-sys-firewall so Nix can fetch missing locked inputs; physical validation of
-the committed configuration remains pending. A guest-only trial reached pool admission, then
-dom0 rejected planning; its reason was masked by the old client and is being
-exposed in the next image. Earlier dated acceptance evidence below applies to
-older revisions. See [the controller TODO](todo/05-sys-ctrl.md)
-and [direct pool admission TODO](todo/06-direct-pool-machine-deployment.md) for
-remaining validation.
+Current physical acceptance (2026-09-27): the latest user-built image boots
+dom0 from the shared pool. Queries, writes and a small build through its actual
+Nix daemon passed. Sys-ctrl has 8 GiB, uses sys-firewall, and sees the running
+host system through its approved builder lower. Initial planning reused all
+seven guest root artifacts and transferred only eight guest objects (1,626,112
+payload bytes), but failed during controller-base publication because equivalent
+base32/hexadecimal Nix hashes were compared as strings.
 
-Local source update (2026-09-26): [TODO 07](todo/07-unified-host-guest-store.md)
-adds pool-backed dom0 boot, independent conventional recovery, host publication
-and offline builder transitions. This update has not been tested or built; use
-a fresh image for combined TODO 05/06/07 validation.
+Committed machine revision `3a6f665` fixes hash identity comparison, builder
+database-bind cleanup on service restart, and machine error reporting. A new
+controller plan is running detached. No release has been selected or applied
+in this image trial. Reboot, rollback, recovery and remaining retention and
+performance acceptance are still required; see [TODO 05](todo/05-sys-ctrl.md),
+[TODO 06](todo/06-direct-pool-machine-deployment.md) and
+[TODO 07](todo/07-unified-host-guest-store.md). Earlier dated evidence below
+applies to its stated revisions.
 
 ## The development contract
 

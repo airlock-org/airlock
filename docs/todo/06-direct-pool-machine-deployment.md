@@ -1,5 +1,13 @@
 # Direct pool admission for whole-machine updates
 
+Latest status (2026-09-27, third image trial): **acceptance incomplete**. Host
+shared-store query/write/build and guest payload reuse checks now pass. The
+initial plan failed at controller-base publication; committed `3a6f665` corrects
+hash comparison, builder mount cleanup and protocol error reporting. Its
+replacement plan is running detached. No release has been applied in this
+trial; reboot, rollback and recovery remain unverified. Detailed evidence is
+recorded at the end of this document; older status sections are historical.
+
 Status (2026-09-25): local implementation now includes the root-image reuse
 work described below. The user subsequently ran `make test-quick`: 594 passed, 24 skipped, three
 failed and two warnings. Two missed fixtures needed a root image and the new

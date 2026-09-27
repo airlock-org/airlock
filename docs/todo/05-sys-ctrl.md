@@ -1,5 +1,13 @@
 # Move configuration work into sys-ctrl
 
+Latest status (2026-09-27, third image trial): **acceptance incomplete**. Host
+shared-store query/write/build and guest payload reuse checks now pass. The
+initial plan failed at controller-base publication; committed `3a6f665` corrects
+hash comparison, builder mount cleanup and protocol error reporting. Its
+replacement plan is running detached. No release has been applied in this
+trial; reboot, rollback and recovery remain unverified. Detailed evidence is
+recorded at the end of this document; older status sections are historical.
+
 Status (2026-09-25): the earlier implementation passed the quick checks:
 579 passed, 24 skipped, two existing warnings. The machine and parent image
 flake checks ran separately with `--no-build`. After the network change, the
