@@ -1,5 +1,10 @@
 # Repository-first whole-machine deployment
 
+Current continuation: committed maintenance fix `fbe6062` is being built and
+planned through sys-ctrl. The old compaction's mutation to retained host
+generation 2's map was restored with its original boot checksum verified;
+the current baseline remains healthy. See the final TODO 07 continuation.
+
 Current physical acceptance (2026-09-27, fourth image): forward deployment,
 rollback, independent recovery and normal return all passed. A committed
 single-guest marker update and rollback through sys-ctrl also passed without

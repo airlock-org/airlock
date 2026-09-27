@@ -1,5 +1,9 @@
 # Direct pool admission for whole-machine updates
 
+Current continuation: source `fbe6062` is being planned for live deployment.
+The old compaction's retained-host-map mutation was restored to its original
+verified checksum. See the final continuation section; acceptance remains open.
+
 Latest status (2026-09-27, fourth image): **acceptance incomplete**. Normal
 return from independent recovery passed. A committed usr-home-only update and
 rollback also passed without a host reboot; only usr-home changed, the marker
@@ -754,3 +758,29 @@ nothing to move or retire; reuse verified extent results within the locked
 operation; refresh only maps affected by relocated objects. Keep checksum
 verification for moved data and conservative running/retained reference checks.
 Measure payload bytes read and elapsed time, including the zero-work case.
+
+
+### Compaction-fix deployment continuation (2026-09-27)
+
+The live baseline remains healthy and both stopped r4 workers remain inactive.
+Committed source `fbe6062` replaced the unused root-trial checkout in sys-dev and
+was forwarded to sys-ctrl through the normal typed plan route. A detached plan
+is building; logs: `~/.local/share/airlock/physical-tests/r5-plan` in sys-dev.
+The interrupted zero-candidate compaction transaction remains pending recovery
+with the updated code; the old expensive recovery path was not restarted.
+
+Read-only validation found that the interrupted old compaction had refreshed
+retained dom0 generation 2's blob-map segment size/status fields, invalidating
+its boot-record checksum. The running image baseline and its recovery choices
+still validated. Under the pool admission lock, generation 2's exact original
+map was reconstructed from the retained manifest's segment descriptors and
+restored **only after its SHA-256 matched the original boot record**:
+`aa9c2c74de9ed210c496c15e9ea18447eb543ef22a8c0ac68f844100e39682e6`.
+Host validation then passed. No boot record or package payload was changed.
+This repair removes a mutation left by the old diagnostic run; the committed
+`fbe6062` pinned-map protection prevents recurrence in the new implementation.
+
+Evidence: `.airlock-logs/physical-20260927-r5/retained-hosts.log`,
+`inspect-retained-map.log`, and `restore-retained-map.log`. The pre-restoration
+map and receipt are retained in `/var/log/airlock/physical-tests/r5` on dom0.
+No new USB image has been built. New-release activation and reboot remain next.
