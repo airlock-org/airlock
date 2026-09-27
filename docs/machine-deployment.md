@@ -1,28 +1,25 @@
 # Repository-first whole-machine deployment
 
-Current physical acceptance (2026-09-27, fourth image): revision `5c87f84`
-passed plan/apply, normal reboot, rollback with sys-ctrl initially stopped, and
-rollback reboot at `sys-dev-1`. Typed verification reports `complete` for
-rollback transaction `1790529121150146796`, with exact host/guest versions,
-private data, builder additions and host derivation/output mapping preserved.
-The user then booted independent recovery and successfully reselected the
-original image host, pool generation 1. A manual normal reboot is now needed
-to verify the return from recovery.
+Current physical acceptance (2026-09-27, fourth image): forward deployment,
+rollback, independent recovery and normal return all passed. A committed
+single-guest marker update and rollback through sys-ctrl also passed without
+host reboot. Original source `5c87f84` is restored in both builder VMs; the
+selected machine is the original image baseline with saved private data,
+builder additions and host derivation/output preserved.
 
-Physical probes confirm isolated writable VM volumes and 496 package objects
-using identical physical extents in dom0 and sys-dev. Current allocation is
-14,277,185,536 bytes in the pool, 36,864 bytes in the host upper, and
-2,943,594,496 bytes in the deliberately separate recovery store. A compaction
-dry run passed with nine referenced segments and nothing immediately reclaimable.
-The observation job finished; no test worker remains running.
+**A missing-view recovery fault test is now staged. The next boot must select
+`Airlock (recovery)`.** The selected host's EROFS metadata is preserved at
+`/var/lib/airlock/recovery-probe/store.erofs`; its original path is temporarily
+absent. The running host is usable, but normal boot requires restoration first.
+The exact console restoration commands and evidence are in the final section
+of [TODO 07](todo/07-unified-host-guest-store.md). No test worker is running.
+This diagnostic mutation must be restored and cleaned up before final verification.
 
 See [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
-[TODO 07](todo/07-unified-host-guest-store.md) for evidence and remaining
-missing/corrupt-view recovery, retention, fault/isolation and performance
-criteria. The independent recovery smoke test passed at the user console;
-normal boot after recovery remains to be checked. Earlier dated sections below
-apply to their stated revisions.
+[TODO 07](todo/07-unified-host-guest-store.md) for passed checks and remaining
+recovery-fault, retention, interruption/isolation and performance criteria.
+Earlier dated sections below apply to their stated revisions.
 
 ## The development contract
 

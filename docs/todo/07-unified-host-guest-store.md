@@ -1,15 +1,15 @@
 # Share immutable store objects between dom0 and guests
 
-Latest status (2026-09-27, fourth image): **acceptance incomplete**. Both
-forward deployment and rollback passed their real host reboots: typed
-verification reports `complete`, with exact host/guest generations and saved
-guest data, builder additions and host derivation/output preserved. Rollback
-was requested successfully while sys-ctrl was stopped. Physical probes confirm
-separate writable volumes and identical shared package extents between dom0
-and sys-dev. Independent recovery boot and selection passed at the user console;
-return to normal boot is next. Missing/corrupt-view recovery, actual GC/compaction,
-interrupted operations and remaining root-change/isolation/performance criteria
-still need acceptance.
+Latest status (2026-09-27, fourth image): **acceptance incomplete**. Normal
+return from independent recovery passed. A committed usr-home-only update and
+rollback also passed without a host reboot; only usr-home changed, the marker
+was removed, and private data survived. Original source `5c87f84` is restored
+in both builder VMs. Installed validators reject damaged metadata in disposable
+copies. **A missing-view recovery boot test is now staged:** selected host
+metadata is safely backed up at `/var/lib/airlock/recovery-probe/store.erofs`.
+The next manual boot must select `Airlock (recovery)` and restore that file
+before returning to normal boot. This diagnostic mutation remains pending
+restoration; see the final section below. Other acceptance criteria remain open.
 
 Status (2026-09-26): image assembly succeeded after seed permission and Xen
 EFI validation fixes. The first laptop boot hung after the host store's saved
@@ -664,3 +664,70 @@ an intact pool. Missing/corrupt-view recovery is still an outstanding fault
 trial. The next step is a manual normal `Airlock` reboot and typed verification
 after Tailscale reconnects. No reboot was initiated by the agent.
 Evidence: `.airlock-logs/physical-20260927-r4/recovery-console.png`.
+
+
+### Recovery return and committed single-guest update passed
+
+Normal boot after the independent recovery smoke test returned to `complete`,
+with exact host/guest bindings, private sentinels, builder additions and saved
+host derivation/output mapping intact. No failed dom0 units were reported.
+Evidence: `recovery-return-verify.json` and `post-recovery-return.log` under
+`.airlock-logs/physical-20260927-r4/`.
+
+An isolated machine acceptance branch `acceptance/r4-guest-marker` committed
+`a4163eae6ab8f4417b04743c878b2c9850b4569c`, adding only the usr-home file
+`/etc/airlock-acceptance-r4` with value `guest-update-r4`. A matching isolated
+parent commit `43dc9f5` pins it. Both main checkouts retain the original product
+source. The normal source import and sys-ctrl guest-plan/guest-apply route were
+used, with no image build or direct live configuration edit.
+
+Guest plan took 152 seconds and admission transferred four objects totaling
+443,392 bytes, reusing 974 objects and the unchanged 1-GiB logical root artifact
+with zero root payload. Apply resubmission took 24 seconds before worker launch,
+reused all 978 objects and sent zero package/root payload. Plan and apply have
+distinct candidate IDs because their admission generations are 3 and 4;
+the closure hash and system are identical.
+
+Apply worker `airlock-machine-deploy-6a9df28d7307` exited 0. Transaction
+`1790539581325101420` verified `complete`; only usr-home changed to
+`/nix/store/ffjpr7vmc6g6nqg8m4ybzpzdn9p26bdp-nixos-system-usr-home-26.11`.
+The marker and unchanged private sentinel were read from the running VM.
+Guest rollback transaction `1790539773592303961` also verified `complete`,
+restoring the exact pre-test host/guest bindings and removing the marker.
+No host reboot was needed. Sys-dev and sys-ctrl were restored to clean source
+`5c87f84`; the controller's cached original release build succeeded afterward.
+
+Evidence: `guest-plan.log`, `guest-receipts.log`, `guest-apply.log`,
+`guest-verify.json`, `guest-marker-check.log`, `guest-rollback-verify.json`,
+`guest-rollback-check.log` and `restored-source-build.log`. Test commits and
+worktrees are retained locally for reproducibility, not selected on the machine.
+
+The installed host validator was also exercised against disposable copies of
+actual generation metadata. Corrupt view checksums, missing retention pins,
+uncommitted generations and wrong installed-boot-artifact hashes were rejected.
+Original metadata and the bootable store were unchanged by this probe, and its
+temporary directory was removed. Evidence: `metadata-fault-probe.log`.
+This probe does not substitute for a physical recovery boot with a missing view.
+
+### Pending diagnostic mutation: missing-view recovery boot
+
+After the checks above, the selected generation-1 host metadata was moved from
+`/var/lib/airlock/closure-store/views/by-closure/27bde8f537a1b1f733fc8046f16307fc98aab16cd6b28ef1c691436ea8e8decc/store.erofs`
+to `/var/lib/airlock/recovery-probe/store.erofs`. Its hash was verified against
+the original record. The running mounted host remains usable, but a normal
+boot will fail until restoration. Package payload segments were not changed.
+`recovery-probe/view` is a symlink to the original metadata directory, and
+`recovery-probe/original.json` records the exact binding. Evidence:
+`.airlock-logs/physical-20260927-r4/recovery-fault-prepare.log`.
+
+The user must choose **Airlock (recovery)** at the next boot, then run:
+
+```bash
+sudo sh -c 'cd /var/lib/airlock/recovery-probe && test ! -e view/store.erofs && echo MISSING_VIEW_CONFIRMED && mv store.erofs view/'
+sudo airlock-host-store recover "$(readlink -f /nix/var/nix/profiles/system)"
+```
+
+Capture the console output before another reboot. A subsequent normal boot
+must verify exact generations and data again. Remove the diagnostic directory
+only after verifying that the original metadata path and hash are restored.
+No deployment/build worker remains running. Fault-test acceptance is pending.
