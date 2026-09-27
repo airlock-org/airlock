@@ -1,8 +1,9 @@
 # Direct pool admission for whole-machine updates
 
-Current continuation: source `fbe6062` is being planned for live deployment.
-The old compaction's retained-host-map mutation was restored to its original
-verified checksum. See the final continuation section; acceptance remains open.
+Current continuation: maintenance fix `fbe6062` is applied to the guests and
+selected for dom0; transaction `1790546188487824369` is `reboot-required`.
+Pre-reboot data and boot checks passed. Manual normal boot is next; compaction
+measurement and overall acceptance remain open. See the final continuation.
 
 Latest status (2026-09-27, fourth image): **acceptance incomplete**. Normal
 return from independent recovery passed. A committed usr-home-only update and
@@ -784,3 +785,37 @@ Evidence: `.airlock-logs/physical-20260927-r5/retained-hosts.log`,
 `inspect-retained-map.log`, and `restore-retained-map.log`. The pre-restoration
 map and receipt are retained in `/var/log/airlock/physical-tests/r5` on dom0.
 No new USB image has been built. New-release activation and reboot remain next.
+
+
+### Maintenance release selected; manual reboot pending (2026-09-27)
+
+Normal typed plan/apply through sys-ctrl selected committed revision `fbe6062`.
+Transaction `1790546188487824369` reached **`reboot-required`**. All six running
+VMs match their selected systems; usr-browser remains intentionally halted.
+Selected dom0 generation 3 is
+`/nix/store/vbj6nh1ivynjh75bsvnm7jw2m83nnsi5-nixos-system-dom0-26.11.20260904.801bef6`;
+the running host is still image generation 1. No new image was built.
+
+The plan took 920 seconds: release build 229 seconds, submission 688 seconds,
+including 404 seconds of guest inventory calculation and 235 seconds of host
+binding. It transferred 5,032,960 guest package bytes and 117,052,461 compressed
+host bytes (33 missing paths); every root artifact was reused with zero root
+payload transferred. Apply's submission process exited zero after 462 seconds
+(45 seconds cached build, 416 seconds submission); the independent apply worker
+subsequently reached reboot-required. Its repeated submission reused all guest
+objects and roots and transferred zero host paths. These are deployment timings,
+**not compaction performance results**.
+
+After the VM restarts, checks passed for private-data sentinels in sys-dev,
+sys-ctrl and usr-home, both builders' saved Nix objects, and the saved host
+output and derivation. All five retained host boot records validate, including
+the restored generation 2 map and new generation 3. Selected generation 3's
+installed boot artifacts also validate. Dom0 has no failed units, and no
+deployment or r4 maintenance/trial units remain loaded.
+
+Evidence: `.airlock-logs/physical-20260927-r5/` files `plan.json`, `apply.json`,
+`apply-exit-elapsed.log`, `apply-status.json`, and `pre-reboot.log`.
+Next: the user reboots into normal Airlock; verify exact host/guest selections
+and installed maintenance code, then recover the stopped compaction transaction
+and measure compaction/GC. The stopped root trial remains stopped. Acceptance
+for TODOs 05–07 is still incomplete.

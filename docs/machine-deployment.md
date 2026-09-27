@@ -1,26 +1,22 @@
 # Repository-first whole-machine deployment
 
-Current continuation: committed maintenance fix `fbe6062` is being built and
-planned through sys-ctrl. The old compaction's mutation to retained host
-generation 2's map was restored with its original boot checksum verified;
-the current baseline remains healthy. See the final TODO 07 continuation.
+Current physical acceptance (2026-09-27, fourth image): committed maintenance
+fix `fbe6062` is applied to the six running guests and selected for dom0.
+Transaction `1790546188487824369` is **`reboot-required`**; the running host
+remains the original image. Saved VM data, builder additions, host output and
+derivation, all retained host boot records, and the selected generation 3 boot
+artifacts passed pre-reboot checks. No deployment or maintenance worker remains
+running. A manual normal Airlock reboot is next; no new image is required.
 
-Current physical acceptance (2026-09-27, fourth image): forward deployment,
-rollback, independent recovery and normal return all passed. A committed
-single-guest marker update and rollback through sys-ctrl also passed without
-host reboot. Original source `5c87f84` is restored in both builder VMs; the
-selected machine is the original image baseline with saved private data,
-builder additions and host derivation/output preserved.
-
-The missing-view recovery trial and subsequent normal boot passed. Exact
-running generations, saved data, restored metadata and installed boot artifacts
-were verified; `/var/lib/airlock/recovery-probe` was removed. No missing-view
-diagnostic mutation remains. Subsequent pool maintenance and the queued usr-home root-image trial were
-stopped at user request. GC passed; compaction left an unfinished transaction
-with no candidate segments. The trial did not start. Host/boot checks passed
-after stopping; transaction recovery and source restoration remain pending.
-Evidence and source-restoration requirements are recorded in
-[TODO 07](todo/07-unified-host-guest-store.md).
+Earlier forward deployment, rollback, independent recovery, missing-view
+recovery and normal return passed. A committed single-guest marker update and
+rollback also passed without a host reboot. The missing-view diagnostic was
+removed. The stopped old compaction's retained-host map mutation was restored
+to its exact original verified checksum; the committed fix prevents recurrence.
+Its unfinished zero-candidate transaction still needs recovery with the updated
+code after reboot. Compaction measurements and the stopped root-image trial
+remain outstanding. See the final continuation in
+[TODO 07](todo/07-unified-host-guest-store.md) for evidence and next steps.
 
 See [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
