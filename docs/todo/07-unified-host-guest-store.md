@@ -11,8 +11,9 @@ generation 1. The subsequent normal reboot passed: exact generations, saved
 data and restored metadata hashes were verified, and the diagnostic directory
 was removed. Other acceptance criteria remain open.
 
-Current follow-up: detached pool maintenance and a queued usr-home root-image
-trial are in progress; see the final section for source revisions and cleanup.
+Current follow-up: maintenance and the queued root-image trial were stopped
+at user request. GC passed; compaction is incomplete. See the final section
+for the unfinished transaction, source state and performance follow-up.
 
 Status (2026-09-26): image assembly succeeded after seed permission and Xen
 EFI validation fixes. The first laptop boot hung after the host store's saved
@@ -802,3 +803,30 @@ source provenance and unchanged other guest bindings. Its logs and durable
 phase are in `/var/log/airlock/physical-tests/r4/root-trial`. Root/data checks,
 rollback and restoration of original source remain pending. The main product
 configuration is unchanged. Do not reboot while these workers are active.
+
+
+### Maintenance stopped at user request
+
+Both `airlock-r4-maintenance` and the queued `airlock-r4-root-trial` were stopped
+and verified inactive. The root trial never left `waiting-for-maintenance`.
+GC completed successfully, removing obsolete sys-ctrl-builder generation 1 and
+its unreferenced view; it removed no payload segments or root artifacts.
+Compaction did not finish. Its transaction `22b13939caaf47c785271ac3b09a46db`
+remains `preparing` with **zero candidate segments**. Do not count this as a
+compaction pass or restart the queued trial automatically. Transaction recovery
+is pending; no expensive recovery scan was started after the stop request.
+
+The selected host and installed boot artifacts were verified after stopping;
+there are no failed dom0 units. Sys-dev still has the isolated root-trial source
+`db62fb5` imported, but it has not been deployed. Restore source before ordinary
+deployment. Evidence: `maintenance-stop.log` and `maintenance-stop-verify.log`
+under `.airlock-logs/physical-20260927-r4/`.
+
+Performance follow-up: compaction repeatedly hashes canonical object payloads
+while finding references and refreshing every closure map, including shared
+objects repeated across views. Even zero-candidate runs seal the open segment,
+refresh all maps, and recompute references. Add an early return when there is
+nothing to move or retire; reuse verified extent results within the locked
+operation; refresh only maps affected by relocated objects. Keep checksum
+verification for moved data and conservative running/retained reference checks.
+Measure payload bytes read and elapsed time, including the zero-work case.

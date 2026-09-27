@@ -10,8 +10,10 @@ builder additions and host derivation/output preserved.
 The missing-view recovery trial and subsequent normal boot passed. Exact
 running generations, saved data, restored metadata and installed boot artifacts
 were verified; `/var/lib/airlock/recovery-probe` was removed. No missing-view
-diagnostic mutation remains. Subsequent detached pool maintenance and a queued
-usr-home root-image trial are in progress; do not reboot until they finish.
+diagnostic mutation remains. Subsequent pool maintenance and the queued usr-home root-image trial were
+stopped at user request. GC passed; compaction left an unfinished transaction
+with no candidate segments. The trial did not start. Host/boot checks passed
+after stopping; transaction recovery and source restoration remain pending.
 Evidence and source-restoration requirements are recorded in
 [TODO 07](todo/07-unified-host-guest-store.md).
 
