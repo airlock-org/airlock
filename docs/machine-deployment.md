@@ -1,21 +1,21 @@
 # Repository-first whole-machine deployment
 
-Current physical acceptance (2026-09-27): the latest user-built image boots
-dom0 from the shared pool. Queries, writes and a small build through its actual
-Nix daemon passed. Sys-ctrl has 8 GiB, uses sys-firewall, and sees the running
-host system through its approved builder lower. Initial planning reused all
-seven guest root artifacts and transferred only eight guest objects (1,626,112
-payload bytes), but failed during controller-base publication because equivalent
-base32/hexadecimal Nix hashes were compared as strings.
+Current physical acceptance (2026-09-27, offline USB inspection): release
+`3a6f665` applied and reached `reboot-required`; all expected running guests
+matched their selected generations, followed by an orderly shutdown. The
+subsequent boot failed during host database reconstruction: Nix needed to
+read a saved derivation while the replacement database used an empty store.
+The original database and derivation remain intact on the USB.
 
-Committed machine revision `3a6f665` fixes hash identity comparison, builder
-database-bind cleanup on service restart, and machine error reporting. The replacement
-controller plan and repeat reuse check succeeded (zero repeated payload).
-Normal apply is now running detached; its durable outcome is not yet verified. Reboot, rollback, recovery and remaining retention and
-performance acceptance are still required; see [TODO 05](todo/05-sys-ctrl.md),
+Local fixes `432a2ae` and `5c87f84` expose store payloads during registration
+and keep early-boot diagnostics enabled in deployed USB host releases. The
+failure was reproduced with copied metadata, and registration succeeded with
+the recipe visible. Nineteen focused host-store tests pass; physical boot of
+the fixes has not been verified. The USB was inspected without editing it,
+and no image was built. See [TODO 05](todo/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
-[TODO 07](todo/07-unified-host-guest-store.md). Earlier dated evidence below
-applies to its stated revisions.
+[TODO 07](todo/07-unified-host-guest-store.md) for detailed evidence and open
+reboot, recovery, rollback, retention and performance criteria.
 
 ## The development contract
 

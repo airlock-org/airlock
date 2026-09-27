@@ -1,12 +1,13 @@
 # Move configuration work into sys-ctrl
 
-Latest status (2026-09-27, third image trial): **acceptance incomplete**. Host
-shared-store query/write/build and guest payload reuse checks now pass. The
-initial plan failed at controller-base publication; committed `3a6f665` corrects
-hash comparison, builder mount cleanup and protocol error reporting. Its
-replacement and repeat plans succeeded. Apply is running detached; its durable
-outcome is not yet verified; reboot, rollback and recovery remain unverified. Detailed evidence is
-recorded at the end of this document; older status sections are historical.
+Latest status (2026-09-27, USB inspection): **acceptance incomplete**. The
+committed release applied successfully and reached `reboot-required`; all
+expected running guests matched their selected generations. Shutdown was
+orderly. The subsequent boot failed during host database reconstruction.
+Local fixes `432a2ae` and `5c87f84` make stored derivations available during
+registration and preserve early-boot logging in deployed releases. Nineteen
+focused host-store tests pass; a new physical boot remains unverified.
+Earlier status sections below are historical.
 
 Status (2026-09-25): the earlier implementation passed the quick checks:
 579 passed, 24 skipped, two existing warnings. The machine and parent image
@@ -288,3 +289,40 @@ Normal `airlock-sys-dev-machine-deploy apply` was started detached from clean
 Its durable dom0 result and host reboot still need verification. Evidence:
 `repeat-plan.log`, `transport-closure.log`, `root-isolation.log`,
 `compaction-result.log` and the r3 mutation record.
+
+## Offline USB inspection after failed restart, 2026-09-27
+
+The mounted USB's durable transaction `1790471934430773647` confirms that
+release `3a6f665` applied and reached `reboot-required`. All six intended running
+guests matched their selected systems; usr-browser remained stopped as declared.
+The selected host was `2dq5fwkk2pllak44q0ycmk9d169jnzk8-nixos-system-dom0-26.11.20260904.801bef6`,
+with pool generation 3. The journal ends in an orderly power-off at 02:25 BST.
+Only the original successful boot has a persistent journal/early-boot log.
+
+Failed-boot state locates the interruption: the original database is intact,
+the replacement database exists with zero registered paths, and published
+upper duplicates have been moved into the retained staging directory. Using
+read-only USB metadata and local temporary copies reproduced Nix's error:
+`store path ...-airlock-host-build-probe.drv does not exist`. Registration
+loads parse derivation files; the empty staging store hid the acceptance-test
+recipe even though its payload was preserved in the host upper. Exposing the
+recipe made the exact reconstructed registration load successfully. This
+reproduction and on-disk state identify the defect; the failed boot itself
+left no new persistent error log.
+
+Fix `432a2ae` mounts the lower payload view before lower registration, assembles
+the final host store before upper database reconstruction, and gives the
+staging database a temporary read-only bind of that store. Cleanup unmounts
+the bind on failure and leaves the old database in place. Two new regression
+cases use real Nix registration with emulated privileged mounts to check saved
+derivation/output preservation and failed-load recovery; all 19 focused
+host-store tests passed. They do not validate the complete physical mount/boot
+sequence. Fix `5c87f84` enables existing early-boot diagnostics in deployed
+USB host releases as well as the image; its Nix wiring assertion was added
+but not evaluated in this inspection.
+
+The USB's files and boot selection were not edited. Its ESP was mounted
+read-only for inspection. No image was built. Evidence is in
+`.airlock-logs/usb-inspection-20260927/`: deployment status/journal, original
+initrd log, failing/successful database reproduction and pytest results.
+Physical reboot, rollback, recovery and remaining acceptance gates stay open.
