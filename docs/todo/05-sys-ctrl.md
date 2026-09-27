@@ -200,3 +200,15 @@ overlay option paths. The corrected mount helper passed an isolated live
 query/write probe without modifying the active store. See TODO 07's “Second
 image trial” section; full deployment acceptance remains blocked on a rebuilt
 image containing that fix.
+
+## Third image trial, 2026-09-27
+
+The c15785b image boots with valid final-root overlay paths. Queries and a
+small write through the real host Nix daemon succeeded. Controller memory,
+network binding, host dependency visibility and policy rejection checks passed.
+An initial controller plan is running detached; no release is selected yet.
+A sys-dev builder restart exposed a read-only database bind left mounted by
+`os.path.ismount`; source now checks the kernel mount table. Clearing that stale
+bind restored the original service with its added package and private data
+intact. Deployment of the fix and full reboot/rollback acceptance remain open.
+See TODO 07's third-trial section for evidence and remaining boundaries.

@@ -529,6 +529,20 @@ def test_builder_guest_restarts_without_rebasing_or_losing_upper(tmp_path):
         guest.record_base(tmp_path, identity)
 
 
+def test_builder_detects_same_filesystem_bind_mount(tmp_path):
+    guest = load_builder_guest()
+    database = tmp_path / "lower database"
+    database.mkdir()
+    assert not os.path.ismount(database)
+    mountinfo = tmp_path / "mountinfo"
+    escaped = str(database).replace(" ", r"\040")
+    mountinfo.write_text(
+        f"42 21 0:25 /lower\\040database {escaped} ro - tmpfs tmpfs rw\n"
+    )
+    assert guest.is_mountpoint(database, mountinfo)
+    assert not guest.is_mountpoint(tmp_path / "absent", mountinfo)
+
+
 @pytest.mark.parametrize("fail_last_mount", [False, True])
 def test_builder_guest_mount_lifecycle_preserves_upper(
     tmp_path, monkeypatch, fail_last_mount
@@ -553,7 +567,7 @@ def test_builder_guest_mount_lifecycle_preserves_upper(
 
     monkeypatch.setattr(Path, "stat", root_stat)
     monkeypatch.setattr(guest.os, "chown", lambda *_: None)
-    monkeypatch.setattr(guest.os.path, "ismount", lambda path: str(path) in mounted)
+    monkeypatch.setattr(guest, "is_mountpoint", lambda path: str(path) in mounted)
     monkeypatch.setattr(
         guest, "read_identity", lambda _, domain="sys-dev": ({"base": "fixed"}, b"registration")
     )
@@ -613,7 +627,7 @@ def test_builder_guest_rejects_bad_metadata_and_stop_preserves_private_state(
     output = tmp_path / "upper-output"
     output.write_text("keep")
     calls = []
-    monkeypatch.setattr(guest.os.path, "ismount", lambda _: True)
+    monkeypatch.setattr(guest, "is_mountpoint", lambda _: True)
     monkeypatch.setattr(guest, "checked", lambda *args: calls.append(args))
     guest.stop(SimpleNamespace(runtime=str(runtime)))
     assert calls == [("umount", "merged"), ("umount", "lower")]

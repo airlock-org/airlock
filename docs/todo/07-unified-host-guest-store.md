@@ -305,3 +305,33 @@ probe, not a completed deployment. A new image boot, daemon query, plan/apply,
 reboot, rollback and the remaining acceptance checklist are still required.
 Regression tests for the chroot-before-mount ordering and syscall failure were
 added, but not run in this session. No image was built by the agent.
+
+## Third image trial: host daemon working, builder restart fix
+
+The c15785b image boots with final-root overlay paths; a query and tiny write
+through dom0's actual daemon passed. The written object was verified in its
+persistent upper and rooted for later reboot verification. Sys-ctrl sees the
+exact host system in its lower view, without a duplicate in its upper.
+Host pool assembly completed between 6.942 and 8.631 seconds after boot.
+The initial whole-machine plan runs detached; no release is selected or applied.
+
+Distinct root/private volume identities were recorded for sys-dev, sys-ctrl and
+usr-home. Private-data sentinels were created in all three. These observations
+do not yet establish all closure-isolation or shared-root-image criteria.
+Malformed control requests and unauthorized direct sys-dev admission failed.
+
+Restarting sys-dev's builder service exposed a cleanup defect: Python's
+`os.path.ismount` misses same-filesystem database self-binds. Stop left the
+database read-only, so the next metadata registration failed. The source now
+reads `/proc/self/mountinfo` for both mount guards and stop cleanup. Four focused
+pytest cases passed, including same-filesystem detection and stop/start with a
+preserved upper. On the laptop, unmounting only the stale DB bind and starting
+the original service recovered it; the added Nix object and private sentinel
+survived. The source fix still needs deployment and a real service restart.
+No live helper or service override was installed.
+
+Evidence: `.airlock-logs/physical-20260927-r3/`, including `baseline.log`,
+`persistence.log`, `policy.log`, `volume-bindings.log`, `builder-upper.log`,
+`builder-restart-failure.log`, `builder-recover.log`, `builder-regression.log`
+and `mutations.md`. Reboot, recovery, rollback, GC and full performance
+acceptance remain open.
