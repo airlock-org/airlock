@@ -977,3 +977,24 @@ inspected without agent changes; the operator granted read ACLs to early boot
 logs. Pre-reboot metadata/data checks remain valid but did not prove cold-boot
 mount assembly. TODOs 05–07 remain open; investigate this mount failure before
 continuing changed-root and memory-only acceptance trials.
+
+
+### Mount-failure diagnostic follow-up (2026-09-29)
+
+Offline boot records identify five distinct metadata images/closure hashes for
+generations 1–5. Multiple recovery aliases share generation 1, which assembly
+already deduplicates. This rules out simply listing the same metadata image
+twice; it does not establish the kernel's rejection reason. Records preserved
+in `.airlock-logs/physical-20260929-boot-failure/boot-records.json`.
+
+Component `7e34747` adds a best-effort persistent failure report before mount
+cleanup: original command/exception, mountinfo, supported filesystems, kernel
+command line and a bounded kernel-message tail. The kernel read has a five-second
+timeout. Reports use mode 0600 under `/var/log/airlock-boot/`; cleanup errors no
+longer mask the original failure. Focused pytest through `make test-quick` passed
+5 tests, including unavailable diagnostics and kernel-read timeout behavior
+(`.airlock-logs/boot-mount-diagnostics/pytest-report.json`). No image build or USB
+modification was performed. This improves diagnosis only; the boot failure is
+not fixed. Obtain the failing boot's kernel messages at its emergency console,
+or deploy this diagnostic initrd before repeating the boot. Existing USB logs
+cannot retroactively supply the missing kernel detail.
