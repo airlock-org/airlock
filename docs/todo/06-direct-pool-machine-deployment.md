@@ -21,11 +21,17 @@ usr-home's disk and pool record both remained 1536 MiB, and guest/private,
 builder and rooted host markers survived. Transaction `1790707116774052820`
 is complete. Typed rollback then restored the 1024 MiB root with matching
 pool generation 6 and preserved private data; only usr-home was restarted.
-Rollback transaction `1790712446217355385` is `reboot-required`, selecting
-**Airlock (Generation 5)**. Its return boot is the next check. TODOs 05–07
-remain open; the broader controller-outage/GC/interruption criteria are not
-implied by this root-change pass.
-The product checkout and both builders are restored to source `649469b`.
+Rollback transaction `1790712446217355385` is now verified **complete**.
+Return boot `0840d0fe-966a-494c-af20-fa167cd47474` runs generation 5 with its
+own view/database, the 1024 MiB guest root, all persistence markers and no
+failed units. The changed-root update → reboot → rollback → reboot sequence
+passed. TODOs 05–07 remain open; broader outage/interruption criteria are
+separate. The memory-only plan `d827ad2` passed with all seven guest generations
+reused and zero guest package/root payload; it has not been activated.
+Component `ae42472` adds only the missing privileged storage pytest worker;
+installed runtime remains `649469b`. Local unprivileged execution correctly
+reports skipped; physical execution is next. Restore builder source after the
+plan-only trial.
 No new image was built and no missing-view fault is active. Evidence lives
 under `.airlock-logs/deployment-performance/` and the r7 physical evidence
 directory (`root-trial-boot6` and `root-trial-rollback-final`).
