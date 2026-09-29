@@ -1403,3 +1403,24 @@ a 3700-second runtime limit. Authoritative logs are now in dom0 at
 `exit`/`elapsed` are written on command completion. The original sys-dev logs
 are retained as evidence of the stopped attempt. No linger settings or product
 code were changed. Review the completed plan before applying; no reboot yet.
+
+### R7 controller request survived launcher loss (2026-09-29)
+
+The next status check corrected the previous diagnosis: the dom0 retry exited
+in one second with `Resource temporarily unavailable`, because the original
+sys-ctrl request still held the controller lock. Controller PID 1068 remained
+active after the SSH-side launcher stopped. At inspection it had run for about
+15 minutes, finished the build, and was admitting usr-browser through
+`airlock-pool-send`; `admissions.json` existed for `41ee7dd`. No request was
+applied. The earlier claim that the whole plan had stopped was incorrect: only
+the requesting launcher stopped. The retry made no concurrent deployment.
+
+Leave the existing controller operation running. Its authoritative durable
+result is sys-ctrl's
+`~/.local/share/airlock/controller/candidates/41ee7dd63ac57406d8dc3dd05a76f7ec80149062/plan.json`,
+written before the response is printed to the disconnected caller. Build timing
+is in `~/.local/share/airlock/machine-deploy/<revision>/build.json`; admission
+receipts are saved incrementally in the candidate's `admissions.json`.
+The failed retry's dom0 logs do not describe the original request's outcome.
+Evidence: r7 `status-plan.results.json` and `controller-status.results.json`.
+No repeated polling, further retries, activation or reboot were performed.
