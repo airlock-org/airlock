@@ -8,10 +8,13 @@ report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
 the generation 2 → 1 → 2 boot sequence passed with isolated stores/databases,
 matching guests and preserved additions. A reversible missing-generation-2-view
-fault is now staged; generation 1 is the boot default. Awaiting manual reboot
-to verify generation 1 does not depend on the unavailable newer view.
+fault is now staged; generation 1 is the boot default. The reboot trial is
+paused for input debugging on running generation 2: its i8042 keyboard failed
+to enable at boot and the TrackPoint was absent. A diagnostic controller rebind
+restored device initialization and forwarding; physical login confirmation is
+pending. See TODO 07's final input checkpoint.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
-historical; generation isolation, rollback and the remaining acceptance tests
+historical; the missing-view isolation trial and remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.
 
 The new baseline uses a fixed host view, writable state per generation, machine

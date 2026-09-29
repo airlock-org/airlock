@@ -8,10 +8,13 @@ report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
 the generation 2 → 1 → 2 boot sequence passed with isolated stores/databases,
 matching guests and preserved additions. A reversible missing-generation-2-view
-fault is now staged; generation 1 is the boot default. Awaiting manual reboot
-to verify generation 1 does not depend on the unavailable newer view.
+fault is now staged; generation 1 is the boot default. The reboot trial is
+paused for input debugging on running generation 2: its i8042 keyboard failed
+to enable at boot and the TrackPoint was absent. A diagnostic controller rebind
+restored device initialization and forwarding; physical login confirmation is
+pending. See TODO 07's final input checkpoint.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
-historical; generation isolation, rollback and the remaining acceptance tests
+historical; the missing-view isolation trial and remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
@@ -1570,6 +1573,37 @@ relationship to generation transitions remain unproven. Evidence: r7
 `input-regression.results.json` and `input-focused.results.json`.
 
 The reversible missing-generation-2-view fault remains staged exactly as above.
-Generation 1 is the verified boot default. Check whether desktop keyboard/clicks
-recover after that reboot, and retain this issue in final acceptance reporting.
+Generation 1 is the verified boot default. The user requested live debugging
+before reboot; retain this issue in final acceptance reporting.
 Do not claim full interactive health merely from an empty failed-unit list.
+
+
+### R7 input failure isolated to controller initialization (2026-09-29)
+
+On boot `ef0091e961fa4878991181f49b0185a4`, dom0 logged atkbd failures to
+deactivate and enable the keyboard, IRQ 1 remained at zero, and i8042 had no
+AUX/TrackPoint device. Both preceding boots had working KBD/AUX initialization
+and detected the Elan TrackPoint. In sys-gui the GDM greeter was active, GNOME
+answered D-Bus, and GNOME had opened the forwarded input devices. A bounded
+120-second event-category counter received touchpad events but no keyboard
+events; it recorded no typed text. Touchpad button versus contact events were
+not distinguished, so this does not establish working clicks.
+
+At 15:14:10 UTC, performed a temporary diagnostic unbind/rebind of the dom0
+`i8042` platform driver using a bounded transient systemd unit. KBD and AUX
+initialized without the earlier errors; the keyboard and Elan TrackPoint
+reappeared, and IRQ counters became nonzero. Existing Qubes discovery handled
+the remove/add events and automatically forwarded both into sys-gui. No Qubes
+or GUI service restart, configuration change, or reboot was needed. The first
+launcher failed before touching the controller because its PATH lacked `date`;
+the retry supplied the existing system PATH and succeeded. Its failed-unit
+marker was cleared after preserving logs; dom0 reports no failed units.
+
+This establishes a recoverable controller-initialization failure, not its
+underlying cause or a permanent boot fix. Physical login confirmation is pending.
+The transient rebind changed only current device state and left the driver bound;
+no persistent override or diagnostic daemon remains. The independent missing-view
+fault above is still staged and must be restored before booting generation 2.
+Evidence: r7 `keyboard-boots`, `keyboard-rebind-observed`,
+`keyboard-rebind-forwarding`, `input-capture-result` and their result JSON files;
+dom0 `/var/log/airlock/physical-tests/r7/i8042-rebind.log`.
