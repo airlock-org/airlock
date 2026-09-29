@@ -1556,3 +1556,20 @@ view remains absent; restore the moved file before any return to generation 2
 or maintenance. Evidence: `missing-view-setup.results.json` and
 `select-generation1-for-fault.results.json`. This diagnostic is not a product
 change and must be undone before final acceptance. No automated reboot.
+
+### R7 user-reported input failure before fault-test reboot (2026-09-29)
+
+The user reports keyboard input and mouse clicks no longer work on the current
+generation-2 desktop. This is unresolved; earlier "healthy" reports described
+service/store checks, not interactive input verification. SSH and qrexec remain
+responsive. Read-only capture found physical input devices in dom0, active input
+discovery/event services and input-proxy senders, plus input devices in sys-gui;
+these facts do not establish successful delivery to the desktop. No input
+services were restarted and no input configuration was changed. Cause and
+relationship to generation transitions remain unproven. Evidence: r7
+`input-regression.results.json` and `input-focused.results.json`.
+
+The reversible missing-generation-2-view fault remains staged exactly as above.
+Generation 1 is the verified boot default. Check whether desktop keyboard/clicks
+recover after that reboot, and retain this issue in final acceptance reporting.
+Do not claim full interactive health merely from an empty failed-unit list.
