@@ -1283,7 +1283,7 @@ returning generation's saved upper; publication reference closure; SQLite WAL
 metadata snapshots; machine-binding restore and interrupted-transaction rejection;
 retained boot artifacts/menu handling, profile filtering and mount errno/cleanup.
 Mount operations in the assembly unit fixtures are emulated: these are not a
-substitute for physical boot evidence. **Tests have not been run.** Static Python
+substitute for physical boot evidence. **Tests were not run during implementation.** Static Python
 parsing and diff whitespace inspection were performed only. No image was built,
 no live session was contacted and the USB was not modified. Component commit
 `c2bb176` contains the implementation and new regression tests; the parent
@@ -1305,3 +1305,15 @@ Next validation on the fresh baseline:
    trials, and recheck affected retention/GC behavior. Historical passes for
    unchanged behavior remain evidence, but do not mark 05–07 complete until the
    new boot/rollback behavior and remaining acceptance criteria pass.
+
+### First baseline quick-test run (2026-09-29)
+
+The user ran `make test-quick`: 663 passed, 24 skipped, eight setup errors and
+one failure. All eight errors came from the new boot fixture mocking admission
+without creating its registration file. Component `c2a6d82` supplies that file
+while retaining real publication and validation. The parent flake check failed
+before evaluation because the local sibling submodule source lacked `c2bb176`.
+The component commits were fetched into that source under
+`refs/airlock/parent-build-source`, without changing its checkout. Both causes
+have been addressed; the user must rerun tests. No tests or image builds were
+run while making these fixes, and no live/USB changes were made.

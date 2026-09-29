@@ -110,6 +110,20 @@ issues.
 
 ## Normal loop
 
+When committing inside `airlock-machine/`, make the commit available in the
+submodule source before running parent flake checks or building. Nix fetches
+the pinned revision from the URL in `.gitmodules`; a commit that exists only
+in the initialized submodule is insufficient. For this checkout's local sibling
+source, run from the parent repository:
+
+```bash
+git -C ../airlock-machine fetch --no-tags "$PWD/airlock-machine" HEAD:refs/airlock/parent-build-source
+git add airlock-machine
+git commit -m 'Update machine component'
+```
+
+This fetch preserves the sibling repository's working tree and current branch.
+
 ```bash
 # Make the change in this repository, then:
 make test-quick
