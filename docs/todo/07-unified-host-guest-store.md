@@ -2,9 +2,13 @@
 
 Status (2026-09-29): **acceptance in progress**; TODO 05 is complete.
 Root update/reboot/rollback, persistence, memory-only reuse, real storage
-integration, fault cleanup/retry and builder reuse passed. Cold/repeat measurements are recorded; the remaining controller-disabled
-offline boot is staged as Airlock (Generation 8), followed by trial rollback.
-Installed runtime is `649469b`; newer component commits add test coverage only.
+integration, fault cleanup/retry and builder reuse passed. Generation 8 booted
+with sys-ctrl halted, declared guests ready and persistence intact. Trial rollback
+remains pending. A verifier bug retains the previous boot's running-VM set;
+Fix `4845da0` passes 120 unit tests and Ruff; full quick tests and live deployment
+are pending. Agent access is restored.
+Installed runtime is `649469b` plus trial configuration `93c3355`.
+Evidence: r7 `offline-boot8.results.json` and `boot-verification-fix/` logs.
 See the latest brief milestones below; earlier checkpoints are historical.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
@@ -2022,7 +2026,8 @@ allocation. Host/controller view publication remains the main changed-plan cost.
 Evidence: `offline-trial-plan/allocation-summary.json`, r7 `offline-preflight`
 and `unique-pool-bytes` results. Earlier measured baseline is retained above.
 
-Trial `93c3355` changes only sys-ctrl autostart to false. Prepared apply passed;
-transaction `1790717000990365650` awaits **Airlock (Generation 8)** reboot.
-Disconnect the laptop from the network for boot, then reconnect after login;
-verify sys-ctrl stayed halted, then roll back to baseline and restore source.
+Trial `93c3355` changes only sys-ctrl autostart to false. Transaction
+`1790717000990365650` booted Generation 8 successfully after the requested offline
+boot. Saved checks confirm sys-ctrl halted, generation-specific host storage,
+declared guests ready and persistence intact. Typed verification still expects
+the pre-reboot running set; fix and trial rollback remain outstanding.

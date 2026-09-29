@@ -4,12 +4,16 @@ Current checkpoint (2026-09-29): **TODO 05 complete; 06–07 finishing acceptanc
 Generation 5 is verified after the real guest-root expansion and rollback cycle;
 private, builder and host data survived. Unchanged preparation is 15.54 s,
 prepared submission 8.65 s. Memory-only planning transfers no guest/root payload.
-An isolated committed trial `93c3355` disables sys-ctrl autostart for the next
-offline boot check. Transaction `1790717000990365650` passed apply and awaits
-**Airlock (Generation 8)**. Boot disconnected from the network, then reconnect
-after login; verify controller remains halted, then roll back and restore source.
-Cold/repeat measurements are recorded; no background test remains running. Runtime remains `649469b`; later component
-commits add acceptance tests only. Evidence: `.airlock-logs/deployment-performance/`
+Offline trial `93c3355`, transaction `1790717000990365650`, booted Generation 8:
+sys-ctrl halted, declared guests ready, persistence intact, no failed units.
+Typed verification incorrectly retains the previous boot's running-VM set.
+Fix `4845da0` passes 120 coordinator unit tests and Ruff; full quick tests and
+live deployment are pending. Agent access is restored. Next: roll back the trial
+while sys-ctrl is halted, restore builder source, then deploy the tested verifier
+fix and verify across reboot.
+Cold/repeat measurements are recorded; no background test remains running.
+Installed runtime remains `649469b` plus the trial configuration.
+Evidence: `.airlock-logs/boot-verification-fix/`, `.airlock-logs/deployment-performance/`
 and `.airlock-logs/physical-20260929-r7/`. No USB rebuild is needed.
 
 ## The development contract
