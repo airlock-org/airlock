@@ -13,8 +13,14 @@ view after being carried into generation 2's lower view. Publication considered
 writable additions but missed rooted additions already in the lower. The local
 fix includes the live rooted paths from either layer; 21 host-generation tests
 passed. Restored only the missing test fixture from its retained original file,
-checking the identical Nix store path and re-registering its root. Deployment of
-the fix is next; the missing-view fault trial is paused, with no fault active.
+checking the identical Nix store path and re-registering its root. The fix is
+now staged as host generation 4 (transaction `1790701105546677309`,
+`reboot-required`); both test paths are in its registration and updated sys-ctrl
+and sys-dev are running. Dom0 still runs generation 3; persistence across the
+next boot is unverified. The missing-view fault trial is paused, with no fault active.
+
+Deployment performance changes are committed locally as `649469b`; full quick
+validation is running before normal live deployment. No new image is planned.
 
 The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
 report: 674 passed, 24 skipped, zero failures/errors. Evidence:
@@ -661,3 +667,21 @@ request, not proof that every VM and filesystem finished shutting down.
 
 These changes require a newly built image and physical validation. No image was
 rebuilt or live system modified during this change; validation uses quick tests.
+
+
+### Prepared deployment reuse
+
+A plan now records a root-owned prepared candidate token. Apply from the same
+committed revision reuses that candidate and pinned build, with no package
+inventory or payload transfer. Dom0 checks the retained views and current plan;
+the worker also checks the recorded machine state under the deployment lock.
+A stale candidate is rejected: run `make machine-plan DEPLOY_TARGET=...` again
+and review its effects before applying. A direct apply without a saved plan still
+prepares the release normally.
+
+Unchanged guest generations keep their original admission provenance, bound to
+the exact immutable identities in the new release. New package contents remain
+validated at admission; existing objects use dom0's verified admission records.
+The update that installs this implementation may still use the previous client
+and receiver until its new host and guests are running together. Do not treat
+that installation's timing as a measurement of the optimized workflow.

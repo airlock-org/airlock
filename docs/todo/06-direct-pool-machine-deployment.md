@@ -13,8 +13,14 @@ view after being carried into generation 2's lower view. Publication considered
 writable additions but missed rooted additions already in the lower. The local
 fix includes the live rooted paths from either layer; 21 host-generation tests
 passed. Restored only the missing test fixture from its retained original file,
-checking the identical Nix store path and re-registering its root. Deployment of
-the fix is next; the missing-view fault trial is paused, with no fault active.
+checking the identical Nix store path and re-registering its root. The fix is
+now staged as host generation 4 (transaction `1790701105546677309`,
+`reboot-required`); both test paths are in its registration and updated sys-ctrl
+and sys-dev are running. Dom0 still runs generation 3; persistence across the
+next boot is unverified. The missing-view fault trial is paused, with no fault active.
+
+Deployment performance changes are committed locally as `649469b`; full quick
+validation is running before normal live deployment. No new image is planned.
 
 The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
 report: 674 passed, 24 skipped, zero failures/errors. Evidence:

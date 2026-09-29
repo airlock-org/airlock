@@ -780,7 +780,9 @@ def test_negotiated_admission_reuses_usb_seed_without_payload(
 
     def negotiate(inventory):
         artifacts.write_message(inventory_stream, inventory)
-        return {"schema": artifacts.SCHEMA_REQUEST, "missing": [], "missing_root": False}
+        return {"schema": artifacts.SCHEMA_REQUEST, "missing": [], "missing_root": False,
+                "reused_tree_hashes": {item["path"]: artifacts.reusable_object(pool, item["path"])["tree_hash"]
+                                       for item in inventory["objects"]}}
 
     monkeypatch.setattr(
         artifacts,

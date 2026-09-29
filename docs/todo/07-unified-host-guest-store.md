@@ -13,8 +13,14 @@ view after being carried into generation 2's lower view. Publication considered
 writable additions but missed rooted additions already in the lower. The local
 fix includes the live rooted paths from either layer; 21 host-generation tests
 passed. Restored only the missing test fixture from its retained original file,
-checking the identical Nix store path and re-registering its root. Deployment of
-the fix is next; the missing-view fault trial is paused, with no fault active.
+checking the identical Nix store path and re-registering its root. The fix is
+now staged as host generation 4 (transaction `1790701105546677309`,
+`reboot-required`); both test paths are in its registration and updated sys-ctrl
+and sys-dev are running. Dom0 still runs generation 3; persistence across the
+next boot is unverified. The missing-view fault trial is paused, with no fault active.
+
+Deployment performance changes are committed locally as `649469b`; full quick
+validation is running before normal live deployment. No new image is planned.
 
 The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
 report: 674 passed, 24 skipped, zero failures/errors. Evidence:
@@ -1741,3 +1747,43 @@ run. This covers rejection and empty interrupted-stream retry, not arbitrary
 mid-object interruption or all temporary-data cleanup cases.
 Evidence: `controller-rejections.results.json` and
 `controller-incomplete-artifact.results.json`.
+
+
+### Deployment preparation performance (2026-09-29)
+
+Measured carry-fix plan: build 210.73 s; preparation 675.51 s. Of preparation,
+per-guest inventory creation totalled 419 s (sys-gui alone 249 s, all 1,513
+objects reused), binding/publication 226.22 s, and host transfer/import 4.95 s.
+All immutable guest root artifacts were reused. Apply repeated preparation;
+its host binding was already cached (4.57 s), but guest inventories were repeated.
+
+Source `649469b` implements:
+
+- Negotiate package availability using Nix path metadata before hashing files.
+  Dom0 supplies the recorded tree identity of existing admitted objects; only
+  missing payloads are read, hashed, transferred and content-validated. Pool
+  admission locking still protects reuse from GC through publication.
+- Query each unique package's Nix metadata once across all machine guests.
+- Probe for an exact retained guest generation before preparing its inventory.
+  Match system, closure source, root source and kernel; check authority,
+  retention, view integrity and backing ranges. Keep original guest provenance
+  in the new machine binding. Guest writable volumes are never shared.
+- Apply the exact root-owned prepared candidate using a checksum-bound token.
+  Revalidate its host/guest views, replan, and compare machine state; repeat the
+  state check under the worker's deployment lock before mutation. Changed
+  selection, transaction, running VMs, booted host or live Nix roots require a
+  new plan. No guest admission or transport import is repeated on this path.
+- Reuse a pinned build of the identical committed source and lock file.
+- Report separate host registration, pool publication, database seeding,
+  controller-base preparation, guest binding and prepared-candidate check times.
+
+A retained generation without the optional reuse proof uses normal admission;
+this prepares a new proven view using existing package objects, without editing
+old generation records. The logical view checksum permits compaction relocation
+but rejects altered object layout or unrecorded physical extents. Integrity
+scrubbing of already admitted package bytes remains a separate operation.
+
+Focused regression coverage passed (187 tests before the final view-proof case).
+Full `make test-quick` and live performance measurements are pending. This is not
+a completion claim for 05–07. Evidence: `.airlock-logs/deployment-performance/`
+and `.airlock-logs/deployment-perf-*.log`.
