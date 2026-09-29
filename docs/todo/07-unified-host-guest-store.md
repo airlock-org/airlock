@@ -6,7 +6,8 @@ pool generation 1; required guests are running, dom0/sys-ctrl have no failed
 units, and persistence/store-addition sentinels passed. The latest local quick
 report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
-a detached machine plan is running, with no apply or reboot requested yet.
+the machine plan passed and detached typed apply submission is now running.
+No reboot has been requested yet.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
 historical; generation isolation, rollback and the remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.
@@ -1424,3 +1425,32 @@ receipts are saved incrementally in the candidate's `admissions.json`.
 The failed retry's dom0 logs do not describe the original request's outcome.
 Evidence: r7 `status-plan.results.json` and `controller-status.results.json`.
 No repeated polling, further retries, activation or reboot were performed.
+
+### R7 plan passed; typed apply submission started (2026-09-29)
+
+The original controller saved a successful `plan.json` before exiting.
+Revision `41ee7dd`, candidate
+`/var/lib/airlock/machine/candidates/d3fa8777c911b072994fef29a7e44ff71c71034619dffc97da4a8089e700590d`.
+Build: 510.52 seconds. Subsequent preparation: 648.44 seconds, including
+196.59 seconds binding validation and 7.01 seconds host transfer/import.
+Guest sender inventory scanning was a major cost (sys-gui alone 246.79 seconds).
+Host transfer: 36 paths, 126,918,080 NAR bytes, 117,092,599 compressed bytes.
+Guest packages: sys-ctrl 12 objects / 3,209,216 payload bytes, sys-dev 11 objects /
+1,907,200 bytes; all other guests reused every package. Every guest reused its
+root image with zero root payload bytes. This proves first-plan root reuse for
+this baseline, not yet changed-root activation/rollback or repeat-update cost.
+
+Pre-apply review confirmed exact revision/lock provenance, all staged guest
+generations 2, host pool generation 2, no retire/restore actions, and the current
+host still on generation 1. A fresh baseline has `host/running.json`, with no
+`host/selected.json` until selection; the initial read-only probe was corrected
+accordingly. Existing generation-1 state and the host persistence GC root exist.
+
+Started dom0 system unit `airlock-r7-apply-submit` (PID 13054), invoking the
+normal typed `airlock-sys-dev-machine-deploy apply` route via sys-dev. It will
+revalidate/reuse the prepared source and admissions, then submit the detached
+dom0 activation worker. Unit lifetime is bounded to 3700 seconds; logs are at
+`/var/log/airlock/physical-tests/r7/apply/`. Request submission is not successful
+activation; inspect machine status and saved sentinels before asking for reboot.
+No reboot, active polling, or direct coordinator bypass was performed. Local
+receipts: r7 `plan.json`, `pre-apply.results.json`, `start-apply.results.json`.
