@@ -1317,3 +1317,22 @@ The component commits were fetched into that source under
 `refs/airlock/parent-build-source`, without changing its checkout. Both causes
 have been addressed; the user must rerun tests. No tests or image builds were
 run while making these fixes, and no live/USB changes were made.
+
+### Second baseline quick-test run (2026-09-29)
+
+The user reran `make test-quick`: 665 passed, 24 skipped and seven failed.
+The parent flake check now passed. Six boot tests exposed a production bug:
+first boot parsed the absent previous database as an empty closure, which the
+strict registration validator correctly rejects. Component `a6f2e71` represents
+an absent database as no prior records and uses the selected registration
+directly when there are no saved upper objects. Existing database dumps remain
+strictly validated. Added coverage checks both an existing database with no
+saved upper objects and rejection of an empty dump from an existing database.
+
+The separate terminal test timed out awaiting client exit after its interrupt
+sequence. Component `e431c44` replaces the race-prone command-echo synchronization
+with foreground-process output and a fresh prompt after Ctrl-C; it also drains
+the final client output before waiting for exit. Confirmation awaits the user's
+rerun. Python syntax parsing and diff whitespace checks passed; no tests,
+image builds or live/USB changes were run during this repair. The local sibling
+Git source contains both commits for parent flake evaluation.
