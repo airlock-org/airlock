@@ -6,9 +6,9 @@ pool generation 1; required guests are running, dom0/sys-ctrl have no failed
 units, and persistence/store-addition sentinels passed. The latest local quick
 report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
-plan and apply passed pre-reboot verification; transaction
-`1790688503537734589` is `reboot-required`. Manual reboot into the default
-Airlock entry is now required to verify host generation 2.
+host generation 2 booted and transaction `1790688503537734589` now verifies
+`complete`. Only its own store view/database are mounted; saved guest, builder
+and host objects survived. Manual boot-menu rollback to generation 1 is next.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
 historical; generation isolation, rollback and the remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.
@@ -1484,3 +1484,28 @@ remain. Evidence: r7 `pre-reboot.results.json` and
 or subsequent test work until the user confirms it. After reboot, verify exactly
 one generation-2 base, matching host/guest selection and saved state before
 starting rollback tests.
+
+### R7 generation-2 boot passed; menu rollback next (2026-09-29)
+
+After the user's reboot, the running host matches selected `qs4fs63...`.
+Coordinator verify advanced transaction `1790688503537734589` to `complete`.
+Only `/var/lib/airlock/host-store/bases/2` is mounted, and `/nix/var/nix/db`
+binds generation 2's private database. Required guests are running, usr-browser
+remains intentionally stopped, and dom0 has no failed units. All guest
+persistence hashes, both builder additions and the original dom0 store object
+survived. Generation-1 and generation-2 machine bindings remain distinct.
+Evidence: r7 `post-reboot.results.json`.
+
+Added and rooted `/nix/store/7nzs8jw48y1pwca1vv1s7qfp9r94smz8-generation2-marker`,
+containing `r7:only-generation-2`. Verified it is in generation 2's upper and
+absent from generation 1's upper. Its root is
+`/var/lib/airlock/physical-tests/r7/generation2-root`; remove after acceptance.
+Evidence: `generation2-sentinel.results.json`. This will check persistence on
+return to generation 2 and isolation while booted into generation 1.
+
+Requested a manual reboot selecting **Airlock (generation 1)** from the boot
+menu, without first applying a rollback transaction. This directly exercises
+restoration from the selected boot generation's own machine binding. Verify
+baseline host/view/database and guest generation 1, saved data, and absence of
+the generation-2-only object from the active store, then return to generation 2.
+No automated reboot or further mutation while waiting for the user.
