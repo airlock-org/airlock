@@ -1,20 +1,20 @@
 # Direct pool admission for whole-machine updates
 
-Current checkpoint (2026-09-28): **root-change acceptance failed; active testing
-stopped to reduce cost**. Transaction `1790549788826426596` reached
-`reboot-required`, selecting trial `da65cc9` / host `nnha9msy…`, but usr-home's
-running disk is 1536 MiB while its current pool manifest still describes the
-old 1024 MiB root. Do not count this trial as passed or request a reboot yet.
-See the final failure checkpoint. Fix `ad3dfd6` is implemented and tested locally; deployment remains pending.
+Current checkpoint (2026-09-29): **new baseline authorized; local generation
+isolation changes await user tests and image build**. The user chose to discard
+the failing USB state without a backup. Earlier results below are historical;
+the exact previous OverlayFS rejection remains unexplained. No tests, image
+build, USB changes or live commands were run for this implementation. See the
+final new-baseline section for the changed design and required acceptance.
 
-Current continuation: maintenance fix `fbe6062` booted successfully; typed
+Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
 verification marked transaction `1790546188487824369` complete. Saved data,
 builder additions and boot records passed; installed maintenance code hashes
 match the commit. Recovery, GC and compaction passed. A machine plan for the
 root-artifact trial is running. Overall acceptance remains open. See the final
 continuation.
 
-Latest status (2026-09-27, fourth image): **acceptance incomplete**. Normal
+Historical status (2026-09-27, fourth image): **acceptance incomplete**. Normal
 return from independent recovery passed. A committed usr-home-only update and
 rollback also passed without a host reboot; only usr-home changed, the marker
 was removed, and private data survived. Original source `5c87f84` is restored
@@ -1050,3 +1050,18 @@ modification was performed. This improves diagnosis only; the boot failure is
 not fixed. Obtain the failing boot's kernel messages at its emergency console,
 or deploy this diagnostic initrd before repeating the boot. Existing USB logs
 cannot retroactively supply the missing kernel detail.
+
+
+### New baseline authorized (2026-09-29)
+
+The user declined a backup of the failing USB and will test/build a fresh image.
+Local changes isolate host views, writable state and machine boot selections,
+preserve independent EFI entries, and improve failure logging. New pytest
+regressions are written but **not run**. No image build or live/USB modification
+was performed. Component commit `c2bb176` contains the implementation and new
+regression tests; the parent repository pins it for the next baseline build.
+See [TODO 07's new-baseline section](07-unified-host-guest-store.md#new-baseline-isolated-host-generations-2026-09-29-not-yet-tested)
+for implementation details and the ordered acceptance plan. Earlier passes are
+historical; fresh boot, update, previous-generation boot, broken-newer-view
+isolation and recovery must be revalidated. Root-change boot/rollback and
+memory-only reuse remain pending. This document remains incomplete.

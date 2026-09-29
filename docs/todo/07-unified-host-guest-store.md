@@ -1,20 +1,20 @@
 # Share immutable store objects between dom0 and guests
 
-Current checkpoint (2026-09-28): **root-change acceptance failed; active testing
-stopped to reduce cost**. Transaction `1790549788826426596` reached
-`reboot-required`, selecting trial `da65cc9` / host `nnha9msy…`, but usr-home's
-running disk is 1536 MiB while its current pool manifest still describes the
-old 1024 MiB root. Do not count this trial as passed or request a reboot yet.
-See the final failure checkpoint. Fix `ad3dfd6` is implemented and tested locally; deployment remains pending.
+Current checkpoint (2026-09-29): **new baseline authorized; local generation
+isolation changes await user tests and image build**. The user chose to discard
+the failing USB state without a backup. Earlier results below are historical;
+the exact previous OverlayFS rejection remains unexplained. No tests, image
+build, USB changes or live commands were run for this implementation. See the
+final new-baseline section for the changed design and required acceptance.
 
-Current continuation: maintenance fix `fbe6062` booted successfully; typed
+Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
 verification marked transaction `1790546188487824369` complete. Saved data,
 builder additions and boot records passed; installed maintenance code hashes
 match the commit. Recovery, GC and compaction passed. A machine plan for the
 root-artifact trial is running. Overall acceptance remains open. See the final
 continuation.
 
-Latest status (2026-09-27, fourth image): **acceptance incomplete**. Normal
+Historical status (2026-09-27, fourth image): **acceptance incomplete**. Normal
 return from independent recovery passed. A committed usr-home-only update and
 rollback also passed without a host reboot; only usr-home changed, the marker
 was removed, and private data survived. Original source `5c87f84` is restored
@@ -25,7 +25,7 @@ generation 1. The subsequent normal reboot passed: exact generations, saved
 data and restored metadata hashes were verified, and the diagnostic directory
 was removed. Other acceptance criteria remain open.
 
-Current follow-up: maintenance and the queued root-image trial were stopped
+Historical follow-up: maintenance and the queued root-image trial were stopped
 at user request. GC passed; compaction is incomplete. See the final section
 for the unfinished transaction, source state and performance follow-up.
 
@@ -49,12 +49,13 @@ TODOs 05, 06 and 07 must be validated together on the next fresh image.
   dependency cycle. Exact store identities reuse existing object extents.
 - Dom0 has a systemd initramfs service that validates the kernel-command-line
   host identity, registration, index, blob map and physical pin, then assembles
-  EROFS bases and a private OverlayFS upper before stage 2. Python storage
+  the one selected EROFS view and its own OverlayFS upper before stage 2. Python storage
   primitives, Nix registration tools, loop and device-mapper tools are carried
   in the initramfs; Qubes services and networking are not dependencies.
 - Normal Nix clients use the daemon, whose backend is the local overlay store.
-  Imports and builds write into `/var/lib/airlock/host-store/upper`. Pool
-  publication verifies and admits these additions before exposing boot records.
+  Imports and builds write through `/var/lib/airlock/host-store/active/upper`,
+  a bind-mounted generation directory. Pool publication freezes the target
+  system plus registered host additions and their dependencies into one view.
 - Planning binds host pool identity as well as guest generation receipts.
   Applying publishes before guest disruption, installs the boot entries, seals
   the exact Xen/kernel/initramfs artifacts, and records selection. Running and
@@ -74,11 +75,10 @@ TODOs 05, 06 and 07 must be validated together on the next fresh image.
   Superseded physical pins are released after the new volumes are saved.
 - Early boot removes identical published host-upper copies, rebuilds registration
   using Nix's dump/load format, preserves trust/output metadata, and uses a
-  recoverable directory-rename sequence for the database. Saved upper references
-  retain any older host bases they still need. Release pruning retires host boot
-  choices; old physical pins are dropped only after the offline reference
-  transition. Existing pool GC/compaction handles the resulting unreferenced
-  generations and extents under the same pool lock.
+  recoverable directory-rename sequence for each generation's database. Boot
+  does not load other generations or run retired-generation collection. Host
+  publication snapshots SQLite trust/output metadata for the next generation.
+  Explicit retirement and pool GC/compaction remain separate maintenance work.
 - Added pytest source coverage for registration conflicts, boot identity,
   publication interruption, metadata damage, authorized builder transitions,
   database recovery, Xen artifact corruption and image-copy removal. Existing
@@ -95,7 +95,8 @@ transient copies; they are not a second retained ordinary host store.
 
 Image assembly records `host-store-install.json` with recovery bytes, pool bytes,
 zero remaining ordinary host objects, and pool-plus-store installation allocation.
-`airlock-host-store status` reports pool, upper and recovery allocation. These are
+`airlock-host-store status` reports pool, active upper, all generation-private
+state and recovery allocation. These are
 measurement hooks, not measured performance claims; full peak allocation and
 cold/repeat timings still need the acceptance run.
 
@@ -1232,3 +1233,75 @@ modification was performed. This improves diagnosis only; the boot failure is
 not fixed. Obtain the failing boot's kernel messages at its emergency console,
 or deploy this diagnostic initrd before repeating the boot. Existing USB logs
 cannot retroactively supply the missing kernel detail.
+
+
+### New baseline: isolated host generations (2026-09-29, not yet tested)
+
+The user explicitly chose a fresh image baseline and declined preservation of
+the old failing USB. Its saved logs remain historical evidence, not proof of
+the original mount rejection's cause. No compatibility/migration path for the
+old shared host-upper layout is provided.
+
+Local implementation now:
+
+- Boot validates and mounts exactly the command-line host's immutable pool
+  view. It neither enumerates other boot records nor runs retirement collection.
+- Writable host state lives under `host-store/generations/<id>/`: upper, work
+  and Nix database. One bind at `host-store/active` keeps upper/work on the same
+  mount and supplies the stable daemon URI. Database replacement uses only that
+  generation's state; a damaged newer database cannot be an older boot's input.
+- First publication captures the target closure and registered host-upper
+  additions, including dependencies currently in the lower store, into its
+  fixed view. SQLite backup preserves trust/output metadata for first boot.
+  Additions after that publication remain in the originating generation's
+  writable state; publication does not silently expand an existing boot view.
+  Retained private uppers can therefore keep copies also published in a later
+  view. Their allocation is reported separately; they are not silently discarded
+  to improve a deduplication measurement. Shared immutable view payloads still
+  reuse pool extents. Measure this retention cost on the new baseline.
+- Apply checkpoints the current host's machine selection, then binds its new
+  selection to the target before disrupting guests. Boot restores its own
+  complete transaction and controller, or the initial image's staged guest
+  generation map. A selected incomplete transaction still fails closed. These
+  bindings use the normal direct-pool candidates outside `/nix/store`.
+- Retained Xen/kernel/initrd files live in `EFI/airlock`, with checksum-bound
+  `airlock-xen-*` entries. Menu regeneration recognizes saved role/system
+  comments without opening old store views, and leaves sealed entries unchanged.
+  Retirement removes only files not shared by another retained descriptor.
+- Boot installation still uses upstream `switch-to-configuration boot`, in a
+  private mount namespace exposing only available profile links. Real profiles
+  and their history are unchanged; unavailable old views do not become installer
+  dependencies. Declarative boot hooks replace the old compatibility drop-in code.
+- Mount failures record exact errno, original exception, mountinfo and a bounded
+  kernel-message tail in `/var/log/airlock-boot/*-host-store-failure.json`, before
+  cleanup. Earlier validation failures are also recorded; cleanup errors do not
+  mask the original failure. Independent recovery remains available.
+
+Added/updated pytest coverage exercises selected-only assembly with a corrupt
+newer boot record, missing/damaged view, missing pin and corrupt database;
+returning generation's saved upper; publication reference closure; SQLite WAL
+metadata snapshots; machine-binding restore and interrupted-transaction rejection;
+retained boot artifacts/menu handling, profile filtering and mount errno/cleanup.
+Mount operations in the assembly unit fixtures are emulated: these are not a
+substitute for physical boot evidence. **Tests have not been run.** Static Python
+parsing and diff whitespace inspection were performed only. No image was built,
+no live session was contacted and the USB was not modified. Component commit
+`c2bb176` contains the implementation and new regression tests; the parent
+repository pins it for the next baseline build.
+
+Next validation on the fresh baseline:
+
+1. User runs `make test-quick`, then builds the image after tests pass.
+2. Boot image A and verify one host base, matching guest selections and writable
+   Nix behavior. Record host/guest data and build-object sentinels.
+3. Apply release B normally; reboot and verify host, guests, Nix registrations
+   and sentinels. Check retained A and recovery EFI entries still validate.
+4. Boot A from its retained entry; verify A's store, machine selection and guest
+   generation bindings. Return to B and check its own additions remain available.
+5. In a controlled fault trial, make only B's view metadata unavailable (preserve
+   it for restoration; do not alter shared payload segments), then boot A and
+   independent recovery. Restore B's metadata before resuming normal tests.
+6. Resume the still-open TODO 06 changed-root boot/rollback and memory-only reuse
+   trials, and recheck affected retention/GC behavior. Historical passes for
+   unchanged behavior remain evidence, but do not mark 05–07 complete until the
+   new boot/rollback behavior and remaining acceptance criteria pass.

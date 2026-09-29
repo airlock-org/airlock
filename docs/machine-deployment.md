@@ -1,16 +1,18 @@
 # Repository-first whole-machine deployment
 
-Current checkpoint (2026-09-29): **r6 pre-reboot verification passed, but
-physical reboot failed**. Component `ad3dfd6` was deployed and selected host
-`nhyj8spd…`. Offline early-boot logs show successful boot-record validation and
-five EROFS base mounts, followed by failure mounting their read-only OverlayFS
-union at 15.902 seconds. Initrd entered emergency mode before stage 2 or guest
-startup. The kernel's specific rejection reason is not in the captured log.
-See TODO 07's final checkpoint and
-`.airlock-logs/physical-20260929-boot-failure/initrd.log`. Resume acceptance only
-after investigating this boot failure.
+Current checkpoint (2026-09-29): **new baseline authorized; local generation
+isolation changes await user tests and image build**. The user chose to discard
+the failing USB state without a backup. Earlier results below are historical;
+the exact previous OverlayFS rejection remains unexplained. No tests, image
+build, USB changes or live commands were run for this implementation. See the
+final new-baseline section for the changed design and required acceptance.
 
-Current physical acceptance (2026-09-27, fourth image): maintenance fix
+The new baseline uses a fixed host view, writable state per generation, machine
+selection bindings per host generation, and independently retained EFI entries.
+Tests and physical acceptance are pending. See TODO 07's final new-baseline
+section. Do not apply this layout as an in-place migration of the old USB.
+
+Historical physical acceptance (2026-09-27, fourth image): maintenance fix
 `fbe6062` has booted successfully. Typed verification completed transaction
 `1790546188487824369`; host and running guests match selection. Saved data,
 builder additions, host derivation/output and retained boot records passed.
