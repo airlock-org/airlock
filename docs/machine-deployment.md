@@ -16,17 +16,19 @@ inventory/transfer, and completed transaction `1790705987415026248` without
 VM stops or reboot. This validates the unchanged path; changed-update timing,
 peak temporary allocation and remaining acceptance are still open.
 
-The isolated committed root trial `b2d511a` has passed pre-reboot activation:
-usr-home's actual root disk and selected pool generation 7 both report 1536 MiB;
-its private-volume identity, size and sentinel survived the restart. Only
-usr-home changed. Transaction `1790707116774052820` is `reboot-required`, with
-host generation 6 selected as **Airlock (Generation 6)**. Manual reboot, boot
-verification and trial rollback remain pending; TODOs 05–07 remain open.
-Prepared apply submitted in 7.00 s with no repeated build or transfer.
-The product checkout remains pinned to `649469b`; restore that source in both
-builders after trial rollback. No new image was built and no missing-view
-fault is active. Evidence lives under `.airlock-logs/deployment-performance/`
-and the r7 physical evidence directory.
+The isolated root trial `b2d511a` passed generation-6 boot verification:
+usr-home's disk and pool record both remained 1536 MiB, and guest/private,
+builder and rooted host markers survived. Transaction `1790707116774052820`
+is complete. Typed rollback then restored the 1024 MiB root with matching
+pool generation 6 and preserved private data; only usr-home was restarted.
+Rollback transaction `1790712446217355385` is `reboot-required`, selecting
+**Airlock (Generation 5)**. Its return boot is the next check. TODOs 05–07
+remain open; the broader controller-outage/GC/interruption criteria are not
+implied by this root-change pass.
+The product checkout and both builders are restored to source `649469b`.
+No new image was built and no missing-view fault is active. Evidence lives
+under `.airlock-logs/deployment-performance/` and the r7 physical evidence
+directory (`root-trial-boot6` and `root-trial-rollback-final`).
 
 The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
 report: 674 passed, 24 skipped, zero failures/errors. Evidence:

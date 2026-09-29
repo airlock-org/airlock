@@ -16,17 +16,19 @@ inventory/transfer, and completed transaction `1790705987415026248` without
 VM stops or reboot. This validates the unchanged path; changed-update timing,
 peak temporary allocation and remaining acceptance are still open.
 
-The isolated committed root trial `b2d511a` has passed pre-reboot activation:
-usr-home's actual root disk and selected pool generation 7 both report 1536 MiB;
-its private-volume identity, size and sentinel survived the restart. Only
-usr-home changed. Transaction `1790707116774052820` is `reboot-required`, with
-host generation 6 selected as **Airlock (Generation 6)**. Manual reboot, boot
-verification and trial rollback remain pending; TODOs 05–07 remain open.
-Prepared apply submitted in 7.00 s with no repeated build or transfer.
-The product checkout remains pinned to `649469b`; restore that source in both
-builders after trial rollback. No new image was built and no missing-view
-fault is active. Evidence lives under `.airlock-logs/deployment-performance/`
-and the r7 physical evidence directory.
+The isolated root trial `b2d511a` passed generation-6 boot verification:
+usr-home's disk and pool record both remained 1536 MiB, and guest/private,
+builder and rooted host markers survived. Transaction `1790707116774052820`
+is complete. Typed rollback then restored the 1024 MiB root with matching
+pool generation 6 and preserved private data; only usr-home was restarted.
+Rollback transaction `1790712446217355385` is `reboot-required`, selecting
+**Airlock (Generation 5)**. Its return boot is the next check. TODOs 05–07
+remain open; the broader controller-outage/GC/interruption criteria are not
+implied by this root-change pass.
+The product checkout and both builders are restored to source `649469b`.
+No new image was built and no missing-view fault is active. Evidence lives
+under `.airlock-logs/deployment-performance/` and the r7 physical evidence
+directory (`root-trial-boot6` and `root-trial-rollback-final`).
 
 The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
 report: 674 passed, 24 skipped, zero failures/errors. Evidence:
@@ -1910,3 +1912,54 @@ and restore source `649469b` in both builders. Changed-root boot/rollback is
 not yet passed. No USB image was built. Evidence:
 `.airlock-logs/deployment-performance/root-trial-{plan,apply}/` and
 `.airlock-logs/physical-20260929-r7/root-trial-{preflight,applied}.results.json`.
+
+
+### R7 changed-root generation 6 boot passed (2026-09-29)
+
+Boot `7339548e-52f1-4f1b-be87-0e4861537fc6` runs the selected `v980gii...`
+host, generation-6 view and generation-6 Nix database. Typed verification
+completed transaction `1790707116774052820`; running guests match selection.
+usr-home's actual root remains 1,610,612,736 bytes and agrees with pool
+generation 7. Its 16 GiB private volume and sentinel survived, as did both
+builder additions, all three guest sentinels and both rooted host markers.
+Boot supervision reports complete/desktop-ready, input guard reports no
+failure and no reset attempted, and dom0 has zero failed units. Physical
+keyboard/click operation was not separately confirmed on this boot.
+
+The first typed verify returned exit 1 without stdout/stderr; a subsequent
+verify succeeded. No deployment state or files were repaired between those
+calls. The reason for the transient failure is not established.
+
+Typed rollback was submitted as `airlock-machine-deploy-230e0fd47669`,
+transaction `1790712446217355385`, targeting retained baseline candidate
+`d961bd05fa05d130a4e7ca6dacaf95b0b96b4134216c56d29669847e45e1c50b`.
+Rollback completion and its next boot are still pending. Evidence:
+`.airlock-logs/physical-20260929-r7/root-trial-boot6.results.json`,
+`.airlock-logs/deployment-performance/root-trial-apply/boot6-verify.json`,
+and `.airlock-logs/deployment-performance/root-trial-rollback/`.
+
+
+### R7 root rollback passed pre-reboot verification (2026-09-29)
+
+Worker `airlock-machine-deploy-230e0fd47669` exited successfully. Rollback
+transaction `1790712446217355385` is `reboot-required`. usr-home's actual root
+is 1,073,741,824 bytes, agreeing with selected pool generation 6 and baseline
+root hash `dbce21f3a91d475190d83ba25fb79e61f0b454f4984ad27b3e433dfc0fd534f7`.
+Its private volume identity/size and sentinel hash are unchanged. Guest boot
+ID `9d27a186-ffc3-4c8b-8ccb-c406e0143129` confirms the restart. Other domain
+topologies are unchanged, running guest systems match selection, and dom0
+has zero failed units. The selected host record, system profile and default
+EFI entry agree on retained host generation 5 (`8vlimj...`).
+
+The clean committed product source `649469b` was restored through the normal
+source importer in sys-dev and checked out in sys-ctrl after checking its
+working tree was clean. No deployed files or package data were patched.
+The earlier inspection during `host-boot-selection` was a premature check;
+the subsequent completed worker passed all assertions without repair.
+
+Next: manual reboot into **Airlock (Generation 5)** and verify the return
+boot and persistence. Root-change activation and forward boot are passed;
+return boot is still pending. sys-ctrl was running in these trials, so the
+controller-outage part of the completion criterion remains separate.
+Evidence: `.airlock-logs/physical-20260929-r7/root-trial-rollback-final.results.json`
+and `.airlock-logs/deployment-performance/root-trial-rollback/`.
