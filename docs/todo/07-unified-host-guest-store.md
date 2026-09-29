@@ -1,22 +1,22 @@
 # Share immutable store objects between dom0 and guests
 
-Current checkpoint (2026-09-29, r7): **fresh baseline booted; acceptance in
-progress on `sys-dev`**. Installed source is `e431c44`. Dom0 uses only host
-pool generation 1; required guests are running, dom0/sys-ctrl have no failed
-units, and persistence/store-addition sentinels passed. The latest local quick
-report has 674 passed, 24 skipped, zero failures/errors. Committed source
-`41ee7dd` (menu cleanup) has been imported through the normal source route;
-the generation 2 → 1 → 2 boot sequence passed with isolated stores/databases,
-matching guests and preserved additions. The missing-generation-2-view trial was paused for an input failure;
-its diagnostic mutation has now been undone and the restored checksum verified.
-Generation 2 is again selected and typed verify reports complete. The user
-confirmed a manual i8042 rebind restored keyboard and clicks. Source `cd47d32`
-adds bounded automatic recovery and boot-failure reporting; focused checks
-passed, and deployment for the next live boot is being prepared. The missing-view
-trial and automatic recovery's physical verification remain outstanding.
-Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
-historical; the missing-view isolation trial and remaining acceptance tests
-still need verification. The previous USB state was discarded as authorized.
+Current checkpoint (2026-09-29, r7): **input recovery update installed;
+manual reboot into default Airlock (generation 3) required** on `sys-dev`.
+Machine source `cd47d32` implements one bounded recovery for an explicit i8042
+keyboard-enable failure and boot-failure reporting before GPU handoff. Focused
+checks passed (13); the built guard matches the committed source checksum.
+Normal plan/apply completed transaction `1790698109572546418` to
+`reboot-required`; the selected EFI entry and host pool record both identify
+generation 3 (`2zdblan...`). Dom0 has no failed units. Running generation 2 and
+all guest systems remain unchanged. Automated recovery has not yet run on a
+physical boot; the user confirmed the earlier manual rebind restored input.
+
+The generation 2 → 1 → 2 isolation/rollback sequence passed. The staged
+missing-generation-2-view fault was fully undone before this update, with its
+original SHA256 verified; that fault trial remains outstanding. Earlier r7
+quick report: 674 passed, 24 skipped, zero failures/errors. Evidence:
+`.airlock-logs/physical-20260929-r7/`. TODOs 05–07 remain open; earlier dated
+results remain evidence for their stated revisions.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
 verification marked transaction `1790546188487824369` complete. Saved data,
@@ -1643,3 +1643,41 @@ active missing-view fault now. The fault trial is outstanding, not passed.
 Next: deploy the committed change through the normal controller route, then
 request a manual reboot into the new selected generation. Do not claim the live
 boot guard is installed until that deployment has completed.
+
+
+### R7 input recovery deployed for the next boot (2026-09-29)
+
+Normal `make machine-plan DEPLOY_TARGET=sys-dev` completed. The source build
+took 67.0 seconds and preparation took 630.8 seconds; only 10 missing host paths
+were transferred (137,018 compressed bytes). The plan had no changed, affected,
+staged, stopped, retired, or restored guests. Its `start` list names the six
+already-running required guests; coordinator startup skips running VMs. An
+initial conservative automation gate stopped on that nonempty list without
+applying anything; after checking the planner/coordinator behavior, the plan
+was reviewed and normal `make machine-apply DEPLOY_TARGET=sys-dev` launched.
+
+Apply preparation reused all guest objects/root artifacts and all host objects
+(zero host paths, 23 framing bytes). Its cached build took 45.9 seconds and
+preparation 395.6 seconds. Detached dom0 worker
+`airlock-machine-deploy-dcd31e3b7b51` completed successfully in 114 seconds.
+Transaction `1790698109572546418` is `reboot-required`; no guests were changed or
+stopped, their systems still match selection, and dom0 has no failed units.
+
+Selected host/pool generation 3:
+`/nix/store/2zdblan8p76952afjy5wg8bi520n81i8-nixos-system-dom0-26.11.20260904.801bef6`.
+The EFI default `airlock-xen-1eb73a3b2e6f586ed22a97451b6aa37a8a5c829fb85496c39b87130f385a52a2.conf`
+is titled **Airlock**, version **Generation 3**, and names that exact system.
+The generated input guard is enabled in multi-user, required before GUI startup,
+and wired to the existing failure handler. Its installed script SHA256
+`6e9b222966b2d04e633455e199d8da7926755da8e21d5a23b129e748d67a8310`
+matches the committed local source. No ad-hoc persistent override was installed.
+
+Evidence: r7 `input-guard-plan/receipt.json`, `input-guard-apply/receipt.json`,
+`input-guard-built-units.results.json`, `input-guard-artifact-hash.results.json`,
+`input-guard-worker-result.results.json`, and `input-guard-selected-boot.results.json`.
+Requested manual reboot into default **Airlock**. After reboot, verify the
+running host is generation 3, inspect the per-boot `input-controller.json`,
+confirm usable keyboard/clicks, and run typed machine verification. A healthy
+boot can establish the no-error path; it does not by itself exercise automatic
+recovery from a new hardware initialization failure. Physical acceptance and the
+remaining 05–07 trials are not complete.

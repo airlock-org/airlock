@@ -1,22 +1,22 @@
 # Direct pool admission for whole-machine updates
 
-Current checkpoint (2026-09-29, r7): **fresh baseline booted; acceptance in
-progress on `sys-dev`**. Installed source is `e431c44`. Dom0 uses only host
-pool generation 1; required guests are running, dom0/sys-ctrl have no failed
-units, and persistence/store-addition sentinels passed. The latest local quick
-report has 674 passed, 24 skipped, zero failures/errors. Committed source
-`41ee7dd` (menu cleanup) has been imported through the normal source route;
-the generation 2 → 1 → 2 boot sequence passed with isolated stores/databases,
-matching guests and preserved additions. The missing-generation-2-view trial was paused for an input failure;
-its diagnostic mutation has now been undone and the restored checksum verified.
-Generation 2 is again selected and typed verify reports complete. The user
-confirmed a manual i8042 rebind restored keyboard and clicks. Source `cd47d32`
-adds bounded automatic recovery and boot-failure reporting; focused checks
-passed, and deployment for the next live boot is being prepared. The missing-view
-trial and automatic recovery's physical verification remain outstanding.
-Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
-historical; the missing-view isolation trial and remaining acceptance tests
-still need verification. The previous USB state was discarded as authorized.
+Current checkpoint (2026-09-29, r7): **input recovery update installed;
+manual reboot into default Airlock (generation 3) required** on `sys-dev`.
+Machine source `cd47d32` implements one bounded recovery for an explicit i8042
+keyboard-enable failure and boot-failure reporting before GPU handoff. Focused
+checks passed (13); the built guard matches the committed source checksum.
+Normal plan/apply completed transaction `1790698109572546418` to
+`reboot-required`; the selected EFI entry and host pool record both identify
+generation 3 (`2zdblan...`). Dom0 has no failed units. Running generation 2 and
+all guest systems remain unchanged. Automated recovery has not yet run on a
+physical boot; the user confirmed the earlier manual rebind restored input.
+
+The generation 2 → 1 → 2 isolation/rollback sequence passed. The staged
+missing-generation-2-view fault was fully undone before this update, with its
+original SHA256 verified; that fault trial remains outstanding. Earlier r7
+quick report: 674 passed, 24 skipped, zero failures/errors. Evidence:
+`.airlock-logs/physical-20260929-r7/`. TODOs 05–07 remain open; earlier dated
+results remain evidence for their stated revisions.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
 verification marked transaction `1790546188487824369` complete. Saved data,
