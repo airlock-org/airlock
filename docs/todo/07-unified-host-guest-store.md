@@ -1,20 +1,23 @@
 # Share immutable store objects between dom0 and guests
 
-Current checkpoint (2026-09-29, r7): **input recovery update installed;
-manual reboot into default Airlock (generation 3) required** on `sys-dev`.
-Machine source `cd47d32` implements one bounded recovery for an explicit i8042
-keyboard-enable failure and boot-failure reporting before GPU handoff. Focused
-checks passed (13); the built guard matches the committed source checksum.
-Normal plan/apply completed transaction `1790698109572546418` to
-`reboot-required`; the selected EFI entry and host pool record both identify
-generation 3 (`2zdblan...`). Dom0 has no failed units. Running generation 2 and
-all guest systems remain unchanged. Automated recovery has not yet run on a
-physical boot; the user confirmed the earlier manual rebind restored input.
+Current checkpoint (2026-09-29, r7): **generation 3 boot and physical input
+passed; host-addition persistence defect found during verification** on `sys-dev`.
+Input guard source `cd47d32` ran before GUI startup, reported
+`no_failure_detected` / `attempted=false`, and made no reset. The user confirmed
+typing, clicks and login work. Typed verify completed transaction
+`1790698109572546418`; host generation 3 and all guest systems match selection,
+and dom0 has no failed units. Guest private data and builder additions survived.
 
-The generation 2 → 1 → 2 isolation/rollback sequence passed. The staged
-missing-generation-2-view fault was fully undone before this update, with its
-original SHA256 verified; that fault trial remains outstanding. Earlier r7
-quick report: 674 passed, 24 skipped, zero failures/errors. Evidence:
+The original rooted dom0 test object was omitted from generation 3's immutable
+view after being carried into generation 2's lower view. Publication considered
+writable additions but missed rooted additions already in the lower. The local
+fix includes the live rooted paths from either layer; 21 host-generation tests
+passed. Restored only the missing test fixture from its retained original file,
+checking the identical Nix store path and re-registering its root. Deployment of
+the fix is next; the missing-view fault trial is paused, with no fault active.
+
+The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
+report: 674 passed, 24 skipped, zero failures/errors. Evidence:
 `.airlock-logs/physical-20260929-r7/`. TODOs 05–07 remain open; earlier dated
 results remain evidence for their stated revisions.
 
@@ -1681,3 +1684,45 @@ confirm usable keyboard/clicks, and run typed machine verification. A healthy
 boot can establish the no-error path; it does not by itself exercise automatic
 recovery from a new hardware initialization failure. Physical acceptance and the
 remaining 05–07 trials are not complete.
+
+
+### R7 generation 3 input success and host-addition carry defect (2026-09-29)
+
+Boot `98b666fc-3a52-4f85-97d4-3e57ae62c681` runs the intended `2zdblan...` host,
+with only `bases/3` mounted and generation 3's private Nix database. Kernel KBD
+and AUX initialization succeeded. The input guard completed at 16:16:16 UTC
+before forwarding started at 16:16:32; its report records no failure and no
+attempt. The user confirmed keyboard, mouse clicks and login work normally.
+Boot supervision and typed machine verification both report complete. This
+validates the normal boot path, not automatic recovery from a fresh fault.
+
+Private hashes for sys-dev, sys-ctrl and usr-home and both builder additions
+match. The generation-2 marker remains valid in dom0, but the original
+`/nix/store/53saabr3jjnr5snhhdj2d6sgifrk7pmk-persistence` is absent from the active
+store. It was added in generation 1's upper, published into generation 2's
+immutable view, then omitted when publication of generation 3 enumerated only
+current upper additions. Generation 2's retained registration still contains it;
+generation 3's does not. This is a real persistence defect, not a passed check.
+
+The local publisher now includes Nix's live rooted path set as well as current
+upper additions and the target system, with reference completeness enforced.
+`--gc --print-live` queries live paths; it does not collect store objects.
+The actual overlay query found the generation-2 marker in the lower-backed live
+set. Regression tests cover an addition moving from upper to lower between
+publications and rejection of a live path absent from registration: the full
+host-generation module passed, 21 tests.
+
+Temporary test-fixture repair: re-added the retained original
+`/var/lib/airlock/physical-tests/r7/persistence`, asserted its resulting store
+path is exactly the existing `store-root` target, re-registered that GC root,
+and verified `r7:dom0`. No payload segments, retained generation records, or
+other user data were edited. This restores the sentinel for testing the source
+fix; it is not evidence that the defective publisher works.
+
+Evidence: `input-guard-boot3.results.json`,
+`input-guard-boot3-persistence.results.json`,
+`host-addition-carry-diagnosis.results.json`,
+`host-addition-live-query.results.json`,
+`host-addition-restore-fixture.results.json`, and
+`host-addition-regression-tests.log`. Keep the missing-view trial paused until
+the carry fix is deployed and both host markers survive the next boot.

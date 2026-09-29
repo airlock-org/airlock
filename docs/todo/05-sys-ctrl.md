@@ -1,20 +1,23 @@
 # Move configuration work into sys-ctrl
 
-Current checkpoint (2026-09-29, r7): **input recovery update installed;
-manual reboot into default Airlock (generation 3) required** on `sys-dev`.
-Machine source `cd47d32` implements one bounded recovery for an explicit i8042
-keyboard-enable failure and boot-failure reporting before GPU handoff. Focused
-checks passed (13); the built guard matches the committed source checksum.
-Normal plan/apply completed transaction `1790698109572546418` to
-`reboot-required`; the selected EFI entry and host pool record both identify
-generation 3 (`2zdblan...`). Dom0 has no failed units. Running generation 2 and
-all guest systems remain unchanged. Automated recovery has not yet run on a
-physical boot; the user confirmed the earlier manual rebind restored input.
+Current checkpoint (2026-09-29, r7): **generation 3 boot and physical input
+passed; host-addition persistence defect found during verification** on `sys-dev`.
+Input guard source `cd47d32` ran before GUI startup, reported
+`no_failure_detected` / `attempted=false`, and made no reset. The user confirmed
+typing, clicks and login work. Typed verify completed transaction
+`1790698109572546418`; host generation 3 and all guest systems match selection,
+and dom0 has no failed units. Guest private data and builder additions survived.
 
-The generation 2 → 1 → 2 isolation/rollback sequence passed. The staged
-missing-generation-2-view fault was fully undone before this update, with its
-original SHA256 verified; that fault trial remains outstanding. Earlier r7
-quick report: 674 passed, 24 skipped, zero failures/errors. Evidence:
+The original rooted dom0 test object was omitted from generation 3's immutable
+view after being carried into generation 2's lower view. Publication considered
+writable additions but missed rooted additions already in the lower. The local
+fix includes the live rooted paths from either layer; 21 host-generation tests
+passed. Restored only the missing test fixture from its retained original file,
+checking the identical Nix store path and re-registering its root. Deployment of
+the fix is next; the missing-view fault trial is paused, with no fault active.
+
+The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
+report: 674 passed, 24 skipped, zero failures/errors. Evidence:
 `.airlock-logs/physical-20260929-r7/`. TODOs 05–07 remain open; earlier dated
 results remain evidence for their stated revisions.
 
