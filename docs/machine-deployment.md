@@ -1,20 +1,18 @@
 # Repository-first whole-machine deployment
 
 Current checkpoint (2026-09-29): **TODO 05 complete; 06–07 finishing acceptance**.
-Generation 5 is verified after the real guest-root expansion and rollback cycle;
-private, builder and host data survived. Unchanged preparation is 15.54 s,
-prepared submission 8.65 s. Memory-only planning transfers no guest/root payload.
-Offline trial `93c3355`, transaction `1790717000990365650`, booted Generation 8:
-sys-ctrl halted, declared guests ready, persistence intact, no failed units.
-Typed verification incorrectly retains the previous boot's running-VM set.
-Fix `4845da0` passes 120 coordinator unit tests and Ruff; full quick tests and
-live deployment are pending. Agent access is restored. Next: roll back the trial
-while sys-ctrl is halted, restore builder source, then deploy the tested verifier
-fix and verify across reboot.
-Cold/repeat measurements are recorded; no background test remains running.
-Installed runtime remains `649469b` plus the trial configuration.
-Evidence: `.airlock-logs/boot-verification-fix/`, `.airlock-logs/deployment-performance/`
-and `.airlock-logs/physical-20260929-r7/`. No USB rebuild is needed.
+Generation 8 booted with sys-ctrl halted and saved data intact; typed rollback
+`1790719314694345139` restored baseline `649469b` without the controller.
+The restarted builder failed loading a saved recipe before mounting its base.
+Committed fixes `4845da0` (boot-scoped verification) and `b1cf5db` (builder mount
+ordering and metadata-only ownership) await normal deployment. A detached job
+reruns quick tests, recovers the builder using the committed script, and runs
+`make machine-plan DEPLOY_TARGET=sys-dev`; it never applies or reboots.
+Review that plan, apply, confirm the temporary sys-ctrl `/run` recovery units and
+scripts are gone after its normal restart, then request the user's manual reboot.
+720 quick tests passed before the final ownership adjustment. Evidence:
+`.airlock-logs/boot-verification-fix/final-deploy-plan/` and
+`.airlock-logs/physical-20260929-r7/`. No USB rebuild is needed.
 
 ## The development contract
 

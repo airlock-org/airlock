@@ -1,14 +1,16 @@
 # Share immutable store objects between dom0 and guests
 
 Status (2026-09-29): **acceptance in progress**; TODO 05 is complete.
-Root update/reboot/rollback, persistence, memory-only reuse, real storage
-integration, fault cleanup/retry and builder reuse passed. Generation 8 booted
-with sys-ctrl halted, declared guests ready and persistence intact. Trial rollback
-remains pending. A verifier bug retains the previous boot's running-VM set;
-Fix `4845da0` passes 120 unit tests and Ruff; full quick tests and live deployment
-are pending. Agent access is restored.
-Installed runtime is `649469b` plus trial configuration `93c3355`.
-Evidence: r7 `offline-boot8.results.json` and `boot-verification-fix/` logs.
+Generation 8 booted with sys-ctrl halted, declared guests ready and data intact;
+typed rollback succeeded without the controller. Its restarted builder exposed
+incorrect database/mount ordering for saved Nix recipes. Fixes `4845da0` and
+`b1cf5db` are committed; 720 quick tests passed before the final ownership
+adjustment. A detached job reruns quick tests, recovers the builder using the
+committed script, then prepares normal deployment. It does not apply or reboot.
+Temporary recovery units/scripts under sys-ctrl's `/run` must disappear on its
+normal deployment restart before acceptance. Runtime is still `649469b`.
+Evidence: r7 `offline-rollback-*`, `rollback-builder-failure`, `builder-recovery-*`
+and `.airlock-logs/boot-verification-fix/final-deploy-plan/`.
 See the latest brief milestones below; earlier checkpoints are historical.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
