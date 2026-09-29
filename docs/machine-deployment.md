@@ -1,81 +1,14 @@
 # Repository-first whole-machine deployment
 
-Current checkpoint (2026-09-29, r7): **generation 5 boot, persistence and
-prepared apply passed** on `sys-dev`. Component `649469b` passed full
-`make test-quick`: 714 passed, 24 skipped, 2 warnings. Boot
-`f78fc248-b3fb-4ab5-93b0-828220637822` runs the selected `8vlimj...` host with
-its own generation-5 view and database. Both host markers, guest private data
-and builder additions survived. Input startup needed no reset; the user
-confirmed typing, clicks and login. Dom0 has no failed units.
-
-Typed verify completed transaction `1790704764992386034`. The first unchanged
-plan took 36.55 s end-to-end (30.40 s preparation); the repeat took 18.20 s
-(15.54 s preparation), reusing all seven guest generations with zero package/root
-payload. Prepared apply submitted in 8.65 s (3.97 s checks), repeated no
-inventory/transfer, and completed transaction `1790705987415026248` without
-VM stops or reboot. This validates the unchanged path; changed-update timing,
-peak temporary allocation and remaining acceptance are still open.
-
-The isolated root trial `b2d511a` passed generation-6 boot verification:
-usr-home's disk and pool record both remained 1536 MiB, and guest/private,
-builder and rooted host markers survived. Transaction `1790707116774052820`
-is complete. Typed rollback then restored the 1024 MiB root with matching
-pool generation 6 and preserved private data; only usr-home was restarted.
-Rollback transaction `1790712446217355385` is now verified **complete**.
-Return boot `0840d0fe-966a-494c-af20-fa167cd47474` runs generation 5 with its
-own view/database, the 1024 MiB guest root, all persistence markers and no
-failed units. The changed-root update → reboot → rollback → reboot sequence
-passed. TODOs 05–07 remain open; broader outage/interruption criteria are
-separate. The memory-only plan `d827ad2` passed with all seven guest generations
-reused and zero guest package/root payload; it has not been activated.
-Component `3a4e3d2` adds only the missing privileged storage pytest worker
-and its bounded loop-cleanup wait; installed runtime remains `649469b`.
-The worker passed on dom0 with real loop/device-mapper/EROFS devices, exact
-closure membership, rejected writes, shared extents and peer survival after
-detach. Local unprivileged execution correctly reports skipped. Both builders
-are restored to clean source `649469b`; the memory trial was never activated.
-Sys-ctrl also reused a host object offline from its lower layer with no upper
-copy, and rejected an unavailable object. That does not yet demonstrate a
-successful download of a genuinely missing build dependency.
-No new image was built and no missing-view fault is active. Evidence lives
-under `.airlock-logs/deployment-performance/` and the r7 physical evidence
-directory (`root-trial-boot6` and `root-trial-rollback-final`).
-
-The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
-report: 674 passed, 24 skipped, zero failures/errors. Evidence:
-`.airlock-logs/physical-20260929-r7/`. TODOs 05–07 remain open; earlier dated
-results remain evidence for their stated revisions.
-
-The new baseline uses a fixed host view, writable state per generation, machine
-selection bindings per host generation, and independently retained EFI entries.
-Tests and physical acceptance are pending. See TODO 07's final new-baseline
-section. Do not apply this layout as an in-place migration of the old USB.
-
-Historical physical acceptance (2026-09-27, fourth image): maintenance fix
-`fbe6062` has booted successfully. Typed verification completed transaction
-`1790546188487824369`; host and running guests match selection. Saved data,
-builder additions, host derivation/output and retained boot records passed.
-Installed maintenance code matches the commit. Recovery, GC and compaction
-passed. The isolated usr-home root-size trial is now being planned through the
-normal machine route; its first guest-only attempt correctly rejected an
-unchanged guest because that route inherits the selected root. No activation
-has occurred for the trial. See TODO 07's final checkpoint.
-
-Earlier forward deployment, rollback, independent recovery, missing-view
-recovery and normal return passed. A committed single-guest marker update and
-rollback also passed without a host reboot. The missing-view diagnostic was
-removed. The stopped old compaction's retained-host map mutation was restored
-to its exact original verified checksum; the committed fix prevents recurrence.
-Its unfinished zero-candidate transaction has now been recovered. Updated
-compaction passed in 358.84 seconds; new-root activation and rollback remain
-outstanding. See the final continuation in
-[TODO 07](todo/07-unified-host-guest-store.md) for evidence and next steps.
-
-See [TODO 05](completed/05-sys-ctrl.md),
-[TODO 06](todo/06-direct-pool-machine-deployment.md) and
-[TODO 07](todo/07-unified-host-guest-store.md) for passed checks and remaining
-retention, interruption/isolation and performance criteria.
-Earlier dated sections below apply to their stated revisions.
+Current checkpoint (2026-09-29): **TODO 05 complete; 06–07 finishing acceptance**.
+Generation 5 is verified after the real guest-root expansion and rollback cycle;
+private, builder and host data survived. Unchanged preparation is 15.54 s,
+prepared submission 8.65 s. Memory-only planning transfers no guest/root payload.
+An isolated committed trial `93c3355` disables sys-ctrl autostart for the next
+offline boot check; cold/repeat planning and allocation observation are detached.
+No trial activation has occurred yet. Runtime remains `649469b`; later component
+commits add acceptance tests only. Evidence: `.airlock-logs/deployment-performance/`
+and `.airlock-logs/physical-20260929-r7/`. No USB rebuild is needed.
 
 ## The development contract
 

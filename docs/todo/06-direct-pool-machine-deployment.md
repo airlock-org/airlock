@@ -1,50 +1,11 @@
 # Direct pool admission for whole-machine updates
 
-Current checkpoint (2026-09-29, r7): **generation 5 boot, persistence and
-prepared apply passed** on `sys-dev`. Component `649469b` passed full
-`make test-quick`: 714 passed, 24 skipped, 2 warnings. Boot
-`f78fc248-b3fb-4ab5-93b0-828220637822` runs the selected `8vlimj...` host with
-its own generation-5 view and database. Both host markers, guest private data
-and builder additions survived. Input startup needed no reset; the user
-confirmed typing, clicks and login. Dom0 has no failed units.
-
-Typed verify completed transaction `1790704764992386034`. The first unchanged
-plan took 36.55 s end-to-end (30.40 s preparation); the repeat took 18.20 s
-(15.54 s preparation), reusing all seven guest generations with zero package/root
-payload. Prepared apply submitted in 8.65 s (3.97 s checks), repeated no
-inventory/transfer, and completed transaction `1790705987415026248` without
-VM stops or reboot. This validates the unchanged path; changed-update timing,
-peak temporary allocation and remaining acceptance are still open.
-
-The isolated root trial `b2d511a` passed generation-6 boot verification:
-usr-home's disk and pool record both remained 1536 MiB, and guest/private,
-builder and rooted host markers survived. Transaction `1790707116774052820`
-is complete. Typed rollback then restored the 1024 MiB root with matching
-pool generation 6 and preserved private data; only usr-home was restarted.
-Rollback transaction `1790712446217355385` is now verified **complete**.
-Return boot `0840d0fe-966a-494c-af20-fa167cd47474` runs generation 5 with its
-own view/database, the 1024 MiB guest root, all persistence markers and no
-failed units. The changed-root update → reboot → rollback → reboot sequence
-passed. TODOs 05–07 remain open; broader outage/interruption criteria are
-separate. The memory-only plan `d827ad2` passed with all seven guest generations
-reused and zero guest package/root payload; it has not been activated.
-Component `3a4e3d2` adds only the missing privileged storage pytest worker
-and its bounded loop-cleanup wait; installed runtime remains `649469b`.
-The worker passed on dom0 with real loop/device-mapper/EROFS devices, exact
-closure membership, rejected writes, shared extents and peer survival after
-detach. Local unprivileged execution correctly reports skipped. Both builders
-are restored to clean source `649469b`; the memory trial was never activated.
-Sys-ctrl also reused a host object offline from its lower layer with no upper
-copy, and rejected an unavailable object. That does not yet demonstrate a
-successful download of a genuinely missing build dependency.
-No new image was built and no missing-view fault is active. Evidence lives
-under `.airlock-logs/deployment-performance/` and the r7 physical evidence
-directory (`root-trial-boot6` and `root-trial-rollback-final`).
-
-The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
-report: 674 passed, 24 skipped, zero failures/errors. Evidence:
-`.airlock-logs/physical-20260929-r7/`. TODOs 05–07 remain open; earlier dated
-results remain evidence for their stated revisions.
+Status (2026-09-29): **acceptance in progress**; TODO 05 is complete.
+Root update/reboot/rollback, persistence, memory-only reuse, real storage
+integration, fault cleanup/retry and builder reuse passed. The remaining
+controller-disabled offline boot and measured cold/repeat plan are in progress.
+Installed runtime is `649469b`; newer component commits add test coverage only.
+See the latest brief milestones below; earlier checkpoints are historical.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
 verification marked transaction `1790546188487824369` complete. Saved data,
@@ -239,13 +200,13 @@ empty space; this is separate from guest package duplication.
 
 ## Completion criteria and evidence
 
-- [ ] On the first deployment from a newly booted image and on repeated updates,
+- [x] On the first deployment from a newly booted image and on repeated updates,
   unchanged root images transfer no payload and require no extra ordinary-store
   copy. Test a memory/NetVM-only change and a guest package-only change.
 - [ ] A genuine boot/root-image change admits the required new artifact;
   corrupt or incomplete artifacts are rejected. Boot and rollback work with
   sys-ctrl stopped, and GC preserves roots required by retained generations.
-- [ ] Two VMs using the same immutable base retain distinct writable and
+- [x] Two VMs using the same immutable base retain distinct writable and
   private volumes. Writes, rollback and deletion in one VM cannot alter the
   other's data; updating one VM cannot switch the other's selected artifact.
 - [x] Measure root-image and package bytes separately, including compressed
@@ -255,7 +216,7 @@ empty space; this is separate from guest package duplication.
 - [x] A whole-machine update prepared by sys-ctrl reuses existing pool objects
   and transfers only missing guest objects; record bytes and elapsed time for
   initial and repeated updates.
-- [ ] Guest-only source closures are not retained in dom0's ordinary store.
+- [x] Guest-only source closures are not retained in dom0's ordinary store.
   Verify release/GC references and allocated disk usage across repeated updates.
 - [x] Dom0 runtime and boot/recovery dependencies remain available independently
   of sys-ctrl, and host updates preserve whole-machine generation verification.
@@ -1251,3 +1212,16 @@ with a new input/output confined to its upper layer. Evidence: r7
 `linux-storage-interruptions-complete-root`, `host-nix-behavior`, and
 `builder-new-input` result JSON files. TODO 05 moved to `docs/completed/`;
 06–07 remain open. These are injected failures, not physical power cuts.
+
+
+### R7 evidence consolidation (2026-09-29)
+
+Current root/private writes and peer deletion remain isolated; 475 host/guest
+objects share 1,496,530,944 payload extent bytes. All seven guests' closure/root
+source outputs are absent from dom0's visible store after repeated updates.
+Existing 714-pass report confirms builder mount-failure cleanup, database-rename
+recovery, failed publication and incomplete boot-selection rejection; combined
+with live persistence/GC evidence, these close the corresponding checks.
+Evidence: r7 `current-volume-isolation`, `source-isolation-space` and
+`existing-fault-test-evidence` JSON files; r4/r5 maintenance results remain valid
+for their unchanged code. Physical power-cut testing is not claimed.
