@@ -1386,3 +1386,20 @@ only plans and checks revision/no retire-or-restore actions; it cannot apply or
 reboot. No active polling of the long command. Review the result before apply.
 Local baseline/sentinel receipts and the driver are in
 `.airlock-logs/physical-20260929-r7/`. No reboot is currently needed.
+
+### R7 plan relaunched independently of SSH (2026-09-29)
+
+The first status check found that sys-dev's user service manager stopped
+`airlock-r7-plan` at 12:55:28 UTC, ten seconds after starting it. `Linger=no`;
+the user manager exited after SSH logout, leaving `phase=planning` without a
+result. The command had reached controller source import/input fetching;
+no apply was requested. This was a test-launcher lifetime error.
+
+Restarted the typed plan under dom0's **system** unit `airlock-r7-plan`, using
+`qvm-run --pass-io --user user sys-dev 'airlock-sys-dev-machine-deploy plan'`.
+The launch returned active/running (PID 10174). It is detached from SSH and has
+a 3700-second runtime limit. Authoritative logs are now in dom0 at
+`/var/log/airlock/physical-tests/r7/plan/{phase,stdout,stderr,exit,elapsed}`;
+`exit`/`elapsed` are written on command completion. The original sys-dev logs
+are retained as evidence of the stopped attempt. No linger settings or product
+code were changed. Review the completed plan before applying; no reboot yet.
