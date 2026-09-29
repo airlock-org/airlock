@@ -1190,3 +1190,24 @@ Evidence: remote `/var/log/airlock/physical-tests/r6/result.json`, captured in
 The worker has exited; manual physical reboot is the next step. Post-reboot
 verification and remaining changed-root/rollback and memory-only trials are
 still pending; this is not final completion of TODOs 05–07.
+
+
+### Reboot failed during host-store assembly (2026-09-29 inspection)
+
+The requested reboot did not pass. Offline USB log
+`b40b79ad-b2da-42fa-bf73-4a47824e7a29-initrd.log` identifies selected host
+`nhyj8spd495f9j28fk7wi725jr21yii3` from the r6 deployment. Root filesystem
+check and mount succeeded; boot-record validation and all five EROFS base
+mounts (generations 5, 1, 4, 2, 3) completed. At 15.902 seconds the read-only
+OverlayFS union of those bases plus `lower-scaffold` failed with mount exit
+32. `airlock-host-store.service` failed, blocking discovery of the NixOS
+closure and entering initrd emergency mode. No stage-2/guest startup occurred.
+The generic mount error does not establish why the kernel rejected the union.
+A secondary emergency-service message reports missing `plymouth`.
+
+Evidence copied locally to
+`.airlock-logs/physical-20260929-boot-failure/initrd.log`. USB contents were
+inspected without agent changes; the operator granted read ACLs to early boot
+logs. Pre-reboot metadata/data checks remain valid but did not prove cold-boot
+mount assembly. TODOs 05–07 remain open; investigate this mount failure before
+continuing changed-root and memory-only acceptance trials.

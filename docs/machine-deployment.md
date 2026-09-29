@@ -1,12 +1,14 @@
 # Repository-first whole-machine deployment
 
-Current checkpoint (2026-09-28): **root-change acceptance failed; active testing
-stopped to reduce cost**. Transaction `1790549788826426596` reached
-`reboot-required`, selecting trial `da65cc9` / host `nnha9msy…`, but usr-home's
-running disk is 1536 MiB while its current pool manifest still describes the
-old 1024 MiB root. Do not count this trial as passed or request a reboot yet.
-See TODO 07’s final failure checkpoint. Fix `ad3dfd6` is implemented and tested locally (163 passed, 1 skipped);
-deployment remains pending.
+Current checkpoint (2026-09-29): **r6 pre-reboot verification passed, but
+physical reboot failed**. Component `ad3dfd6` was deployed and selected host
+`nhyj8spd…`. Offline early-boot logs show successful boot-record validation and
+five EROFS base mounts, followed by failure mounting their read-only OverlayFS
+union at 15.902 seconds. Initrd entered emergency mode before stage 2 or guest
+startup. The kernel's specific rejection reason is not in the captured log.
+See TODO 07's final checkpoint and
+`.airlock-logs/physical-20260929-boot-failure/initrd.log`. Resume acceptance only
+after investigating this boot failure.
 
 Current physical acceptance (2026-09-27, fourth image): maintenance fix
 `fbe6062` has booted successfully. Typed verification completed transaction
