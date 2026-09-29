@@ -1,16 +1,15 @@
 # Direct pool admission for whole-machine updates
 
-Status (2026-09-29): **acceptance in progress**; TODO 05 is complete.
-Generation 8 booted with sys-ctrl halted, declared guests ready and data intact;
-typed rollback succeeded without the controller. Its restarted builder exposed
-incorrect database/mount ordering for saved Nix recipes. Fixes `4845da0` and
-`b1cf5db` are committed; 720 quick tests passed before the final ownership
-adjustment. A detached job reruns quick tests, recovers the builder using the
-committed script, then prepares normal deployment. It does not apply or reboot.
-Temporary recovery units/scripts under sys-ctrl's `/run` must disappear on its
-normal deployment restart before acceptance. Runtime is still `649469b`.
-Evidence: r7 `offline-rollback-*`, `rollback-builder-failure`, `builder-recovery-*`
-and `.airlock-logs/boot-verification-fix/final-deploy-plan/`.
+Status (2026-09-29): **final reboot verification pending**; TODO 05 is complete.
+Offline boot and controller-independent rollback passed. Fixes `4845da0` and
+`b1cf5db` passed **720 quick tests, 25 skipped** and deployed normally in
+transaction `1790721069384601443`. Both builder services started successfully;
+private/builder/host markers survived and temporary recovery units/scripts are
+absent. Typed verification passed with `reboot-required`; default boot entry is
+**Airlock (Generation 10)**. Reboot manually, then verify exact generations,
+builder readiness and saved data before completing 06–07. No test job is running.
+Evidence: `.airlock-logs/boot-verification-fix/final-{deploy-plan,apply}/` and r7
+`final-apply-checks`, `final-boot-selection` results.
 See the latest brief milestones below; earlier checkpoints are historical.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed

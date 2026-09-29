@@ -1,18 +1,17 @@
 # Repository-first whole-machine deployment
 
-Current checkpoint (2026-09-29): **TODO 05 complete; 06–07 finishing acceptance**.
-Generation 8 booted with sys-ctrl halted and saved data intact; typed rollback
-`1790719314694345139` restored baseline `649469b` without the controller.
-The restarted builder failed loading a saved recipe before mounting its base.
-Committed fixes `4845da0` (boot-scoped verification) and `b1cf5db` (builder mount
-ordering and metadata-only ownership) await normal deployment. A detached job
-reruns quick tests, recovers the builder using the committed script, and runs
-`make machine-plan DEPLOY_TARGET=sys-dev`; it never applies or reboots.
-Review that plan, apply, confirm the temporary sys-ctrl `/run` recovery units and
-scripts are gone after its normal restart, then request the user's manual reboot.
-720 quick tests passed before the final ownership adjustment. Evidence:
-`.airlock-logs/boot-verification-fix/final-deploy-plan/` and
-`.airlock-logs/physical-20260929-r7/`. No USB rebuild is needed.
+Current checkpoint (2026-09-29): **TODO 05 complete; 06–07 await final reboot**.
+Offline boot and rollback with sys-ctrl halted passed. Committed verifier and
+builder fixes (`4845da0`, `b1cf5db`) passed **720 quick tests, 25 skipped** and
+normal apply `1790721069384601443`. Only sys-dev/sys-ctrl restarted; every root
+was reused. Both normal builder services are healthy, saved markers match and
+temporary recovery units/scripts are gone. Typed verification passed with
+`reboot-required`. Default boot entry: **Airlock (Generation 10)**, selected host
+`/nix/store/n0ymw800sicwqswwra2nzi4fa1zgmr93-nixos-system-dom0-26.11.20260904.801bef6`.
+Next: user reboots manually; verify exact host/guest generations, builders and
+saved markers, then complete 06–07. No background test remains running.
+Evidence: `.airlock-logs/boot-verification-fix/final-{deploy-plan,apply}/` and
+r7 `final-apply-checks`, `final-boot-selection`. No USB rebuild is needed.
 
 ## The development contract
 
