@@ -19,8 +19,10 @@ now staged as host generation 4 (transaction `1790701105546677309`,
 and sys-dev are running. Dom0 still runs generation 3; persistence across the
 next boot is unverified. The missing-view fault trial is paused, with no fault active.
 
-Deployment performance changes are committed locally as `649469b`; full quick
-validation is running before normal live deployment. No new image is planned.
+Deployment performance changes are committed as `649469b`. Full `make test-quick`
+passed: 714 passed, 24 skipped, 2 warnings (215.11 s). The normal live plan is
+running before apply; no performance change is claimed boot-verified yet. No
+new image is planned.
 
 The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
 report: 674 passed, 24 skipped, zero failures/errors. Evidence:
