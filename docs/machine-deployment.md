@@ -1,27 +1,27 @@
 # Repository-first whole-machine deployment
 
-Current checkpoint (2026-09-29, r7): **deployment performance update applied;
-manual reboot into generation 5 required** on `sys-dev`. Component `649469b`
-passed full `make test-quick`: 714 passed, 24 skipped, 2 warnings (215.11 s).
-Transaction `1790704764992386034` is `reboot-required`; the detached worker
-exited successfully. Updated sys-ctrl and sys-dev run their selected systems,
-all other running guests match selection, and dom0 has no failed units.
-The default EFI entry and system profile both select generation 5, host
-`/nix/store/8vlimjinqd06xylm9jskksgpyg6cv9ya-nixos-system-dom0-26.11.20260904.801bef6`.
+Current checkpoint (2026-09-29, r7): **generation 5 boot, persistence and
+prepared apply passed** on `sys-dev`. Component `649469b` passed full
+`make test-quick`: 714 passed, 24 skipped, 2 warnings. Boot
+`f78fc248-b3fb-4ab5-93b0-828220637822` runs the selected `8vlimj...` host with
+its own generation-5 view and database. Both host markers, guest private data
+and builder additions survived. Input startup needed no reset; the user
+confirmed typing, clicks and login. Dom0 has no failed units.
 
-Generation 5 includes both the host-addition carry fix and deployment performance
-changes. Its registration contains both rooted host test objects. Dom0 still
-runs generation 3: persistence across boot and the optimized workflow's live
-performance remain unverified. No new USB image was built. The missing-view
-fault trial remains paused, with no fault active. After manual reboot, verify
-host/guest selection, input usability and both host markers before measuring
-an unchanged plan/apply and resuming remaining acceptance.
+Typed verify completed transaction `1790704764992386034`. The first unchanged
+plan took 36.55 s end-to-end (30.40 s preparation); the repeat took 18.20 s
+(15.54 s preparation), reusing all seven guest generations with zero package/root
+payload. Prepared apply submitted in 8.65 s (3.97 s checks), repeated no
+inventory/transfer, and completed transaction `1790705987415026248` without
+VM stops or reboot. This validates the unchanged path; changed-update timing,
+peak temporary allocation and remaining acceptance are still open.
 
-Generation 3's input guard ran with `no_failure_detected` / `attempted=false`,
-and the user confirmed typing, clicks and login worked. Its verification found
-the host-addition carry defect; the original sentinel was restored from its
-retained test file at the same store path before testing the committed fix.
-Historical evidence and that diagnostic repair are recorded below.
+An isolated committed root trial `b2d511a` changes only usr-home's root image
+from 1024 to 1536 MiB. Its normal typed machine plan is running for review;
+no root-trial activation has occurred. The product checkout remains pinned to
+`649469b`. Restore that source after trial rollback. No new image was built,
+and no missing-view fault is active. Evidence lives under
+`.airlock-logs/deployment-performance/` and the r7 physical evidence directory.
 
 The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
 report: 674 passed, 24 skipped, zero failures/errors. Evidence:

@@ -1,27 +1,27 @@
 # Share immutable store objects between dom0 and guests
 
-Current checkpoint (2026-09-29, r7): **deployment performance update applied;
-manual reboot into generation 5 required** on `sys-dev`. Component `649469b`
-passed full `make test-quick`: 714 passed, 24 skipped, 2 warnings (215.11 s).
-Transaction `1790704764992386034` is `reboot-required`; the detached worker
-exited successfully. Updated sys-ctrl and sys-dev run their selected systems,
-all other running guests match selection, and dom0 has no failed units.
-The default EFI entry and system profile both select generation 5, host
-`/nix/store/8vlimjinqd06xylm9jskksgpyg6cv9ya-nixos-system-dom0-26.11.20260904.801bef6`.
+Current checkpoint (2026-09-29, r7): **generation 5 boot, persistence and
+prepared apply passed** on `sys-dev`. Component `649469b` passed full
+`make test-quick`: 714 passed, 24 skipped, 2 warnings. Boot
+`f78fc248-b3fb-4ab5-93b0-828220637822` runs the selected `8vlimj...` host with
+its own generation-5 view and database. Both host markers, guest private data
+and builder additions survived. Input startup needed no reset; the user
+confirmed typing, clicks and login. Dom0 has no failed units.
 
-Generation 5 includes both the host-addition carry fix and deployment performance
-changes. Its registration contains both rooted host test objects. Dom0 still
-runs generation 3: persistence across boot and the optimized workflow's live
-performance remain unverified. No new USB image was built. The missing-view
-fault trial remains paused, with no fault active. After manual reboot, verify
-host/guest selection, input usability and both host markers before measuring
-an unchanged plan/apply and resuming remaining acceptance.
+Typed verify completed transaction `1790704764992386034`. The first unchanged
+plan took 36.55 s end-to-end (30.40 s preparation); the repeat took 18.20 s
+(15.54 s preparation), reusing all seven guest generations with zero package/root
+payload. Prepared apply submitted in 8.65 s (3.97 s checks), repeated no
+inventory/transfer, and completed transaction `1790705987415026248` without
+VM stops or reboot. This validates the unchanged path; changed-update timing,
+peak temporary allocation and remaining acceptance are still open.
 
-Generation 3's input guard ran with `no_failure_detected` / `attempted=false`,
-and the user confirmed typing, clicks and login worked. Its verification found
-the host-addition carry defect; the original sentinel was restored from its
-retained test file at the same store path before testing the committed fix.
-Historical evidence and that diagnostic repair are recorded below.
+An isolated committed root trial `b2d511a` changes only usr-home's root image
+from 1024 to 1536 MiB. Its normal typed machine plan is running for review;
+no root-trial activation has occurred. The product checkout remains pinned to
+`649469b`. Restore that source after trial rollback. No new image was built,
+and no missing-view fault is active. Evidence lives under
+`.airlock-logs/deployment-performance/` and the r7 physical evidence directory.
 
 The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
 report: 674 passed, 24 skipped, zero failures/errors. Evidence:
@@ -1826,3 +1826,44 @@ terminal result above. No ad-hoc live code patch or image rebuild was used.
 Manual reboot into default **Airlock** is now required. Verify both host
 sentinels, selected generation and input readiness after boot, then measure
 unchanged/changed planning and prepared apply. TODOs 05–07 remain open.
+
+
+### Generation 5 and optimized unchanged workflow verified (2026-09-29)
+
+Boot `f78fc248-b3fb-4ab5-93b0-828220637822` runs `8vlimj...`, with only host
+`bases/5` mounted and its own generation-5 Nix database. Typed verify completed
+transaction `1790704764992386034`. Both rooted host objects are valid with
+contents `r7:dom0` and `r7:only-generation-2`. The three private-data SHA256s
+match previous evidence; sys-dev/sys-ctrl builder additions remain valid and
+readable. Boot supervision is complete, there are no failed dom0 units, and
+the input guard reported no failure/no attempt before forwarding. The user
+confirmed keyboard, clicks and login work. Evidence: r7
+`performance-boot5.results.json`.
+
+Optimized timings (same source `649469b`):
+
+| Operation | Local command wall time | Controller preparation/checks | Result |
+| --- | ---: | ---: | --- |
+| First unchanged plan after boot | 36.55 s | 30.40 s | Existing packages/roots reused; optional guest view proofs prepared |
+| Repeat unchanged plan | 18.20 s | 15.54 s | All seven retained guest generations reused |
+| Prepared apply submission | 8.65 s | 3.97 s | Exact prepared candidate reused; no inventory or payload transfer |
+
+Cached build lookups took 0.03 s and 0.005 s. Both plans transferred zero
+package/root payloads and required no VM stops or host reboot. The prepared
+apply used candidate `d961bd05fa05d130a4e7ca6dacaf95b0b96b4134216c56d29669847e45e1c50b`;
+transaction `1790705987415026248` reached complete and typed verification matched
+host and guests. Submission timing excludes the detached activation worker.
+Compared with previous repeated preparation (422.94 s), repeat preparation is
+about 27 times faster on this machine. This is an unchanged-update comparison,
+not a claim that newly changed releases build or publish at the same speed.
+
+Evidence: `deployment-performance/boot5-plan/receipt.json`,
+`boot5-repeat-plan/receipt.json`, `boot5-prepared-apply/receipt.json`,
+`boot5-prepared-verify.json`, and each command's `elapsed` file.
+
+Remaining work continues with isolated branch `acceptance/r7-root-change`,
+commit `b2d511a`, based exactly on `649469b`; only usr-home's root image size is
+changed to 1536 MiB. Normal source push and typed machine-plan run detached under
+`deployment-performance/root-trial-plan/`. Review exact topology and root bytes
+before apply; check actual selected root plus private data after activation,
+then manual boot and rollback. Product main remains pinned to the baseline.
