@@ -595,6 +595,7 @@ def test_builder_guest_mount_lifecycle_preserves_upper(
         if argv[0] == "nix-store":
             lower = Path(argv[2])
             assert str(lower / "nix/store") in mounted
+            assert argv[3:6] == ("--option", "build-users-group", "")
             if with_derivation:
                 assert (lower / drv.lstrip("/")).read_bytes() == (source / drv.lstrip("/")).read_bytes()
                 return real_command(*argv, **kwargs)
