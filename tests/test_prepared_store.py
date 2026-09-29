@@ -544,10 +544,27 @@ def test_builder_detects_same_filesystem_bind_mount(tmp_path):
 
 
 @pytest.mark.parametrize("fail_last_mount", [False, True])
+@pytest.mark.parametrize("with_derivation", [False, True])
 def test_builder_guest_mount_lifecycle_preserves_upper(
-    tmp_path, monkeypatch, fail_last_mount
+    tmp_path, monkeypatch, fail_last_mount, with_derivation
 ):
     guest = load_builder_guest()
+    registration = b"registration"
+    drv = None
+    source = tmp_path / "source"
+    if with_derivation:
+        if not shutil.which("nix-instantiate") or not shutil.which("nix-store"):
+            pytest.skip("requires Nix registration tools")
+        # Instantiate a real recipe, without building or using the host store.
+        drv = subprocess.check_output(
+            ["nix-instantiate", "--store", f"local?root={source}", "--expr",
+             'derivation { name = "builder-base-recipe"; '
+             'system = builtins.currentSystem; builder = "/bin/sh"; args = []; }'],
+            text=True,
+        ).strip()
+        registration = subprocess.check_output(
+            ["nix-store", "--store", f"local?root={source}", "--dump-db"]
+        )
     args = SimpleNamespace(
         state=str(tmp_path / "state"),
         runtime=str(tmp_path / "run"),
@@ -569,22 +586,37 @@ def test_builder_guest_mount_lifecycle_preserves_upper(
     monkeypatch.setattr(guest.os, "chown", lambda *_: None)
     monkeypatch.setattr(guest, "is_mountpoint", lambda path: str(path) in mounted)
     monkeypatch.setattr(
-        guest, "read_identity", lambda _, domain="sys-dev": ({"base": "fixed"}, b"registration")
+        guest, "read_identity", lambda _, domain="sys-dev": ({"base": "fixed"}, registration)
     )
+    real_command = guest.checked
 
     def command(*argv, **kwargs):
         calls.append(argv)
         if argv[0] == "nix-store":
             lower = Path(argv[2])
+            assert str(lower / "nix/store") in mounted
+            if with_derivation:
+                assert (lower / drv.lstrip("/")).read_bytes() == (source / drv.lstrip("/")).read_bytes()
+                return real_command(*argv, **kwargs)
             (lower / "nix/store/.links").mkdir(parents=True, exist_ok=True)
             (lower / "nix/var/nix/db").mkdir(parents=True, exist_ok=True)
             assert kwargs["input"] == "registration"
         elif argv[0] == "mount":
             if fail_last_mount and argv[-1] == args.state + "/merged/nix/store":
                 raise RuntimeError("injected mount failure")
+            if argv[-1] == args.runtime + "/lower/nix/store":
+                assert "ro,nodev,nosuid," in argv[-2]
+                assert "upperdir=" not in argv[-2]
+                assert (Path(args.runtime) / "lower-scaffold/.links").is_dir()
+                if with_derivation:
+                    # Emulate only the privileged mount; load a real database.
+                    shutil.copytree(source / "nix/store", argv[-1], dirs_exist_ok=True)
             mounted.add(argv[-1])
         elif argv[0] == "umount":
             mounted.remove(argv[-1])
+            if with_derivation and argv[-1] == args.runtime + "/lower/nix/store":
+                shutil.rmtree(argv[-1])
+                Path(argv[-1]).mkdir()
 
     monkeypatch.setattr(guest, "checked", command)
     if fail_last_mount:
@@ -597,6 +629,12 @@ def test_builder_guest_mount_lifecycle_preserves_upper(
     assert sum(call[:3] == ("mount", "-t", "erofs") for call in calls) == 1
     assert any("ro,nodev,nosuid,device=blob-device" in call for call in calls)
     ready = json.loads((Path(args.runtime) / "ready.json").read_text())
+    if with_derivation:
+        registered = subprocess.check_output(
+            ["nix-store", "--store", args.runtime + "/lower", "--query", "--outputs", drv],
+            text=True,
+        ).strip()
+        assert registered.endswith("-builder-base-recipe")
     assert ready["uri"].startswith("local-overlay://")
     assert "read-only%3Dtrue" in ready["uri"]
     output = Path(args.state) / "upper/built-output"
