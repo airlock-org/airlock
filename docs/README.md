@@ -29,6 +29,7 @@ host/guest storage passed acceptance. Detailed summaries retain their boundaries
 | [USB lab network follow-ups](todo/usb-lab-network-followups.md) | Focused tests, updates proxy, PCI Wi-Fi traffic, and an exact persistence sentinel remain. The wired topology passed physical acceptance. |
 | [Deployment metadata and validation reuse](todo/08-deployment-metadata-validation-reuse.md) | Planned. Reduce repeated preparation work with operation-scoped caches; RAM staging is out of scope. |
 | [Deployment code health](todo/09-deployment-code-health.md) | Planned. Preserve cleanup errors, use durable record writes, and simplify host publication. |
+| [Boot menu presentation](todo/10-boot-menu-presentation.md) | Planned. Newest generation first and default; concise commit timestamp/SHA labels and recovery below. |
 | [sys-ctrl](completed/05-sys-ctrl.md) | Completed controller deployment and fault-handling acceptance. |
 | [Direct pool deployment](completed/06-direct-pool-machine-deployment.md) | Completed package admission, sparse root reuse and physical update/rollback acceptance. |
 | [Unified host and guest store](completed/07-unified-host-guest-store.md) | Completed shared storage, host boot/recovery, builder reuse and maintenance acceptance. |
