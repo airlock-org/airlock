@@ -1,11 +1,15 @@
 # Move configuration work into sys-ctrl
 
-Current checkpoint (2026-09-29): **new baseline authorized; local generation
-isolation changes await user tests and image build**. The user chose to discard
-the failing USB state without a backup. Earlier results below are historical;
-the exact previous OverlayFS rejection remains unexplained. No tests, image
-build, USB changes or live commands were run for this implementation. See the
-final new-baseline section for the changed design and required acceptance.
+Current checkpoint (2026-09-29, r7): **fresh baseline booted; acceptance in
+progress on `sys-dev`**. Installed source is `e431c44`. Dom0 uses only host
+pool generation 1; required guests are running, dom0/sys-ctrl have no failed
+units, and persistence/store-addition sentinels passed. The latest local quick
+report has 674 passed, 24 skipped, zero failures/errors. Committed source
+`41ee7dd` (menu cleanup) has been imported through the normal source route;
+a detached machine plan is running, with no apply or reboot requested yet.
+Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
+historical; generation isolation, rollback and the remaining acceptance tests
+still need verification. The previous USB state was discarded as authorized.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
 verification marked transaction `1790546188487824369` complete. Saved data,

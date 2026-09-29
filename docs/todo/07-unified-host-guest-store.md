@@ -1,11 +1,15 @@
 # Share immutable store objects between dom0 and guests
 
-Current checkpoint (2026-09-29): **new baseline authorized; local generation
-isolation changes await user tests and image build**. The user chose to discard
-the failing USB state without a backup. Earlier results below are historical;
-the exact previous OverlayFS rejection remains unexplained. No tests, image
-build, USB changes or live commands were run for this implementation. See the
-final new-baseline section for the changed design and required acceptance.
+Current checkpoint (2026-09-29, r7): **fresh baseline booted; acceptance in
+progress on `sys-dev`**. Installed source is `e431c44`. Dom0 uses only host
+pool generation 1; required guests are running, dom0/sys-ctrl have no failed
+units, and persistence/store-addition sentinels passed. The latest local quick
+report has 674 passed, 24 skipped, zero failures/errors. Committed source
+`41ee7dd` (menu cleanup) has been imported through the normal source route;
+a detached machine plan is running, with no apply or reboot requested yet.
+Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
+historical; generation isolation, rollback and the remaining acceptance tests
+still need verification. The previous USB state was discarded as authorized.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
 verification marked transaction `1790546188487824369` complete. Saved data,
@@ -1351,3 +1355,34 @@ Added regression coverage for duplicate removal, concise labels, regeneration,
 and preserved rollback defaults. Static Python parsing and whitespace checks
 passed; tests and image rebuilding remain with the user. The running USB was
 not changed.
+
+### R7 fresh baseline and detached plan (2026-09-29)
+
+SSH through `sys-dev` succeeded after the user approved the replacement SSH
+host key and authorized Tailscale SSH. Running host:
+`/nix/store/sazv1kzrs8c8wa5xqafyjqcwmcsbndg3-nixos-system-dom0-efi-raw-26.11.20260904.801bef6`.
+Both builder repositories initially reported `e431c44`. Only
+`/var/lib/airlock/host-store/bases/1` is mounted as EROFS. Sys-ctrl has 8192 MiB
+and uses sys-firewall; its builder base is generation 2. Required guests and
+machine autostart are healthy; usr-browser remains stopped as configured.
+The 57-GiB root has 38 GiB available. The install receipt reports zero ordinary
+host store objects remaining after seeding and 2,943,639,552 recovery bytes.
+These are baseline observations, not completed update/rollback acceptance.
+
+Test-owned persistence files were created under
+`~/.local/share/airlock/physical-tests/r7/` in sys-dev, sys-ctrl and usr-home;
+dom0 uses `/var/lib/airlock/physical-tests/r7/`. Host and builder files were
+added to their respective Nix stores and rooted for later preservation checks.
+An initial diagnostic incorrectly tried to read a builder object through the
+guest runtime store; reading its actual `/rw/airlock-builder/merged/nix/store`
+path succeeded. No runtime product code was modified. Remove these test roots
+and sentinels after final verification.
+
+The standard source importer installed committed `41ee7dd` into sys-dev.
+Detached user unit `airlock-r7-plan` runs the typed plan route through sys-ctrl,
+with a one-hour command timeout and durable stdout/stderr, phase and JSON result
+under `~/.local/share/airlock/physical-tests/r7/plan/` in sys-dev. The test driver
+only plans and checks revision/no retire-or-restore actions; it cannot apply or
+reboot. No active polling of the long command. Review the result before apply.
+Local baseline/sentinel receipts and the driver are in
+`.airlock-logs/physical-20260929-r7/`. No reboot is currently needed.
