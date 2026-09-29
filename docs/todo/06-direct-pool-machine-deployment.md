@@ -6,8 +6,9 @@ pool generation 1; required guests are running, dom0/sys-ctrl have no failed
 units, and persistence/store-addition sentinels passed. The latest local quick
 report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
-the machine plan passed and detached typed apply submission is now running.
-No reboot has been requested yet.
+plan and apply passed pre-reboot verification; transaction
+`1790688503537734589` is `reboot-required`. Manual reboot into the default
+Airlock entry is now required to verify host generation 2.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
 historical; generation isolation, rollback and the remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.

@@ -6,8 +6,9 @@ pool generation 1; required guests are running, dom0/sys-ctrl have no failed
 units, and persistence/store-addition sentinels passed. The latest local quick
 report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
-the machine plan passed and detached typed apply submission is now running.
-No reboot has been requested yet.
+plan and apply passed pre-reboot verification; transaction
+`1790688503537734589` is `reboot-required`. Manual reboot into the default
+Airlock entry is now required to verify host generation 2.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
 historical; generation isolation, rollback and the remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.
@@ -1454,3 +1455,32 @@ dom0 activation worker. Unit lifetime is bounded to 3700 seconds; logs are at
 activation; inspect machine status and saved sentinels before asking for reboot.
 No reboot, active polling, or direct coordinator bypass was performed. Local
 receipts: r7 `plan.json`, `pre-apply.results.json`, `start-apply.results.json`.
+
+### R7 pre-reboot verification passed (2026-09-29)
+
+Transaction `1790688503537734589` reached `reboot-required`; typed coordinator
+verification passed with running guests matching the selected systems. Apply
+submission completed successfully in 444 seconds. Repeat preparation reused all
+guest packages and roots (zero payload bytes), and zero host paths were imported
+(23 compressed framing bytes). Cached build took 45.84 seconds and subsequent
+preparation 396.74 seconds; reuse still has substantial inventory/validation cost.
+
+All three guest persistence hashes match the baseline; both builder store
+additions remain valid and readable. The dom0 store addition is also valid.
+Generation 1's saved machine binding contains the baseline guest generations 1;
+generation 2's binding contains the selected transaction and guest generations 2.
+Host generation 1, host generation 2, and independent recovery have verified
+boot artifact descriptors. The loader default points to generation 2's retained
+entry. The menu now contains three independent choices: Airlock, Airlock
+(generation 1), and recovery. Old sealed labels remain unchanged as intended.
+An initial diagnostic incorrectly demanded an installed EFI descriptor for every
+published image system alias; verification was corrected to cover every actual
+installed descriptor plus explicit running/selected-host requirements.
+
+The only failed systemd unit was the known test retry rejected by the controller
+lock; its failed state was cleared after preserving its logs. No failed units
+remain. Evidence: r7 `pre-reboot.results.json` and
+`boot-artifact-check.results.json`. Manual reboot requested; no automated reboot
+or subsequent test work until the user confirms it. After reboot, verify exactly
+one generation-2 base, matching host/guest selection and saved state before
+starting rollback tests.
