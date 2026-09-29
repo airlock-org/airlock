@@ -6,10 +6,10 @@ pool generation 1; required guests are running, dom0/sys-ctrl have no failed
 units, and persistence/store-addition sentinels passed. The latest local quick
 report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
-host generation 2 boot and direct boot-menu rollback to generation 1 passed.
-Each uses its own store/database and correct guest generations; saved data
-survived. Generation 2-only additions remain isolated and preserved. Manual
-return to generation 2 is next.
+the generation 2 → 1 → 2 boot sequence passed with isolated stores/databases,
+matching guests and preserved additions. A reversible missing-generation-2-view
+fault is now staged; generation 1 is the boot default. Awaiting manual reboot
+to verify generation 1 does not depend on the unavailable newer view.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
 historical; generation isolation, rollback and the remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.

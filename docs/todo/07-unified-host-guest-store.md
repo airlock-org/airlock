@@ -6,10 +6,10 @@ pool generation 1; required guests are running, dom0/sys-ctrl have no failed
 units, and persistence/store-addition sentinels passed. The latest local quick
 report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
-host generation 2 boot and direct boot-menu rollback to generation 1 passed.
-Each uses its own store/database and correct guest generations; saved data
-survived. Generation 2-only additions remain isolated and preserved. Manual
-return to generation 2 is next.
+the generation 2 → 1 → 2 boot sequence passed with isolated stores/databases,
+matching guests and preserved additions. A reversible missing-generation-2-view
+fault is now staged; generation 1 is the boot default. Awaiting manual reboot
+to verify generation 1 does not depend on the unavailable newer view.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
 historical; generation isolation, rollback and the remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.
@@ -1529,3 +1529,30 @@ Evidence: r7 `rollback-status.results.json` and `rollback-guests.results.json`.
 Requested manual reboot selecting **Airlock** (generation 2) to verify the
 return restores its selection, database, guests and saved addition. No product
 changes, automated reboot or destructive fault injection performed.
+
+### R7 return to generation 2 passed; missing-view fault staged (2026-09-29)
+
+Generation 2 booted again. Coordinator verify reports `complete`, its own
+base/database are mounted, all six running guest systems match generation 2,
+and private-data hashes plus original host/builder additions match. The
+additional generation-2-only object is valid and readable again. This completes
+the normal 2 → 1 → 2 sequence with the new isolated state layout. Evidence:
+`return-generation2.results.json`.
+
+A deliberate, reversible diagnostic mutation is now active: moved only
+`/var/lib/airlock/closure-store/views/by-closure/42d6b0863f4b11e74e105d4774c62be6b056c52cf3d5ceddda1bd48a109ab14a/store.erofs`
+to `/var/lib/airlock/physical-tests/r7/missing-generation2-view/store.erofs`.
+Verified its checksum first and checked no guest generation uses that metadata
+image. Shared payload segments were untouched. `restore.json` in the same test
+directory records source/destination and SHA256
+`f427fa4489d18a9aa511307417f5c259dfcd51e751d3b2641d76171106e5c2aa`.
+The running mounted view remains usable until shutdown. Generation 2 must not
+be booted until this file is restored and its hash checked.
+
+Used the existing `airlock-host-store select` command to make generation 1 the
+boot default, after validating its independent artifacts. Requested manual
+reboot into **Airlock (generation 1)**. Verify that it boots while generation 2's
+view remains absent; restore the moved file before any return to generation 2
+or maintenance. Evidence: `missing-view-setup.results.json` and
+`select-generation1-for-fault.results.json`. This diagnostic is not a product
+change and must be undone before final acceptance. No automated reboot.
