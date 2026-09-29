@@ -16,12 +16,17 @@ inventory/transfer, and completed transaction `1790705987415026248` without
 VM stops or reboot. This validates the unchanged path; changed-update timing,
 peak temporary allocation and remaining acceptance are still open.
 
-An isolated committed root trial `b2d511a` changes only usr-home's root image
-from 1024 to 1536 MiB. Its normal typed machine plan is running for review;
-no root-trial activation has occurred. The product checkout remains pinned to
-`649469b`. Restore that source after trial rollback. No new image was built,
-and no missing-view fault is active. Evidence lives under
-`.airlock-logs/deployment-performance/` and the r7 physical evidence directory.
+The isolated committed root trial `b2d511a` has passed pre-reboot activation:
+usr-home's actual root disk and selected pool generation 7 both report 1536 MiB;
+its private-volume identity, size and sentinel survived the restart. Only
+usr-home changed. Transaction `1790707116774052820` is `reboot-required`, with
+host generation 6 selected as **Airlock (Generation 6)**. Manual reboot, boot
+verification and trial rollback remain pending; TODOs 05–07 remain open.
+Prepared apply submitted in 7.00 s with no repeated build or transfer.
+The product checkout remains pinned to `649469b`; restore that source in both
+builders after trial rollback. No new image was built and no missing-view
+fault is active. Evidence lives under `.airlock-logs/deployment-performance/`
+and the r7 physical evidence directory.
 
 The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
 report: 674 passed, 24 skipped, zero failures/errors. Evidence:

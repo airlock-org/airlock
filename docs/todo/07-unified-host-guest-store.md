@@ -16,12 +16,17 @@ inventory/transfer, and completed transaction `1790705987415026248` without
 VM stops or reboot. This validates the unchanged path; changed-update timing,
 peak temporary allocation and remaining acceptance are still open.
 
-An isolated committed root trial `b2d511a` changes only usr-home's root image
-from 1024 to 1536 MiB. Its normal typed machine plan is running for review;
-no root-trial activation has occurred. The product checkout remains pinned to
-`649469b`. Restore that source after trial rollback. No new image was built,
-and no missing-view fault is active. Evidence lives under
-`.airlock-logs/deployment-performance/` and the r7 physical evidence directory.
+The isolated committed root trial `b2d511a` has passed pre-reboot activation:
+usr-home's actual root disk and selected pool generation 7 both report 1536 MiB;
+its private-volume identity, size and sentinel survived the restart. Only
+usr-home changed. Transaction `1790707116774052820` is `reboot-required`, with
+host generation 6 selected as **Airlock (Generation 6)**. Manual reboot, boot
+verification and trial rollback remain pending; TODOs 05–07 remain open.
+Prepared apply submitted in 7.00 s with no repeated build or transfer.
+The product checkout remains pinned to `649469b`; restore that source in both
+builders after trial rollback. No new image was built and no missing-view
+fault is active. Evidence lives under `.airlock-logs/deployment-performance/`
+and the r7 physical evidence directory.
 
 The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
 report: 674 passed, 24 skipped, zero failures/errors. Evidence:
@@ -1867,3 +1872,41 @@ changed to 1536 MiB. Normal source push and typed machine-plan run detached unde
 `deployment-performance/root-trial-plan/`. Review exact topology and root bytes
 before apply; check actual selected root plus private data after activation,
 then manual boot and rollback. Product main remains pinned to the baseline.
+
+
+### R7 changed-root activation passed; generation 6 reboot pending (2026-09-29)
+
+Isolated committed trial `b2d511a` changes only usr-home root size from 1024 to
+1536 MiB. Preflight compared the selected and candidate topologies: the sole
+difference was `/domains/usr-home/backend/root/source`. All seven guest package
+closures needed zero payload; six unchanged guest generations were reused.
+The new sparse root transferred 2,949,690 bytes for 1,610,612,736 logical bytes.
+Four host paths transferred 113,035 compressed bytes.
+
+Changed-release build took 71.77 s and preparation 261.37 s. Binding accounted
+for 187.48 s, including 183.61 s host publication: controller-base publication
+119.06 s and host-pool publication 63.24 s. These measurements identify remaining
+costs for changed releases; unchanged-plan timings do not predict this path.
+
+Typed prepared apply reused the reviewed candidate and submitted in 7.00 s
+(4.61 s prepared checks), without repeating build, inventory or transfer.
+Detached worker `airlock-machine-deploy-adacb1479938` exited successfully.
+Transaction `1790707116774052820` is `reboot-required`; only usr-home was stopped
+and staged. Its actual root volume and selected pool generation 7 agree on
+1,610,612,736 bytes and the new root source. This passes the pre-reboot check
+that exposed the earlier root-selection mismatch.
+
+usr-home restarted (boot ID `0da1a82d-2608-4640-83a3-defe8e892c9f`); private
+volume `appvms/usr-home/private` remains 17,179,869,184 bytes and sentinel SHA256
+`c82d507df8430088f8b91dba130639b595f586074f0a3f92ba77ddfb2c71a397` matches.
+Other domain topologies are unchanged, running guest systems match selection,
+and dom0 reports zero failed units. The system profile, selected host record
+and default EFI entry agree on generation 6, host `/nix/store/v980gii12s3vikqxnkxpm0c123r66ldz-nixos-system-dom0-26.11.20260904.801bef6`.
+Both rooted host markers were checked in its registration before apply.
+
+Next: manual reboot into **Airlock (Generation 6)**, verify host/guest state and
+persistence, then rollback the trial to candidate `d961bd05fa05d130a4e7ca6dacaf95b0b96b4134216c56d29669847e45e1c50b`
+and restore source `649469b` in both builders. Changed-root boot/rollback is
+not yet passed. No USB image was built. Evidence:
+`.airlock-logs/deployment-performance/root-trial-{plan,apply}/` and
+`.airlock-logs/physical-20260929-r7/root-trial-{preflight,applied}.results.json`.
