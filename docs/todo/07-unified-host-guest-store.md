@@ -2,8 +2,8 @@
 
 Status (2026-09-29): **acceptance in progress**; TODO 05 is complete.
 Root update/reboot/rollback, persistence, memory-only reuse, real storage
-integration, fault cleanup/retry and builder reuse passed. The remaining
-controller-disabled offline boot and measured cold/repeat plan are in progress.
+integration, fault cleanup/retry and builder reuse passed. Cold/repeat measurements are recorded; the remaining controller-disabled
+offline boot is staged as Airlock (Generation 8), followed by trial rollback.
 Installed runtime is `649469b`; newer component commits add test coverage only.
 See the latest brief milestones below; earlier checkpoints are historical.
 
@@ -305,7 +305,7 @@ recovery/restoration before resuming normal deployment and TODO 05–07 acceptan
 - [x] GC and compaction preserve running, selected, rollback and persistent
   builder dependencies across repeated updates and remove only unreferenced
   objects. Boot selection and GC races are covered explicitly.
-- [ ] Compare cold and repeat planning against TODO 06's measured baseline:
+- [x] Compare cold and repeat planning against TODO 06's measured baseline:
   build time, network/transfer bytes, validation/import time, unique stored
   payload bytes and peak temporary allocation. Report remaining costs rather
   than assuming all first-update work disappears.
@@ -2006,3 +2006,23 @@ with live persistence/GC evidence, these close the corresponding checks.
 Evidence: r7 `current-volume-isolation`, `source-isolation-space` and
 `existing-fault-test-evidence` JSON files; r4/r5 maintenance results remain valid
 for their unchanged code. Physical power-cut testing is not claimed.
+
+
+### R7 measured planning and offline boot pending (2026-09-29)
+
+New-revision plan: 266 s total (53 s build, 210 s preparation); repeat: 42 s
+(39 s preparation). Guest/root payload: zero both times; host payload: 112,917 / 23
+compressed bytes. Pool has 2,544 canonical objects, 14.743 GB logical tar bytes,
+13.715 GB allocated segments. At 250 ms sampling, dom0 staging peaked at
+360,448 / 0 bytes and USB allocation rose by at most 287.9 / 12.3 MB. USB I/O
+was 4.454 / 0.172 GB read; background activity is included. This is an uncached
+revision on an already seeded pool, not an empty-store benchmark; sampled
+staging peaks and filesystem high-water marks are not exact total temporary
+allocation. Host/controller view publication remains the main changed-plan cost.
+Evidence: `offline-trial-plan/allocation-summary.json`, r7 `offline-preflight`
+and `unique-pool-bytes` results. Earlier measured baseline is retained above.
+
+Trial `93c3355` changes only sys-ctrl autostart to false. Prepared apply passed;
+transaction `1790717000990365650` awaits **Airlock (Generation 8)** reboot.
+Disconnect the laptop from the network for boot, then reconnect after login;
+verify sys-ctrl stayed halted, then roll back to baseline and restore source.

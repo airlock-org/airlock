@@ -5,8 +5,10 @@ Generation 5 is verified after the real guest-root expansion and rollback cycle;
 private, builder and host data survived. Unchanged preparation is 15.54 s,
 prepared submission 8.65 s. Memory-only planning transfers no guest/root payload.
 An isolated committed trial `93c3355` disables sys-ctrl autostart for the next
-offline boot check; cold/repeat planning and allocation observation are detached.
-No trial activation has occurred yet. Runtime remains `649469b`; later component
+offline boot check. Transaction `1790717000990365650` passed apply and awaits
+**Airlock (Generation 8)**. Boot disconnected from the network, then reconnect
+after login; verify controller remains halted, then roll back and restore source.
+Cold/repeat measurements are recorded; no background test remains running. Runtime remains `649469b`; later component
 commits add acceptance tests only. Evidence: `.airlock-logs/deployment-performance/`
 and `.airlock-logs/physical-20260929-r7/`. No USB rebuild is needed.
 

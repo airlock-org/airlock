@@ -2,8 +2,8 @@
 
 Status (2026-09-29): **acceptance in progress**; TODO 05 is complete.
 Root update/reboot/rollback, persistence, memory-only reuse, real storage
-integration, fault cleanup/retry and builder reuse passed. The remaining
-controller-disabled offline boot and measured cold/repeat plan are in progress.
+integration, fault cleanup/retry and builder reuse passed. Cold/repeat measurements are recorded; the remaining controller-disabled
+offline boot is staged as Airlock (Generation 8), followed by trial rollback.
 Installed runtime is `649469b`; newer component commits add test coverage only.
 See the latest brief milestones below; earlier checkpoints are historical.
 
