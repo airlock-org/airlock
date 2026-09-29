@@ -4,7 +4,7 @@ Status: implemented in the pinned `airlock-machine` component on 2026-09-17.
 Physical admission was validated on 2026-09-17; the nested flow remains
 available as `vm-pool-admission-flow` for broader activation and rollback tests.
 
-A small first step toward [sys-ctrl](../todo/05-sys-ctrl.md): let `sys-dev` prepare and
+A small first step toward [sys-ctrl](05-sys-ctrl.md): let `sys-dev` prepare and
 send guest package artifacts to the existing Python `airlock-qubes-storage`
 manager in dom0. Later, `sys-ctrl` can take over this sender role.
 

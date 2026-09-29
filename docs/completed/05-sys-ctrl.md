@@ -1,50 +1,14 @@
 # Move configuration work into sys-ctrl
 
-Current checkpoint (2026-09-29, r7): **generation 5 boot, persistence and
-prepared apply passed** on `sys-dev`. Component `649469b` passed full
-`make test-quick`: 714 passed, 24 skipped, 2 warnings. Boot
-`f78fc248-b3fb-4ab5-93b0-828220637822` runs the selected `8vlimj...` host with
-its own generation-5 view and database. Both host markers, guest private data
-and builder additions survived. Input startup needed no reset; the user
-confirmed typing, clicks and login. Dom0 has no failed units.
+Status: **complete** (2026-09-29). Typed controller deployment, reboot,
+rollback, persistence, authorization checks, real storage integration and
+interrupted-transfer cleanup/retry passed. Final fault coverage used the
+installed engine with a disposable pool and real devices; it is injected-failure
+coverage, not physical power-cut testing. Evidence: r7
+`linux-storage-interruptions-complete-root.results.json` and the root-cycle
+records. TODOs 06–07 retain their separate remaining criteria.
 
-Typed verify completed transaction `1790704764992386034`. The first unchanged
-plan took 36.55 s end-to-end (30.40 s preparation); the repeat took 18.20 s
-(15.54 s preparation), reusing all seven guest generations with zero package/root
-payload. Prepared apply submitted in 8.65 s (3.97 s checks), repeated no
-inventory/transfer, and completed transaction `1790705987415026248` without
-VM stops or reboot. This validates the unchanged path; changed-update timing,
-peak temporary allocation and remaining acceptance are still open.
-
-The isolated root trial `b2d511a` passed generation-6 boot verification:
-usr-home's disk and pool record both remained 1536 MiB, and guest/private,
-builder and rooted host markers survived. Transaction `1790707116774052820`
-is complete. Typed rollback then restored the 1024 MiB root with matching
-pool generation 6 and preserved private data; only usr-home was restarted.
-Rollback transaction `1790712446217355385` is now verified **complete**.
-Return boot `0840d0fe-966a-494c-af20-fa167cd47474` runs generation 5 with its
-own view/database, the 1024 MiB guest root, all persistence markers and no
-failed units. The changed-root update → reboot → rollback → reboot sequence
-passed. TODOs 05–07 remain open; broader outage/interruption criteria are
-separate. The memory-only plan `d827ad2` passed with all seven guest generations
-reused and zero guest package/root payload; it has not been activated.
-Component `3a4e3d2` adds only the missing privileged storage pytest worker
-and its bounded loop-cleanup wait; installed runtime remains `649469b`.
-The worker passed on dom0 with real loop/device-mapper/EROFS devices, exact
-closure membership, rejected writes, shared extents and peer survival after
-detach. Local unprivileged execution correctly reports skipped. Both builders
-are restored to clean source `649469b`; the memory trial was never activated.
-Sys-ctrl also reused a host object offline from its lower layer with no upper
-copy, and rejected an unavailable object. That does not yet demonstrate a
-successful download of a genuinely missing build dependency.
-No new image was built and no missing-view fault is active. Evidence lives
-under `.airlock-logs/deployment-performance/` and the r7 physical evidence
-directory (`root-trial-boot6` and `root-trial-rollback-final`).
-
-The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
-report: 674 passed, 24 skipped, zero failures/errors. Evidence:
-`.airlock-logs/physical-20260929-r7/`. TODOs 05–07 remain open; earlier dated
-results remain evidence for their stated revisions.
+Earlier checkpoints below are historical.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
 verification marked transaction `1790546188487824369` complete. Saved data,
@@ -115,7 +79,7 @@ from normal deployment authority.
 - Sys-ctrl saves candidate source archives and request records under
   `~/.local/share/airlock/controller/candidates/<revision>/`. Build roots remain
   under `~/.local/share/airlock/machine-deploy/<revision>/`.
-- [Direct whole-machine pool admission](06-direct-pool-machine-deployment.md)
+- [Direct whole-machine pool admission](../todo/06-direct-pool-machine-deployment.md)
   sends missing guest objects to the pool and only host/transport dependencies
   to dom0's ordinary store. Dom0 binds exact validated generation receipts to
   a durable machine candidate before planning or activation.
@@ -212,15 +176,17 @@ logs; the original diagnostic build log and exit marker are in sys-ctrl's
   R5 normal apply restarted sys-ctrl and continued independently in dom0;
   sys-dev status and post-reboot verify passed. R4 also exercised controller
   outage and rollback/recovery. Abrupt power-cut cases remain separate.
-- [ ] Reject unauthorized/malformed requests and incomplete artifacts; exercise
+- [x] Reject unauthorized/malformed requests and incomplete artifacts; exercise
   interrupted transfers, retries and temporary-data cleanup.
   R7 live probes denied sys-dev's direct MachinePlan and usr-home's MachineControl
   calls (126), rejected malformed/truncated headers and invalid release paths,
   and rejected two incomplete Nix export submissions without registering the
-  bogus object or creating an activation transaction. Partially received object
-  cleanup and broader interruption cases remain outstanding. Evidence:
-  `controller-rejections.results.json` and
-  `controller-incomplete-artifact.results.json` in the r7 log directory.
+  bogus object or creating an activation transaction. The installed engine also
+  rejected truncated/corrupt payloads and injected failures after object import
+  and before generation commit; existing manifests/selection survived, staging
+  was empty and retries passed. Evidence: `controller-rejections.results.json`,
+  `controller-incomplete-artifact.results.json` and
+  `linux-storage-interruptions-complete-root.results.json` in the r7 directory.
 - [x] Retention and GC preserve running and rollback generations across updates.
 - [x] Host updates preserve the `reboot-required` / `complete` distinction.
   Fourth-image apply and normal reboot verified both states; rollback again
@@ -1060,7 +1026,7 @@ preserve independent EFI entries, and improve failure logging. New pytest
 regressions are written but **not run**. No image build or live/USB modification
 was performed. Component commit `c2bb176` contains the implementation and new
 regression tests; the parent repository pins it for the next baseline build.
-See [TODO 07's new-baseline section](07-unified-host-guest-store.md#new-baseline-isolated-host-generations-2026-09-29-not-yet-tested)
+See [TODO 07's new-baseline section](../todo/07-unified-host-guest-store.md#new-baseline-isolated-host-generations-2026-09-29-not-yet-tested)
 for implementation details and the ordered acceptance plan. Earlier passes are
 historical; fresh boot, update, previous-generation boot, broken-newer-view
 isolation and recovery must be revalidated. Root-change boot/rollback and

@@ -332,7 +332,7 @@ recovery/restoration before resuming normal deployment and TODO 05–07 acceptan
   isolated; a guest cannot modify host/shared objects or publish trusted state.
 - [ ] Nix queries, imports, supported builds, profile selection and GC behave
   correctly against dom0's composed store and registration database.
-- [ ] Sys-ctrl reuses an existing host object through its approved builder view
+- [x] Sys-ctrl reuses an existing host object through its approved builder view
   without downloading, rebuilding or copying that payload into its upper layer.
   Confirm genuinely missing build inputs are still handled correctly.
 - [ ] Updating sys-ctrl's builder base preserves its saved additions across a
@@ -355,7 +355,7 @@ A successful build or pool mount does not establish boot, recovery or GC safety.
 
 ## Starting points
 
-- [Controller ownership](05-sys-ctrl.md)
+- [Controller ownership](../completed/05-sys-ctrl.md)
 - [Direct pool deployment and root reuse](06-direct-pool-machine-deployment.md)
 - [Existing builder store](../sys-dev-build-store.md)
 - [Image pool seeding](../../lifecycle/image/prepared-guest-store.nix)
@@ -2020,3 +2020,15 @@ Evidence under `.airlock-logs/physical-20260929-r7/`:
 `linux-storage-retry.results.json`, `memory-trial-check.results.json`, and
 `acceptance-cleanup.results.json`. Plan receipt/timings are under
 `.airlock-logs/deployment-performance/memory-trial-plan/`.
+
+
+### R7 fault handling and Nix behavior (2026-09-29)
+
+Installed-engine disposable-pool checks passed for truncated/corrupt transfers,
+failures after object import and before commit, unchanged existing generations,
+staging cleanup and successful retries. Dom0 native build/query/isolated import
+passed; sys-ctrl reused a host object from its lower view and built successfully
+with a new input/output confined to its upper layer. Evidence: r7
+`linux-storage-interruptions-complete-root`, `host-nix-behavior`, and
+`builder-new-input` result JSON files. TODO 05 moved to `docs/completed/`;
+06–07 remain open. These are injected failures, not physical power cuts.

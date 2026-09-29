@@ -71,7 +71,7 @@ compaction passed in 358.84 seconds; new-root activation and rollback remain
 outstanding. See the final continuation in
 [TODO 07](todo/07-unified-host-guest-store.md) for evidence and next steps.
 
-See [TODO 05](todo/05-sys-ctrl.md),
+See [TODO 05](completed/05-sys-ctrl.md),
 [TODO 06](todo/06-direct-pool-machine-deployment.md) and
 [TODO 07](todo/07-unified-host-guest-store.md) for passed checks and remaining
 retention, interruption/isolation and performance criteria.

@@ -77,7 +77,7 @@ Earlier evidence: the earlier implementation passed the quick suite and
 both flake checks (579 passed, 24 skipped, two existing warnings across
 separate runs). The subsequent controller network change passed nine focused
 tests; the full quick suite has not been rerun at that revision. See
-[sys-ctrl validation evidence](05-sys-ctrl.md#remaining-acceptance-work).
+[sys-ctrl validation evidence](../completed/05-sys-ctrl.md#remaining-acceptance-work).
 The first image's whole-machine controller build was killed before pool
 transfer. An 8 GiB controller later completed a diagnostic network-assisted
 whole-machine build from the previous source revision, but that build did not
@@ -259,9 +259,9 @@ empty space; this is separate from guest package duplication.
   Verify release/GC references and allocated disk usage across repeated updates.
 - [x] Dom0 runtime and boot/recovery dependencies remain available independently
   of sys-ctrl, and host updates preserve whole-machine generation verification.
-- [ ] Admitted generations match the intended guest and release provenance;
+- [x] Admitted generations match the intended guest and release provenance;
   incomplete or invalid artifacts cannot be activated.
-- [ ] Interrupted transfers, retries, and cleanup preserve running and retained
+- [x] Interrupted transfers, retries, and cleanup preserve running and retained
   generations without accumulating unbounded temporary data.
 - [x] Reboot and rollback work with direct admission and preserve guest private
   data; stopping sys-ctrl leaves running guests' storage usable.
@@ -276,7 +276,7 @@ physical deployment separately. Use only guarded Airlock GC targets.
 
 ## Starting points
 
-- [Sys-ctrl ownership](05-sys-ctrl.md)
+- [Sys-ctrl ownership](../completed/05-sys-ctrl.md)
 - [Completed direct admission work](../completed/sys-dev-pool-admission.md)
 - [Pool-backed builder](../sys-dev-build-store.md)
 - [Admission policy and receiver](../../airlock-machine/lifecycle/misc/modules/pool-admission.nix)
@@ -1239,3 +1239,15 @@ Evidence under `.airlock-logs/physical-20260929-r7/`:
 `linux-storage-retry.results.json`, `memory-trial-check.results.json`, and
 `acceptance-cleanup.results.json`. Plan receipt/timings are under
 `.airlock-logs/deployment-performance/memory-trial-plan/`.
+
+
+### R7 fault handling and Nix behavior (2026-09-29)
+
+Installed-engine disposable-pool checks passed for truncated/corrupt transfers,
+failures after object import and before commit, unchanged existing generations,
+staging cleanup and successful retries. Dom0 native build/query/isolated import
+passed; sys-ctrl reused a host object from its lower view and built successfully
+with a new input/output confined to its upper layer. Evidence: r7
+`linux-storage-interruptions-complete-root`, `host-nix-behavior`, and
+`builder-new-input` result JSON files. TODO 05 moved to `docs/completed/`;
+06–07 remain open. These are injected failures, not physical power cuts.

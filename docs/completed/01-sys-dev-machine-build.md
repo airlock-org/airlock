@@ -6,7 +6,7 @@ Status: completed; physical build, reuse and inactive admission validated on
 Put a usable standalone `airlock-machine` Git checkout on the physical machine
 in `sys-dev`, then build a small guest configuration change there and send its
 closure through the [existing pool admission path](../completed/sys-dev-pool-admission.md).
-This is a completed step toward [sys-ctrl](../todo/05-sys-ctrl.md).
+This is a completed step toward [sys-ctrl](05-sys-ctrl.md).
 
 ## Scope
 

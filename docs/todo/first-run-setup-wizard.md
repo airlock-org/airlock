@@ -115,7 +115,7 @@ must not maintain a separate live configuration or bypass dom0 enforcement.
 Follow the deployment architecture in place when those pages are implemented.
 The [configuration system](../config-system.md),
 [machine deployment workflow](../machine-deployment.md), and planned
-[sys-ctrl migration](05-sys-ctrl.md) describe distinct paths and stages; do not
+[sys-ctrl migration](../completed/05-sys-ctrl.md) describe distinct paths and stages; do not
 assume sys-ctrl already exists or make this minimal wizard depend on that
 migration. Do not grant sys-gui general dom0 administrative access.
 
