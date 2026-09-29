@@ -6,9 +6,10 @@ pool generation 1; required guests are running, dom0/sys-ctrl have no failed
 units, and persistence/store-addition sentinels passed. The latest local quick
 report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
-host generation 2 booted and transaction `1790688503537734589` now verifies
-`complete`. Only its own store view/database are mounted; saved guest, builder
-and host objects survived. Manual boot-menu rollback to generation 1 is next.
+host generation 2 boot and direct boot-menu rollback to generation 1 passed.
+Each uses its own store/database and correct guest generations; saved data
+survived. Generation 2-only additions remain isolated and preserved. Manual
+return to generation 2 is next.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
 historical; generation isolation, rollback and the remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.
@@ -1509,3 +1510,22 @@ restoration from the selected boot generation's own machine binding. Verify
 baseline host/view/database and guest generation 1, saved data, and absence of
 the generation-2-only object from the active store, then return to generation 2.
 No automated reboot or further mutation while waiting for the user.
+
+### R7 direct menu rollback to generation 1 passed (2026-09-29)
+
+The user selected generation 1 in the boot menu. Running host is the original
+`sazv1k...` baseline; only `bases/1` is mounted and its private database backs
+`/nix/var/nix/db`. All seven guest selections reverted to generation 1, and
+all six running guests' actual systems match their generation-1 manifests.
+Usr-browser remains stopped. Dom0 has no failed units. The coordinator reports
+`image-baseline` with no selection, as expected for the original image binding;
+its `host_matches_selection=false` reflects the absent transaction selection,
+not a failed rollback. No rollback apply transaction was needed.
+
+All three private-data hashes match; both builder additions and the original
+host addition remain valid and readable. The generation-2-only marker is absent
+from the active store but still exists in generation 2's private upper.
+Evidence: r7 `rollback-status.results.json` and `rollback-guests.results.json`.
+Requested manual reboot selecting **Airlock** (generation 2) to verify the
+return restores its selection, database, guests and saved addition. No product
+changes, automated reboot or destructive fault injection performed.
