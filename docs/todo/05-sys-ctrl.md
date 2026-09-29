@@ -7,13 +7,13 @@ units, and persistence/store-addition sentinels passed. The latest local quick
 report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
 the generation 2 → 1 → 2 boot sequence passed with isolated stores/databases,
-matching guests and preserved additions. A reversible missing-generation-2-view
-fault is now staged; generation 1 is the verified boot default. On running
-generation 2, a diagnostic i8042 rebind restored keyboard/TrackPoint
-initialization; the user confirms keyboard and mouse clicks work again.
-The underlying boot-time initialization defect remains open. Awaiting manual
-reboot into generation 1 for the missing-newer-view trial. See TODO 07's final
-input checkpoint.
+matching guests and preserved additions. The missing-generation-2-view trial was paused for an input failure;
+its diagnostic mutation has now been undone and the restored checksum verified.
+Generation 2 is again selected and typed verify reports complete. The user
+confirmed a manual i8042 rebind restored keyboard and clicks. Source `cd47d32`
+adds bounded automatic recovery and boot-failure reporting; focused checks
+passed, and deployment for the next live boot is being prepared. The missing-view
+trial and automatic recovery's physical verification remain outstanding.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
 historical; the missing-view isolation trial and remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.

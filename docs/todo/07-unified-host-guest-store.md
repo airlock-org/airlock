@@ -7,13 +7,13 @@ units, and persistence/store-addition sentinels passed. The latest local quick
 report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
 the generation 2 → 1 → 2 boot sequence passed with isolated stores/databases,
-matching guests and preserved additions. A reversible missing-generation-2-view
-fault is now staged; generation 1 is the verified boot default. On running
-generation 2, a diagnostic i8042 rebind restored keyboard/TrackPoint
-initialization; the user confirms keyboard and mouse clicks work again.
-The underlying boot-time initialization defect remains open. Awaiting manual
-reboot into generation 1 for the missing-newer-view trial. See TODO 07's final
-input checkpoint.
+matching guests and preserved additions. The missing-generation-2-view trial was paused for an input failure;
+its diagnostic mutation has now been undone and the restored checksum verified.
+Generation 2 is again selected and typed verify reports complete. The user
+confirmed a manual i8042 rebind restored keyboard and clicks. Source `cd47d32`
+adds bounded automatic recovery and boot-failure reporting; focused checks
+passed, and deployment for the next live boot is being prepared. The missing-view
+trial and automatic recovery's physical verification remain outstanding.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
 historical; the missing-view isolation trial and remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.
@@ -1618,3 +1618,28 @@ from its original path, and the saved copy matches its recorded SHA256. Keyboard
 IRQ counts increased following recovery; dom0 has no failed units. Evidence:
 r7 `input-recovered-pre-reboot.results.json`. Requested manual reboot into
 **Airlock (generation 1)**; do not select generation 2 until its view is restored.
+
+
+### R7 automatic input recovery implementation and deployment (2026-09-29)
+
+At the user's request, machine source `cd47d32` adds a boot guard before physical
+GPU startup and input connection. Only an explicit kernel atkbd failure to enable
+the i8042 keyboard triggers one bounded unbind/bind attempt. A durable per-boot
+attempt marker prevents repeats after failure, timeout or interruption. The guard
+requires keyboard driver binding and no new enable failure after the reset.
+Reports explicitly leave physical input unverified. Hardware absence or inactivity
+alone does not trigger resets. Failure blocks GPU startup and invokes the existing
+boot failure reporting/console with the saved input report path.
+
+Focused checks: 13 passed (12 behavioral recovery checks plus Nix service wiring);
+the final formatted behavioral checks passed again (12), and scoped Ruff lint
+passed. No image build or full quick suite was run. The component commit is
+available in the configured sibling source for reproducible parent builds.
+
+Before deployment, restored the deliberately moved generation-2 metadata image
+and verified its original SHA256, reselected generation 2, and obtained typed
+`verify: complete`. Evidence: `input-fix-restore-view.results.json`. There is no
+active missing-view fault now. The fault trial is outstanding, not passed.
+Next: deploy the committed change through the normal controller route, then
+request a manual reboot into the new selected generation. Do not claim the live
+boot guard is installed until that deployment has completed.
