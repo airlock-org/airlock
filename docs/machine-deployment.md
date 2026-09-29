@@ -28,10 +28,15 @@ failed units. The changed-root update → reboot → rollback → reboot sequenc
 passed. TODOs 05–07 remain open; broader outage/interruption criteria are
 separate. The memory-only plan `d827ad2` passed with all seven guest generations
 reused and zero guest package/root payload; it has not been activated.
-Component `ae42472` adds only the missing privileged storage pytest worker;
-installed runtime remains `649469b`. Local unprivileged execution correctly
-reports skipped; physical execution is next. Restore builder source after the
-plan-only trial.
+Component `3a4e3d2` adds only the missing privileged storage pytest worker
+and its bounded loop-cleanup wait; installed runtime remains `649469b`.
+The worker passed on dom0 with real loop/device-mapper/EROFS devices, exact
+closure membership, rejected writes, shared extents and peer survival after
+detach. Local unprivileged execution correctly reports skipped. Both builders
+are restored to clean source `649469b`; the memory trial was never activated.
+Sys-ctrl also reused a host object offline from its lower layer with no upper
+copy, and rejected an unavailable object. That does not yet demonstrate a
+successful download of a genuinely missing build dependency.
 No new image was built and no missing-view fault is active. Evidence lives
 under `.airlock-logs/deployment-performance/` and the r7 physical evidence
 directory (`root-trial-boot6` and `root-trial-rollback-final`).

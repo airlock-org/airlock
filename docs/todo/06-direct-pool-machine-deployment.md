@@ -28,10 +28,15 @@ failed units. The changed-root update → reboot → rollback → reboot sequenc
 passed. TODOs 05–07 remain open; broader outage/interruption criteria are
 separate. The memory-only plan `d827ad2` passed with all seven guest generations
 reused and zero guest package/root payload; it has not been activated.
-Component `ae42472` adds only the missing privileged storage pytest worker;
-installed runtime remains `649469b`. Local unprivileged execution correctly
-reports skipped; physical execution is next. Restore builder source after the
-plan-only trial.
+Component `3a4e3d2` adds only the missing privileged storage pytest worker
+and its bounded loop-cleanup wait; installed runtime remains `649469b`.
+The worker passed on dom0 with real loop/device-mapper/EROFS devices, exact
+closure membership, rejected writes, shared extents and peer survival after
+detach. Local unprivileged execution correctly reports skipped. Both builders
+are restored to clean source `649469b`; the memory trial was never activated.
+Sys-ctrl also reused a host object offline from its lower layer with no upper
+copy, and rejected an unavailable object. That does not yet demonstrate a
+successful download of a genuinely missing build dependency.
 No new image was built and no missing-view fault is active. Evidence lives
 under `.airlock-logs/deployment-performance/` and the r7 physical evidence
 directory (`root-trial-boot6` and `root-trial-rollback-final`).
@@ -1188,3 +1193,49 @@ return boot is still pending. sys-ctrl was running in these trials, so the
 controller-outage part of the completion criterion remains separate.
 Evidence: `.airlock-logs/physical-20260929-r7/root-trial-rollback-final.results.json`
 and `.airlock-logs/deployment-performance/root-trial-rollback/`.
+
+
+### R7 remaining-check consolidation (2026-09-29)
+
+The complete changed-root cycle passed: generation 5 → generation 6 →
+generation 5, with a genuine 1024 → 1536 → 1024 MiB guest root change. Final
+boot `0840d0fe-966a-494c-af20-fa167cd47474` uses only host base 5 and its database;
+typed verify completed rollback `1790712446217355385`. All guest, builder and
+host markers survived. No failed dom0 units; input guard attempted no reset.
+
+Committed isolated plan `d827ad2` changes only `/domains/usr-home/prefs/memory`
+from 2048 to 2304 MiB. It was **not applied**: runtime memory is still 2048,
+selection is still baseline `d961bd...`. All seven guest generations reused;
+zero guest package or root payload bytes. Build took 64.66 s, preparation
+234.42 s; four host paths transferred 112,910 compressed bytes. Host publication
+accounted for 205.43 s (111.18 s controller base, 92.98 s host pool). These costs
+remain for changed whole-machine topology even when guest roots are unchanged.
+
+A host sentinel already in sys-ctrl's approved builder lower store was realized
+successfully with `airlock-config-nix build --offline --no-link`, remained absent
+from its upper layer, and matched the lower payload. An unavailable path failed
+with no substituter. This proves reuse and missing-path rejection; fetching a
+new build dependency remains separate.
+
+The previously unimplemented privileged storage check is now a real pytest
+worker. Component `3a4e3d2` contains test-only changes; no runtime replacement or
+image build is needed. Its dom0 run passed with a disposable pool/private mount
+namespace, sharing a payload extent between two different closure views,
+checking exact membership and write rejection, detaching one view while its peer
+remained readable, then removing all test loop/device-mapper devices. Initial
+execution failed an immediate loop-removal assertion; the test now waits up to
+five seconds for asynchronous removal. The successful repeat left no test loops.
+Local `make test-quick TESTS=closure-store-linux-storage PYTEST_WORKERS=` reports
+one explicit skip because local root privileges are unavailable. The full suite
+was not rerun for these test-only changes; its last runtime baseline result is
+714 passed / 24 skipped. Targeted Ruff and `git diff --check` passed.
+
+Both builders are restored to clean `649469b`. Temporary worker scripts were
+removed from sys-dev and dom0; machine-readable evidence is retained. No active
+plan, build or deployment remains from these checks. No reboot is pending.
+
+Evidence under `.airlock-logs/physical-20260929-r7/`:
+`root-trial-return5.results.json`, `builder-host-reuse-shell.results.json`,
+`linux-storage-retry.results.json`, `memory-trial-check.results.json`, and
+`acceptance-cleanup.results.json`. Plan receipt/timings are under
+`.airlock-logs/deployment-performance/memory-trial-plan/`.
