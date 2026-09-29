@@ -1,28 +1,27 @@
 # Direct pool admission for whole-machine updates
 
-Current checkpoint (2026-09-29, r7): **generation 3 boot and physical input
-passed; host-addition persistence defect found during verification** on `sys-dev`.
-Input guard source `cd47d32` ran before GUI startup, reported
-`no_failure_detected` / `attempted=false`, and made no reset. The user confirmed
-typing, clicks and login work. Typed verify completed transaction
-`1790698109572546418`; host generation 3 and all guest systems match selection,
-and dom0 has no failed units. Guest private data and builder additions survived.
+Current checkpoint (2026-09-29, r7): **deployment performance update applied;
+manual reboot into generation 5 required** on `sys-dev`. Component `649469b`
+passed full `make test-quick`: 714 passed, 24 skipped, 2 warnings (215.11 s).
+Transaction `1790704764992386034` is `reboot-required`; the detached worker
+exited successfully. Updated sys-ctrl and sys-dev run their selected systems,
+all other running guests match selection, and dom0 has no failed units.
+The default EFI entry and system profile both select generation 5, host
+`/nix/store/8vlimjinqd06xylm9jskksgpyg6cv9ya-nixos-system-dom0-26.11.20260904.801bef6`.
 
-The original rooted dom0 test object was omitted from generation 3's immutable
-view after being carried into generation 2's lower view. Publication considered
-writable additions but missed rooted additions already in the lower. The local
-fix includes the live rooted paths from either layer; 21 host-generation tests
-passed. Restored only the missing test fixture from its retained original file,
-checking the identical Nix store path and re-registering its root. The fix is
-now staged as host generation 4 (transaction `1790701105546677309`,
-`reboot-required`); both test paths are in its registration and updated sys-ctrl
-and sys-dev are running. Dom0 still runs generation 3; persistence across the
-next boot is unverified. The missing-view fault trial is paused, with no fault active.
+Generation 5 includes both the host-addition carry fix and deployment performance
+changes. Its registration contains both rooted host test objects. Dom0 still
+runs generation 3: persistence across boot and the optimized workflow's live
+performance remain unverified. No new USB image was built. The missing-view
+fault trial remains paused, with no fault active. After manual reboot, verify
+host/guest selection, input usability and both host markers before measuring
+an unchanged plan/apply and resuming remaining acceptance.
 
-Deployment performance changes are committed as `649469b`. Full `make test-quick`
-passed: 714 passed, 24 skipped, 2 warnings (215.11 s). The normal live plan is
-running before apply; no performance change is claimed boot-verified yet. No
-new image is planned.
+Generation 3's input guard ran with `no_failure_detected` / `attempted=false`,
+and the user confirmed typing, clicks and login worked. Its verification found
+the host-addition carry defect; the original sentinel was restored from its
+retained test file at the same store path before testing the committed fix.
+Historical evidence and that diagnostic repair are recorded below.
 
 The generation 2 → 1 → 2 isolation/rollback sequence passed. Earlier r7 quick
 report: 674 passed, 24 skipped, zero failures/errors. Evidence:
