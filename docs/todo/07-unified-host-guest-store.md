@@ -1336,3 +1336,18 @@ the final client output before waiting for exit. Confirmation awaits the user's
 rerun. Python syntax parsing and diff whitespace checks passed; no tests,
 image builds or live/USB changes were run during this repair. The local sibling
 Git source contains both commits for parent flake evaluation.
+
+### Fresh-image menu duplication (2026-09-29)
+
+The user's first-boot photo showed both generated and retained normal/recovery
+entries. Sealing had copied the boot entries without removing their native menu
+copies. Duplicate recovery titles/versions caused systemd-boot to display long
+identifiers. The local repair uses short role titles and `Generation N` version
+fields, verifies retained boot files before deleting matching native menu
+entries, and redirects loader defaults before removal. Menu regeneration prefers
+the retained entry for the same selected system, preserving rollback selection
+and sealed entry bytes. Distinct older normal generations remain selectable.
+Added regression coverage for duplicate removal, concise labels, regeneration,
+and preserved rollback defaults. Static Python parsing and whitespace checks
+passed; tests and image rebuilding remain with the user. The running USB was
+not changed.
