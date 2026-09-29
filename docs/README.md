@@ -1,7 +1,7 @@
 # Documentation map
 
-Updated 2026-09-25 with physical network-isolation deployment and rollback
-results. Other document summaries retain their stated validation boundaries.
+Updated 2026-09-29: controller deployment, direct pool admission and unified
+host/guest storage passed acceptance. Detailed summaries retain their boundaries.
 
 ## Current operating guides
 
@@ -20,7 +20,7 @@ results. Other document summaries retain their stated validation boundaries.
 - [Hardware usability policy](hardware-usability-policy.md): agreed requirements
   for usable, recoverable hardware isolation; not yet an implemented wizard.
 
-## Active work
+## Work plans and completed acceptance
 
 | Plan | Status and boundary |
 | --- | --- |
@@ -28,8 +28,8 @@ results. Other document summaries retain their stated validation boundaries.
 | [USB input setup](todo/usb-input-setup.md) | Planned. First hardware trial consumer; preserve storage and existing connectivity. Ownership depends on hardware. |
 | [USB lab network follow-ups](todo/usb-lab-network-followups.md) | Focused tests, updates proxy, PCI Wi-Fi traffic, and an exact persistence sentinel remain. The wired topology passed physical acceptance. |
 | [sys-ctrl](completed/05-sys-ctrl.md) | Completed controller deployment and fault-handling acceptance. |
-| [Direct pool deployment](todo/06-direct-pool-machine-deployment.md) | Package admission and sparse root reuse; physical acceptance remains open. |
-| [Unified host and guest store](todo/07-unified-host-guest-store.md) | Proposed shared object storage, early-boot host view and builder reuse of host objects. |
+| [Direct pool deployment](completed/06-direct-pool-machine-deployment.md) | Completed package admission, sparse root reuse and physical update/rollback acceptance. |
+| [Unified host and guest store](completed/07-unified-host-guest-store.md) | Completed shared storage, host boot/recovery, builder reuse and maintenance acceptance. |
 | [Cached offline builder check](completed/07-cached-offline-builder-check.md) | Completed image prerequisite that reuses passing offline acceptance for unchanged inputs. |
 
 Wizard and input work do not depend on implementing sys-ctrl. Network isolation

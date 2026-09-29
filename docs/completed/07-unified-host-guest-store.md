@@ -1,15 +1,15 @@
 # Share immutable store objects between dom0 and guests
 
-Status (2026-09-29): **final reboot verification pending**; TODO 05 is complete.
-Offline boot and controller-independent rollback passed. Fixes `4845da0` and
-`b1cf5db` passed **720 quick tests, 25 skipped** and deployed normally in
-transaction `1790721069384601443`. Both builder services started successfully;
-private/builder/host markers survived and temporary recovery units/scripts are
-absent. Typed verification passed with `reboot-required`; default boot entry is
-**Airlock (Generation 10)**. Reboot manually, then verify exact generations,
-builder readiness and saved data before completing 06–07. No test job is running.
-Evidence: `.airlock-logs/boot-verification-fix/final-{deploy-plan,apply}/` and r7
-`final-apply-checks`, `final-boot-selection` results.
+Status: **complete** (2026-09-29). Root update/reboot/rollback, controller-disabled
+offline boot, isolation, persistence, recovery, maintenance and measured planning
+passed within the documented physical/automated boundaries. Final fixes
+`4845da0` and `b1cf5db` passed **720 quick tests, 25 skipped** and normal deployment.
+After booting **Airlock (Generation 10)**, typed verification marked transaction
+`1790721069384601443` complete; both normal builders are healthy, saved markers
+match, and temporary recovery units/scripts are absent. Host pool generation 9
+is mounted with its own database; boot-menu generation numbers are independent.
+Evidence: `.airlock-logs/boot-verification-fix/final-apply/boot10-verify.json`,
+r7 `boot10-final-checks.results.json`, and the earlier milestone records below.
 See the latest brief milestones below; earlier checkpoints are historical.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
@@ -287,7 +287,7 @@ recovery/restoration before resuming normal deployment and TODO 05–07 acceptan
 
 ## Acceptance criteria
 
-- [ ] A fresh image boots dom0 from its selected pool view with sys-ctrl stopped
+- [x] A fresh image boots dom0 from its selected pool view with sys-ctrl stopped
   and no network access. Qubes services and declared guests start normally.
 - [x] Recovery boots independently when the selected host view is missing,
   corrupt or cannot be assembled; it can select a retained working generation.
@@ -321,7 +321,7 @@ A successful build or pool mount does not establish boot, recovery or GC safety.
 
 ## Starting points
 
-- [Controller ownership](../completed/05-sys-ctrl.md)
+- [Controller ownership](05-sys-ctrl.md)
 - [Direct pool deployment and root reuse](06-direct-pool-machine-deployment.md)
 - [Existing builder store](../sys-dev-build-store.md)
 - [Image pool seeding](../../lifecycle/image/prepared-guest-store.nix)

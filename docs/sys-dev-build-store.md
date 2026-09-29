@@ -1,9 +1,9 @@
 # sys-dev's pool-backed build store
 
-The original frozen sys-dev builder passed fresh-image/build/reuse checks on
-2026-09-18. TODO 07 now extends the local source to both builder roles with host
-inputs and approved offline base transitions. These changes have not been tested
-or booted; the earlier results do not validate the new transition path.
+Both sys-dev and sys-ctrl builders passed physical acceptance on 2026-09-29:
+approved host inputs, additive base transitions, saved additions and full reboot
+persistence. The final normal deployment boots both builder services successfully;
+see [completed 07](completed/07-unified-host-guest-store.md) for scope and evidence.
 
 The USB seed supplies a builder view containing guest closures, selected build
 inputs, offline sources and the approved host closure. Its EROFS index and Nix
@@ -12,7 +12,8 @@ pool views rather than copied into the builder's writable layer.
 
 Qubes attaches two read-only volumes to sys-dev: `builder-store` (`xvdg`) and
 `builder-data` (`xvdh`). The builder-specific index contains `.airlock-builder/`
-with registration and identity metadata, plus Nix's empty `.links` directory.
+with registration and identity metadata. An empty administrative `.links`
+directory is supplied by the read-only lower scaffold.
 It is created by copying only the canonical index and adding these small files
 with EROFS incremental image construction; shared package extents are unchanged.
 The image tools include upstream's incremental-data fix for erofs-utils 1.9.
@@ -27,8 +28,10 @@ This keeps sys-dev at eight boot disks, avoiding the invalid SCSI address 8
 observed with the previous nine-disk layout, without changing Xen or Qubes.
 This change targets a freshly built/flashed USB; there is no migration path.
 
-At boot, `airlock-sys-dev-build-store.service` mounts the base and registers its
-metadata in a read-only lower Nix database. Normal `nix`, `airlock-config-nix`
+At boot, `airlock-sys-dev-build-store.service` (or its sys-ctrl counterpart) mounts
+the approved objects before loading Nix registration, so saved build recipes are
+readable. Metadata loading disables build-user ownership changes to the sealed
+mount, then freezes the lower database read-only. Normal `nix`, `airlock-config-nix`
 and machine-build/admission commands use Nix's experimental local overlay store:
 
 - `/run/airlock-builder/`: read-only inputs, lower database and readiness record.
@@ -44,8 +47,8 @@ old base's physical retention to the successor, which includes all prior inputs.
 This does not shrink a controller's approved input set or erase saved outputs.
 Missing build-only dependencies still require downloads/builds.
 
-See [TODO 07](todo/07-unified-host-guest-store.md) for host boot, independent
-recovery, publication ordering and the pending combined acceptance run.
+See [completed 07](completed/07-unified-host-guest-store.md) for host boot,
+independent recovery, publication ordering and combined acceptance results.
 
 ## Fresh-image acceptance
 

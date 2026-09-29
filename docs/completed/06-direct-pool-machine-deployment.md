@@ -1,15 +1,15 @@
 # Direct pool admission for whole-machine updates
 
-Status (2026-09-29): **final reboot verification pending**; TODO 05 is complete.
-Offline boot and controller-independent rollback passed. Fixes `4845da0` and
-`b1cf5db` passed **720 quick tests, 25 skipped** and deployed normally in
-transaction `1790721069384601443`. Both builder services started successfully;
-private/builder/host markers survived and temporary recovery units/scripts are
-absent. Typed verification passed with `reboot-required`; default boot entry is
-**Airlock (Generation 10)**. Reboot manually, then verify exact generations,
-builder readiness and saved data before completing 06–07. No test job is running.
-Evidence: `.airlock-logs/boot-verification-fix/final-{deploy-plan,apply}/` and r7
-`final-apply-checks`, `final-boot-selection` results.
+Status: **complete** (2026-09-29). Root update/reboot/rollback, controller-disabled
+offline boot, isolation, persistence, recovery, maintenance and measured planning
+passed within the documented physical/automated boundaries. Final fixes
+`4845da0` and `b1cf5db` passed **720 quick tests, 25 skipped** and normal deployment.
+After booting **Airlock (Generation 10)**, typed verification marked transaction
+`1790721069384601443` complete; both normal builders are healthy, saved markers
+match, and temporary recovery units/scripts are absent. Host pool generation 9
+is mounted with its own database; boot-menu generation numbers are independent.
+Evidence: `.airlock-logs/boot-verification-fix/final-apply/boot10-verify.json`,
+r7 `boot10-final-checks.results.json`, and the earlier milestone records below.
 See the latest brief milestones below; earlier checkpoints are historical.
 
 Historical continuation (2026-09-28): maintenance fix `fbe6062` booted successfully; typed
@@ -43,7 +43,7 @@ Earlier evidence: the earlier implementation passed the quick suite and
 both flake checks (579 passed, 24 skipped, two existing warnings across
 separate runs). The subsequent controller network change passed nine focused
 tests; the full quick suite has not been rerun at that revision. See
-[sys-ctrl validation evidence](../completed/05-sys-ctrl.md#remaining-acceptance-work).
+[sys-ctrl validation evidence](05-sys-ctrl.md#remaining-acceptance-work).
 The first image's whole-machine controller build was killed before pool
 transfer. An 8 GiB controller later completed a diagnostic network-assisted
 whole-machine build from the previous source revision, but that build did not
@@ -76,7 +76,7 @@ roots, and release inventory/pruning tracks planned candidates.
 
 No migration or compatibility protocol is required for this unreleased software.
 
-[TODO 07](07-unified-host-guest-store.md) proposes extending the pool to dom0's
+[Completed 07](07-unified-host-guest-store.md) extends the pool to dom0's
 own Nix objects and enabling builder reuse of selected host objects. That work
 is separate from this TODO's direct admission and root-image reuse criteria.
 
@@ -208,7 +208,7 @@ empty space; this is separate from guest package duplication.
 - [x] On the first deployment from a newly booted image and on repeated updates,
   unchanged root images transfer no payload and require no extra ordinary-store
   copy. Test a memory/NetVM-only change and a guest package-only change.
-- [ ] A genuine boot/root-image change admits the required new artifact;
+- [x] A genuine boot/root-image change admits the required new artifact;
   corrupt or incomplete artifacts are rejected. Boot and rollback work with
   sys-ctrl stopped, and GC preserves roots required by retained generations.
 - [x] Two VMs using the same immutable base retain distinct writable and
@@ -242,8 +242,8 @@ physical deployment separately. Use only guarded Airlock GC targets.
 
 ## Starting points
 
-- [Sys-ctrl ownership](../completed/05-sys-ctrl.md)
-- [Completed direct admission work](../completed/sys-dev-pool-admission.md)
+- [Sys-ctrl ownership](05-sys-ctrl.md)
+- [Completed direct admission work](sys-dev-pool-admission.md)
 - [Pool-backed builder](../sys-dev-build-store.md)
 - [Admission policy and receiver](../../airlock-machine/lifecycle/misc/modules/pool-admission.nix)
 - [Artifact sender and receiver CLI](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/artifact_cli.py)

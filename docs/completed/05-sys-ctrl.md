@@ -6,7 +6,7 @@ interrupted-transfer cleanup/retry passed. Final fault coverage used the
 installed engine with a disposable pool and real devices; it is injected-failure
 coverage, not physical power-cut testing. Evidence: r7
 `linux-storage-interruptions-complete-root.results.json` and the root-cycle
-records. TODOs 06–07 retain their separate remaining criteria.
+records. Related work in 06–07 is also complete; see their acceptance summaries.
 
 Earlier checkpoints below are historical.
 
@@ -79,7 +79,7 @@ from normal deployment authority.
 - Sys-ctrl saves candidate source archives and request records under
   `~/.local/share/airlock/controller/candidates/<revision>/`. Build roots remain
   under `~/.local/share/airlock/machine-deploy/<revision>/`.
-- [Direct whole-machine pool admission](../todo/06-direct-pool-machine-deployment.md)
+- [Direct whole-machine pool admission](06-direct-pool-machine-deployment.md)
   sends missing guest objects to the pool and only host/transport dependencies
   to dom0's ordinary store. Dom0 binds exact validated generation receipts to
   a durable machine candidate before planning or activation.
@@ -1026,7 +1026,7 @@ preserve independent EFI entries, and improve failure logging. New pytest
 regressions are written but **not run**. No image build or live/USB modification
 was performed. Component commit `c2bb176` contains the implementation and new
 regression tests; the parent repository pins it for the next baseline build.
-See [TODO 07's new-baseline section](../todo/07-unified-host-guest-store.md#new-baseline-isolated-host-generations-2026-09-29-not-yet-tested)
+See [TODO 07's new-baseline section](07-unified-host-guest-store.md#new-baseline-isolated-host-generations-2026-09-29-not-yet-tested)
 for implementation details and the ordered acceptance plan. Earlier passes are
 historical; fresh boot, update, previous-generation boot, broken-newer-view
 isolation and recovery must be revalidated. Root-change boot/rollback and

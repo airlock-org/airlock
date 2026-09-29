@@ -1,17 +1,16 @@
 # Repository-first whole-machine deployment
 
-Current checkpoint (2026-09-29): **TODO 05 complete; 06–07 await final reboot**.
-Offline boot and rollback with sys-ctrl halted passed. Committed verifier and
-builder fixes (`4845da0`, `b1cf5db`) passed **720 quick tests, 25 skipped** and
-normal apply `1790721069384601443`. Only sys-dev/sys-ctrl restarted; every root
-was reused. Both normal builder services are healthy, saved markers match and
-temporary recovery units/scripts are gone. Typed verification passed with
-`reboot-required`. Default boot entry: **Airlock (Generation 10)**, selected host
-`/nix/store/n0ymw800sicwqswwra2nzi4fa1zgmr93-nixos-system-dom0-26.11.20260904.801bef6`.
-Next: user reboots manually; verify exact host/guest generations, builders and
-saved markers, then complete 06–07. No background test remains running.
-Evidence: `.airlock-logs/boot-verification-fix/final-{deploy-plan,apply}/` and
-r7 `final-apply-checks`, `final-boot-selection`. No USB rebuild is needed.
+Current checkpoint (2026-09-29): **TODOs 05–07 complete**.
+Final fixes `4845da0` and `b1cf5db` passed **720 quick tests, 25 skipped** and normal
+apply/reboot. **Airlock (Generation 10)** booted the selected host; typed verify
+marked transaction `1790721069384601443` complete. Both normal builders are
+healthy, saved guest/builder/host markers match, temporary recovery setup is
+absent, and dom0 has no failed units. Host pool generation 9 uses its own database.
+Earlier root update/rollback, offline controller-disabled boot, isolation,
+recovery, GC/compaction and measured planning results remain valid within their
+recorded scope. No background test remains running; no USB rebuild was needed.
+Evidence: `.airlock-logs/boot-verification-fix/final-apply/boot10-verify.json` and
+r7 `boot10-final-checks.results.json`; completed plans are under `docs/completed/`.
 
 ## The development contract
 
