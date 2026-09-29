@@ -8,11 +8,12 @@ report has 674 passed, 24 skipped, zero failures/errors. Committed source
 `41ee7dd` (menu cleanup) has been imported through the normal source route;
 the generation 2 → 1 → 2 boot sequence passed with isolated stores/databases,
 matching guests and preserved additions. A reversible missing-generation-2-view
-fault is now staged; generation 1 is the boot default. The reboot trial is
-paused for input debugging on running generation 2: its i8042 keyboard failed
-to enable at boot and the TrackPoint was absent. A diagnostic controller rebind
-restored device initialization and forwarding; physical login confirmation is
-pending. See TODO 07's final input checkpoint.
+fault is now staged; generation 1 is the verified boot default. On running
+generation 2, a diagnostic i8042 rebind restored keyboard/TrackPoint
+initialization; the user confirms keyboard and mouse clicks work again.
+The underlying boot-time initialization defect remains open. Awaiting manual
+reboot into generation 1 for the missing-newer-view trial. See TODO 07's final
+input checkpoint.
 Evidence: `.airlock-logs/physical-20260929-r7/`. Earlier dated evidence remains
 historical; the missing-view isolation trial and remaining acceptance tests
 still need verification. The previous USB state was discarded as authorized.
@@ -1600,10 +1601,20 @@ the retry supplied the existing system PATH and succeeded. Its failed-unit
 marker was cleared after preserving logs; dom0 reports no failed units.
 
 This establishes a recoverable controller-initialization failure, not its
-underlying cause or a permanent boot fix. Physical login confirmation is pending.
+underlying cause or a permanent boot fix. The user subsequently confirmed that
+keyboard input and mouse clicks work again; successful login was not separately
+reported.
 The transient rebind changed only current device state and left the driver bound;
 no persistent override or diagnostic daemon remains. The independent missing-view
 fault above is still staged and must be restored before booting generation 2.
 Evidence: r7 `keyboard-boots`, `keyboard-rebind-observed`,
 `keyboard-rebind-forwarding`, `input-capture-result` and their result JSON files;
 dom0 `/var/log/airlock/physical-tests/r7/i8042-rebind.log`.
+
+
+Before resuming the missing-view trial, rechecked that generation 2 is still
+running, generation 1 is the EFI default, the deliberately moved file is absent
+from its original path, and the saved copy matches its recorded SHA256. Keyboard
+IRQ counts increased following recovery; dom0 has no failed units. Evidence:
+r7 `input-recovered-pre-reboot.results.json`. Requested manual reboot into
+**Airlock (generation 1)**; do not select generation 2 until its view is restored.
