@@ -183,6 +183,13 @@ logs; the original diagnostic build log and exit marker are in sys-ctrl's
   outage and rollback/recovery. Abrupt power-cut cases remain separate.
 - [ ] Reject unauthorized/malformed requests and incomplete artifacts; exercise
   interrupted transfers, retries and temporary-data cleanup.
+  R7 live probes denied sys-dev's direct MachinePlan and usr-home's MachineControl
+  calls (126), rejected malformed/truncated headers and invalid release paths,
+  and rejected two incomplete Nix export submissions without registering the
+  bogus object or creating an activation transaction. Partially received object
+  cleanup and broader interruption cases remain outstanding. Evidence:
+  `controller-rejections.results.json` and
+  `controller-incomplete-artifact.results.json` in the r7 log directory.
 - [x] Retention and GC preserve running and rollback generations across updates.
 - [x] Host updates preserve the `reboot-required` / `complete` distinction.
   Fourth-image apply and normal reboot verified both states; rollback again

@@ -1726,3 +1726,18 @@ Evidence: `input-guard-boot3.results.json`,
 `host-addition-restore-fixture.results.json`, and
 `host-addition-regression-tests.log`. Keep the missing-view trial paused until
 the carry fix is deployed and both host markers survive the next boot.
+
+
+While the carry-fix plan runs, bounded live rejection probes passed on generation
+3: sys-dev's direct MachinePlan and usr-home's MachineControl requests were
+refused (exit 126); authorized sys-ctrl requests with an unsupported schema,
+truncated machine header or invalid release path returned explicit errors.
+A truncated guest apply request also exited 1. Two MachineApply requests with
+a valid-shaped inventory but no Nix export payload both returned `Nix closure
+import failed`; the bogus store path remained invalid and transaction
+`1790698109572546418` remained complete. These checks used the real qrexec routes,
+with no policy edits or synthetic success receipts. No garbage collection was
+run. This covers rejection and empty interrupted-stream retry, not arbitrary
+mid-object interruption or all temporary-data cleanup cases.
+Evidence: `controller-rejections.results.json` and
+`controller-incomplete-artifact.results.json`.
