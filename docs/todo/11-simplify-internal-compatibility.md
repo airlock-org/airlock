@@ -2,7 +2,7 @@
 
 Status: **local implementation complete; quick tests passed; remaining validation
 and live acceptance pending** (2026-09-30). Sections 1–8 have local changes;
-section 9 has a documented retention decision. Latest quick suite after rebasing onto main: **681 passed,
+section 9 has a documented retention decision. Latest quick suite on main after worktree retirement: **681 passed,
 59 skipped**. No live changes have been performed for this cleanup.
 
 Airlock is unreleased. The local source contains a meaningful amount of
@@ -602,19 +602,49 @@ No implementation changes were introduced during integration, so the post-rebase
 build, deployment, activation or live session change was performed. The original
 main checkout and component checkout are clean after integration.
 
+## Worktree retirement and main validation (2026-09-30)
+
+Confirmed parent main contains the entire cleanup at `b5fd497`, and both the
+parent's component checkout and the standalone component main contain `38886d6`.
+The working checkout had no uncommitted source changes. Preserved its ignored
+validation/rebase evidence under the main checkout's
+`.airlock-logs/retired-worktrees/airlock-simplify-build-option/`, retaining the
+relative paths listed in earlier records. This archive is the current location
+for the worktree-local evidence cited above; externally recorded evidence stays
+at its original locations.
+
+Removed the cleanup worktree and its merged parent `simplify-build-option`
+branch. Git removal left read-only test fixture directories; these were already
+archived, owned by the current user, and confined to the retired worktree's log
+directory. Removed those leftovers too. The worktree directory and registration
+are gone; other agents' worktrees were left alone.
+
+Ran `make test-quick` from `/home/user/dev/airlock-org/airlock` on main:
+**681 passed, 59 skipped in 5.90 s**, exit status **0**. No code fixes were needed.
+The component pin matches `38886d6`; main and its component are clean. This
+confirms the quick suite on the integrated checkout, with the same Nix exclusion
+and environment-dependent skips as the post-rebase run.
+
+Current main-run evidence:
+
+- `.airlock-logs/main-compat-cleanup/quick.log`: complete command/output.
+- `.airlock-logs/main-compat-cleanup/quick/pytest-junit.xml`: JUnit results.
+- `.airlock-logs/main-compat-cleanup/quick/pytest-report.json`: machine-readable results.
+
+No Nix evaluation/build, live session change, deployment, activation, reboot or
+live test was performed in this retirement/validation pass.
+
 ## Current handoff
 
-All selected local code work is committed in
-`/home/user/dev/airlock-org/worktrees/airlock-simplify-build-option`, branch
-`simplify-build-option`, including component commits and parent pin/docs updates. The work is now also
-integrated into both repositories' main branches. Source edits were made in the
-working checkout; the original checkout was advanced by fast-forward merges. Initial implementation commits
-bypassed hooks to honor the then-current instruction to defer tests/check suites.
-Both the later authorized quick run and the post-rebase quick run passed, as
-recorded above.
+All selected local code work is integrated into both repositories' main branches.
+Continue from `/home/user/dev/airlock-org/airlock`; the cleanup worktree and its
+merged parent branch have been retired. Earlier worktree test/rebase evidence
+is preserved in the archive above. Initial implementation commits bypassed
+hooks to honor the then-current instruction to defer tests/check suites. The
+subsequent authorized quick runs passed before rebase, after rebase, and on main.
 
 Remaining: opt-in Nix schema/integration validation, real EROFS index checks,
 and persisted-state inventory/preparation before any separately authorized
-activation and live acceptance. The successful quick run does not complete
+activation and live acceptance. The successful quick runs do not complete
 these remaining checks. No further test/build or live operation is implied by
 this handoff.
