@@ -4,6 +4,27 @@ Status: implemented and deployed for early testing, 2026-09-30. The operator
 tested the indicator and reported that it looks good. Detailed acceptance checks
 and host-generation verification after reboot remain pending.
 
+Window identity cache follow-up (2026-09-30): machine revision `b867b9a`
+eliminates repeated ownership-reader startup when switching among verified open
+windows. Cached identities render synchronously, with no `Unknown VM` stage on
+a cache hit. Window closure and extension disable remove entries; failures are
+retried and cancelled reads cannot fill the cache. The pytest regression verifies
+that 200 repeated switches after two initial lookups start no further readers,
+plus closed windows, reused XIDs, transient-parent changes and late completions.
+The quick suite passed **665 tests, 58 skipped**.
+
+Normal plan/apply built and deployed this revision. The deployment worker exited
+successfully, all seven running guest systems match their selections, and GNOME
+reports the extension **ACTIVE** with no extension errors. The installed cache
+source matches the committed source. The operator retested and reported that it
+looks good. Transaction `1790781773748219122` remains **reboot-required** because
+the host still runs its prior generation; updated sys-gui is
+`24ymjdyixagdsx6q4smyaqbf0643x3q4`. No live overlay or diagnostic configuration
+mutation was used. Evidence is under
+`.airlock-logs/gnome-focused-vm/window-cache/`, including `plan.json`, `apply.json`,
+`verify-after.json`, `live-checks.json` and `acceptance.json`. Broader GUI acceptance
+and host-generation verification after reboot remain pending.
+
 Calculator follow-up (2026-09-30): the operator found that switching from
 Firefox to Calculator hid the indicator completely. Calculator's active
 Xwayland window had valid `usr-home`, label 6 and `#3465a4` metadata, and the

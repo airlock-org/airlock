@@ -1,5 +1,22 @@
 # Repository-first whole-machine deployment
 
+Focused VM indicator cache follow-up (2026-09-30): machine revision `b867b9a`
+caches verified identities for each live window and removes entries on closure
+or extension disable. Repeated switches avoid both reader startup and the
+intermediate `Unknown VM` text; a new Xwayland window still needs its first lookup.
+The quick suite passed **665 tests, 58 skipped**, including a regression with
+200 repeat switches and no additional reader calls. Normal plan/apply built and
+deployed the revision, the worker exited successfully, and GNOME reports the
+extension **ACTIVE** with no extension errors. The operator retested and reported
+that it looks good. No live overlay or diagnostic configuration mutation was used.
+
+Typed verification of transaction `1790781773748219122` is **reboot-required**:
+all seven running guest systems match their selections, including sys-gui
+`24ymjdyixagdsx6q4smyaqbf0643x3q4`. Host-generation verification after reboot and
+the broader GUI acceptance matrix remain pending. Evidence is under
+`.airlock-logs/gnome-focused-vm/window-cache/`; see the
+[indicator plan](todo/gnome-focused-vm-indicator.md).
+
 Focused VM indicator Calculator follow-up (2026-09-30): machine revision
 `3750010` fixes application-actor and Shell focus-transition handling after the
 operator reported that Calculator hid the indicator. Calculator's Qubes metadata
