@@ -1,7 +1,20 @@
 # Show the focused window VM in the GNOME panel
 
-Status: planned. Created 2026-09-30. Metadata access from GNOME Shell and live
-focus behavior remain unverified.
+Status: implemented and deployed for early testing, 2026-09-30. The operator
+tested the indicator and reported that it looks good. Detailed acceptance checks
+and host-generation verification after reboot remain pending.
+
+Machine revision `eb939a1` is committed on main and deployed through normal
+whole-machine plan/apply to the discovered development SSH target. The quick
+suite passed **663 tests, 58 skipped**. GNOME Shell **50.4** reports the extension
+enabled and **ACTIVE**, with no extension errors found in the session journal.
+The packaged reader resolves live Files metadata to `usr-home` and `#3465a4`.
+Typed machine verification reports transaction `1790778349293663479`
+**reboot-required**: all seven running guests match their selected generations,
+including the updated sys-gui. The host still runs its previous generation.
+No diagnostic configuration mutation or live overlay was used. Evidence is under
+`.airlock-logs/gnome-focused-vm/`, including `plan.json`, `apply.json`,
+`verify-after.json`, `live-checks.json`, and `acceptance.json`.
 
 Add a GNOME top-panel indicator in `sys-gui` showing the VM that owns the
 window with keyboard focus. Display the VM name beside a small dot in its
@@ -33,24 +46,46 @@ window-label integration is separate work.
 
 ## Implementation investigation
 
-- [ ] Inspect suitable maintained upstream GNOME Shell extensions before
+- [x] Inspect suitable maintained upstream GNOME Shell extensions before
   choosing a custom extension. Verify compatibility with Airlock's pinned
   GNOME version and Qubes GUI path.
-- [ ] Confirm the effective forwarded-window metadata in the live session.
+- [x] Confirm the effective forwarded-window metadata in the live session.
   Qubes' GUI daemon sets `_QUBES_VMNAME`, `_QUBES_LABEL`, and
   `_QUBES_LABEL_COLOR` on its local windows; use the existing Qubes identity
   source rather than parsing application titles or guessing from app names.
   See the [upstream GUI daemon](https://github.com/QubesOS/qubes-gui-daemon/blob/main/gui-daemon/xside.c).
-- [ ] Determine how GNOME Shell can reliably access this metadata for
+- [x] Determine how GNOME Shell can reliably access this metadata for
   forwarded Xwayland windows. Trace its provenance and establish how local
   windows are identified; missing metadata must remain distinguishable from
   confirmed local ownership.
-- [ ] Track focus through Mutter's window API. Use event-driven updates and
+- [x] Track focus through Mutter's window API. Use event-driven updates and
   keep metadata reads from blocking the Shell. See
   [Mutter's focused-window property](https://gnome.pages.gitlab.gnome.org/mutter/meta/property.Display.focus-window.html).
-- [ ] Package and enable the extension declaratively in `airlock-machine`,
+- [x] Package and enable the extension declaratively in `airlock-machine`,
   following the existing custom GNOME extension packaging where appropriate.
   Disconnect signals and remove panel elements cleanly on disable.
+
+The installed custom extension follows `notify::focus-window` and Shell keyboard
+focus. Overview, Shell menus/modal interaction, and lock/greeter states suppress
+the application indicator. Native Wayland application windows are local to
+sys-gui in this GUI path. For Xwayland windows, an asynchronous Python-Xlib
+reader obtains bounded Qubes properties and uses XRes's server-reported client
+PID plus `/proc/<pid>/exe` to identify the installed `qubes-guid` binary. It
+accepts forwarded identity only from that daemon; absent properties on another
+confirmed local client resolve to sys-gui. Missing client provenance, malformed
+identity, and destroyed windows resolve to unknown. Transient windows without
+Qubes properties can use their Mutter parent; invalid properties do not trigger
+that fallback. Read cancellation and per-focus revisions prevent stale results,
+including across extension disable/re-enable. Invalid colour suppresses the dot
+while preserving a verified VM name.
+
+[Tasks in Panel](https://extensions.gnome.org/extension/8642/tasks-in-panel/)
+provides application/task UI, and
+[Focused Window D-Bus](https://github.com/flexagoon/focused-window-dbus)
+exports focused title/class information. Neither supplies the Qubes ownership
+resolution needed here. Airlock therefore packages its small GNOME 50 extension
+alongside the existing host-power-off extension. It adds no D-Bus observation
+service or VM control actions.
 
 The indicator only observes focus and identity. Preserve Xen, qrexec,
 QubesDB, qubesd, libvirt, and Qubes policy; displaying identity must not
@@ -58,7 +93,7 @@ introduce VM control actions or require broader control permissions.
 
 ## Acceptance checks
 
-- [ ] Add focused pytest coverage for ownership resolution and state changes,
+- [x] Add focused pytest coverage for ownership resolution and state changes,
   including absent or invalid metadata, destroyed windows, and delayed results
   after focus changes. Check declarative extension installation and enablement.
   Run `make test-quick` and retain results under `.airlock-logs/`.

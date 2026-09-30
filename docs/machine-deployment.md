@@ -1,5 +1,23 @@
 # Repository-first whole-machine deployment
 
+Focused VM indicator early deployment (2026-09-30): machine revision `eb939a1`
+was built and applied through normal whole-machine plan/apply using the
+development VM's discovered SSH target. Only sys-gui changed; activation
+restarted sys-gui and its running usr-home dependent. The quick suite passed
+**663 tests, 58 skipped**. GNOME 50.4 reports the declaratively installed
+indicator enabled and **ACTIVE**, the packaged metadata reader resolves Files
+to `usr-home` with its blue label colour, and the operator tested it and reported
+that it looks good. No live overlay or diagnostic configuration mutation was used.
+
+Typed verification of transaction `1790778349293663479` reports
+**reboot-required**: all seven running guest systems match their selections,
+including sys-gui `cj7n3xrxkc7w86plv439rv1d5rq5karn`. Selected host is
+`n2y35ad8hn3yz6j05rsx1475q5hvmnrs`; running host remains
+`dyy6c32zx6fanzfrxyzgriw4rchihhwy`. Host verification after reboot and the
+detailed GUI acceptance matrix remain pending. Evidence is under
+`.airlock-logs/gnome-focused-vm/`; see the
+[indicator plan](todo/gnome-focused-vm-indicator.md).
+
 Boot-menu acceptance (2026-09-30): the operator restarted the laptop and confirmed
 the menu looks fine with the final `consoleMode = "1"` setting. Post-reboot typed
 verification reports transaction `1790768363786110491` **complete**: running and
