@@ -94,12 +94,24 @@ final quick run; there were no evaluator calls. Installed EROFS tools were on
 `PATH`. Nix checks remain available explicitly through `make test-nix` and are
 not a routine deployment gate.
 
-Normal apply reused the prepared candidate with zero builds/transfers. Typed
-verification of transaction `1790766764373029803` is **reboot-required**: six
-running guests match their selections, usr-browser is stopped. Controller
-builder generation 17 is mounted and active; inherited and appended host init
-files are readable through the real kernel mount. Selected host is
-`fhrlj5cxg5lnc0xjw5rwv7bzn7zrbalh`, while the running host remains
-`mq1z3vjikp3ynnc4ryrx64f3csplc26y`. Host reboot verification remains pending.
+At this historical checkpoint, normal apply reused the prepared candidate with
+zero builds/transfers. Typed verification of transaction `1790766764373029803`
+reported **reboot-required**: six running guests matched their selections and
+usr-browser was stopped. Controller builder generation 17 was mounted and
+active; inherited and appended host init files were readable through the real
+kernel mount. Selected host was `fhrlj5cxg5lnc0xjw5rwv7bzn7zrbalh`, while the
+running host remained `mq1z3vjikp3ynnc4ryrx64f3csplc26y`. Host reboot verification
+was pending at that point.
 Evidence: `verify-after.json`, `apply.json`, and `controller-mounted-check.json`
 in `.airlock-logs/store-preparation/`. No diagnostic mutation was made live.
+
+Later on 2026-09-30, the boot-menu follow-up at machine revision `5bd3a92`
+was applied and physically rebooted. Typed verification of transaction
+`1790768363786110491` reported **complete**: running and selected host both
+resolved to `dyy6c32zx6fanzfrxyzgriw4rchihhwy`, all six running guests matched
+their selections, and usr-browser remained stopped. Evidence:
+`.airlock-logs/boot-screen-consistency/verify-after-reboot.json` and
+`acceptance.json`; see the [boot-menu final acceptance](../completed/10-boot-menu-presentation.md#final-acceptance-2026-09-30).
+The earlier performance-test host generation was superseded before reboot and
+was not separately boot-verified. This later acceptance does not complete the
+operation-scoped metadata and validation cache work planned above.
