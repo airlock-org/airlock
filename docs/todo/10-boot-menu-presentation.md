@@ -77,5 +77,34 @@ This exception remains an acceptance gap; the task is not complete.
 Focused pytest coverage includes generations 2 and 10, identical source labels,
 older selection, native/retained duplicates, repeated formatting/sealing,
 independent recovery, distinct pool/menu generation numbers, corrupt artifacts,
-interrupted migration and stored firmware preference handling. Live deployment
-and physical menu/reboot acceptance are pending.
+interrupted migration and stored firmware preference handling. The live release is applied; physical menu/reboot acceptance remains pending.
+
+## Acceptance so far (2026-09-30)
+
+- Machine source **`8048650`** is committed and pinned by the parent repository.
+  **`make test-quick`: 733 passed, 25 skipped.** Nix evaluation covers both fresh
+  image source metadata and standalone release metadata.
+- Normal `make machine-plan DEPLOY_TARGET=sys-dev` built and admitted the release.
+  Normal apply reused its prepared token with zero builds and payload transfers.
+  Only sys-dev and sys-ctrl restarted. Superseded prepared candidates were not
+  activated. No ad-hoc live configuration fix or overlay was used.
+- Transaction **`1790759936024504141`** passed typed verification with status
+  **`reboot-required`**. All six running guests match their selections;
+  usr-browser remains stopped. Selected host is `0hhav9125qp9smac62ys6zmb3qhzp0c1`,
+  while running host remains `1r34d0azzpnc70kw5qmppwm3g30hlfcf`.
+- Read-only ESP inspection and `bootctl list` confirm normal order
+  **12, 11, 10, 8, 6, 5, 4, 3, 2, 1**, followed by independent recovery.
+  There is one entry per retained normal generation and no native duplicates.
+  `Airlock (2026-09-30_09:08-8048650)` is first/default; `showTitle` contains no
+  added version suffix. All previous entries have short legacy-generation
+  labels. The normal apply completed its artifact sealing/verification steps.
+- Guarded `make gc-auto` completed and skipped collection below its 150 GiB
+  threshold. It did not collect the development host's `/nix/store`.
+- Still required: physical confirmation of the menu, manual boot of
+  `Airlock (legacy generation 11)`, then a reboot allowing generation 12 to
+  boot by default, followed by `make machine-verify DEPLOY_TARGET=sys-dev`.
+  Exact source labels for old entries also need verified provenance backfill.
+
+Evidence: `.airlock-logs/boot-menu-presentation/` contains the final quick-test
+reports, plan/apply JSON, menu snapshot, bootctl output, status, and typed
+verification before host reboot. The task remains **in progress**.

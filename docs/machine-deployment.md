@@ -1,5 +1,18 @@
 # Repository-first whole-machine deployment
 
+Boot-menu deployment (2026-09-30): machine revision `8048650` passed **733 quick
+tests, 25 skipped** and normal plan/apply through sys-dev and sys-ctrl.
+Transaction `1790759936024504141` is **reboot-required**: six running guests match
+their selections, with usr-browser stopped. The selected host is
+`0hhav9125qp9smac62ys6zmb3qhzp0c1`; the running host is still the previously
+verified `1r34d0azzpnc70kw5qmppwm3g30hlfcf`. Bootctl confirms generation 12 is first
+and default, titled `Airlock (2026-09-30_09:08-8048650)`, with numeric normal
+history and recovery below it. Physical menu/default-boot and manual older-boot
+acceptance remain pending. Existing entries have legacy-generation labels;
+source metadata is available for new images and releases. Evidence:
+`.airlock-logs/boot-menu-presentation/` and
+[TODO 10](todo/10-boot-menu-presentation.md).
+
 Current checkpoint (2026-09-30): personal application VMs explicitly select
 `sys-gui` as their GUI VM. Machine revision `caff35e` and parent pin `6368ef6`
 passed **722 quick tests, 25 skipped**. Normal plan/apply through sys-dev and
