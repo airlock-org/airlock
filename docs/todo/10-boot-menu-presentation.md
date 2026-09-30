@@ -112,3 +112,47 @@ interrupted migration and stored firmware preference handling. The live release 
 Evidence: `.airlock-logs/boot-menu-presentation/` contains the final quick-test
 reports, plan/apply JSON, menu snapshot, bootctl output, status, and typed
 verification before host reboot. The task remains **in progress**.
+
+
+## Pruning and readable console follow-up (2026-09-30)
+
+The operator declined provenance backfill and requested testing the deployed
+release-pruning workflow. Generation 12 booted and typed verification first
+reported **complete**. Thirteen eligible release records were then pruned,
+including unused prepared candidates and the image's normal baseline. Normal
+profile generations 2 through 11 were removed where they remained registered;
+retained legacy normal boot artifacts were removed independently. Recovery
+remains pinned and present. No ad-hoc live configuration changes were used.
+Pruning removes retention references and boot artifacts; it does not claim that
+all unreferenced store contents were garbage-collected.
+
+The current and immediate rollback releases stayed protected. After deploying
+machine revision **`e196ef8`**, generation 11 became eligible and was pruned.
+Repeating generation 2's completed prune preserved the identical audit record.
+One plan attempt overlapped that repeat check and was rejected by the deployment
+lock; the sequential retry succeeded. Pruning operations otherwise finished.
+
+The larger-text setting is committed in `machine-host.nix` as systemd-boot
+`consoleMode = "0"`, the standard 80x25 UEFI console mode. The existing Nix
+image/release evaluation tests check this setting in both construction paths.
+[Upstream console-mode documentation](https://github.com/systemd/systemd/blob/main/man/loader.conf.xml).
+**Quick tests: 733 passed, 25 skipped.** Guarded development-store GC ran and
+skipped collection below its threshold.
+
+Normal plan/apply reused the prepared release with zero builds/transfers during
+apply and no guest restarts. Transaction **`1790762690675027745`** is verified
+**reboot-required**: six running guests match their selections, usr-browser is
+stopped, and the selected host `mq1z3vjikp3ynnc4ryrx64f3csplc26y` differs from
+the running generation 12 host `0hhav9125qp9smac62ys6zmb3qhzp0c1`.
+
+Final ESP inspection and actual `bootctl list` confirm installed normal order
+**13, 12**, then independent recovery. Generation 13 is first/default with title
+`Airlock (2026-09-30_09:51-e196ef8)`. There are no legacy normal entries. The
+loader contains `console-mode 0`; no saved firmware console override exists.
+Bootctl also reports the firmware's stale last-boot entry inventory; those
+reported/absent entries have no installed menu files and refresh on reboot.
+
+Still pending: physically confirm the larger text and newest default, boot
+generation 13, then run `make machine-verify DEPLOY_TARGET=sys-dev`. Generation
+12 remains the protected rollback/running host. Evidence and machine-readable
+acceptance: `.airlock-logs/boot-menu-cleanup/`.

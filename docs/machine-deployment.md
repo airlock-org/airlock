@@ -1,5 +1,18 @@
 # Repository-first whole-machine deployment
 
+Boot-menu cleanup follow-up (2026-09-30): machine revision `e196ef8` passed
+**733 quick tests, 25 skipped** and normal plan/apply without guest restarts.
+Thirteen eligible release records were pruned through the deployed coordinator;
+all legacy normal menu entries are gone, while recovery is preserved. Installed
+normal order is **13, 12**, with generation 13 first/default and `console-mode 0`
+(80x25) configured for larger text. Transaction `1790762690675027745` is verified
+**reboot-required**: selected host `mq1z3vjikp3ynnc4ryrx64f3csplc26y`, running
+host `0hhav9125qp9smac62ys6zmb3qhzp0c1`, and all six running guests match their
+selections. Generation 12 remains protected as the running/rollback host.
+The operator declined source-provenance backfill. Physical text-size/default
+confirmation and generation 13 host verification remain pending. Evidence:
+`.airlock-logs/boot-menu-cleanup/` and [TODO 10](todo/10-boot-menu-presentation.md).
+
 Boot-menu deployment (2026-09-30): machine revision `8048650` passed **733 quick
 tests, 25 skipped** and normal plan/apply through sys-dev and sys-ctrl.
 Transaction `1790759936024504141` is **reboot-required**: six running guests match
