@@ -343,6 +343,7 @@ def test_image_and_release_embed_their_own_committed_boot_source(repo, configura
         expected = {{ revision = f.rev or "dirty"; timestamp = f.lastModified or 0; }};
         normal = builtins.fromJSON config.specialisation.usb-lab.configuration.environment.etc."airlock/boot-source.json".text;
         recovery = builtins.fromJSON config.specialisation.usb-text-recovery.configuration.environment.etc."airlock/boot-source.json".text;
+        consoleMode = config.specialisation.usb-lab.configuration.boot.loader.systemd-boot.consoleMode;
       }}
     '''
     result = subprocess.run([
@@ -351,3 +352,4 @@ def test_image_and_release_embed_their_own_committed_boot_source(repo, configura
     ], cwd=ROOT, capture_output=True, text=True, check=True)
     report = json.loads(result.stdout)
     assert report['normal'] == report['recovery'] == report['expected']
+    assert report['consoleMode'] == '0'
