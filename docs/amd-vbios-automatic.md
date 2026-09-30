@@ -77,7 +77,7 @@ Source references: [pinned libvirt PCI conversion](https://github.com/libvirt/li
 [Qubes startup events](https://github.com/QubesOS/qubes-core-admin/blob/v4.3.44/qubes/vm/qubesvm.py),
 [Qubes event ordering](https://github.com/QubesOS/qubes-core-admin/blob/v4.3.44/qubes/events.py).
 The old `slic` spelling is the pinned Xen driver's raw ACPI-table transport;
-see [the original VFCT investigation](amd-gpu-vbios.md).
+see [the original VFCT investigation](history/amd-gpu-vbios.md).
 
 ## Supported boundary
 

@@ -142,4 +142,4 @@ sudo systemctl stop airlock-gui-input-keyboard.service \
 ```
 
 The running setup is not a persistent boot workflow. The VBIOS/assignment
-experiment also remains manual; see [its lifecycle limits](amd-gpu-vbios.md).
+experiment also remains manual; see [its lifecycle limits](history/amd-gpu-vbios.md).

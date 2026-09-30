@@ -341,4 +341,4 @@ includes `sys-gui` (GNOME), `sys-dev`, `sys-ctrl` routed through sys-firewall,
 `usr-home`, and `usr-browser`.
 Standalone GUI and hybrid GUI configurations remain available as source builders
 but are excluded from the USB image, including their guest stores.
-See [the historical GPU experiment](usb-gui-lab.md) for earlier validation work.
+See [the historical GPU experiment](history/usb-gui-lab.md) for earlier validation work.

@@ -1,7 +1,7 @@
 # Cache offline acceptance before USB image assembly
 
 Status: completed on 2026-09-24. Builds on the
-[completed offline builder baseline](../completed/06-builder-input-baseline.md).
+[completed offline builder baseline](06-builder-input-baseline.md).
 
 ## Goal and scope
 

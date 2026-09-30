@@ -111,7 +111,7 @@ make vm-gpu-lab-run
 
 Tests or launches an isolated image with an on-demand `sys-gpu` diagnostic
 guest. XFCE stays in place and physical GPUs remain unassigned. See
-[sys-gpu experiments](docs/sys-gpu.md) for the test boundaries and the planned
+[sys-gpu experiments](docs/experiments/sys-gpu.md) for the test boundaries and the planned
 AMD iGPU → `sys-gui`, RTX 3090 → `sys-gpu` split.
 
 ```bash

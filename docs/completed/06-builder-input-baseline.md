@@ -32,7 +32,7 @@ changes to activation authority.
    machine source and lock file. Use these examples to drive input selection.
 2. Start with the guest-build trial's download list in
    `.airlock-logs/pool-trial-20260918T223925Z/first-build.log`, linked from the
-   [completed guest-build trial](../completed/01-sys-dev-machine-build.md).
+   [completed guest-build trial](01-sys-dev-machine-build.md).
    It fetched 12 store paths, reported as 734.5 KiB downloaded and 11.1 MiB
    unpacked. These are candidate inputs for the baseline, not proof that the
    current image or every supported change needs exactly that set.

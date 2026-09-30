@@ -58,7 +58,7 @@ The USB AMD lab now opts into a temporary firmware console for bootstrap
 progress. Its startup precondition detaches that console and firmware driver
 before `qvm-start`; failed release blocks the guest. This sole-display-GPU
 experiment does not change the default reservation behavior for other users
-of the module. See [the framebuffer handoff](usb-gui-lab.md#temporary-bootstrap-framebuffer).
+of the module. See [the framebuffer handoff](history/usb-gui-lab.md#temporary-bootstrap-framebuffer).
 
 Boot reservation is address-based and happens before userspace identity
 validation. If hardware changes, a stale BDF can reserve the wrong function;
@@ -93,7 +93,7 @@ Boot `f34306b1-b7f6-483a-bfc6-7ef8cf298e1c` passed bootstrap, GPU startup and
 framebuffer release on the rebuilt USB; the guest uses amdgpu and hardware
 OpenGL. The user reached the desktop, and input senders are active. This
 followed a default/hybrid boot; repeat cold-boot acceptance remains pending.
-See [the recorded milestone](amd-gpu-investigation.md#current-milestone--2026-09-14).
+See [the recorded milestone](history/amd-gpu-investigation.md#current-milestone--2026-09-14).
 The procedure below remains the checklist for subsequent acceptance runs.
 
 ```sh
