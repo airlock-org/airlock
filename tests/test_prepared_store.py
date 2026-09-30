@@ -82,25 +82,9 @@ def test_incremental_nix_verification_is_nonrecursive_and_rejects_corruption(
 
 @pytest.fixture
 def seed_inputs(tmp_path, monkeypatch):
-    # Exercise the real tar/EROFS format, using the guarded Airlock Nix store
-    # already configured by conftest; no block devices or mounts are needed.
-    original_require = views.require_tool
-    monkeypatch.setattr(
-        views,
-        "require_tool",
-        lambda name, envvar=None: (
-            name if name == "mkfs.erofs" else original_require(name, envvar)
-        ),
-    )
-    monkeypatch.setattr(
-        views,
-        "run_checked",
-        lambda command, **kwargs: core.run_checked(
-            ["nix", "shell", "path:./airlock-machine#airlock-erofs-utils", "-c"]
-            + command,
-            **kwargs,
-        ),
-    )
+    # Use installed tools directly; quick tests never start a Nix evaluation.
+    if not shutil.which("mkfs.erofs"):
+        pytest.skip("requires erofs-utils on PATH")
     monkeypatch.setenv("AIRLOCK_CLOSURE_STORE_INDEX_SOURCE", "file")
     source = tmp_path / "sources"
     source.mkdir()
@@ -545,6 +529,7 @@ def test_builder_detects_same_filesystem_bind_mount(tmp_path):
 
 @pytest.mark.parametrize("fail_last_mount", [False, True])
 @pytest.mark.parametrize("with_derivation", [False, True])
+@pytest.mark.nix
 def test_builder_guest_mount_lifecycle_preserves_upper(
     tmp_path, monkeypatch, fail_last_mount, with_derivation
 ):

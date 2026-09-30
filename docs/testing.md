@@ -1,8 +1,9 @@
 # Testing
 
-Airlock exposes three test-suite targets. They are intentionally not aliases:
+Airlock exposes four test-suite targets. They are intentionally not aliases:
 
 - `make test-quick`
+- `make test-nix` (explicit Nix evaluations and builds)
 - `make test-warm`
 - `make test-slow`
 
@@ -13,15 +14,14 @@ make test-quick
 ```
 
 Component checks run directly from `airlock-machine/tests/` against that
-checkout's runtime sources and flake. Parent tests cover image assembly,
+checkout's runtime sources. Parent tests cover image assembly,
 deployment transport, repository boundaries, and nested-VM orchestration.
 The `TESTS="..."` names below still select component checks in the submodule;
 `run-nested-gui-smoke-static` selects the parent orchestration check.
 
 The checks include:
 
-- `nix flake check --no-build`
-- topology and system schema tests,
+- Python unit and regression tests,
 - setup/apply/status helper tests,
 - staged candidate validation tests,
 - host capability detection,
@@ -49,11 +49,23 @@ Run selected tests by exact name, or pass normal pytest arguments through
 `PYTEST_ARGS`:
 
 ```bash
-make test-quick TESTS="host-capabilities topology-schema"
-make test-quick PYTEST_ARGS="-m nix"
+make test-quick TESTS="host-capabilities setup-config-static"
 make test-quick PYTEST_ARGS="-k topology"
 make test-quick PYTEST_ARGS=--collect-only
 ```
+
+## Nix checks (opt-in)
+
+```bash
+make test-nix
+make test-nix TESTS="topology-schema"
+```
+
+This target runs checks marked `nix`, including both flake checks, topology and
+system schema evaluation, evaluated module contracts and package builds. It is
+separate from the regular feedback loop and is not a prerequisite of deployment.
+`make test-quick` excludes these checks, including when selecting a Nix check by
+name. Release builds still evaluate the configuration they need to build.
 
 ## Warm
 
@@ -141,9 +153,11 @@ pytest reports under the log directory:
 Each shell check receives its own `AIRLOCK_LOG_DIR` subdirectory below the report
 directory so parallel workers do not overwrite same-named artifacts.
 
-Before quick tests run, pytest initializes the shared Airlock environment once
-and warms the common `nixpkgs#erofs-utils` dependency in the shared Nix store.
-Set `AIRLOCK_PYTEST_WARM_STORE=0` to skip that warm-up for narrow runs.
+Pytest initializes the shared Airlock environment without evaluating or building
+Nix inputs. Storage format tests use `mkfs.erofs` and `fsck.erofs` from `PATH`;
+tests that require unavailable tools report a skip. Test setup does not build
+tools or launch Nix shells. The optional legacy dependency warm-up requires
+`AIRLOCK_PYTEST_WARM_STORE=1`; `test-quick` always disables it.
 
 Show the slowest tests from the latest run:
 

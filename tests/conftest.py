@@ -119,7 +119,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     if session.config.option.collectonly:
         return
 
-    if os.environ.get("AIRLOCK_PYTEST_WARM_STORE", "1") == "1":
+    if os.environ.get("AIRLOCK_PYTEST_WARM_STORE", "0") == "1":
         # Warm common immutable inputs once in the shared Airlock store. Per-test
         # mutable artifacts still live under each test's own AIRLOCK_LOG_DIR.
         _run_setup_command(

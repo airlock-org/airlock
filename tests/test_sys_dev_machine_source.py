@@ -8,6 +8,8 @@ import subprocess
 import sys
 import tarfile
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "lifecycle/misc/tools/scripts/sys-dev-machine-source.py"
 
@@ -223,6 +225,7 @@ def test_source_archive_refuses_uncommitted_machine_changes(tmp_path: Path):
     assert "commit or stash changes" in result.stderr
 
 
+@pytest.mark.nix
 def test_shallow_seed_archive_contains_only_the_pinned_checkout(tmp_path: Path):
     repo = tmp_path / "machine"
     revision = repository(repo)

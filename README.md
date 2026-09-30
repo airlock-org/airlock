@@ -64,7 +64,8 @@ make test-slow
 ```
 
 Runs the test suites. `test-quick` is the local feedback loop and runs
-parallel-safe checks by default. `test-warm` reuses one warm nested dom0 and
+parallel-safe Python checks without Nix evaluations or builds. `make test-nix`
+runs the Nix checks explicitly. `test-warm` reuses one warm nested dom0 and
 runs ordered staged VM coverage. `test-slow` runs cold VM coverage with
 parallel VM lanes where safe, followed by serial boot-activation coverage.
 
