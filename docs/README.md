@@ -54,6 +54,7 @@ historical paths.
 | [Internal compatibility cleanup](todo/11-simplify-internal-compatibility.md) | Planned. Consolidate option/output aliases and imports, retire obsolete persisted formats after inventory, and review the legacy deployment route. |
 | [Live VM additions](todo/12-live-vm-additions.md) | Planned. Create and use persistent VMs immediately; defer host activation until a later reboot. |
 | [Minimal VM declarations](todo/13-minimal-vm-declarations.md) | Planned. Derive builds, topology, deployment targets and live desktop integration from one small declaration per ordinary VM. |
+| [Separate bootstrap from normal startup](todo/14-separate-bootstrap-from-normal-startup.md) | Planned. Reuse applied configuration on unchanged boots, keep GUI/input prerequisites, and reserve detailed bootstrap work and progress for initialization, changes and recovery. |
 | [GNOME Files launcher](todo/sys-gui-files-launcher.md) | Planned. Hide local Files in sys-gui, retain Nautilus for DING, and expose the usr-home launcher. |
 | [GNOME focused VM indicator](todo/gnome-focused-vm-indicator.md) | Implemented and deployed for early testing; operator liked the result. Detailed acceptance and host-generation verification after reboot remain pending. |
 | [Display consistency across VMs](todo/cross-vm-display-consistency.md) | Planned. Align cursors, scaling, fonts and appearance; use GNOME Console for utility terminals and verify display layout changes. |
