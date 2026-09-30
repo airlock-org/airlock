@@ -105,8 +105,9 @@ builds alone do not complete this plan.
 
 ## Implementation checkpoint
 
-The worktree is `/home/user/dev/airlock-org/worktrees/airlock-live-vm-additions`,
-on parent and component branches `feat/live-vm-additions`.
+Implementation was developed in
+`/home/user/dev/airlock-org/worktrees/airlock-live-vm-additions`,
+on parent and component branches `feat/live-vm-additions`, now merged and retired.
 
 The controller now imports the host/transport closure through
 `airlock.Ctrl.MachinePrepare` before sending guest payloads. The installed
@@ -136,7 +137,8 @@ under this worktree's `.airlock-logs/`: `final-quick/pytest-report.json`,
 
 Component commits: `9e78e25` (candidate admission), `48a981a` (live menus),
 and `ae6dabb` (wire protocol regression coverage and lifecycle documentation).
-The parent pins the last commit; these changes are not merged into main.
+Parent main includes these changes through `4989092` and pins the last component
+commit. Component main also includes all three commits.
 
 Rebased onto parent main `4581f17` and its component baseline `38886d6`.
 After rebase, `make test-quick` passed with **724 passed, 59 skipped** and the
@@ -144,11 +146,22 @@ three targeted Nix interface tests passed. Reports are in
 `.airlock-logs/rebase-quick/pytest-report.json` and
 `.airlock-logs/rebase-nix/report.json`.
 
-No whole-machine release or physical deployment has been performed from this
-branch. The no-reboot application launch, exact home sentinel, later host boot
+No whole-machine release or physical deployment has been performed for this
+implementation. The no-reboot application launch, exact home sentinel, later host boot
 and physical rollback/reapply checks remain open. Implementations checked above
 are not a claim of physical acceptance; this document remains in `todo`.
 
 Next, build a committed whole-machine candidate adding one ordinary VM using
 the existing declaration wiring, then run the lab acceptance sequence above.
 The larger declaration simplification belongs to TODO 13.
+
+## Worktree retirement (2026-09-30)
+
+Verified that the parent and component changes were fully on main and that both
+working trees were clean. Removed the worktree and its local feature branches.
+Continue from `/home/user/dev/airlock-org/airlock`.
+
+Worktree-local evidence is preserved under
+`.airlock-logs/retired-worktrees/airlock-live-vm-additions/` in the main checkout.
+This archive is the current location for the earlier `.airlock-logs/` paths;
+their relative suffixes are unchanged. Physical acceptance remains pending.
