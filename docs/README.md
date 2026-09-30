@@ -31,6 +31,7 @@ their boundaries.
 | [USB lab network follow-ups](todo/usb-lab-network-followups.md) | Focused tests, updates proxy, PCI Wi-Fi traffic, and an exact persistence sentinel remain. The wired topology passed physical acceptance. |
 | [Deployment metadata and validation reuse](todo/08-deployment-metadata-validation-reuse.md) | Planned. Reduce repeated preparation work with operation-scoped caches; RAM staging is out of scope. |
 | [Deployment code health](todo/09-deployment-code-health.md) | Planned. Preserve cleanup errors, use durable record writes, and simplify host publication. |
+| [Internal compatibility cleanup](todo/11-simplify-internal-compatibility.md) | Planned. Consolidate option/output aliases and imports, retire obsolete persisted formats after inventory, and review the legacy deployment route. |
 | [GNOME Files launcher](todo/sys-gui-files-launcher.md) | Planned. Hide local Files in sys-gui, retain Nautilus for DING, and expose the usr-home launcher. |
 | [GNOME focused VM indicator](todo/gnome-focused-vm-indicator.md) | Planned. Show the focused window's VM name and Qubes label colour in the top panel using verified window metadata. |
 | [Display consistency across VMs](todo/cross-vm-display-consistency.md) | Planned. Align cursors, scaling, fonts and appearance; use GNOME Console for utility terminals and verify display layout changes. |
