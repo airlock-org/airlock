@@ -1240,7 +1240,7 @@ def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs):
                     "system": {"source": spec["system"]},
                     "root": {"source": str(root_image)},
                     "kernel": {"name": "test-kernel"},
-                    "state": {"persistentSize": 32 * 1024 * 1024},
+                    "state": {"persistent_size": 32 * 1024 * 1024},
                     "store": {"source": str(descriptors / spec["name"])},
                 },
             }

@@ -180,8 +180,7 @@ async def prepare(topology, physical_pool, output, storage_helper):
         # Use Qubes' file-volume implementation to create correctly sized sparse
         # disks. Software-store volumes are registered only after this step.
         private_size = (
-            backend["state"].get("persistentSize")
-            or backend["state"].get("persistent_size")
+            backend["state"].get("persistent_size")
             or qubes.config.defaults["private_img_size"]
         )
         for volume_name, size in (

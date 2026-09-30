@@ -1,18 +1,22 @@
 # 11: Simplify internal compatibility before release
 
-Status: **in progress** (2026-09-30). Listed authored option aliases and dom0 module interface
-implemented locally; further cleanup and validation are pending.
+Status: **local implementation complete; validation and live acceptance pending**
+(2026-09-30). Sections 1–8 have local changes; section 9 has a documented
+retention decision. No tests or live changes were performed in the latest pass.
 
 Airlock is unreleased. The local source contains a meaningful amount of
 compatibility code, concentrated in configuration parsing, storage and deployment.
 Standardize on one current internal interface and storage format where practical,
 while preserving the existing Qubes architecture and required upstream integration.
 
-This document records the read-only investigation of the parent repository and
-its `airlock-machine` checkout. It identifies cleanup candidates, not proof that
-every candidate can already be deleted. No live-state inventory, build, test or
-deployment was performed during the investigation. Counts describe confirmed
-examples rather than an exhaustive count of compatibility branches.
+This document preserves the initial read-only findings and records subsequent
+implementation in the parent repository and its `airlock-machine` checkout.
+The initial investigation performed no live-state inventory, build, test or
+deployment. Earlier build/source-reference cleanup has test evidence below;
+all later changes are source-only and unvalidated, at the user's request.
+Counts describe confirmed examples rather than an exhaustive count of
+compatibility branches. Persisted-state changes must not be activated until
+the pending inventory, validation and acceptance steps are completed.
 
 ## Findings and implementation
 
@@ -104,8 +108,13 @@ Additional finding from validation: the pre-existing subpath regular expression
 accepts `../root.img`, despite its diagnostic promising paths without `..`.
 This behavior was not changed in the alias cleanup.
 
-- [ ] Investigate relative subpath traversal validation separately in both
-  schema libraries and their consumers.
+- [x] Investigate relative subpath traversal validation in both schema
+  libraries and their consumers; implement rejection locally.
+
+Source-only follow-up: component `1474686` rejects `.` and `..` components in
+both source-reference parsers and system activation commands. Normal dotted
+filenames and hidden directories remain valid. Added positive/negative pytest
+cases; **not run**. No file/path rewriting or live state changes occurred.
 
 #### Second change: require authored `sourceRef` (2026-09-30)
 
@@ -157,10 +166,24 @@ for this pass**. Earlier validation above predates these changes. New regression
 cases and the quick/Nix checks require a later validation pass. Commits skip
 pre-commit execution to honor the instruction not to run tests/check suites.
 
-Further inventory found store inputs `blobDevice` / `blob_device` and
-`viewBackend` / `view_backend`, plus accepted-but-unused `chunkSize` /
-`chunk_size`. These require an additional local interface review; the initial
-nine-pair table was not exhaustive.
+Additional local interface inventory and implementation:
+
+- [x] Store `blobDevice` / `blob_device` and `viewBackend` / `view_backend`:
+  component `dd3e557` requires authored camelCase. Existing normalized store
+  fields remain intact for their current consumers. Added rejection cases.
+- [x] Store `chunkSize` / `chunk_size`: neither accepted input ever affected
+  normalization or storage. Removed both from accepted authored keys and removed
+  obsolete hand-written normalized fixture fields (`dd3e557`, `0fa7f66`).
+- [x] Runtime private-size readers previously accepted normalized
+  `persistent_size` or authored `persistentSize`. Setup reconciliation and parent
+  image preparation now consume `persistent_size`; the parent image fixture
+  uses that current normalized field (`0fa7f66` plus parent integration).
+- [x] Setup's normalized store readers now consume `blob_device` and
+  `view_backend` directly, without camelCase fallback (`cf6d525`).
+
+The initial nine-pair table was not exhaustive. Both configuration guides now
+include the additional authored store spellings and relative-path contract.
+All new regression cases and changes in this subsection remain **unvalidated**.
 
 ### 2. Old dom0 module interface
 
@@ -256,10 +279,10 @@ import checks and the parent Python file list. **Tests/build checks pending**.
 
 - [x] Update callers/docs and remove the former offline-builder Make target.
 - [ ] Establish the canonical desktop marker on retained user homes before
-  deleting old-marker support; preserve one-time bootstrap behavior and user
-  customization.
-- [ ] Verify supported images/recovery environments provide `machine-profile`,
-  then remove old profile discovery.
+  activating current-only marker support; preserve one-time bootstrap behavior
+  and user customization.
+- [ ] Verify supported normal deployment environments provide `machine-profile`
+  before activating current-only profile discovery.
 
 Source-only changes remove the renamed Make command and use only the current
 desktop and machine-profile markers. Current machine-deployment modules emit
@@ -289,10 +312,28 @@ reuse logic. These are actual conversion paths, not just version labels.
   retained generations, recovery images and development fixtures.
 - [ ] Record whether current-format replacement/reseeding is needed before
   removal. Any destructive reset needs its own explicit authorization.
-- [ ] Remove automatic conversions, legacy path helpers and obsolete layout
-  handling once supported state is current.
-- [ ] Reject unsupported layouts clearly, preserving admission locking,
-  durability, object/extent integrity, retention and recovery semantics.
+- [x] Remove local automatic conversions, legacy path helpers and obsolete
+  cached-layout conversion handling; activation depends on the inventory above.
+- [x] Implement clear unsupported-layout rejection while retaining admission
+  locking, durability, object/extent checks, retention and recovery code paths.
+- [ ] Validate those invariants with the new regression cases and existing
+  storage/admission/maintenance suites before activation.
+
+Source-only implementation: component `c334658` deletes all three migration
+functions and the old blob-path helper. Existing pool manifests must describe
+current segmented storage; a single-blob pool or unsupported manifest fails
+before `ensure_pool` creates directories or rewrites metadata. Cached blob maps
+with `central_blob` or extents lacking segment identity/offset are rejected,
+instead of converted or silently rebuilt. New pytest cases cover read-only
+refusal and reopening a current pool; **none have been run**.
+
+Current extent-location handling remains: newly appended segmented objects can
+use their top-level current extent before a location-history list exists, and
+compaction maintains both current and historical locations. That is current
+storage behavior, not a single-blob migration alias. No lab pool, retained
+metadata, recovery image or object payload was inspected or changed. Any
+required reseeding/replacement remains a preactivation task; no reset is
+implicitly authorized by this source cleanup.
 
 ### 7. Older host/controller index metadata
 
@@ -304,12 +345,31 @@ record hashes. Older controller indexes use one full build first. Existing
 coverage includes `test_incompatible_predecessor_uses_full_index` in
 `airlock-machine/tests/test_incremental_store_index.py` with a `legacy` case.
 
-- [ ] Determine which missing-metadata defaults are solely for older formats
-  and whether supported state can require those fields.
-- [ ] Remove obsolete accommodation only after checking retained builder bases.
-- [ ] Preserve full index construction for fresh images, absent predecessors,
-  removed objects and the depth limit; those are functional requirements.
-- [ ] Preserve authenticated predecessor reuse and checksum/layout verification.
+- [x] Audit current metadata writers and remove missing-integrity/depth
+  accommodation from the local index contract.
+- [ ] Inventory retained host/controller/builder bases and cached view manifests
+  before activating the stricter contract; replace/reseed unsupported state
+  only with separately authorized preparation.
+- [x] Preserve full construction for fresh images, absent predecessors,
+  removed objects and the depth limit.
+- [x] Preserve authenticated reuse and checksum/layout verification in code.
+- [ ] Run index, host-publication, artifact-admission and recovery coverage.
+
+Source-only implementation: `34bd7e6` removes host integrity synthesis and the
+missing-integrity full-build fallback. An eligible runtime predecessor requires
+its recorded integrity and a non-negative integer `index_depth`. Cached view
+manifests require depth too. Current fresh/depth-limited/non-additive index
+construction is retained; additive reuse still verifies the predecessor.
+Replaced the historical full-build expectation with explicit metadata-refusal
+coverage, including predecessor-byte preservation; **tests are unrun**.
+
+Writer audit found an additional current omission: received-artifact generation
+manifests wrote integrity but omitted `index_depth`. Component `3b2f013` now
+persists the materialized view's depth and updates its pytest fixture/assertion.
+Ordinary admission already writes both fields. Artifact negotiation's decision
+to reuse only a proven matching generation, otherwise perform normal admission,
+remains a current protocol behavior; it is distinct from predecessor-index
+format accommodation. No retained bases were read from a live system.
 
 ### 8. Boot-entry and retained-artifact compatibility
 
@@ -333,12 +393,34 @@ change, so its broader purpose should be checked before deleting it.
 
 - [ ] Inventory retained normal/recovery entries, provenance, installer hooks
   and incomplete presentation journals before changing supported formats.
-- [ ] Retire generation/provenance fallbacks and old installer compatibility
-  once all supported entries use the current contract.
-- [ ] Decide whether presentation migration remains a current feature or can
-  be removed with its alternate-checksum handling.
-- [ ] Preserve independent boot artifact verification, recovery availability,
-  newest-first ordering and rollback behavior.
+- [x] Remove local retained-generation/provenance fallbacks and old short
+  installer-version output; activation requires the inventory above.
+- [x] Retain presentation refresh and its resumable checksum transition as
+  current behavior, rather than historical-format support.
+- [x] Preserve independent boot verification, recovery, newest-first ordering
+  and rollback code paths, including operation without a mounted old system.
+- [ ] Run boot-menu/artifact/interruption coverage and verify retained normal
+  and independent recovery choices before activation.
+
+Source-only implementation: component `2860f59` requires explicit
+`# airlock-generation` for retained entries and committed provenance when
+formatting entries. It removes `legacy generation N` labels and emission of
+`version Generation N` for historical Airlock installer hooks. Current native
+NixOS/Xen entries still require discovery from upstream's version field; only
+native-entry call sites opt into that discovery. This upstream interface is
+retained deliberately. Current machine normal and independent recovery
+configurations both embed `boot-source.json`.
+
+Recorded revision/timestamp on a retained entry remains usable when its original
+system path is unavailable; recovery must not depend on mounting that system.
+`refresh_presentation` (formerly `migrate_presentation`) still journals verified
+before/after entry bytes in `presentationMigration`. A current presentation
+change can be interrupted too, so its alternate authenticated fingerprint is
+retained. Updated coverage models a current authenticated entry refresh, plus
+missing identity/provenance rejection and recorded-source reuse. **All unrun**.
+No EFI partition, firmware variables, boot entry, recovery profile or retained
+journal was modified. Older rollback installer hooks and provenance-free entries
+are outside the new local contract; inventory/replacement is still pending.
 
 ### 9. Explicit legacy deployment route: investigate first
 
@@ -354,13 +436,30 @@ routing: the parent currently uses normal controller submission for `usb-lab`,
 while other actions/profiles can reach the host-side path without the flag.
 Removing the flag alone would not necessarily remove the duplicate workflow.
 
-- [ ] List operations/profiles still depending on the route, including recovery
-  and coordinator-update workflows.
-- [ ] Record a decision to retain or retire it and the supported replacement
-  for each remaining operation. Retirement is not assumed by this TODO.
-- [ ] If retired, remove associated dispatch, build/transfer code, flags,
-  variables, tests and documentation together.
-- [ ] Preserve Qubes policy boundaries and observation/control separation.
+- [x] Audit source dispatch for operations/profiles depending on the route.
+- [x] Record the retention decision and outstanding replacement requirements.
+- [x] Preserve existing policy boundaries and observation/control separation;
+  this investigation introduces no additional control route.
+
+**Decision: retain the development route.** No dispatch/transport code or flags
+are removed in this pass. Its retirement is not an outstanding local change
+selected by this TODO.
+
+| Current source path | Why it remains |
+| --- | --- |
+| Parent `usb-lab` plan/apply/status/verify/resume/rollback | Defaults to sys-dev/sys-ctrl submission; explicit `--legacy-dom0` still selects the separate administrative development transport. |
+| Parent `build` | Local host-side build does not require a remote session or the controller route. |
+| Parent `usb-gui-lab` | Outside the parent controller-forwarding condition. The profile normally lacks a sys-dev bridge; provisioning/transport and a supported controller workflow must be established before removing the host-side route. |
+| Parent `guest-plan` / `guest-apply` | Uses an existing sys-dev admission receipt and the direct development coordinator channel; removing the flag alone would not remove this path. |
+| Parent guest `--update-coordinator` | Builds/transfers a committed standalone coordinator for already flashed development images. No equivalent update path is supplied by the ordinary whole-machine submission dispatch. |
+| Component sys-dev CLI | Defaults to typed controller build/plan/apply and qrexec machine control; `--legacy-dom0` still selects direct development build/transfer/control. |
+| Independent recovery | Does not expose normal whole-machine deployment or `machine-profile`; its explicit recovery/boot selection functionality must be preserved. It is not evidence that the controller workflow covers all administrative recovery operations. |
+
+Removing the route requires a separate workflow decision and replacements for
+these dependencies, followed by removal of flags, Make variables, dispatch,
+transfer/build code, tests and runbook text together. Current development shell
+and Qubes policy constraints remain intact. This is a source audit, not a live
+claim that every alternative profile/transport is deployed or operational.
 
 ## Versioning and aliases that serve current behavior
 
@@ -396,18 +495,19 @@ It is not a historical name alias to remove as part of this cleanup.
 ## Execution order and acceptance
 
 Start with configuration aliases, old output names, the import facade and the
-renamed Make target. Handle persisted formats after state inventory and any
-required replacement. Keep the legacy deployment-route decision separate.
+renamed Make target. Persisted-format local implementation is complete, but activation must wait
+for state inventory and any required replacement. Keep the documented
+development-route retention decision separate.
 Maintain the existing Xen, qrexec, QubesDB, qubesd, libvirt and policy architecture.
 
-- [ ] Update all in-repository consumers of each retired interface; distinguish
+- [x] Update in-repository consumers found for each retired interface; distinguish
   authored options from intentional serialized representations.
-- [ ] Preserve or extend meaningful pytest coverage for current behavior,
+- [x] Write or update meaningful pytest coverage for current behavior,
   malformed/unsupported data rejection, installed imports and interruption/
   recovery where relevant. Remove tests whose sole purpose was an obsolete alias.
 - [ ] Run `make test-quick` for implementation changes, with clear results under
   `.airlock-logs/`. Keep Nix evaluation/builds opt-in through `make test-nix`.
-- [ ] Commit coherent component changes in `airlock-machine`, then update and
+- [x] Commit coherent component changes in `airlock-machine`, then update and
   commit the parent pin and affected integration/docs changes.
 - [ ] For runtime/storage/boot changes affecting the lab, follow
   [machine-deployment.md](../machine-deployment.md): commit first, use
@@ -420,3 +520,18 @@ This is separate from [TODO 08](08-deployment-metadata-validation-reuse.md)'s
 performance work and [TODO 09](09-deployment-code-health.md)'s behavior-preserving
 cleanup. Preserve completed deployment/storage/boot acceptance records as
 historical evidence when updating current interfaces and documentation.
+
+## Current handoff
+
+All selected local code work is in
+`/home/user/dev/airlock-org/worktrees/airlock-simplify-build-option`, branch
+`simplify-build-option`, including component commits and parent pin/docs updates.
+This implementation pass did not edit the original checkout. The user explicitly deferred
+all tests, builds and live session changes for this pass; commits bypassed hooks
+that would otherwise run checks. Static source review, reference searches and
+`git diff --check` are the only verification performed for these later changes.
+
+Next pass: run the pending local regression/quick checks, opt-in Nix schema and
+integration checks, then the persisted-state inventory. Record each result here.
+No cleanup reset, deployment, activation, reboot or live test has been performed
+or approved by this source-only handoff. Earlier test results in section 1 do not establish correctness of the subsequent untested changes.

@@ -107,8 +107,11 @@ The authored options are `sourceRef` and `build`; `source_ref` and `attr` belong
 to normalized records.
 
 Authored options use camelCase, including `activationCommand`, `activationAction`,
-`switchAction`, `skipStart`, `readOnly`, `persistentSize`, `qrexecPolicy` and guest
-`hostName`. Their snake_case deployment fields are normalized output.
+`switchAction`, `skipStart`, `readOnly`, `persistentSize`, `blobDevice`,
+`viewBackend`, `qrexecPolicy` and guest `hostName`. Their snake_case deployment
+fields are normalized output. Store `chunkSize` is unsupported; it previously
+passed input validation without affecting storage. Source-reference subpaths
+and activation commands reject `.` and `..` path components.
 
 A `nix-closure` domain is represented as:
 
