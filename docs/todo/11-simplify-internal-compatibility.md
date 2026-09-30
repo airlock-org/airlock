@@ -1,7 +1,7 @@
 # 11: Simplify internal compatibility before release
 
-Status: **in progress** (2026-09-30). First two option pairs completed; remaining
-cleanup is pending.
+Status: **in progress** (2026-09-30). Listed authored option aliases and dom0 module interface
+implemented locally; further cleanup and validation are pending.
 
 Airlock is unreleased. The local source contains a meaningful amount of
 compatibility code, concentrated in configuration parsing, storage and deployment.
@@ -48,10 +48,10 @@ established for every pair. Generated snake_case fields may still be the right
 machine-readable representation even if authored configuration uses camelCase.
 One spelling per interface does not require renaming every serialized field.
 
-- [ ] Choose the canonical authored spelling for each pair after checking callers.
-- [ ] Update configuration, module option declarations, fixtures and documentation.
-- [ ] Remove alternate input spellings and duplicate/conflict-resolution branches.
-- [ ] Keep intentional normalization between authored configuration and generated
+- [x] Choose the canonical authored spelling for each pair after checking callers.
+- [x] Update configuration, module option declarations, fixtures and documentation.
+- [x] Remove alternate input spellings and duplicate/conflict-resolution branches.
+- [x] Keep intentional normalization between authored configuration and generated
   topology/system JSON; retain unknown-option rejection.
 
 Pair-by-pair progress:
@@ -60,14 +60,14 @@ Pair-by-pair progress:
   references retain `attr`.
 - [x] `sourceRef` / `source_ref`: authored source options require `sourceRef`;
   normalized records retain `source_ref`.
-- [ ] `activationCommand` / `activation_command`.
-- [ ] `activationAction` / `activation_action`.
-- [ ] `switchAction` / `switch_action`.
-- [ ] `skipStart` / `skip_start`.
-- [ ] `readOnly` / `read_only`.
-- [ ] `persistentSize` / `persistent_size`.
-- [ ] `qrexecPolicy` / `qrexec_policy`.
-- [ ] Additional bootstrap `hostName` / `hostname` pair.
+- [x] `activationCommand` / `activation_command`.
+- [x] `activationAction` / `activation_action`.
+- [x] `switchAction` / `switch_action`.
+- [x] `skipStart` / `skip_start`.
+- [x] `readOnly` / `read_only`.
+- [x] `persistentSize` / `persistent_size`.
+- [x] `qrexecPolicy` / `qrexec_policy`.
+- [x] Additional bootstrap `hostName` / `hostname` pair.
 
 #### First change: require authored `build` (2026-09-30)
 
@@ -144,6 +144,24 @@ Validation:
   (JUnit and JSON reports). No image/package build or live deployment was
   performed.
 
+#### Remaining listed authored aliases (source-only implementation)
+
+Component commit: `c061a21`. Retired the remaining seven snake_case input
+aliases and bootstrap `hostname`. Canonical camelCase inputs keep the existing
+normalized fields and defaults. The caller inventory found only normalized
+snake_case fixtures/consumers, which remain intact. Added pytest contract cases
+and bootstrap hostname rejection cases, and updated the component guide.
+
+At the user's request, **no tests, builds, live sessions or deployments are run
+for this pass**. Earlier validation above predates these changes. New regression
+cases and the quick/Nix checks require a later validation pass. Commits skip
+pre-commit execution to honor the instruction not to run tests/check suites.
+
+Further inventory found store inputs `blobDevice` / `blob_device` and
+`viewBackend` / `view_backend`, plus accepted-but-unused `chunkSize` /
+`chunk_size`. These require an additional local interface review; the initial
+nine-pair table was not exhaustive.
+
 ### 2. Old dom0 module interface
 
 The example [runtime.nix](../../airlock-machine/lifecycle/bootstrap/initial-runtime-config/airlock/runtime.nix)
@@ -152,10 +170,16 @@ explicitly labels `dom0.extraModules` backward-compatible and recommends
 includes it in automatic boot/switch classification, and appends it alongside
 `dom0.host.modules` when constructing host modules.
 
-- [ ] Move callers to `dom0.host.modules` and remove `dom0.extraModules`.
-- [ ] Remove the old field from accepted keys, module composition, example
+- [x] Move callers to `dom0.host.modules` and remove `dom0.extraModules`.
+- [x] Remove the old field from accepted keys, module composition, example
   configuration and activation-classification comments/logic.
-- [ ] Preserve the current boot classification for arbitrary host modules.
+- [x] Preserve the current boot classification for arbitrary host modules.
+
+Source-only implementation commit: `f1e6f02`. The runtime example and closure
+smoke fixture use `dom0.host.modules`; the bootstrap no longer accepts or appends
+`extraModules`. Added future regression cases for old-option rejection and the
+boot classification of a non-empty host module list. **Validation pending**;
+these checks have not been run.
 
 ### 3. Historical flake output names
 

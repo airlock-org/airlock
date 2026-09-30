@@ -106,6 +106,10 @@ Normalization emits `source_ref.attr` for validation and activation consumers.
 The authored options are `sourceRef` and `build`; `source_ref` and `attr` belong
 to normalized records.
 
+Authored options use camelCase, including `activationCommand`, `activationAction`,
+`switchAction`, `skipStart`, `readOnly`, `persistentSize`, `qrexecPolicy` and guest
+`hostName`. Their snake_case deployment fields are normalized output.
+
 A `nix-closure` domain is represented as:
 
 ```text
