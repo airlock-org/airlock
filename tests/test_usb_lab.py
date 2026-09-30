@@ -352,4 +352,4 @@ def test_image_and_release_embed_their_own_committed_boot_source(repo, configura
     ], cwd=ROOT, capture_output=True, text=True, check=True)
     report = json.loads(result.stdout)
     assert report['normal'] == report['recovery'] == report['expected']
-    assert report['consoleMode'] == '0'
+    assert report['consoleMode'] == '1'

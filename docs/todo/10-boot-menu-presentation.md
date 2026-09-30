@@ -10,7 +10,8 @@ Status: **in progress** (2026-09-30).
   `Airlock (2026-09-30_14:30-a1b2c3d)`.
 - Use the release source commit's timestamp, formatted in UTC, and the first
   seven characters of its SHA. Labels remain stable across rebuilds.
-- Use the standard 80x25 UEFI console mode to make menu text larger.
+- Match the apparent menu text size to the bootstrap/startup screen. The
+  current trial uses UEFI 80x50 mode; the previous 80x25 setting was too large.
 - Prune unneeded historical normal generations through the deployed retention
   workflow; preserve independent recovery and protected current/rollback hosts.
 - Recovery entries appear below normal generations and are clearly labeled,
