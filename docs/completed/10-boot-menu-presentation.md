@@ -1,6 +1,11 @@
 # 10: Simplify the boot menu
 
-Status: **in progress** (2026-09-30).
+Status: **complete** (2026-09-30). The operator restarted the laptop and confirmed
+that the boot menu looks good with the final 80x50 console setting. Post-reboot
+typed verification reports **complete**, with the selected host running. Source labels,
+ordering/default selection, recovery placement and pruning passed the recorded
+automated and live inspection checks. Physical manual older-generation selection
+and next-boot default restoration were not separately exercised.
 
 ## Agreed behavior
 
@@ -11,7 +16,7 @@ Status: **in progress** (2026-09-30).
 - Use the release source commit's timestamp, formatted in UTC, and the first
   seven characters of its SHA. Labels remain stable across rebuilds.
 - Match the apparent menu text size to the bootstrap/startup screen. The
-  current trial uses UEFI 80x50 mode; the previous 80x25 setting was too large.
+  accepted setting uses UEFI 80x50 mode; the previous 80x25 setting was too large.
 - Prune unneeded historical normal generations through the deployed retention
   workflow; preserve independent recovery and protected current/rollback hosts.
 - Recovery entries appear below normal generations and are clearly labeled,
@@ -49,10 +54,10 @@ Paths below are relative to `airlock-machine/`.
   duplicate suppression, and repeated menu generation.
 - [x] Cover fresh-image and deployment/retained-entry paths; identical source
   labels must not merge distinct generations or change their order.
-- [ ] Pass `make test-quick`, then verify the physical menu and default boot,
+- [x] Pass `make test-quick`, then verify the physical menu and default boot,
   including readable text after pruning the unneeded older generations.
   Use the [normal deployment workflow](../machine-deployment.md) where possible.
-- [ ] Record a brief acceptance summary here.
+- [x] Record a brief acceptance summary here.
 
 ## Implementation notes (2026-09-30)
 
@@ -81,7 +86,8 @@ New images and releases use the agreed commit labels.
 Focused pytest coverage includes generations 2 and 10, identical source labels,
 older selection, native/retained duplicates, repeated formatting/sealing,
 independent recovery, distinct pool/menu generation numbers, corrupt artifacts,
-interrupted migration and stored firmware preference handling. The live release is applied; physical menu/reboot acceptance remains pending.
+interrupted migration and stored firmware preference handling. At this checkpoint,
+the live release was applied and physical menu/reboot acceptance was pending.
 
 ## Acceptance so far (2026-09-30)
 
@@ -112,7 +118,8 @@ interrupted migration and stored firmware preference handling. The live release 
 
 Evidence: `.airlock-logs/boot-menu-presentation/` contains the final quick-test
 reports, plan/apply JSON, menu snapshot, bootctl output, status, and typed
-verification before host reboot. The task remains **in progress**.
+verification before host reboot. This was an **in-progress** checkpoint; final
+acceptance follows below.
 
 
 ## Pruning and readable console follow-up (2026-09-30)
@@ -191,3 +198,23 @@ host is `dyy6c32zx6fanzfrxyzgriw4rchihhwy`; the running host remains generation
 13's `mq1z3vjikp3ynnc4ryrx64f3csplc26y`. The next physical boot must compare the
 menu and startup text and verify the selected generation. Evidence:
 `.airlock-logs/boot-screen-consistency/`.
+
+## Final acceptance (2026-09-30)
+
+The operator restarted the laptop and confirmed that the boot menu looks fine.
+The accepted setting is `consoleMode = "1"` (UEFI 80x50), deployed from machine
+revision **`5bd3a92`**. Startup font configuration was unchanged. The final quick
+suite passed **629 tests, 58 skipped in 5.60 s**, without Nix evaluations or
+automatic tool provisioning. The prior deployed pruning trial removed thirteen
+eligible release records while preserving recovery and protected generations.
+
+Post-reboot `make machine-verify DEPLOY_TARGET=sys-dev` reports transaction
+**`1790768363786110491` complete**. Running and selected host both resolve to
+`dyy6c32zx6fanzfrxyzgriw4rchihhwy`; all six running guest systems match their
+selections and usr-browser remains stopped. Evidence:
+`.airlock-logs/boot-screen-consistency/verify-after-reboot.json` and the updated
+`acceptance.json` in that directory.
+
+Physical manual older-generation/default restoration was not separately tested;
+the behavior is covered by pytest and installed-menu inspection. Source-provenance
+backfill was explicitly declined and is outside this completed task.

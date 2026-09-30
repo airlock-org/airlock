@@ -1,6 +1,17 @@
 # Repository-first whole-machine deployment
 
-Boot-screen size follow-up (2026-09-30): the operator confirmed bootstrap/startup
+Boot-menu acceptance (2026-09-30): the operator restarted the laptop and confirmed
+the menu looks fine with the final `consoleMode = "1"` setting. Post-reboot typed
+verification reports transaction `1790768363786110491` **complete**: running and
+selected host both resolve to `dyy6c32zx6fanzfrxyzgriw4rchihhwy`, all six running
+guest systems match their selections, and usr-browser remains stopped. The
+[boot-menu plan](completed/10-boot-menu-presentation.md) is complete, with the
+physical manual older-generation/default-restoration trial explicitly untested.
+Evidence: `.airlock-logs/boot-screen-consistency/verify-after-reboot.json` and
+`acceptance.json`. No deployment or live configuration change was needed for
+this documentation closeout.
+
+Historical boot-screen size follow-up (2026-09-30): the operator confirmed bootstrap/startup
 text is good and the 80x25 boot menu is too large. Machine revision `5bd3a92`
 changes only the menu to `consoleMode = "1"` (UEFI 80x50 trial); startup font
 configuration stays unchanged. The observed startup framebuffer is 3840x2400
@@ -17,7 +28,7 @@ passed **629 tests, 58 skipped in 5.60 s**, with no Nix evaluations or automatic
 tool setup; storage-tool-dependent checks skipped because those tools were not
 on PATH. No new test was added for this configuration adjustment. No live
 configuration mutation was used. Evidence: `.airlock-logs/boot-screen-consistency/`
-and [TODO 10](todo/10-boot-menu-presentation.md). Next boot must confirm the
+and [completed boot-menu plan](completed/10-boot-menu-presentation.md). Next boot must confirm the
 menu/startup size comparison and the selected host generation.
 
 Store preparation follow-up (2026-09-30): machine revision `3efe570` is committed,
@@ -55,7 +66,7 @@ host `0hhav9125qp9smac62ys6zmb3qhzp0c1`, and all six running guests match their
 selections. Generation 12 remains protected as the running/rollback host.
 The operator declined source-provenance backfill. Physical text-size/default
 confirmation and generation 13 host verification remain pending. Evidence:
-`.airlock-logs/boot-menu-cleanup/` and [TODO 10](todo/10-boot-menu-presentation.md).
+`.airlock-logs/boot-menu-cleanup/` and [completed boot-menu plan](completed/10-boot-menu-presentation.md).
 
 Boot-menu deployment (2026-09-30): machine revision `8048650` passed **733 quick
 tests, 25 skipped** and normal plan/apply through sys-dev and sys-ctrl.
@@ -68,7 +79,7 @@ history and recovery below it. Physical menu/default-boot and manual older-boot
 acceptance remain pending. Existing entries have legacy-generation labels;
 source metadata is available for new images and releases. Evidence:
 `.airlock-logs/boot-menu-presentation/` and
-[TODO 10](todo/10-boot-menu-presentation.md).
+[completed boot-menu plan](completed/10-boot-menu-presentation.md).
 
 Current checkpoint (2026-09-30): personal application VMs explicitly select
 `sys-gui` as their GUI VM. Machine revision `caff35e` and parent pin `6368ef6`

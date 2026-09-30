@@ -1,7 +1,9 @@
 # Documentation map
 
-Updated 2026-09-29: controller deployment, direct pool admission and unified
-host/guest storage passed acceptance. Detailed summaries retain their boundaries.
+Updated 2026-09-30: boot-menu presentation passed operator acceptance and
+post-reboot generation verification. Controller deployment, direct pool admission
+and unified host/guest storage also passed acceptance. Detailed summaries retain
+their boundaries.
 
 ## Current operating guides
 
@@ -29,7 +31,6 @@ host/guest storage passed acceptance. Detailed summaries retain their boundaries
 | [USB lab network follow-ups](todo/usb-lab-network-followups.md) | Focused tests, updates proxy, PCI Wi-Fi traffic, and an exact persistence sentinel remain. The wired topology passed physical acceptance. |
 | [Deployment metadata and validation reuse](todo/08-deployment-metadata-validation-reuse.md) | Planned. Reduce repeated preparation work with operation-scoped caches; RAM staging is out of scope. |
 | [Deployment code health](todo/09-deployment-code-health.md) | Planned. Preserve cleanup errors, use durable record writes, and simplify host publication. |
-| [Boot menu presentation](todo/10-boot-menu-presentation.md) | Planned. Newest generation first and default; concise commit timestamp/SHA labels and recovery below. |
 | [GNOME Files launcher](todo/sys-gui-files-launcher.md) | Planned. Hide local Files in sys-gui, retain Nautilus for DING, and expose the usr-home launcher. |
 | [GNOME focused VM indicator](todo/gnome-focused-vm-indicator.md) | Planned. Show the focused window's VM name and Qubes label colour in the top panel using verified window metadata. |
 | [Display consistency across VMs](todo/cross-vm-display-consistency.md) | Planned. Align cursors, scaling, fonts and appearance; use GNOME Console for utility terminals and verify display layout changes. |
@@ -37,6 +38,7 @@ host/guest storage passed acceptance. Detailed summaries retain their boundaries
 | [Direct pool deployment](completed/06-direct-pool-machine-deployment.md) | Completed package admission, sparse root reuse and physical update/rollback acceptance. |
 | [Unified host and guest store](completed/07-unified-host-guest-store.md) | Completed shared storage, host boot/recovery, builder reuse and maintenance acceptance. |
 | [Cached offline builder check](completed/07-cached-offline-builder-check.md) | Completed image prerequisite that reuses passing offline acceptance for unchanged inputs. |
+| [Boot menu presentation](completed/10-boot-menu-presentation.md) | Completed. Commit labels, newest-first/default ordering, pruning and recovery placement; operator accepted menu text after reboot. Physical manual older-generation/default restoration was not separately exercised. |
 
 Wizard and input work do not depend on implementing sys-ctrl. Network isolation
 and sys-ctrl are distinct changes to the current lab. USB Wi-Fi routing has no
