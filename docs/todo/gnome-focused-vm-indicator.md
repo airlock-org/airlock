@@ -4,6 +4,26 @@ Status: implemented and deployed for early testing, 2026-09-30. The operator
 tested the indicator and reported that it looks good. Detailed acceptance checks
 and host-generation verification after reboot remain pending.
 
+Calculator follow-up (2026-09-30): the operator found that switching from
+Firefox to Calculator hid the indicator completely. Calculator's active
+Xwayland window had valid `usr-home`, label 6 and `#3465a4` metadata, and the
+packaged reader resolved it correctly. Machine revision `3750010` adjusts the
+focus handling: application actors in Mutter's window groups are distinguished
+from Shell controls, grab/key-focus changes trigger a coalesced idle refresh,
+and that refresh rereads Mutter's focused window after the transition settles.
+Pending results are invalidated immediately; disable removes the queued refresh.
+The added pytest check exercises application actors, Shell interaction, settled
+focus refresh and disable cleanup. The quick suite passed **664 tests, 58 skipped**.
+
+Normal whole-machine plan/apply deployed the follow-up and restarted sys-gui,
+usr-home and usr-browser. GNOME reports the extension **ACTIVE**, and the
+operator retested the Calculator case and reported that it works now. Typed
+verification of transaction `1790780281071143141` is **reboot-required**, with
+all seven running guests matching their selections. No live code overlay or
+diagnostic configuration mutation was used. Follow-up evidence is in
+`.airlock-logs/gnome-focused-vm/calculator-fix/`, including `plan.json`,
+`apply.json`, `verify-after.json`, and `acceptance.json`.
+
 Machine revision `eb939a1` is committed on main and deployed through normal
 whole-machine plan/apply to the discovered development SSH target. The quick
 suite passed **663 tests, 58 skipped**. GNOME Shell **50.4** reports the extension
@@ -67,7 +87,9 @@ window-label integration is separate work.
 
 The installed custom extension follows `notify::focus-window` and Shell keyboard
 focus. Overview, Shell menus/modal interaction, and lock/greeter states suppress
-the application indicator. Native Wayland application windows are local to
+the application indicator; application focus actors do not. Keyboard-focus and
+grab transitions refresh at idle after Shell finishes changing state. Native
+Wayland application windows are local to
 sys-gui in this GUI path. For Xwayland windows, an asynchronous Python-Xlib
 reader obtains bounded Qubes properties and uses XRes's server-reported client
 PID plus `/proc/<pid>/exe` to identify the installed `qubes-guid` binary. It

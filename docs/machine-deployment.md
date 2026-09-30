@@ -1,5 +1,21 @@
 # Repository-first whole-machine deployment
 
+Focused VM indicator Calculator follow-up (2026-09-30): machine revision
+`3750010` fixes application-actor and Shell focus-transition handling after the
+operator reported that Calculator hid the indicator. Calculator's Qubes metadata
+and the packaged identity reader were already correct. The quick suite passed
+**664 tests, 58 skipped**. Normal plan/apply restarted sys-gui and its running
+usr-home/usr-browser dependents; GNOME reports the extension **ACTIVE**, and
+the operator confirmed the Calculator case works after the update. No live
+overlay or diagnostic configuration mutation was used.
+
+Typed verification of transaction `1790780281071143141` reports
+**reboot-required**, with all seven running guest systems matching their
+selections, including updated sys-gui `54dhx8c2018szghq3qlqk0bpdqccy7np`.
+Host verification after reboot and the broader GUI acceptance matrix remain
+pending. Evidence is under `.airlock-logs/gnome-focused-vm/calculator-fix/`;
+see the [indicator plan](todo/gnome-focused-vm-indicator.md).
+
 Focused VM indicator early deployment (2026-09-30): machine revision `eb939a1`
 was built and applied through normal whole-machine plan/apply using the
 development VM's discovered SSH target. Only sys-gui changed; activation
