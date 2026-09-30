@@ -55,6 +55,8 @@ resize/maximize and login/lock after building and booting the updated image.
 
 The [Files launcher TODO](todo/sys-gui-files-launcher.md) tracks hiding local
 Files while keeping Nautilus installed for desktop integration.
+The [focused VM indicator TODO](todo/gnome-focused-vm-indicator.md) tracks
+showing the active window's VM name and Qubes label colour in the top panel.
 
 ## Deferred: appearance synchronization
 

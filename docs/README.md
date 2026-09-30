@@ -31,6 +31,7 @@ host/guest storage passed acceptance. Detailed summaries retain their boundaries
 | [Deployment code health](todo/09-deployment-code-health.md) | Planned. Preserve cleanup errors, use durable record writes, and simplify host publication. |
 | [Boot menu presentation](todo/10-boot-menu-presentation.md) | Planned. Newest generation first and default; concise commit timestamp/SHA labels and recovery below. |
 | [GNOME Files launcher](todo/sys-gui-files-launcher.md) | Planned. Hide local Files in sys-gui, retain Nautilus for DING, and expose the usr-home launcher. |
+| [GNOME focused VM indicator](todo/gnome-focused-vm-indicator.md) | Planned. Show the focused window's VM name and Qubes label colour in the top panel using verified window metadata. |
 | [sys-ctrl](completed/05-sys-ctrl.md) | Completed controller deployment and fault-handling acceptance. |
 | [Direct pool deployment](completed/06-direct-pool-machine-deployment.md) | Completed package admission, sparse root reuse and physical update/rollback acceptance. |
 | [Unified host and guest store](completed/07-unified-host-guest-store.md) | Completed shared storage, host boot/recovery, builder reuse and maintenance acceptance. |
