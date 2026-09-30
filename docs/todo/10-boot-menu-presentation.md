@@ -165,3 +165,29 @@ both resolve to `mq1z3vjikp3ynnc4ryrx64f3csplc26y`, and six running guests match
 their selections; usr-browser is stopped. Evidence:
 `.airlock-logs/store-preparation/verify-before.json`. Physical confirmation of
 the larger text and manual older-generation/default behavior remains pending.
+
+
+## Menu/startup size comparison (2026-09-30)
+
+The operator confirmed the bootstrap/startup font is good and the 80x25 menu is
+now too large. Read-only kernel logs show a 3840x2400 bootstrap framebuffer and
+240x75 console cells, corresponding to 16x32 pixels per cell. The menu uses a
+separate firmware text renderer. Machine source **`5bd3a92`** changes its setting
+to **`consoleMode = "1"`**, the [UEFI 80x50 mode](https://github.com/systemd/systemd/blob/main/man/loader.conf.xml).
+This is the next smaller menu-mode trial; exact visual matching has not yet
+been observed. Startup font and resolution configuration are unchanged.
+
+**`make test-quick`: 629 passed, 58 skipped in 5.60 s**. No Nix evaluation or
+automatic tool setup ran; absent EROFS tools account for the additional skips
+relative to the previous tool-equipped run. The existing opt-in image/release
+console-mode assertion now expects `1`; it was not run as an evaluation gate.
+
+Normal plan/apply installed **`console-mode 1`** in the live ESP with no guest
+changes or restarts. Apply reused its prepared candidate with zero builds and
+transfers. The activation worker exited successfully. Typed verification of
+transaction **`1790768363786110491`** reports **reboot-required**; six running
+guests match their selections and usr-browser remains stopped. The selected
+host is `dyy6c32zx6fanzfrxyzgriw4rchihhwy`; the running host remains generation
+13's `mq1z3vjikp3ynnc4ryrx64f3csplc26y`. The next physical boot must compare the
+menu and startup text and verify the selected generation. Evidence:
+`.airlock-logs/boot-screen-consistency/`.

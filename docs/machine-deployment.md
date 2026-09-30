@@ -1,5 +1,25 @@
 # Repository-first whole-machine deployment
 
+Boot-screen size follow-up (2026-09-30): the operator confirmed bootstrap/startup
+text is good and the 80x25 boot menu is too large. Machine revision `5bd3a92`
+changes only the menu to `consoleMode = "1"` (UEFI 80x50 trial); startup font
+configuration stays unchanged. The observed startup framebuffer is 3840x2400
+with 240x75 console cells (inferred 16x32 glyphs). Firmware and Linux render
+text separately; exact apparent size matching remains a physical comparison.
+
+Normal plan/apply installed `console-mode 1` in the live ESP without guest
+changes or restarts. Apply reused its prepared candidate with zero builds and
+transfers. Transaction `1790768363786110491` is verified **reboot-required**:
+six running guests match their selections, usr-browser is stopped, selected host
+is `dyy6c32zx6fanzfrxyzgriw4rchihhwy`, and running host remains
+`mq1z3vjikp3ynnc4ryrx64f3csplc26y`. The worker completed successfully. Quick tests
+passed **629 tests, 58 skipped in 5.60 s**, with no Nix evaluations or automatic
+tool setup; storage-tool-dependent checks skipped because those tools were not
+on PATH. No new test was added for this configuration adjustment. No live
+configuration mutation was used. Evidence: `.airlock-logs/boot-screen-consistency/`
+and [TODO 10](todo/10-boot-menu-presentation.md). Next boot must confirm the
+menu/startup size comparison and the selected host generation.
+
 Store preparation follow-up (2026-09-30): machine revision `3efe570` is committed,
 pinned and applied through the normal controller route. Typed verification of
 transaction `1790766764373029803` is **reboot-required**: all six running guests
