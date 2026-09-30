@@ -1,6 +1,6 @@
 # 11: Simplify internal compatibility before release
 
-Status: **in progress** (2026-09-30). First option pair completed; remaining
+Status: **in progress** (2026-09-30). First two option pairs completed; remaining
 cleanup is pending.
 
 Airlock is unreleased. The local source contains a meaningful amount of
@@ -58,7 +58,8 @@ Pair-by-pair progress:
 
 - [x] `build` / `attr`: authored references now require `build`; normalized
   references retain `attr`.
-- [ ] `sourceRef` / `source_ref`.
+- [x] `sourceRef` / `source_ref`: authored source options require `sourceRef`;
+  normalized records retain `source_ref`.
 - [ ] `activationCommand` / `activation_command`.
 - [ ] `activationAction` / `activation_action`.
 - [ ] `switchAction` / `switch_action`.
@@ -105,6 +106,43 @@ This behavior was not changed in the alias cleanup.
 
 - [ ] Investigate relative subpath traversal validation separately in both
   schema libraries and their consumers.
+
+#### Second change: require authored `sourceRef` (2026-09-30)
+
+Same worktree and branch as the first change. Component implementation commit:
+`9711c8b`.
+
+Removed `source_ref` from the accepted authored keys for system profiles,
+host systems/reboot components, templates and closure backends (system, kernel,
+initrd, modules, root and store). Both libraries now resolve `source` /
+`sourceRef` without the alternate-spelling branches; template normalization
+reuses the existing shared source helper instead of duplicating that logic.
+The NixOS module already exposed only `sourceRef`, so its declarations needed
+no further change.
+
+The caller inventory found no authored `source_ref` options to migrate.
+Normalized `source_ref` records, fixtures, and activation/validation consumers
+remain unchanged. Authored `source = { build = "..."; }` references and concrete
+`source` paths remain supported; conflicting non-null `source` and `sourceRef`
+still fail. Both configuration guides document these interfaces.
+
+Expanded pytest coverage exercises all distinct source-option parsers, including
+the shared reboot-component parser through the host kernel. It verifies reference
+and concrete-source normalization, null `sourceRef`, rejection of `source_ref`
+even when null or supplied alongside `sourceRef`, and source/reference conflicts.
+All Nix evaluation tests remain explicitly marked `nix`.
+
+Validation:
+
+- Focused regression suite: **88 passed** in **1.31 s** after strengthening
+  assertions to inspect complete normalized source records.
+- Existing `system-schema`, `topology-schema` and `config-topology-eval`:
+  **3 passed**, included in an earlier **91 passed** run in **18.64 s**.
+- `make test-quick`: **629 passed, 58 skipped** in **5.62 s**.
+- Evidence: worktree `.airlock-logs/source-ref-option/quick/` and
+  `/run/media/user/data/airlock/logs/compat-source-ref/{nix,regression}/`
+  (JUnit and JSON reports). No image/package build or live deployment was
+  performed.
 
 ### 2. Old dom0 module interface
 
