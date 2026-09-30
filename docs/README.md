@@ -51,7 +51,7 @@ historical paths.
 | [USB lab network follow-ups](todo/usb-lab-network-followups.md) | Focused tests, updates proxy, PCI Wi-Fi traffic, and an exact persistence sentinel remain. The wired topology passed physical acceptance. |
 | [Deployment metadata and validation reuse](todo/08-deployment-metadata-validation-reuse.md) | Planned. Reduce repeated preparation work with operation-scoped caches; RAM staging is out of scope. |
 | [Deployment code health](todo/09-deployment-code-health.md) | Planned. Preserve cleanup errors, use durable record writes, and simplify host publication. |
-| [Internal compatibility cleanup](todo/11-simplify-internal-compatibility.md) | Local cleanup implemented. Tests and persisted-state acceptance are pending; the current development deployment route is retained with documented dependencies. |
+| [Internal compatibility cleanup](todo/11-simplify-internal-compatibility.md) | Local cleanup implemented; quick tests passed (645 passed, 59 skipped). Nix/EROFS checks and persisted-state acceptance remain pending; the development deployment route is retained. |
 | [Live VM additions](todo/12-live-vm-additions.md) | Planned. Create and use persistent VMs immediately; defer host activation until a later reboot. |
 | [Minimal VM declarations](todo/13-minimal-vm-declarations.md) | Planned. Derive builds, topology, deployment targets and live desktop integration from one small declaration per ordinary VM. |
 | [Separate bootstrap from normal startup](todo/14-separate-bootstrap-from-normal-startup.md) | Planned. Reuse applied configuration on unchanged boots, keep GUI/input prerequisites, and reserve detailed bootstrap work and progress for initialization, changes and recovery. |

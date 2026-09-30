@@ -1,8 +1,9 @@
 # 11: Simplify internal compatibility before release
 
-Status: **local implementation complete; validation and live acceptance pending**
-(2026-09-30). Sections 1–8 have local changes; section 9 has a documented
-retention decision. No tests or live changes were performed in the latest pass.
+Status: **local implementation complete; quick tests passed; remaining validation
+and live acceptance pending** (2026-09-30). Sections 1–8 have local changes;
+section 9 has a documented retention decision. Latest quick suite: **645 passed,
+59 skipped**. No live changes have been performed for this cleanup.
 
 Airlock is unreleased. The local source contains a meaningful amount of
 compatibility code, concentrated in configuration parsing, storage and deployment.
@@ -13,9 +14,13 @@ This document preserves the initial read-only findings and records subsequent
 implementation in the parent repository and its `airlock-machine` checkout.
 The initial investigation performed no live-state inventory, build, test or
 deployment. Earlier build/source-reference cleanup has test evidence below;
-all later changes are source-only and unvalidated, at the user's request.
+later implementation was initially source-only at the user's request. The user
+subsequently authorized quick tests; the latest results are recorded below.
 Counts describe confirmed examples rather than an exhaustive count of
-compatibility branches. Persisted-state changes must not be activated until
+compatibility branches. Implementation subsections preserve their initial
+source-only status; references to unrun tests below describe that implementation
+pass. See the latest validation record for current coverage. Persisted-state
+changes must not be activated until
 the pending inventory, validation and acceptance steps are completed.
 
 ## Findings and implementation
@@ -505,7 +510,7 @@ Maintain the existing Xen, qrexec, QubesDB, qubesd, libvirt and policy architect
 - [x] Write or update meaningful pytest coverage for current behavior,
   malformed/unsupported data rejection, installed imports and interruption/
   recovery where relevant. Remove tests whose sole purpose was an obsolete alias.
-- [ ] Run `make test-quick` for implementation changes, with clear results under
+- [x] Run `make test-quick` for implementation changes, with clear results under
   `.airlock-logs/`. Keep Nix evaluation/builds opt-in through `make test-nix`.
 - [x] Commit coherent component changes in `airlock-machine`, then update and
   commit the parent pin and affected integration/docs changes.
@@ -521,17 +526,50 @@ performance work and [TODO 09](09-deployment-code-health.md)'s behavior-preservi
 cleanup. Preserve completed deployment/storage/boot acceptance records as
 historical evidence when updating current interfaces and documentation.
 
+## Latest quick validation (2026-09-30)
+
+The user authorized `make test-quick` after the source-only implementation pass.
+Ran the parent target in the same worktree, covering component tests and parent
+integration checks: **645 passed, 59 skipped in 5.68 s**; exit status **0**.
+No implementation changes were needed after this run.
+
+Selected coverage included:
+
+| Suite | Result |
+| --- | --- |
+| Current storage format/rejection | 10 passed |
+| Boot menu and retained identity/provenance | 13 passed |
+| Host publication, boot artifacts and resumable presentation | 29 passed |
+| Transferred/incremental artifact admission | 50 passed |
+| Machine coordinator, including current profile discovery | 122 passed |
+
+These are selected suite counts within the overall result, not additional runs.
+The quick target excludes Nix-marked authored-option/source-reference/bootstrap
+schema tests. The ten real incremental-index cases skipped because patched
+`airlock-erofs-utils` is unavailable in the quick environment. Other skipped
+cases retain their existing environment prerequisites. These skips do not
+establish Nix integration, real EROFS index correctness or live acceptance.
+
+Evidence in the worktree:
+
+- `.airlock-logs/compat-cleanup-quick.log`: complete command/output.
+- `.airlock-logs/compat-cleanup/quick/pytest-junit.xml`: JUnit results.
+- `.airlock-logs/compat-cleanup/quick/pytest-report.json`: machine-readable results.
+
+No Nix evaluations/builds, live session changes, resets, deployment, activation,
+reboots or live tests were performed by this validation run.
+
 ## Current handoff
 
-All selected local code work is in
+All selected local code work is committed in
 `/home/user/dev/airlock-org/worktrees/airlock-simplify-build-option`, branch
 `simplify-build-option`, including component commits and parent pin/docs updates.
-This implementation pass did not edit the original checkout. The user explicitly deferred
-all tests, builds and live session changes for this pass; commits bypassed hooks
-that would otherwise run checks. Static source review, reference searches and
-`git diff --check` are the only verification performed for these later changes.
+The cleanup did not edit the original checkout. Initial implementation commits
+bypassed hooks to honor the then-current instruction to defer tests/check suites.
+The later authorized quick run passed as recorded above.
 
-Next pass: run the pending local regression/quick checks, opt-in Nix schema and
-integration checks, then the persisted-state inventory. Record each result here.
-No cleanup reset, deployment, activation, reboot or live test has been performed
-or approved by this source-only handoff. Earlier test results in section 1 do not establish correctness of the subsequent untested changes.
+Remaining: opt-in Nix schema/integration validation, real EROFS index checks,
+and persisted-state inventory/preparation before any separately authorized
+activation and live acceptance. The successful quick run does not complete
+these remaining checks. No further test/build or live operation is implied by
+this handoff.
