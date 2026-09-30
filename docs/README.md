@@ -79,7 +79,9 @@ records the physical early-purge result and its shared-pool GC limit. The
 [completed offline builder baseline](completed/06-builder-input-baseline.md)
 records disconnected guest builds, pin retention through pool cleanup, and
 the reboot trial for two routine configuration changes. The
-[completed plans](completed) record acceptance evidence for earlier work.
+[completed plans](completed/) record acceptance evidence for earlier work.
+Their shared controller, direct-pool and unified-store trial timeline is in the
+[2026-09-25 to 2026-09-29 acceptance report](history/machine-acceptance-2026-09-25-to-29.md).
 Completion is limited to each document's stated scope, not universal hardware
 support. A successful build is not physical acceptance.
 
@@ -119,6 +121,8 @@ profile/evidence scope rather than blindly synchronizing text.
   [VBIOS trial](history/amd-gpu-vbios.md), and [reset findings](history/amd-gpu-assignment-reset-findings.md):
   dated hardware evidence. Later successful desktops do not prove reset safety,
   suspend/resume, or general hardware compatibility.
+- [Machine acceptance history](history/machine-acceptance-2026-09-25-to-29.md):
+  shared deployment trials, failures, cleanup and final acceptance for plans 05–07.
 - [Pool builder proof](history/pool-builder-proof.md): historical precursor to the
   implemented pool-backed builder, not an active implementation checklist.
 
