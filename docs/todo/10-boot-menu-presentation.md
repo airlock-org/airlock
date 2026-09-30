@@ -55,8 +55,8 @@ Paths below are relative to `airlock-machine/`.
 The image embeds the parent image source commit; standalone releases embed the
 machine source commit. Both normal and independent recovery carry the same
 `boot-source.json` for their corresponding source. Menu entries carry explicit
-boot-menu generation, role, system and source comments. Short numeric versions
-only distinguish equal labels; ordering uses an ascending, fixed-width
+boot-menu generation, role, system and source comments. Short `Generation N` versions
+only distinguish equal labels and preserve old installer compatibility; ordering uses an ascending, fixed-width
 complement of the boot-menu generation, separately for normal and recovery.
 
 Retained legacy entries are verified before a journalled presentation migration
