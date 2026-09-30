@@ -146,8 +146,8 @@ three targeted Nix interface tests passed. Reports are in
 `.airlock-logs/rebase-quick/pytest-report.json` and
 `.airlock-logs/rebase-nix/report.json`.
 
-No whole-machine release or physical deployment has been performed for this
-implementation. The no-reboot application launch, exact home sentinel, later host boot
+At the implementation checkpoint, no whole-machine release or physical deployment
+had been performed. The no-reboot application launch, exact home sentinel, later host boot
 and physical rollback/reapply checks remain open. Implementations checked above
 are not a claim of physical acceptance; this document remains in `todo`.
 
@@ -165,3 +165,56 @@ Worktree-local evidence is preserved under
 `.airlock-logs/retired-worktrees/airlock-live-vm-additions/` in the main checkout.
 This archive is the current location for the earlier `.airlock-logs/` paths;
 their relative suffixes are unchanged. Physical acceptance remains pending.
+
+## Live baseline installation attempt (2026-09-30)
+
+Reached the live development VM through Tailscale at `user@100.104.92.101` and
+confirmed its Qubes name is sys-dev. Dom0 was running host
+`dyy6c32zx6fanzfrxyzgriw4rchihhwy`, boot ID
+`4513ac2c-980a-4cd7-8c35-27edb6a2e83b`. Neither `MachinePrepare` nor
+`Pool.AdmitCandidate` was installed in that running host. This prerelease
+baseline needs installation and an initial host boot before exercising the
+released no-reboot addition interface. This installation is separate from the
+ordinary VM-addition acceptance test.
+
+Normal `make machine-plan` built component revision `ae6dabb` through sys-ctrl.
+The plan changes sys-ctrl, sys-dev and sys-gui, restarting their running
+usr-home/usr-browser dependents; sys-net and sys-firewall are unaffected.
+Normal `make machine-apply` reused the prepared candidate with zero builds and
+transfers and submitted detached worker `airlock-machine-deploy-5b42fb9f7eb7`.
+Candidate: `/var/lib/airlock/machine/candidates/b03198349a6455711665c24f8e87e77646fe78b07641bc7761284b1fd88442ee`.
+
+**Outcome unverified:** at 17:01 UTC, sys-dev had not returned to Tailscale after
+its planned restart (eleven minutes offline). The submitting SSH call succeeded;
+that does not establish worker success or host selection. A physical screen
+observation or dom0 journal is needed before rebooting or submitting another
+deployment. The read-only diagnostic is:
+
+```sh
+sudo journalctl -u airlock-machine-deploy-5b42fb9f7eb7 --no-pager -n 80
+```
+
+No host reboot, live overlay, service override or diagnostic configuration
+mutation was performed. Observation used the existing unprivileged development
+dom0 PTY. No new control authority was added.
+
+The separate committed acceptance candidate is in
+`/home/user/dev/airlock-org/worktrees/airlock-live-vm-acceptance`, on parent and
+component branches `trial/live-vm-acceptance`. Parent `3eb1140` pins component
+`67955a5`. It adds an offline purple `usr-notes` VM with Text Editor, a 2-GiB
+private disk, sys-gui as its GUI VM and `autostart = false`. Evaluated topology
+differs from the baseline only in that domain. Quick tests passed **724 passed,
+59 skipped**, and the complete release built locally:
+`/nix/store/kyrgy381xvx0m9hkkha4l1x9jq9m0iyy-airlock-machine-release`.
+This trial has not been submitted to the live machine or merged into main.
+
+Evidence is in the main checkout's `.airlock-logs/live-vm-trial/`: baseline
+`baseline-before.json`, `baseline-plan.log`, `baseline-plan.json`,
+`baseline-apply.log` and `baseline-submission.json`; trial `trial-topology.json`,
+`trial-topology-diff.json`, `trial-quick.log`, `trial-quick/pytest-report.json`,
+`trial-build.log` and `trial-release.json`.
+
+Next: inspect the baseline worker, recover or finish it through the normal
+coordinator, verify its guest selections, then boot the installed baseline.
+After confirming the generic host RPCs and GUI tools are running, use normal
+plan/apply from the trial worktree and perform the no-reboot acceptance sequence.
