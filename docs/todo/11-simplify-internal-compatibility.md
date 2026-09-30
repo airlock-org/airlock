@@ -583,15 +583,32 @@ Evidence in the worktree:
 - `.airlock-logs/rebase-main/component-commit-map.json`: component identities.
 - `.airlock-logs/rebase-main/parent-range-diff.txt`: parent replay comparison.
 
-Both checkouts remain on `simplify-build-option`. Main was not merged or
-advanced; fast-forward integration remains a separate user instruction.
+At the end of the rebase, both working checkouts remained on
+`simplify-build-option`; main had not yet been advanced. The subsequently
+authorized fast-forward integration is recorded below.
+
+## Fast-forward integration (2026-09-30)
+
+The user authorized integration after the rebase and passing quick run. The
+parent main advanced from `2d48fe1` to the rebased implementation and validation
+record at `29d5642`. Its component main advanced from `b867b9a` to `38886d6`,
+matching the parent pin; the standalone component source repository main also
+advanced to `38886d6`. All integrations used `--ff-only`, with no merge commits.
+This documentation update is committed on the working branch and fast-forwarded
+into parent main as well.
+
+No implementation changes were introduced during integration, so the post-rebase
+**681 passed, 59 skipped** quick result remains applicable. No remote push,
+build, deployment, activation or live session change was performed. The original
+main checkout and component checkout are clean after integration.
 
 ## Current handoff
 
 All selected local code work is committed in
 `/home/user/dev/airlock-org/worktrees/airlock-simplify-build-option`, branch
-`simplify-build-option`, including component commits and parent pin/docs updates.
-The cleanup did not edit the original checkout. Initial implementation commits
+`simplify-build-option`, including component commits and parent pin/docs updates. The work is now also
+integrated into both repositories' main branches. Source edits were made in the
+working checkout; the original checkout was advanced by fast-forward merges. Initial implementation commits
 bypassed hooks to honor the then-current instruction to defer tests/check suites.
 Both the later authorized quick run and the post-rebase quick run passed, as
 recorded above.
