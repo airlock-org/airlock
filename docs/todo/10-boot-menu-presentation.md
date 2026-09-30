@@ -10,6 +10,9 @@ Status: **in progress** (2026-09-30).
   `Airlock (2026-09-30_14:30-a1b2c3d)`.
 - Use the release source commit's timestamp, formatted in UTC, and the first
   seven characters of its SHA. Labels remain stable across rebuilds.
+- Use the standard 80x25 UEFI console mode to make menu text larger.
+- Prune unneeded historical normal generations through the deployed retention
+  workflow; preserve independent recovery and protected current/rollback hosts.
 - Recovery entries appear below normal generations and are clearly labeled,
   for example `Airlock (recovery, 2026-09-30_14:30-a1b2c3d)`.
 - Manually choosing an older generation boots it once. The next boot defaults
@@ -46,7 +49,7 @@ Paths below are relative to `airlock-machine/`.
 - [x] Cover fresh-image and deployment/retained-entry paths; identical source
   labels must not merge distinct generations or change their order.
 - [ ] Pass `make test-quick`, then verify the physical menu and default boot,
-  including a manual older-generation boot followed by the newest default.
+  including readable text after pruning the unneeded older generations.
   Use the [normal deployment workflow](../machine-deployment.md) where possible.
 - [ ] Record a brief acceptance summary here.
 
@@ -70,9 +73,9 @@ available; Xen systems without EFI variable access use `loader.conf`.
 Compatibility limitation: pre-existing image/deployment generations did not
 embed a source timestamp. They receive `Airlock (legacy generation N)` (or the
 recovery equivalent), rather than attributing the new source identity to old
-artifacts. Exact commit labels for those existing entries require a separately
-verified provenance backfill. New images and releases use the agreed labels.
-This exception remains an acceptance gap; the task is not complete.
+artifacts. The operator explicitly declined provenance backfill and requested pruning
+unneeded older generations instead. Independent legacy recovery stays available.
+New images and releases use the agreed commit labels.
 
 Focused pytest coverage includes generations 2 and 10, identical source labels,
 older selection, native/retained duplicates, repeated formatting/sealing,
@@ -100,10 +103,11 @@ interrupted migration and stored firmware preference handling. The live release 
   labels. The normal apply completed its artifact sealing/verification steps.
 - Guarded `make gc-auto` completed and skipped collection below its 150 GiB
   threshold. It did not collect the development host's `/nix/store`.
-- Still required: physical confirmation of the menu, manual boot of
-  `Airlock (legacy generation 11)`, then a reboot allowing generation 12 to
-  boot by default, followed by `make machine-verify DEPLOY_TARGET=sys-dev`.
-  Exact source labels for old entries also need verified provenance backfill.
+- Follow-up: the operator booted generation 12. Typed verification now reports
+  **complete**, with the selected host running and guest generations matching.
+  The operator requested pruning old generations and larger menu text;
+  provenance backfill is no longer required. Physical confirmation of the
+  larger text remains pending.
 
 Evidence: `.airlock-logs/boot-menu-presentation/` contains the final quick-test
 reports, plan/apply JSON, menu snapshot, bootctl output, status, and typed
