@@ -7,6 +7,13 @@ performance follow-up to completed [direct pool deployment](../completed/06-dire
 and [unified storage](../completed/07-unified-host-guest-store.md); their acceptance
 remains recorded separately.
 
+Before implementing any remaining item, investigate whether it is worth doing.
+Measure the remaining preparation costs after the completed incremental-index
+optimization and determine how much repeated metadata reads and validation
+contribute. Proceed only where the expected benefit justifies the added
+complexity and maintenance cost; defer or close items without a worthwhile
+payoff. The unchecked items below are proposals pending that investigation.
+
 ## Baseline
 
 The latest verifier/builder update took about **135 seconds to build** and
