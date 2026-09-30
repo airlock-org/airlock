@@ -1,6 +1,7 @@
 # 11: Simplify internal compatibility before release
 
-Status: **planned** (2026-09-30).
+Status: **in progress** (2026-09-30). First option pair completed; remaining
+cleanup is pending.
 
 Airlock is unreleased. The local source contains a meaningful amount of
 compatibility code, concentrated in configuration parsing, storage and deployment.
@@ -17,9 +18,10 @@ examples rather than an exhaustive count of compatibility branches.
 
 ### 1. Equivalent configuration option names
 
-The Nix parsers accept at least nine pairs of equivalent names. Several branches
-validate both spellings, reject conflicting values, or accept duplicate values
-when they agree. These branches repeat across templates and domain backends.
+The initial inventory found at least nine pairs of equivalent names. Several
+branches validate both spellings, reject conflicting values, or accept duplicate
+values when they agree. These branches repeat across templates and domain
+backends. The table records that inventory; completed removals are tracked below.
 
 | Equivalent names | Location |
 | --- | --- |
@@ -36,7 +38,7 @@ when they agree. These branches repeat across templates and domain backends.
 Sources: [system.nix](../../airlock-machine/lifecycle/misc/lib/system.nix),
 [topology.nix](../../airlock-machine/lifecycle/misc/lib/topology.nix), and
 [qubes-topology.nix](../../airlock-machine/lifecycle/misc/modules/qubes-topology.nix).
-The topology module explicitly describes `attr` as an alias for `build`.
+The topology module initially described `attr` as an alias for `build`.
 The bootstrap flake additionally accepts `hostName` / `hostname` in
 `mkGuestContentModule`, preferring `hostName` if both appear:
 [initial-runtime-config/flake.nix](../../airlock-machine/lifecycle/bootstrap/initial-runtime-config/flake.nix).
@@ -51,6 +53,58 @@ One spelling per interface does not require renaming every serialized field.
 - [ ] Remove alternate input spellings and duplicate/conflict-resolution branches.
 - [ ] Keep intentional normalization between authored configuration and generated
   topology/system JSON; retain unknown-option rejection.
+
+Pair-by-pair progress:
+
+- [x] `build` / `attr`: authored references now require `build`; normalized
+  references retain `attr`.
+- [ ] `sourceRef` / `source_ref`.
+- [ ] `activationCommand` / `activation_command`.
+- [ ] `activationAction` / `activation_action`.
+- [ ] `switchAction` / `switch_action`.
+- [ ] `skipStart` / `skip_start`.
+- [ ] `readOnly` / `read_only`.
+- [ ] `persistentSize` / `persistent_size`.
+- [ ] `qrexecPolicy` / `qrexec_policy`.
+- [ ] Additional bootstrap `hostName` / `hostname` pair.
+
+#### First change: require authored `build` (2026-09-30)
+
+Worktree: `/home/user/dev/airlock-org/worktrees/airlock-simplify-build-option`,
+branch `simplify-build-option` in the parent and component checkouts.
+Component implementation commit: `0cc6883`.
+
+Removed `attr` from accepted input keys in both schema libraries and from the
+topology module's source-reference options, along with alternate-name/conflict
+branches. Missing references now report `must set build`. Normalized
+`source_ref.attr` and existing activation/validation consumers remain unchanged.
+The caller inventory found no authored `attr` references needing conversion;
+existing `attr` fixtures represent normalized JSON and remain valid.
+Both configuration guides document the authored/normalized distinction.
+
+New pytest coverage evaluates actual Nix schemas for system-profile, template
+and domain-root references: `build` normalization, rejection of `attr` alone
+or alongside `build`, missing `build`, malformed output attributes and absolute
+subpaths. These tests are marked `nix` and excluded from the quick loop.
+
+Validation:
+
+- Targeted schema/regression checks: **20 passed** (including the existing
+  `system-schema` and `topology-schema` checks).
+- Existing NixOS topology integration check (`config-topology-eval`):
+  **1 passed** in **17.60 s**.
+- `make test-quick`: **629 passed, 58 skipped** in **5.77 s**.
+- Evidence: worktree `.airlock-logs/build-option/quick/` and
+  `/run/media/user/data/airlock/logs/compat-build-option/nix/` (JUnit and JSON
+  reports), plus `/run/media/user/data/airlock/logs/compat-build-option/integration/`.
+  No image/package build or live deployment was performed.
+
+Additional finding from validation: the pre-existing subpath regular expression
+accepts `../root.img`, despite its diagnostic promising paths without `..`.
+This behavior was not changed in the alias cleanup.
+
+- [ ] Investigate relative subpath traversal validation separately in both
+  schema libraries and their consumers.
 
 ### 2. Old dom0 module interface
 

@@ -100,6 +100,10 @@ domains.work = {
 };
 ```
 
+Authored flake output references use `build`, with an optional `subpath`.
+Normalization stores the output attribute in `source_ref.attr` for validation
+and activation consumers. `attr` is not accepted as an authored option.
+
 A `nix-closure` domain is represented as:
 
 ```text
