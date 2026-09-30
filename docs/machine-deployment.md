@@ -134,8 +134,10 @@ restricted config-authority/approval workflow described in `config-system.md`.
 - A bootstrapped machine started from the `Airlock` boot-menu entry, with
   sys-dev reachable over SSH/Tailscale and access to the dom0 development
   password. The internal deployment profile remains named `usb-lab`; it is not
-  a boot-menu label. Use the Tailscale name (which can be `sys-dev-2`); its
-  Qubes name remains `sys-dev`.
+  a boot-menu label. Discover the development VM's current SSH/Tailscale
+  hostname or address with `tailscale status` and confirm it with `ssh`.
+  Enrollment can change that hostname; do not infer it from the Qubes name,
+  which remains `sys-dev`. Set `DEPLOY_TARGET` to the confirmed SSH target.
 - Keep a physical dom0 console available for the first trials. Restarting
   sys-dev removes the remote connection; failures may require local recovery.
 - Clean, committed `airlock-machine` and parent `airlock` repositories, an initialized
@@ -146,7 +148,7 @@ restricted config-authority/approval workflow described in `config-system.md`.
   and missing host dependencies to the ordinary store. Space checks never
   resize partitions, run GC or delete retained generations to make an update fit.
 
-At implementation time the live `sys-dev-2` machine's 31-GiB root had only
+At implementation time the live development VM's 31-GiB root had only
 about 1.4 GiB free. SSH and the password-protected dom0 control transport were
 tested, but a full live apply/reboot/rollback cannot be validated on that disk
 without provisioning more space. `make usb-dev-provision USB_SERIAL=...` now
@@ -201,10 +203,13 @@ git add <the relevant files>
 git commit -m 'Describe the change'
 
 make machine-build
-make machine-plan DEPLOY_TARGET=sys-dev-2
-make machine-apply DEPLOY_TARGET=sys-dev-2
-make machine-status DEPLOY_TARGET=sys-dev-2
-make machine-verify DEPLOY_TARGET=sys-dev-2
+# Set this once to the current SSH target discovered above:
+export DEPLOY_TARGET='<current-development-VM-SSH-target>'
+ssh "$DEPLOY_TARGET" hostname
+make machine-plan
+make machine-apply
+make machine-status
+make machine-verify
 ```
 
 The same whole-machine release can be built and submitted directly from the
@@ -271,8 +276,8 @@ coordinator can derive a one-guest candidate without building or transferring a
 second whole-machine release:
 
 ```bash
-make machine-guest-plan DEPLOY_TARGET=sys-dev-2 ADMISSION_RECEIPT=/home/user/.local/share/airlock/machine-build/admissions/<receipt>.json
-make machine-guest-apply DEPLOY_TARGET=sys-dev-2 ADMISSION_RECEIPT=/home/user/.local/share/airlock/machine-build/admissions/<receipt>.json
+make machine-guest-plan ADMISSION_RECEIPT=/home/user/.local/share/airlock/machine-build/admissions/<receipt>.json
+make machine-guest-apply ADMISSION_RECEIPT=/home/user/.local/share/airlock/machine-build/admissions/<receipt>.json
 ```
 
 The receipt path is inside sys-dev. Dom0 validates it against the retained pool
@@ -491,10 +496,10 @@ Boot reconciliation refuses an interrupted transaction instead of silently
 adopting the image's original topology. Don't run legacy apply tools concurrently.
 
 ```bash
-make machine-status DEPLOY_TARGET=sys-dev-2
-make machine-resume DEPLOY_TARGET=sys-dev-2
+make machine-status
+make machine-resume
 # Or explicitly select the previous whole-machine release:
-make machine-rollback DEPLOY_TARGET=sys-dev-2
+make machine-rollback
 ```
 
 If sys-dev is down, use the physical dom0 console:
