@@ -227,13 +227,25 @@ After reboot, run `machine-verify` again. Only `complete` means both host and
 guest generation checks passed. Window behavior still needs its own functional
 test; generation equality alone is not a GUI acceptance test.
 
-At the boot menu, use `Airlock`, which points to the newest selected normal Xen
-generation. Retained normal generations are titled `Airlock (generation N)`.
-`Airlock (recovery)` is the newest Xen text-recovery entry and does not start
-VMs, hand off the GPU or bring up networking automatically. The repository-owned
-post-install normalizer applies these names after image builds and deployments.
-Recovery is pinned as a separate Nix system profile, so it remains available
-when the original image generation falls outside the retained history.
+The boot menu lists normal Airlock generations from newest installed to oldest,
+then recovery entries. New images and releases use titles such as
+`Airlock (2026-09-30_14:30-a1b2c3d)` and
+`Airlock (recovery, 2026-09-30_14:30-a1b2c3d)`, using the source commit's UTC
+timestamp and short SHA. Entries created before source metadata was embedded
+are explicitly labelled `legacy generation N` during verified migration.
+
+The newest normal generation is always the persistent default. Manually choosing
+an older generation boots it once; the following boot defaults to the newest
+again. Whole-machine rollback and recovery selection do not establish an older
+persistent default: use the physical menu to boot that older host. Boot artifacts
+and writable host state remain specific to the manually chosen generation.
+
+Recovery does not start VMs, hand off the GPU or bring up networking automatically.
+The repository-owned post-install normalizer applies presentation after image
+builds and deployments. Recovery is pinned as a separate Nix system profile, so
+it remains available when the original image generation falls outside history.
+Retained entry migrations verify existing checksums before changing presentation,
+with a journalled checksum transition; Xen, kernel and initrd checksums stay fixed.
 
 Normal USB boots are guarded by a persistent boot-attempt supervisor. A VM is
 not ready merely because Xen created it: network providers, sys-gui, and every
@@ -365,7 +377,7 @@ data, Tailscale enrollment and credentials need separate backups.
 
 ## Independent recovery acceptance
 
-Select `Airlock (recovery)` manually from the boot menu and log in as `user`
+Select the labelled Airlock recovery entry manually from the boot menu and log in as `user`
 with the provisioned local password. This entry deliberately has no networking,
 Qubes guests or main pool-store assembly, so remote Tailscale access is unavailable.
 For the initial healthy-pool recovery smoke test, inspect:
@@ -384,7 +396,7 @@ sudo airlock-host-store recover "$(readlink -f /nix/var/nix/profiles/system)"
 
 This validates the retained pool binding and installed EFI artifacts before
 selecting the entry; it does not reboot. Capture the command result at the
-console, then manually boot normal `Airlock` and verify the machine again.
+console, then manually boot the newest normal Airlock entry and verify the machine again.
 This smoke test alone does not establish recovery from a missing/corrupt view;
 that fault-injection trial remains separate. Do not use the recovery environment
 to run normal whole-machine apply or garbage-collect its shared Nix database.

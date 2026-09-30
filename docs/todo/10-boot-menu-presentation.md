@@ -64,7 +64,7 @@ updates their entry checksums. Interrupted migrations accept either authenticate
 entry file and resume; Xen, kernel and initrd hashes stay fixed. The selected
 pool generation remains independent of the persistent menu default. Rollback
 and recovery selection keep the newest default; manually choose an older entry
-to boot that host. Saved firmware defaults are cleared when EFI variables are
+to boot that host. Saved firmware default and preferred entries are cleared when EFI variables are
 available; Xen systems without EFI variable access use `loader.conf`.
 
 Compatibility limitation: pre-existing image/deployment generations did not
