@@ -328,3 +328,26 @@ def test_usb_lab_routes_sys_dev_through_firewall_and_retains_development_access(
         "providesNetwork": False,
     }
     assert "jq" in report["dev"]["packages"]
+
+
+@pytest.mark.nix
+@pytest.mark.parametrize('repo, configuration', [
+    (ROOT, 'usb-dev'), (ROOT / 'airlock-machine', 'machine'),
+])
+def test_image_and_release_embed_their_own_committed_boot_source(repo, configuration):
+    expression = f'''
+      let
+        f = builtins.getFlake "{repo}";
+        config = f.nixosConfigurations.{configuration}.config;
+      in {{
+        expected = {{ revision = f.rev or "dirty"; timestamp = f.lastModified or 0; }};
+        normal = builtins.fromJSON config.specialisation.usb-lab.configuration.environment.etc."airlock/boot-source.json".text;
+        recovery = builtins.fromJSON config.specialisation.usb-text-recovery.configuration.environment.etc."airlock/boot-source.json".text;
+      }}
+    '''
+    result = subprocess.run([
+        str(ROOT / 'lifecycle/misc/tools/scripts/airlock-nix.sh'),
+        'eval', '--impure', '--json', '--expr', expression,
+    ], cwd=ROOT, capture_output=True, text=True, check=True)
+    report = json.loads(result.stdout)
+    assert report['normal'] == report['recovery'] == report['expected']

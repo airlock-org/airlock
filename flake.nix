@@ -63,6 +63,8 @@
           };
           extraSpecialArgs = {
             airlockUsbPreparedStore = preparedStore;
+            airlockSourceRevision = self.rev or "dirty";
+            airlockSourceTimestamp = self.lastModified or 0;
             airlockUsbGuestEntries = entries;
             inherit airlockMachineSeedArchive;
           };
