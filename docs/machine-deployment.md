@@ -15,7 +15,7 @@ all seven running guest systems match their selections, including sys-gui
 `24ymjdyixagdsx6q4smyaqbf0643x3q4`. Host-generation verification after reboot and
 the broader GUI acceptance matrix remain pending. Evidence is under
 `.airlock-logs/gnome-focused-vm/window-cache/`; see the
-[indicator plan](todo/gnome-focused-vm-indicator.md).
+[indicator plan](completed/gnome-focused-vm-indicator.md).
 
 Focused VM indicator Calculator follow-up (2026-09-30): machine revision
 `3750010` fixes application-actor and Shell focus-transition handling after the
@@ -31,7 +31,7 @@ Typed verification of transaction `1790780281071143141` reports
 selections, including updated sys-gui `54dhx8c2018szghq3qlqk0bpdqccy7np`.
 Host verification after reboot and the broader GUI acceptance matrix remain
 pending. Evidence is under `.airlock-logs/gnome-focused-vm/calculator-fix/`;
-see the [indicator plan](todo/gnome-focused-vm-indicator.md).
+see the [indicator plan](completed/gnome-focused-vm-indicator.md).
 
 Focused VM indicator early deployment (2026-09-30): machine revision `eb939a1`
 was built and applied through normal whole-machine plan/apply using the
@@ -49,7 +49,7 @@ including sys-gui `cj7n3xrxkc7w86plv439rv1d5rq5karn`. Selected host is
 `dyy6c32zx6fanzfrxyzgriw4rchihhwy`. Host verification after reboot and the
 detailed GUI acceptance matrix remain pending. Evidence is under
 `.airlock-logs/gnome-focused-vm/`; see the
-[indicator plan](todo/gnome-focused-vm-indicator.md).
+[indicator plan](completed/gnome-focused-vm-indicator.md).
 
 Boot-menu acceptance (2026-09-30): the operator restarted the laptop and confirmed
 the menu looks fine with the final `consoleMode = "1"` setting. Post-reboot typed

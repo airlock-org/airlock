@@ -56,12 +56,12 @@ historical paths.
 | [Minimal VM declarations](todo/13-minimal-vm-declarations.md) | Planned. Derive builds, topology, deployment targets and live desktop integration from one small declaration per ordinary VM. |
 | [Separate bootstrap from normal startup](todo/14-separate-bootstrap-from-normal-startup.md) | Planned. Reuse applied configuration on unchanged boots, keep GUI/input prerequisites, and reserve detailed bootstrap work and progress for initialization, changes and recovery. |
 | [GNOME Files launcher](todo/sys-gui-files-launcher.md) | Planned. Hide local Files in sys-gui, retain Nautilus for DING, and expose the usr-home launcher. |
-| [GNOME focused VM indicator](todo/gnome-focused-vm-indicator.md) | Implemented and deployed for early testing; operator liked the result. Detailed acceptance and host-generation verification after reboot remain pending. |
 | [Display consistency across VMs](todo/cross-vm-display-consistency.md) | Planned. Align cursors, scaling, fonts and appearance; use GNOME Console for utility terminals and verify display layout changes. |
 | [Hyprland physical trial](todo/sys-gui-hyprland-trial.md) | Deferred. Configuration exists; physical Wayland desktop and cross-VM transport are unverified. |
 | [sys-gpu hardware](todo/sys-gpu-hardware.md) | Deferred. Physical assignment, rendering, lifecycle and later inference work for an additional GPU. |
 | [AMD GPU lifecycle](todo/amd-gpu-lifecycle.md) | Open investigation. Reset effectiveness, state isolation and supported lifecycle operations need evidence. |
 | [Qubes restart race](todo/qubesd-restart-race.md) | Open investigation. Socket readiness and client recovery; the cause of the historical black-screen incident is unconfirmed. |
+| [GNOME focused VM indicator](completed/gnome-focused-vm-indicator.md) | Completed. Deployed and operator accepted, including Calculator focus and window identity caching. Broader GUI checks and host-generation verification after reboot remain pending. |
 | [sys-ctrl](completed/05-sys-ctrl.md) | Completed controller deployment and fault-handling acceptance. |
 | [Direct pool deployment](completed/06-direct-pool-machine-deployment.md) | Completed package admission, sparse root reuse and physical update/rollback acceptance. |
 | [Unified host and guest store](completed/07-unified-host-guest-store.md) | Completed shared storage, host boot/recovery, builder reuse and maintenance acceptance. |

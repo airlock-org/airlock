@@ -94,5 +94,6 @@ mechanism. Each VM retains its own settings and session.
 
 Preserve the Qubes architecture and existing VM ownership boundaries. Keep
 trusted VM names and label colours distinct: consistent styling must not erase
-window identity. The [focused VM indicator](gnome-focused-vm-indicator.md) and
-[Files launcher visibility](sys-gui-files-launcher.md) remain separate TODOs.
+window identity. The [focused VM indicator](../completed/gnome-focused-vm-indicator.md)
+is complete; [Files launcher visibility](sys-gui-files-launcher.md) remains a
+separate TODO.

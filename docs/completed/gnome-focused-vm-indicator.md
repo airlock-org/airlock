@@ -1,8 +1,9 @@
 # Show the focused window VM in the GNOME panel
 
-Status: implemented and deployed for early testing, 2026-09-30. The operator
-tested the indicator and reported that it looks good. Detailed acceptance checks
-and host-generation verification after reboot remain pending.
+Status: completed and accepted by the operator, 2026-09-30. The indicator is
+implemented and deployed, including the Calculator focus fix and window identity
+cache. The operator retested and reported that it looks good. Broader GUI checks
+and host-generation verification after reboot remain pending as recorded below.
 
 Window identity cache follow-up (2026-09-30): machine revision `b867b9a`
 eliminates repeated ownership-reader startup when switching among verified open
@@ -147,8 +148,10 @@ The indicator only observes focus and identity. Preserve Xen, qrexec,
 QubesDB, qubesd, libvirt, and Qubes policy; displaying identity must not
 introduce VM control actions or require broader control permissions.
 
-## Acceptance checks
+## Acceptance evidence and remaining verification
 
+- [x] Deploy the indicator, Calculator focus fix and window identity cache;
+  record successful operator retests and running guest-generation verification.
 - [x] Add focused pytest coverage for ownership resolution and state changes,
   including absent or invalid metadata, destroyed windows, and delayed results
   after focus changes. Check declarative extension installation and enablement.
