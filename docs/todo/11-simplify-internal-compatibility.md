@@ -2,7 +2,7 @@
 
 Status: **local implementation complete; quick tests passed; remaining validation
 and live acceptance pending** (2026-09-30). Sections 1–8 have local changes;
-section 9 has a documented retention decision. Latest quick suite: **645 passed,
+section 9 has a documented retention decision. Latest quick suite after rebasing onto main: **681 passed,
 59 skipped**. No live changes have been performed for this cleanup.
 
 Airlock is unreleased. The local source contains a meaningful amount of
@@ -19,7 +19,7 @@ subsequently authorized quick tests; the latest results are recorded below.
 Counts describe confirmed examples rather than an exhaustive count of
 compatibility branches. Implementation subsections preserve their initial
 source-only status; references to unrun tests below describe that implementation
-pass. See the latest validation record for current coverage. Persisted-state
+pass. See the validation and rebase records below for current coverage. Persisted-state
 changes must not be activated until
 the pending inventory, validation and acceptance steps are completed.
 
@@ -82,7 +82,7 @@ Pair-by-pair progress:
 
 Worktree: `/home/user/dev/airlock-org/worktrees/airlock-simplify-build-option`,
 branch `simplify-build-option` in the parent and component checkouts.
-Component implementation commit: `0cc6883`.
+Component implementation commit: `a94ed5f`.
 
 Removed `attr` from accepted input keys in both schema libraries and from the
 topology module's source-reference options, along with alternate-name/conflict
@@ -116,7 +116,7 @@ This behavior was not changed in the alias cleanup.
 - [x] Investigate relative subpath traversal validation in both schema
   libraries and their consumers; implement rejection locally.
 
-Source-only follow-up: component `1474686` rejects `.` and `..` components in
+Source-only follow-up: component `6f5f557` rejects `.` and `..` components in
 both source-reference parsers and system activation commands. Normal dotted
 filenames and hidden directories remain valid. Added positive/negative pytest
 cases; **not run**. No file/path rewriting or live state changes occurred.
@@ -124,7 +124,7 @@ cases; **not run**. No file/path rewriting or live state changes occurred.
 #### Second change: require authored `sourceRef` (2026-09-30)
 
 Same worktree and branch as the first change. Component implementation commit:
-`9711c8b`.
+`8ba2121`.
 
 Removed `source_ref` from the accepted authored keys for system profiles,
 host systems/reboot components, templates and closure backends (system, kernel,
@@ -160,7 +160,7 @@ Validation:
 
 #### Remaining listed authored aliases (source-only implementation)
 
-Component commit: `c061a21`. Retired the remaining seven snake_case input
+Component commit: `740fe23`. Retired the remaining seven snake_case input
 aliases and bootstrap `hostname`. Canonical camelCase inputs keep the existing
 normalized fields and defaults. The caller inventory found only normalized
 snake_case fixtures/consumers, which remain intact. Added pytest contract cases
@@ -174,17 +174,17 @@ pre-commit execution to honor the instruction not to run tests/check suites.
 Additional local interface inventory and implementation:
 
 - [x] Store `blobDevice` / `blob_device` and `viewBackend` / `view_backend`:
-  component `dd3e557` requires authored camelCase. Existing normalized store
+  component `05b629c` requires authored camelCase. Existing normalized store
   fields remain intact for their current consumers. Added rejection cases.
 - [x] Store `chunkSize` / `chunk_size`: neither accepted input ever affected
   normalization or storage. Removed both from accepted authored keys and removed
-  obsolete hand-written normalized fixture fields (`dd3e557`, `0fa7f66`).
+  obsolete hand-written normalized fixture fields (`05b629c`, `b51ca39`).
 - [x] Runtime private-size readers previously accepted normalized
   `persistent_size` or authored `persistentSize`. Setup reconciliation and parent
   image preparation now consume `persistent_size`; the parent image fixture
-  uses that current normalized field (`0fa7f66` plus parent integration).
+  uses that current normalized field (`b51ca39` plus parent integration).
 - [x] Setup's normalized store readers now consume `blob_device` and
-  `view_backend` directly, without camelCase fallback (`cf6d525`).
+  `view_backend` directly, without camelCase fallback (`38886d6`).
 
 The initial nine-pair table was not exhaustive. Both configuration guides now
 include the additional authored store spellings and relative-path contract.
@@ -203,7 +203,7 @@ includes it in automatic boot/switch classification, and appends it alongside
   configuration and activation-classification comments/logic.
 - [x] Preserve the current boot classification for arbitrary host modules.
 
-Source-only implementation commit: `f1e6f02`. The runtime example and closure
+Source-only implementation commit: `d4a92a8`. The runtime example and closure
 smoke fixture use `dom0.host.modules`; the bootstrap no longer accepts or appends
 `extraModules`. Added future regression cases for old-option rejection and the
 boot classification of a non-empty host module list. **Validation pending**;
@@ -241,7 +241,7 @@ automatically historical compatibility debt.
 - [x] Update image documentation and assertions that enforce historical aliases.
 - [x] Preserve the meaningful development/release image distinction.
 
-Source-only implementation commit: `427141f`. Removed all six historical VM output names
+Source-only implementation commit: `18d56c0`. Removed all six historical VM output names
 and the component `usb-dev` alias. Component callers use `machine`; the parent's
 real USB image configuration remains `usb-dev`. Updated current scripts, image
 guides and evaluation fixtures; removed assertions whose sole purpose was the
@@ -265,7 +265,7 @@ Tests and packaging references also need an inventory before removal.
 - [x] Update package/file lists and test imports, preserving installed CLI and
   Qubes storage-plugin behavior.
 
-Source-only implementation commit: `637b9b5`. Updated the installed CLI,
+Source-only implementation commit: `f493d36`. Updated the installed CLI,
 Qubes storage adapter, domain-storage helper and filtered-device test patches to
 import the owning `_engine` modules directly. Removed the facade, updated Nix
 import checks and the parent Python file list. **Tests/build checks pending**.
@@ -324,7 +324,7 @@ reuse logic. These are actual conversion paths, not just version labels.
 - [ ] Validate those invariants with the new regression cases and existing
   storage/admission/maintenance suites before activation.
 
-Source-only implementation: component `c334658` deletes all three migration
+Source-only implementation: component `9fa26c6` deletes all three migration
 functions and the old blob-path helper. Existing pool manifests must describe
 current segmented storage; a single-blob pool or unsupported manifest fails
 before `ensure_pool` creates directories or rewrites metadata. Cached blob maps
@@ -360,7 +360,7 @@ coverage includes `test_incompatible_predecessor_uses_full_index` in
 - [x] Preserve authenticated reuse and checksum/layout verification in code.
 - [ ] Run index, host-publication, artifact-admission and recovery coverage.
 
-Source-only implementation: `34bd7e6` removes host integrity synthesis and the
+Source-only implementation: `c89c1f9` removes host integrity synthesis and the
 missing-integrity full-build fallback. An eligible runtime predecessor requires
 its recorded integrity and a non-negative integer `index_depth`. Cached view
 manifests require depth too. Current fresh/depth-limited/non-additive index
@@ -369,7 +369,7 @@ Replaced the historical full-build expectation with explicit metadata-refusal
 coverage, including predecessor-byte preservation; **tests are unrun**.
 
 Writer audit found an additional current omission: received-artifact generation
-manifests wrote integrity but omitted `index_depth`. Component `3b2f013` now
+manifests wrote integrity but omitted `index_depth`. Component `1444a07` now
 persists the materialized view's depth and updates its pytest fixture/assertion.
 Ordinary admission already writes both fields. Artifact negotiation's decision
 to reuse only a proven matching generation, otherwise perform normal admission,
@@ -407,7 +407,7 @@ change, so its broader purpose should be checked before deleting it.
 - [ ] Run boot-menu/artifact/interruption coverage and verify retained normal
   and independent recovery choices before activation.
 
-Source-only implementation: component `2860f59` requires explicit
+Source-only implementation: component `1479c7e` requires explicit
 `# airlock-generation` for retained entries and committed provenance when
 formatting entries. It removes `legacy generation N` labels and emission of
 `version Generation N` for historical Airlock installer hooks. Current native
@@ -526,7 +526,7 @@ performance work and [TODO 09](09-deployment-code-health.md)'s behavior-preservi
 cleanup. Preserve completed deployment/storage/boot acceptance records as
 historical evidence when updating current interfaces and documentation.
 
-## Latest quick validation (2026-09-30)
+## Pre-rebase quick validation (2026-09-30)
 
 The user authorized `make test-quick` after the source-only implementation pass.
 Ran the parent target in the same worktree, covering component tests and parent
@@ -559,6 +559,33 @@ Evidence in the worktree:
 No Nix evaluations/builds, live session changes, resets, deployment, activation,
 reboots or live tests were performed by this validation run.
 
+## Rebase onto main (2026-09-30)
+
+Rebased the parent branch onto local main `2d48fe1` and the component branch onto
+main's component pin `b867b9a`. All 15 component patches are unchanged according
+to `git range-diff`. The six parent commits were replayed with their component
+pins mapped to the rebased commit identities; documentation index conflicts
+preserve main's newer work-plan entries and this cleanup's current status.
+Implementation commit references above now use their rebased identities. Earlier
+test evidence was collected before this history rewrite.
+
+Reran the parent `make test-quick` target after rebasing: **681 passed, 59 skipped
+in 5.70 s**, exit status **0**. The newer main includes 36 additional passing
+quick tests. No implementation fixes were required. Nix-marked tests remain
+excluded, and environment-dependent skips retain the same boundary as the prior
+run. No build, live session operation or deployment was performed.
+
+Evidence in the worktree:
+
+- `.airlock-logs/rebase-main/quick.log`: full quick command/output.
+- `.airlock-logs/rebase-main/quick/pytest-junit.xml`: JUnit results.
+- `.airlock-logs/rebase-main/quick/pytest-report.json`: machine-readable results.
+- `.airlock-logs/rebase-main/component-commit-map.json`: component identities.
+- `.airlock-logs/rebase-main/parent-range-diff.txt`: parent replay comparison.
+
+Both checkouts remain on `simplify-build-option`. Main was not merged or
+advanced; fast-forward integration remains a separate user instruction.
+
 ## Current handoff
 
 All selected local code work is committed in
@@ -566,7 +593,8 @@ All selected local code work is committed in
 `simplify-build-option`, including component commits and parent pin/docs updates.
 The cleanup did not edit the original checkout. Initial implementation commits
 bypassed hooks to honor the then-current instruction to defer tests/check suites.
-The later authorized quick run passed as recorded above.
+Both the later authorized quick run and the post-rebase quick run passed, as
+recorded above.
 
 Remaining: opt-in Nix schema/integration validation, real EROFS index checks,
 and persisted-state inventory/preparation before any separately authorized
