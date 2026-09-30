@@ -24,6 +24,11 @@ their boundaries.
 
 ## Work plans and completed acceptance
 
+Assign each new numbered plan one greater than the highest number across both
+`docs/todo/` and `docs/completed/`. Its number is permanent: preserve it when
+moving the document to `completed`, and never reuse or renumber it. Existing
+historical filenames retain their numbers and paths.
+
 | Plan | Status and boundary |
 | --- | --- |
 | [First-run wizard](todo/first-run-setup-wizard.md) | Planned. Welcome/completion shell first; timed trials and rollback before disruptive pages. |
@@ -32,6 +37,8 @@ their boundaries.
 | [Deployment metadata and validation reuse](todo/08-deployment-metadata-validation-reuse.md) | Planned. Reduce repeated preparation work with operation-scoped caches; RAM staging is out of scope. |
 | [Deployment code health](todo/09-deployment-code-health.md) | Planned. Preserve cleanup errors, use durable record writes, and simplify host publication. |
 | [Internal compatibility cleanup](todo/11-simplify-internal-compatibility.md) | Planned. Consolidate option/output aliases and imports, retire obsolete persisted formats after inventory, and review the legacy deployment route. |
+| [Live VM additions](todo/12-live-vm-additions.md) | Planned. Create and use persistent VMs immediately; defer host activation until a later reboot. |
+| [Minimal VM declarations](todo/13-minimal-vm-declarations.md) | Planned. Derive builds, topology, deployment targets and live desktop integration from one small declaration per ordinary VM. |
 | [GNOME Files launcher](todo/sys-gui-files-launcher.md) | Planned. Hide local Files in sys-gui, retain Nautilus for DING, and expose the usr-home launcher. |
 | [GNOME focused VM indicator](todo/gnome-focused-vm-indicator.md) | Planned. Show the focused window's VM name and Qubes label colour in the top panel using verified window metadata. |
 | [Display consistency across VMs](todo/cross-vm-display-consistency.md) | Planned. Align cursors, scaling, fonts and appearance; use GNOME Console for utility terminals and verify display layout changes. |
