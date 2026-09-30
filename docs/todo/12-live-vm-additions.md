@@ -1,6 +1,6 @@
 # 12: Apply VM additions without a host reboot
 
-Status: **planned** (2026-09-30).
+Status: **implementation in progress; physical acceptance pending** (2026-09-30).
 
 A released Airlock machine must accept a new ordinary `usr-*` VM, create it
 with persistent storage, and make it usable immediately. The same release can
@@ -27,7 +27,7 @@ of changes are a separate future task; do not design that workflow here.
 Apply must not implicitly start every new VM. Autostart controls automatic
 startup; an explicit start or application launch remains available immediately.
 
-## Existing mechanisms and gaps
+## Initial mechanisms and gaps
 
 - The [coordinator](../../airlock-machine/lifecycle/runtime/tools/airlock_machine_deploy/coordinator.py)
   already applies Qubes topology before selecting the host boot generation.
@@ -37,57 +37,56 @@ startup; an explicit start or application launch remains available immediately.
   accepts new Nix-closure domains and orders their dependencies. The existing
   [pytest coverage](../../airlock-machine/tests/test_machine_deploy.py) includes
   VM addition followed by rollback into recoverable retirement.
-- [Pool admission](../../airlock-machine/lifecycle/misc/modules/pool-admission.nix)
-  embeds an explicit target list. The
+- The original [pool admission](../../airlock-machine/lifecycle/misc/modules/pool-admission.nix)
+  embedded an explicit target list. The original
   [controller sender](../../airlock-machine/lifecycle/runtime/tools/sys-ctrl-guest-deploy.py)
-  admits guest artifacts before submitting the new host release, so the current
-  host cannot accept a previously unknown name merely because the next host
-  generation allows it.
-- GUI startup mostly uses Qubes GUI-VM tags, but
+  admitted guest artifacts before submitting the new host release, blocking a
+  previously unknown name even when the next host generation allowed it.
+- GUI startup mostly used Qubes GUI-VM tags, but
   [session readiness policy](../../airlock-machine/lifecycle/misc/modules/dom0.nix)
-  names the two current personal VMs. Installed
+  named the two existing personal VMs. Installed
   [desktop launchers](../../airlock-machine/lifecycle/misc/modules/sys-gui/base.nix)
   also name those VMs. New applications need live discovery or installation
   through a reusable interface.
 
-These findings describe source inspection, not successful live acceptance.
+These initial findings describe source inspection, not successful live acceptance.
 Airlock is unreleased: implement the required interfaces in the release baseline.
 A migration for previously released hosts or a two-deployment workaround is
 outside this plan.
 
 ## Implementation
 
-- [ ] Preserve Xen, qrexec, QubesDB, qubesd, libvirt, Qubes policy and the existing
+- [x] Preserve Xen, qrexec, QubesDB, qubesd, libvirt, Qubes policy and the existing
   storage/convergence machinery. Nix and committed source remain authoritative.
-- [ ] Define a bounded preparation interface that authorizes artifact admission
+- [x] Define a bounded preparation interface that authorizes artifact admission
   for domains in a validated candidate, including names not yet selected.
   Bind preparation to candidate identity, caller, domain and artifact identity.
   Preparation must leave the VM inactive and must not grant arbitrary dom0
   command execution or turn the new application VM into a control authority.
-- [ ] Make required per-VM permissions available during live activation through
+- [x] Make required per-VM permissions available during live activation through
   Qubes policy, with durable state, rollback and reload behavior. Any derived
   policy must agree with the configuration used after reboot.
-- [ ] Reuse selected-release state and journalled setup for creation, private
+- [x] Reuse selected-release state and journalled setup for creation, private
   storage identity, explicit start, autostart and later boot convergence.
   Do not introduce a separate hand-maintained VM registry or configuration history.
-- [ ] Ensure graphical readiness and application launching work before host
+- [x] Ensure graphical readiness and application launching work before host
   reboot. Avoid making routine additions depend on rebuilding or restarting
   `sys-gui` merely to install another launcher; define the interface with TODO 13.
 - [ ] Keep unaffected running VMs running. Report genuine dependency restarts
   in the plan, and reject unsupported host changes that prevent immediate use.
-- [ ] Cover interruption and retry across admission, creation, permissions,
+- [x] Cover interruption and retry across admission, creation, permissions,
   selection and startup. An incomplete transaction must not appear successful
   or cause boot to silently restore the image's original topology.
-- [ ] Preserve recoverable retirement when rolling back an addition. Reapplying
+- [x] Preserve recoverable retirement when rolling back an addition. Reapplying
   the declaration must restore the same private storage; rollback must not
   silently delete user data or claim to undo application data migrations.
 
 ## Acceptance
 
-- [ ] Add meaningful pytest coverage for unknown-name admission, inactive
+- [x] Add meaningful pytest coverage for unknown-name admission, inactive
   preparation, candidate/caller rejection, explicit start versus autostart,
   failure recovery, policy reconciliation and rollback/reapply.
-- [ ] Run `make test-quick`; keep Nix evaluation/build checks opt-in. Record
+- [x] Run `make test-quick`; keep Nix evaluation/build checks opt-in. Record
   machine-readable results under `.airlock-logs/`.
 - [ ] On the lab machine, apply an ordinary new `usr-*` VM through the normal
   [deployment workflow](../machine-deployment.md), with no preliminary host
@@ -103,3 +102,53 @@ outside this plan.
 Implementation belongs in `airlock-machine`; commit coherent component changes,
 then update and commit the parent pin and integration/docs changes. Successful
 builds alone do not complete this plan.
+
+## Implementation checkpoint
+
+The worktree is `/home/user/dev/airlock-org/worktrees/airlock-live-vm-additions`,
+on parent and component branches `feat/live-vm-additions`.
+
+The controller now imports the host/transport closure through
+`airlock.Ctrl.MachinePrepare` before sending guest payloads. The installed
+coordinator validates the candidate and records a root-owned admission token.
+`airlock.Pool.AdmitCandidate+TOKEN.DOMAIN` accepts only the prepared domain's
+system, closure, root, kernel and source identity from sys-ctrl. Preparation
+does not create a VM or change boot selection. Tokens are rejected after a
+boot, selection or deployment-state change, or release pruning. Existing
+static admission remains available for the existing individual update path.
+
+Readiness policy now uses `@tag:guivm-sys-gui`. Upstream Qubes appmenu handling
+is retained, with NixOS paths, the graphical user, and Airlock's session barrier
+for generated launchers. In sys-gui, `airlock-sync-qube-appmenus VM` explicitly
+starts the guest, waits for readiness, and imports its menus into the persistent
+GUI user's profile. The declaration's existing `menu-items` feature selects
+which desktop entries appear. This needs no per-VM GUI rebuild or restart.
+TODO 13 will expose the declaration and derive the remaining duplicated lists.
+
+Automated checks cover inactive candidate preparation, artifact substitution,
+caller/stale-state rejection, retries, pool protocol output, explicit start
+with autostart disabled, boot convergence and rollback/reapply storage identity.
+`make test-quick` passed with **706 passed, 58 skipped**. Three targeted Nix tests
+passed, building the menu package and checking the installed scripts and policy.
+The coordinator package also built in the guarded Airlock store. Evidence is
+under this worktree's `.airlock-logs/`: `final-quick/pytest-report.json`,
+`live-vm-nix/report.json`, and `live-vm-nix/engine-build.log`.
+
+Component commits: `9e78e25` (candidate admission), `48a981a` (live menus),
+and `ae6dabb` (wire protocol regression coverage and lifecycle documentation).
+The parent pins the last commit; these changes are not merged into main.
+
+Rebased onto parent main `4581f17` and its component baseline `38886d6`.
+After rebase, `make test-quick` passed with **724 passed, 59 skipped** and the
+three targeted Nix interface tests passed. Reports are in
+`.airlock-logs/rebase-quick/pytest-report.json` and
+`.airlock-logs/rebase-nix/report.json`.
+
+No whole-machine release or physical deployment has been performed from this
+branch. The no-reboot application launch, exact home sentinel, later host boot
+and physical rollback/reapply checks remain open. Implementations checked above
+are not a claim of physical acceptance; this document remains in `todo`.
+
+Next, build a committed whole-machine candidate adding one ordinary VM using
+the existing declaration wiring, then run the lab acceptance sequence above.
+The larger declaration simplification belongs to TODO 13.

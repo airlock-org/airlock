@@ -277,11 +277,13 @@ airlock-sys-dev-machine-deploy verify
 
 The sys-dev client sends a versioned source bundle to `sys-ctrl`. The
 controller verifies the Git revision and lock hash and builds from the locked
-source, fetching missing inputs or substitutes through sys-firewall. It sends
-guest manifests to the shared pool receiver, which
-requests only missing package objects and immutable root artifacts, then streams
-missing host/transport dependencies
-to dom0's private host-store upper. The TODO 07 implementation then publishes
+source, fetching missing inputs or substitutes through sys-firewall. The live-VM
+addition branch first imports missing host/transport dependencies through the
+installed `airlock.Ctrl.MachinePrepare` interface into dom0's private host-store
+upper. Dom0 validates the candidate and issues an inactive admission token.
+The controller sends guest manifests through candidate-bound pool admission,
+which requests only missing package objects and immutable root artifacts.
+The TODO 07 implementation then publishes
 verified host objects into the same pool and prepares an approved sys-ctrl base
 for its next stopped setup. Dom0 binds independently checked admission receipts
 to the release and invokes its journalled coordinator. `plan` never activates;
@@ -454,6 +456,28 @@ Unchanged VMs remain running. A first deployment can affect every VM because
 the image's prepared descriptor sources are replaced by closure-manifest sources.
 Already running VMs and declared autostart VMs are brought back, with their
 dependencies. Shutdown timeouts fail the transaction; the tool does not kill VMs.
+
+### Live VM addition implementation
+
+[TODO 12](todo/12-live-vm-additions.md) implements a released baseline that can
+prepare and activate a new ordinary VM without a preparatory host deployment
+or reboot. Its host generation is selected for the next boot while Qubes creates
+the VM and its persistent private disk on the running host. Physical acceptance
+is pending; the existing live machine has not received this branch.
+
+Candidate admission is restricted to sys-ctrl and binds exact guest identities
+to the imported candidate. It does not activate anything. The normal whole-machine
+apply still binds independently checked pool receipts, journals activation and
+uses the existing selected-release boot and recoverable rollback paths. An
+admission token becomes stale when boot, selection or deployment state changes;
+prepare the release again rather than bypassing the check.
+
+Graphical readiness uses the Qubes GUI-VM tag. The new sys-gui interface
+`airlock-sync-qube-appmenus VM` explicitly starts a guest, waits for its session
+and uses upstream Qubes tools to install its declared menus live. `menu-items`
+contains the selected desktop filenames; generated launchers use fixed StartApp
+RPCs and the readiness barrier. Routine menu additions need no sys-gui restart.
+User review/approval and the smaller declaration interface remain separate work.
 
 Deployment admission uses `--verify-mode incremental`: complete canonical object
 records in dom0's managed append-only pool are reused without rehashing their
