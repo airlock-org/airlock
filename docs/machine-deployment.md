@@ -1,5 +1,29 @@
 # Repository-first whole-machine deployment
 
+Store preparation follow-up (2026-09-30): machine revision `3efe570` is committed,
+pinned and applied through the normal controller route. Typed verification of
+transaction `1790766764373029803` is **reboot-required**: all six running guests
+match their selections, usr-browser is stopped, and the controller mounted the
+incremental builder index (generation 17) with both inherited and appended host
+files readable. Selected host is `fhrlj5cxg5lnc0xjw5rwv7bzn7zrbalh`; running host
+remains `mq1z3vjikp3ynnc4ryrx64f3csplc26y`. No live diagnostic mutation was needed.
+Host reboot verification remains pending.
+
+The small follow-up reused 2,660 controller index objects and appended four.
+Controller preparation took **17.04 s**, versus **149.68 s** on the initial full
+migration; index construction fell from **129.37 s to 0.62 s**. Total preparation
+was **94.21 s**, compared with the earlier small boot-menu update's **274.13 s**;
+building took **53.39 s** separately. Cache states differ, so these are observed
+runs rather than a controlled benchmark. The host still rebuilt its full index
+(**35.35 s**). Apply reused the prepared candidate with zero builds/transfers.
+
+`make test-quick` now excludes Nix evaluations/builds and automatic tool setup:
+**665 passed, 22 skipped in 6.00 s**, with evaluators blocked and installed EROFS
+tools on PATH. Nix checks are opt-in via `make test-nix`, not a routine deployment
+gate. Before this workflow change, the full suite passed **742 tests, 25 skipped**
+in **220.92 s**. Evidence: `.airlock-logs/store-preparation/` and
+[performance notes](todo/08-deployment-metadata-validation-reuse.md).
+
 Boot-menu cleanup follow-up (2026-09-30): machine revision `e196ef8` passed
 **733 quick tests, 25 skipped** and normal plan/apply without guest restarts.
 Thirteen eligible release records were pruned through the deployed coordinator;

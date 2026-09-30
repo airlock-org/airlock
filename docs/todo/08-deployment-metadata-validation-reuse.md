@@ -58,3 +58,48 @@ Each new operation starts with fresh state.
 
 RAM-backed temporary index staging is **out of scope**. This work preserves the
 storage format, generation behavior, and deployment authority.
+
+## Related store-index improvement (2026-09-30)
+
+Machine implementation `121ba4d`, hardened by `d291864`, extends an authenticated
+predecessor EROFS index with only new objects. It preserves logical blob offsets,
+copies the predecessor image, and retains the existing admission and publication
+checks. Removed objects, missing integrity metadata, and depth 16 fall back to a
+full build. Pytest covers real index extraction, interruption/retry, corruption,
+changed object identity and physical extent relocation. This optimization is
+separate from the operation-scoped metadata caches still planned above.
+
+The first live migration needed full host and controller indexes. Controller
+index construction took **129.37 s**, and controller preparation **149.68 s**.
+The follow-up at machine source `3efe570` inherited **2,660 objects**, appended
+**4**, and built its controller index in **0.62 s**. Controller preparation
+fell to **17.04 s**. Total follow-up preparation was **94.21 s**, versus the
+previous small boot-menu update's **274.13 s**; its build took **53.39 s** and
+is reported separately. All seven guest generations were reused, with zero
+guest/root payload transfers; four small host/transport paths transferred
+111,126 compressed bytes. These are observed runs with different cache states,
+not a controlled cold-cache benchmark or a guaranteed future speedup.
+
+The host still used a full index build (**35.35 s**) in this follow-up. Remaining
+costs include controller metadata publication beyond index construction, host
+publication, and ordinary release evaluation/building. New host/controller
+timing fields separate object verification/admission, view preparation and index
+construction, and count inherited/new objects. Existing payload verification remains intact. Evidence: `.airlock-logs/store-preparation/live-performance.json`,
+`plan-initial.json`, `plan-incremental.json`, and the regression/benchmark logs.
+
+The regular feedback loop now excludes Nix checks and automatic tool preparation:
+**665 passed, 22 skipped in 6.00 s**, compared with the previous full run's
+**742 passed, 25 skipped in 220.92 s**. Nix evaluators were blocked during the
+final quick run; there were no evaluator calls. Installed EROFS tools were on
+`PATH`. Nix checks remain available explicitly through `make test-nix` and are
+not a routine deployment gate.
+
+Normal apply reused the prepared candidate with zero builds/transfers. Typed
+verification of transaction `1790766764373029803` is **reboot-required**: six
+running guests match their selections, usr-browser is stopped. Controller
+builder generation 17 is mounted and active; inherited and appended host init
+files are readable through the real kernel mount. Selected host is
+`fhrlj5cxg5lnc0xjw5rwv7bzn7zrbalh`, while the running host remains
+`mq1z3vjikp3ynnc4ryrx64f3csplc26y`. Host reboot verification remains pending.
+Evidence: `verify-after.json`, `apply.json`, and `controller-mounted-check.json`
+in `.airlock-logs/store-preparation/`. No diagnostic mutation was made live.

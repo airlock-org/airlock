@@ -156,3 +156,11 @@ Still pending: physically confirm the larger text and newest default, boot
 generation 13, then run `make machine-verify DEPLOY_TARGET=sys-dev`. Generation
 12 remains the protected rollback/running host. Evidence and machine-readable
 acceptance: `.airlock-logs/boot-menu-cleanup/`.
+
+
+Generation 13 follow-up: before the store-preparation work, typed verification
+reported transaction `1790762690675027745` **complete**. Running and selected host
+both resolve to `mq1z3vjikp3ynnc4ryrx64f3csplc26y`, and six running guests match
+their selections; usr-browser is stopped. Evidence:
+`.airlock-logs/store-preparation/verify-before.json`. Physical confirmation of
+the larger text and manual older-generation/default behavior remains pending.
