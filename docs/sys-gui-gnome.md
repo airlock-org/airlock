@@ -60,6 +60,9 @@ showing the active window's VM name and Qubes label colour in the top panel.
 
 ## Deferred: appearance synchronization
 
+The [display consistency TODO](todo/cross-vm-display-consistency.md) tracks
+this work alongside cursor/font defaults, scaling, and GNOME utility terminals.
+
 Changing light/dark appearance in sys-gui does not currently update applications
 running in `usr-home` or `usr-browser`, because each VM has its own GNOME/dconf
 settings and session bus. Add a narrow appearance-sync mechanism later:
