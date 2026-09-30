@@ -101,6 +101,19 @@ that fallback. Read cancellation and per-focus revisions prevent stale results,
 including across extension disable/re-enable. Invalid colour suppresses the dot
 while preserving a verified VM name.
 
+Verified direct identities and label colours are cached by the live
+`Meta.Window` object, rather than an XID, title or application name. A repeated
+focus renders the cached identity synchronously and starts no reader. The cache
+is removed on `unmanaged` (including unfocused windows) and cleared on extension
+disable. Cancelled or late lookups cannot repopulate it. Unknown results are
+retried, and transient-parent fallback is not stored on the child, so a changed
+parent is resolved again. Native Wayland windows display sys-gui synchronously.
+The [GUI daemon sets identity and label properties when creating each local
+window](https://github.com/QubesOS/qubes-gui-daemon/blob/main/gui-daemon/xside.c);
+this cache follows that window lifetime. Direct property edits on an existing
+window are not monitored; recreating the window or extension clears its entry.
+A new Xwayland window still needs its first asynchronous provenance lookup.
+
 [Tasks in Panel](https://extensions.gnome.org/extension/8642/tasks-in-panel/)
 provides application/task UI, and
 [Focused Window D-Bus](https://github.com/flexagoon/focused-window-dbus)
