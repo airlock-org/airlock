@@ -103,7 +103,7 @@ case "$SYNC_TOPOLOGY" in
     "$ROOT/lifecycle/misc/tools/scripts/airlock-nix.sh" eval \
       --impure \
       --json \
-      "$ROOT#nixosConfigurations.vm-gui-config.config.airlock.qubes.topology" \
+      "$ROOT#nixosConfigurations.vm-gui-config-dev.config.airlock.qubes.topology" \
       > "$TOPOLOGY_JSON"
     jq -e '.schema == "airlock.qubes-topology.v1"' "$TOPOLOGY_JSON" >/dev/null
 

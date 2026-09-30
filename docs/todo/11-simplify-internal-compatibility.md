@@ -206,17 +206,24 @@ nixosConfigurations.machine`. Review this separately: the parent overrides
 meaning matter. Standard flake `default` exports and parent forwarding are not
 automatically historical compatibility debt.
 
-- [ ] Update callers to explicit development/release output names and remove the
+- [x] Update callers to explicit development/release output names and remove the
   six historical names above.
-- [ ] Review whether the component's `usb-dev` alias is still useful and remove
+- [x] Review whether the component's `usb-dev` alias is still useful and remove
   it if its callers can use `machine` directly.
-- [ ] Update image documentation and assertions that enforce historical aliases.
-- [ ] Preserve the meaningful development/release image distinction.
+- [x] Update image documentation and assertions that enforce historical aliases.
+- [x] Preserve the meaningful development/release image distinction.
+
+Source-only implementation commit: `427141f`. Removed all six historical VM output names
+and the component `usb-dev` alias. Component callers use `machine`; the parent's
+real USB image configuration remains `usb-dev`. Updated current scripts, image
+guides and evaluation fixtures; removed assertions whose sole purpose was the
+old aliases. **Tests and Nix evaluations are pending**, per the user's request.
 
 ### 4. Python import compatibility facade
 
-[engine.py](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/engine.py)
-calls itself a compatibility facade and wildcard-imports ten `_engine` modules:
+The former `airlock_qubes_storage/engine.py` in the
+[storage package](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage)
+called itself a compatibility facade and wildcard-imports ten `_engine` modules:
 core, pool, segments, objects, views, state, generations, artifacts, maintenance
 and CLI. This retains the former flat import interface after implementation
 was split into modules.
@@ -225,10 +232,15 @@ The package's `cli.py` and several methods in `qubes.py` still use the facade;
 many other runtime/image tools already import `_engine` modules directly.
 Tests and packaging references also need an inventory before removal.
 
-- [ ] Replace facade callers with explicit imports from the modules they need.
-- [ ] Remove wildcard re-exports and the facade once callers are updated.
-- [ ] Update package/file lists and test imports, preserving installed CLI and
+- [x] Replace facade callers with explicit imports from the modules they need.
+- [x] Remove wildcard re-exports and the facade once callers are updated.
+- [x] Update package/file lists and test imports, preserving installed CLI and
   Qubes storage-plugin behavior.
+
+Source-only implementation commit: `637b9b5`. Updated the installed CLI,
+Qubes storage adapter, domain-storage helper and filtered-device test patches to
+import the owning `_engine` modules directly. Removed the facade, updated Nix
+import checks and the parent Python file list. **Tests/build checks pending**.
 
 ### 5. Renamed command and initialization markers
 
@@ -242,12 +254,22 @@ Tests and packaging references also need an inventory before removal.
   falls back from `/etc/airlock/machine-profile` to `/etc/airlock/usb-lab` or
   `/etc/airlock/usb-gui-lab` for images predating the coordinator.
 
-- [ ] Update callers/docs and remove the former offline-builder Make target.
+- [x] Update callers/docs and remove the former offline-builder Make target.
 - [ ] Establish the canonical desktop marker on retained user homes before
   deleting old-marker support; preserve one-time bootstrap behavior and user
   customization.
 - [ ] Verify supported images/recovery environments provide `machine-profile`,
   then remove old profile discovery.
+
+Source-only changes remove the renamed Make command and use only the current
+desktop and machine-profile markers. Current machine-deployment modules emit
+`machine-profile`; independent recovery deliberately does not expose whole-machine
+deployment. Added a profile-marker regression case; **tests remain unrun**.
+
+The two marker inventory/preparation boxes above remain unchecked: before any
+activation, retained user homes must have the current desktop-bootstrap marker
+if bootstrap has already occurred, and supported normal host generations must
+provide `machine-profile`. No homes, images or live state were changed here.
 
 ### 6. Legacy closure-store conversions
 

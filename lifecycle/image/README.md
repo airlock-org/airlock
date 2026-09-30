@@ -31,7 +31,7 @@ nix build .#airlock-vm-gui-config-dev-image
 nix build .#airlock-vm-gui-config-release-image
 ```
 
-The historic unsuffixed image outputs remain development-mode aliases for now.
+Use the explicit `-dev` or `-release` flake output names.
 
 See [sys-gui desktop and login](../../docs/sys-gui.md) for the guest login
 credentials, the remaining dom0 display relay, and desktop-management permissions.

@@ -23,7 +23,7 @@ offline guest builds before assembling the image. A matching passing receipt
 skips the two trials on later builds with the same inputs. The receipt and
 machine-readable results live under the configured Airlock cache and log
 directories. Run `make usb-builder-offline-check` to force both trials and
-refresh the receipt; `make usb-builder-offline-gate` is its legacy alias.
+refresh the receipt.
 Failures stop image assembly. The examples add an `/etc` marker and change an
 existing usr-home service setting using the image's pinned software. They do
 not establish offline support for arbitrary new packages or versions.

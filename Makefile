@@ -100,7 +100,7 @@ PYTHON_FILES := \
 	airlock-machine/tests/test_amd_vbios_events.py \
 	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/__init__.py \
 	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/cli.py \
-	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/engine.py \
+	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/cli.py \
 	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/*.py \
 	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/qubes.py \
 	airlock-machine/lifecycle/runtime/tools/scripts/nix-domain-storage.py \
@@ -188,7 +188,7 @@ test-nix: ensure-generated-dirs
 
 .PHONY: vm-gui-minimal-image vm-gui-minimal-run vm-gui-minimal-ssh
 
-.PHONY: usb-dev-prepare-inputs usb-builder-offline-check usb-builder-offline-gate usb-dev-image usb-dev-write usb-dev-provision usb-dev-help
+.PHONY: usb-dev-prepare-inputs usb-builder-offline-check usb-dev-image usb-dev-write usb-dev-provision usb-dev-help
 
 USB_DEV_PROVISION = sudo python3 lifecycle/image/tools/usb-dev.py provision-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --resize-backup-dir "$(or $(AIRLOCK_LOG_DIR),/var/log/airlock)/usb-root-expansion" --repo "$(CURDIR)" --public-key "$(HOME)/.ssh/id_ed25519.pub" --auth-file "$(HOME)/.codex/auth.json" --insecure-dev-password --insecure-plain-codex-auth
 
@@ -223,9 +223,6 @@ usb-builder-offline-check: usb-dev-prepare-inputs
 	  --log-dir "$(or $(AIRLOCK_LOG_DIR),$(CURDIR)/.airlock-logs)/offline-builder-gate" \
 	  --cache-dir "$(or $(AIRLOCK_DATA_ROOT),$(CURDIR)/.airlock)/cache/offline-builder-gate" \
 	  --temporary-root "$(or $(AIRLOCK_TMPDIR),$(TMPDIR),$(CURDIR)/.airlock)" --force
-
-# Retain the former command name for callers.
-usb-builder-offline-gate: usb-builder-offline-check
 
 usb-dev-image: usb-dev-prepare-inputs
 	@set -eu; \

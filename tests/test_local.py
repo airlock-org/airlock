@@ -214,7 +214,7 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             'nixos-qubes", .nixosQubes',
             "mount --bind",
             "airlock-config-vms-smoke",
-            "nixosConfigurations.vm-gui-config.config.airlock.qubes.topology",
+            "nixosConfigurations.vm-gui-config-dev.config.airlock.qubes.topology",
             "nixosConfigurations.airlock-domain-$domain.config.system.build.toplevel",
             "airlock-domain-$domain-store-closure",
             "PYTHONPATH=",
