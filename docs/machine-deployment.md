@@ -1,6 +1,21 @@
 # Repository-first whole-machine deployment
 
-Current checkpoint (2026-09-29): **TODOs 05–07 complete**.
+Current checkpoint (2026-09-30): personal application VMs explicitly select
+`sys-gui` as their GUI VM. Machine revision `caff35e` and parent pin `6368ef6`
+passed **722 quick tests, 25 skipped**. Normal plan/apply through sys-dev and
+sys-ctrl changed the two personal `guivm` preferences; after reboot, typed
+verification marked transaction `1790728702090998936` **complete**. The running
+host matches selected system `1r34d0azzpnc70kw5qmppwm3g30hlfcf`, and all seven
+guest systems match their selections. The operator confirmed GNOME reached
+login and subsequently confirmed the desktop looked good. After reboot, the
+`usr-home` GUI agent and graphical session were active; GNOME's Xwayland client
+list included Files from `usr-home` and Firefox from `usr-browser`, with their
+Qubes VM identity properties. Evidence: `.airlock-logs/personal-guivm-fix/`,
+including `verify-after-reboot.json`, `live-final-checks.json` and the plan/apply
+records. See the
+[GNOME notes](sys-gui-gnome.md#personal-vm-gui-assignment-fix-2026-09-30).
+
+Previous checkpoint (2026-09-29): **TODOs 05–07 complete**.
 Final fixes `4845da0` and `b1cf5db` passed **720 quick tests, 25 skipped** and normal
 apply/reboot. **Airlock (Generation 10)** booted the selected host; typed verify
 marked transaction `1790721069384601443` complete. Both normal builders are

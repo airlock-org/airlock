@@ -58,6 +58,33 @@ Files while keeping Nautilus installed for desktop integration.
 The [focused VM indicator TODO](todo/gnome-focused-vm-indicator.md) tracks
 showing the active window's VM name and Qubes label colour in the top panel.
 
+## Personal VM GUI assignment fix (2026-09-30)
+
+The Files launcher reported that `usr-home` could not start its graphical
+session. Both personal VMs had an explicit `guivm=None`, overriding the global
+`default_guivm=sys-gui`. They lacked the `guivm-sys-gui` policy tag, so sys-gui
+could not discover them; the `usr-home` GUI agent also waited for its missing
+GUI-domain QubesDB value.
+
+Machine revision `caff35e` assigns `guivm=sys-gui` explicitly for `usr-home` and
+`usr-browser`, in both bootstrap defaults and the initial runtime configuration.
+Regression tests cover the physical and nested profiles and runtime defaults.
+The quick suite passed **722 tests, 25 skipped**. Normal whole-machine apply
+through sys-dev/sys-ctrl converged the two preferences and restored the GUI tags.
+Before reboot, `usr-home`'s GUI agent was active and its session had `DISPLAY=:0`,
+`GDK_SCALE=3`, and `XCURSOR_SIZE=72`. No diagnostic configuration changes were
+needed on the target.
+
+After reboot, typed machine verification reports `complete`, with matching host
+and guest generations. Both GUI assignments and the `usr-home` graphical session
+survived startup. GNOME's Xwayland client list showed Firefox with
+`_QUBES_VMNAME=usr-browser` and its expected window class, and focused Files with
+`_QUBES_VMNAME=usr-home` and the Nautilus window class. Both application processes
+were running in their respective VMs. The operator confirmed GNOME reached login
+and subsequently reported that the desktop looked good. Evidence is under
+`.airlock-logs/personal-guivm-fix/`, including `live-final-checks.json`; see
+[machine deployment](machine-deployment.md).
+
 ## Deferred: appearance synchronization
 
 The [display consistency TODO](todo/cross-vm-display-consistency.md) tracks
