@@ -1,17 +1,33 @@
 # Repository-first whole-machine deployment
 
-Live VM addition baseline attempt (2026-09-30): revision `ae6dabb` built and
-normal plan/apply submitted worker `airlock-machine-deploy-5b42fb9f7eb7` using
-its prepared candidate with zero further builds/transfers. The plan updates
-sys-ctrl, sys-dev and sys-gui and restarts their running personal-VM dependents;
-the two network providers are unchanged. At 17:01 UTC sys-dev had not returned
-to Tailscale after its planned restart, so the worker outcome and host selection
-remain **unverified**. Inspect the dom0 unit journal before rebooting or submitting
-another deployment. The new admission RPCs were absent from the running baseline;
-their initial installation/host boot is separate from testing a later VM addition
-without reboot. A committed, locally built usr-notes trial is ready but has not
-been applied. See [TODO 12](todo/12-live-vm-additions.md#live-baseline-installation-attempt-2026-09-30)
-and `.airlock-logs/live-vm-trial/`.
+Live VM addition baseline failure (2026-10-01): saved USB diagnostics confirm
+worker `airlock-machine-deploy-5b42fb9f7eb7` failed in `host-boot-selection`,
+transaction `1790786804188630165`. `seal-boot` rejected a previously sealed boot
+entry without source provenance after the affected guests had stopped. Boot
+installation had already installed host `frp44hh7h9g5bv54khr4x5kys3mhgsnn`;
+its subsequent startup rejected the bound failed transaction and entered initrd
+emergency mode. The host store assembled successfully before this guard, and
+the filesystem check reported clean after journal recovery. The operator has
+booted the earlier `h8v0fz89xmdxjz5sh6ppnr7cyciv71j8` generation. Normal typed
+verification reports transaction `1790781773748219122` **complete**, with all six
+running guests matching their selections; usr-browser is stopped. Dom0 boot ID
+is `dc910c03-fb3f-4bab-bae6-baa80e649d4f`.
+
+Machine commits `e0f9081` and `0935cde` preserve authenticated retained entries
+without source labels and move boot preparation before guest shutdown. Upstream
+loader edits are staged in its existing private mount namespace, then published
+with the previous default preserved. Preparation first restores the booted
+host's verified default, including after a manual recovery boot. Sealing keeps
+that default; target binding and explicit boot selection follow guest
+verification. New entry formatting still requires committed provenance.
+
+The quick suite passed **735 tests, 59 skipped**; targeted boot/deployment tests
+and lint also passed. These changes are not yet built or deployed. The final binding, boot selection
+and transaction completion remain separate durable writes, so abrupt power loss
+in that final window can still require recovery; this is not an atomic machine
+transaction. The usr-notes trial remains unapplied. See
+[TODO 12](todo/12-live-vm-additions.md#live-baseline-installation-attempt-2026-09-30)
+and `.airlock-logs/live-vm-trial/boot-hang-20261001/`.
 
 Focused VM indicator cache follow-up (2026-09-30): machine revision `b867b9a`
 caches verified identities for each live window and removes entries on closure

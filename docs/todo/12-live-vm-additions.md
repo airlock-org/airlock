@@ -184,19 +184,44 @@ Normal `make machine-apply` reused the prepared candidate with zero builds and
 transfers and submitted detached worker `airlock-machine-deploy-5b42fb9f7eb7`.
 Candidate: `/var/lib/airlock/machine/candidates/b03198349a6455711665c24f8e87e77646fe78b07641bc7761284b1fd88442ee`.
 
-**Outcome unverified:** at 17:01 UTC, sys-dev had not returned to Tailscale after
-its planned restart (eleven minutes offline). The submitting SSH call succeeded;
-that does not establish worker success or host selection. A physical screen
-observation or dom0 journal is needed before rebooting or submitting another
-deployment. The read-only diagnostic is:
+**Failure confirmed (2026-10-01):** inspection of the laptop USB recovered the
+worker diagnostics for transaction `1790786804188630165`. The worker stopped
+the affected guests and failed in `host-boot-selection`: `seal-boot` tried to
+refresh a retained entry without source provenance and raised `ValueError`.
+The compatibility cleanup had removed the previous formatter fallback.
 
-```sh
-sudo journalctl -u airlock-machine-deploy-5b42fb9f7eb7 --no-pager -n 80
-```
+Boot installation had already installed host `frp44hh7h9g5bv54khr4x5kys3mhgsnn`.
+After the operator hard restarted, boot `647aff8d-4033-49a9-a2c6-13a5bb9db9c6`
+validated pool generation 22 and assembled the store, then refused to restore
+the bound failed transaction. The initrd entered emergency mode; the last
+visible EROFS message was a successful mount, not the cause. Filesystem checking
+reported clean after recovering the ext4 journal. The operator has since booted
+the earlier `h8v0fz89xmdxjz5sh6ppnr7cyciv71j8` generation. Normal typed verification
+reports transaction `1790781773748219122` **complete** and all six running guests
+matching their selections; usr-browser is stopped. The new dom0 boot ID is
+`dc910c03-fb3f-4bab-bae6-baa80e649d4f`.
+
+Machine commit `e0f9081` preserves the bytes of checksum-verified retained
+entries when their provenance is unavailable. New entry formatting remains
+strict, and corruption still fails verification. Commit `0935cde` moves boot
+installation and sealing ahead of guest shutdown, preserves the previous default
+through upstream loader regeneration, and publishes the target host binding and
+default only after guest verification. Preparation explicitly restores the
+booted host as default so a failed newer entry left by manual recovery cannot
+remain selected. These changes have not yet been built or deployed.
+The quick suite passed **735 tests, 59 skipped**; targeted tests and lint passed.
+
+Tests cover installer failure and interrupted menu publication without changing
+the prior default, boot-preparation failures without stopping guests or changing
+machine selection, and guest-start failure without replacing the prior host
+binding. Final binding, boot selection and transaction completion still require
+separate writes; abrupt power loss in that window remains a recovery case.
 
 No host reboot, live overlay, service override or diagnostic configuration
 mutation was performed. Observation used the existing unprivileged development
-dom0 PTY. No new control authority was added.
+dom0 PTY. Later USB inspection required operator-granted read ACLs on boot logs
+and the failed transaction directory. Those diagnostic ACL changes remain;
+deployment state was not edited. No new control authority was added.
 
 The separate committed acceptance candidate is in
 `/home/user/dev/airlock-org/worktrees/airlock-live-vm-acceptance`, on parent and
@@ -214,7 +239,10 @@ Evidence is in the main checkout's `.airlock-logs/live-vm-trial/`: baseline
 `trial-topology-diff.json`, `trial-quick.log`, `trial-quick/pytest-report.json`,
 `trial-build.log` and `trial-release.json`.
 
-Next: inspect the baseline worker, recover or finish it through the normal
-coordinator, verify its guest selections, then boot the installed baseline.
+Boot-failure evidence, including raw initrd logs, the failure traceback and
+transaction command output, is in `boot-hang-20261001/` below that directory.
+
+Next: deploy the fixes through the normal coordinator, then boot and verify the
+installed baseline.
 After confirming the generic host RPCs and GUI tools are running, use normal
 plan/apply from the trial worktree and perform the no-reboot acceptance sequence.
