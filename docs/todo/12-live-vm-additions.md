@@ -1,6 +1,6 @@
 # 12: Apply VM additions without a host reboot
 
-Status: **implementation in progress; physical acceptance pending** (2026-09-30).
+Status: **implementation in progress; physical acceptance pending** (2026-10-01).
 
 A released Airlock machine must accept a new ordinary `usr-*` VM, create it
 with persistent storage, and make it usable immediately. The same release can
@@ -239,7 +239,7 @@ deployment state was not edited. No new control authority was added.
 The separate committed acceptance candidate is in
 `/home/user/dev/airlock-org/worktrees/airlock-live-vm-acceptance`, on parent and
 component branches `trial/live-vm-acceptance`. After rebasing onto the recovery
-fixes, parent `23b310d` pins component `4e36175`. It adds an offline purple
+fixes, parent `ee48d81` pins component `4e36175`. It adds an offline purple
 `usr-notes` VM with Text Editor, a 2-GiB
 private disk, sys-gui as its GUI VM and `autostart = false`. Evaluated topology
 differs from the original baseline only in that domain. Original trial quick
@@ -256,6 +256,23 @@ Evidence is in the main checkout's `.airlock-logs/live-vm-trial/`: baseline
 Boot-failure evidence, including raw initrd logs, the failure traceback and
 transaction command output, is in `boot-hang-20261001/` below that directory.
 
-Next: boot and verify the installed baseline.
-After confirming the generic host RPCs and GUI tools are running, use normal
-plan/apply from the trial worktree and perform the no-reboot acceptance sequence.
+## Baseline boot verified (2026-10-01)
+
+The operator restarted normally and confirmed the desktop looks good. Dom0
+boot ID is `b1866698-e8d6-42a9-b6a2-e27d064e387b`; its running system is the
+selected `4v44y6607wp1c087dgkl8id5pj8cxnrw` host. Typed verification reports
+transaction `1790847116434715227` **complete**, with all six running guests
+matching their selections and usr-browser halted. The record's `boot_id` is
+the deployment's original boot ID; the separate dom0 observation records the
+current boot.
+
+The running host provides `airlock.Ctrl.MachinePrepare` and
+`airlock.Pool.AdmitCandidate`. Sys-gui provides `airlock-sync-qube-appmenus`.
+This completes the initial prerelease baseline installation. Normal planning
+for the separate usr-notes trial is now underway; its application launch and
+persistence tests will run without another host reboot.
+
+Evidence: `boot-hang-20261001/baseline-after-reboot-verify.log`,
+`baseline-after-reboot-dom0.txt` and `sys-gui-menu-tools.txt` under the evidence
+directory above. Current existing guest XIDs are sys-net 1, sys-gui 3,
+sys-firewall 5, usr-home 6, sys-ctrl 7 and sys-dev 8.

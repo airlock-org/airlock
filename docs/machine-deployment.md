@@ -1,5 +1,15 @@
 # Repository-first whole-machine deployment
 
+Recovery baseline boot verified (2026-10-01): the operator restarted normally
+and confirmed the desktop looks good. Dom0 now runs selected host
+`4v44y6607wp1c087dgkl8id5pj8cxnrw`, boot ID
+`b1866698-e8d6-42a9-b6a2-e27d064e387b`. Typed verification of transaction
+`1790847116434715227` reports **complete**; all six running guests match their
+selections and usr-browser is halted. The generic candidate-preparation and
+admission RPCs are present. The separate usr-notes addition is now being
+prepared; no further host reboot has occurred. See [TODO 12](todo/12-live-vm-additions.md#baseline-boot-verified-2026-10-01)
+and `.airlock-logs/live-vm-trial/boot-hang-20261001/`.
+
 Live VM addition baseline failure (2026-10-01): saved USB diagnostics confirm
 worker `airlock-machine-deploy-5b42fb9f7eb7` failed in `host-boot-selection`,
 transaction `1790786804188630165`. `seal-boot` rejected a previously sealed boot
