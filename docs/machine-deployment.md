@@ -1,5 +1,33 @@
 # Repository-first whole-machine deployment
 
+Connected personal desktop and agent handoff deployed (2026-10-01): component
+`e8dd762` creates `sys-agent`, copies the stopped `sys-dev` private volume,
+retains its home and former builder cache, and recoverably retires `sys-dev`
+and `usr-browser`. Firefox and URL launchers now run in connected `usr-home`
+through `sys-firewall`. The quick suite passed **770 tests, 59 skipped**.
+Normal plan built in 321 s and prepared in 377 s; apply reused the candidate
+with zero further builds/transfers. Worker `airlock-machine-deploy-9019252a4495`
+succeeded, transaction `1790869300566467587`, with all six running guests
+matching selection. Firefox reports 155.0; usr-home DNS and an external TCP
+connection succeeded. Its original UUID is unchanged. Sys-agent reconnected at
+`100.104.92.101`, its builder and Tailscale services are active, and no guest
+units failed. A copied private-data marker matched, and the old builder cache
+is preserved at `/rw/airlock-builder-sys-dev-builder`.
+
+Host `rw6krh25y2qrn2wfi55p99l4xp6d4sx6` is selected; running host remains
+`vxa5n5j8nyql4bkdafikd2mnr0px1v05` until the operator restart. A temporary,
+unprivileged dom0 observer relayed the existing controller's outcome, worker
+exit status and home network checks to sys-agent across SSH disconnection;
+it removed its script after relaying. Its remaining evidence files in dom0's
+user cache still require cleanup after reboot. The source's Tailscale enrollment
+was copied into its private volume before handoff; this intentional data
+preparation is reproduced in sys-agent's declarative private-state bind.
+The active agent's test marker and relay file have been removed. Component
+`d0fa841` clears the completed handoff declarations and is committed/pinned,
+but its cleanup release is not yet deployed. Host verification after restart,
+cleanup release deployment and manual Firefox acceptance are pending.
+Evidence: `.airlock-logs/home-default-agent/`.
+
 Application-owned GUI chrome deployed (2026-10-01): machine revision `f52366c`
 applies one GNOME policy to every forwarded window: no outer title bar or frame,
 and no GUI-daemon colour border. Application chrome remains inside its VM;
