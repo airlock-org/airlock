@@ -208,7 +208,7 @@ async def prepare(topology, physical_pool, output, storage_helper):
         configs = helper.shared_volume_configs(
             "airlock-closure", name, admission, metadata_size=metadata_size
         )
-        if name in ("sys-dev", "sys-ctrl"):
+        if name in ("sys-agent", "sys-ctrl"):
             configs.update(
                 builder_volume_configs(
                     RUNTIME_POOL, "airlock-closure", domain=name, physical_root=physical_pool

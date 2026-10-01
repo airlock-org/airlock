@@ -102,7 +102,7 @@ def cached_gate(tmp_path, monkeypatch):
     lock_hash = gate.digest((ROOT / "airlock-machine/flake.lock").read_bytes())
     manifest = tmp_path / "inputs.json"
     manifest.write_text(json.dumps({
-        "schema": "airlock.sys-dev-offline-inputs.v1",
+        "schema": "airlock.sys-agent-offline-inputs.v1",
         "lock_hash": lock_hash,
         "inputs": {"nixpkgs": flake},
     }))

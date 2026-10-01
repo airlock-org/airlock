@@ -75,7 +75,7 @@ def test_low_space_stops_transfer_before_any_write(monkeypatch):
             return "" if script == client.REMOTE_INVENTORY else str(1024**3)
 
     with pytest.raises(RuntimeError, match="No VMs or partitions changed"):
-        client.transfer("sys-dev-2", "sys-dev", "/nix/store/release", Session())
+        client.transfer("sys-agent-2", "sys-agent", "/nix/store/release", Session())
     assert len(calls) == 2
 
 
@@ -91,10 +91,10 @@ def test_existing_closure_requires_no_upload(monkeypatch):
             assert script == client.REMOTE_INVENTORY
             return "/nix/store/present"
 
-    client.transfer("sys-dev-2", "sys-dev", "/nix/store/present", Session())
+    client.transfer("sys-agent-2", "sys-agent", "/nix/store/present", Session())
 
 
-def test_guest_receipt_is_read_from_sys_dev_and_installed_for_dom0(monkeypatch):
+def test_guest_receipt_is_read_from_sys_agent_and_installed_for_dom0(monkeypatch):
     receipt = {
         "schema": "airlock.closure-store.admission.v1",
         "domain": "usr-home",
@@ -102,7 +102,7 @@ def test_guest_receipt_is_read_from_sys_dev_and_installed_for_dom0(monkeypatch):
     }
     monkeypatch.setattr(client, "command", lambda *args: json.dumps(receipt))
     assert (
-        client.remote_receipt("sys-dev", "/home/user/.local/share/airlock/receipt.json")
+        client.remote_receipt("sys-agent", "/home/user/.local/share/airlock/receipt.json")
         == receipt
     )
 
@@ -130,8 +130,8 @@ def test_guest_receipt_is_read_from_sys_dev_and_installed_for_dom0(monkeypatch):
     [
         ("262144 4096", "private-volume space"),
         ("4080335 4096", "reached export"),
-        ("-1 4096", "invalid sys-dev"),
-        ("100 0", "invalid sys-dev"),
+        ("-1 4096", "invalid sys-agent"),
+        ("100 0", "invalid sys-agent"),
     ],
 )
 def test_bridge_space_check_does_not_require_python(monkeypatch, report, error):
@@ -140,7 +140,7 @@ def test_bridge_space_check_does_not_require_python(monkeypatch, report, error):
     def command(*args):
         calls.append(args)
         if args[0] == "ssh":
-            assert args == ("ssh", "sys-dev", "stat -f -c '%a %S' /home/user")
+            assert args == ("ssh", "sys-agent", "stat -f -c '%a %S' /home/user")
             return report
         return json.dumps({"/nix/store/new": {"narSize": 1024**3}})
 
@@ -154,7 +154,7 @@ def test_bridge_space_check_does_not_require_python(monkeypatch, report, error):
     monkeypatch.setattr(client, "command", command)
     monkeypatch.setattr(client.subprocess, "Popen", stop_at_export)
     with pytest.raises(RuntimeError, match=error):
-        client.transfer("sys-dev", "sys-dev", "/nix/store/release", Session())
+        client.transfer("sys-agent", "sys-agent", "/nix/store/release", Session())
     assert len(calls) == 2
 
 
@@ -163,7 +163,7 @@ def test_guest_plan_can_transfer_committed_coordinator(monkeypatch):
 
     class Session:
         def __init__(self, target):
-            assert target == "sys-dev"
+            assert target == "sys-agent"
 
         def run(self, script, **kwargs):
             events.append(script)
@@ -192,7 +192,7 @@ def test_guest_plan_can_transfer_committed_coordinator(monkeypatch):
             [
                 "guest-plan",
                 "--target",
-                "sys-dev",
+                "sys-agent",
                 "--receipt",
                 "/receipt.json",
                 "--update-coordinator",
@@ -225,7 +225,7 @@ def test_client_status_before_and_after_first_deployment(
 
     class Session:
         def __init__(self, target):
-            assert target == "sys-dev"
+            assert target == "sys-agent"
 
         def run(self, script, **kwargs):
             script = script.replace(
@@ -239,7 +239,7 @@ def test_client_status_before_and_after_first_deployment(
             pass
 
     monkeypatch.setattr(client, "Dom0", Session)
-    result = client.main(["status", "--target", "sys-dev", "--legacy-dom0"])
+    result = client.main(["status", "--target", "sys-agent", "--legacy-dom0"])
     output = capsys.readouterr().out
     if controller == "absent":
         assert result == 0 and "image-baseline" in output

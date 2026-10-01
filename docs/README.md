@@ -25,11 +25,11 @@ current backlog items.
 - [Repository boundaries](repositories.md): source ownership and submodule workflow.
 - [USB development](usb-dev.md) and [USB lab](usb-lab.md): current image,
   provisioning, recovery, and physical topology. The normal Airlock entry uses
-  physical-GPU GNOME; the deployed USB lab release routes sys-dev through
+  physical-GPU GNOME; the deployed USB lab release routes sys-agent through
   sys-firewall and sys-net.
-- [Machine deployment](machine-deployment.md): host and sys-dev submission,
+- [Machine deployment](machine-deployment.md): host and sys-agent submission,
   whole-machine activation, verification, rollback, and maintenance.
-- [Pool-backed builder](sys-dev-build-store.md): implemented build-store behavior
+- [Pool-backed builder](sys-agent-build-store.md): implemented build-store behavior
   and its physical/automated validation boundaries.
 - [Physical input](sys-gui-input.md): declared dom0-to-sys-gui forwarding;
   its dated experiment section is historical evidence, not generic USB setup.

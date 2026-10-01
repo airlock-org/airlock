@@ -306,7 +306,7 @@ laptop console. SSH password/root login and non-Tailscale port 22 are disabled.
 Do not disable host-key verification to reuse the Ubuntu identity.
 
 The desktop's Tailscale launcher checks the route, DNS and HTTPS connectivity
-from sys-dev before requesting login. Failed checks print a specific error;
+from sys-agent before requesting login. Failed checks print a specific error;
 interactive login has a two-minute timeout and can be retried. Offline use does
 not require passing this check to reach GNOME. Network-provider startup checks
 the firewall and forwarding services as well as qrexec readiness.
@@ -337,7 +337,7 @@ that same data root. No full-store garbage collection is done automatically.
 
 Store notes/logs under the repo's `.airlock-logs/usb-dev/`. The image contains the
 [normal Airlock configuration](usb-lab.md) and text recovery. Its prepared pool
-includes `sys-gui` (GNOME), `sys-dev`, `sys-ctrl` routed through sys-firewall,
+includes `sys-gui` (GNOME), `sys-agent`, `sys-ctrl` routed through sys-firewall,
 `usr-home`, and `usr-browser`.
 Standalone GUI and hybrid GUI configurations remain available as source builders
 but are excluded from the USB image, including their guest stores.

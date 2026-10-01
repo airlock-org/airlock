@@ -213,7 +213,7 @@ def test_usb_dom0_display_does_not_wait_for_guest_password_mutation():
     ]
     assert configuration["guestLabels"] == [
         "sys-ctrl",
-        "sys-dev",
+        "sys-agent",
         "sys-firewall",
         "sys-gui",
         "sys-net",

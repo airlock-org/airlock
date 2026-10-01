@@ -1,3 +1,8 @@
+The default personal desktop now runs Firefox, files and terminal applications in
+connected `usr-home`, using `sys-firewall` for internet access. The separate
+`usr-browser` VM is no longer part of the default topology. Firefox starts with
+a fresh profile; no browser data is imported from the retired VM.
+
 # GNOME sys-gui milestone
 
 Status: GNOME and forwarded Firefox/Calculator windows verified live on the
@@ -78,7 +83,7 @@ Machine revision `caff35e` assigns `guivm=sys-gui` explicitly for `usr-home` and
 `usr-browser`, in both bootstrap defaults and the initial runtime configuration.
 Regression tests cover the physical and nested profiles and runtime defaults.
 The quick suite passed **722 tests, 25 skipped**. Normal whole-machine apply
-through sys-dev/sys-ctrl converged the two preferences and restored the GUI tags.
+through sys-agent/sys-ctrl converged the two preferences and restored the GUI tags.
 Before reboot, `usr-home`'s GUI agent was active and its session had `DISPLAY=:0`,
 `GDK_SCALE=3`, and `XCURSOR_SIZE=72`. No diagnostic configuration changes were
 needed on the target.

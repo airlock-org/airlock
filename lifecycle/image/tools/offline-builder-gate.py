@@ -365,7 +365,7 @@ def main():
             (args.machine / "flake.lock").read_bytes()
         ).hexdigest()
         manifest = json.loads(args.manifest.read_text())
-        if manifest.get("schema") != "airlock.sys-dev-offline-inputs.v1":
+        if manifest.get("schema") != "airlock.sys-agent-offline-inputs.v1":
             raise RuntimeError("invalid offline input manifest")
         if manifest.get("lock_hash") != lock_hash:
             raise RuntimeError("offline input manifest differs from machine lock")

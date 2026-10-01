@@ -47,10 +47,10 @@ For physical Airlock USB iteration without reflashing, use the repository-owned
 [whole-machine deployment workflow](docs/machine-deployment.md):
 
 ```bash
-make machine-plan DEPLOY_TARGET=sys-dev-2
-make machine-apply DEPLOY_TARGET=sys-dev-2
-make machine-status DEPLOY_TARGET=sys-dev-2
-make machine-verify DEPLOY_TARGET=sys-dev-2
+make machine-plan DEPLOY_TARGET=sys-agent-2
+make machine-apply DEPLOY_TARGET=sys-agent-2
+make machine-status DEPLOY_TARGET=sys-agent-2
+make machine-verify DEPLOY_TARGET=sys-agent-2
 ```
 
 Commit first. This builds one release for dom0 and the complete VM topology;

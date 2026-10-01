@@ -1,6 +1,6 @@
-# sys-dev's pool-backed build store
+# sys-agent's pool-backed build store
 
-Both sys-dev and sys-ctrl builders passed physical acceptance on 2026-09-29:
+The former sys-dev and sys-ctrl builders passed physical acceptance on 2026-09-29:
 approved host inputs, additive base transitions, saved additions and full reboot
 persistence. The final normal deployment boots both builder services successfully;
 see [completed 07](completed/07-unified-host-guest-store.md) for scope and evidence.
@@ -10,7 +10,7 @@ inputs, offline sources and the approved host closure. Its EROFS index and Nix
 registration are additional metadata; package extents are shared with other
 pool views rather than copied into the builder's writable layer.
 
-Qubes attaches two read-only volumes to sys-dev: `builder-store` (`xvdg`) and
+Qubes attaches two read-only volumes to sys-agent: `builder-store` (`xvdg`) and
 `builder-data` (`xvdh`). The builder-specific index contains `.airlock-builder/`
 with registration and identity metadata. An empty administrative `.links`
 directory is supplied by the read-only lower scaffold.
@@ -24,11 +24,11 @@ attaches its two volumes atomically during a stopped setup; a running controller
 continues using its current base until the next stopped setup. No new
 guest-to-dom0 control service is added.
 
-This keeps sys-dev at eight boot disks, avoiding the invalid SCSI address 8
+This keeps sys-agent at eight boot disks, avoiding the invalid SCSI address 8
 observed with the previous nine-disk layout, without changing Xen or Qubes.
 This change targets a freshly built/flashed USB; there is no migration path.
 
-At boot, `airlock-sys-dev-build-store.service` (or its sys-ctrl counterpart) mounts
+At boot, `airlock-sys-agent-build-store.service` (or its sys-ctrl counterpart) mounts
 the approved objects before loading Nix registration, so saved build recipes are
 readable. Metadata loading disables build-user ownership changes to the sealed
 mount, then freezes the lower database read-only. Normal `nix`, `airlock-config-nix`
@@ -52,7 +52,7 @@ independent recovery, publication ordering and combined acceptance results.
 
 ## Fresh-image acceptance
 
-1. Check `systemctl status airlock-sys-dev-build-store` and
+1. Check `systemctl status airlock-sys-agent-build-store` and
    `/run/airlock-builder/ready.json`; confirm both builder devices are read-only
    and no `builder-metadata` volume or `xvdi` dependency remains.
 2. Query an existing guest system through `airlock-config-nix path-info`, build
@@ -70,3 +70,8 @@ identity. Physical testing also demonstrated reuse of read-only inputs without
 copying them into the private upper layer, retention during a running-VM GC
 trial, and full-machine reboot persistence. Offline pin retention is covered
 by automated tests, not a physical offline-GC trial.
+
+When a private volume comes from a different builder role, its former base and
+upper are archived together beside `/rw/airlock-builder`; they are never mounted
+over the new role's independent base. Host publication can seed a missing agent
+base from the controller's frozen view, retaining its pinned offline inputs.

@@ -11,7 +11,7 @@ import tarfile
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "lifecycle/misc/tools/scripts/sys-dev-machine-source.py"
+SCRIPT = ROOT / "lifecycle/misc/tools/scripts/sys-agent-machine-source.py"
 
 
 def git(path: Path, *args: str) -> str:
@@ -85,7 +85,7 @@ def test_offline_input_manifest_records_nested_sources_and_lock(tmp_path: Path):
     )
     assert result.returncode == 0, result.stderr
     data = json.loads(manifest.read_text())
-    assert data["schema"] == "airlock.sys-dev-offline-inputs.v1"
+    assert data["schema"] == "airlock.sys-agent-offline-inputs.v1"
     assert (
         data["lock_hash"]
         == hashlib.sha256((repo / "flake.lock").read_bytes()).hexdigest()
@@ -148,7 +148,9 @@ def test_offline_input_manifest_resolves_local_input_in_machine_archive(tmp_path
     }
 
 
-def test_source_archive_preserves_machine_revision_and_lock(tmp_path: Path):
+@pytest.mark.parametrize("schema", ["airlock.sys-agent-machine-source.v1", "airlock.sys-dev-machine-source.v1"])
+def test_source_archive_preserves_machine_revision_and_lock(tmp_path: Path, monkeypatch, schema):
+    monkeypatch.setenv("AIRLOCK_DEPLOY_SOURCE_SCHEMA", schema)
     repo = tmp_path / "machine"
     revision = repository(repo)
     archive = tmp_path / "machine-source.tar.gz"
@@ -178,7 +180,7 @@ def test_source_archive_preserves_machine_revision_and_lock(tmp_path: Path):
         assert sorted(source.getnames()) == ["manifest.json", "repo.bundle"]
         manifest = json.load(source.extractfile("manifest.json"))
         assert manifest == {
-            "schema": "airlock.sys-dev-machine-source.v1",
+            "schema": schema,
             "revision": revision,
             "lock_hash": report["lock_hash"],
             "submodules": [],
@@ -251,7 +253,7 @@ def test_shallow_seed_archive_contains_only_the_pinned_checkout(tmp_path: Path):
         source.extractall(extracted)
         manifest = json.load(source.extractfile("manifest.json"))
     checkout = extracted / "repo"
-    assert manifest["schema"] == "airlock.sys-dev-machine-seed.v1"
+    assert manifest["schema"] == "airlock.sys-agent-machine-seed.v1"
     assert manifest["revision"] == revision
     assert git(checkout, "rev-parse", "HEAD") == revision
     assert git(checkout, "rev-parse", "--is-shallow-repository") == "true"
@@ -273,7 +275,7 @@ def test_shallow_seed_archive_contains_only_the_pinned_checkout(tmp_path: Path):
           entries = flake.lib.mkMachineGuestEntries "x86_64-linux" {{
             airlockMachineSeedArchive = "/seed.tar.gz";
           }};
-      in entries.sys-dev.configuration.config.systemd.services.airlock-machine-source-seed.script
+      in entries.sys-agent.configuration.config.systemd.services.airlock-machine-source-seed.script
     """
     evaluated = subprocess.run(
         ["nix", "eval", "--impure", "--raw", "--expr", expression],

@@ -161,7 +161,7 @@ def tree_fingerprints(root):
 def builder_seed(seed_inputs, tmp_path, request):
     specs, systems, _ = seed_inputs
     parameter = getattr(request, "param", 0)
-    builder_domain = parameter.get("domain", "sys-dev-builder") if isinstance(parameter, dict) else "sys-dev-builder"
+    builder_domain = parameter.get("domain", "sys-agent-builder") if isinstance(parameter, dict) else "sys-agent-builder"
     closure = tmp_path / "builder-closure"
     closure.mkdir()
     paths = sorted(
@@ -205,7 +205,7 @@ def test_sys_ctrl_builder_has_its_own_pinned_view(builder_seed):
 
     root, descriptors, _ = builder_seed
     assert prepared.verify_outputs(root, descriptors)["status"] == "passed"
-    assert not (root / "builders/sys-dev.json").exists()
+    assert not (root / "builders/sys-agent.json").exists()
     assert (root / "builders/sys-ctrl.json").exists()
     configs = builder.builder_volume_configs(root, "airlock-closure", domain="sys-ctrl")
     assert set(configs) == {"builder-store", "builder-data"}
@@ -222,7 +222,7 @@ def test_builder_seed_shares_payload_and_retains_frozen_view_offline(builder_see
     assert list(configs) == ["builder-store", "builder-data"]
     assert all(not cfg["rw"] and cfg["save_on_stop"] for cfg in configs.values())
     # There is no running VM, no current generation, and no retention fallback.
-    for domain, generation in (("sys-gui", 1), ("sys-gui", 2), ("sys-dev-builder", 1)):
+    for domain, generation in (("sys-gui", 1), ("sys-gui", 2), ("sys-agent-builder", 1)):
         generations.set_retention(
             SimpleNamespace(
                 pool_root=str(root),
@@ -238,11 +238,11 @@ def test_builder_seed_shares_payload_and_retains_frozen_view_offline(builder_see
     for _ in range(2):
         result = maintenance.gc(cleanup)
         assert result["retained_generations"] == [
-            {"domain": "sys-dev-builder", "generation": 1}
+            {"domain": "sys-agent-builder", "generation": 1}
         ]
         assert builder.builder_volume_configs(root, "airlock-closure") == configs
         assert fingerprints == {p: core.hash_file(p) for p in fingerprints}
-    state.clear_running_ref(root, "sys-dev-builder", 1, "builder-persistent")
+    state.clear_running_ref(root, "sys-agent-builder", 1, "builder-persistent")
     with pytest.raises(FileNotFoundError):
         builder.builder_volume_configs(root, "airlock-closure")
     maintenance.gc(cleanup)
@@ -283,7 +283,7 @@ def test_builder_seed_validates_metadata_and_physical_pin(builder_seed):
     with pytest.raises(core.EngineError, match="read-only"):
         builder.builder_volume_configs(root, "airlock-closure")
     metadata.chmod(0o444)
-    pin = state.running_ref_path(root, "sys-dev-builder", 1, "builder-persistent")
+    pin = state.running_ref_path(root, "sys-agent-builder", 1, "builder-persistent")
     data = core.read_json(pin)
     data["physical_references"] = []
     core.atomic_json(pin, data)
@@ -305,7 +305,7 @@ def test_builder_offline_input_manifest_is_bound_to_registered_paths(
     manifest.write_text(
         json.dumps(
             {
-                "schema": "airlock.sys-dev-offline-inputs.v1",
+                "schema": "airlock.sys-agent-offline-inputs.v1",
                 "lock_hash": "a" * 64,
                 "inputs": {"nixpkgs": paths[0] + source_suffix},
             }
@@ -344,7 +344,7 @@ def test_builder_offline_input_manifest_is_bound_to_registered_paths(
     manifest.write_text(
         json.dumps(
             {
-                "schema": "airlock.sys-dev-offline-inputs.v1",
+                "schema": "airlock.sys-agent-offline-inputs.v1",
                 "lock_hash": "a" * 64,
                 "inputs": {"nixpkgs": "/nix/store/" + "z" * 32 + "-missing"},
             }
@@ -426,7 +426,7 @@ def test_builder_combined_index_reads_metadata_and_external_packages(
 def load_builder_guest():
     spec = importlib.util.spec_from_file_location(
         "builder_guest",
-        ROOT / "airlock-machine/lifecycle/runtime/tools/scripts/sys-dev-build-store.py",
+        ROOT / "airlock-machine/lifecycle/runtime/tools/scripts/sys-agent-build-store.py",
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -467,7 +467,7 @@ def test_builder_qubes_attachment_is_stable_after_serialization(
 
     monkeypatch.setattr(helper, "with_qubesd_restart", restart)
     args = SimpleNamespace(
-        pool_root=str(root), pool_name="airlock-closure", domain="sys-dev"
+        pool_root=str(root), pool_name="airlock-closure", domain="sys-agent"
     )
     asyncio.run(helper.ensure_builder_store(args))
     assert len(saves) == 1
@@ -571,7 +571,7 @@ def test_builder_guest_mount_lifecycle_preserves_upper(
     monkeypatch.setattr(guest.os, "chown", lambda *_: None)
     monkeypatch.setattr(guest, "is_mountpoint", lambda path: str(path) in mounted)
     monkeypatch.setattr(
-        guest, "read_identity", lambda _, domain="sys-dev": ({"base": "fixed"}, registration)
+        guest, "read_identity", lambda _, domain="sys-agent": ({"base": "fixed"}, registration)
     )
     real_command = guest.checked
 
@@ -777,7 +777,7 @@ def test_transferred_artifact_builds_a_real_pool_view(seed_inputs, tmp_path):
         io.BytesIO(output.getvalue()),
         pool_root=tmp_path / "pool",
         expected_domain="usr-home",
-        approved_by="sys-dev",
+        approved_by="sys-agent",
     )
     manifest = core.read_json(result["manifest"])
     assert result["activated"] is False
@@ -839,7 +839,7 @@ def test_negotiated_admission_reuses_usb_seed_without_payload(
         response,
         pool_root=pool,
         expected_domain="usr-home",
-        approved_by="sys-dev",
+        approved_by="sys-agent",
     )
     assert json.loads(response.getvalue())["missing"] == []
     assert json.loads(response.getvalue())["missing_root"] is False

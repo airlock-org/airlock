@@ -15,7 +15,7 @@ let
     kernel_name = entry.domain.backend.kernel.name;
     closure_source = toString entry.storeArtifact;
   }) entries;
-  # These roots cover the build hooks and tools missing from the first sys-dev
+  # These roots cover the build hooks and tools missing from the first sys-agent
   # guest change. The view shares objects already present in guest closures.
   routineBuildInputs = with pkgs; [
     composefs
@@ -42,14 +42,14 @@ let
         )
       );
   # A stable builder view shares the already admitted objects, including other
-  # guests' software. It is independent of sys-dev's own boot generation.
+  # guests' software. It is independent of sys-agent's own boot generation.
   builderInputRoots =
       map (entry: entry.configuration.config.system.build.toplevel) (builtins.attrValues entries)
-      ++ lib.optionals (entries ? sys-dev) (routineBuildInputs ++ sourcePaths);
+      ++ lib.optionals (entries ? sys-agent) (routineBuildInputs ++ sourcePaths);
   buildClosure = pkgs.closureInfo {
     rootPaths = builderInputRoots;
   };
-  buildManifest = pkgs.runCommand "sys-dev-builder-closure" { } ''
+  buildManifest = pkgs.runCommand "sys-agent-builder-closure" { } ''
     mkdir -p "$out"
     cp ${buildClosure}/store-paths ${buildClosure}/registration "$out/"
     echo '{}' > "$out/manifest.json"
@@ -65,7 +65,7 @@ let
     kernel_name = "";
     closure_source = toString buildManifest;
     builder = true;
-  }) (builtins.filter (role: builtins.hasAttr role entries) [ "sys-dev" "sys-ctrl" ]);
+  }) (builtins.filter (role: builtins.hasAttr role entries) [ "sys-agent" "sys-ctrl" ]);
   seed =
     pkgs.runCommand "airlock-usb-prepared-guest-store"
       {
@@ -86,7 +86,7 @@ let
         unsafeDiscardReferences.descriptors = true;
         passthru.builderInputClosure = buildClosure;
         passthru.builderInputRoots = builderInputRoots;
-        passthru.builderNix = entries.sys-dev.configuration.pkgs.nix;
+        passthru.builderNix = entries.sys-agent.configuration.pkgs.nix;
         AIRLOCK_CLOSURE_STORE_INDEX_SOURCE = "file";
         # Execute this in the consuming image derivation too: a cached receipt
         # cannot attest to payload bytes rebuilt after that receipt was made.

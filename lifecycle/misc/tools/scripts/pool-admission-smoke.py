@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the sys-dev pool-admission apply/rollback flow in nested dom0."""
+"""Run the sys-agent pool-admission apply/rollback flow in nested dom0."""
 
 import json
 import os
@@ -34,7 +34,7 @@ def guest(script, timeout=900):
     args = ["qvm-run", "--pass-io", "--user", "root"]
     if "--no-gui" in run("qvm-run", "--help"):
         args.append("--no-gui")
-    return run(*args, "sys-dev", "bash -s", input=script, timeout=timeout)
+    return run(*args, "sys-agent", "bash -s", input=script, timeout=timeout)
 
 
 def final_json(text):
@@ -51,8 +51,8 @@ def final_json(text):
     raise SystemExit("command did not finish with a JSON object")
 
 
-if subprocess.run(["qvm-check", "--running", "sys-dev"]).returncode:
-    run("qvm-start", "sys-dev", timeout=300)
+if subprocess.run(["qvm-check", "--running", "sys-agent"]).returncode:
+    run("qvm-start", "sys-agent", timeout=300)
 deadline = time.monotonic() + 240
 while True:
     try:
@@ -61,12 +61,12 @@ while True:
     except subprocess.SubprocessError:
         pass
     if time.monotonic() >= deadline:
-        raise SystemExit("sys-dev qrexec did not become ready")
+        raise SystemExit("sys-agent qrexec did not become ready")
     time.sleep(3)
 
 topology_path = Path("/var/lib/airlock/system/current-topology.json")
 topology = json.loads(topology_path.read_text())
-backend = topology["domains"]["sys-dev"]["backend"]
+backend = topology["domains"]["sys-agent"]["backend"]
 system = backend["system"]["source"]
 root_source = backend["root"]["source"]
 kernel_name = backend["kernel"]["name"]
@@ -77,7 +77,7 @@ mkdir -p {shlex.quote(closure_source)}
 printf '%s\\n' {shlex.quote(sentinel)} > /home/user/.airlock-pool-admission-sentinel
 nix-store -qR {shlex.quote(system)} > {shlex.quote(closure_source + "/store-paths")}
 airlock-pool-send \\
-  --domain sys-dev \\
+  --domain sys-agent \\
   --system {shlex.quote(system)} \\
   --closure-source {shlex.quote(closure_source)} \\
   --root-source {shlex.quote(root_source)} \\
@@ -97,7 +97,7 @@ work = Path("/var/lib/airlock/pool-admission-smoke")
 release = work / "release"
 release.mkdir(parents=True, exist_ok=True)
 updated = json.loads(json.dumps(topology))
-updated["domains"]["sys-dev"]["backend"]["store"]["source"] = closure_source
+updated["domains"]["sys-agent"]["backend"]["store"]["source"] = closure_source
 (release / "topology.json").write_text(json.dumps(updated, sort_keys=True) + "\n")
 host = str(Path("/run/current-system").resolve())
 setup = str(Path("/run/current-system/sw/bin/airlock-setup-config").resolve())

@@ -67,15 +67,15 @@ PYTHON_FILES := \
 	lifecycle/image/tools/prepare-runtime.py \
 	airlock-machine/lifecycle/runtime/tools/machine-deploy.py \
 	airlock-machine/lifecycle/runtime/tools/airlock_machine_deploy/*.py \
-	airlock-machine/lifecycle/runtime/tools/sys-dev-machine-deploy.py \
+	airlock-machine/lifecycle/runtime/tools/sys-agent-machine-deploy.py \
 	airlock-machine/lifecycle/runtime/tools/sys-ctrl-*.py \
 	airlock-machine/tests/test_sys_ctrl_*.py \
 	lifecycle/misc/tools/scripts/machine-deploy.py \
-	lifecycle/misc/tools/scripts/sys-dev-machine-source.py \
+	lifecycle/misc/tools/scripts/sys-agent-machine-source.py \
 	tests/test_machine_deploy_client.py \
-	tests/test_sys_dev_machine_source.py \
-	airlock-machine/tests/test_sys_dev_machine_build.py \
-	airlock-machine/tests/test_sys_dev_machine_deploy.py \
+	tests/test_sys_agent_machine_source.py \
+	airlock-machine/tests/test_sys_agent_machine_build.py \
+	airlock-machine/tests/test_sys_agent_machine_deploy.py \
 	airlock-machine/tests/test_qubes_guest_session.py \
 	airlock-machine/lifecycle/misc/tools/pkgs/airlock-gui-gpu-check/src/check.py \
 	airlock-machine/tests/test_gui_gpu_assignment.py \
@@ -104,7 +104,7 @@ PYTHON_FILES := \
 	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/*.py \
 	airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/qubes.py \
 	airlock-machine/lifecycle/runtime/tools/scripts/nix-domain-storage.py \
-	airlock-machine/lifecycle/runtime/tools/scripts/sys-dev-build-store.py \
+	airlock-machine/lifecycle/runtime/tools/scripts/sys-agent-build-store.py \
 	tests/conftest.py \
 	airlock-machine/tests/local_harness.py \
 	airlock-machine/tests/machine_pychecks.py \
@@ -135,23 +135,23 @@ PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_L
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
 # Run component tests from their canonical checkout, plus parent integration tests.
-PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,airlock-machine/tests tests/test_repository_split.py tests/test_local.py tests/test_gpu.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_host_store_image.py tests/test_machine_deploy_client.py tests/test_sys_dev_machine_source.py)
+PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,airlock-machine/tests tests/test_repository_split.py tests/test_local.py tests/test_gpu.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_host_store_image.py tests/test_machine_deploy_client.py tests/test_sys_agent_machine_source.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'$(if $(filter run-nested-gui-smoke-static,$(test)),tests/test_local.py,airlock-machine/tests/test_machine_local.py)::test_local_check[$(test)]')
 
 # One committed configuration, one whole-machine release. No per-VM switches.
 DEPLOY_PROFILE ?= usb-lab
 DEPLOY_LEGACY_DOM0 ?= 0
 DEPLOY_TARGET ?=
-.PHONY: machine-build machine-plan machine-apply machine-status machine-verify machine-resume machine-rollback machine-guest-plan machine-guest-apply sys-dev-machine-source
+.PHONY: machine-build machine-plan machine-apply machine-status machine-verify machine-resume machine-rollback machine-guest-plan machine-guest-apply sys-agent-machine-source
 machine-build machine-plan machine-apply machine-status machine-verify machine-resume machine-rollback:
 	uv run python lifecycle/misc/tools/scripts/machine-deploy.py $(patsubst machine-%,%,$@) --profile "$(DEPLOY_PROFILE)" $(if $(DEPLOY_TARGET),--target "$(DEPLOY_TARGET)",) $(if $(filter 1,$(DEPLOY_LEGACY_DOM0)),--legacy-dom0,)
 machine-guest-plan machine-guest-apply:
-	@test -n "$(DEPLOY_TARGET)" || { echo 'set DEPLOY_TARGET to the Tailscale sys-dev host'; exit 2; }
-	@test -n "$(ADMISSION_RECEIPT)" || { echo 'set ADMISSION_RECEIPT to the receipt path inside sys-dev'; exit 2; }
+	@test -n "$(DEPLOY_TARGET)" || { echo 'set DEPLOY_TARGET to the Tailscale sys-agent host'; exit 2; }
+	@test -n "$(ADMISSION_RECEIPT)" || { echo 'set ADMISSION_RECEIPT to the receipt path inside sys-agent'; exit 2; }
 	uv run python lifecycle/misc/tools/scripts/machine-deploy.py $(patsubst machine-%,%,$@) --profile "$(DEPLOY_PROFILE)" --target "$(DEPLOY_TARGET)" --receipt "$(ADMISSION_RECEIPT)" $(if $(filter 1,$(UPDATE_COORDINATOR)),--update-coordinator)
-sys-dev-machine-source:
-	@test -n "$(DEPLOY_TARGET)" || { echo 'set DEPLOY_TARGET to the Tailscale sys-dev host'; exit 2; }
-	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py push --target "$(DEPLOY_TARGET)"
+sys-agent-machine-source:
+	@test -n "$(DEPLOY_TARGET)" || { echo 'set DEPLOY_TARGET to the Tailscale sys-agent host'; exit 2; }
+	uv run python lifecycle/misc/tools/scripts/sys-agent-machine-source.py push --target "$(DEPLOY_TARGET)"
 VM_STAGED_PYTEST_SELECTED = $(foreach test,$(TESTS),'tests/test_vm_staged.py::test_staged_vm_step[$(test)]')
 VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS = vm-config-flow vm-nix-closure-flow
 VM_SLOW_PARALLEL_FLOW_IDS = $(VM_SLOW_DEFAULT_PARALLEL_FLOW_IDS) vm-config-boot-flow
@@ -206,9 +206,9 @@ usb-dev-prepare-inputs: ensure-generated-dirs
 	seed_archive="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-seed.tar.gz"; \
 	offline_inputs="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-offline-inputs.json"; \
 	archive_json="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-flake-archive.json"; \
-	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py seed --reuse --output "$$seed_archive" >/dev/null; \
+	uv run python lifecycle/misc/tools/scripts/sys-agent-machine-source.py seed --reuse --output "$$seed_archive" >/dev/null; \
 	$(AIRLOCK_NIX) flake archive --no-update-lock-file --json path:./airlock-machine > "$$archive_json"; \
-	uv run python lifecycle/misc/tools/scripts/sys-dev-machine-source.py offline-inputs --repository airlock-machine --output "$$offline_inputs" < "$$archive_json"
+	uv run python lifecycle/misc/tools/scripts/sys-agent-machine-source.py offline-inputs --repository airlock-machine --output "$$offline_inputs" < "$$archive_json"
 
 # Force both offline trials and publish a fresh passing receipt.
 usb-builder-offline-check: usb-dev-prepare-inputs

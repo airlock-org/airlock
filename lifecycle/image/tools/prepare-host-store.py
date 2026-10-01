@@ -35,7 +35,7 @@ def prepare(seed, output, registration, system, choices):
     text = Path(registration).read_text()
     systems = list(dict.fromkeys([system] + list(choices.values())))
     host.publish(root, system, text, systems, incremental=False)
-    for role in ("sys-ctrl", "sys-dev"):
+    for role in ("sys-ctrl", "sys-agent"):
         if (root / f"builders/{role}.json").exists():
             host.refresh_builder(root, role, text, incremental=False)
     core.atomic_json(root / "host/aliases.json", choices)
@@ -73,7 +73,7 @@ def verify(seed):
         verify_generation_root(root, core.read_json(path))
     for path in (root / "host/boots").glob("*.json"):
         host.validate_boot(root, core.read_json(path)["system"], logical_root=host.POOL)
-    for role in ("sys-dev", "sys-ctrl"):
+    for role in ("sys-agent", "sys-ctrl"):
         builder_volume_configs(host.POOL, "airlock-closure", domain=role, physical_root=root)
     print(json.dumps({"schema": "airlock.unified-seed-check.v1", "status": "passed"}))
 

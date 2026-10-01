@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a committed whole-machine release and deploy via the sys-dev bridge."""
+"""Build a committed whole-machine release and deploy via the sys-agent bridge."""
 
 import argparse
 import base64
@@ -182,7 +182,7 @@ def transfer(target, bridge_vm, release, session):
             f"only {free / 1024**3:.1f} GiB is available. No VMs or partitions changed. "
             "Provision development storage first; do not delete active/rollback store generations."
         )
-    # sys-dev deliberately has a small package set and need not include Python.
+    # sys-agent deliberately has a small package set and need not include Python.
     # GNU stat is already available; use available blocks, not total/free blocks.
     bridge_blocks, bridge_block_size = map(
         int,
@@ -193,11 +193,11 @@ def transfer(target, bridge_vm, release, session):
         ).split(),
     )
     if bridge_blocks < 0 or bridge_block_size <= 0:
-        raise RuntimeError("invalid sys-dev filesystem space report")
+        raise RuntimeError("invalid sys-agent filesystem space report")
     bridge_free = bridge_blocks * bridge_block_size
     if bridge_free < needed + 512 * 1024**2:
         raise RuntimeError(
-            "sys-dev needs more private-volume space for the compressed closure transfer"
+            "sys-agent needs more private-volume space for the compressed closure transfer"
         )
     nonce = uuid.uuid4().hex
     remote = f"/home/user/.cache/airlock-deploy/{nonce}.nar.gz"
@@ -259,7 +259,7 @@ def remote_receipt(target, path):
     payload = command("ssh", target, "cat -- " + shlex.quote(path))
     receipt = json.loads(payload)
     if not isinstance(receipt, dict):
-        raise RuntimeError("sys-dev admission receipt is not a JSON object")
+        raise RuntimeError("sys-agent admission receipt is not a JSON object")
     return receipt
 
 
@@ -301,15 +301,15 @@ def main(argv=None):
             "guest-apply",
         ],
     )
-    parser.add_argument("--target", help="sys-dev SSH/Tailscale name, e.g. sys-dev-2")
+    parser.add_argument("--target", help="sys-agent SSH/Tailscale name, e.g. sys-agent-2")
     parser.add_argument(
-        "--bridge-vm", default="sys-dev", help="Qubes VM name (not its Tailscale name)"
+        "--bridge-vm", default="sys-agent", help="Qubes VM name (not its Tailscale name)"
     )
     parser.add_argument(
         "--profile", default="usb-lab", choices=["usb-lab", "usb-gui-lab"]
     )
     parser.add_argument(
-        "--receipt", help="path to the inactive admission receipt inside sys-dev"
+        "--receipt", help="path to the inactive admission receipt inside sys-agent"
     )
     parser.add_argument(
         "--update-coordinator",
@@ -329,10 +329,10 @@ def main(argv=None):
             and args.action in {"plan", "apply", "status", "verify", "resume", "rollback"}):
         try:
             if args.action in {"plan", "apply"}:
-                subprocess.run([sys.executable, str(ROOT / "lifecycle/misc/tools/scripts/sys-dev-machine-source.py"),
+                subprocess.run([sys.executable, str(ROOT / "lifecycle/misc/tools/scripts/sys-agent-machine-source.py"),
                                 "push", "--target", args.target], check=True)
             return subprocess.call(["ssh", args.target,
-                                    "airlock-sys-dev-machine-deploy", args.action])
+                                    os.environ.get("AIRLOCK_DEPLOY_REMOTE_CLIENT", "airlock-sys-agent-machine-deploy"), args.action])
         except (OSError, subprocess.SubprocessError) as exc:
             print(f"machine-deploy: controller submission failed: {exc}", file=sys.stderr)
             return 1

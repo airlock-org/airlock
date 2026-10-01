@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Bundle the pinned machine source and import it into a sys-dev guest."""
+"""Bundle the pinned machine source and import it into a sys-agent guest."""
 
 import argparse
 import hashlib
 import json
+import os
 import posixpath
 import re
 from pathlib import Path
@@ -14,9 +15,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[4]
 MACHINE = ROOT / "airlock-machine"
-SCHEMA = "airlock.sys-dev-machine-source.v1"
-SEED_SCHEMA = "airlock.sys-dev-machine-seed.v1"
-OFFLINE_SCHEMA = "airlock.sys-dev-offline-inputs.v1"
+SCHEMA = "airlock.sys-agent-machine-source.v1"
+SEED_SCHEMA = "airlock.sys-agent-machine-seed.v1"
+OFFLINE_SCHEMA = "airlock.sys-agent-offline-inputs.v1"
 
 
 def run(*args, cwd=None, input=None):
@@ -65,7 +66,7 @@ def source_archive(destination, repository=MACHINE):
     status = output("git", "submodule", "status", "--recursive", cwd=repository)
     if status:
         raise RuntimeError(
-            "machine source has Git submodules; sys-dev source bundles do not yet "
+            "machine source has Git submodules; sys-agent source bundles do not yet "
             "support importing them"
         )
 
@@ -79,7 +80,7 @@ def source_archive(destination, repository=MACHINE):
         manifest.write_text(
             json.dumps(
                 {
-                    "schema": SCHEMA,
+                    "schema": os.environ.get("AIRLOCK_DEPLOY_SOURCE_SCHEMA", SCHEMA),
                     "revision": revision,
                     "lock_hash": lock_hash,
                     "submodules": [],
@@ -217,7 +218,7 @@ def push_archive(target, archive):
     command = [
         "ssh",
         target,
-        "airlock-sys-dev-machine-source",
+        os.environ.get("AIRLOCK_DEPLOY_SOURCE_COMMAND", "airlock-sys-agent-machine-source"),
         "import",
         "--revision",
         manifest["revision"],
@@ -227,11 +228,11 @@ def push_archive(target, archive):
     with archive.open("rb") as stream:
         result = subprocess.run(command, stdin=stream, check=False)
     if result.returncode:
-        raise RuntimeError(f"sys-dev import failed with exit code {result.returncode}")
+        raise RuntimeError(f"sys-agent import failed with exit code {result.returncode}")
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="sys-dev-machine-source")
+    parser = argparse.ArgumentParser(prog="sys-agent-machine-source")
     commands = parser.add_subparsers(dest="command", required=True)
     create = commands.add_parser("create")
     create.add_argument("--output", required=True, type=Path)
@@ -273,7 +274,7 @@ def main(argv=None):
             print(json.dumps(result, sort_keys=True))
             return 0
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
-        print(f"sys-dev-machine-source: {exc}", file=sys.stderr)
+        print(f"sys-agent-machine-source: {exc}", file=sys.stderr)
         return 1
 
 
