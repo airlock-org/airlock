@@ -1,5 +1,33 @@
 # Repository-first whole-machine deployment
 
+Automatic application discovery prepared locally (2026-10-01): component
+`c323fba` replaces the fixed personal application launchers with discovery for
+VMs assigned to sys-gui. Guest RPCs use active system/user profiles and XDG
+desktop entries consistently for discovery, launching and icons. The GUI
+refresh timer retains stopped-VM catalogs, withdraws deleted/retired/reassigned
+VMs, and preserves launcher IDs across VM rename using UUIDs. New Nix VMs
+default to `menu-items = "*"`; explicit selections remain available. Browser
+URL activation uses the chosen VM's MIME default rather than a Firefox command.
+
+The final quick suite passed **796 tests, 59 skipped**, including 26 new
+application discovery/lifecycle tests. Six checks against the packaged Qubes
+receiver/menu code passed, as did the three personal/desktop configuration
+checks and the minimal-GUI configuration check. A stale boot-supervisor test
+was corrected to check the desktop-ready hook in the split startup stage.
+Commit-hook lint and Python compilation passed. The normal local
+`make machine-build` produced
+`/nix/store/br2f0dza4qcp83csd2dcxdvcal3qqx8l-airlock-machine-release`, bound to
+component `c323fba` and parent `6d13a92`. Guarded GC remained below its automatic
+threshold. **No live deployment has been performed for this change.**
+
+Manual acceptance after deployment should cover GNOME search/icons, two VMs
+with Firefox, favorites and window grouping, install/removal or profile
+switches, launching from a stopped VM, and VM rename/retirement. New VMs need
+their first startup before their catalog is available; build-time catalog
+seeding is not implemented. Normal healthy refresh rounds repeat after thirty
+seconds. Evidence: `.airlock-logs/application-menus/`; component design and
+diagnostic commands: `airlock-machine/docs/sys-gui.md`.
+
 Connected personal desktop and agent handoff deployed (2026-10-01): component
 `e8dd762` creates `sys-agent`, copies the stopped `sys-dev` private volume,
 retains its home and former builder cache, and recoverably retires `sys-dev`
