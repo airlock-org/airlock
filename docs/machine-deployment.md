@@ -1,16 +1,27 @@
 # Repository-first whole-machine deployment
 
-Usr-notes trial cleanup requested (2026-10-01): the operator requested removal
+Usr-notes trial cleanup deployed (2026-10-01): the operator requested removal
 after acceptance. Normal rollback worker `airlock-machine-deploy-e6d2d2e10cd3`
-succeeded, transaction `1790853218723382023`; typed verification reports
-**reboot-required** with the no-trial baseline selected and only usr-notes
-retired. Its private disk is still recoverable. Permanent deletion must first
-advance the immediate rollback choice beyond the trial and boot a host without
-usr-notes, then safely prune the trial release and purge the exact trash record.
-Component `1255f94` documents those existing protections and supplies the next
+succeeded, transaction `1790853218723382023`, retiring only usr-notes. Upstream
+`qvm-appmenus --remove usr-notes` removed its desktop entries. Component
+`1255f94` documents the existing purge protections and supplies the next
 committed no-trial release; it changes no VM declaration or runtime code.
-Preparation and final deletion are pending. Evidence is under
-`.airlock-logs/live-vm-trial/boot-hang-20261001/usr-notes-removal-*`.
+Normal plan built it in 89 s and prepared it in 50 s, with no changed guests
+or stop list. Apply reused the candidate with zero builds/transfers; worker
+`airlock-machine-deploy-55b38e27a455` succeeded. Typed verification of transaction
+`1790853674535062419` reports **reboot-required**, selecting host
+`x6fqp88gsd44sfgq202ads7p1k1d2bk0` and preserving the no-trial baseline as the
+immediate rollback choice. Existing VM states, XIDs and UUIDs are unchanged.
+
+Usr-notes remains stopped in recoverable trash, record
+`1790853218723382023-usr-notes`. The effective trial-release prune plan waives
+only its unexpired-trash deadline and reports one remaining blocker:
+`running or booted host`, because dom0 still runs the trial's
+`p08d4fmqhpy199ay2jff5952w039q88f`. A normal host restart is needed before
+safe trial pruning and permanent purge. No protection was bypassed and no data
+was purged. Evidence is under `.airlock-logs/live-vm-trial/boot-hang-20261001/`,
+including `usr-notes-removal.json`, `usr-notes-cleanup-plan.json`,
+`usr-notes-cleanup-verify.json` and `usr-notes-removal-prune-before-boot.json`.
 
 Live VM addition acceptance complete (2026-10-01): after the no-reboot addition,
 a normal host restart loaded selected host `p08d4fmqhpy199ay2jff5952w039q88f`.
