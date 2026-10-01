@@ -1,5 +1,17 @@
 # Repository-first whole-machine deployment
 
+Live VM addition acceptance complete (2026-10-01): after the no-reboot addition,
+a normal host restart loaded selected host `p08d4fmqhpy199ay2jff5952w039q88f`.
+Usr-notes remained halted as declared; an explicit start found the same private
+volume and exact home sentinel. Normal rollback recoverably retired only
+usr-notes, and normal reapply restored its original UUID, volume and sentinel
+without another reboot or restarting other VMs. Final transaction
+`1790849824713060611` verifies **complete**, with all seven running guests matching
+selection, usr-browser halted and no active trash records. The operator
+confirmed the desktop and application. [Plan 12](completed/12-live-vm-additions.md)
+is complete; the committed experimental declaration remains on the separate
+trial branch. Evidence: `.airlock-logs/live-vm-trial/boot-hang-20261001/`.
+
 No-reboot VM addition verified (2026-10-01): the separate committed usr-notes
 trial (`4e36175`) passed normal plan/apply. The plan changed only usr-notes and
 stopped no VMs; worker `airlock-machine-deploy-be0e7c5dfa81` succeeded. Typed
@@ -9,7 +21,7 @@ ID, while host `p08d4fmqhpy199ay2jff5952w039q88f` is selected for later boot.
 Existing guests kept their states, XIDs and UUIDs. Sys-gui imported the new
 launcher live, the operator saw Text Editor, and an exact home sentinel survived
 usr-notes stop/start with the same private volume. Host reboot persistence and
-rollback/reapply remain pending. See [TODO 12](todo/12-live-vm-additions.md#no-reboot-addition-verified-2026-10-01)
+rollback/reapply remain pending. See [TODO 12](completed/12-live-vm-additions.md#no-reboot-addition-verified-2026-10-01)
 and `.airlock-logs/live-vm-trial/boot-hang-20261001/usr-notes-live-acceptance.json`.
 
 Recovery baseline boot verified (2026-10-01): the operator restarted normally
@@ -19,7 +31,7 @@ and confirmed the desktop looks good. Dom0 now runs selected host
 `1790847116434715227` reports **complete**; all six running guests match their
 selections and usr-browser is halted. The generic candidate-preparation and
 admission RPCs are present. The separate usr-notes addition is now being
-prepared; no further host reboot has occurred. See [TODO 12](todo/12-live-vm-additions.md#baseline-boot-verified-2026-10-01)
+prepared; no further host reboot has occurred. See [TODO 12](completed/12-live-vm-additions.md#baseline-boot-verified-2026-10-01)
 and `.airlock-logs/live-vm-trial/boot-hang-20261001/`.
 
 Live VM addition baseline failure (2026-10-01): saved USB diagnostics confirm
@@ -58,7 +70,7 @@ remains unapplied.
 The final binding, boot selection and transaction completion remain separate durable writes, so abrupt power loss
 in that final window can still require recovery; this is not an atomic machine
 transaction. The usr-notes trial remains unapplied. See
-[TODO 12](todo/12-live-vm-additions.md#live-baseline-installation-attempt-2026-09-30)
+[TODO 12](completed/12-live-vm-additions.md#live-baseline-installation-attempt-2026-09-30)
 and `.airlock-logs/live-vm-trial/boot-hang-20261001/`.
 
 Focused VM indicator cache follow-up (2026-09-30): machine revision `b867b9a`
@@ -520,7 +532,7 @@ dependencies. Shutdown timeouts fail the transaction; the tool does not kill VMs
 
 ### Live VM addition implementation
 
-[TODO 12](todo/12-live-vm-additions.md) implements a released baseline that can
+[TODO 12](completed/12-live-vm-additions.md) implements a released baseline that can
 prepare and activate a new ordinary VM without a preparatory host deployment
 or reboot. Its host generation is selected for the next boot while Qubes creates
 the VM and its persistent private disk on the running host. Physical acceptance

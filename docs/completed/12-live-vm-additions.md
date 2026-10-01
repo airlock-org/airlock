@@ -1,13 +1,13 @@
 # 12: Apply VM additions without a host reboot
 
-Status: **implementation in progress; physical acceptance pending** (2026-10-01).
+Status: **completed; physical acceptance passed** (2026-10-01).
 
 A released Airlock machine must accept a new ordinary `usr-*` VM, create it
 with persistent storage, and make it usable immediately. The same release can
 select an updated host generation for the next boot. Neither a preparatory
 host deployment nor a host reboot may be required before using the new VM.
 
-This plan implements the lifecycle. [TODO 13](13-minimal-vm-declarations.md)
+This plan implements the lifecycle. [TODO 13](../todo/13-minimal-vm-declarations.md)
 makes its declaration small and removes repeated wiring. Sketch the declaration
 and lifecycle together, then implement this plan first. User review and approval
 of changes are a separate future task; do not design that workflow here.
@@ -94,9 +94,9 @@ outside this plan.
 - [x] Start the new VM and launch an application before any reboot. Stop/start
   it again and verify an exact sentinel in its persistent home. Confirm
   unaffected running VMs were not restarted just because a domain was added.
-- [ ] Reboot later and verify the selected whole-machine generation, the VM's
+- [x] Reboot later and verify the selected whole-machine generation, the VM's
   private storage identity and sentinel, and its declared autostart behavior.
-- [ ] Verify rollback and reapply preserve the sentinel in recoverable storage.
+- [x] Verify rollback and reapply preserve the sentinel in recoverable storage.
   Record build, live activation, later reboot and rollback evidence separately.
 
 Implementation belongs in `airlock-machine`; commit coherent component changes,
@@ -318,3 +318,53 @@ Evidence is under `boot-hang-20261001/`: `usr-notes-plan.json`,
 `usr-notes-desktop-launch-observation.txt` and `usr-notes-live-acceptance.json`.
 The trial declaration remains on its separate branch and is not merged into
 main. Later host reboot and physical rollback/reapply remain pending.
+
+## Host boot and rollback/reapply accepted (2026-10-01)
+
+The operator restarted normally and confirmed the desktop returned. Dom0 boot
+ID changed to `9db8e603-906c-497a-aa4c-7f2fdd70a7eb`; running and selected host
+both became `p08d4fmqhpy199ay2jff5952w039q88f`. Typed verification reported the
+addition transaction **complete**. Usr-notes remained halted on boot with
+`autostart = false`, preserving its original UUID and 2-GiB private volume.
+An explicit start read the exact original sentinel and matching SHA-256.
+The transient GUI launch-test units were absent after reboot.
+
+Normal `make machine-rollback` completed successfully through worker
+`airlock-machine-deploy-b71e9d181db2`, transaction `1790849545422532582`.
+Only usr-notes stopped. The retirement record
+`1790849545422532582-usr-notes` recorded the original UUID and private volume,
+status `trashed`, disposition `registered-stopped`, and 30-day retention.
+Typed verification reported **reboot-required** with the baseline host selected;
+the current host stayed running. No data purge was performed.
+
+Normal plan/apply from the committed trial worktree restored only usr-notes,
+stopping no VMs. Preparation reused every guest artifact and took 33 s.
+An initial planning attempt collided with the concurrent typed verification's
+deployment lock and was rejected; retry after verification succeeded. Apply
+reused the prepared candidate with zero builds/transfers. Worker
+`airlock-machine-deploy-c8ba9ab5520e` completed successfully in 107 s,
+transaction `1790849824713060611`. The retirement record became `restored`,
+storage disposition `active`, and the retirement tag was removed.
+
+Usr-notes remained halted after reapply until explicitly started. The exact
+sentinel comparison passed again, with the original VM UUID and private volume.
+The dom0 boot ID and all existing guest states, XIDs and UUIDs were unchanged
+through rollback/reapply. Final whole-machine verification reports **complete**:
+running and selected host match, all seven running guests match their selections,
+usr-browser is halted, and there are no active trash records. Usr-notes is left
+running with its persistent test file and generated desktop launcher available.
+
+The no-reboot lifecycle is accepted. The experimental declaration remains
+committed on `trial/live-vm-acceptance` in the separate acceptance worktree;
+it is not merged into main. Its addition required 32 lines across three
+component files. [TODO 13](../todo/13-minimal-vm-declarations.md) remains the
+separate declaration-simplification task. The final boot-selection power-loss
+window described above remains an explicit limitation.
+
+Evidence under `boot-hang-20261001/`: `usr-notes-after-host-reboot-verify.json`,
+`usr-notes-after-host-reboot-dom0.txt`, `usr-notes-after-host-reboot-sentinel.txt`,
+`usr-notes-after-rollback-verify.json`, `usr-notes-rollback-trash.json`,
+`usr-notes-rollback-worker-result.txt`, `usr-notes-reapply-plan-retry.json`,
+`usr-notes-reapply.log`, `usr-notes-reapply-worker-result.txt`,
+`usr-notes-restored-trash.json`, `usr-notes-sentinel-after-reapply-exact.txt`,
+`usr-notes-final-verify.json` and `usr-notes-live-acceptance.json`.

@@ -104,5 +104,5 @@ Implementation belongs in `airlock-machine`; update the parent pin and affected
 integration/docs after coherent component commits. This work is separate from
 [TODO 11](11-simplify-internal-compatibility.md)'s compatibility cleanup and
 [TODO 08](08-deployment-metadata-validation-reuse.md)'s deployment preparation
-performance work. Coordinate with [TODO 12](12-live-vm-additions.md) so live VM
+performance work. Coordinate with [completed plan 12](../completed/12-live-vm-additions.md) so live VM
 additions remain usable and survive later boots.

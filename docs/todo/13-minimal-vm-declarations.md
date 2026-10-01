@@ -7,7 +7,7 @@ Shared interfaces and functions should derive its guest system, Qubes descriptor
 deployment integration and optional application launchers. The declaration should
 be understandable to a user reviewing the change before it takes effect.
 
-[TODO 12](12-live-vm-additions.md) supplies immediate creation and use with host
+[Completed plan 12](../completed/12-live-vm-additions.md) supplies immediate creation and use with host
 activation deferred until a later reboot. Design the declaration alongside that
 lifecycle, then remove the duplicated wiring here. Choosing reviewers, approval
 rules and the review UI is deferred to a separate task.
