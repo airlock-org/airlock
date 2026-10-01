@@ -1,9 +1,10 @@
 # Documentation map
 
-Updated 2026-09-30: boot-menu presentation passed operator acceptance and
-post-reboot generation verification. Controller deployment, direct pool admission
-and unified host/guest storage also passed acceptance. Detailed summaries retain
-their boundaries.
+Updated 2026-10-01: bootstrap/normal-startup separation passed its first physical
+reboot and operator checks; repeated unchanged-boot reuse and broader recovery
+trials remain unverified. Boot-menu presentation, controller deployment, direct
+pool admission and unified host/guest storage also passed their recorded
+acceptance. Detailed summaries retain their boundaries.
 
 ## Placement rules
 
@@ -54,7 +55,7 @@ historical paths.
 | [Internal compatibility cleanup](todo/11-simplify-internal-compatibility.md) | Local cleanup implemented; worktree retired and quick tests passed on main (681 passed, 59 skipped). Nix/EROFS checks and persisted-state acceptance remain pending; the development deployment route is retained. |
 | [Live VM additions](completed/12-live-vm-additions.md) | Completed. Physical no-reboot addition, application launch, VM stop/start, later host boot and recoverable rollback/reapply passed with exact persistent data and unchanged existing VMs. Declaration simplification remains in TODO 13. |
 | [Minimal VM declarations](todo/13-minimal-vm-declarations.md) | Planned. Derive builds, topology, deployment targets and live desktop integration from one small declaration per ordinary VM. |
-| [Separate bootstrap from normal startup](todo/14-separate-bootstrap-from-normal-startup.md) | Planned. Reuse applied configuration on unchanged boots, keep GUI/input prerequisites, and reserve detailed bootstrap work and progress for initialization, changes and recovery. |
+| [Separate bootstrap from normal startup](completed/14-separate-bootstrap-from-normal-startup.md) | Completed for implemented scope. First reboot verified and login/input/application launch accepted; GUI configuration precedes background work. Repeated unchanged-boot reuse, fresh initialization and broader recovery checks remain unverified. |
 | [GNOME Files launcher](todo/sys-gui-files-launcher.md) | Planned. Hide local Files in sys-gui, retain Nautilus for DING, and expose the usr-home launcher. |
 | [Display consistency across VMs](todo/cross-vm-display-consistency.md) | Planned. Align cursors, scaling, fonts and appearance; use GNOME Console for utility terminals and verify display layout changes. |
 | [Hyprland physical trial](todo/sys-gui-hyprland-trial.md) | Deferred. Configuration exists; physical Wayland desktop and cross-VM transport are unverified. |
