@@ -1,5 +1,24 @@
 # Repository-first whole-machine deployment
 
+Application-owned GUI chrome deployed (2026-10-01): machine revision `f52366c`
+applies one GNOME policy to every forwarded window: no outer title bar or frame,
+and no GUI-daemon colour border. Application chrome remains inside its VM;
+the trusted focused VM panel indicator is the identity display. Quick tests
+passed **750 tests, 59 skipped**, and commit-hook lint passed. Normal plan
+built the release in 407 s and prepared it in 193 s, changing only sys-gui.
+Apply reused the prepared release with zero further builds/transfers and
+restarted sys-gui and its running usr-home/usr-browser dependents. Worker
+`airlock-machine-deploy-6bf7d90f1d29` succeeded; typed verification of transaction
+`1790864713181133896` reports **reboot-required**, with all seven running guests
+matching their selections. Sys-gui runs `7gafnhba97jg6pz7p8j7plf387jfnjdl`;
+selected host is `i5sq1cvrk4ivi38r02vijmf9kahjqwn0`, while dom0 still runs
+`vxa5n5j8nyql4bkdafikd2mnr0px1v05`. Live Calculator carries the no-decoration
+Motif hint, has no outer frame-extents property, and preserves `usr-home`
+metadata. The panel extension is **ACTIVE**, and the operator reported
+"that looks good". No diagnostic configuration mutation was used. Broader
+move/resize/maximize, dialog and login/lock acceptance and host verification
+after reboot remain pending. Evidence: `.airlock-logs/gui-no-decorations/`.
+
 Usr-notes trial cleanup deployed (2026-10-01): the operator requested removal
 after acceptance. Normal rollback worker `airlock-machine-deploy-e6d2d2e10cd3`
 succeeded, transaction `1790853218723382023`, retiring only usr-notes. Upstream

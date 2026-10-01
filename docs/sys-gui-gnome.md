@@ -56,7 +56,9 @@ Windows remain managed normally; the focused VM panel indicator supplies the
 trusted identity display. It identifies only the focused window. Applications
 that depend on external title-bar controls must supply those inside their VM.
 Recheck launches, scaling, cursor, move/resize/maximize, dialogs and login/lock
-after deployment; manual acceptance of the new policy is pending.
+after deployment. The operator visually accepted the live policy on 2026-10-01
+("that looks good"). Broader interaction and login/lock acceptance remains
+pending; see [deployment evidence](machine-deployment.md).
 
 The [Files launcher TODO](todo/sys-gui-files-launcher.md) tracks hiding local
 Files while keeping Nautilus installed for desktop integration.
