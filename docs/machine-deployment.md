@@ -1,5 +1,17 @@
 # Repository-first whole-machine deployment
 
+Usr-notes trial cleanup requested (2026-10-01): the operator requested removal
+after acceptance. Normal rollback worker `airlock-machine-deploy-e6d2d2e10cd3`
+succeeded, transaction `1790853218723382023`; typed verification reports
+**reboot-required** with the no-trial baseline selected and only usr-notes
+retired. Its private disk is still recoverable. Permanent deletion must first
+advance the immediate rollback choice beyond the trial and boot a host without
+usr-notes, then safely prune the trial release and purge the exact trash record.
+Component `1255f94` documents those existing protections and supplies the next
+committed no-trial release; it changes no VM declaration or runtime code.
+Preparation and final deletion are pending. Evidence is under
+`.airlock-logs/live-vm-trial/boot-hang-20261001/usr-notes-removal-*`.
+
 Live VM addition acceptance complete (2026-10-01): after the no-reboot addition,
 a normal host restart loaded selected host `p08d4fmqhpy199ay2jff5952w039q88f`.
 Usr-notes remained halted as declared; an explicit start found the same private
