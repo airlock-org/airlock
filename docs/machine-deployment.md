@@ -1,5 +1,17 @@
 # Repository-first whole-machine deployment
 
+No-reboot VM addition verified (2026-10-01): the separate committed usr-notes
+trial (`4e36175`) passed normal plan/apply. The plan changed only usr-notes and
+stopped no VMs; worker `airlock-machine-deploy-be0e7c5dfa81` succeeded. Typed
+verification of transaction `1790848522636123019` reports **reboot-required**:
+the running host remains `4v44y6607wp1c087dgkl8id5pj8cxnrw`, with unchanged boot
+ID, while host `p08d4fmqhpy199ay2jff5952w039q88f` is selected for later boot.
+Existing guests kept their states, XIDs and UUIDs. Sys-gui imported the new
+launcher live, the operator saw Text Editor, and an exact home sentinel survived
+usr-notes stop/start with the same private volume. Host reboot persistence and
+rollback/reapply remain pending. See [TODO 12](todo/12-live-vm-additions.md#no-reboot-addition-verified-2026-10-01)
+and `.airlock-logs/live-vm-trial/boot-hang-20261001/usr-notes-live-acceptance.json`.
+
 Recovery baseline boot verified (2026-10-01): the operator restarted normally
 and confirmed the desktop looks good. Dom0 now runs selected host
 `4v44y6607wp1c087dgkl8id5pj8cxnrw`, boot ID

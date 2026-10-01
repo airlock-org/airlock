@@ -72,7 +72,7 @@ outside this plan.
 - [x] Ensure graphical readiness and application launching work before host
   reboot. Avoid making routine additions depend on rebuilding or restarting
   `sys-gui` merely to install another launcher; define the interface with TODO 13.
-- [ ] Keep unaffected running VMs running. Report genuine dependency restarts
+- [x] Keep unaffected running VMs running. Report genuine dependency restarts
   in the plan, and reject unsupported host changes that prevent immediate use.
 - [x] Cover interruption and retry across admission, creation, permissions,
   selection and startup. An incomplete transaction must not appear successful
@@ -88,10 +88,10 @@ outside this plan.
   failure recovery, policy reconciliation and rollback/reapply.
 - [x] Run `make test-quick`; keep Nix evaluation/build checks opt-in. Record
   machine-readable results under `.airlock-logs/`.
-- [ ] On the lab machine, apply an ordinary new `usr-*` VM through the normal
+- [x] On the lab machine, apply an ordinary new `usr-*` VM through the normal
   [deployment workflow](../machine-deployment.md), with no preliminary host
   apply or reboot. Record the unchanged running host and newly selected host.
-- [ ] Start the new VM and launch an application before any reboot. Stop/start
+- [x] Start the new VM and launch an application before any reboot. Stop/start
   it again and verify an exact sentinel in its persistent home. Confirm
   unaffected running VMs were not restarted just because a domain was added.
 - [ ] Reboot later and verify the selected whole-machine generation, the VM's
@@ -276,3 +276,45 @@ Evidence: `boot-hang-20261001/baseline-after-reboot-verify.log`,
 `baseline-after-reboot-dom0.txt` and `sys-gui-menu-tools.txt` under the evidence
 directory above. Current existing guest XIDs are sys-net 1, sys-gui 3,
 sys-firewall 5, usr-home 6, sys-ctrl 7 and sys-dev 8.
+
+## No-reboot addition verified (2026-10-01)
+
+Normal plan/apply from the trial worktree deployed component `4e36175`.
+Build took 117 s and preparation 154 s. Unknown-name admission succeeded for
+usr-notes before the domain existed, with preparation leaving it inactive.
+The plan changed only usr-notes, with an empty stop list. Apply reused the
+prepared candidate with zero builds or transfers. Worker
+`airlock-machine-deploy-be0e7c5dfa81` completed successfully in 161 s;
+transaction `1790848522636123019` verifies **reboot-required**.
+
+Running host remains `4v44y6607wp1c087dgkl8id5pj8cxnrw`, with the same dom0
+boot ID `b1866698-e8d6-42a9-b6a2-e27d064e387b`. Selected host is
+`p08d4fmqhpy199ay2jff5952w039q88f` for a later boot. All existing VM states,
+XIDs and UUIDs stayed unchanged through apply and the usr-notes stop/start.
+
+Usr-notes was initially halted, with `autostart = false`, as declared. The
+existing sys-gui menu-import tool explicitly started it and generated
+`org.qubes-os.vm._usr_dnotes.org.gnome.TextEditor.desktop` without rebuilding or
+restarting sys-gui. Its Exec uses the existing session barrier and upstream
+`qubes.StartApp`. The operator confirmed Text Editor appeared. The first remote
+gtk-launch invocation did not display a window; retrying the entry with a
+transient user unit using `ExitType=cgroup` kept launcher descendants alive.
+This was a launch-test harness adjustment, with no persistent service override
+or application configuration fix. A direct invocation of the same launcher
+also displayed the application; its subsequent code 255 was caused by the
+intentional VM shutdown during the persistence test.
+
+Explicit stop/start changed only usr-notes's XID, from 10 to 11. VM UUID remains
+`aa1299a3-70a6-43c8-acda-bd2ff4feba84`, with the same 2-GiB private volume
+`varlibqubes:appvms/usr-notes/private`. An exact comparison of
+`/home/user/airlock-live-vm-acceptance.txt` passed after restart, SHA-256
+`7d062eed561f49e6529301a8ed4c565174f56bbc23116a2ff79eb4c71c74fa33`.
+The test file remains for later host boot and rollback/reapply checks.
+
+Evidence is under `boot-hang-20261001/`: `usr-notes-plan.json`,
+`usr-notes-apply.json`, `usr-notes-after-apply-verify.json`,
+`usr-notes-after-start-verify.json`, `usr-notes-after-apply-dom0.txt`,
+`usr-notes-stop-start.txt`, `usr-notes-sentinel-check.json`,
+`usr-notes-desktop-launch-observation.txt` and `usr-notes-live-acceptance.json`.
+The trial declaration remains on its separate branch and is not merged into
+main. Later host reboot and physical rollback/reapply remain pending.
