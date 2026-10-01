@@ -14,19 +14,30 @@ connection succeeded. Its original UUID is unchanged. Sys-agent reconnected at
 units failed. A copied private-data marker matched, and the old builder cache
 is preserved at `/rw/airlock-builder-sys-dev-builder`.
 
-Host `rw6krh25y2qrn2wfi55p99l4xp6d4sx6` is selected; running host remains
-`vxa5n5j8nyql4bkdafikd2mnr0px1v05` until the operator restart. A temporary,
-unprivileged dom0 observer relayed the existing controller's outcome, worker
-exit status and home network checks to sys-agent across SSH disconnection;
-it removed its script after relaying. Its remaining evidence files in dom0's
-user cache still require cleanup after reboot. The source's Tailscale enrollment
-was copied into its private volume before handoff; this intentional data
-preparation is reproduced in sys-agent's declarative private-state bind.
-The active agent's test marker and relay file have been removed. Component
-`d0fa841` clears the completed handoff declarations and is committed/pinned,
-but its cleanup release is not yet deployed. Host verification after restart,
-cleanup release deployment and manual Firefox acceptance are pending.
-Evidence: `.airlock-logs/home-default-agent/`.
+After the operator's restart, the handoff transaction verifies **complete**:
+running/selected host both match `rw6krh25y2qrn2wfi55p99l4xp6d4sx6`, all six
+guests match, and renamed sys-agent management access works. The builder and
+Tailscale survived reboot. Usr-home DNS and an external TCP connection passed
+again; its Firefox profile was still uninitialized, confirming a fresh start.
+A temporary unprivileged dom0 observer relayed the existing controller outcome,
+worker exit status and home network checks across SSH disconnection. Its script
+and remaining cache files are removed. The source's Tailscale enrollment was
+copied into its private volume before handoff; this intentional data preparation
+is reproduced in sys-agent's declarative private-state bind. The active agent's
+test marker and relay file are removed. Upstream `qvm-appmenus --remove` cleared
+the retired sys-dev and usr-browser entries.
+
+Component `d0fa841` clears the completed handoff declarations and is also
+committed, pinned and deployed. Normal cleanup plan built in 84 s and prepared
+in 95 s, with no changed guests or stop list. Apply reused it with zero further
+builds/transfers. Worker `airlock-machine-deploy-12b0adcc8299` succeeded;
+transaction `1790870916451415092` verifies **reboot-required**, with every guest
+matching and unchanged VM states, XIDs and UUIDs. Selected cleanup host is
+`6cb9j09q630qvqsg6z6mm7wpgchbkhbs`; the running host is the verified handoff
+host above. Its metadata will activate at the next normal restart. No runtime
+configuration overlay remains. Cleanup-host verification after that restart
+and manual Firefox acceptance are pending. Evidence:
+`.airlock-logs/home-default-agent/`.
 
 Application-owned GUI chrome deployed (2026-10-01): machine revision `f52366c`
 applies one GNOME policy to every forwarded window: no outer title bar or frame,
