@@ -208,8 +208,21 @@ installation and sealing ahead of guest shutdown, preserves the previous default
 through upstream loader regeneration, and publishes the target host binding and
 default only after guest verification. Preparation explicitly restores the
 booted host as default so a failed newer entry left by manual recovery cannot
-remain selected. These changes have not yet been built or deployed.
+remain selected.
 The quick suite passed **735 tests, 59 skipped**; targeted tests and lint passed.
+
+Normal plan built revision `0935cde` in 235 s and prepared candidate
+`f19c7f8b6de2c372d7de26a362087b20f6af4adf78405dd23456e931ada39c80` in 117 s.
+Normal apply reused the candidate without builds or transfers. Worker
+`airlock-machine-deploy-2d09764d26d0` exited with `Result=success`, status 0.
+Typed verification reports transaction `1790847116434715227` **reboot-required**:
+all six running guests match their selections, usr-browser is stopped, selected
+host is `4v44y6607wp1c087dgkl8id5pj8cxnrw`, and running host is still
+`h8v0fz89xmdxjz5sh6ppnr7cyciv71j8`. Boot ID is unchanged. The worker journal confirms
+successful boot preparation before stopping guests, and final boot selection
+after verification. This is a successful live deployment with host boot
+verification still pending. The initial host boot also loads the new admission
+RPCs, which are absent from the currently running host.
 
 Tests cover installer failure and interrupted menu publication without changing
 the prior default, boot-preparation failures without stopping guests or changing
@@ -225,12 +238,13 @@ deployment state was not edited. No new control authority was added.
 
 The separate committed acceptance candidate is in
 `/home/user/dev/airlock-org/worktrees/airlock-live-vm-acceptance`, on parent and
-component branches `trial/live-vm-acceptance`. Parent `3eb1140` pins component
-`67955a5`. It adds an offline purple `usr-notes` VM with Text Editor, a 2-GiB
+component branches `trial/live-vm-acceptance`. After rebasing onto the recovery
+fixes, parent `23b310d` pins component `4e36175`. It adds an offline purple
+`usr-notes` VM with Text Editor, a 2-GiB
 private disk, sys-gui as its GUI VM and `autostart = false`. Evaluated topology
-differs from the baseline only in that domain. Quick tests passed **724 passed,
-59 skipped**, and the complete release built locally:
-`/nix/store/kyrgy381xvx0m9hkkha4l1x9jq9m0iyy-airlock-machine-release`.
+differs from the original baseline only in that domain. Original trial quick
+tests passed **724 passed, 59 skipped**. The complete rebased release built locally:
+`/nix/store/cv365ckhd9cvbnqc21lv78zf3kn4w81b-airlock-machine-release`.
 This trial has not been submitted to the live machine or merged into main.
 
 Evidence is in the main checkout's `.airlock-logs/live-vm-trial/`: baseline
@@ -242,7 +256,6 @@ Evidence is in the main checkout's `.airlock-logs/live-vm-trial/`: baseline
 Boot-failure evidence, including raw initrd logs, the failure traceback and
 transaction command output, is in `boot-hang-20261001/` below that directory.
 
-Next: deploy the fixes through the normal coordinator, then boot and verify the
-installed baseline.
+Next: boot and verify the installed baseline.
 After confirming the generic host RPCs and GUI tools are running, use normal
 plan/apply from the trial worktree and perform the no-reboot acceptance sequence.

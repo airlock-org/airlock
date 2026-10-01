@@ -22,8 +22,18 @@ that default; target binding and explicit boot selection follow guest
 verification. New entry formatting still requires committed provenance.
 
 The quick suite passed **735 tests, 59 skipped**; targeted boot/deployment tests
-and lint also passed. These changes are not yet built or deployed. The final binding, boot selection
-and transaction completion remain separate durable writes, so abrupt power loss
+and lint also passed. Normal plan built revision `0935cde` in 235 s and prepared
+the candidate in 117 s. Apply reused it with zero further builds/transfers.
+Worker `airlock-machine-deploy-2d09764d26d0` exited successfully; typed verification
+reports transaction `1790847116434715227` **reboot-required**, with all six running
+guests matching their selections and usr-browser stopped. Selected host is
+`4v44y6607wp1c087dgkl8id5pj8cxnrw`; running host remains `h8v0fz89xmdxjz5sh6ppnr7cyciv71j8`.
+The journal confirms boot preparation completed before guest shutdown, then host
+selection followed verification. An initial host boot is needed to load the new
+admission RPCs; the separate usr-notes trial has been rebased and rebuilt but
+remains unapplied.
+
+The final binding, boot selection and transaction completion remain separate durable writes, so abrupt power loss
 in that final window can still require recovery; this is not an atomic machine
 transaction. The usr-notes trial remains unapplied. See
 [TODO 12](todo/12-live-vm-additions.md#live-baseline-installation-attempt-2026-09-30)
