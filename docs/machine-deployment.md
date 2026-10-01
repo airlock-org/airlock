@@ -1,6 +1,6 @@
 # Repository-first whole-machine deployment
 
-Automatic application discovery prepared locally (2026-10-01): component
+Automatic application discovery deployed to guests (2026-10-01): component
 `c323fba` replaces the fixed personal application launchers with discovery for
 VMs assigned to sys-gui. Guest RPCs use active system/user profiles and XDG
 desktop entries consistently for discovery, launching and icons. The GUI
@@ -18,7 +18,29 @@ Commit-hook lint and Python compilation passed. The normal local
 `make machine-build` produced
 `/nix/store/br2f0dza4qcp83csd2dcxdvcal3qqx8l-airlock-machine-release`, bound to
 component `c323fba` and parent `6d13a92`. Guarded GC remained below its automatic
-threshold. **No live deployment has been performed for this change.**
+threshold.
+
+The normal controller `make machine-plan` / `make machine-apply` route built the
+same release in the live session and activated transaction
+`1790888403410125759`. Worker `airlock-machine-deploy-bd79c9d6f6d8` exited 0 with
+`Result=success`. `make machine-verify` checked all six guest selections against
+their running generations. The host selection is
+`/nix/store/mckynwhdk9bjn1d52zgf0cjk0s988dyv-nixos-system-dom0-26.11.20260904.801bef6`;
+**host verification remains `reboot-required`** while the previously booted
+`rw6krh25...` host runs. No VMs were newly retired.
+
+The controller build took 199.7 seconds and preparation took 273.1 seconds.
+Host transport sent eight paths (457,608 NAR bytes; 119,349 compressed bytes).
+Guest admission sent 67 package objects (23,328,768 payload bytes), reused every
+root artifact, and sent no root payload. The two unique root artifacts total
+1.5 GiB logical and 4,136,960 allocated bytes. Apply reused the prepared token
+with zero further build/transfer work. Live guest RPC discovery returned Firefox
+and 19 GNOME application entries; usr-home has `menu-items = "*"` and its
+readiness feature enabled. sys-agent networking returned and its failed-unit
+list was empty. sys-gui was at its greeter after restart, with the refresh timer
+installed and enabled but awaiting a graphical session. Automatic menu
+publication and GUI acceptance remain pending login; no manual menu refresh or
+runtime configuration mutation was used.
 
 Manual acceptance after deployment should cover GNOME search/icons, two VMs
 with Firefox, favorites and window grouping, install/removal or profile
