@@ -50,7 +50,28 @@ inspection found `kgx` inside sys-agent and correctly forwarded
 StartupWMClass from the original guest executable metadata, preserving explicit
 application hints. There is no Console-specific rule or forwarding change.
 Nine additional regression cases bring the local quick suite to
-**811 passed, 59 skipped**. Lint and compilation pass. Build, deployment and
-live acceptance of this follow-up remain pending at this record revision.
+**811 passed, 59 skipped**. Lint and compilation pass. The final live quick
+suite passes **719 tests, 35 skipped, 228 deselected** from the committed
+sys-agent checkout, including both corrected configuration fixtures.
+
+The follow-up local build produced
+`/nix/store/i56ljrbrf5j2j97mk78ccs7966g1fr5b-airlock-machine-release`, bound to
+component `0f40092` and parent `090e40d`. Guarded GC again skipped collection
+below its threshold. The documented single-guest controller plan/apply route
+updated usr-home, then sys-agent, preserving sys-gui and the selected host.
+Workers `airlock-machine-deploy-c4b1e4815d9c` and
+`airlock-machine-deploy-c1e3d9277a50` both exited 0 with `Result=success`.
+Final transaction `1790941875954591923` verifies all six running guests against
+their selections. Sys-agent runs `3clzq6j3...`; usr-home runs `r9620gyz...`.
+Whole-machine verification still reports `reboot-required` for the unchanged
+pending host selection from the initial workspace deployment.
+
+After each guest restart, GNOME's automatic refresh published its updated
+Console launcher without a manual cache refresh. Both use their VM-prefixed
+`kgx` class. A normal sys-agent Console launch produces window `0x2400054`
+with `WM_CLASS("sys-agent:kgx", "sys-agent:kgx")`, matching its launcher, and its
+cached application PNG exists. The timer is active and its service exits 0.
+No live configuration overlays or diagnostic configuration mutations were used.
+Visual icon acceptance and host verification after reboot remain pending.
 
 Evidence: `.airlock-logs/sys-agent-workspace/`.
