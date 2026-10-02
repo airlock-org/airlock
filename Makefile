@@ -80,6 +80,7 @@ PYTHON_FILES := \
 	tests/test_sys_agent_machine_source.py \
 	airlock-machine/tests/test_sys_agent_machine_build.py \
 	airlock-machine/tests/test_sys_agent_machine_deploy.py \
+	airlock-machine/tests/test_sys_agent_workspace.py \
 	airlock-machine/tests/test_qubes_guest_session.py \
 	airlock-machine/lifecycle/misc/tools/pkgs/airlock-gui-gpu-check/src/check.py \
 	airlock-machine/tests/test_gui_gpu_assignment.py \
