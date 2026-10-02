@@ -74,6 +74,38 @@ need manual acceptance. Evidence: `final-live-verify.log`,
 `final-published-menus.log`, `final-svg-rpc-refresh.log`, `post-reboot-summary.json`
 and the `tag-list-*`, `icon-profile-*`, `svg-icons-*` logs in the directory below.
 
+Icon fidelity correction (2026-10-02): Firefox's published icon was a blue,
+16x16 image. Component `7a90952` preserves application colours in upstream
+appmenus instead of applying the VM label tint. Byte comparison replaces
+existing tinted cache files even when their timestamps are newer, while
+unchanged files retain their timestamps. The same correction applies to every
+application VM. A pyxdg patch fixes missing icon-theme size defaults and scalable
+size matching/distance, so the generic guest resolver selects Firefox's supplied
+128x128 icon. No Firefox-specific discovery or launcher rule was added.
+
+Validation passed **798 quick tests, 59 skipped**, and all **nine** focused
+packaged interface checks, including the real Firefox RGBA receiver and cached
+icon replacement. Lint and Python compilation passed. The normal local machine
+build produced `/nix/store/qvjs0hiylnysg43650bqy2rbhlll6bvp-airlock-machine-release`,
+bound to component `7a90952` and parent `ef4c4b5`. Guarded automatic GC skipped
+collection below its threshold.
+
+The documented controller single-guest plan/apply route updated usr-home first,
+then sys-gui, keeping the running host and other guests selected. The final
+transaction `1790938179646689025`, worker `airlock-machine-deploy-772283cba526`,
+exited 0 with `Result=success`. `make machine-verify` reports **complete** for
+the host and all six guests. usr-home runs `9qc77q7l...`; sys-gui runs
+`4w4ykaf1...`. No host reboot was needed.
+
+The packaged `airlock-sync-qube-appmenus usr-home` command refreshed the cache
+without waiting for its five-minute interval. All 20 published application PNGs
+match their original source caches byte for byte. Firefox's icon is 128x128,
+and visual inspection confirms its normal colours. GLib search resolves the
+usr-home UUID launcher to this PNG. After login the automatic refresh timer is
+active and its service exits 0. No live configuration overlay or diagnostic
+configuration edit was used. Evidence: `icon-colour-*.log` and
+`firefox-icon-before.png` / `firefox-icon-after.png` in the directory below.
+
 Manual acceptance after deployment should cover GNOME search/icons, two VMs
 with Firefox, favorites and window grouping, install/removal or profile
 switches, launching from a stopped VM, and VM rename/retirement. New VMs need
