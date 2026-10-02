@@ -292,7 +292,7 @@ def test_shallow_seed_archive_contains_only_the_pinned_checkout(tmp_path: Path):
         .replace("chown -R user:users", f"chown -R {os.getuid()}:{os.getgid()}")
     )
     subprocess.run(["bash", "-c", script], check=True, capture_output=True, text=True)
-    seeded = guest_home / "dev/airlock-machine"
+    seeded = guest_home / "airlock-machine"
     assert git(seeded, "config", "airlock.seedRevision") == revision
     assert git(seeded, "config", "airlock.seedLockHash") == manifest["lock_hash"]
     assert git(seeded, "rev-parse", "--is-shallow-repository") == "true"
