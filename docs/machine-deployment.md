@@ -26,8 +26,8 @@ same release in the live session and activated transaction
 `Result=success`. `make machine-verify` checked all six guest selections against
 their running generations. The host selection is
 `/nix/store/mckynwhdk9bjn1d52zgf0cjk0s988dyv-nixos-system-dom0-26.11.20260904.801bef6`;
-**host verification remains `reboot-required`** while the previously booted
-`rw6krh25...` host runs. No VMs were newly retired.
+After the physical reboot on 2026-10-02, verification confirmed this host was
+running and reported `complete`. No VMs were newly retired.
 
 The controller build took 199.7 seconds and preparation took 273.1 seconds.
 Host transport sent eight paths (457,608 NAR bytes; 119,349 compressed bytes).
@@ -38,9 +38,41 @@ with zero further build/transfer work. Live guest RPC discovery returned Firefox
 and 19 GNOME application entries; usr-home has `menu-items = "*"` and its
 readiness feature enabled. sys-agent networking returned and its failed-unit
 list was empty. sys-gui was at its greeter after restart, with the refresh timer
-installed and enabled but awaiting a graphical session. Automatic menu
-publication and GUI acceptance remain pending login; no manual menu refresh or
-runtime configuration mutation was used.
+installed and enabled but awaiting a graphical session. This was the pre-login observation; post-login validation and corrections are
+recorded below. No runtime configuration mutation was used.
+
+Post-reboot functional validation (2026-10-02) found and fixed three gaps:
+component `a5b3aba` uses the permitted `admin.vm.tag.List` read instead of the
+denied membership query; `6e89b24` projects `share/icons` and `share/pixmaps`
+into headless application profiles; `4ecca40` renders SVGs with librsvg before
+GraphicsMagick probes them. All fixes are generic. Two retirement-listing
+regression cases bring the quick suite to **798 passed, 59 skipped**. A
+packaged icon-RPC test passed with the Contacts, Logs and Fonts SVGs that failed
+GraphicsMagick's original parser. The final normal local machine build produced
+`/nix/store/1ki33v0v2vz3qnzlf45nnwjksh7jsgh5-airlock-machine-release`.
+
+The documented controller single-guest plan/apply route deployed the reader to
+sys-gui and the profile/rendering fixes to usr-home, preserving the running host
+and other guest selections. Its plans required only sys-gui/usr-home restarts
+and no host reboot. Final transaction `1790936410103085952`, worker
+`airlock-machine-deploy-d973b68bbf5d`, exited 0 with `Result=success`.
+`make machine-verify` reports **complete** with the host and all six guests
+matching their selections. sys-gui runs `fnmzbs2n...`; usr-home runs
+`8mvqhzaw...`. The candidate records the separate guest source revisions.
+
+After GNOME login, the automatic timer published usr-home's catalog and refresh
+exited 0. All 20 application entries now have cached application icons; the
+reserved Start qube entry uses its VM theme icon. GLib sees 21 total entries,
+19 visible in GNOME, and searching Firefox returns the UUID-based usr-home
+launcher with its application icon and `qubes.StartApp+firefox` target. The three
+problem SVG RPCs each returned a valid 512x512 RGBA payload. The packaged
+`airlock-sync-qube-appmenus usr-home` command refreshed cached fallback icons
+after each icon fix rather than waiting for the five-minute icon interval.
+No live configuration overlays or diagnostic configuration edits were used.
+GUI launching, favorites, window grouping and a second application VM still
+need manual acceptance. Evidence: `final-live-verify.log`,
+`final-published-menus.log`, `final-svg-rpc-refresh.log`, `post-reboot-summary.json`
+and the `tag-list-*`, `icon-profile-*`, `svg-icons-*` logs in the directory below.
 
 Manual acceptance after deployment should cover GNOME search/icons, two VMs
 with Firefox, favorites and window grouping, install/removal or profile
