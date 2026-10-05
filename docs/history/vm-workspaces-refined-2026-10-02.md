@@ -43,10 +43,18 @@ with all six running guests matching their selections. The existing host
 `reboot-required` state remains unchanged (`mckynwhd...` running, `9yrfxaq3...`
 selected). No live configuration overlay or diagnostic mutation was used.
 
-At the last live check on 2 October, GNOME was at GDM after restart. Signed-in
-extension validation and visual feedback on the revised panel remained pending.
-The 5 October follow-up requires a fresh Tailscale SSH authentication check;
-current session state has not yet been inspected.
+The 5 October follow-up verified the logged-in GNOME session after fresh
+Tailscale SSH authentication. The extension is enabled and `ACTIVE` while the
+screen is locked, and Shell's `GetExtensionErrors` returns an empty list. The
+saved layout has one usr-home slot and two sys-agent slots, with no sys-gui
+group. GNOME's workspace preference is 3 and dynamic workspaces remain disabled;
+the installed extension source hash still matches the built package. These are
+runtime checks; visual feedback on the revised styling remains up to the user.
+
+A fresh `make machine-verify` reports `phase=complete`: all six guest generations
+match, and both running and selected host are `9yrfxaq3...`. The earlier host
+mismatch is resolved. No code, VM configuration or session preferences were
+changed during this follow-up.
 
 Evidence: `.airlock-logs/vm-workspaces-refined/` and the build record beneath
 `.airlock-logs/machine-deploy/d32b3f858b23ade426e98d1933428cd7e65d1840/`.
