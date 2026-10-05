@@ -108,5 +108,13 @@ and no diagnostic configuration overlays or runtime workarounds were applied.
 Captured logs are in `postmortem.json`; the recovered baseline verification is
 in `postmortem-baseline-verify.log` in the evidence directory below.
 
+Subsequent activation: the [PVH/readiness follow-up](sys-agent-pvh-readiness-2026-10-05.md)
+deployed the pending sys-gui generation successfully in transaction
+`1791214406533086342`. All six guest generations match the selected release.
+After login the extension is ACTIVE and its JavaScript/CSS hashes match the
+built artifacts above. The selected host still needs reboot, and visual/click
+acceptance remains manual. The preceding undeployed status describes the
+postmortem baseline before this follow-up.
+
 Evidence: `.airlock-logs/vm-workspaces-native-overview/` and the build record under
 `.airlock-logs/machine-deploy/52f1cfcdfb8eebd83fe1c8a31daf7cd8dfef1217/`.

@@ -26,14 +26,54 @@ The normal local whole-machine build produced
 `4586c91bdb98a8c4d1b13af77c1a867c72e6bb33`. Its topology declares sys-agent PVH,
 and its coordinator is `k72c09ibr0dm4chs4v9h465r2dmz9l7d`. Guarded automatic GC
 skipped below its threshold. The normal controller `make machine-plan` route
-built the identical release in 215.9 seconds. Candidate admission and live
-activation are pending; no successful deployment is claimed yet.
+built the identical release in 215.9 seconds and prepared the candidate in
+404.3 seconds. The plan restarts all six active guests, retires none and requires
+a later host reboot. The normal `make machine-apply` reused preparation with no
+further build or transfer. Candidate `fa501bba7a9e624b4e874f6fb0587e52ade4ae37dea94f0cbb4e6f596085e62b`,
+worker `airlock-machine-deploy-3fa715d4d61c`, transaction `1791214406533086342`.
+
+The retained worker journal confirms successful activation at 15:38:42 UTC.
+The worker used the new coordinator; it passed staging, shutdown, configuration,
+startup and exact-generation verification before binding/selecting the host.
+Transient unit removal means its later `LoadState=not-found` default properties
+alone are not success evidence. `make machine-verify` independently confirms
+all six guests match the selected release. The state is **reboot-required**:
+dom0 runs `9yrfxaq3g6x28ywkcjfwjdf9bqgv62r8`, and selected dom0 is
+`aaq4px7jylgzpa21v4mg6phd2zlq7cr6`. Complete host verification is pending reboot.
 
 The pre-deployment dom0 boot ID is `eba7098a-1080-48eb-86d8-f4e53a658e97`;
 sys-agent's boot ID is `6c755252-14e4-41c6-ba93-5172811aa677`, UUID
 `a8c14e6d-05c6-412a-952d-28f41c910aca`, and virtualization mode HVM.
 Tailscale and qrexec are active. The home guidance checksum is recorded for
-comparison after restart. No temporary configuration overlay was applied.
+comparison after restart.
+
+Qubes reports sys-agent **PVH** after activation, with its original UUID and
+home guidance checksum. Tailscale restored remote access without enrollment;
+qrexec, Tailscale and the GUI agent are active with no failed guest services.
+The first new guest boot ID was `450113af-dc65-4861-949c-a5cd73f9135c`.
+
+A second controlled restart exercised sys-agent alone while signed-in GNOME and
+`qvm-start-daemon --all --watch` remained running. A temporary unprivileged
+detached dom0 process called ordinary `qvm-shutdown --wait --timeout 120` and
+`qvm-start`, recording both return codes as 0. Shutdown took 13.9 seconds;
+startup took 8.5 seconds. The next SSH probe succeeded without enrollment.
+Sys-agent's boot ID changed to `af2fe522-8478-4ca1-b8af-6bdc78760579`; the dom0
+boot ID and GNOME shell PID 1426 remained unchanged. Qrexec, Tailscale and the
+GUI agent remained healthy, the original home checksum and UUID still matched,
+and a repeated whole-machine verification again matched all six guests.
+This demonstrates recovery for this restart; it does not prove the earlier
+HVM stall's precise cause or guarantee all future restarts.
+
+The native Activities extension is now **ACTIVE** in GNOME, and its JavaScript
+and CSS hashes match the built artifacts recorded in the earlier history.
+Visual/click acceptance remains manual.
+
+Diagnostic cleanup: the attempted transient user service could not launch
+because dom0 has no user session bus and made no service changes. The detached
+restart process has exited. Its temporary `/home/user/.cache/airlock-sys-agent-pvh-restart.log`
+was captured and removed. No executable, policy edit, systemd override or
+configuration overlay was left in the live machine. All persistent changes
+come from the committed release. Final host verification remains pending reboot.
 
 Evidence: `.airlock-logs/sys-agent-pvh/` and
 `.airlock-logs/machine-deploy/9d542bf2c531f07f296ffe10c7f0553f33106f3f/`.
