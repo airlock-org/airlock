@@ -21,3 +21,15 @@ extension runtime and visual acceptance await sign-in/manual review. No live
 configuration edit or diagnostic overlay was used. Evidence:
 `.airlock-logs/vm-workspaces-selectors/` (`guest-plan.log`, `guest-apply.log`,
 `live-verify.log`, `pin.log`).
+
+Larger-preview corner follow-up: component `e61abcd`, pinned by `d5bb0ac`, sets
+its remaining 28px outline radius to zero (extension version 5). No tests ran.
+The controller guest build succeeded. Initial worker `airlock-machine-deploy-cd875e0f2396`
+failed while starting usr-home, although read-only inspection found that VM running
+and answering its generation check. The exact startup-command failure remains
+undetermined. Normal `make machine-resume` worker `airlock-machine-deploy-03c039c62790`
+completed the transaction. Final whole-machine verification reports **complete**,
+transaction `1791374339406341342`, host and all six guests matching selection.
+Sys-gui runs `/nix/store/za9mhapgrp7xckxp57k4326k9lhfgzra-nixos-system-sys-gui-26.11`.
+No runtime overlay or configuration edit was used. Visual acceptance remains manual.
+Evidence: `.airlock-logs/vm-workspaces-square-previews/`.
