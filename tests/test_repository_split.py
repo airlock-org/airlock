@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import configparser
+import os
 from pathlib import Path
 import subprocess
 
@@ -69,19 +70,28 @@ def test_release_and_usb_assembly_have_separate_dependency_edges():
     assert "preparedStore.descriptors" in dev_flake
 
 
-def test_both_nix_wrappers_select_the_external_airlock_store():
+def test_both_nix_wrappers_select_the_external_airlock_store(tmp_path):
+    data_root = tmp_path / "external data"
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("AIRLOCK_")
+        and key not in {"NIX_CONFIG", "TMPDIR", "XDG_CACHE_HOME"}
+    }
+    env["AIRLOCK_DATA_ROOT"] = str(data_root)
     for repository in (ROOT, ROOT / "airlock-machine"):
         output = subprocess.check_output(
             [
                 "bash",
                 "-c",
-                'source "$1"; printf "%s\n%s\n" "$AIRLOCK_NIX_ROOT" "$NIX_CONFIG"',
+                'source "$1" && printf "%s\n%s\n" "$AIRLOCK_NIX_ROOT" "$NIX_CONFIG"',
                 "bash",
                 str(repository / "lifecycle/misc/tools/scripts/lib/airlock-env.sh"),
             ],
+            env=env,
             text=True,
         ).splitlines()
         assert output == [
-            "/run/media/user/data/airlock/nix-root",
-            "store = /run/media/user/data/airlock/nix-root",
+            str(data_root / "nix-root"),
+            f"store = {data_root / 'nix-root'}",
         ]

@@ -28,7 +28,12 @@ Live GNOME reports workspace extension version 9 enabled, state 1, with no
 extension error. Both VMs' GUI daemons now use the newly built
 `8k0a6hblp837fpdkpwr941bg5k2a09yh` package with their respective red/blue labels.
 
-No test suite ran, as requested for the POC. Syntax checks and normal commit-hook
-lint/compilation passed. No runtime configuration overlay was used. Window
-outline appearance and overview corner alignment remain for manual review.
-Evidence: `.airlock-logs/vm-outlines-contours/`.
+Initial POC validation used syntax checks and normal commit-hook lint/compilation,
+without a test suite as requested. The operator subsequently accepted the visual
+changes and requested quick tests. `make test-quick` passed **835 tests, 59
+skipped** after correcting a repository test that assumed the external data disk
+was mounted. The test now uses an isolated temporary data root and checks both
+wrappers without inheriting the caller's store configuration. No runtime code
+changed for this correction and no runtime configuration overlay was used.
+Evidence: `.airlock-logs/vm-outlines-contours/`, including
+`test-quick-final.log`.
