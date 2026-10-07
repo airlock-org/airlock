@@ -65,6 +65,7 @@ VM_PREBUILD_ATTRS := \
 
 PYTHON_FILES := \
 	airlock-machine/lifecycle/misc/modules/sys-gui/application-menus.py \
+	airlock-machine/lifecycle/misc/modules/sys-gui/workspace-launch.py \
 	airlock-machine/lifecycle/misc/modules/qube-guest/scripts/application-catalog.py \
 	airlock-machine/lifecycle/misc/modules/qube-guest/scripts/xdg-icon.py \
 	airlock-machine/tests/test_application_menus.py \
