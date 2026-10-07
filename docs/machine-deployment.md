@@ -1,5 +1,38 @@
 # Repository-first whole-machine deployment
 
+GNOME capture handoff prepared (2026-10-07): component `6c04c37` hooks the
+native screenshot save path and successful screencast EOS, queues completed
+files, and imports them into usr-home over dedicated qrexec services. Native
+notification actions open or reveal the received file in usr-home. Login retries
+pending captures and imports existing captures once; there is no capture timer
+or filesystem watcher. Original files remain in sys-gui as recovery copies.
+
+The normal whole-machine plan/apply installed sys-gui generation
+`g9dv1wcsxji1pmmd3dw8kadz2cmagj67` and usr-home generation
+`g14y990191g9iyylx0i1xpkivydw90ak`. Transaction `1791393510320779863`
+failed at GUI reconnection because sys-gui remained at the greeter; the normal
+resume route was started as transaction `1791394533580047023`. An attempted
+handoff retained the existing recording in the sender queue. A direct RPC
+probe returned `Request refused`: the earlier GUI policy's default deny
+shadowed the new topology-managed allow rules.
+
+Component `4e83114` places the four capture permissions before that deny in
+`50-airlock-sys-gui.policy`, restricted to sys-gui targeting usr-home with
+`+image` or `+video`. The regression check uses Qubes' packaged policy parser.
+Validation passed **871 quick tests, 59 skipped**, all **21** capture transfer
+tests, and **11** packaged interface/minimal-GUI checks. Lint and compilation
+passed. The corrected normal local machine build produced
+`/nix/store/mmcnpix5f0x350yahw3339v4ajhm76pa-airlock-machine-release`.
+Guarded automatic GC skipped collection below its threshold.
+
+This is not yet verified live capture delivery. Finishing the interrupted
+transaction requires a GNOME login to reconnect the preserved sys-agent
+windows. The corrected release then needs normal plan/apply and a host reboot
+to activate its static Qubes permissions. Native screenshots of the desktop
+and overview, video recording, file delivery and notification actions remain
+pending. No live policy overlay or diagnostic configuration edit was used.
+Evidence: `.airlock-logs/gnome-capture/`.
+
 Automatic application discovery deployed to guests (2026-10-01): component
 `c323fba` replaces the fixed personal application launchers with discovery for
 VMs assigned to sys-gui. Guest RPCs use active system/user profiles and XDG
