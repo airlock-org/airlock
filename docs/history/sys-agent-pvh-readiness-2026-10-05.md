@@ -73,7 +73,14 @@ because dom0 has no user session bus and made no service changes. The detached
 restart process has exited. Its temporary `/home/user/.cache/airlock-sys-agent-pvh-restart.log`
 was captured and removed. No executable, policy edit, systemd override or
 configuration overlay was left in the live machine. All persistent changes
-come from the committed release. Final host verification remains pending reboot.
+come from the committed release. Final host verification was pending reboot at this observation.
+
+Post-reboot verification on 2026-10-07 reports **complete** for transaction
+`1791214406533086342`: dom0 runs selected host `aaq4px7jylgzpa21v4mg6phd2zlq7cr6`,
+and all six guests match selection. Remote access returned after the operator's
+restart. Evidence: `post-reboot-verify-20261007.json` in the directory below.
+The subsequent [workspace bar deployment](vm-workspaces-compact-2026-10-07.md)
+also completed its sys-agent restart and automatic remote-access recovery.
 
 Evidence: `.airlock-logs/sys-agent-pvh/` and
 `.airlock-logs/machine-deploy/9d542bf2c531f07f296ffe10c7f0553f33106f3f/`.
