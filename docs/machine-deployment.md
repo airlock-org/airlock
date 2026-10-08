@@ -1,5 +1,59 @@
 # Repository-first whole-machine deployment
 
+Stock GNOME applications deployed to usr-home (2026-10-08): component
+`f472c43` opts this guest out of the minimal profile and uses the pinned
+NixOS GNOME core application selection. GNOME Web replaces Firefox, Loupe
+provides Image Viewer, and normal documentation, Nano, completion and convenience
+packages return. Nix/channels, installer tools and Flatpak remain disabled.
+Component `84bd4cb` adds standard Mesa/EGL software rendering after the first
+live WebKit launch exposed missing EGL drivers. No GPU assignment was added.
+Every other role's evaluated system derivation remained identical to the
+pre-change source. The parent pointers were committed before source transfer.
+
+The quick suite passed **871 tests, 59 skipped**. All four focused personal-GUI
+configuration checks passed; the stock application/default-package comparison
+passed again after the graphics change. The final local usr-home build is
+`/nix/store/kz7v8k989f573rw5dj1phhhg02fjc57r-nixos-system-usr-home-26.11`.
+The documented controller single-guest plan/apply route changed only usr-home,
+with no host reboot. The host and the five other guest generations were
+preserved. The host and other guest boot IDs matched after the first activation;
+sys-agent's boot ID was also confirmed unchanged after the graphics recovery.
+
+A diagnostic `qvm-run` accidentally auto-started usr-home during the second
+activation, so the coordinator stopped with deferred configuration work.
+All diagnostic calls were changed to `--no-autostart`. Normal
+`make machine-resume` recovered the activation; transaction
+`1791461355992655519`, worker `airlock-machine-deploy-1258e395527c`, completed
+successfully. Its selected candidate is
+`874dfadbd8a00937b8f52dad3ae4360c28521fc71d8dadb3a5ff7a776177be6b`.
+The controller reports **complete**, with the host and all six running guest
+systems matching selection. The running usr-home exactly matches the local
+build above. No live configuration or policy overlay was used.
+
+Live checks confirmed automatic application menu publication including Web and
+Image Viewer, no Firefox launcher, expected image/PDF/HTTPS MIME defaults,
+no failed system/user units in usr-home, and persistent private storage across
+updates. A PNG opened in Loupe and the local smoke HTML page loaded in GNOME Web;
+forwarded windows retained their usr-home identity. WebKit's sandbox was retained.
+
+The pre-existing cross-VM `airlock.OpenUrl` launcher is still broken: sys-gui
+puts a raw URL in the service argument, and the pinned Qubes daemon sanitizes
+`:` and `/` to underscores before the receiver validates the scheme. This
+requires a separate sender/receiver transport fix; no sys-gui update or restart
+was attempted in this pass. Browser HTTPS MIME selection itself is correct.
+Physical audio/camera/scanner integration and native capture delivery were not
+accepted by these application smoke checks.
+
+Before final diagnostic cleanup, Tailscale SSH required interactive
+reauthentication, blocking new connections. The temporary persistence sentinel
+`~/.local/state/airlock/usr-home-stock-gnome-sentinel`, smoke directory
+`~/.local/state/airlock/usr-home-stock-gnome-smoke/`, and owned user transient
+units named `airlock-stock-smoke-*` still need cleanup in usr-home once access
+returns. The final boot-ID comparison and post-cleanup verification are pending;
+the complete generation check above precedes this access interruption.
+Guarded `make gc-auto` skipped collection below its threshold. Evidence:
+`.airlock-logs/usr-home-stock-gnome/`.
+
 Failed boot investigated and corrected release prepared (2026-10-08): the
 saved initrd evidence for boot `56146084-0929-4b18-b0f2-33ff303900e9`
 confirms `host generation has no machine boot binding`. Menu generation 34
