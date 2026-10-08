@@ -1,5 +1,19 @@
 # Repository-first whole-machine deployment
 
+Usr-home gray label deployed, host reboot pending (2026-10-09): after
+operator approval of the broader prepared plan, normal `make machine-apply`
+reused the admitted candidate without a rebuild or payload transfer. Transaction
+`1791502047384920876` completed guest activation and GUI reconnection after
+the operator signed in. `make machine-verify` reports **reboot-required**:
+all six running guests match selection. Live `qvm-prefs usr-home label`
+returns **gray**. Sys-gui now runs `93fmcjj6n7k7ksf0rn5lxk4ha6c48pxq`;
+usr-home and sys-agent retain their fixed agent systems. The selected host is
+`sb7i9bnyvmp0w4bim6y4bzag35zvahwy`; the running host is still
+`gmdygzm515zaa4m7m84yxmwaqd7biwc3`. The operator was told it is now time to
+reboot. Whole-machine post-reboot verification remains pending. No custom
+update route was added, and no tests were run. Evidence:
+`.airlock-logs/usr-home-gray/apply.log`, `status.json`, and `verify.log`.
+
 Usr-home gray label prepared, not applied (2026-10-09): component
 `b600a0a` changes both the default personal VM declaration and bootstrap runtime
 configuration from blue to standard Qubes gray. The 10px border width is unchanged.
