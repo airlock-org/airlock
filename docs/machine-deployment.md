@@ -16,8 +16,14 @@ token `b43ede10b98e6d35c9e9226931e348e36edf69246c958fafdb4be86b1ee20d90`.
 It changes/restarts only sys-gui and usr-home, preserves sys-agent for GUI
 reconnection, retires no VMs, and requires a subsequent host reboot. All guest
 generations and roots were reused. Preparation completed without activation.
-Apply awaits operator availability to log into GNOME after sys-gui restarts;
-do not repeat the earlier unattended GUI-reconnection timeout. Keep generation
+Normal apply reused the prepared candidate with zero builds/transfers. After
+the operator logged into the restarted GNOME session, sys-agent reconnected to
+GUI XID 9. Transaction `1791450959865485535`, worker
+`airlock-machine-deploy-cb21da499c93`, succeeded with exit 0. Normal verification
+reports reboot-required with all six guests matching selection. Menu generation
+35 (`4e83114`, host `vjki1cdlwqkhlz2j6bh7kvynvc4iawxf`) is the persistent
+default; host-store generation 36 has the exact successful transaction binding.
+A normal host reboot was requested for whole-machine verification. Keep generation
 34 until the replacement has booted and verified. Guarded `make gc-auto`
 skipped collection below its threshold. Evidence:
 `.airlock-logs/boot-failure-20261007/`.
