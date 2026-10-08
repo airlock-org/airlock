@@ -1,5 +1,27 @@
 # Repository-first whole-machine deployment
 
+Black display recovered (2026-10-08): the operator reported a completely black,
+unresponsive panel after the Calculator deployment. SSH and GNOME remained
+responsive; the session was locked and display power saving was active. Neither
+setting display power on nor waking GNOME's lock screen restored the panel.
+Restarting only display-manager produced a running greeter but still no image.
+Kernel logs showed AMD fence fallback timeouts from 22:22:57 and a `flip_done`
+timeout at 22:23:06, before usr-home activation was submitted at 22:23:41.
+Generation verification did not establish physical display health.
+
+After checking the only running GUI clients (sys-agent/usr-home) and their
+reconnect features, a bounded ordinary sys-gui shutdown/start restored the
+physical greeter. No GPU ownership change, manual PCI reset, host reboot or
+configuration overlay was used. The operator signed in and confirmed the
+desktop and Calculator both work. Sys-gui boot ID is now
+`926e271c-74a9-46f1-8f33-65f3f5ebd883`; both application VM boot IDs and Calculator
+PID 966 were preserved. The fixed usr-home input ring was empty with write
+notifications armed after this real reconnection. New sys-gui boot logs had no
+graphics timeout matches at inspection; whole-machine verification remained
+**complete**. The underlying AMD graphics failure remains unresolved; this was
+recovery, not a permanent GPU fix. No tests were run. Evidence:
+`.airlock-logs/black-screen-recovery/`.
+
 Calculator input recovery deployed (2026-10-08): component `0de6d4c` checks
 GUI vchan readiness before waiting, including after the reconnect checkpoint.
 Readiness also arms Xen write notifications. Live observations found a full
