@@ -1,5 +1,23 @@
 # Repository-first whole-machine deployment
 
+VM border contrast deployed live (2026-10-08): component `22904f7` gives every
+forwarded VM window a 1px black outer edge and 3px of its trusted Qubes label
+colour. Tray icons remain excluded. The GUI daemon allocates a separate black
+graphics context and retains application-owned chrome. No tests were run at
+the operator's request; the controller build completed successfully after a
+patch-header correction. Changes and parent pointers were committed before
+normal whole-machine plan/apply.
+
+Initial transaction `1791487168215437058` timed out awaiting GUI reconnection.
+Normal resume transaction `1791490315607184785` succeeded after GNOME login.
+Verification reports **reboot-required**, with all six guests matching their
+selections. Sys-gui runs `4d3rhbq04rcdy7fwnxrmpn3rd4l7yaax` and its sys-agent
+and usr-home GUI daemons both run package `3d88wvkycp707x67il5j0filpkxj0k5p`.
+The selected host is `gmdygzm515zaa4m7m84yxmwaqd7biwc3`; the running host remains
+`vjki1cdlwqkhlz2j6bh7kvynvc4iawxf`. Live visual acceptance and subsequent
+whole-machine boot verification remain pending. No runtime configuration
+overlay was used. Evidence: `.airlock-logs/window-border-contrast/`.
+
 Stock GNOME applications deployed to usr-home (2026-10-08): component
 `f472c43` opts this guest out of the minimal profile and uses the pinned
 NixOS GNOME core application selection. GNOME Web replaces Firefox, Loupe
