@@ -23,8 +23,15 @@ GUI XID 9. Transaction `1791450959865485535`, worker
 reports reboot-required with all six guests matching selection. Menu generation
 35 (`4e83114`, host `vjki1cdlwqkhlz2j6bh7kvynvc4iawxf`) is the persistent
 default; host-store generation 36 has the exact successful transaction binding.
-A normal host reboot was requested for whole-machine verification. Keep generation
-34 until the replacement has booted and verified. Guarded `make gc-auto`
+A normal host reboot loaded the selected host; post-reboot verification reports
+**complete**, with all six guests matching. Boot ID
+`e731b7c5-dad4-4a46-923c-6726dff0cf1b` reached supervised readiness in 201.5
+seconds, and dom0 has no failed units. Menu generation 35 is now verified live.
+The guarded prune plan for failed generation 34 remains blocked by unfinished
+transactions `1791393510320779863` and `1791394533580047023`; no pruning or
+manual transaction alteration was performed. Working generation 33 is retained.
+Native capture delivery still requires its separate functional acceptance.
+Guarded `make gc-auto`
 skipped collection below its threshold. Evidence:
 `.airlock-logs/boot-failure-20261007/`.
 
