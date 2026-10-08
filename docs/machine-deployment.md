@@ -1,5 +1,31 @@
 # Repository-first whole-machine deployment
 
+Calculator input recovery deployed (2026-10-08): component `0de6d4c` checks
+GUI vchan readiness before waiting, including after the reconnect checkpoint.
+Readiness also arms Xen write notifications. Live observations found a full
+4096-byte client-to-agent input ring with notifications disabled: GNOME and
+the daemon received clicks/keys, while usr-home's agent only polled. This was
+not CPU pressure: usr-home had 2 vCPUs, load 0.03 and 3319MiB available RAM;
+sys-gui had 4 vCPUs on an 8-core host.
+
+A diagnostic SIGCHLD to the existing agent interrupted its wait, drained the
+queued input and armed notifications. The operator confirmed both Calculator
+buttons and title-bar dragging recovered without a restart. The temporary
+diagnostic strace copy in sys-gui `/run/airlock-guid-strace` was removed before
+deployment; no process-memory writes or configuration overlay were used.
+
+The controller build succeeded; no tests were run at the operator's request.
+Normal controller single-guest plan/apply then installed the durable fix in
+usr-home, restarting only that VM. Transaction `1791498221099446980` selected
+candidate `9314593a95a9dda5d3396135dbc4738f9b6ef2e7fc076d913f81413a69c3c9fe`.
+Whole-machine verification reports **complete**, with the host and all six guest
+systems matching selection. Usr-home now runs `rzj55dy19qks3pcy2w5srgr11ipcl315`
+and agent package `irxg1cbbhal2h6wmw70nyzjbs1gy23v2`. Calculator was reopened.
+Sys-gui retained boot ID `d849a246-6bdc-47f4-be12-e132a3eb31f5`, GNOME PID 1449
+and its 10px border setting; no desktop or host reboot was needed. Other guests'
+agent packages remain unchanged by this single-guest deployment. Evidence:
+`.airlock-logs/calculator-input-freeze/`.
+
 Live GUI style route deployed (2026-10-08): component `9622f29` makes the trusted
 VM colour width reloadable through the GUI daemon's existing SIGHUP path,
 redrawing forwarded windows. The fixed black outer edge remains 1px, widths
