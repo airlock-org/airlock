@@ -1,5 +1,19 @@
 # Repository-first whole-machine deployment
 
+Usr-home gray label prepared, not applied (2026-10-09): component
+`b600a0a` changes both the default personal VM declaration and bootstrap runtime
+configuration from blue to standard Qubes gray. The 10px border width is unchanged.
+Normal `make machine-plan DEPLOY_TARGET=user@100.104.92.101` built and admitted
+candidate `fe031d68a5031828a9dd0a80b3e8bb283c1de2d5e90593f2543a04c1d4910350`.
+The concrete plan stops usr-home, sys-agent and sys-gui, stages all three,
+and reports host_reboot_required=true. Existing separate guest updates mean
+this whole-machine candidate has a broader scope than the requested label.
+No apply was submitted: the operator prefers avoiding restarts, and sys-gui's
+recent AMD failures make this particularly relevant. The live label remains blue.
+No tests were run. Evidence: `.airlock-logs/usr-home-gray/plan.json` and `plan.log`.
+A narrower durable label deployment route or approval of the broader plan is
+needed before live activation; do not report the committed source as deployed.
+
 Black display recurred (2026-10-08): the recovered sys-gui boot
 `926e271c-74a9-46f1-8f33-65f3f5ebd883` developed AMD fence fallback timeouts
 at 22:45:05 UTC and a flip_done timeout at 22:45:16. GNOME workspace-index
