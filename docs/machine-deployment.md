@@ -1,5 +1,27 @@
 # Repository-first whole-machine deployment
 
+Failed boot investigated and corrected release prepared (2026-10-08): the
+saved initrd evidence for boot `56146084-0929-4b18-b0f2-33ff303900e9`
+confirms `host generation has no machine boot binding`. Menu generation 34
+(`6c04c37`, host `c47s40197s7qpbap1qdfqm5fn11mqriy`) uses host-store generation
+35, whose `machine.json` is absent. Both capture transactions timed out at
+GUI reconnection before host binding/selection. The recovered menu generation
+33 remains running and the persistent default; its selected deployment reports
+complete. No live configuration mutation was used.
+
+Normal `make machine-plan DEPLOY_TARGET=user@100.104.92.101` prepared corrected
+component `4e83114` as candidate
+`/var/lib/airlock/machine/candidates/6c55cefd2165dfcb67a2e1af148c06229df9a3363eb3f8c04b42f3afb80b77ba`,
+token `b43ede10b98e6d35c9e9226931e348e36edf69246c958fafdb4be86b1ee20d90`.
+It changes/restarts only sys-gui and usr-home, preserves sys-agent for GUI
+reconnection, retires no VMs, and requires a subsequent host reboot. All guest
+generations and roots were reused. Preparation completed without activation.
+Apply awaits operator availability to log into GNOME after sys-gui restarts;
+do not repeat the earlier unattended GUI-reconnection timeout. Keep generation
+34 until the replacement has booted and verified. Guarded `make gc-auto`
+skipped collection below its threshold. Evidence:
+`.airlock-logs/boot-failure-20261007/`.
+
 GNOME capture handoff prepared (2026-10-07): component `6c04c37` hooks the
 native screenshot save path and successful screencast EOS, queues completed
 files, and imports them into usr-home over dedicated qrexec services. Native
