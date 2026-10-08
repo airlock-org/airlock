@@ -1,5 +1,25 @@
 # Repository-first whole-machine deployment
 
+Usr-home khaki label deployed, host reboot pending (2026-10-09):
+component `a5e2270` declares label khaki and managed feature
+`airlock-label-color=0x6b7a3d`. The existing setup converger creates this label
+through Qubes admin.label.Create before assigning it; an existing conflicting
+colour is rejected. Standard labels remain untouched and no new RPC authority
+or deployment route was added. The border width remains 10px. Shell syntax
+parsing and the controller build succeeded; no tests were run.
+
+Normal whole-machine plan/apply selected candidate
+`465cea6c0913023d95d48e79a64c0f0b6866e954d6b4ad77e0899e915b54af60`,
+transaction `1791503679918108115`. Only usr-home restarted, with no system
+closure staging; sys-gui and sys-agent stayed running. Live label is khaki,
+and the new usr-home GUI daemon PID 7566 uses colour 0x6b7a3d and label index 9.
+Calculator was reopened. Whole-machine verify reports **reboot-required**,
+with all six guest systems matching selection. Selected host is
+`s7y5vd30f6n4a30r2jwnjzlf8hsvgccc`; running host remains
+`sb7i9bnyvmp0w4bim6y4bzag35zvahwy`. Operator was told reboot is now ready;
+post-reboot verification and physical colour acceptance remain pending.
+Evidence: `.airlock-logs/usr-home-khaki/`.
+
 Gray-label post-reboot verification and GUI recovery (2026-10-09):
 normal `make machine-verify` now reports **complete**, with selected host
 `sb7i9bnyvmp0w4bim6y4bzag35zvahwy` running. The operator reported usr-home
