@@ -152,6 +152,9 @@ PYTEST_SELECTED = $(foreach test,$(TESTS),'$(if $(filter run-nested-gui-smoke-st
 DEPLOY_PROFILE ?= usb-lab
 DEPLOY_LEGACY_DOM0 ?= 0
 DEPLOY_TARGET ?=
+.PHONY: machine-gui-style-plan machine-gui-style-apply
+machine-gui-style-plan machine-gui-style-apply:
+	uv run python lifecycle/misc/tools/scripts/machine-gui-style.py $(patsubst machine-gui-style-%,%,$@) --target "$(DEPLOY_TARGET)"
 .PHONY: machine-build machine-plan machine-apply machine-status machine-verify machine-resume machine-rollback machine-guest-plan machine-guest-apply sys-agent-machine-source
 machine-build machine-plan machine-apply machine-status machine-verify machine-resume machine-rollback:
 	uv run python lifecycle/misc/tools/scripts/machine-deploy.py $(patsubst machine-%,%,$@) --profile "$(DEPLOY_PROFILE)" $(if $(DEPLOY_TARGET),--target "$(DEPLOY_TARGET)",) $(if $(filter 1,$(DEPLOY_LEGACY_DOM0)),--legacy-dom0,)
