@@ -1,5 +1,35 @@
 # Repository-first whole-machine deployment
 
+Live GUI style route prepared (2026-10-08): component `9622f29` makes the trusted
+VM colour width reloadable through the GUI daemon's existing SIGHUP path,
+redrawing forwarded windows. The fixed black outer edge remains 1px, widths
+are restricted to 1–16px, and tray icons remain excluded. The Nix source is
+`sys-gui/desktop/gnome/gui-style.json`, currently 10px. A root-owned durable
+selection and journal live under `/rw/airlock`; the booted Nix generation
+restores its declared default at sys-gui startup.
+
+Parent `machine-gui-style-plan` / `machine-gui-style-apply` use the existing
+password-protected development dom0 shell and administrator qrexec transport,
+without adding production control authority. Apply only changes this style,
+signals supported daemon processes via pidfds, and records the source revision;
+it does not restart VMs, select a host, or replace the running OS identity.
+Plan describes the desired change; a reload-requested receipt is not physical
+acceptance. Unsupported running daemon packages are rejected before mutation.
+
+No tests were run at the operator's request. Python syntax parsing and the
+controller build succeeded. Normal whole-machine preparation completed, but
+its candidate remains inactive. The documented controller single-guest plan
+prepared sys-gui candidate
+`8808562edc18f31fe930e882d2ecbe6a159344b2d4935919b92641b4297fc52e`,
+changing only sys-gui and preserving sys-agent/usr-home for GUI reconnection.
+It retains the existing selected host and its pre-existing pending reboot.
+One bootstrap sys-gui restart is necessary to install support in the currently
+immutable guest. Activation awaits operator availability for the GNOME login;
+live reload/identity preservation and 10px visual acceptance remain pending.
+No live configuration mutation was used. Evidence:
+`.airlock-logs/gui-style-reload/`. This route handles border settings, not
+arbitrary live sys-gui binary upgrades.
+
 VM border contrast deployed live (2026-10-08): component `22904f7` gives every
 forwarded VM window a 1px black outer edge and 3px of its trusted Qubes label
 colour. Tray icons remain excluded. The GUI daemon allocates a separate black
