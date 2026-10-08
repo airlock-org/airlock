@@ -1,5 +1,24 @@
 # Repository-first whole-machine deployment
 
+Sys-agent Console input recovery deployed (2026-10-08): the old agent also
+hit the reconnection deadlock after the graphics recovery. Read-only channel
+metadata showed a full 4096-byte incoming ring with write notifications disabled.
+A diagnostic SIGCHLD through its existing handler drained the ring and armed
+notifications without a restart; the operator confirmed typing and dragging
+worked again. No runtime configuration overlay or process-memory write was used.
+
+The existing committed fix `0de6d4c` was built and deployed through controller
+single-guest plan/apply. Only sys-agent restarted. Transaction
+`1791499464910648864` selected candidate
+`59bc4e4ffc3fd3007c4d0ea56ffcf5b80d36cb36702e55e64b038ca6df4700eb`.
+Whole-machine verification reports **complete**. Sys-agent runs
+`yv9hkm6jg9mm4b0gx9nqlvwrw657d9sc`, with agent package
+`irxg1cbbhal2h6wmw70nyzjbs1gy23v2`; Console was reopened. Its input ring was empty
+with notifications armed. GNOME retained PID 1411 and sys-gui boot ID
+`926e271c-74a9-46f1-8f33-65f3f5ebd883`; usr-home retained boot ID
+`5bfa934d-33b5-48d6-8c50-ee806f91e043`. No desktop or host restart was needed.
+No tests were run. Evidence: `.airlock-logs/sys-agent-input-freeze/`.
+
 Black display recovered (2026-10-08): the operator reported a completely black,
 unresponsive panel after the Calculator deployment. SSH and GNOME remained
 responsive; the session was locked and display power saving was active. Neither
