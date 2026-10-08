@@ -1,5 +1,24 @@
 # Repository-first whole-machine deployment
 
+Black display recurred (2026-10-08): the recovered sys-gui boot
+`926e271c-74a9-46f1-8f33-65f3f5ebd883` developed AMD fence fallback timeouts
+at 22:45:05 UTC and a flip_done timeout at 22:45:16. GNOME workspace-index
+assertions occurred at the same time; their causal relationship is unknown.
+Both application VMs already contain the generic input notification fix.
+SSH/qrexec remained responsive. PSR was supported but its observed state and
+residency were zero; no speculative graphics parameter changes were made.
+
+Ordinary sys-gui shutdown timed out after 120 seconds, leaving the domain
+Transient without qrexec. A bounded qvm-kill stopped only sys-gui, followed by
+ordinary qvm-start. New boot `f6b825a0-cd0d-4c98-906e-879894fefb06` failed AMD
+PSP hardware initialization with error -22 and GPU mapping/walker errors;
+no GNOME process started. This recovery therefore **failed**. The operator
+was asked for the documented cold-power-cycle fallback. The host and both
+application VMs remained running throughout these operations. No configuration
+overlay or manual PCI reset was used. No tests were run. Evidence:
+`.airlock-logs/black-screen-recurrence/`. Physical recovery remains pending;
+the recurring GPU failure is unresolved.
+
 Sys-agent Console input recovery deployed (2026-10-08): the old agent also
 hit the reconnection deadlock after the graphics recovery. Read-only channel
 metadata showed a full 4096-byte incoming ring with write notifications disabled.
