@@ -1,6 +1,6 @@
 # Repository-first whole-machine deployment
 
-Live GUI style route prepared (2026-10-08): component `9622f29` makes the trusted
+Live GUI style route deployed (2026-10-08): component `9622f29` makes the trusted
 VM colour width reloadable through the GUI daemon's existing SIGHUP path,
 redrawing forwarded windows. The fixed black outer edge remains 1px, widths
 are restricted to 1–16px, and tray icons remain excluded. The Nix source is
@@ -17,16 +17,22 @@ Plan describes the desired change; a reload-requested receipt is not physical
 acceptance. Unsupported running daemon packages are rejected before mutation.
 
 No tests were run at the operator's request. Python syntax parsing and the
-controller build succeeded. Normal whole-machine preparation completed, but
-its candidate remains inactive. The documented controller single-guest plan
-prepared sys-gui candidate
-`8808562edc18f31fe930e882d2ecbe6a159344b2d4935919b92641b4297fc52e`,
-changing only sys-gui and preserving sys-agent/usr-home for GUI reconnection.
-It retains the existing selected host and its pre-existing pending reboot.
-One bootstrap sys-gui restart is necessary to install support in the currently
-immutable guest. Activation awaits operator availability for the GNOME login;
-live reload/identity preservation and 10px visual acceptance remain pending.
-No live configuration mutation was used. Evidence:
+controller build succeeded. After the operator rebooted into the previous 3px
+release, a fresh controller single-guest plan/apply installed the reload support
+with one sys-gui restart. Transaction `1791496641801964133` selected candidate
+`b59824d9f487ff409251db537947c581b5ede39c37b025518148cc35b35d246a`.
+Whole-machine verification reports **complete**, with the host and all six
+guest systems matching selection. Sys-gui runs `yw2dbjplm08dqm7xbq57ph9jcgbmn9q4`.
+The host boot ID remained `6aa4ab21-3d07-419c-a175-19737938a497`, and sys-agent
+and usr-home reconnected with their original boot IDs. No host reboot was needed.
+
+The new `machine-gui-style-apply` route then applied the committed 10px setting
+and returned `reload-requested` for both supported daemons. Sys-gui's boot ID,
+GNOME PID 1449 and daemon PIDs 2542/2591 stayed unchanged. Live Calculator
+window `0x1c00055` identified itself as usr-home; a horizontal pixel sample
+confirmed one black outer pixel followed by exactly ten blue `#3465a4` pixels.
+Physical visual acceptance remains with the operator. Runtime selection uses
+the committed helper and its durable journal; no ad-hoc overlay was used. Evidence:
 `.airlock-logs/gui-style-reload/`. This route handles border settings, not
 arbitrary live sys-gui binary upgrades.
 
