@@ -1,5 +1,24 @@
 # Repository-first whole-machine deployment
 
+Gray-label post-reboot verification and GUI recovery (2026-10-09):
+normal `make machine-verify` now reports **complete**, with selected host
+`sb7i9bnyvmp0w4bim6y4bzag35zvahwy` running. The operator reported usr-home
+could not start its graphical session. It was running with its fixed agent,
+but no usr-home GUI daemon/Xorg session was attached. User-journal evidence
+shows the GUI watcher initially failed before DISPLAY was ready, restarted,
+then lost its qubesd connection during boot with Request refused responses.
+This is a startup/reconnection issue; its exact causal sequence remains under
+investigation. Missing icon-path warnings also occur, but do not prevent the
+recovered daemon starting.
+
+Restarting only the existing user `airlock-gui-daemons.service` rediscovered
+both running application VMs. Usr-home daemon PID 3728 uses `-c 0x555555 -l 5`;
+its Xorg PID 1572 started, and Calculator was reopened. No VM, GNOME or host
+restart, configuration overlay, or process-memory write was used. This is
+operational recovery, not a claimed permanent startup-race fix. Physical
+Calculator acceptance is pending. No tests were run. Verification evidence:
+`.airlock-logs/usr-home-gray/post-reboot-verify.log`.
+
 Usr-home gray label deployed, host reboot pending (2026-10-09): after
 operator approval of the broader prepared plan, normal `make machine-apply`
 reused the admitted candidate without a rebuild or payload transfer. Transaction
