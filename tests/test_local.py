@@ -15,7 +15,6 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
     for rel_path in (
         "lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh",
         "lifecycle/misc/tools/scripts/sync-nested-dom0-tools.sh",
-        "lifecycle/misc/tools/scripts/sync-nested-codex-auth.sh",
         "lifecycle/misc/tools/scripts/run-config-boot-activation-flow.sh",
         "airlock-machine/lifecycle/runtime/tools/scripts/apply-config-candidate.sh",
         "airlock-machine/lifecycle/misc/tools/scripts/nixos-config-vms-smoke.sh",
@@ -45,9 +44,6 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
         ),
         "sync_tools": (
             repo_root / "lifecycle/misc/tools/scripts/sync-nested-dom0-tools.sh"
-        ).read_text(encoding="utf-8"),
-        "sync_codex_auth": (
-            repo_root / "lifecycle/misc/tools/scripts/sync-nested-codex-auth.sh"
         ).read_text(encoding="utf-8"),
         "config_inputs_import": (
             repo_root / "airlock-machine/lifecycle/misc/tools/scripts/import-config-inputs.sh"
@@ -117,8 +113,6 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "AIRLOCK_VM_SKIP_BASE_BUILD=1",
             "vm-warm-start",
             "vm-warm-sync",
-            "vm-sync-codex-auth",
-            "sync-nested-codex-auth.sh",
             "vm-warm-apply",
             "vm-warm-test-config",
             "vm-parallel-prebuild-image",
@@ -219,19 +213,6 @@ def check_run_nested_gui_smoke_static(repo_root: Path, log_dir: Path) -> None:
             "airlock-domain-$domain-store-closure",
             "PYTHONPATH=",
             "systemctl restart qubesd.service",
-        ],
-        "sync_codex_auth": [
-            "airlock.nested-codex-auth-sync.v1",
-            "LOCAL_AUTH_JSON",
-            "auth.json",
-            "AIRLOCK_SYNC_CODEX_CONFIG",
-            "config.toml",
-            "/etc/airlock/dev-mode",
-            "nested dom0 SSH is not reachable",
-            "remote nested dom0 is not a dev-mode image",
-            "install -m 0600",
-            "CODEX_HOME:-$HOME/.codex",
-            '"$ROOT/lifecycle/misc/tools/scripts/airlock-nix.sh" shell nixpkgs#sshpass',
         ],
         "config_inputs_import": [
             "store-export.nar.gz",

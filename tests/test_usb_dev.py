@@ -31,7 +31,7 @@ def test_writer_requires_explicit_usb_identity(usb, device):
 def test_mutable_destination_rejects_symlinks(usb, tmp_path):
     (tmp_path / "home").symlink_to("/tmp")
     with pytest.raises(ValueError, match="symlink"):
-        usb.beneath(tmp_path, "home/user/.codex")
+        usb.beneath(tmp_path, "home/user/.ssh")
 
 
 def test_provisioner_rejects_prior_dom0_username_image(usb, tmp_path, monkeypatch):
@@ -89,21 +89,6 @@ def test_sparse_copy_writes_allocated_extents_only(usb, tmp_path):
         assert stream.read(4) == b"last"
 
 
-def test_auth_cache_must_be_a_json_object(usb, tmp_path):
-    valid = tmp_path / "auth.json"
-    valid.write_text('{"tokens": {}}')
-    assert usb.read_auth_cache(valid) == b'{"tokens": {}}'
-    invalid = tmp_path / "invalid.json"
-    invalid.write_text("[]")
-    with pytest.raises(ValueError, match="Invalid auth JSON"):
-        usb.read_auth_cache(invalid)
-
-
-def test_auth_requires_mounted_vault(usb, tmp_path):
-    with pytest.raises(ValueError, match="vault is locked"):
-        usb.require_vault(tmp_path)
-
-
 def test_flatten_includes_descendants(usb):
     nodes = [
         {
@@ -116,6 +101,15 @@ def test_flatten_includes_descendants(usb):
         "partition",
         "crypt",
     ]
+
+
+@pytest.mark.parametrize("action", ["vault-create", "vault-unlock", "vault-lock", "auth-import"])
+def test_removed_credential_commands_fail_before_disk_access(usb, monkeypatch, action):
+    monkeypatch.setattr(usb.sys, "argv", ["airlock-usb", action])
+    monkeypatch.setattr(usb, "root_only", lambda: pytest.fail("must not access disks"))
+    with pytest.raises(SystemExit) as error:
+        usb.main()
+    assert error.value.code == 2
 
 
 @pytest.fixture

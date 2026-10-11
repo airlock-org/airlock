@@ -16,7 +16,6 @@ import tempfile
 import time
 
 MARKER = "airlock-usb-dev-v2\n"
-MAPPER = "airlock-codex"
 UID, GID = 1000, 100
 COPY_CHUNK = 8 * 1024 * 1024
 PROGRESS_INTERVAL = 128 * 1024 * 1024
@@ -645,10 +644,8 @@ def provision_latest_image(args):
                 root=str(root),
                 repo=args.repo,
                 public_key=args.public_key,
-                auth_file=args.auth_file,
                 amd_vfct=args.amd_vfct,
                 insecure_dev_password=args.insecure_dev_password,
-                insecure_plain_codex_auth=args.insecure_plain_codex_auth,
             )
         )
         print("Flushing personalized USB filesystem…", flush=True)
@@ -707,14 +704,6 @@ def private_file(path, data, uid=0, gid=0):
         os.fsync(stream.fileno())
 
 
-def read_auth_cache(value):
-    source = Path(value).resolve(strict=True)
-    require(source.is_file(), "Auth source must be a regular file.")
-    data = source.read_bytes()
-    require(isinstance(json.loads(data), dict), "Invalid auth JSON.")
-    return data
-
-
 def read_amd_vfct(value):
     """Read a machine-local, structurally valid ACPI VFCT table."""
     source = Path(value).resolve(strict=True)
@@ -747,7 +736,7 @@ def personalize(args):
     root = checked_root(args.root)
     require(root != Path("/"), "Personalize offline, before the first USB boot.")
     password_file = beneath(root, "var/lib/airlock/usb/local-password.hash")
-    repo_target = beneath(root, "home/user/dev/nixome")
+    repo_target = beneath(root, "home/user/dev/airlock")
     key_target = beneath(root, "home/user/.ssh/authorized_keys")
     vfct_target = beneath(root, "var/lib/airlock/amd-lab/sys-gui.vfct")
     require(
@@ -756,12 +745,7 @@ def personalize(args):
         ),
         "Already personalized (or interrupted); refusing to overwrite data.",
     )
-    auth_data = read_auth_cache(args.auth_file) if args.auth_file else None
     vfct_data = read_amd_vfct(args.amd_vfct) if args.amd_vfct else None
-    require(
-        not args.insecure_plain_codex_auth or auth_data is not None,
-        "--insecure-plain-codex-auth requires --auth-file.",
-    )
     key_source = Path(args.public_key).resolve(strict=True)
     run("ssh-keygen", "-l", "-f", str(key_source), stdout=subprocess.DEVNULL)
     key = key_source.read_bytes()
@@ -822,117 +806,11 @@ def personalize(args):
         for name in directories + files:
             os.chown(Path(current) / name, UID, GID, follow_symlinks=False)
     os.chmod(key_target.parent, 0o700)
-    if auth_data is not None:
-        if args.insecure_plain_codex_auth:
-            codex_home = beneath(root, "home/user/.codex")
-            marker = beneath(root, "var/lib/airlock/usb/insecure-codex-auth")
-            require(
-                not codex_home.exists() and not marker.exists(),
-                "Plain Codex auth is already configured.",
-            )
-            codex_home.mkdir(mode=0o700)
-            os.chown(codex_home, UID, GID)
-            private_file(codex_home / "auth.json", auth_data, UID, GID)
-            private_file(marker, b"plaintext-codex-auth-v1\n")
-            print(
-                f"DEVELOPMENT MODE: Personalized USB; writable repo at /home/user/dev/nixome ({commit}); Codex auth is stored unencrypted."
-            )
-        else:
-            # Keep the cache outside the raw filesystem. vault-create opens a
-            # new LUKS2 vault and asks for its independent passphrase; always
-            # lock it again before returning from offline personalization.
-            vault(argparse.Namespace(action="vault-create", root=str(root)))
-            _, mount = vault_paths(root)
-            try:
-                private_file(mount / "auth.json", auth_data, UID, GID)
-            finally:
-                vault(argparse.Namespace(action="vault-lock", root=str(root)))
-            print(
-                f"Personalized USB; writable repo at /home/user/dev/nixome ({commit}); Codex auth is in the locked encrypted vault."
-            )
-    else:
-        print(
-            f"Personalized USB; writable repo at /home/user/dev/nixome ({commit}). No credentials copied."
-        )
+    print(f"Personalized USB; writable repo at /home/user/dev/airlock ({commit}).")
     if vfct_data is not None:
         print(
             "Installed the machine-local AMD VFCT at /var/lib/airlock/amd-lab/sys-gui.vfct."
         )
-
-
-def vault_paths(root):
-    return (
-        beneath(root, "var/lib/airlock/usb/codex.luks"),
-        beneath(root, "home/user/.codex"),
-    )
-
-
-def require_vault(mount):
-    require(os.path.ismount(mount), "Codex vault is locked; run vault-unlock first.")
-    source = output(
-        "findmnt", "--noheadings", "--mountpoint", str(mount), "--output", "SOURCE"
-    )
-    require(
-        Path(source).resolve() == Path(f"/dev/mapper/{MAPPER}").resolve(),
-        "Unexpected vault mount.",
-    )
-    run("cryptsetup", "status", MAPPER, stdout=subprocess.DEVNULL)
-
-
-def vault(args):
-    root = checked_root(args.root)
-    image, mount = vault_paths(root)
-    mapper = Path(f"/dev/mapper/{MAPPER}")
-    if args.action == "vault-create":
-        require(
-            not mapper.exists() and not image.exists(),
-            "Vault already exists or is open.",
-        )
-        require(
-            not mount.exists() or not list(mount.iterdir()),
-            "Codex directory is not empty.",
-        )
-        image.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with os.fdopen(
-            os.open(image, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "wb"
-        ) as stream:
-            stream.truncate(512 * 1024 * 1024)
-        run("cryptsetup", "luksFormat", "--type", "luks2", str(image))
-        run("cryptsetup", "open", str(image), MAPPER)
-        try:
-            run("mkfs.ext4", "-L", "airlock-codex", str(mapper))
-        finally:
-            run("cryptsetup", "close", MAPPER)
-    if args.action in ["vault-create", "vault-unlock"]:
-        require(
-            not mapper.exists() and not os.path.ismount(mount), "Vault is already open."
-        )
-        require(
-            not mount.exists() or not list(mount.iterdir()),
-            "Codex mountpoint is not empty.",
-        )
-        mount.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chown(mount, 0, 0)
-        os.chmod(mount, 0o555)
-        run("cryptsetup", "open", str(image), MAPPER)
-        try:
-            run("mount", "-o", "nosuid,nodev,noexec", str(mapper), str(mount))
-        except BaseException:
-            run("cryptsetup", "close", MAPPER)
-            raise
-        os.chown(mount, UID, GID)
-        os.chmod(mount, 0o700)
-        print("Codex vault unlocked. It must be unlocked again after reboot.")
-    elif args.action == "vault-lock":
-        require_vault(mount)
-        run("umount", str(mount))
-        run("cryptsetup", "close", MAPPER)
-    elif args.action == "auth-import":
-        require_vault(mount)
-        target = beneath(root, "home/user/.codex/auth.json")
-        data = read_auth_cache(args.auth_file)
-        private_file(target, data, UID, GID)
-        print("Auth imported into the encrypted vault; contents were not logged.")
 
 
 def main():
@@ -1001,7 +879,6 @@ def main():
     provisioner.add_argument(
         "--public-key", required=True, help="One SSH public key to authorize"
     )
-    provisioner.add_argument("--auth-file", help="Optional existing Codex auth.json")
     provisioner.add_argument(
         "--resize-backup-dir",
         default="/var/log/airlock/usb-root-expansion",
@@ -1016,11 +893,6 @@ def main():
         action="store_true",
         help="Set the literal development password 'password' without prompting.",
     )
-    provisioner.add_argument(
-        "--insecure-plain-codex-auth",
-        action="store_true",
-        help="Store auth.json unencrypted; requires --auth-file.",
-    )
     provisioner.set_defaults(
         write=True,
         full_write=False,
@@ -1032,10 +904,6 @@ def main():
     setup.add_argument("--repo", required=True)
     setup.add_argument("--public-key", required=True)
     setup.add_argument(
-        "--auth-file",
-        help="Optional existing Codex auth.json; imports it into a new encrypted vault.",
-    )
-    setup.add_argument(
         "--amd-vfct",
         help="Optional validated, machine-local AMD VFCT to install before first boot.",
     )
@@ -1044,18 +912,7 @@ def main():
         action="store_true",
         help="Set the literal development password 'password' without prompting.",
     )
-    setup.add_argument(
-        "--insecure-plain-codex-auth",
-        action="store_true",
-        help="Store auth.json unencrypted; requires --auth-file.",
-    )
     setup.set_defaults(handler=personalize)
-    for name in ["vault-create", "vault-unlock", "vault-lock", "auth-import"]:
-        command = commands.add_parser(name)
-        command.add_argument("--root", default="/")
-        if name == "auth-import":
-            command.add_argument("--auth-file", required=True)
-        command.set_defaults(handler=vault)
     args = parser.parse_args()
     try:
         args.handler(args)

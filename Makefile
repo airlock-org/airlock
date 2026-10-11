@@ -178,7 +178,7 @@ VM_SLOW_SELECTED_PARALLEL_TARGETS = $(foreach test,$(VM_SLOW_SELECTED_PARALLEL_F
 VM_SLOW_SELECTED_SERIAL_TARGETS = $(foreach test,$(VM_SLOW_SELECTED_SERIAL_FLOW_IDS),'tests/test_vm.py::test_vm_flow[$(test)]')
 VM_SLOW_SERIAL_TARGETS = $(foreach test,$(VM_SLOW_SERIAL_FLOW_IDS),'tests/test_vm.py::test_vm_flow[$(test)]')
 
-.PHONY: ensure-generated-dirs build test-quick test-nix test-warm test-slow py-sync py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-config-network-debug-image vm-gui-config-network-debug-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-sync-codex-auth vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test-quick test-nix test-warm test-slow py-sync py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-config-network-debug-image vm-gui-config-network-debug-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(AIRLOCK_DATA_ROOT)),)
@@ -203,7 +203,10 @@ test-nix: ensure-generated-dirs
 
 .PHONY: usb-dev-prepare-inputs usb-builder-offline-check usb-dev-image usb-dev-write usb-dev-provision usb-dev-help
 
-USB_DEV_PROVISION = sudo python3 lifecycle/image/tools/usb-dev.py provision-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --resize-backup-dir "$(or $(AIRLOCK_LOG_DIR),/var/log/airlock)/usb-root-expansion" --repo "$(CURDIR)" --public-key "$(HOME)/.ssh/id_ed25519.pub" --auth-file "$(HOME)/.codex/auth.json" --insecure-dev-password --insecure-plain-codex-auth
+USB_PUBLIC_KEY ?= $(HOME)/.ssh/id_ed25519.pub
+USB_INSECURE_DEV_PASSWORD ?= 0
+USB_DEV_PASSWORD_ARGS = $(if $(filter 1,$(USB_INSECURE_DEV_PASSWORD)),--insecure-dev-password,)
+USB_DEV_PROVISION = sudo python3 lifecycle/image/tools/usb-dev.py provision-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --resize-backup-dir "$(or $(AIRLOCK_LOG_DIR),/var/log/airlock)/usb-root-expansion" --repo "$(CURDIR)" --public-key "$(USB_PUBLIC_KEY)" $(USB_DEV_PASSWORD_ARGS)
 
 .PHONY: usb-dom0-console-image usb-dom0-console-write
 
@@ -252,13 +255,12 @@ usb-dev-image: usb-dev-prepare-inputs
 	  --image-command $(AIRLOCK_NIX) build --impure .#airlock-usb-dev-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --print-build-logs
 
 usb-dev-write:
-	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-write USB_SERIAL=25110814640207" >&2; exit 2)
+	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-write USB_SERIAL=YOUR_USB_SERIAL" >&2; exit 2)
 	sudo python3 lifecycle/image/tools/usb-dev.py write-latest --result-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --nix-root "$(AIRLOCK_NIX_ROOT)" --serial "$(USB_SERIAL)" --write
 
 usb-dev-provision:
-	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-provision USB_SERIAL=25110814640207" >&2; exit 2)
-	@test -f "$(HOME)/.ssh/id_ed25519.pub" || (echo "Missing $(HOME)/.ssh/id_ed25519.pub" >&2; exit 2)
-	@test -f "$(HOME)/.codex/auth.json" || (echo "Missing $(HOME)/.codex/auth.json" >&2; exit 2)
+	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-provision USB_SERIAL=YOUR_USB_SERIAL" >&2; exit 2)
+	@test -f "$(USB_PUBLIC_KEY)" || (echo "Missing $(USB_PUBLIC_KEY)" >&2; exit 2)
 	$(USB_DEV_PROVISION)
 
 usb-dev-help:
@@ -390,8 +392,6 @@ vm-warm-start: ensure-generated-dirs
 vm-warm-sync: ensure-generated-dirs
 	AIRLOCK_SYNC_DOM0_TOOLS=1 ./lifecycle/misc/tools/scripts/sync-nested-dom0-tools.sh
 
-vm-sync-codex-auth: ensure-generated-dirs
-	./lifecycle/misc/tools/scripts/sync-nested-codex-auth.sh
 
 vm-warm-apply: ensure-generated-dirs
 	AIRLOCK_KEEP_VM=1 AIRLOCK_REUSE_WARM_VM=1 AIRLOCK_SYNC_DOM0_TOOLS=1 AIRLOCK_NESTED_WARM_STOP_NIX_DOMAINS=1 AIRLOCK_VM_SKIP_BASE_BUILD=1 AIRLOCK_VM_IMAGE_ATTR="$(VM_GUI_CONFIG_IMAGE_ATTR)" AIRLOCK_VM_DISPLAY=none AIRLOCK_VM_FRESH=0 AIRLOCK_BOOTSTRAP_QUBES=0 AIRLOCK_RUN_SETUP_CONFIG=1 AIRLOCK_RUN_CONFIG_INPUTS_IMPORT=1 AIRLOCK_RUN_CONFIG_VMS_SMOKE=0 AIRLOCK_RUN_NIX_CLOSURE_SMOKE=0 AIRLOCK_RUN_QUBES_SMOKE=0 AIRLOCK_RUN_GUI_SMOKE=0 ./lifecycle/misc/tools/scripts/run-nested-gui-smoke.sh

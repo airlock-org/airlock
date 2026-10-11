@@ -59,11 +59,10 @@ non-USB disks, partitions and active device-mapper holders.
 
 Provision it with the serial printed by `lsblk`; the command resolves the
 current result link, calculates the image SHA-256 itself, unmounts the selected
-USB, writes it, expands root into the remaining space, copies the committed repository, SSH public key and local
-Codex auth cache, syncs it, then unmounts it again:
+USB, writes it, expands root into the remaining space, copies the committed repository and SSH public key, syncs it, then unmounts it again:
 
 ```sh
-make usb-dev-provision USB_SERIAL=25110814640207
+make usb-dev-provision USB_SERIAL=YOUR_USB_SERIAL
 ```
 
 Expansion is part of this command; no extra sudo command or first-boot resize
@@ -84,7 +83,7 @@ reading the source tree. Backups from older tooling under
 These are recovery metadata, **not backups of data erased by flashing**. Do not
 restore a smaller old partition boundary over an already enlarged filesystem.
 
-The roughly 58.2-GiB USB with serial `25110814640207` should get a roughly
+The roughly 58.2-GiB USB with serial `YOUR_USB_SERIAL` should get a roughly
 57.2-GiB root partition instead of 31 GiB. Dom0 needs that space because it hosts
 the shared VM package store, writable VM disks and retained rollback generations.
 The deployment workflow also imports/stages new Nix closures before changing
@@ -114,9 +113,9 @@ for supported configurations and failure handling. The lower-level
 `usb-dev.py --amd-vfct` option remains available only for reproducing older
 manual experiments; the automatic startup path never reads that file.
 
-This development shortcut deliberately selects the literal local password
-`password` and plaintext Codex auth; it is only for a physically controlled
-USB. It requires exactly one attached whole-disk USB with that serial, **erases
+Provisioning prompts for a local dom0 password. Use
+`USB_INSECURE_DEV_PASSWORD=1` only to select the literal development password
+`password` on a physically controlled USB. It requires exactly one attached whole-disk USB with that serial, **erases
 it**, flushes the device, and does not touch firmware boot variables. It copies
 only allocated image extents by default; this makes a sparse seed image much
 quicker to flash. To write without personalization or use `--full-write` or
@@ -125,7 +124,7 @@ Sparse writing leaves any prior USB bytes in filesystem blocks marked free by
 the image; use `--full-write` for an untrusted/reused USB where that
 data-remanence trade-off is unacceptable. An interrupted write requires
 re-imaging that USB. The host needs Python, util-linux, Git, OpenSSH, OpenSSL,
-cryptsetup and e2fsprogs for these tools.
+and e2fsprogs for these tools.
 
 Mount the new USB's `airlock-usb` root partition at a fresh mountpoint, using its
 **USB by-id partition path** (normally `…-part2`). Inspect `lsblk -f` first.
@@ -133,53 +132,19 @@ Do not mount by a potentially duplicated generic label. Then:
 
 ```sh
 sudo python3 lifecycle/image/tools/usb-dev.py personalize \
-  --root /mnt/airlock-usb --repo "$PWD" --public-key /absolute/id_ed25519.pub \
-  --auth-file /absolute/path/to/auth.json \
-  --insecure-dev-password --insecure-plain-codex-auth
+  --root /mnt/airlock-usb --repo "$PWD" --public-key /absolute/id_ed25519.pub
 ```
 
 This asks for a new local password for dom0 `user`, installs one public SSH
 key and clones the clean committed repository onto a writable
-`usb-dev` branch. By default, `--auth-file` creates an encrypted Codex vault,
-imports only that cache, then locks the vault. No private keys, untracked files,
-hooks, build artifacts, remote credentials or Codex settings are copied. The
-clone has no origin; configure a suitable remote later. The password hash is
-outside Nix, readable only by root. USB dom0 uses declarative users so boot
-activation applies this hash even though the image already contains a locked
-account. This also applies to the text-recovery and AMD-lab boot entries.
-Changes made with `passwd` are reset at activation; the provisioned hash file
-is the source of truth for dom0's password. Re-personalization refuses to overwrite an
-existing setup.
+`usb-dev` branch. No credentials, local Git hooks, untracked files, build
+artifacts, or user application settings are copied. The SSH public key is the
+only authentication input. Codex remains an ordinary application in sys-agent;
+Airlock does not import or manage its credentials.
 
-For a throwaway, physically controlled developer USB only, add
-`--insecure-dev-password` to set dom0's literal password `password` without a
-prompt. sys-gui uses that same fixed developer password, set declaratively in
-its immutable NixOS image; it is not mutated over qrexec during boot. This is
-intentionally opt-in and must not be used for a shared or network-exposed system.
-
-Add `--insecure-plain-codex-auth` with `--auth-file` to skip LUKS and store the
-Codex cache directly in the USB's writable root. This is also intentionally
-opt-in: anyone who obtains the USB can use those access tokens.
-
-## Codex authentication: separate encrypted vault
-
-The raw OS itself is **not encrypted**. Codex's state lives in a 512 MiB LUKS2
-file vault. Its passphrase is separate from the login password and is never
-saved by the tool. Supplying `--auth-file` to `personalize` is the preferred
-one-step setup unless you deliberately select `--insecure-plain-codex-auth`.
-To add credentials later, offline before unmounting the USB:
-
-```sh
-sudo python3 lifecycle/image/tools/usb-dev.py vault-create --root /mnt/airlock-usb
-sudo python3 lifecycle/image/tools/usb-dev.py auth-import --root /mnt/airlock-usb --auth-file /absolute/auth.json
-sudo python3 lifecycle/image/tools/usb-dev.py vault-lock --root /mnt/airlock-usb
-```
-
-Creation prompts for the passphrase more than once. Import refuses to overwrite
-an existing auth cache. If your local login uses an OS keyring there may be no
-`auth.json`; authenticate inside Codex on the USB instead. No full `config.toml`
-is copied. OpenAI documents copying the cache for headless login and treating
-it as a password: [official OpenAI authentication documentation](https://learn.chatgpt.com/docs/auth#fallback-authenticate-locally-and-copy-your-auth-cache).
+The OS filesystem is unencrypted. This tool no longer supports the old Codex
+vault commands. Existing USB credential files and vaults are not erased by a
+source update; remove or migrate them separately if you have used that feature.
 
 Unmount the root and use the laptop's firmware USB boot menu. No installation
 onto an internal disk is needed. Only one Airlock USB should be attached.
@@ -208,7 +173,7 @@ dom0's `user` account; `sudo` uses the dom0 password. In that terminal:
 ```sh
 sudo nmcli --ask device wifi connect YOUR_SSID
 sudo tailscale up --ssh --hostname=airlock-usb
-cd /home/user/dev/nixome
+cd /home/user/dev/airlock
 codex
 ```
 
@@ -295,9 +260,6 @@ The XFCE panel's **Shut Down** action requests a clean dom0 power-off through
 a single qrexec service restricted to `sys-gui`; it does not merely halt the
 GUI VM. Log out and reboot remain guest-session actions for now.
 
-When using the encrypted-vault path, run `sudo airlock-usb vault-unlock` before
-starting Codex. It is not needed for `--insecure-plain-codex-auth`.
-
 Wired Ethernet can simplify first boot. Join Tailscale interactively; no auth
 key is in the image. This is a **new Tailscale node**, not the laptop's Ubuntu
 identity. Use its reported address from the host:
@@ -318,11 +280,6 @@ Qubes uplink; sys-net retains NetworkManager/resolvconf and includes
 redistributable hardware firmware. These changes still require physical
 verification on a rebuilt image.
 
-The vault must be unlocked after each reboot; the `codex` wrapper refuses to
-run while it is locked. Tokens can refresh inside the mounted vault normally.
-Close Codex before `sudo airlock-usb vault-lock`. Losing the passphrase loses
-access to the vault (you can authenticate afresh). The vault protects stored
-credentials, not a modified bootloader/OS or credentials while it is unlocked.
 Keep physical custody of this development USB. Tailscale's machine identity,
 Wi-Fi settings, logs, repository and VM state persist on the **unencrypted** root.
 

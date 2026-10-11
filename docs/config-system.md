@@ -592,9 +592,7 @@ Persistent user state is initialized at:
 `CODEX_HOME` is set to `/home/user/.codex`, matching Codex's documented default
 state directory. Codex authentication and configuration are mutable private VM
 state; no API keys, tokens, `auth.json`, or user config are placed in Nix
-configuration or the Nix store. In a nested dev-mode image, `make
-vm-sync-codex-auth` sends the host login state to `usr-cmd` through the dedicated
-`airlock.CodexAuthImport` qrexec service. Dom0 does not retain the credential.
+configuration or the Nix store. Airlock does not copy or manage application credentials.
 
 Dev-mode dom0 behavior is selected at image build time. The Make image targets
 default to `VM_IMAGE_MODE=dev`; pass `VM_IMAGE_MODE=release` to build the same

@@ -92,20 +92,12 @@ in
   environment.etc."airlock/usb-dev".text = "airlock-usb-dev-v2\n";
   environment.systemPackages = with pkgs; [
     (writeShellScriptBin "airlock-usb" ''
-      export PATH=${lib.makeBinPath [ coreutils util-linux cryptsetup e2fsprogs git openssh openssl ]}:$PATH
+      export PATH=${lib.makeBinPath [ coreutils util-linux e2fsprogs git openssh openssl ]}:$PATH
       exec ${python3}/bin/python3 ${../tools/usb-dev.py} "$@"
     '')
     (writeShellScriptBin "airlock-usb-amd-preflight" ''
       exec ${python3}/bin/python3 ${../tools/amd-preflight.py} "$@"
     '')
-    (lib.hiPrio (writeShellScriptBin "codex" ''
-      if ! ${util-linux}/bin/mountpoint -q /home/user/.codex \
-        && ! test -f /var/lib/airlock/usb/insecure-codex-auth; then
-        echo 'Unlock credentials with: sudo airlock-usb vault-unlock' >&2
-        exit 1
-      fi
-      export CODEX_HOME=/home/user/.codex
-      exec ${codex}/bin/codex "$@"
-    ''))
+
   ];
 }
