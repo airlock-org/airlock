@@ -1,60 +1,71 @@
 # Repository boundary and workflow
 
-`airlock-machine` owns deployable whole-machine Nix configuration, declared dom0
-and guest systems, runtime services and packages, bootstrap inputs, its flake
-lock, and component tests. A standalone checkout builds
-`.#airlock-machine-release-usb-lab` or
-`.#airlock-machine-release-usb-gui-lab` without the parent repository and without
-evaluating a USB image or prepared guest-store payload.
+`airlock-machine` owns deployable whole-machine Nix configuration, dom0 and
+Qubes guests, bootstrap, runtime helpers, its lock file, and component tests.
+It builds independently of this parent repository. The parent owns USB image
+assembly, prepared-store seeding, provisioning, lab transport, and integration
+tests. Keep one editable source per runtime helper and component test.
 
-The parent `airlock` repository owns USB disk-image assembly, prepared-store seeding, flashing,
-provisioning, development-host tooling, lab orchestration, and integration
-tests. Its USB configuration calls `airlock-machine.lib.mkMachineConfiguration` and
-only substitutes prepared descriptor sources for image assembly. Deployable
-releases canonicalize those sources back to the same OS-owned guest closure
-artifacts.
+## Clone
 
-Runtime helper sources and component tests live only in `airlock-machine`.
-The parent quick suite runs those tests directly from the pinned submodule;
-it must not keep editable copies of setup, config import, network startup,
-component smoke scripts, or boot helpers. Parent-only tests cover USB assembly,
-deployment transport, and nested-VM orchestration. Both repositories retain
-their own guarded development-store wrappers so they can initialize their
-development environments independently.
+The intended component URL in `.gitmodules` is
+`git@github.com:airlock-org/airlock-machine.git`. Both repositories and the
+pinned component commit must be accessible before a remote recursive clone can
+work. Updating this file locally does not create or publish a remote.
 
-The current `.gitmodules` URL is the local-only path
-`/home/user/dev/airlock-org/airlock-machine`; no remote has been selected or published.
-An existing local checkout initializes with:
-
-```bash
-git -c protocol.file.allow=always submodule update --init airlock-machine
+```sh
+git clone --recurse-submodules git@github.com:airlock-org/airlock.git
 ```
 
-A fresh clone on another machine must first obtain `airlock-machine` at a chosen
-local path, then override the temporary local URL before initialization:
+For an existing checkout after changing the URL:
 
-```bash
-git config submodule.airlock-machine.url /absolute/path/to/airlock-machine
-git -c protocol.file.allow=always submodule update --init airlock-machine
+```sh
+git submodule sync -- airlock-machine
+git submodule update --init airlock-machine
 ```
 
-Once hosting is agreed, replace the URL in `.gitmodules`, run `git submodule
-sync -- airlock-machine`, and commit that metadata change. Do not invent a remote meanwhile.
+## Local-source clone
 
-Make machine changes and commits in the standalone checkout first. Then update the
-parent pointer and commit its integration changes:
+Before hosting is available, clone from local committed repositories. Override
+the URL in the clone's Git configuration, leaving tracked metadata portable:
 
-```bash
-git -C /home/user/dev/airlock-org/airlock-machine switch main
-# edit, test, and commit airlock-machine
-git -C airlock-machine fetch /home/user/dev/airlock-org/airlock-machine main
-git -C airlock-machine checkout <airlock-machine-commit>
+```sh
+git clone --no-local /path/to/airlock /path/to/new-airlock
+cd /path/to/new-airlock
+git config submodule.airlock-machine.url /path/to/airlock-machine
+git -c protocol.file.allow=always submodule update --init airlock-machine
+uv sync --locked
+make test-quick
+```
+
+`/path/to/airlock-machine` must contain the exact pinned commit. It can be the
+initialized component checkout from the original parent. File transport is
+allowed only for this explicit local initialization command.
+
+## Change and pin the component
+
+Work inside `airlock-machine/` on a named branch rather than detached HEAD:
+
+```sh
+git -C airlock-machine switch -c my-change
+# edit and run the component or parent quick suite
+git -C airlock-machine add <changed-files>
+git -C airlock-machine commit -m 'Describe the machine change'
 git add airlock-machine
-git commit
+git commit -m 'Pin machine change'
 ```
 
-Both repositories retain `lifecycle/misc/tools/scripts/airlock-nix.sh`. Use it
-for every Nix evaluation and build. It selects the isolated store rooted at
-`/run/media/user/data/airlock/nix-root`; routine work must stop when that
-external storage is unavailable. Use only the guarded `make gc-auto`,
-`make gc-dry-run`, and `make gc` targets.
+When remote hosting is in use, make the component commit accessible there before
+sharing the parent pointer. Local builds may need a local submodule URL override
+if the committed revision has not been uploaded; never claim that a local clone
+proves remote availability. If editing a separate component checkout, fetch its
+commit into `airlock-machine/` and check it out before committing the parent pin.
+
+## Stores and generated files
+
+Use each repository's guarded `lifecycle/misc/tools/scripts/airlock-nix.sh` for
+Nix commands. Set `AIRLOCK_DATA_ROOT` to your development storage; the example
+mount is `/run/media/user/data/airlock`. Keep generated stores, VM disks, logs,
+firmware captures, credentials, and deployment receipts out of Git.
+Use only the guarded Airlock GC targets. See [contributor setup](../CONTRIBUTING.md)
+and [lab configuration](lab-configuration.md).

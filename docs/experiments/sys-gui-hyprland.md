@@ -23,7 +23,7 @@ HiDPI profile, and its DMS package customization live together under
 
 ```console
 make usb-dev-image
-make usb-dev-provision USB_SERIAL=25110814640207
+make usb-dev-provision USB_SERIAL=YOUR_USB_SERIAL
 ```
 
 Choose **usb-gui-lab-hyprland with Xen**, then log in as `user` with `password`.

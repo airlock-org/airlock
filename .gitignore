@@ -10,3 +10,11 @@
 /.airlock-vm/
 /.airlock-vm-*/
 /.direnv/
+
+/.pytest_cache/
+/.codex/
+/credentials/
+*.luks
+*.vfct
+*.vbios
+*.rom

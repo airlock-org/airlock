@@ -28,7 +28,7 @@ Build and provision:
 
 ```console
 make usb-dev-image
-make usb-dev-provision USB_SERIAL=25110814640207
+make usb-dev-provision USB_SERIAL=YOUR_USB_SERIAL
 ```
 
 ## Cross-VM app display fixes (2026-09-15)

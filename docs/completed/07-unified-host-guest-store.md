@@ -289,10 +289,10 @@ A successful build or pool mount does not establish boot, recovery or GC safety.
 
 - [Controller ownership](05-sys-ctrl.md)
 - [Direct pool deployment and root reuse](06-direct-pool-machine-deployment.md)
-- [Existing builder store](../sys-dev-build-store.md)
+- [Existing builder store](../sys-agent-build-store.md)
 - [Image pool seeding](../../lifecycle/image/prepared-guest-store.nix)
 - [Image assembly](../../lifecycle/image/profiles/usb-image.nix)
-- [Builder mount and registration](../../airlock-machine/lifecycle/runtime/tools/scripts/sys-dev-build-store.py)
+- [Builder mount and registration](../../airlock-machine/lifecycle/runtime/tools/scripts/sys-agent-build-store.py)
 - [Pool views and backing devices](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/views.py)
 - [Builder generation metadata](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/builder.py)
 - [Nix local overlay store documentation](https://nix.dev/manual/nix/2.34/store/types/experimental-local-overlay-store)

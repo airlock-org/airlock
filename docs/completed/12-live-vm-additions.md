@@ -106,7 +106,7 @@ builds alone do not complete this plan.
 ## Implementation checkpoint
 
 Implementation was developed in
-`/home/user/dev/airlock-org/worktrees/airlock-live-vm-additions`,
+`/path/to/worktrees/airlock-live-vm-additions`,
 on parent and component branches `feat/live-vm-additions`, now merged and retired.
 
 The controller now imports the host/transport closure through
@@ -159,7 +159,7 @@ The larger declaration simplification belongs to TODO 13.
 
 Verified that the parent and component changes were fully on main and that both
 working trees were clean. Removed the worktree and its local feature branches.
-Continue from `/home/user/dev/airlock-org/airlock`.
+Continue from `/path/to/airlock`.
 
 Worktree-local evidence is preserved under
 `.airlock-logs/retired-worktrees/airlock-live-vm-additions/` in the main checkout.
@@ -168,7 +168,7 @@ their relative suffixes are unchanged. Physical acceptance remains pending.
 
 ## Live baseline installation attempt (2026-09-30)
 
-Reached the live development VM through Tailscale at `user@100.104.92.101` and
+Reached the live development VM through Tailscale at `user@SYS_AGENT_ADDRESS` and
 confirmed its Qubes name is sys-dev. Dom0 was running host
 `dyy6c32zx6fanzfrxyzgriw4rchihhwy`, boot ID
 `4513ac2c-980a-4cd7-8c35-27edb6a2e83b`. Neither `MachinePrepare` nor
@@ -237,7 +237,7 @@ and the failed transaction directory. Those diagnostic ACL changes remain;
 deployment state was not edited. No new control authority was added.
 
 The separate committed acceptance candidate is in
-`/home/user/dev/airlock-org/worktrees/airlock-live-vm-acceptance`, on parent and
+`/path/to/worktrees/airlock-live-vm-acceptance`, on parent and
 component branches `trial/live-vm-acceptance`. After rebasing onto the recovery
 fixes, parent `ee48d81` pins component `4e36175`. It adds an offline purple
 `usr-notes` VM with Text Editor, a 2-GiB

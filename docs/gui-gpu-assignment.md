@@ -98,7 +98,7 @@ The procedure below remains the checklist for subsequent acceptance runs.
 
 ```sh
 make usb-dev-image
-make usb-dev-provision USB_SERIAL=25110814640207
+make usb-dev-provision USB_SERIAL=YOUR_USB_SERIAL
 ```
 
 Boot the normal **Airlock** entry. `usb-gui-lab` is an internal profile name,

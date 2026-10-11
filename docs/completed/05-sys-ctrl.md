@@ -173,11 +173,11 @@ verification separately.
 - [Detached guest activation](../../airlock-machine/lifecycle/runtime/tools/sys-ctrl-guest-receive.py)
 - [Dom0 release receiver](../../airlock-machine/lifecycle/runtime/tools/sys-ctrl-machine-receive.py)
 - [Typed observation and recovery](../../airlock-machine/lifecycle/runtime/tools/sys-ctrl-machine-control.py)
-- [Controller packaging and outcome timer](../../airlock-machine/lifecycle/misc/modules/sys-dev-machine-build.nix)
+- [Controller packaging and outcome timer](../../airlock-machine/lifecycle/misc/modules/sys-agent-machine-build.nix)
 - [Deployment services and policy](../../airlock-machine/lifecycle/misc/modules/machine-deployment.nix)
 - [Release construction](../../airlock-machine/lifecycle/misc/modules/machine-release.nix)
 - [Coordinator](../../airlock-machine/lifecycle/runtime/tools/airlock_machine_deploy/coordinator.py)
-- [Pool-backed builder](../sys-dev-build-store.md)
+- [Pool-backed builder](../sys-agent-build-store.md)
 
 Moving the pool into sys-ctrl, replacing the Xen storage backend or Qubes control
 mechanisms, and full GUI completion are outside this work.

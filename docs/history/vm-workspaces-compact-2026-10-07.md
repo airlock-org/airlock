@@ -27,7 +27,7 @@ was required. Worker `airlock-machine-deploy-d4584689c6cd` completed successfull
 at 09:42:10 UTC, transaction `1791365917355493408`, candidate
 `adfa3a3f50cc912af6e4ecaa78d79d808cb270835ca58e4100dc503981ebcafb`.
 
-`make machine-verify DEPLOY_TARGET=user@100.104.92.101` reports **complete**:
+`make machine-verify DEPLOY_TARGET=user@SYS_AGENT_ADDRESS` reports **complete**:
 the retained host `aaq4px7jylgzpa21v4mg6phd2zlq7cr6` and all six guest generations
 match selection. Sys-gui runs
 `/nix/store/0jl32xbsnl3wm5nkradp2rnml8rzb3q3-nixos-system-sys-gui-26.11`.

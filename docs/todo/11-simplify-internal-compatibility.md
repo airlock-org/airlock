@@ -80,7 +80,7 @@ Pair-by-pair progress:
 
 #### First change: require authored `build` (2026-09-30)
 
-Worktree: `/home/user/dev/airlock-org/worktrees/airlock-simplify-build-option`,
+Worktree: `/path/to/worktrees/airlock-simplify-build-option`,
 branch `simplify-build-option` in the parent and component checkouts.
 Component implementation commit: `a94ed5f`.
 
@@ -430,7 +430,7 @@ are outside the new local contract; inventory/replacement is still pending.
 ### 9. Explicit legacy deployment route: investigate first
 
 The parent [machine-deploy.py](../../lifecycle/misc/tools/scripts/machine-deploy.py),
-component [sys-dev-machine-deploy.py](../../airlock-machine/lifecycle/runtime/tools/sys-dev-machine-deploy.py),
+component [sys-dev-machine-deploy.py](../../airlock-machine/lifecycle/runtime/tools/sys-agent-machine-deploy.py),
 and parent Makefile expose `--legacy-dom0` / `DEPLOY_LEGACY_DOM0`.
 This maintains additional development build, transfer and direct-dom0 control
 paths beside normal sys-dev/sys-ctrl submission. Tests explicitly cover the
@@ -619,7 +619,7 @@ archived, owned by the current user, and confined to the retired worktree's log
 directory. Removed those leftovers too. The worktree directory and registration
 are gone; other agents' worktrees were left alone.
 
-Ran `make test-quick` from `/home/user/dev/airlock-org/airlock` on main:
+Ran `make test-quick` from `/path/to/airlock` on main:
 **681 passed, 59 skipped in 5.90 s**, exit status **0**. No code fixes were needed.
 The component pin matches `38886d6`; main and its component are clean. This
 confirms the quick suite on the integrated checkout, with the same Nix exclusion
@@ -637,7 +637,7 @@ live test was performed in this retirement/validation pass.
 ## Current handoff
 
 All selected local code work is integrated into both repositories' main branches.
-Continue from `/home/user/dev/airlock-org/airlock`; the cleanup worktree and its
+Continue from `/path/to/airlock`; the cleanup worktree and its
 merged parent branch have been retired. Earlier worktree test/rebase evidence
 is preserved in the archive above. Initial implementation commits bypassed
 hooks to honor the then-current instruction to defer tests/check suites. The

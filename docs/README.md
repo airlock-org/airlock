@@ -1,10 +1,9 @@
 # Documentation map
 
-Updated 2026-10-01: bootstrap/normal-startup separation passed its first physical
-reboot and operator checks; repeated unchanged-boot reuse and broader recovery
-trials remain unverified. Boot-menu presentation, controller deployment, direct
-pool admission and unified host/guest storage also passed their recorded
-acceptance. Detailed summaries retain their boundaries.
+Start with [project status](status.md), [contributor setup](../CONTRIBUTING.md),
+[lab configuration](lab-configuration.md), and [local public-readiness results](public-readiness.md).
+Physical evidence remains limited to the named hardware and trial scope.
+No new live deployment is implied by source cleanup.
 
 ## Placement rules
 
@@ -51,7 +50,7 @@ historical paths.
 | [USB input setup](todo/usb-input-setup.md) | Planned. First hardware trial consumer; preserve storage and existing connectivity. Ownership depends on hardware. |
 | [USB lab network follow-ups](todo/usb-lab-network-followups.md) | Focused tests, updates proxy, PCI Wi-Fi traffic, and an exact persistence sentinel remain. The wired topology passed physical acceptance. |
 | [Deployment metadata and validation reuse](todo/08-deployment-metadata-validation-reuse.md) | Planned. Reduce repeated preparation work with operation-scoped caches; RAM staging is out of scope. |
-| [Deployment code health](todo/09-deployment-code-health.md) | Planned. Preserve cleanup errors, use durable record writes, and simplify host publication. |
+| [Deployment code health](todo/09-deployment-code-health.md) | Implemented and locally verified. Cleanup preserves startup errors; saved records are durable; publication finishing is shared. No live deployment. |
 | [Internal compatibility cleanup](todo/11-simplify-internal-compatibility.md) | Local cleanup implemented; worktree retired and quick tests passed on main (681 passed, 59 skipped). Nix/EROFS checks and persisted-state acceptance remain pending; the development deployment route is retained. |
 | [Live VM additions](completed/12-live-vm-additions.md) | Completed. Physical no-reboot addition, application launch, VM stop/start, later host boot and recoverable rollback/reapply passed with exact persistent data and unchanged existing VMs. Declaration simplification remains in TODO 13. |
 | [Minimal VM declarations](todo/13-minimal-vm-declarations.md) | Planned. Derive builds, topology, deployment targets and live desktop integration from one small declaration per ordinary VM. |

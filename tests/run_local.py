@@ -44,6 +44,7 @@ def main() -> int:
     command = [
         "uv",
         "run",
+        "--no-sync",
         "pytest",
         *args,
         "--durations=20",
@@ -52,7 +53,6 @@ def main() -> int:
         "--json-report",
         "--json-report-file",
         str(log_dir / "pytest-report.json"),
-        *args,
     ]
     os.chdir(repo_root)
     os.execvpe(command[0], command, env)

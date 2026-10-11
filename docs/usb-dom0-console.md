@@ -8,7 +8,7 @@ GPU boot entries. The ordinary non-Xen recovery entry is explicitly labelled.
 
 ```sh
 make usb-dom0-console-image
-make usb-dom0-console-write USB_SERIAL=25110814640207
+make usb-dom0-console-write USB_SERIAL=YOUR_USB_SERIAL
 ```
 
 The writer unmounts the identified USB and overwrites it with the console

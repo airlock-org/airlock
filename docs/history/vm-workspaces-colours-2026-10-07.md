@@ -25,7 +25,7 @@ sys-gui generation, restarting its sys-agent/usr-home dependents. Worker
 Transaction `1791367386189972236`, candidate
 `cf9106edfcadb21ea1c5a6daa462de64dfd623f5204628158f44676bf84d56dd`.
 
-`make machine-verify DEPLOY_TARGET=user@100.104.92.101` reports **complete**:
+`make machine-verify DEPLOY_TARGET=user@SYS_AGENT_ADDRESS` reports **complete**:
 the retained host and all six guests match their selected generations. Sys-gui
 runs `/nix/store/apyfnqplca5mv1k4j2wwsw5981fraiwi-nixos-system-sys-gui-26.11`.
 Remote access restored automatically. A read-only observation found GNOME at its

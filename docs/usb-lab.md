@@ -4,29 +4,23 @@
 hardened profile: `sys-agent` is deliberately privileged and has a
 development-only Qubes RPC shell into dom0.
 
-```
-development machine --Tailnet SSH--> sys-agent --airlock-dom0-shell--> dom0
-                                      |
-                                 sys-firewall <-- usr-browser
-                                      |
-                                   sys-net
-                                      |
-                                 physical NIC
-
-usr-home stays offline
+```text
+development computer --Tailnet SSH--> sys-agent --airlock-dom0-shell--> dom0
+                                           |
+usr-home -------------------------------- sys-firewall
+                                           |
+                                         sys-net
+                                           |
+                                       physical NIC
 ```
 
-The user-facing `Airlock` boot entry uses this topology and starts `sys-agent`,
-`sys-net`, `sys-firewall`, `sys-ctrl` routed through sys-firewall, physical-GPU
-`sys-gui`, and offline `usr-home`. `usr-browser` is available but halted by
-default. `sys-ctrl` prepares deployment candidates. `usb-lab` is only the
-internal profile name. The checked-in profile assigns physical network
-devices to `sys-net`, with `sys-agent` and `usr-browser` routed through
-`sys-firewall`. See the [completed migration trial](completed/usb-lab-network-isolation.md)
-for deployment and physical acceptance. A booted image or selected release
-still needs its running host and guest generations verified after a reboot.
-Dom0's direct NetworkManager, Tailscale, and SSH services are disabled in this
-profile.
+The normal `Airlock` boot entry uses the internal `usb-lab` profile and starts
+sys-gui, sys-agent, sys-ctrl, sys-net, sys-firewall, and connected usr-home.
+Sys-net owns physical network devices. Sys-agent, sys-ctrl, and usr-home route
+through sys-firewall. The retired sys-dev/usr-browser topology is historical;
+[deployment notes](history/machine-deployment-lab-notes-2026-10-09.md) retain the
+migration and acceptance evidence. Dom0's direct NetworkManager, Tailscale, and
+SSH services are disabled in this normal profile.
 
 ## First boot
 

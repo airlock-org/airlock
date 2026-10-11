@@ -603,7 +603,7 @@ Explicit flake outputs are also available, for example
 The expected repository path is:
 
 ```text
-/home/user/dev/airlock-org/airlock
+/path/to/airlock
 ```
 
 Airlock does not bake a mutable checkout into the immutable VM closure. If that

@@ -10,6 +10,7 @@ Airlock exposes four test-suite targets. They are intentionally not aliases:
 ## Quick
 
 ```bash
+uv sync --locked
 make test-quick
 ```
 
@@ -27,7 +28,11 @@ The checks include:
 - host capability detection,
 - shell syntax and static runner checks.
 
-The quick layer should pass on ordinary NixOS development hosts. It does not
+Prepare the locked Python dependencies explicitly before testing. Quick tests
+use `uv run --no-sync`, so the test command does not install dependencies.
+CI runs this layer on Linux without Nix or Xen and retains JUnit/JSON reports.
+
+The quick layer should pass on ordinary Linux development hosts. It does not
 prove that Xen boots or that Qubes services run.
 
 By default, local tests and Nix builds use the shared Airlock store under
@@ -314,7 +319,7 @@ Inside nested dom0, cached Qubes RPM/template inputs are copied to:
 ## Generated State
 
 The source tree, Nix code, scripts, docs, and Git history stay in
-`/home/user/dev/airlock-org/airlock`. The Airlock Nix store is a chroot local store at:
+`/path/to/airlock`. The Airlock Nix store is a chroot local store at:
 
 ```text
 /run/media/user/data/airlock/nix-root

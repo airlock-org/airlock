@@ -96,7 +96,7 @@ change was made during this investigation.
 
 After the second operator reboot, dom0's actual boot ID was
 `eba7098a-1080-48eb-86d8-f4e53a658e97`. Tailscale restored its persisted connection
-without fresh enrollment. `make machine-verify DEPLOY_TARGET=user@100.104.92.101`
+without fresh enrollment. `make machine-verify DEPLOY_TARGET=user@SYS_AGENT_ADDRESS`
 passed for the host and all six running guests against the previous selected
 release, transaction `1790962552320744861`, revision `714b6c3`. Sys-gui is still
 `5qvhnb2fja19hlk49r0527366rv8kmw5`; the native Activities change has **not** been

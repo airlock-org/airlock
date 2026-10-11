@@ -193,7 +193,7 @@ physical deployment separately. Use only guarded Airlock GC targets.
 
 - [Sys-ctrl ownership](05-sys-ctrl.md)
 - [Completed direct admission work](sys-dev-pool-admission.md)
-- [Pool-backed builder](../sys-dev-build-store.md)
+- [Pool-backed builder](../sys-agent-build-store.md)
 - [Admission policy and receiver](../../airlock-machine/lifecycle/misc/modules/pool-admission.nix)
 - [Artifact sender and receiver CLI](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/artifact_cli.py)
 - [Artifact validation and admission](../../airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src/airlock_qubes_storage/_engine/artifacts.py)

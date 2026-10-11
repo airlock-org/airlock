@@ -68,6 +68,8 @@
             airlockUsbGuestEntries = entries;
             inherit airlockMachineSeedArchive;
           };
+          # Keep the lab defaults; callers can construct another machine through
+          # airlock-machine.lib.mkMachineConfiguration { hardwareModules = [ ... ]; }.
           extraModules = [ ./lifecycle/image/profiles/usb-image.nix ];
         };
 
