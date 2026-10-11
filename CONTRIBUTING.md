@@ -7,7 +7,8 @@ Qubes policy. Prefer upstream integrations and upstreamable fixes. Start with
 ## Prepare a checkout
 
 Initialize the pinned component using [repository workflow](docs/repositories.md).
-Both sources must be present for the parent quick suite. On Linux, install Git,
+Both sources must be present for the parent quick suite. Hosted SSH clones
+require a GitHub SSH key with access to both repositories. On Linux, install Git,
 Bash, Make, Python >=3.11, and uv. The checks also use ordinary coreutils and
 OpenSSH tools. Some host capability checks skip when optional tools are absent.
 The CI environment includes jq, util-linux, e2fsprogs, and ripgrep.

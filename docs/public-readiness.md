@@ -38,13 +38,21 @@ with 5 Nix tests deselected. A focused Nix test proved replacement hardware driv
 the machine GPU assignment. Parsing changed Nix modules and evaluating the parent
 library succeeded. No full Nix/USB build or hardware acceptance was performed.
 
-Fresh local clone, workflow validation, and final source scan results are recorded
-below after the final preparation check. Hosted CI is not claimed as run.
+A fresh `git clone --no-local` of parent commit `5b6070d`, initialized from the
+local component source at `20bedc2`, installed locked dependencies from the local
+cache and passed **878 tests, 59 skipped**. Its working tree stayed clean. A Nix
+tripwire recorded only the host-capability `--version` probe; there were **no Nix
+evaluations or builds**. This exercised the documented local-source override
+while keeping the tracked SSH URLs intact. The clone was removed after checking.
+
+Both CI workflows passed actionlint v1.7.12. A local documentation check
+resolved 580 relative link targets with no missing files. Hosted CI is not claimed
+as run; remote availability and live deployment remain unverified.
 
 ## Source/history audit
 
-Checksum-verified Gitleaks **v8.30.1** scanned all available local refs before the
-final preparation commits: **927 parent commits** and **761 component commits**,
+Checksum-verified Gitleaks **v8.30.1** scanned all available local refs after the
+implementation commits: **929 parent commits** and **764 component commits**,
 with no detected secrets. This covers available local history, not unknown remote
 refs or ignored runtime files. Gitleaks is a pattern-based check, not proof that
 all sensitive material is absent. Both repositories retain two author-email
