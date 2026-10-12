@@ -25,7 +25,6 @@ export default function Home() {
             <a href="#main" className="nav-home" aria-current="page">Home</a>
             <a href="#architecture" className="nav-section">Architecture</a>
             <Link href="/docs/">Docs</Link>
-            <Link href="/docs/status/">Status</Link>
           </nav>
           <div className="header-actions">
             <Link href="/docs/" className="mobile-docs">Docs</Link>
