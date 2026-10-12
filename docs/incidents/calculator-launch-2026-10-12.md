@@ -53,3 +53,25 @@ blockers; none were pruned. Guarded development-host gc-auto was invoked, but
 does not resolve this separate physical dom0 capacity constraint. The final
 combined revision must be built/planned after controlled storage cleanup. Evidence and controller logs are under
 .airlock-logs/calculator-launch-2026-10-12/.
+
+## Authorized six-candidate cleanup
+
+The operator requested a before/after baseline and pruning of exactly the six
+unused prepared candidates identified in the review. Fresh coordinator previews
+showed no blockers and no boot-profile generations for each. The coordinator
+pruned 04169e377881, 6df4ead09e6e, 8616596dd273, cd9a473ecdeb, cf3529386ee5 and
+ed07925de8fa, retaining its audit records. All six pending roots are absent.
+Release inventory now contains 81 records rather than 87. Current khaki selection,
+immediate gray rollback and running host selection remain unchanged.
+
+Available filesystem bytes immediately before prune: 2,107,490,304.
+Available bytes immediately after: 2,109,140,992.
+Observed increase: 1,650,688 bytes (1.57 MiB), subject to ordinary live-system
+writes during the measurement. No broader pool GC, compaction, journal cleanup,
+host Nix GC or VM disk deletion was performed. Dropping these retention roots
+alone does not establish the bulk artifacts' reclaimable size. The deployment
+space reserve is still unmet. No tests were run.
+
+Full previews/results and baseline measurements are retained in dom0 at
+/var/log/airlock/candidate-cleanup-2026-10-12.json. Updated release and selection
+inventories are under .airlock-logs/calculator-launch-2026-10-12/.
