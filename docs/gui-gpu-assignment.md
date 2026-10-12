@@ -3,7 +3,7 @@
 The optional physical-GPU profile now connects a machine's GPU selection to
 early Xen reservation, existing Qubes bootstrap, and one guest start. Firmware
 delivery remains [a separate Qubes startup extension](amd-vbios-automatic.md).
-This is not automatic hardware discovery, reset certification, or Hyprland.
+This is not automatic hardware discovery or reset certification.
 
 ## Configuration boundary
 
@@ -119,10 +119,10 @@ Confirm the active libvirt hostdev, generated VFCT manifest and guest
 reboot should retain the same assignment and succeed without manual changes.
 Do not use repeated guest stop/start loops as a substitute for that check.
 
-The USB AMD lab now opts into the guest's physical XFCE/LightDM boot and starts
+The USB AMD lab now opts into the guest's physical desktop/LightDM boot and starts
 the input target only after successful `qvm-start`. A blank panel by itself
 does not identify which stage failed; check the guest display manager and each
-input sender separately. Hyprland remains a subsequent milestone.
+input sender separately.
 
 Implementation verification uses pytest fixtures with a different PCI address,
 port and vendor, plus Nix evaluation of normal, laptop and alternate selections.

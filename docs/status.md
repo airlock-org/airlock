@@ -22,7 +22,7 @@ Evidence is limited to the configuration and trial recorded in each
 - AMD GPU reset and restart failures remain under investigation.
 - GUI watcher startup/reconnection can require operational recovery.
 - First-run wizard acceptance and broader recovery trials remain pending.
-- Hyprland and additional-GPU work remain experimental/deferred.
+- Additional-GPU work remains experimental/deferred.
 - Compatibility cleanup has remaining persisted-state and Nix/EROFS acceptance.
 
 The latest recorded khaki-label deployment (2026-10-09) selected a host requiring

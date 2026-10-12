@@ -14,8 +14,8 @@ below preserve the original observations rather than defining today's backlog.
 Establish whether this laptop can give its internal GPU to `sys-gui` and run
 a usable physical desktop through the existing Xen/Qubes architecture.
 Progress is measured by evidence and completed gates, not elapsed time.
-Keep the initial desktop on XFCE/Xorg; Hyprland, inference and `sys-gpu` are
-outside this investigation.
+Keep the initial desktop on the Xorg path; alternative desktop experiments,
+inference and `sys-gpu` are outside this investigation.
 
 <a id="current-milestone--2026-09-14"></a>
 
@@ -23,8 +23,8 @@ outside this investigation.
 
 Later follow-up: [GNOME](../sys-gui-gnome.md) and forwarded application windows
 were verified on the physical lab. The normal USB entry now uses GNOME.
-Hyprland and XFCE builders remain in source; the experimental boot-menu
-choices described by older reports are no longer the normal image menu.
+The experimental boot-menu choices described by older reports are no longer
+the normal image menu.
 
 The rebuilt USB's **usb-gui-lab with Xen** now boots into a physical sys-gui
 desktop with hardware-accelerated AMD rendering. Boot ID:

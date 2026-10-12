@@ -10,16 +10,16 @@ reset effectiveness and broader hardware compatibility remain unproven.
 This records the earlier standalone GPU experiment. The current USB image ships
 the normal GNOME Airlock configuration and text recovery only; standalone and
 hybrid GUI builders remain in source but their closures are no longer embedded.
-References below to hybrid defaults and XFCE validation describe that earlier work.
+References below to hybrid defaults and desktop validation describe that earlier work.
 
 An experimental physical GPU profile, with a successful automatic laptop desktop
 boot; **not general hardware or reset certification**. The default USB
-configuration still runs the hybrid XFCE desktop with AMD driven by dom0.
+configuration still runs the hybrid desktop with AMD driven by dom0.
 The historical lab name remains an internal Nix specialisation/profile name;
 it is not a user-facing boot-menu entry or a runtime toggle.
 Its current milestone is reproducible boot-time GPU assignment and automatic
 firmware delivery, checked over SSH. The lab now also enables automatic
-XFCE/LightDM login and selected input forwarding. Boot
+desktop/LightDM login and selected input forwarding. Boot
 `f34306b1-b7f6-483a-bfc6-7ef8cf298e1c` now confirms successful automatic startup,
 framebuffer release, a working dom0 terminal, and hardware-accelerated AMD
 OpenGL in sys-gui. See [the current milestone](amd-gpu-investigation.md#current-milestone--2026-09-14).
@@ -52,13 +52,12 @@ The user-facing systemd-boot menu is intentionally limited to:
 | `Airlock (generation N)` | A retained older normal Xen generation |
 
 `Airlock` is always the default. The configured five-generation limit is retained;
-only the newest recovery entry is shown. The old hybrid, GUI-only, Hyprland and
-XFCE builders remain in the source tree but do not clutter the boot menu.
+only the newest recovery entry is shown. The old hybrid, GUI-only and experimental
+desktop builders remain in the source tree but do not clutter the boot menu.
 
-At the time of this experiment, GNOME and Hyprland were not hardware-verified.
-The successful desktop evidence above is for XFCE; later GNOME evidence is
-recorded separately in [the GNOME milestone](../sys-gui-gnome.md). See [the Hyprland milestone](../experiments/sys-gui-hyprland.md) for its
-build, boot, shortcuts and diagnostic commands.
+At the time of this experiment, GNOME was not hardware-verified.
+The successful desktop evidence above is for the earlier Xorg desktop; later
+GNOME evidence is recorded separately in [the GNOME milestone](../sys-gui-gnome.md).
 
 All manual entries retain direct dom0 networking, SSH and Tailscale. The lab
 reserves **only** `0000:04:00.0`, not audio, USB, PSP, ACP or storage functions.
@@ -160,7 +159,7 @@ images assign and start the reviewed GPU on lab boot; use the
 [fresh-flash acceptance checklist](../gui-gpu-assignment.md) for the next test.
 
 1. Boot the default USB. Confirm the laptop's internal filesystems are not
-   mounted, Xen is running, XFCE/input works and Tailscale SSH reconnects.
+   mounted, Xen is running, desktop/input works and Tailscale SSH reconnects.
 2. An optional recovery rehearsal is to boot **`Airlock (recovery)`**,
    verify console login and remote access, then return to the default entry.
    This rehearsal was skipped for the current experiment; see the plan's

@@ -10,12 +10,12 @@ The GPU lab below is retained as earlier opt-in groundwork, not the default
 profile or a verified physical GPU setup.
 
 The intended deployment assigns **AMD integrated graphics to `sys-gui`** and
-the **NVIDIA RTX 3090 to `sys-gpu`**. The current physical USB desktop uses GNOME; Hyprland and AI inference are
-deferred experiments. When added, the
+the **NVIDIA RTX 3090 to `sys-gpu`**. The current physical USB desktop uses GNOME;
+AI inference remains a deferred experiment. When added, the
 inference engine and model storage may live inside `sys-gpu`.
 
-This supersedes the earlier proposal to make Hyprland depend on a virtual GPU
-provided by `sys-gpu`. With separate physical GPUs, Hyprland need not share the
+This supersedes the earlier proposal to make the desktop depend on a virtual GPU
+provided by `sys-gpu`. With separate physical GPUs, the desktop need not share the
 3090 with inference. Keep Xen, qrexec, QubesDB, qubesd, libvirt, and Qubes policy.
 
 A read-only inventory of the development host found:
@@ -44,7 +44,7 @@ is [`sys-gpu-guest.nix`](../../airlock-machine/lifecycle/misc/modules/sys-gpu-gu
 - HVM mode with fixed 2048 MiB RAM prepares the domain for PCI experiments.
 - No NetVM, GUI VM, autostart, custom administrative RPC, or inference service.
 - Mesa/EGL/Vulkan diagnostic tools and `airlock-gpu-probe` are installed.
-- The normal image's domains, XFCE session, and default GUI VM are unchanged.
+- The normal image's domains, desktop session, and default GUI VM are unchanged.
 - This is a bootstrap lab image. It does not add `sys-gpu` to the normal
   initial runtime configuration; a later normal configuration deployment must
   explicitly declare the domain before managing it through that workflow.
@@ -91,5 +91,4 @@ graphics. Those unverified properties are explicit in the JSON report.
 ## Outstanding hardware work
 
 The [sys-gpu hardware plan](../todo/sys-gpu-hardware.md) records the deferred
-physical assignment, rendering, lifecycle and inference work. The independent
-[Hyprland trial](../todo/sys-gui-hyprland-trial.md) has its own acceptance plan.
+physical assignment, rendering, lifecycle and inference work.

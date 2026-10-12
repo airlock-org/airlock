@@ -31,8 +31,7 @@ QubesDB, qubesd, libvirt and Qubes policy.
 5. Add inference and model storage only after hardware ownership and rendering
    pass. Define its own service and resource acceptance before implementation.
 
-The [Hyprland desktop trial](sys-gui-hyprland-trial.md) is independent of this
-additional-GPU work. Cross-VM graphics remains optional research, outside these
+Cross-VM graphics remains optional research, outside these
 acceptance criteria. The earlier notes identify
 [Qubes' Rust virtual GPU backend](https://github.com/QubesOS/qubes-virtgpu-host)
 as an upstream research starting point; that observation is dated and does

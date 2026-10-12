@@ -68,13 +68,14 @@ Traditional Qubes domains keep the mature TemplateVM/AppVM model:
 ```nix
 domains.sys-net = {
   backend.type = "qubes-template";
-  template = "fedora-44-xfce";
+  template = "fedora-template";
   label = "red";
   netvm = null;
 };
 ```
 
-These are ordinary Qubes domains. Fedora, Debian, `sys-usb`, and other
+Use the name of an installed TemplateVM for `template`; `fedora-template` above
+is an example name. These are ordinary Qubes domains. Fedora, Debian, `sys-usb`, and other
 conventional guests stay on this path unless there is a specific reason to move
 them. The bootstrap `sys-net` and `usr-cmd` domains use the Nix-native path below.
 

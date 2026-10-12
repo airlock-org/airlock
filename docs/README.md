@@ -61,7 +61,6 @@ historical paths.
 | [Separate bootstrap from normal startup](completed/14-separate-bootstrap-from-normal-startup.md) | Completed for implemented scope. First reboot verified and login/input/application launch accepted; GUI configuration precedes background work. Repeated unchanged-boot reuse, fresh initialization and broader recovery checks remain unverified. |
 | [GNOME Files launcher](todo/sys-gui-files-launcher.md) | Planned. Hide local Files in sys-gui, retain Nautilus for DING, and expose the usr-home launcher. |
 | [Display consistency across VMs](todo/cross-vm-display-consistency.md) | Planned. Align cursors, scaling, fonts and appearance; use GNOME Console for utility terminals and verify display layout changes. |
-| [Hyprland physical trial](todo/sys-gui-hyprland-trial.md) | Deferred. Configuration exists; physical Wayland desktop and cross-VM transport are unverified. |
 | [sys-gpu hardware](todo/sys-gpu-hardware.md) | Deferred. Physical assignment, rendering, lifecycle and later inference work for an additional GPU. |
 | [AMD GPU lifecycle](todo/amd-gpu-lifecycle.md) | Open investigation. Reset effectiveness, state isolation and supported lifecycle operations need evidence. |
 | [Qubes restart race](todo/qubesd-restart-race.md) | Open investigation. Socket readiness and client recovery; the cause of the historical black-screen incident is unconfirmed. |
@@ -102,9 +101,7 @@ alone do not imply that they describe every profile.
 mechanisms with hardware-specific evidence boundaries.
 
 [GNOME](sys-gui-gnome.md) records verified desktop integration and deferred
-appearance/window work. [Hyprland](experiments/sys-gui-hyprland.md) remains an unverified
-physical desktop experiment under `experiments/`; its old menu instructions
-are historical.
+appearance/window work.
 [sys-gpu](experiments/sys-gpu.md) is a separate optional hardware direction, not a desktop
 prerequisite.
 

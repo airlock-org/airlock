@@ -13,8 +13,7 @@ every appearance, login/lock, and window-integration check below is complete.
 
 The normal **Airlock** USB entry now uses the physical-GPU GNOME desktop
 (internal profile: `usb-lab`). See [USB development](usb-dev.md) for build,
-boot, and recovery instructions. Hyprland and XFCE builders remain in source,
-but the older experimental menu entries are no longer shipped as desktop
+boot, and recovery instructions. Older experimental menu entries are no longer shipped as desktop
 choices. The evidence below records the GNOME integration milestone; it does
 not establish general hardware compatibility or close every lifecycle check.
 

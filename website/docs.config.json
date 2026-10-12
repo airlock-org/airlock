@@ -31,7 +31,6 @@
       "slug": "experiments",
       "title": "Experiments",
       "pages": [
-        { "source": "docs/experiments/sys-gui-hyprland.md", "slug": "hyprland", "title": "Hyprland trial", "description": "An opt-in desktop experiment with physical verification pending." },
         { "source": "docs/experiments/sys-gpu.md", "slug": "sys-gpu", "title": "Additional GPU", "description": "The optional sys-gpu hardware direction." }
       ]
     },

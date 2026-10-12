@@ -1,6 +1,6 @@
 # sys-gui desktop and login
 
-Scope: this document describes the **nested/hybrid XFCE GUI path** and its
+Scope: this document describes the **nested/hybrid GUI path** and its
 historical physical-GPU roadmap. It is not the current physical USB desktop
 runbook. The USB lab uses physical-GPU GNOME; see [USB lab](usb-lab.md),
 [GNOME evidence](sys-gui-gnome.md), and [input forwarding](sys-gui-input.md).
@@ -22,11 +22,11 @@ Dom0 automatically opens a greeterless relay session. It retains Xorg,
 LightDM's session supervisor, and `qubes-guid` to forward the guest display.
 The Qubes GUI agent starts the outer Xorg server on `:1` inside `sys-gui`;
 the `qubes.GuiVMSession` RPC then starts guest LightDM on a software-cursor
-Xephyr display. Guest LightDM authenticates the user and launches XFCE.
+Xephyr display. Guest LightDM authenticates the user and launches the desktop.
 Logging out returns to the guest login screen. Disconnecting the relay
 stops guest LightDM, so reconnecting starts at the greeter.
 
-Dom0 no longer installs XFCE, its fallback xterm desktop, Qubes Manager,
+Dom0 no longer installs a desktop session, its fallback xterm desktop, Qubes Manager,
 the Qubes desktop-manager frontend package, or Qubes artwork in its system
 profile. Xen, libvirt, qubesd, QubesDB, qrexec, and policy enforcement remain
 in dom0. The desktop-linux-common package stays there because it also
@@ -67,7 +67,7 @@ custom `sys-gpu` deployment.
 It reuses Xen, qubesd, QubesDB, qrexec, libvirt, the Qubes GUI transport and the
 existing Nix-native guest builder. The full image profiles remain unchanged.
 
-- XFCE and the current hybrid display/login path are retained. Dom0 still
+- The current hybrid desktop and display/login path are retained. Dom0 still
   hosts the outer display; this image does **not** pass through the AMD GPU.
 - The sole guest has no NetVM and no PCI assignments.
 - Network, configuration, application and `sys-gpu` VM images are not selected
@@ -127,10 +127,10 @@ AMD direct-display configuration still needs:
 3. A direct display-manager path in `sys-gui`, independent of the existing
    dom0 GUI session relay, plus keyboard/mouse delivery at login.
 4. A tested recovery boot entry before handing over the only display GPU.
-5. XFCE login, locking, monitor modes and reboot validation on hardware.
+5. Desktop login, locking, monitor modes and reboot validation on hardware.
 
-Hyprland follows that milestone, with separate Qubes window/input integration
-testing. No GPU discovery or automatic device reassignment is introduced here.
+Qubes window/input integration needs separate testing. No GPU discovery or
+automatic device reassignment is introduced here.
 
 The opt-in physical laptop experiment now has a confirmed GUI login with
 keyboard and pointer input. Its [reusable input module and findings](sys-gui-input.md)

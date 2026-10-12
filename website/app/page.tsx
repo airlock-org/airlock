@@ -138,7 +138,7 @@ export default function Home() {
             <div className="desktop-details">
               <Link href="/docs/guides/gnome/"><Monitor size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>GNOME desktop</strong><span>Current physical lab</span></p></Link>
               <Link href="/docs/guides/gnome/"><Box size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>VM identity</strong><span>Application context</span></p></Link>
-              <Link href="/docs/experiments/hyprland/"><Code2 size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Hyprland trial</strong><span>Acceptance pending</span></p></Link>
+              <Link href="/docs/guides/usb-lab/"><Terminal size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Development access</strong><span>Through sys-agent</span></p></Link>
               <Link href="/docs/guides/machine-deployment/"><BookOpen size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Recovery guides</strong><span>Deployment and rollback</span></p></Link>
             </div>
             <Link href="/docs/guides/gnome/" className="text-link">Read about the desktop <ArrowRight size={17} aria-hidden="true" /></Link>

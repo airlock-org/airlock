@@ -184,4 +184,4 @@ state; platform reset efficacy and repeatability remain hardware questions.
 Unresolved: actual assignment success, guest initialization, physical panel,
 and reset/state isolation across lifecycle transitions. Those require a
 separately accepted hardware experiment, not more confidence inferred from
-sysfs listings. Hyprland and input forwarding remain outside this review.
+sysfs listings. Desktop experiments and input forwarding remain outside this review.

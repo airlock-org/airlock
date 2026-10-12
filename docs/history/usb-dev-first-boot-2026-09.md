@@ -112,7 +112,7 @@ prompt for the dom0 password. This is still a development-only capability.
 ordinary-user startup path and error forwarding. The launcher package build
 and laptop retry remain pending.
 
-The XFCE panel's **Shut Down** action requests a clean dom0 power-off through
+The desktop panel's **Shut Down** action requests a clean dom0 power-off through
 a single qrexec service restricted to `sys-gui`; it does not merely halt the
 GUI VM. Log out and reboot remain guest-session actions for now.
 

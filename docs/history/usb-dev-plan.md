@@ -14,13 +14,13 @@ integration remain hardware-development follow-ups.
 See [the runbook](../usb-dev.md) for commands. No builds or tests authorized for this change.
 
 Scope: ThinkPad T14 Gen 3 AMD (21CFCTO1WW), persistent removable development
-system, dom0 + sys-gui only. No sys-gpu, inference or Hyprland work yet.
+system, dom0 + sys-gui only. No sys-gpu, inference or alternative desktop work yet.
 The existing VM profiles are unchanged.
 
 ## Delivery sequence
 
 1. `usb-dev` NixOS configuration and `airlock-usb-dev-image`: EFI raw image,
-   hybrid XFCE, direct dom0 Wi-Fi/Ethernet, Codex/Git/Zellij, Tailscale and
+   hybrid desktop, direct dom0 Wi-Fi/Ethernet, Codex/Git/Zellij, Tailscale and
    key-only SSH restricted by the firewall to tailscale0.
 2. Guarded USB writer, offline personalization and a writable Git clone;
    separate encrypted credential storage and import. Never build secrets into
@@ -47,7 +47,7 @@ Observed over SSH on the laptop, not inferred from the desktop:
 2. Select an expendable USB SSD (the fixed 32 GiB POC image fits a nominal
    64 GB device; 128 GB is recommended for development), personalize,
    boot via the firmware's removable-media menu. No internal installation.
-3. Confirm Xen, Qubes lifecycle, XFCE, inputs, networking and Tailscale SSH.
+3. Confirm Xen, Qubes lifecycle, desktop, inputs, networking and Tailscale SSH.
    Cold reboot and confirm repo, VM state and logs persist.
 4. Confirm recovery from a text-only boot before any GPU experiment.
 5. Reinspect PCI ownership/reset topology under Xen; attempt passthrough only
