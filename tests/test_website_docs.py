@@ -295,7 +295,8 @@ def test_export_internal_links_and_fragments_resolve(exported_site):
     assert not failures, "\n".join(failures)
 
 
-def test_export_documentation_images_are_local_and_present(exported_site):
+@pytest.mark.parametrize("filename", ["network-topology.svg", "gui-topology.svg"])
+def test_export_documentation_images_are_local_and_present(exported_site, filename):
     architecture = HTMLPage(
         (exported_site / "docs/architecture/index.html").read_text()
     )
@@ -308,7 +309,7 @@ def test_export_documentation_images_are_local_and_present(exported_site):
                 path,
                 src,
             )
-    diagram = (ROOT / "website/public/diagrams/vm-topology.svg").read_bytes()
+    diagram = (ROOT / "website/public/diagrams" / filename).read_bytes()
     assert any(
         (exported_site / unquote(urlsplit(src).path).lstrip("/")).read_bytes()
         == diagram

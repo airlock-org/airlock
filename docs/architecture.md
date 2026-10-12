@@ -17,31 +17,41 @@ practical. Runtime state and generated release records have distinct ownership.
 ## VM topology
 
 The current USB lab starts sys-gui, sys-agent, sys-ctrl, sys-net, sys-firewall,
-and usr-home. The diagram shows this physical development profile, not every
-possible Airlock configuration.
+and usr-home. All six guests run on the same NixOS dom0 / Xen host. These views
+describe the normal physical development profile; optional experiments and
+on-demand configuration VMs are omitted.
 
-![Physical USB lab VM topology: dom0 hosts six guests; sys-agent, sys-ctrl and usr-home route through sys-firewall and sys-net to the physical network. sys-gui has no NetVM. sys-agent has a development-only dom0 shell.](../website/public/diagrams/vm-topology.svg)
+### Network routing
 
-[Open the full-size topology diagram](../website/public/diagrams/vm-topology.svg).
+![Network topology: sys-agent, sys-ctrl and usr-home use sys-firewall as their NetVM; sys-firewall uses sys-net, which owns the physical NICs.](../website/public/diagrams/network-topology.svg)
 
-Blue arrows show the upstream network path. The dashed orange arrow is the
-lab's explicitly permitted `sys-agent` → dom0 development shell; it is not a
-network route or a permission granted to every guest.
+[Open the full-size network diagram](../website/public/diagrams/network-topology.svg).
 
-- **Network:** sys-net owns the physical NICs. Sys-agent, sys-ctrl, and usr-home
-  use sys-firewall as their NetVM; sys-firewall uses sys-net. Dom0 has no default
-  network route in the normal lab profile.
-- **Display:** sys-gui owns the physical desktop GPU and runs GNOME without a
-  NetVM. Sys-agent and usr-home display their application windows in sys-gui
-  through the Qubes GUI transport; their processes and data stay in their VMs.
-- **Deployment:** sys-agent submits committed source to sys-ctrl. Sys-ctrl
-  validates and builds candidates and requests admission/activation from dom0
-  through the supported, policy-gated qrexec operations. Dom0 retains lifecycle
-  and activation authority.
+Blue arrows follow the upstream network path. Sys-agent, sys-ctrl, and usr-home
+use sys-firewall as their NetVM; sys-firewall uses sys-net. Sys-net owns the
+physical NICs. Dom0 has no default network route, and sys-gui has no NetVM.
 
-The diagram omits optional experiments and on-demand configuration VMs that
-are not part of this normal six-guest topology. Read the
-[USB lab guide](usb-lab.md) for remote access and the development boundary.
+### GUI and input
+
+![GUI topology: application windows from sys-agent and usr-home reach GNOME in sys-gui through Qubes GUI transport. sys-gui owns the display GPU; dom0 forwards keyboard and pointer events through the Qubes input proxy.](../website/public/diagrams/gui-topology.svg)
+
+[Open the full-size GUI diagram](../website/public/diagrams/gui-topology.svg).
+
+Orange arrows show window display through the Qubes GUI transport and the
+physical display driven by sys-gui's assigned GPU. Application processes and
+data stay in sys-agent and usr-home. Sys-gui runs GNOME without a NetVM.
+
+The dashed path shows keyboard and pointer events forwarded from dom0 through
+the Qubes input proxy. It does not move input-device ownership to application
+VMs. See [GNOME integration](sys-gui-gnome.md) and
+[physical input](sys-gui-input.md) for implementation and acceptance scope.
+
+### Development access
+
+The lab explicitly permits a `sys-agent` → dom0 development shell over qrexec.
+This privileged RPC is separate from network routing and GUI transport;
+other guests do not inherit it. Read the [USB lab guide](usb-lab.md) for remote
+access and the development boundary.
 
 ## Declaration and activation
 
@@ -59,8 +69,8 @@ Nix host and guest declarations
      declared NixOS guests
 ```
 
-This flow shows how Nix declarations become a running machine. The VM topology
-above describes the resulting domains and their separate responsibilities.
+This flow shows how Nix declarations become a running machine. The topology
+views above describe the resulting domains and their separate responsibilities.
 
 ## Whole-machine releases
 

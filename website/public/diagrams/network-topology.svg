@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" role="img" aria-labelledby="title description">
+  <title id="title">Airlock network topology</title>
+  <desc id="description">In the normal physical USB lab, sys-agent, sys-ctrl and usr-home use sys-firewall as their NetVM. sys-firewall uses sys-net, which owns the physical network devices. dom0 has no default network route and sys-gui has no NetVM.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1 9 5 0 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linejoin="round"/></marker>
+  </defs>
+  <style>
+    :root { --canvas: #f8fafc; --surface: #fff; --line: #dce3eb; --text: #243341; --muted: #627284; --accent: #267a9e; --tint: #eff8fc; }
+    @media (prefers-color-scheme: dark) { :root { --canvas: #101820; --surface: #17232e; --line: #344655; --text: #e1eaf2; --muted: #a9bac9; --accent: #80c9e8; --tint: #182c38; } }
+    text { font-family: Inter, system-ui, sans-serif; fill: var(--text); }
+    .eyebrow { font-size: 14px; font-weight: 600; letter-spacing: 1.6px; fill: var(--muted); }
+    .name { font-family: ui-monospace, monospace; font-size: 22px; font-weight: 600; }
+    .detail { font-size: 17px; fill: var(--muted); }
+    .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+    .route { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .edge-label { font-size: 14px; fill: var(--accent); }
+  </style>
+  <rect x="1" y="1" width="898" height="498" rx="16" fill="var(--canvas)" stroke="var(--line)"/>
+  <text x="40" y="40" class="eyebrow">NETWORK ROUTING</text>
+  <text x="860" y="40" class="eyebrow" text-anchor="end">USB LAB</text>
+
+  <rect x="40" y="80" width="216" height="80" rx="10" class="node"/>
+  <text x="60" y="113" class="name">sys-agent</text>
+  <text x="60" y="139" class="detail">Development access</text>
+  <rect x="40" y="192" width="216" height="80" rx="10" class="node"/>
+  <text x="60" y="225" class="name">sys-ctrl</text>
+  <text x="60" y="251" class="detail">Release controller</text>
+  <rect x="40" y="304" width="216" height="80" rx="10" class="node"/>
+  <text x="60" y="337" class="name">usr-home</text>
+  <text x="60" y="363" class="detail">User applications</text>
+
+  <path d="M256 120H306V344H256M256 232H360" class="route"/>
+  <circle cx="306" cy="232" r="3" fill="var(--accent)"/>
+  <path d="M306 232H360" class="route" marker-end="url(#arrow)"/>
+  <text x="310" y="212" class="edge-label">NetVM</text>
+
+  <rect x="362" y="192" width="216" height="80" rx="10" class="node"/>
+  <text x="382" y="225" class="name">sys-firewall</text>
+  <text x="382" y="251" class="detail">Network filtering</text>
+  <path d="M578 232H642" class="route" marker-end="url(#arrow)"/>
+  <text x="610" y="212" class="edge-label" text-anchor="middle">NetVM</text>
+
+  <rect x="644" y="192" width="216" height="80" rx="10" fill="var(--tint)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="664" y="225" class="name">sys-net</text>
+  <text x="664" y="251" class="detail">Physical NIC owner</text>
+  <path d="M752 272V342" class="route" marker-end="url(#arrow)"/>
+  <rect x="644" y="344" width="216" height="80" rx="10" class="node"/>
+  <text x="664" y="377" font-size="18" font-weight="600">Physical network</text>
+  <text x="664" y="403" class="detail">Assigned NIC uplink</text>
+
+  <path d="M40 450H860" stroke="var(--line)"/>
+  <text x="40" y="479" class="detail">dom0 has no default route. sys-gui has no NetVM.</text>
+</svg>
