@@ -53,7 +53,7 @@ def test_machine_is_a_real_pinned_submodule():
     assert modules['submodule "airlock-machine"']["path"] == "airlock-machine"
     assert (
         modules['submodule "airlock-machine"']["url"]
-        == "git@github.com:airlock-org/airlock-machine.git"
+        == "git@github.com:airlock-org/machine.git"
     )
 
 

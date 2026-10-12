@@ -1,6 +1,7 @@
 # Local public-readiness preparation
 
-Prepared on 2026-10-11. Changes are local. Neither repository visibility nor
+Local preparation recorded on 2026-10-11. At that point, changes were local.
+Neither repository visibility nor
 hosting settings changed; no commits, images, artifacts, or releases were
 uploaded, and no live machine was deployed.
 
@@ -14,7 +15,7 @@ uploaded, and no live machine was deployed.
 - USB provisioning prompts for a dom0 password by default and accepts an explicit
   development-password opt-in. The SSH public-key path is configurable.
 - The component URL and remote clone examples use SSH:
-  `git@github.com:airlock-org/airlock-machine.git` and
+  `git@github.com:airlock-org/machine.git` and
   `git@github.com:airlock-org/airlock.git`. Local-source overrides remain documented.
 - The default lab hardware remains intact; `hardwareModules` can replace it,
   and physical GUI assignment derives the PCI port from that hardware declaration.
@@ -84,3 +85,12 @@ gitleaks git airlock-machine --log-opts='--all' --redact --report-format=json \
 
 Further hardware acceptance and existing feature plans remain separate from this
 source-preparation work. See [status](status.md) and [the docs index](README.md).
+
+## Authorized commit transfer (2026-10-12)
+
+The user subsequently authorized pushing commits to the existing repositories.
+The component's actual SSH remote is `git@github.com:airlock-org/machine.git`;
+the local source directory remains `airlock-machine`. The parent uses
+`git@github.com:airlock-org/airlock.git`. The submodule URL, instructions, and
+component security-reporting link now match these existing destinations.
+Repository visibility and hosting settings remain outside this authorization.

@@ -8,10 +8,11 @@ tests. Keep one editable source per runtime helper and component test.
 
 ## Clone
 
-The intended component URL in `.gitmodules` is
-`git@github.com:airlock-org/airlock-machine.git`. Both repositories and the
+The component URL in `.gitmodules` is
+`git@github.com:airlock-org/machine.git`. Both repositories and the
 pinned component commit must be accessible before a remote recursive clone can
-work. Updating this file locally does not create or publish a remote.
+work. The existing GitHub repository is named `machine`; its local submodule
+directory remains `airlock-machine`. Updating this file does not change visibility.
 
 ```sh
 git clone --recurse-submodules git@github.com:airlock-org/airlock.git
