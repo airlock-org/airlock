@@ -83,16 +83,6 @@ a, button { -webkit-tap-highlight-color: transparent; }
 .emblem-rule { display: block; height: 2px; width: 34px; background: var(--site-accent); margin-block: 29px 23px; }
 .hero-emblem figcaption p { font-size: 10px; line-height: 1.9; white-space: nowrap; letter-spacing: .09em; }
 
-.features { padding-bottom: 52px; scroll-margin-top: 112px; }
-.feature-grid { border-top: 1px solid var(--site-line); padding-top: 30px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
-.feature-card { position: relative; display: flex; align-items: flex-start; gap: 21px; min-height: 145px; padding: 25px 23px; border: 1px solid #2a4053; border-radius: 8px; background: linear-gradient(145deg, #11202b88, #0a151d33); transition: border-color .18s, background .18s, transform .18s; }
-.feature-card > svg { color: #a8c1db; flex-shrink: 0; }
-.feature-card h3 { font-size: 16px; line-height: 1.35; font-weight: 500; letter-spacing: -.025em; color: var(--site-fg); }
-.feature-card p { color: var(--site-muted); line-height: 1.65; font-size: 14px; margin-top: 10px; }
-.feature-card .feature-arrow { position: absolute; top: 13px; right: 13px; color: #728ca3; opacity: .65; transition: color .18s, transform .18s; }
-.feature-card:hover, .feature-card:focus-visible { border-color: #ac5a3c; background: #12212a; transform: translateY(-2px); }
-.feature-card:hover .feature-arrow, .feature-card:focus-visible .feature-arrow { color: var(--site-accent); transform: translate(1px, -1px); }
-
 .architecture-section { border-block: 1px solid #223544; scroll-margin-top: 80px; background: #0b151a55; }
 .architecture-inner { display: grid; grid-template-columns: .82fr 1.18fr; gap: 60px; padding-block: 66px; align-items: center; }
 .system-copy, .desktop-copy, .domain-diagram { min-width: 0; }
@@ -171,7 +161,6 @@ a, button { -webkit-tap-highlight-color: transparent; }
   .header-inner { gap: 18px; }.desktop-nav { gap: 20px; }.nav-home { display: none !important; }
   .header-actions { gap: 16px; }
   .hero { gap: 34px; }.hero-emblem { gap: 28px; }
-  .feature-card { gap: 16px; padding: 24px 20px; }
   .architecture-inner { gap: 34px; }
   .domain-diagram { padding: 18px; }
   .desktop-section { gap: 34px; }
@@ -189,7 +178,6 @@ a, button { -webkit-tap-highlight-color: transparent; }
   .hero h1 { font-size: 62px; }.hero-tagline { font-size: 37px; }
   .hero-emblem { width: 100%; max-width: 560px; min-height: 310px; margin-inline: auto; justify-content: center; gap: 44px; }
   .hero-emblem > img { max-width: 270px; }
-  .feature-grid { grid-template-columns: 1fr 1fr; gap: 16px; }
   .architecture-inner { grid-template-columns: minmax(0, 1fr); gap: 35px; padding-block: 52px; }
   .system-copy { max-width: 620px; }
   .domain-diagram { width: 100%; max-width: 700px; padding: 24px; }
@@ -215,9 +203,6 @@ a, button { -webkit-tap-highlight-color: transparent; }
   .hero-emblem { min-height: 235px; gap: 25px; }.hero-emblem > img { width: 55%; max-width: 210px; }
   .hero-emblem figcaption { font-size: 11px; }.hero-emblem figcaption p { font-size: 9px; }
   .emblem-grid { inset-inline: 0; }
-  .features { padding-bottom: 36px; }
-  .feature-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; padding-top: 24px; }
-  .feature-card { min-height: 0; padding: 22px; gap: 22px; }.feature-card p { font-size: 14px; }
   .architecture-inner { padding-block: 40px; }.system-copy h2 { font-size: clamp(25px, 6.8vw, 30px); }
   .system-copy > p:not(.eyebrow), .desktop-copy > p:not(.eyebrow) { font-size: 14px; }
   .system-checklist { font-size: 13px; gap: 11px; }
@@ -261,6 +246,4 @@ a, button { -webkit-tap-highlight-color: transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
   .airlock-site * { transition: none; }
-  .feature-card:hover, .feature-card:focus-visible,
-  .feature-card:hover .feature-arrow, .feature-card:focus-visible .feature-arrow { transform: none; }
 }

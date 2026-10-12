@@ -7,12 +7,6 @@ import { Brand } from "@/components/brand";
 import { MobileNav } from "@/components/mobile-nav";
 
 const github = "https://github.com/airlock-org/airlock";
-const features = [
-  { icon: Box, title: "NixOS", text: "Declare host and guest systems together, with pinned build inputs.", href: "/docs/architecture/" },
-  { icon: Shield, title: "Qubes architecture", text: "Retain Qubes VM lifecycle, device ownership, and policy, with inter-VM RPC through qrexec.", href: "/docs/architecture/" },
-  { icon: Terminal, title: "Computer assistant", text: "A dedicated workspace to help inspect, configure, and maintain your computer.", href: "/docs/guides/assistant/" },
-  { icon: GitBranch, title: "Machine releases", text: "Deploy committed configuration with verification and rollback.", href: "/docs/guides/machine-deployment/" },
-];
 const systemDomains = [
   { name: "sys-gui", role: "GNOME desktop", icon: Monitor, href: "/docs/guides/gnome/" },
   { name: "sys-net", role: "Network devices", icon: Globe, href: "/docs/architecture/#network-routing" },
@@ -29,7 +23,6 @@ export default function Home() {
           <Brand />
           <nav className="desktop-nav" aria-label="Main navigation">
             <a href="#main" className="nav-home" aria-current="page">Home</a>
-            <a href="#features" className="nav-section">Features</a>
             <a href="#architecture" className="nav-section">Architecture</a>
             <Link href="/docs/">Docs</Link>
             <Link href="/docs/status/">Status</Link>
@@ -64,18 +57,6 @@ export default function Home() {
               <p>DECLARED IN NIX.<br />BUILT ON QUBES.</p>
             </figcaption>
           </figure>
-        </section>
-        <section className="features site-container" id="features" aria-labelledby="features-title">
-          <h2 id="features-title" className="sr-only">Features</h2>
-          <div className="feature-grid">
-            {features.map(({ icon: Icon, title, text, href }) => (
-              <Link href={href} className="feature-card" key={title}>
-                <Icon size={30} strokeWidth={1.5} aria-hidden="true" />
-                <div><h3>{title}</h3><p>{text}</p></div>
-                <ArrowUpRight size={15} className="feature-arrow" aria-hidden="true" />
-              </Link>
-            ))}
-          </div>
         </section>
         <section className="architecture-section" id="architecture" aria-labelledby="architecture-title">
           <div className="site-container architecture-inner">
