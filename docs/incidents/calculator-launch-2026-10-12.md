@@ -75,3 +75,33 @@ space reserve is still unmet. No tests were run.
 Full previews/results and baseline measurements are retained in dom0 at
 /var/log/airlock/candidate-cleanup-2026-10-12.json. Updated release and selection
 inventories are under .airlock-logs/calculator-launch-2026-10-12/.
+
+## Manifest-based pool GC
+
+After operator authorization to reclaim unused closure-store artifacts/views,
+the existing airlock-closure-store gc ran with keep-generations=2. A read-only
+compaction preview was stopped before any compaction because its full payload
+verification was unnecessary for this initial pass. The existing GC also
+verifies live payloads; it finished successfully in approximately 465 seconds,
+hashing 17,096,320,512 bytes with 4,542 verification cache hits. No validation
+checks were bypassed and no replacement maintenance mechanism was introduced.
+
+Available bytes before GC: 2,105,470,976; after: 12,773,150,720.
+Observed gain: 10,667,679,744 bytes (9.94 GiB), subject to live-system writes.
+The closure store's allocated usage fell from about 30 GiB to 20 GiB;
+the filesystem is now approximately 78% used, with about 12 GiB available.
+GC removed 70 stored generations: 16 dom0, 13 sys-agent-builder and
+41 sys-ctrl-builder. It removed 57 unused store views, zero shared-object
+metadata entries and zero backing segments. It retained 198 generations and
+recognized 36 running references, with no in-progress storage generations.
+This did not prune additional machine-release records, delete VM private disks,
+clear logs or run host Nix-store GC. No reboot or tests were required.
+
+Normal machine verification after cleanup reports complete for the current
+khaki machine generation. The disk-space blockage is resolved; the committed
+Calculator reliability fixes still require a fresh combined deployment plan
+and live activation. Audit files in dom0:
+/var/log/airlock/pool-gc-baseline-2026-10-12.json,
+/var/log/airlock/pool-gc-2026-10-12.json and
+/var/log/airlock/pool-gc-summary-2026-10-12.json.
+Verification: .airlock-logs/calculator-launch-2026-10-12/verify-after-pool-gc.log.
