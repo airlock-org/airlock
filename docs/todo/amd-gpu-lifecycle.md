@@ -78,8 +78,10 @@ or that their proposed patches are merged or applicable to the pinned kernel.
 Do not backport an experimental recovery series as an established fix.
 
 This investigation performed no GPU reset, PSR write, PCI change or desktop
-restart. The current display remains available. Successful mitigation and
-recovery still require separate measured evidence.
+restart. The current display remains available. The subsequent implementation
+adds a laptop sys-gui PSR boot mitigation and a manual recovery tool; see
+[deployment and recovery instructions](../gpu-display-recovery.md). Successful
+mitigation and recovery still require separate measured evidence.
 
 - Review the currently pinned Xen, Qubes, libvirt and kernel reset paths against
   the actual device and sibling topology. Separate predicted behavior from
