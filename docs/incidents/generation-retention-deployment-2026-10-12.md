@@ -64,3 +64,13 @@ GUI reconnection and final guest verification. The host is still running the
 previous generation. A verification request at this intermediate phase did not
 succeed; this is not a completed or post-reboot verified deployment. Do not
 reboot until reconnection finishes and status reports `reboot-required`.
+
+The first login arrived after the reconnection timeout. Normal resume replayed
+the affected VM restarts; after a second physical sign-in, transaction
+`1791811335379818663` reached `reboot-required` with no error. All six guests
+reported their expected running systems, and usr-home reconnected to sys-gui
+without restarting usr-home. `make machine-verify` passed at the pre-reboot
+boundary. The selected host is
+`/nix/store/gsi4qfc2gb60aqmzvnvijnai8g3mglcz-nixos-system-dom0-26.11.20260904.801bef6`.
+Host boot and automatic retention/GC activation still require reboot and
+post-reboot verification; the user has been told it is now ready to reboot.
