@@ -46,7 +46,6 @@ export default function Home() {
               <Link href="/docs/getting-started/" className="site-button primary">Get started <ArrowRight size={17} aria-hidden="true" /></Link>
               <Link href="/docs/" className="site-button secondary"><BookOpen size={16} aria-hidden="true" /> Explore the docs</Link>
             </div>
-            <Link href="/docs/status/" className="hero-note"><span className="status-dot" /> See what has been verified <ArrowRight size={13} aria-hidden="true" /></Link>
           </div>
           <figure className="hero-emblem">
             <div className="emblem-grid" aria-hidden="true" />

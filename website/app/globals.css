@@ -59,7 +59,6 @@ a, button { -webkit-tap-highlight-color: transparent; }
 .skip-link { position: absolute; top: 8px; left: 8px; transform: translateY(-150%); padding: 12px; background: var(--site-card); z-index: 50; }
 .skip-link:focus { transform: translateY(0); }
 .eyebrow { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .15em; line-height: 1.7; color: #8eacc6; }
-.status-dot { display: inline-block; width: 6px; height: 6px; background: var(--site-accent, #ff5832); border-radius: 50%; flex-shrink: 0; }
 .hero { padding-block: 76px 48px; display: grid; grid-template-columns: 1.08fr 1fr; gap: 56px; align-items: center; }
 .hero-eyebrow { font-size: 11px; letter-spacing: .1em; }
 .hero h1 { font-size: clamp(48px, 4.8vw, 66px); letter-spacing: -.055em; line-height: 1.1; font-weight: 600; margin-top: 20px; }
@@ -73,8 +72,6 @@ a, button { -webkit-tap-highlight-color: transparent; }
 .site-button.secondary { color: #bad0e4; border-color: #5b758b; }
 .site-button.secondary:hover { border-color: var(--site-accent); background: #ff583209; }
 .site-button.header-cta { border-color: var(--site-accent); color: var(--site-accent); padding: 11px 18px; font-size: 12px; }
-.hero-note { display: inline-flex; align-items: center; gap: 9px; min-height: 40px; font-size: 12px; color: #a1b3c4; margin-top: 12px; line-height: 1.7; }
-.hero-note > svg { margin-left: 3px; }
 .hero-emblem { display: flex; align-items: center; gap: 50px; min-height: 360px; position: relative; }
 .hero-emblem > img { width: min(62%, 300px); height: auto; z-index: 1; filter: drop-shadow(0 12px 30px #0008); }
 .emblem-grid { position: absolute; inset: 0 -10px; background-image: linear-gradient(#29435750 1px, transparent 1px), linear-gradient(90deg, #29435750 1px, transparent 1px); background-size: 98px 98px; mask-image: radial-gradient(ellipse at 42% 50%, #000 15%, transparent 72%); }
@@ -192,7 +189,6 @@ a, button { -webkit-tap-highlight-color: transparent; }
   .hero-tagline { font-size: clamp(26px, 7.4vw, 33px); }
   .hero-description { font-size: 15px; margin-top: 20px; }
   .hero-eyebrow { font-size: 10px; letter-spacing: .06em; }
-  .hero-note { font-size: 12px; }
   .button-row { gap: 12px; margin-top: 24px; }.site-button { padding-inline: 17px; }
   .hero-emblem { min-height: 235px; gap: 25px; }.hero-emblem > img { width: 55%; max-width: 210px; }
   .hero-emblem figcaption { font-size: 11px; }.hero-emblem figcaption p { font-size: 9px; }
