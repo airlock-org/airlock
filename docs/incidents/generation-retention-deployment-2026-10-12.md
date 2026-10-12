@@ -56,4 +56,11 @@ The prune ordering must also tolerate a full EFI partition: authenticated
 obsolete artifact retirement should make space before fallible menu refresh.
 Automatic maintenance must not repeatedly hit this dependency cycle.
 
-Activation and post-reboot verification remain pending at the time of this note.
+Deployment transaction `1791801231221221547` subsequently passed boot preparation,
+restarted sys-agent, sys-ctrl and sys-gui, selected candidate
+`52e5cd6520d6961f7215ccdf6ae6a37cb25bfc92dd44cb7330f64e7f0693b1f1`,
+and reached `gui-reconnecting`. It is waiting for physical GNOME login before
+GUI reconnection and final guest verification. The host is still running the
+previous generation. A verification request at this intermediate phase did not
+succeed; this is not a completed or post-reboot verified deployment. Do not
+reboot until reconnection finishes and status reports `reboot-required`.
