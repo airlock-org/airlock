@@ -39,6 +39,8 @@ Website assets belong in `public/`; components and styling belong here.
 with a transparent background. The header, hero, documentation, footer, and
 favicon all share that asset. The landing page follows the supplied navy/orange
 mockup; its desktop preview is an illustration rather than a lab capture.
+The locally served Inter variable font and its license live in `public/fonts/`;
+provenance is recorded in [third-party attribution](../THIRD_PARTY.md).
 Repository Markdown currently uses text and code rather than local image assets.
 Keep navigation and publication metadata in the manifest, and prose in Markdown.
 
