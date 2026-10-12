@@ -39,4 +39,21 @@ stopped, the existing `airlock-host-store seal-boot --keep-default` maintenance
 command completed successfully; normal coordinator resume was then submitted.
 This is an operational boot-artifact repair, not a configuration overlay.
 
+Resume still exhausted space in upstream boot installation. A read-only policy
+plan retained the newest two, weekly anchor and aging successor, and identified
+34 verified records eligible for pruning. Two obsolete candidates,
+`872cae54eddb1835858b18a441c38cdbe74e2ed8cf06f2a954a0ab61caa0b393` and
+`ddc933c8ccd074231719e80990e1d0d32d3954ebab5b98df57c43f7786149324`,
+had no prune blockers and were the only retained descriptors sharing the old
+`7niaps0v3rimqahjzqi03pns476q7q5d` initrd. Pruning also attempted menu
+regeneration before retiring artifacts, initially failing for space. Their exact
+host artifacts were retired using the existing backend command; unreferenced,
+hash-identical native copies and failed `.tmp` files were quarantined under
+`attempt-4`. Both coordinator prune journals then completed successfully,
+preserving all four policy-selected rollback choices. Deployment was resumed.
+
+The prune ordering must also tolerate a full EFI partition: authenticated
+obsolete artifact retirement should make space before fallible menu refresh.
+Automatic maintenance must not repeatedly hit this dependency cycle.
+
 Activation and post-reboot verification remain pending at the time of this note.
