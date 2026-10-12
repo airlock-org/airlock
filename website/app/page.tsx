@@ -47,7 +47,7 @@ export default function Home() {
           <div className="hero-copy">
             <p className="eyebrow hero-eyebrow">NIX-NATIVE / QUBES</p>
             <h1 id="hero-title">Airlock<span>OS</span></h1>
-            <p className="hero-tagline">Qubes architecture.<br />Declared in Nix.</p>
+            <p className="hero-tagline">A Nix-native Qubes system.</p>
             <p className="hero-description">NixOS host and guest systems on the Qubes architecture. A desktop across domains, with an assistant to help operate your computer.</p>
             <div className="button-row">
               <Link href="/docs/getting-started/" className="site-button primary">Get started <ArrowRight size={17} aria-hidden="true" /></Link>
