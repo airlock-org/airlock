@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "AirlockOS — Qubes architecture, declared in Nix", template: "%s | Airlock" },
-  description: "An experimental Nix-native Qubes system with declarative host and guest systems, whole-machine deployment, and recorded verification.",
+  description: "A Nix-native Qubes system with declarative host and guest systems, whole-machine deployment, and recorded verification.",
   icons: { icon: { url: "/favicon.svg", type: "image/svg+xml", sizes: "any" } },
 };
 

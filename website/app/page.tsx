@@ -45,7 +45,7 @@ export default function Home() {
       <main id="main" tabIndex={-1}>
         <section className="hero site-container" aria-labelledby="hero-title">
           <div className="hero-copy">
-            <p className="eyebrow hero-eyebrow"><span className="hero-stage">Experimental</span><span>NIX-NATIVE / QUBES</span></p>
+            <p className="eyebrow hero-eyebrow">NIX-NATIVE / QUBES</p>
             <h1 id="hero-title">Airlock<span>OS</span></h1>
             <p className="hero-tagline">Qubes architecture.<br />Declared in Nix.</p>
             <p className="hero-description">NixOS host and guest systems on the Qubes architecture. A desktop across domains, with an assistant to help operate your computer.</p>
@@ -153,14 +153,14 @@ export default function Home() {
         </section>
         <section className="status-section site-container" aria-labelledby="status-title">
           <div className="status-panel">
-            <div><p className="eyebrow"><span className="status-dot" /> PROJECT STATUS</p><h2 id="status-title">Experimental. With recorded trials.</h2><p>Qubes VM lifecycle and RPC, deployment, and rollback have recorded evidence. GPU recovery and broader hardware support remain open. Development access includes a privileged dom0 shell; Qubes OS security equivalence has not been established.</p></div>
+            <div><p className="eyebrow"><span className="status-dot" /> PROJECT STATUS</p><h2 id="status-title">What works today.</h2><p>Qubes VM lifecycle and RPC, deployment, and rollback have recorded evidence. GPU recovery and broader hardware support remain open. Development access includes a privileged dom0 shell; Qubes OS security equivalence has not been established.</p></div>
             <Link href="/docs/status/" className="site-button secondary">Validation status <ArrowRight size={16} aria-hidden="true" /></Link>
           </div>
         </section>
       </main>
       <footer className="site-footer">
         <div className="site-container footer-inner">
-          <Brand /><p>An experimental Nix-native Qubes system.</p>
+          <Brand /><p>A Nix-native Qubes system.</p>
           <div><Link href="/docs/">Docs</Link><Link href="/docs/reference/third-party/">Licensing</Link><Link href="/docs/reference/security/">Security</Link><a href={github} aria-label="Airlock source on GitHub"><Github size={19} aria-hidden="true" /></a></div>
         </div>
       </footer>

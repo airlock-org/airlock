@@ -61,8 +61,7 @@ a, button { -webkit-tap-highlight-color: transparent; }
 .eyebrow { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .15em; line-height: 1.7; color: #8eacc6; }
 .status-dot { display: inline-block; width: 6px; height: 6px; background: var(--site-accent, #ff5832); border-radius: 50%; flex-shrink: 0; }
 .hero { padding-block: 76px 48px; display: grid; grid-template-columns: 1.08fr 1fr; gap: 56px; align-items: center; }
-.hero-eyebrow { flex-wrap: wrap; gap: 12px; font-size: 11px; letter-spacing: .1em; }
-.hero-stage { padding: 4px 8px; color: #ffc0a9; border: 1px solid #783d2d; border-radius: 4px; background: #ff5b2e0a; font-family: var(--font-sans); font-size: 10px; font-weight: 550; letter-spacing: .035em; text-transform: uppercase; }
+.hero-eyebrow { font-size: 11px; letter-spacing: .1em; }
 .hero h1 { font-size: clamp(48px, 4.8vw, 66px); letter-spacing: -.055em; line-height: 1.1; font-weight: 600; margin-top: 20px; }
 .hero h1 span { color: var(--site-accent); }
 .hero-tagline { font-size: clamp(28px, 3vw, 38px); letter-spacing: -.04em; line-height: 1.25; font-weight: 400; margin-top: 10px; }
@@ -210,7 +209,7 @@ a, button { -webkit-tap-highlight-color: transparent; }
   .hero h1 { font-size: clamp(44px, 13.4vw, 54px); }
   .hero-tagline { font-size: clamp(26px, 7.4vw, 33px); }
   .hero-description { font-size: 15px; margin-top: 20px; }
-  .hero-eyebrow { font-size: 10px; gap: 10px; letter-spacing: .06em; }
+  .hero-eyebrow { font-size: 10px; letter-spacing: .06em; }
   .hero-note { font-size: 12px; }
   .button-row { gap: 12px; margin-top: 24px; }.site-button { padding-inline: 17px; }
   .hero-emblem { min-height: 235px; gap: 25px; }.hero-emblem > img { width: 55%; max-width: 210px; }
