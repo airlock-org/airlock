@@ -523,6 +523,10 @@ receipts allow retries even if GC runs before the coordinator records completion
 The audit record remains with status `purged`; repeating a finished purge is a
 no-op. No expiration or purge automatically deletes unrelated pool objects.
 
-There is no automatic old-release pruning. Retained releases cost disk space.
+Local code now implements [verified machine-generation retention and background
+GC](machine-generation-retention.md): newest two, a weekly rollback and an aging
+successor, plus existing protection exceptions. This is not deployed in the lab
+yet; the currently running updater still requires manual old-generation pruning.
+Retained generations cost disk space.
 Only use the guarded Airlock GC targets on the development host; never run GC
 on its host `/nix/store`. Do not manually delete runtime closure-store segments.
