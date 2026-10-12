@@ -32,4 +32,11 @@ Follow-up work:
   descriptor-protected file on a hash mismatch.
 - Add regression coverage for both exhaustion and interrupted-seal recovery.
 
+Another resume regenerated the unused native initrd, consuming the freed space
+before sealing could complete. The recreated duplicate and partial copy were
+moved to a separate `attempt-3` recovery subdirectory. With the coordinator
+stopped, the existing `airlock-host-store seal-boot --keep-default` maintenance
+command completed successfully; normal coordinator resume was then submitted.
+This is an operational boot-artifact repair, not a configuration overlay.
+
 Activation and post-reboot verification remain pending at the time of this note.
