@@ -35,6 +35,10 @@ while the repositories remain private. Relative links are validated before
 replacing the generated collection. Code examples keep their literal paths.
 
 Website assets belong in `public/`; components and styling belong here.
+`public/logo.svg` is the editable geometric recreation of the supplied logo,
+with a transparent background. The header, hero, documentation, footer, and
+favicon all share that asset. The landing page follows the supplied navy/orange
+mockup; its desktop preview is an illustration rather than a lab capture.
 Repository Markdown currently uses text and code rather than local image assets.
 Keep navigation and publication metadata in the manifest, and prose in Markdown.
 

@@ -1,8 +1,25 @@
 import Link from "next/link";
-import { ArrowDown, ArrowRight, ArrowUpRight, BookOpen, GitBranch, Layers3, Terminal } from "lucide-react";
+import {
+  ArrowRight, ArrowUpRight, BookOpen, Box, Check, Code2, Database,
+  Folder, Github, GitBranch, Globe, Layers3, Monitor, Network, Shield, Terminal,
+} from "lucide-react";
 import { Brand } from "@/components/brand";
 
 const github = "https://github.com/airlock-org/airlock";
+const features = [
+  { icon: Box, title: "NixOS", text: "Declarative host and guest systems, built from pinned inputs." },
+  { icon: Shield, title: "Qubes architecture", text: "Compartmentalized VMs with Qubes lifecycle, devices, and policy." },
+  { icon: Layers3, title: "Xen", text: "The virtualization foundation, with NixOS running in dom0." },
+  { icon: Network, title: "qrexec", text: "Inter-VM communication through the existing Qubes machinery." },
+  { icon: GitBranch, title: "Whole-machine releases", text: "Committed configuration, coordinated deployment, and rollback." },
+  { icon: Database, title: "Persistent guests", text: "Read-only NixOS system content with persistent private data." },
+];
+const systemDomains = [
+  { name: "sys-gui", role: "GNOME desktop", icon: Monitor },
+  { name: "sys-net", role: "Network devices", icon: Globe },
+  { name: "sys-firewall", role: "Network policy", icon: Shield },
+  { name: "sys-ctrl", role: "Build controller", icon: GitBranch },
+];
 
 export default function Home() {
   return (
@@ -12,69 +29,126 @@ export default function Home() {
         <div className="site-container header-inner">
           <Brand />
           <nav aria-label="Main navigation">
+            <a href="#main" className="nav-home" aria-current="page">Home</a>
+            <a href="#features" className="nav-section">Features</a>
+            <a href="#architecture" className="nav-section">Architecture</a>
             <Link href="/docs/">Docs</Link>
             <Link href="/docs/status/">Status</Link>
-            <a href={github}>GitHub <ArrowUpRight size={14} aria-hidden="true" /></a>
           </nav>
+          <div className="header-actions">
+            <a href={github} className="github-link" aria-label="Airlock on GitHub"><Github size={21} aria-hidden="true" /></a>
+            <Link href="/docs/getting-started/" className="site-button header-cta">Get started <ArrowRight size={15} aria-hidden="true" /></Link>
+          </div>
         </div>
       </header>
       <main id="main">
         <section className="hero site-container" aria-labelledby="hero-title">
           <div className="hero-copy">
-            <p className="eyebrow"><span className="status-dot" /> EXPERIMENTAL / NIX-NATIVE QUBES</p>
-            <h1 id="hero-title">Qubes architecture.<br /><span>Declared in Nix.</span></h1>
-            <p className="hero-description">NixOS hosts and guests, built on Xen and the Qubes machinery. Explore a declarative approach to the whole machine.</p>
+            <p className="eyebrow">DECLARATIVE / COMPARTMENTALIZED / EXPERIMENTAL</p>
+            <h1 id="hero-title">Airlock<span>OS</span></h1>
+            <p className="hero-tagline">Qubes architecture.<br />Declared in Nix.</p>
+            <p className="hero-description">An experimental Nix-native Qubes system, built on Xen. NixOS hosts and guests, a desktop across domains, and configuration for the whole machine.</p>
             <div className="button-row">
-              <Link href="/docs/getting-started/" className="site-button primary">Start exploring <ArrowRight size={18} aria-hidden="true" /></Link>
-              <Link href="/docs/architecture/" className="site-button secondary">Read the architecture</Link>
+              <Link href="/docs/getting-started/" className="site-button primary">Get started <ArrowRight size={17} aria-hidden="true" /></Link>
+              <Link href="/docs/" className="site-button secondary"><BookOpen size={16} aria-hidden="true" /> Explore the docs</Link>
             </div>
-            <p className="hero-note">Proof of concept. Hardware evidence is limited to the named lab.</p>
+            <p className="hero-note"><span className="status-dot" /> Proof of concept. Explore the source and recorded evidence.</p>
           </div>
-          <figure className="machine-diagram" aria-label="Declaration layers: Nix defines a whole-machine release, which supplies a NixOS Xen host and declared NixOS guests. This is a conceptual diagram, not network routing.">
-            <div className="diagram-caption"><span>ONE MACHINE / DECLARED SYSTEMS</span><Layers3 size={17} aria-hidden="true" /></div>
-            <div className="declaration"><span className="diagram-number">01</span><div><strong>Nix declarations</strong><span>Host + guest configurations</span></div><code>.nix</code></div>
-            <div className="diagram-connector"><ArrowDown size={17} aria-hidden="true" /><span>build &amp; release</span></div>
-            <div className="host-layer"><span className="diagram-number">02</span><div><strong>NixOS dom0</strong><span>Xen · Qubes lifecycle · policy</span></div><span className="host-tag">HOST</span></div>
-            <div className="diagram-connector"><ArrowDown size={17} aria-hidden="true" /><span>declared NixOS guests</span></div>
-            <div className="guest-grid">
-              <div className="guest network"><span className="guest-dot" /><strong>sys-net</strong><span>Network devices</span></div>
-              <div className="guest desktop"><span className="guest-dot" /><strong>sys-gui</strong><span>GNOME desktop</span></div>
-              <div className="guest development"><span className="guest-dot" /><strong>sys-agent</strong><span>Development</span></div>
-            </div>
-            <figcaption>Selected guests from the development lab. <Link href="/docs/guides/usb-lab/">See full topology <ArrowUpRight size={12} aria-hidden="true" /></Link></figcaption>
+          <figure className="hero-emblem">
+            <div className="emblem-grid" aria-hidden="true" />
+            <img src="/logo.svg" width="280" height="284" alt="Airlock's octagonal doorway emblem" />
+            <figcaption>
+              <ul aria-label="System foundations"><li>NIXOS</li><li>QUBES</li><li>XEN</li><li>QREXEC</li></ul>
+              <span className="emblem-rule" />
+              <p>ONE MACHINE.<br />DISTINCT DOMAINS.</p>
+            </figcaption>
           </figure>
         </section>
-        <div className="mechanisms-band">
-          <div className="site-container mechanisms-inner"><span>BUILT ON QUBES</span><ul aria-label="Preserved Qubes mechanisms">{["Xen", "qrexec", "QubesDB", "qubesd", "libvirt", "Qubes policy"].map(name => <li key={name}>{name}</li>)}</ul></div>
-        </div>
-        <section className="approach site-container" aria-labelledby="approach-title">
-          <div className="section-heading"><p className="eyebrow">THE APPROACH</p><h2 id="approach-title">Configuration belongs<br />with the system.</h2><p>Declare the host and its guests, produce a release, and verify the machine that actually runs.</p></div>
-          <div className="approach-list">
-            <article><span className="row-number">01</span><div><h3>Declare hosts and guests together</h3><p>Nix describes system configuration and pinned build inputs. Qubes retains VM lifecycle, communication, and policy.</p></div></article>
-            <article><span className="row-number">02</span><div><h3>Deploy a whole-machine release</h3><p>Committed source flows through the controller to host-owned admission and activation, with retained recovery generations.</p></div></article>
-            <article><span className="row-number">03</span><div><h3>Record what has been verified</h3><p>Local checks, nested Xen trials, and physical acceptance carry separate evidence. A running generation is verified after deployment.</p></div></article>
+        <section className="features site-container" id="features" aria-label="Airlock system features">
+          <div className="feature-grid">
+            {features.map(({ icon: Icon, title, text }) => (
+              <article className="feature-card" key={title}>
+                <Icon size={30} strokeWidth={1.5} aria-hidden="true" />
+                <div><h2>{title}</h2><p>{text}</p></div>
+              </article>
+            ))}
           </div>
         </section>
-        <section className="lab-section" aria-labelledby="lab-title">
-          <div className="site-container lab-inner">
-            <div><p className="eyebrow">FROM THE PHYSICAL LAB</p><h2 id="lab-title">Working paths.<br />Explicit limits.</h2><p>The current physical example runs GNOME in sys-gui on a ThinkPad T14 Gen 3 AMD. Every acceptance record has a configuration and scope.</p><Link href="/docs/status/" className="text-link">Read the validation status <ArrowRight size={17} aria-hidden="true" /></Link></div>
-            <div className="lab-records">
-              <div className="record"><span className="record-label">DEMONSTRATED</span><ul><li>VM lifecycle and qrexec</li><li>Closure-backed NixOS guests</li><li>Whole-machine deployment and rollback</li><li>Shared storage and persistent guest data</li></ul></div>
-              <div className="record open"><span className="record-label">OPEN WORK</span><p>GPU reset and restart, GUI recovery, first-run acceptance, and broader hardware support.</p></div>
+        <section className="architecture-section" id="architecture" aria-labelledby="architecture-title">
+          <div className="site-container architecture-inner">
+            <div className="system-copy">
+              <p className="eyebrow">THE SYSTEM</p>
+              <h2 id="architecture-title">Compartmentalized.<br />From the hypervisor up.</h2>
+              <p>Airlock brings declarative NixOS systems to the existing Qubes architecture. Xen runs the guests; Qubes retains lifecycle, communication, device ownership, and policy.</p>
+              <ul className="system-checklist">
+                {[
+                  "NixOS in dom0 and declared guests",
+                  "Closure-backed, read-only guest systems",
+                  "Xen, qrexec, QubesDB, and Qubes policy",
+                  "Whole-machine deployment and recovery",
+                  "Persistent private data across updates",
+                ].map(item => <li key={item}><Check size={13} strokeWidth={3} aria-hidden="true" />{item}</li>)}
+              </ul>
+              <Link href="/docs/architecture/" className="text-link">Explore the architecture <ArrowRight size={17} aria-hidden="true" /></Link>
             </div>
+            <figure className="domain-diagram">
+              <div className="dom0-card">
+                <img src="/logo.svg" width="48" height="49" alt="" aria-hidden="true" />
+                <div><strong>Dom0 <span>(NixOS / Xen)</span></strong><p>Lifecycle · Devices · Policy · Activation</p></div>
+              </div>
+              <div className="domain-branches" aria-hidden="true" />
+              <div className="system-domains">
+                {systemDomains.map(({ name, role, icon: Icon }) => (
+                  <div className="domain-card" key={name}><Icon size={25} strokeWidth={1.5} aria-hidden="true" /><strong>{name}</strong><span>{role}</span></div>
+                ))}
+              </div>
+              <div className="working-domain-label">WORKING DOMAINS</div>
+              <div className="working-domains">
+                <div className="domain-card"><Terminal size={24} strokeWidth={1.5} aria-hidden="true" /><strong>sys-agent</strong><span>Development access</span></div>
+                <div className="domain-card"><Folder size={24} strokeWidth={1.5} aria-hidden="true" /><strong>usr-home</strong><span>User applications</span></div>
+              </div>
+              <figcaption>Selected domains from the current development lab. <Link href="/docs/guides/usb-lab/">Read the topology and access policy <ArrowUpRight size={12} aria-hidden="true" /></Link></figcaption>
+            </figure>
           </div>
-          <div className="site-container maturity-note"><span className="status-dot" /><p>Airlock is experimental. Qubes OS security equivalence has not been established. The USB lab includes privileged development access.</p></div>
         </section>
-        <section className="explore site-container" aria-labelledby="explore-title">
-          <div className="explore-heading"><div><p className="eyebrow">EXPLORE THE PROJECT</p><h2 id="explore-title">Start with the source.</h2></div><p>Local checks are the first step.<br />Hardware work follows the documented lab workflow.</p></div>
-          <div className="explore-grid">
-            <Link href="/docs/getting-started/" className="explore-link"><Terminal size={23} aria-hidden="true" /><h3>Getting started</h3><p>Prepare a checkout and run the quick suite.</p><span>Start here <ArrowRight size={17} aria-hidden="true" /></span></Link>
-            <Link href="/docs/guides/machine-deployment/" className="explore-link"><GitBranch size={23} aria-hidden="true" /><h3>Machine workflow</h3><p>Build, plan, apply, verify, and recover.</p><span>Read the guide <ArrowRight size={17} aria-hidden="true" /></span></Link>
-            <Link href="/docs/" className="explore-link"><BookOpen size={23} aria-hidden="true" /><h3>Documentation</h3><p>Architecture, operating guides, plans, and evidence.</p><span>Browse the docs <ArrowRight size={17} aria-hidden="true" /></span></Link>
+        <section className="desktop-section site-container" aria-labelledby="desktop-title">
+          <figure className="desktop-preview" aria-label="Illustrative desktop with a development terminal in sys-agent">
+            <div className="desktop-topbar"><span>sys-gui</span><span>GNOME</span></div>
+            <div className="desktop-wallpaper"><img src="/logo.svg" width="180" height="183" alt="" aria-hidden="true" /></div>
+            <div className="desktop-dock" aria-hidden="true"><Monitor size={17} /><Terminal size={17} /><Folder size={17} /><Code2 size={17} /></div>
+            <div className="terminal-window">
+              <div className="terminal-title"><span className="vm-dot" /> sys-agent <span className="terminal-controls" aria-hidden="true">− &nbsp;□ &nbsp;×</span></div>
+              <div className="terminal-body">
+                <p><span className="terminal-prompt">~/airlock</span> <span className="terminal-branch">main</span></p>
+                <pre><code><span className="terminal-comment"># Prepare dependencies explicitly</span>{"\n"}<span className="terminal-prompt">$</span> uv sync --locked{"\n\n"}<span className="terminal-comment"># Run local checks</span>{"\n"}<span className="terminal-prompt">$</span> make test-quick{"\n\n"}<span className="terminal-cursor" aria-hidden="true">▌</span></code></pre>
+              </div>
+            </div>
+            <figcaption>Illustrative desktop layout · current physical lab uses GNOME</figcaption>
+          </figure>
+          <div className="desktop-copy">
+            <p className="eyebrow">A DESKTOP ACROSS DOMAINS</p>
+            <h2 id="desktop-title">An everyday interface.<br />Explicit system boundaries.</h2>
+            <p>The physical lab runs GNOME in sys-gui, with application windows and VM identity integrated into the desktop. Begin with local checks, then follow the documented hardware workflow.</p>
+            <div className="desktop-details">
+              <div><Monitor size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>GNOME desktop</strong><span>Current physical lab</span></p></div>
+              <div><Box size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>VM identity</strong><span>Visible application context</span></p></div>
+              <div><Code2 size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Hyprland experiment</strong><span>Physical acceptance pending</span></p></div>
+              <div><BookOpen size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Operating guides</strong><span>Deployment and recovery</span></p></div>
+            </div>
+            <Link href="/docs/guides/gnome/" className="text-link">Read about the desktop <ArrowRight size={17} aria-hidden="true" /></Link>
           </div>
+        </section>
+        <section className="status-section site-container" aria-label="Project maturity">
+          <div><p className="eyebrow"><span className="status-dot" /> EXPERIMENTAL / EVIDENCE IN THE OPEN</p><p>VM lifecycle, qrexec, deployment, and rollback have recorded trials. GPU recovery and broader hardware support remain open. Qubes OS security equivalence has not been established; the USB lab includes privileged development access.</p></div>
+          <Link href="/docs/status/" className="site-button secondary">Validation status <ArrowRight size={16} aria-hidden="true" /></Link>
         </section>
       </main>
-      <footer className="site-footer"><div className="site-container footer-inner"><Brand /><p>An experimental Nix-native Qubes system.</p><div><a href={github}>Source <ArrowUpRight size={13} aria-hidden="true" /></a><Link href="/docs/reference/third-party/">Licensing</Link><Link href="/docs/reference/security/">Security</Link></div></div></footer>
+      <footer className="site-footer">
+        <div className="site-container footer-inner">
+          <Brand /><p>An experimental Nix-native Qubes system.</p>
+          <div><Link href="/docs/">Docs</Link><Link href="/docs/reference/third-party/">Licensing</Link><Link href="/docs/reference/security/">Security</Link><a href={github} aria-label="Airlock source on GitHub"><Github size={19} aria-hidden="true" /></a></div>
+        </div>
+      </footer>
     </div>
   );
 }
