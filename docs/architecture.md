@@ -18,10 +18,10 @@ The proof of concept accepts existing Qubes runtime state such as `qubes.xml`.
 Nix remains the source of truth for declared host/guest systems wherever
 practical. Runtime state and generated release records have distinct ownership.
 
-## Shared global store
+## Shared global Nix store
 
 Airlock builds guest systems as NixOS closures: the system and all of its
-dependencies. A shared global store reuses package objects across VM closures.
+dependencies. A shared global Nix store reuses package objects across VM closures.
 Each VM receives a read-only view of its declared system closure, while its
 private data remains separate and writable.
 

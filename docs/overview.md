@@ -5,7 +5,7 @@ declares host and guest systems in Nix while preserving the Qubes architecture:
 Xen-based virtualization, VM lifecycle, device ownership, inter-VM RPC through
 qrexec, and Qubes policy.
 
-A shared global store reuses package objects across VM closures. Each guest
+A shared global Nix store reuses package objects across VM closures. Each guest
 receives a read-only view of its system and dependencies, with separate writable
 private data. The store is global to the machine and managed by dom0.
 
