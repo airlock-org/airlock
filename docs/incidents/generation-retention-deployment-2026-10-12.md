@@ -85,3 +85,21 @@ error. Journals for sys-gui and usr-home and the deployment status were saved
 on dom0 under `/var/log/airlock/gui-freeze-2026-10-12-1326/` before recovery.
 No GPU reset or sys-gui restart was attempted. The planned host reboot is the
 next recovery step; it must not be described as a fix for the GPU defect.
+
+After the user's mouse remained frozen, a normal dom0 `systemctl reboot` was
+requested remotely. SSH disconnected and subsequently returned after sign-in.
+The selected `gsi4qfc...` host booted. The first external verify attempt preceded
+boot autostart completion and did not pass; boot-start subsequently verified the
+host and all six guests and recorded machine phase `complete`, with no
+maintenance queue error. The automatic maintenance path started its service
+after autostart, pruned all 34 eligible verified records, and launched the
+existing pool GC with `--keep-generations 2`. GC was still running when this
+observation was recorded; no final reclaimed-space result is claimed.
+
+The four policy choices are the new generation, previous khaki generation,
+weekly anchor `862486feeeb94d24ae824dacad6c64b30bb6d098d31b2fd354e5b6f070ca695d`,
+and aging successor `fd3315b581310e9d6b70994d8b9f03c57d584869d1410937067d4cac5aacfe40`.
+Other recovery/trash/unfinished-transaction protections remain in force.
+The new sys-gui boot logged a DMCUB diagnostic error at 13:34:53 UTC, but no
+flip timeout was found at inspection. Deployment verification does not resolve
+or constitute acceptance of the recurring GPU/display failure.
