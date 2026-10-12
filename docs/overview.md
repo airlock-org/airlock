@@ -5,6 +5,10 @@ declares host and guest systems in Nix while preserving the Qubes architecture:
 Xen-based virtualization, VM lifecycle, device ownership, inter-VM RPC through
 qrexec, and Qubes policy.
 
+The [computer assistant](usr-assistant.md) runs in its own user VM,
+`usr-assistant`. It is a workspace for inspecting, configuring, and maintaining
+the computer; the current interface is Codex in Console.
+
 The project explores how declarative systems and whole-machine releases can
 work with the existing Qubes architecture. It has demonstrated Qubes VM lifecycle
 and inter-VM RPC, closure-backed NixOS guests, configuration validation, and machine
@@ -31,7 +35,7 @@ support remain active work. Nested VM checks and physical acceptance are
 recorded separately.
 
 Airlock has not established Qubes OS security equivalence. The development
-configuration includes privileged access through sys-agent; read the
+configuration includes privileged access through usr-assistant; read the
 [development access guide](usb-lab.md) before treating that configuration as a security boundary.
 
 ## Project source

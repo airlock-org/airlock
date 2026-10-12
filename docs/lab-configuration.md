@@ -18,7 +18,7 @@ one SSH public key and defaults to `~/.ssh/id_ed25519.pub`. Provisioning prompts
 for a dom0 password; `USB_INSECURE_DEV_PASSWORD=1` explicitly selects the public
 development password. No application credentials are provisioned.
 
-`DEPLOY_TARGET` is the SSH target for your enrolled sys-agent. Tailscale setup
+`DEPLOY_TARGET` is the SSH target for your enrolled usr-assistant. Tailscale setup
 is unchanged: enroll interactively after first boot; the private VM volume
 retains enrollment across updates. No enrollment key is embedded in source or images.
 

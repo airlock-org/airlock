@@ -11,7 +11,7 @@ storage formats, and lock boundaries. Keep this separate from
 
 ### 1. Preserve startup errors during builder cleanup
 
-`lifecycle/runtime/tools/scripts/sys-agent-build-store.py`: startup cleanup
+`lifecycle/runtime/tools/scripts/usr-assistant-build-store.py`: startup cleanup
 currently stops at the first failed unmount, obscuring the original failure.
 
 - [x] Attempt every tracked unmount in reverse order, reporting individual

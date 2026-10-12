@@ -2,7 +2,7 @@
 
 Scope: the separate `sys-config-*` candidate workflow and shared storage
 architecture. This is **not the active physical-lab deployment authority**.
-Use [machine deployment](machine-deployment.md) for the host/sys-agent deployment
+Use [machine deployment](machine-deployment.md) for the host/usr-assistant deployment
 paths and [sys-ctrl](completed/05-sys-ctrl.md) for the proposed successor.
 This parent-repository integration copy adapts component links from
 [airlock-machine documentation](../airlock-machine/docs/config-system.md);
@@ -305,7 +305,7 @@ under `.airlock-logs/prepared-store-reproducibility/`; a rebuilt/flashed USB
 boot remains the hardware acceptance check.
 
 The 2026-09-16 USB failure exposed a gap in that earlier test: `--mtime=@1`
-does not remove POSIX tar's PAX `atime` and `ctime` fields. The failed sys-agent
+does not remove POSIX tar's PAX `atime` and `ctime` fields. The failed usr-assistant
 fragment contained real host timestamps, and the local pool failed the same
 metadata checksum as the USB. The separate validation receipt was still cached
 as passed. The archive normalization and in-image-build check above address

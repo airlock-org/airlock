@@ -23,30 +23,34 @@ practical. Runtime state and generated release records have distinct ownership.
 
 ## VM topology
 
-The current configuration starts sys-gui, sys-agent, sys-ctrl, sys-net, sys-firewall,
+The [computer assistant](usr-assistant.md) lives in `usr-assistant`. It provides
+the user's conversation and tool workspace; sys-ctrl and dom0 retain their
+existing validation, deployment, and Qubes control responsibilities.
+
+The current configuration starts sys-gui, usr-assistant, sys-ctrl, sys-net, sys-firewall,
 and usr-home. All six guests run on the same NixOS dom0 / Xen host. These views
 describe the development configuration; optional experiments and
 on-demand configuration VMs are omitted.
 
 ### Network routing
 
-![Network topology: sys-agent, sys-ctrl and usr-home use sys-firewall as their NetVM; sys-firewall uses sys-net, which owns the physical NICs.](../website/public/diagrams/network-topology.svg)
+![Network topology: usr-assistant, sys-ctrl and usr-home use sys-firewall as their NetVM; sys-firewall uses sys-net, which owns the physical NICs.](../website/public/diagrams/network-topology.svg)
 
 [Open the full-size network diagram](../website/public/diagrams/network-topology.svg).
 
-Blue arrows follow the upstream network path. Sys-agent, sys-ctrl, and usr-home
+Blue arrows follow the upstream network path. Usr-assistant, sys-ctrl, and usr-home
 use sys-firewall as their NetVM; sys-firewall uses sys-net. Sys-net owns the
 physical NICs. Dom0 has no default network route, and sys-gui has no NetVM.
 
 ### GUI and input
 
-![GUI topology: application windows from sys-agent and usr-home reach GNOME in sys-gui through Qubes GUI transport. sys-gui owns the display GPU; dom0 forwards keyboard and pointer events through the Qubes input proxy.](../website/public/diagrams/gui-topology.svg)
+![GUI topology: application windows from usr-assistant and usr-home reach GNOME in sys-gui through Qubes GUI transport. sys-gui owns the display GPU; dom0 forwards keyboard and pointer events through the Qubes input proxy.](../website/public/diagrams/gui-topology.svg)
 
 [Open the full-size GUI diagram](../website/public/diagrams/gui-topology.svg).
 
 Orange arrows show window display through the Qubes GUI transport and the
 physical display driven by sys-gui's assigned GPU. Application processes and
-data stay in sys-agent and usr-home. Sys-gui runs GNOME without a NetVM.
+data stay in usr-assistant and usr-home. Sys-gui runs GNOME without a NetVM.
 
 The dashed path shows keyboard and pointer events forwarded from dom0 through
 the Qubes input proxy. It does not move input-device ownership to application
@@ -55,7 +59,7 @@ VMs. See [GNOME integration](sys-gui-gnome.md) and
 
 ### Development access
 
-The development configuration explicitly permits a `sys-agent` → dom0 shell over qrexec.
+The development configuration explicitly permits a `usr-assistant` → dom0 shell over qrexec.
 This privileged RPC is separate from network routing and GUI transport;
 other guests do not inherit it. Read the [development access guide](usb-lab.md) for remote
 access and the development boundary.
@@ -81,7 +85,7 @@ views above describe the resulting domains and their separate responsibilities.
 
 ## Whole-machine releases
 
-The committed development source is submitted through sys-agent to sys-ctrl.
+The committed development source is submitted through usr-assistant to sys-ctrl.
 The controller validates and builds candidates, then requests release
 preparation and admission. Dom0 owns the shared guest pool, generation
 validation, Qubes lifecycle, activation, and recovery records.
@@ -90,7 +94,7 @@ Typed status and recovery operations remain available through the supported
 deployment client. Selected generations, running generations, pending reboots,
 and verified completion are tracked separately. See
 [machine deployment](machine-deployment.md),
-[pool-backed build storage](sys-agent-build-store.md), and
+[pool-backed build storage](usr-assistant-build-store.md), and
 [generation retention](machine-generation-retention.md).
 
 ## Source ownership

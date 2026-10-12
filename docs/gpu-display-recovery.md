@@ -10,7 +10,7 @@ idle and lock/unlock observation separate from generation verification.
 
 `airlock-gpu-recovery` is installed in physical lab sys-gui. It uses the existing
 root administrative route and adds no Qubes RPC, policy rule or automatic
-watchdog. When the physical panel freezes but SSH to sys-agent still works,
+watchdog. When the physical panel freezes but SSH to usr-assistant still works,
 enter dom0 with `airlock-dom0-shell` and become root. Capture evidence first:
 
 ```sh

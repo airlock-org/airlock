@@ -5,6 +5,10 @@ It has not demonstrated the full Qubes OS security model or general hardware sup
 A successful build, a passing pytest suite, a selected release, and a verified
 running generation are distinct results.
 
+Current source names the assistant VM `usr-assistant`. Earlier physical trials
+used `sys-agent` or its predecessor; the
+[rename transition](usr-assistant-rename.md) has not been physically verified.
+
 ## Demonstrated paths
 
 Nested Qubes trials on Xen cover control services, inter-VM RPC through qrexec,

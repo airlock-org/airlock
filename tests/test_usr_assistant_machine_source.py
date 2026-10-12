@@ -11,7 +11,7 @@ import tarfile
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "lifecycle/misc/tools/scripts/sys-agent-machine-source.py"
+SCRIPT = ROOT / "lifecycle/misc/tools/scripts/usr-assistant-machine-source.py"
 
 
 def git(path: Path, *args: str) -> str:
@@ -275,7 +275,7 @@ def test_shallow_seed_archive_contains_only_the_pinned_checkout(tmp_path: Path):
           entries = flake.lib.mkMachineGuestEntries "x86_64-linux" {{
             airlockMachineSeedArchive = "/seed.tar.gz";
           }};
-      in entries.sys-agent.configuration.config.systemd.services.airlock-machine-source-seed.script
+      in entries.usr-assistant.configuration.config.systemd.services.airlock-machine-source-seed.script
     """
     evaluated = subprocess.run(
         ["nix", "eval", "--impure", "--raw", "--expr", expression],

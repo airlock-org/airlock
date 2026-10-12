@@ -2,7 +2,7 @@
 
 Status: completed for the two documented guest changes on the 2026-09-24 USB
 image, including physical offline builds, pool cleanup, and reboot. Extends the
-implemented [pool-backed build store](../sys-agent-build-store.md).
+implemented [pool-backed build store](../usr-assistant-build-store.md).
 
 ## Goal and boundary
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bundle the pinned machine source and import it into a sys-agent guest."""
+"""Bundle the pinned machine source and import it into a usr-assistant guest."""
 
 import argparse
 import hashlib
@@ -66,7 +66,7 @@ def source_archive(destination, repository=MACHINE):
     status = output("git", "submodule", "status", "--recursive", cwd=repository)
     if status:
         raise RuntimeError(
-            "machine source has Git submodules; sys-agent source bundles do not yet "
+            "machine source has Git submodules; usr-assistant source bundles do not yet "
             "support importing them"
         )
 
@@ -218,7 +218,7 @@ def push_archive(target, archive):
     command = [
         "ssh",
         target,
-        os.environ.get("AIRLOCK_DEPLOY_SOURCE_COMMAND", "airlock-sys-agent-machine-source"),
+        os.environ.get("AIRLOCK_DEPLOY_SOURCE_COMMAND", "airlock-usr-assistant-machine-source"),
         "import",
         "--revision",
         manifest["revision"],
@@ -228,11 +228,11 @@ def push_archive(target, archive):
     with archive.open("rb") as stream:
         result = subprocess.run(command, stdin=stream, check=False)
     if result.returncode:
-        raise RuntimeError(f"sys-agent import failed with exit code {result.returncode}")
+        raise RuntimeError(f"usr-assistant import failed with exit code {result.returncode}")
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="sys-agent-machine-source")
+    parser = argparse.ArgumentParser(prog="usr-assistant-machine-source")
     commands = parser.add_subparsers(dest="command", required=True)
     create = commands.add_parser("create")
     create.add_argument("--output", required=True, type=Path)
@@ -274,7 +274,7 @@ def main(argv=None):
             print(json.dumps(result, sort_keys=True))
             return 0
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
-        print(f"sys-agent-machine-source: {exc}", file=sys.stderr)
+        print(f"usr-assistant-machine-source: {exc}", file=sys.stderr)
         return 1
 
 

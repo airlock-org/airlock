@@ -25,14 +25,16 @@ current backlog items.
 
 ## Current operating guides
 
+- [Computer assistant](usr-assistant.md): the usr-assistant role, current tools,
+  and the [migration from the previous VM name](usr-assistant-rename.md).
 - [Repository boundaries](repositories.md): source ownership and submodule workflow.
 - [USB development](usb-dev.md) and [development access](usb-lab.md): current image,
   provisioning, recovery, and physical topology. The normal Airlock entry uses
-  physical-GPU GNOME; the current configuration routes sys-agent through
+  physical-GPU GNOME; the current configuration routes usr-assistant through
   sys-firewall and sys-net.
-- [Machine deployment](machine-deployment.md): host and sys-agent submission,
+- [Machine deployment](machine-deployment.md): host and usr-assistant submission,
   whole-machine activation, verification, rollback, and maintenance.
-- [Pool-backed builder](sys-agent-build-store.md): implemented build-store behavior
+- [Pool-backed builder](usr-assistant-build-store.md): implemented build-store behavior
   and its physical/automated validation boundaries.
 - [Physical input](sys-gui-input.md): declared dom0-to-sys-gui forwarding;
   its dated experiment section is historical evidence, not generic USB setup.

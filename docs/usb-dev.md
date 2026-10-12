@@ -139,7 +139,7 @@ This asks for a new local password for dom0 `user`, installs one public SSH
 key and clones the clean committed repository onto a writable
 `usb-dev` branch. No credentials, local Git hooks, untracked files, build
 artifacts, or user application settings are copied. The SSH public key is the
-only authentication input. Codex remains an ordinary application in sys-agent;
+only authentication input. Codex remains an ordinary application in usr-assistant;
 Airlock does not import or manage its credentials.
 
 The OS filesystem is unencrypted. This tool no longer supports the old Codex
@@ -156,9 +156,9 @@ Use the firmware USB boot menu with one Airlock USB attached. The normal
 during personalization; the current development guest login is `user` / `password`.
 Wait for bootstrap to complete before manually starting guests.
 
-For networking and interactive Tailscale enrollment in sys-agent, follow
+For networking and interactive Tailscale enrollment in usr-assistant, follow
 [the development access guide](usb-lab.md#first-boot). Normal dom0 has no direct network
-or SSH listener. The enrolled identity persists on sys-agent's private volume;
+or SSH listener. The enrolled identity persists on usr-assistant's private volume;
 no Tailscale auth key or host identity is copied during provisioning.
 
 The text recovery entry starts offline and skips normal guest startup. Follow

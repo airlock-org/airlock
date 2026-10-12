@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  ArrowRight, ArrowUpRight, BookOpen, Box, Check, Code2, Database,
+  ArrowRight, ArrowUpRight, BookOpen, Box, Check, Code2,
   Folder, Github, GitBranch, Globe, Monitor, Shield, Terminal,
 } from "lucide-react";
 import { Brand } from "@/components/brand";
@@ -10,8 +10,8 @@ const github = "https://github.com/airlock-org/airlock";
 const features = [
   { icon: Box, title: "NixOS", text: "Declare host and guest systems together, with pinned build inputs.", href: "/docs/architecture/" },
   { icon: Shield, title: "Qubes architecture", text: "Retain Qubes VM lifecycle, device ownership, and policy, with inter-VM RPC through qrexec.", href: "/docs/architecture/" },
+  { icon: Terminal, title: "Computer assistant", text: "A dedicated workspace to help inspect, configure, and maintain your computer.", href: "/docs/guides/assistant/" },
   { icon: GitBranch, title: "Machine releases", text: "Deploy committed configuration with verification and rollback.", href: "/docs/guides/machine-deployment/" },
-  { icon: Database, title: "Persistent guests", text: "Read-only NixOS systems. Private data that survives updates.", href: "/docs/guides/build-store/" },
 ];
 const systemDomains = [
   { name: "sys-gui", role: "GNOME desktop", icon: Monitor, href: "/docs/guides/gnome/" },
@@ -48,7 +48,7 @@ export default function Home() {
             <p className="eyebrow hero-eyebrow"><span className="hero-stage">Experimental</span><span>NIX-NATIVE / QUBES</span></p>
             <h1 id="hero-title">Airlock<span>OS</span></h1>
             <p className="hero-tagline">Qubes architecture.<br />Declared in Nix.</p>
-            <p className="hero-description">NixOS host and guest systems on the Qubes architecture. A desktop across domains, with one configuration for the whole machine.</p>
+            <p className="hero-description">NixOS host and guest systems on the Qubes architecture. A desktop across domains, with an assistant to help operate your computer.</p>
             <div className="button-row">
               <Link href="/docs/getting-started/" className="site-button primary">Get started <ArrowRight size={17} aria-hidden="true" /></Link>
               <Link href="/docs/" className="site-button secondary"><BookOpen size={16} aria-hidden="true" /> Explore the docs</Link>
@@ -108,7 +108,7 @@ export default function Home() {
               </div>
               <div className="working-domain-label">WORKING DOMAINS</div>
               <div className="working-domains">
-                <Link href="/docs/guides/usb-lab/" className="domain-card"><Terminal size={24} strokeWidth={1.5} aria-hidden="true" /><strong>sys-agent</strong><span>Development access</span></Link>
+                <Link href="/docs/guides/assistant/" className="domain-card"><Terminal size={24} strokeWidth={1.5} aria-hidden="true" /><strong>usr-assistant</strong><span>Computer assistant</span></Link>
                 <Link href="/docs/evidence/live-vm-additions/" className="domain-card"><Folder size={24} strokeWidth={1.5} aria-hidden="true" /><strong>usr-home</strong><span>User applications</span></Link>
               </div>
               <figcaption>VM roles and responsibilities. <Link href="/docs/architecture/#vm-topology">Explore the topology <ArrowUpRight size={12} aria-hidden="true" /></Link></figcaption>
@@ -116,12 +116,12 @@ export default function Home() {
           </div>
         </section>
         <section className="desktop-section site-container" aria-labelledby="desktop-title">
-          <figure className="desktop-preview" aria-label="Illustrative desktop with a development terminal in sys-agent">
+          <figure className="desktop-preview" aria-label="Illustrative desktop with a terminal in usr-assistant">
             <div className="desktop-topbar"><span>sys-gui</span><span>GNOME</span></div>
             <div className="desktop-wallpaper"><img src="/logo.svg" width="180" height="183" alt="" aria-hidden="true" /></div>
             <div className="desktop-dock" aria-hidden="true"><Monitor size={17} /><Terminal size={17} /><Folder size={17} /><Code2 size={17} /></div>
             <div className="terminal-window">
-              <div className="terminal-title"><span className="vm-dot" /> sys-agent — Terminal <span className="terminal-controls" aria-hidden="true">− &nbsp;□ &nbsp;×</span></div>
+              <div className="terminal-title"><span className="vm-dot" /> usr-assistant — Terminal <span className="terminal-controls" aria-hidden="true">− &nbsp;□ &nbsp;×</span></div>
               <div className="terminal-body">
                 <p><span className="terminal-prompt">~/airlock</span> <span className="terminal-branch">main</span></p>
                 <pre><code><span className="terminal-comment"># Prepare dependencies</span>{"\n"}<span className="terminal-prompt">$</span> uv sync --locked{"\n\n"}<span className="terminal-comment"># Run local checks</span>{"\n"}<span className="terminal-prompt">$</span> make test-quick{"\n\n"}<span className="terminal-cursor" aria-hidden="true">▌</span></code></pre>
@@ -131,12 +131,12 @@ export default function Home() {
           </figure>
           <div className="desktop-copy">
             <p className="eyebrow">A DESKTOP ACROSS DOMAINS</p>
-            <h2 id="desktop-title">A familiar desktop.<br />Across separate domains.</h2>
-            <p>GNOME runs in sys-gui. Application windows carry their VM context; system changes follow the documented deployment and recovery workflow.</p>
+            <h2 id="desktop-title">A familiar desktop.<br />With a computer assistant.</h2>
+            <p>GNOME runs in sys-gui. The usr-assistant workspace helps you inspect, configure, and maintain your computer, while applications keep their VM context and system changes follow the deployment workflow.</p>
             <div className="desktop-details">
               <Link href="/docs/guides/gnome/"><Monitor size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>GNOME desktop</strong><span>Runs in sys-gui</span></p></Link>
               <Link href="/docs/guides/gnome/"><Box size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>VM identity</strong><span>Application context</span></p></Link>
-              <Link href="/docs/guides/usb-lab/"><Terminal size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Development access</strong><span>Through sys-agent</span></p></Link>
+              <Link href="/docs/guides/assistant/"><Terminal size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Computer assistant</strong><span>In usr-assistant</span></p></Link>
               <Link href="/docs/guides/machine-deployment/"><BookOpen size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Recovery guides</strong><span>Deployment and rollback</span></p></Link>
             </div>
             <Link href="/docs/guides/gnome/" className="text-link">Read about the desktop <ArrowRight size={17} aria-hidden="true" /></Link>

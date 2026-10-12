@@ -430,7 +430,7 @@ are outside the new local contract; inventory/replacement is still pending.
 ### 9. Explicit legacy deployment route: investigate first
 
 The parent [machine-deploy.py](../../lifecycle/misc/tools/scripts/machine-deploy.py),
-component [sys-dev-machine-deploy.py](../../airlock-machine/lifecycle/runtime/tools/sys-agent-machine-deploy.py),
+component [sys-dev-machine-deploy.py](../../airlock-machine/lifecycle/runtime/tools/usr-assistant-machine-deploy.py),
 and parent Makefile expose `--legacy-dom0` / `DEPLOY_LEGACY_DOM0`.
 This maintains additional development build, transfer and direct-dom0 control
 paths beside normal sys-dev/sys-ctrl submission. Tests explicitly cover the

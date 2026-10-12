@@ -25,7 +25,8 @@ def test_client_refuses_uncommitted_sources(monkeypatch):
         client.build("usb-lab")
 
 
-def test_client_builds_the_pinned_airlock_machine_checkout(monkeypatch, tmp_path):
+@pytest.mark.parametrize("assistant_rename", [False, True])
+def test_client_builds_the_pinned_airlock_machine_checkout(monkeypatch, tmp_path, assistant_rename):
     monkeypatch.setattr(client, "ROOT", tmp_path)
     calls = []
 
@@ -37,7 +38,10 @@ def test_client_builds_the_pinned_airlock_machine_checkout(monkeypatch, tmp_path
             return "dev-revision"
         if args == ("git", "-C", "airlock-machine", "rev-parse", "HEAD"):
             return "machine-revision"
-        if args[1:3] == ("build", "./airlock-machine#airlock-machine-release-usb-lab"):
+        installable = "./airlock-machine#airlock-machine-release-usb-lab"
+        if assistant_rename:
+            installable += "-assistant-rename"
+        if args[1:3] == ("build", installable):
             return json.dumps([{"outputs": {"out": "/nix/store/release"}}])
         if args[1:] == (
             "build",
@@ -56,12 +60,36 @@ def test_client_builds_the_pinned_airlock_machine_checkout(monkeypatch, tmp_path
 
     monkeypatch.setattr(client, "command", command)
 
-    assert client.build("usb-lab") == (
+    assert client.build("usb-lab", assistant_rename=assistant_rename) == (
         "/nix/store/release",
         "machine-revision",
         "dev-revision",
     )
     assert all("os" not in args for args, _ in calls)
+
+
+@pytest.mark.parametrize("arguments", [
+    ["plan", "--target", "old-ssh-target", "--assistant-rename"],
+    ["apply", "--target", "old-ssh-target", "--assistant-rename"],
+    ["status", "--target", "old-ssh-target", "--assistant-rename", "--legacy-dom0"],
+    ["build", "--profile", "usb-gui-lab", "--assistant-rename"],
+])
+def test_assistant_rename_rejects_incompatible_transport_before_build(monkeypatch, arguments):
+    monkeypatch.setattr(client, "build", lambda *_args, **_kwargs: pytest.fail("unexpected build"))
+    with pytest.raises(SystemExit) as error:
+        client.main(arguments)
+    assert error.value.code == 2
+
+
+def test_assistant_rename_build_is_explicit_and_does_not_open_a_remote_session(monkeypatch):
+    calls = []
+    def build(profile, **options):
+        calls.append((profile, options))
+        return "/nix/store/rename-release", "machine-revision", "parent-revision"
+    monkeypatch.setattr(client, "build", build)
+    monkeypatch.setattr(client, "Dom0", lambda *_: pytest.fail("unexpected remote session"))
+    assert client.main(["build", "--assistant-rename"]) == 0
+    assert calls == [("usb-lab", {"assistant_rename": True})]
 
 
 def test_low_space_stops_transfer_before_any_write(monkeypatch):
@@ -75,7 +103,7 @@ def test_low_space_stops_transfer_before_any_write(monkeypatch):
             return "" if script == client.REMOTE_INVENTORY else str(1024**3)
 
     with pytest.raises(RuntimeError, match="No VMs or partitions changed"):
-        client.transfer("sys-agent-2", "sys-agent", "/nix/store/release", Session())
+        client.transfer("usr-assistant-2", "usr-assistant", "/nix/store/release", Session())
     assert len(calls) == 2
 
 
@@ -91,10 +119,10 @@ def test_existing_closure_requires_no_upload(monkeypatch):
             assert script == client.REMOTE_INVENTORY
             return "/nix/store/present"
 
-    client.transfer("sys-agent-2", "sys-agent", "/nix/store/present", Session())
+    client.transfer("usr-assistant-2", "usr-assistant", "/nix/store/present", Session())
 
 
-def test_guest_receipt_is_read_from_sys_agent_and_installed_for_dom0(monkeypatch):
+def test_guest_receipt_is_read_from_usr_assistant_and_installed_for_dom0(monkeypatch):
     receipt = {
         "schema": "airlock.closure-store.admission.v1",
         "domain": "usr-home",
@@ -102,7 +130,7 @@ def test_guest_receipt_is_read_from_sys_agent_and_installed_for_dom0(monkeypatch
     }
     monkeypatch.setattr(client, "command", lambda *args: json.dumps(receipt))
     assert (
-        client.remote_receipt("sys-agent", "/home/user/.local/share/airlock/receipt.json")
+        client.remote_receipt("usr-assistant", "/home/user/.local/share/airlock/receipt.json")
         == receipt
     )
 
@@ -130,8 +158,8 @@ def test_guest_receipt_is_read_from_sys_agent_and_installed_for_dom0(monkeypatch
     [
         ("262144 4096", "private-volume space"),
         ("4080335 4096", "reached export"),
-        ("-1 4096", "invalid sys-agent"),
-        ("100 0", "invalid sys-agent"),
+        ("-1 4096", "invalid usr-assistant"),
+        ("100 0", "invalid usr-assistant"),
     ],
 )
 def test_bridge_space_check_does_not_require_python(monkeypatch, report, error):
@@ -140,7 +168,7 @@ def test_bridge_space_check_does_not_require_python(monkeypatch, report, error):
     def command(*args):
         calls.append(args)
         if args[0] == "ssh":
-            assert args == ("ssh", "sys-agent", "stat -f -c '%a %S' /home/user")
+            assert args == ("ssh", "usr-assistant", "stat -f -c '%a %S' /home/user")
             return report
         return json.dumps({"/nix/store/new": {"narSize": 1024**3}})
 
@@ -154,7 +182,7 @@ def test_bridge_space_check_does_not_require_python(monkeypatch, report, error):
     monkeypatch.setattr(client, "command", command)
     monkeypatch.setattr(client.subprocess, "Popen", stop_at_export)
     with pytest.raises(RuntimeError, match=error):
-        client.transfer("sys-agent", "sys-agent", "/nix/store/release", Session())
+        client.transfer("usr-assistant", "usr-assistant", "/nix/store/release", Session())
     assert len(calls) == 2
 
 
@@ -163,7 +191,7 @@ def test_guest_plan_can_transfer_committed_coordinator(monkeypatch):
 
     class Session:
         def __init__(self, target):
-            assert target == "sys-agent"
+            assert target == "usr-assistant"
 
         def run(self, script, **kwargs):
             events.append(script)
@@ -192,7 +220,7 @@ def test_guest_plan_can_transfer_committed_coordinator(monkeypatch):
             [
                 "guest-plan",
                 "--target",
-                "sys-agent",
+                "usr-assistant",
                 "--receipt",
                 "/receipt.json",
                 "--update-coordinator",
@@ -225,7 +253,7 @@ def test_client_status_before_and_after_first_deployment(
 
     class Session:
         def __init__(self, target):
-            assert target == "sys-agent"
+            assert target == "usr-assistant"
 
         def run(self, script, **kwargs):
             script = script.replace(
@@ -239,7 +267,7 @@ def test_client_status_before_and_after_first_deployment(
             pass
 
     monkeypatch.setattr(client, "Dom0", Session)
-    result = client.main(["status", "--target", "sys-agent", "--legacy-dom0"])
+    result = client.main(["status", "--target", "usr-assistant", "--legacy-dom0"])
     output = capsys.readouterr().out
     if controller == "absent":
         assert result == 0 and "image-baseline" in output

@@ -11,20 +11,20 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.nix
-def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_access():
+def test_usb_lab_routes_usr_assistant_through_firewall_and_retains_development_access():
     expression = f"""
       let
         f = builtins.getFlake "{ROOT}";
         host = f.nixosConfigurations.usb-dev.config.specialisation.usb-lab.configuration;
-        dev = f.nixosConfigurations.airlock-domain-sys-agent.config;
+        dev = f.nixosConfigurations.airlock-domain-usr-assistant.config;
         ctrl = f.nixosConfigurations.airlock-domain-sys-ctrl.config;
         gui = f.nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.config;
         labGui = f.nixosConfigurations.airlock-domain-sys-gui-usb-lab.config;
         tailscaleLauncher = builtins.head (builtins.filter (package:
-          (package.pname or package.name) == "airlock-start-sys-agent-tailscale"
+          (package.pname or package.name) == "airlock-start-usr-assistant-tailscale"
         ) labGui.environment.systemPackages);
         tailscaleDesktop = builtins.head (builtins.filter (package:
-          (package.pname or package.name) == "airlock-start-sys-agent-tailscale.desktop"
+          (package.pname or package.name) == "airlock-start-usr-assistant-tailscale.desktop"
         ) labGui.environment.systemPackages);
         policy = builtins.head (builtins.filter (p:
           (p.name or "") == "airlock-dev-dom0-terminal-policy"
@@ -39,20 +39,20 @@ def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_acces
         domains = builtins.attrNames host.airlock.qubes.domains;
         bootRole = host.environment.etc."airlock/boot-role".text;
         inherit (host.airlock.qubes.prefs) default_netvm;
-        devNetvm = host.airlock.qubes.domains.sys-agent.netvm;
+        devNetvm = host.airlock.qubes.domains.usr-assistant.netvm;
         ctrlNetvm = host.airlock.qubes.domains.sys-ctrl.netvm;
         firewallNetvm = host.airlock.qubes.domains.sys-firewall.netvm;
         netNetvm = host.airlock.qubes.domains.sys-net.netvm;
         homeNetvm = host.airlock.qubes.domains.usr-home.netvm;
-        devProvider = host.airlock.qubes.domains.sys-agent.prefs.provides_network;
+        devProvider = host.airlock.qubes.domains.usr-assistant.prefs.provides_network;
         netProvider = host.airlock.qubes.domains.sys-net.prefs.provides_network;
         firewallProvider = host.airlock.qubes.domains.sys-firewall.prefs.provides_network;
-        devPci = host.airlock.qubes.domains.sys-agent.devices.pci;
+        devPci = host.airlock.qubes.domains.usr-assistant.devices.pci;
         netPci = host.airlock.qubes.domains.sys-net.devices.pci;
-        devAutoPci = host.airlock.qubes.domains.sys-agent.features."airlock-auto-network-pci";
+        devAutoPci = host.airlock.qubes.domains.usr-assistant.features."airlock-auto-network-pci";
         netAutoPci = host.airlock.qubes.domains.sys-net.features."airlock-auto-network-pci";
-        devMemory = host.airlock.qubes.domains.sys-agent.prefs.memory;
-        devMaxmem = host.airlock.qubes.domains.sys-agent.prefs.maxmem;
+        devMemory = host.airlock.qubes.domains.usr-assistant.prefs.memory;
+        devMaxmem = host.airlock.qubes.domains.usr-assistant.prefs.maxmem;
         ctrlMemory = host.airlock.qubes.domains.sys-ctrl.prefs.memory;
         ctrlMaxmem = host.airlock.qubes.domains.sys-ctrl.prefs.maxmem;
         ctrlBuildJobs = ctrl.nix.settings.max-jobs;
@@ -62,8 +62,8 @@ def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_acces
         labGuiPackages = map (package: package.pname or package.name) labGui.environment.systemPackages;
         labGuiGsettingsOverridePackages = map (package: package.pname or package.name)
           labGui.services.desktopManager.gnome.extraGSettingsOverridePackages;
-        tailscaleLauncher = builtins.readFile "${{tailscaleLauncher}}/bin/airlock-start-sys-agent-tailscale";
-        tailscaleDesktop = builtins.readFile "${{tailscaleDesktop}}/share/applications/airlock-start-sys-agent-tailscale.desktop";
+        tailscaleLauncher = builtins.readFile "${{tailscaleLauncher}}/bin/airlock-start-usr-assistant-tailscale";
+        tailscaleDesktop = builtins.readFile "${{tailscaleDesktop}}/share/applications/airlock-start-usr-assistant-tailscale.desktop";
         tailscaleHandler = builtins.readFile dev.environment.etc."qubes-rpc/airlock.DevTailscaleUp".source;
         tailscaleRpcConfig = dev.environment.etc."qubes/rpc-config/airlock.DevTailscaleUp".text;
         tailscalePolicy = builtins.readFile "${{host.environment.etc."qubes/policy.d".source}}/40-airlock-dev-tailscale.policy";
@@ -88,6 +88,9 @@ def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_acces
           failureConsole = host.systemd.services.airlock-boot-failure-console.serviceConfig;
           setup = {{
             inherit (host.systemd.services.airlock-setup-config) unitConfig serviceConfig;
+          }};
+          deferredSetup = {{
+            inherit (host.systemd.services.airlock-setup-config-deferred) unitConfig serviceConfig;
           }};
           network = {{
             inherit (host.systemd.services.airlock-start-network-providers) unitConfig serviceConfig;
@@ -117,11 +120,11 @@ def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_acces
           networkManager = dev.networking.networkmanager.enable;
           packages = map (package: package.pname or package.name) dev.environment.systemPackages;
           configNixStoreRoot = dev.airlock.qubeGuest.configNixStoreRoot;
-          poolInit = dev.systemd.services.airlock-sys-agent-build-store.serviceConfig;
-          poolDevices = dev.systemd.services.airlock-sys-agent-build-store.requires;
+          poolInit = dev.systemd.services.airlock-usr-assistant-build-store.serviceConfig;
+          poolDevices = dev.systemd.services.airlock-usr-assistant-build-store.requires;
           poolSend = builtins.readFile "${{poolSend}}/bin/airlock-pool-send";
           userSelection = dev.airlock.qubeGuest.allowQrexecUserSelection;
-          providesNetwork = host.airlock.qubes.domains.sys-agent.prefs.provides_network;
+          providesNetwork = host.airlock.qubes.domains.usr-assistant.prefs.provides_network;
         }};
       }}
     """
@@ -174,13 +177,13 @@ def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_acces
         )
         expected_failure = (
             "airlock-boot-background-failure.service"
-            if service == "autostart"
+            if service in {"network", "autostart"}
             else "airlock-boot-failure@%n.service"
         )
         assert supervisor[service]["unitConfig"]["OnFailure"] == [expected_failure]
     assert any(
         "desktop-ready" in command
-        for command in supervisor["autostart"]["serviceConfig"]["ExecStartPre"]
+        for command in supervisor["deferredSetup"]["serviceConfig"]["ExecStartPre"]
     )
     assert supervisor["setup"]["serviceConfig"]["ExecCondition"][0].endswith(
         "test ! -e /run/airlock/boot-supervisor/recovery-required.json"
@@ -188,10 +191,10 @@ def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_acces
 
     assert report["domains"] == [
         "sys-ctrl",
-        "sys-agent",
         "sys-firewall",
         "sys-gui",
         "sys-net",
+        "usr-assistant",
         "usr-home",
     ]
     assert report["bootRole"] == "normal\n"
@@ -213,15 +216,16 @@ def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_acces
     assert report["ctrlBuildJobs"] == 1
     assert report["guiHostname"] == "sys-gui"
     assert not report["labGuiHasDom0Terminal"]
-    assert "airlock-start-sys-agent-tailscale" in report["labGuiPackages"]
-    assert "airlock-start-sys-agent-tailscale.desktop" in report["labGuiPackages"]
-    assert "nautilus" in report["labGuiPackages"]
+    assert "airlock-start-usr-assistant-tailscale" in report["labGuiPackages"]
+    assert "airlock-start-usr-assistant-tailscale.desktop" in report["labGuiPackages"]
+    # Connected desktop profiles keep everyday applications in usr-home.
+    assert "nautilus" not in report["labGuiPackages"]
     assert report["labGuiGsettingsOverridePackages"] == ["gnome-shell"]
     assert "/bin/xterm -hold " in report["tailscaleLauncher"]
     assert "-fs 16" in report["tailscaleLauncher"]
     assert "force-user='root'" in report["tailscaleRpcConfig"]
     assert (
-        "airlock.DevTailscaleUp + sys-gui sys-agent allow user=root"
+        "airlock.DevTailscaleUp + sys-gui usr-assistant allow user=root"
         in report["tailscalePolicy"]
     )
     assert "airlock.DevTailscaleUp * @anyvm @anyvm deny" in report["tailscalePolicy"]
@@ -239,7 +243,7 @@ def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_acces
             timeout=5,
         )
         assert rejected.returncode == 1
-    assert "Exec=airlock-start-sys-agent-tailscale" in report["tailscaleDesktop"]
+    assert "Exec=airlock-start-usr-assistant-tailscale" in report["tailscaleDesktop"]
     assert report["guiPci"] == [
         {
             "backend": "dom0",
@@ -252,15 +256,15 @@ def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_acces
     assert not report["hostNetworkManager"]
     assert not report["hostTailscale"]
     assert not report["hostSsh"]
-    assert report["callers"] == ["sys-agent"]
-    assert "airlock.DevDom0Shell + sys-agent dom0 allow" in report["policy"]
+    assert report["callers"] == ["usr-assistant"]
+    assert "airlock.DevDom0Shell + usr-assistant dom0 allow" in report["policy"]
     assert "airlock.DevDom0Shell + sys-gui dom0 allow" not in report["policy"]
     assert report["poolAdmission"] == {
         "enable": True,
         "caller": "sys-ctrl",
         "targets": [
             "sys-gui",
-            "sys-agent",
+            "usr-assistant",
             "sys-ctrl",
             "sys-net",
             "sys-firewall",
@@ -276,7 +280,7 @@ def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_acces
     assert "airlock.Pool.Admit * @anyvm @anyvm deny" in report["poolAdmissionPolicy"]
     for source, target, expected_error in [
         ("usr-home", "usr-home", "restricted to sys-ctrl"),
-        ("sys-agent", "usr-home", "restricted to sys-ctrl"),
+        ("usr-assistant", "usr-home", "restricted to sys-ctrl"),
         ("sys-ctrl", "dom0", "target is not permitted"),
     ]:
         rejected = subprocess.run(
@@ -315,7 +319,7 @@ def test_usb_lab_routes_sys_agent_through_firewall_and_retains_development_acces
             "providesNetwork",
         )
     } == {
-        "role": "sys-agent",
+        "role": "usr-assistant",
         "tailscale": True,
         "tailscaleSsh": ["--ssh"],
         "dom0Shell": True,
@@ -345,7 +349,8 @@ def test_image_and_release_embed_their_own_committed_boot_source(repo, configura
     result = subprocess.run([
         str(ROOT / 'lifecycle/misc/tools/scripts/airlock-nix.sh'),
         'eval', '--impure', '--json', '--expr', expression,
-    ], cwd=ROOT, capture_output=True, text=True, check=True)
+    ], cwd=ROOT, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
     report = json.loads(result.stdout)
     assert report['normal'] == report['recovery'] == report['expected']
     assert report['consoleMode'] == '1'

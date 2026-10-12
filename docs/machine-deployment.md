@@ -1,5 +1,9 @@
 # Repository-first whole-machine deployment
 
+For a machine still using the previous `sys-agent` name, first read the
+[assistant VM migration](usr-assistant-rename.md). Ordinary deployment commands
+below target the current `usr-assistant` configuration.
+
 This is the operating guide for committed whole-machine updates. Start with
 [repository setup](repositories.md), [lab configuration](lab-configuration.md),
 and [current validation status](status.md). Dated lab results and migration-only
@@ -20,9 +24,9 @@ The coordinator covers the whole declared machine, not one application/VM.
 It uses the existing Xen/Qubes lifecycle, setup-config converger, policy, and
 immutable closure-store engine. It does not replace those mechanisms.
 
-For `usb-lab`, host-side plan/apply commands push committed source to sys-agent
+For `usb-lab`, host-side plan/apply commands push committed source to usr-assistant
 and use the typed controller route. The explicitly selected development-host
-transport (`DEPLOY_LEGACY_DOM0=1`) uses sys-agent's existing **development-only
+transport (`DEPLOY_LEGACY_DOM0=1`) uses usr-assistant's existing **development-only
 full dom0 administrative access**, with a password-protected sudo session. It adds no
 dom0 SSH listener or new production qrexec capability. This is not yet the
 restricted config-authority/approval workflow described in `config-system.md`.
@@ -30,14 +34,14 @@ restricted config-authority/approval workflow described in `config-system.md`.
 ## Prerequisites and current validation boundary
 
 - A bootstrapped machine started from the `Airlock` boot-menu entry, with
-  sys-agent reachable over SSH/Tailscale and access to the dom0 development
+  usr-assistant reachable over SSH/Tailscale and access to the dom0 development
   password. The internal deployment profile remains named `usb-lab`; it is not
   a boot-menu label. Discover the development VM's current SSH/Tailscale
   hostname or address with `tailscale status` and confirm it with `ssh`.
   Enrollment can change that hostname; do not infer it from the Qubes name,
-  which remains `sys-agent`. Set `DEPLOY_TARGET` to the confirmed SSH target.
+  which remains `usr-assistant`. Set `DEPLOY_TARGET` to the confirmed SSH target.
 - Keep a physical dom0 console available for the first trials. Restarting
-  sys-agent removes the remote connection; failures may require local recovery.
+  usr-assistant removes the remote connection; failures may require local recovery.
 - Clean, committed `airlock-machine` and parent `airlock` repositories, an initialized
   `airlock-machine/` submodule at the committed pointer, and the guarded Airlock Nix store
   under `/run/media/user/data/airlock`.
@@ -76,18 +80,18 @@ make machine-verify
 ```
 
 The same whole-machine release can be built and submitted directly from the
-clean committed checkout included in sys-agent, without a parent `airlock`
+clean committed checkout included in usr-assistant, without a parent `airlock`
 checkout or development-host build artifacts:
 
 ```bash
-airlock-sys-agent-machine-deploy build
-airlock-sys-agent-machine-deploy plan
-airlock-sys-agent-machine-deploy apply
-airlock-sys-agent-machine-deploy status
-airlock-sys-agent-machine-deploy verify
+airlock-usr-assistant-machine-deploy build
+airlock-usr-assistant-machine-deploy plan
+airlock-usr-assistant-machine-deploy apply
+airlock-usr-assistant-machine-deploy status
+airlock-usr-assistant-machine-deploy verify
 ```
 
-The sys-agent client sends a versioned source bundle to `sys-ctrl`. The
+The usr-assistant client sends a versioned source bundle to `sys-ctrl`. The
 controller verifies the Git revision and lock hash and builds from the locked
 source, fetching missing inputs or substitutes through sys-firewall. The live-VM
 addition branch first imports missing host/transport dependencies through the
@@ -99,7 +103,7 @@ The TODO 07 implementation then publishes
 verified host objects into the same pool and prepares an approved sys-ctrl base
 for its next stopped setup. Dom0 binds independently checked admission receipts
 to the release and invokes its journalled coordinator. `plan` never activates;
-`apply` starts a detached worker so restarting sys-ctrl or sys-agent cannot cancel
+`apply` starts a detached worker so restarting sys-ctrl or usr-assistant cannot cancel
 activation. Normal status/verify/resume/rollback and retention commands use a
 typed dom0 interface, including when sys-ctrl is unavailable. The explicitly
 selected `--legacy-dom0` development route remains separate.
@@ -120,9 +124,9 @@ and controller boot artifacts independently.
 For a committed single-guest update, the controller route is:
 
 ```bash
-# Run inside sys-agent from its clean airlock-machine checkout.
-airlock-sys-agent-machine-deploy guest-plan --target usr-home
-airlock-sys-agent-machine-deploy guest-apply --target usr-home
+# Run inside usr-assistant from its clean airlock-machine checkout.
+airlock-usr-assistant-machine-deploy guest-plan --target usr-home
+airlock-usr-assistant-machine-deploy guest-apply --target usr-home
 ```
 
 The client sends a versioned source archive over qrexec. `sys-ctrl` verifies
@@ -131,12 +135,12 @@ in its pool-backed private store, and sends the resulting guest closure
 to dom0's shared pool. Dom0 accepts admission only from `sys-ctrl`, validates
 the inactive generation receipt, and runs its existing journalled guest
 plan/apply coordinator. The controller cannot submit an arbitrary release path
-or shell command to this interface. Guest activation also uses a detached dom0 worker, so updating sys-agent or
+or shell command to this interface. Guest activation also uses a detached dom0 worker, so updating usr-assistant or
 sys-ctrl can disconnect the submitting client without cancelling activation.
 Inspect dom0's machine deployment status to establish the outcome. The newest whole-machine integration has not been tested or built in this
 pass; the sys-ctrl TODO remains open for automated and physical validation.
 
-For a guest closure already built and admitted by sys-agent, the development
+For a guest closure already built and admitted by usr-assistant, the development
 coordinator can derive a one-guest candidate without building or transferring a
 second whole-machine release:
 
@@ -145,7 +149,7 @@ make machine-guest-plan ADMISSION_RECEIPT=/home/user/.local/share/airlock/machin
 make machine-guest-apply ADMISSION_RECEIPT=/home/user/.local/share/airlock/machine-build/admissions/<receipt>.json
 ```
 
-The receipt path is inside sys-agent. Dom0 validates it against the retained pool
+The receipt path is inside usr-assistant. Dom0 validates it against the retained pool
 generation and keeps the resulting candidate and exact generation binding in
 the machine journal. Apply, verify, reboot handling, resume and rollback then
 use the same coordinator flow as an ordinary whole-machine release.
@@ -160,7 +164,7 @@ USB for a coordinator-only fix; it does not update other host components.
 `machine-build` needs no remote machine. All commands default to the internal
 `usb-lab` deployment profile; this is not a boot-menu entry.
 `DEPLOY_PROFILE=usb-gui-lab` builds that complete profile instead, but its usual
-topology has no sys-agent bridge; use the dom0 coordinator directly if artifacts
+topology has no usr-assistant bridge; use the dom0 coordinator directly if artifacts
 are provisioned by another authorized transport. A deployment cannot silently
 change the active boot profile.
 
@@ -311,14 +315,14 @@ Sys-dev's `airlock-pool-send` now uses `airlock.Pool.AdmitIncremental+TARGET`.
 It sends a closure inventory with source tree hashes first. Dom0 checks its
 existing pool records (including the prepared USB seed), requests missing
 objects, then verifies only the transferred payloads before publishing a retained,
-inactive generation. Reused objects are neither packaged nor uploaded; sys-agent
+inactive generation. Reused objects are neither packaged nor uploaded; usr-assistant
 still reads their local contents to compute the inventory hashes. The response
 records `objects_transferred`, `payload_bytes_transferred`, and reuse counts.
 Admission, GC, compaction, and recovery share a lock to protect negotiated reuse.
-Both sys-agent and dom0 need the updated image; the original full-artifact service
+Both usr-assistant and dom0 need the updated image; the original full-artifact service
 remains available, but the new sender does not silently fall back to a full upload.
 Fresh-image physical validation passed on 2026-09-18: a committed usr-home
-change built in sys-agent admitted 4 new objects (434,176 bytes) and reused 978.
+change built in usr-assistant admitted 4 new objects (434,176 bytes) and reused 978.
 Generation 2 was retained but inactive; generation 1 and the running guest
 stayed unchanged. See the [completed build/admission trial](completed/01-sys-dev-machine-build.md).
 
@@ -389,7 +393,7 @@ make machine-resume
 make machine-rollback
 ```
 
-If sys-agent is down, use the physical dom0 console:
+If usr-assistant is down, use the physical dom0 console:
 
 ```bash
 sudo /var/lib/airlock/machine/controller status
@@ -412,12 +416,12 @@ preference/feature/service keys without explicit reset values. A rollback that
 removes newly introduced settings can likewise require explicit reset values.
 Unsupported changes fail preflight rather than being silently ignored.
 
-The USB lab `sys-agent`/`sys-net` automatic network PCI handoff is a scoped
+The USB lab `usr-assistant`/`sys-net` automatic network PCI handoff is a scoped
 exception: the release coordinator reports `pci_handoff`, checks current
 network-controller assignments before stopping VMs, and releases the former
 owner after the dependent VMs stop. Setup assigns the new owner. The same
 sequence supports rollback; confirm it on hardware before relying on remote
-access through sys-agent.
+access through usr-assistant.
 
 To retire a domain, remove it from the topology and list its name in
 `airlock.machineDeployment.retireDomains` in the same committed release. The
@@ -450,10 +454,10 @@ pruned. Use the deployed coordinator to inspect all recorded releases, their
 roots, removable Nix boot generations, and protection reasons:
 
 ```bash
-airlock-sys-agent-machine-deploy release-list
-airlock-sys-agent-machine-deploy release-prune-plan --release /nix/store/RELEASE
-airlock-sys-agent-machine-deploy release-retain --release /nix/store/RELEASE --retain true
-airlock-sys-agent-machine-deploy release-prune --release /nix/store/RELEASE \
+airlock-usr-assistant-machine-deploy release-list
+airlock-usr-assistant-machine-deploy release-prune-plan --release /nix/store/RELEASE
+airlock-usr-assistant-machine-deploy release-retain --release /nix/store/RELEASE --retain true
+airlock-usr-assistant-machine-deploy release-prune --release /nix/store/RELEASE \
   --confirm /nix/store/RELEASE
 ```
 
@@ -475,9 +479,9 @@ To empty a specific trash record before its deadline, inspect the effective
 prune plan and prune each release that references the VM:
 
 ```bash
-airlock-sys-agent-machine-deploy release-prune-plan --release /nix/store/RELEASE \
+airlock-usr-assistant-machine-deploy release-prune-plan --release /nix/store/RELEASE \
   --allow-unexpired-trash TRANSACTION-VM
-airlock-sys-agent-machine-deploy release-prune --release /nix/store/RELEASE \
+airlock-usr-assistant-machine-deploy release-prune --release /nix/store/RELEASE \
   --confirm /nix/store/RELEASE --allow-unexpired-trash TRANSACTION-VM
 ```
 
@@ -505,7 +509,7 @@ sudo /var/lib/airlock/machine/controller trash-purge TRANSACTION-VM \
   --confirm TRANSACTION-VM
 ```
 
-The sys-agent equivalent is `airlock-sys-agent-machine-deploy trash-purge
+The usr-assistant equivalent is `airlock-usr-assistant-machine-deploy trash-purge
 --identity TRANSACTION-VM --confirm TRANSACTION-VM`. Prune and purge use detached
 dom0 workers and survive SSH disconnection; `trash-list` reports purge status.
 Before expiry, add `--before-expiry` to that exact purge command. This waives

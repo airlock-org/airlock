@@ -1,11 +1,11 @@
 # Development access
 
-`sys-agent` provides remote development access and has an explicitly enabled
+`usr-assistant` provides remote development access and has an explicitly enabled
 Qubes RPC shell into dom0. This is a privileged development configuration,
 not a hardened profile.
 
 ```text
-development computer --Tailnet SSH--> sys-agent --airlock-dom0-shell--> dom0
+development computer --Tailnet SSH--> usr-assistant --airlock-dom0-shell--> dom0
                                            |
 usr-home -------------------------------- sys-firewall
                                            |
@@ -15,8 +15,8 @@ usr-home -------------------------------- sys-firewall
 ```
 
 The normal `Airlock` boot entry uses the internal `usb-lab` profile and starts
-sys-gui, sys-agent, sys-ctrl, sys-net, sys-firewall, and connected usr-home.
-Sys-net owns physical network devices. Sys-agent, sys-ctrl, and usr-home route
+sys-gui, usr-assistant, sys-ctrl, sys-net, sys-firewall, and connected usr-home.
+Sys-net owns physical network devices. Usr-assistant, sys-ctrl, and usr-home route
 through sys-firewall. The retired sys-dev/usr-browser topology is historical;
 [deployment notes](history/machine-deployment-lab-notes-2026-10-09.md) retain the
 migration and acceptance evidence. Dom0's direct NetworkManager, Tailscale, and
@@ -27,25 +27,25 @@ SSH services are disabled in this normal profile.
 From the physical dom0 console, authenticate the new Tailnet node:
 
 ```sh
-qvm-run --pass-io --user root sys-agent 'tailscale up --ssh'
+qvm-run --pass-io --user root usr-assistant 'tailscale up --ssh'
 ```
 
-Open the URL printed by Tailscale and approve `sys-agent`. From the development
+Open the URL printed by Tailscale and approve `usr-assistant`. From the development
 machine, use Tailnet SSH to enter that VM, then open the intentionally enabled
 dom0 session:
 
 ```sh
-tailscale ssh user@sys-agent
+tailscale ssh user@usr-assistant
 airlock-dom0-shell
 ```
 
 The dom0 shell runs as the ordinary `airlock` account; `sudo` remains
-password-protected. Treat the entire profile, especially `sys-agent` and this
+password-protected. Treat the entire profile, especially `usr-assistant` and this
 RPC permission, as development-only.
 
-To remove remote control later, select a profile without `sys-agent`, or disable
+To remove remote control later, select a profile without `usr-assistant`, or disable
 the profile's `airlock.devDom0Terminal` host capability. The new networking
-topology retains the Tailnet/development workflow in `sys-agent`.
+topology retains the Tailnet/development workflow in `usr-assistant`.
 
 ## Physical update and rollback result (2026-09-25)
 
@@ -53,7 +53,7 @@ The corrected `usb-lab` release at
 `/nix/store/8g8fncff0wl21p3dr7lf033wfd024pqb-airlock-machine-release`
 was applied, rolled back to the booted image baseline, and reapplied on the
 USB laptop. Each selection was followed by a normal reboot and
-`make machine-verify DEPLOY_TARGET=sys-agent`; all three checks reported
+`make machine-verify DEPLOY_TARGET=usr-assistant`; all three checks reported
 `phase=complete` with matching host and running guest generations. Tailscale
 SSH and HTTPS through `sys-firewall` and `sys-net` returned after each reboot.
 The NIC assignments remained with `sys-net`; dom0 had no default route and

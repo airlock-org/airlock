@@ -5,6 +5,10 @@ declares host and guest systems in Nix while preserving the Qubes architecture:
 Xen-based virtualization, VM lifecycle, device ownership, inter-VM RPC through
 qrexec, and Qubes policy.
 
+The [computer assistant](docs/usr-assistant.md) has its own user VM,
+`usr-assistant`, for inspecting, configuring, and maintaining the computer.
+The current interface is Codex in Console.
+
 The project has demonstrated Qubes VM lifecycle and inter-VM RPC, closure-backed
 NixOS guests, configuration validation, and whole-machine deployment and rollback. Nested
 verification and physical lab acceptance are recorded separately. The current
@@ -66,7 +70,7 @@ make test-nix
 
 Read [USB provisioning](docs/usb-dev.md) before building or writing an image.
 Writing/provisioning erases the explicitly selected USB. Codex is available as
-an application in sys-agent; Airlock does not copy or manage its credentials.
+an application in usr-assistant; Airlock does not copy or manage its credentials.
 Tailscale enrollment is interactive after boot, with state retained in the VM's
 private volume.
 

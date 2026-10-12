@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a committed whole-machine release and deploy via the sys-agent bridge."""
+"""Build a committed whole-machine release and deploy via the usr-assistant bridge."""
 
 import argparse
 import base64
@@ -111,7 +111,7 @@ class Dom0:
         self.process.wait(timeout=10)
 
 
-def build(profile):
+def build(profile, *, assistant_rename=False):
     if command("git", "status", "--porcelain", cwd=ROOT):
         raise RuntimeError(
             "commit repository changes before deployment (including new files)"
@@ -119,6 +119,10 @@ def build(profile):
     dev_revision = command("git", "rev-parse", "HEAD", cwd=ROOT)
     os_revision = command("git", "-C", "airlock-machine", "rev-parse", "HEAD", cwd=ROOT)
     attr = f"airlock-machine-release-{profile}"
+    if assistant_rename:
+        if profile != "usb-lab":
+            raise RuntimeError("assistant rename requires the usb-lab profile")
+        attr += "-assistant-rename"
     result = json.loads(
         command(
             str(NIX),
@@ -182,7 +186,7 @@ def transfer(target, bridge_vm, release, session):
             f"only {free / 1024**3:.1f} GiB is available. No VMs or partitions changed. "
             "Provision development storage first; do not delete active/rollback store generations."
         )
-    # sys-agent deliberately has a small package set and need not include Python.
+    # usr-assistant deliberately has a small package set and need not include Python.
     # GNU stat is already available; use available blocks, not total/free blocks.
     bridge_blocks, bridge_block_size = map(
         int,
@@ -193,11 +197,11 @@ def transfer(target, bridge_vm, release, session):
         ).split(),
     )
     if bridge_blocks < 0 or bridge_block_size <= 0:
-        raise RuntimeError("invalid sys-agent filesystem space report")
+        raise RuntimeError("invalid usr-assistant filesystem space report")
     bridge_free = bridge_blocks * bridge_block_size
     if bridge_free < needed + 512 * 1024**2:
         raise RuntimeError(
-            "sys-agent needs more private-volume space for the compressed closure transfer"
+            "usr-assistant needs more private-volume space for the compressed closure transfer"
         )
     nonce = uuid.uuid4().hex
     remote = f"/home/user/.cache/airlock-deploy/{nonce}.nar.gz"
@@ -259,7 +263,7 @@ def remote_receipt(target, path):
     payload = command("ssh", target, "cat -- " + shlex.quote(path))
     receipt = json.loads(payload)
     if not isinstance(receipt, dict):
-        raise RuntimeError("sys-agent admission receipt is not a JSON object")
+        raise RuntimeError("usr-assistant admission receipt is not a JSON object")
     return receipt
 
 
@@ -301,15 +305,15 @@ def main(argv=None):
             "guest-apply",
         ],
     )
-    parser.add_argument("--target", help="sys-agent SSH/Tailscale name, e.g. sys-agent-2")
+    parser.add_argument("--target", help="usr-assistant SSH/Tailscale name, e.g. usr-assistant-2")
     parser.add_argument(
-        "--bridge-vm", default="sys-agent", help="Qubes VM name (not its Tailscale name)"
+        "--bridge-vm", help="Qubes VM name (defaults to usr-assistant, or sys-agent for the rename transition)"
     )
     parser.add_argument(
         "--profile", default="usb-lab", choices=["usb-lab", "usb-gui-lab"]
     )
     parser.add_argument(
-        "--receipt", help="path to the inactive admission receipt inside sys-agent"
+        "--receipt", help="path to the inactive admission receipt inside usr-assistant"
     )
     parser.add_argument(
         "--update-coordinator",
@@ -318,28 +322,43 @@ def main(argv=None):
     )
     parser.add_argument("--legacy-dom0", action="store_true",
                         help="use the development shell and host-built closure transport")
+    parser.add_argument(
+        "--assistant-rename", action="store_true",
+        help="build the one-shot sys-agent to usr-assistant private-volume migration",
+    )
     args = parser.parse_args(argv)
+    args.bridge_vm = args.bridge_vm or (
+        "sys-agent" if args.assistant_rename else "usr-assistant"
+    )
     if args.action != "build" and not args.target:
         parser.error("--target is required")
     if args.action.startswith("guest-") and not args.receipt:
         parser.error("--receipt is required for guest activation")
     if args.update_coordinator and not args.action.startswith("guest-"):
         parser.error("--update-coordinator requires guest-plan or guest-apply")
+    if args.assistant_rename and (
+        args.profile != "usb-lab" or args.action not in {"build", "plan", "apply"}
+        or (args.action != "build" and not args.legacy_dom0)
+    ):
+        parser.error("--assistant-rename requires usb-lab build, or plan/apply with --legacy-dom0")
     if (not args.legacy_dom0 and args.profile == "usb-lab"
             and args.action in {"plan", "apply", "status", "verify", "resume", "rollback"}):
         try:
             if args.action in {"plan", "apply"}:
-                subprocess.run([sys.executable, str(ROOT / "lifecycle/misc/tools/scripts/sys-agent-machine-source.py"),
+                subprocess.run([sys.executable, str(ROOT / "lifecycle/misc/tools/scripts/usr-assistant-machine-source.py"),
                                 "push", "--target", args.target], check=True)
             return subprocess.call(["ssh", args.target,
-                                    os.environ.get("AIRLOCK_DEPLOY_REMOTE_CLIENT", "airlock-sys-agent-machine-deploy"), args.action])
+                                    os.environ.get("AIRLOCK_DEPLOY_REMOTE_CLIENT", "airlock-usr-assistant-machine-deploy"), args.action])
         except (OSError, subprocess.SubprocessError) as exc:
             print(f"machine-deploy: controller submission failed: {exc}", file=sys.stderr)
             return 1
     session = None
     try:
         if args.action in ("build", "plan", "apply"):
-            release, os_revision, dev_revision = build(args.profile)
+            release, os_revision, dev_revision = (
+                build(args.profile, assistant_rename=True) if args.assistant_rename
+                else build(args.profile)
+            )
             print(
                 json.dumps(
                     {

@@ -19,10 +19,12 @@
         { "source": "docs/lab-configuration.md", "slug": "lab-configuration", "title": "Lab configuration", "description": "Development storage, hardware declarations, and lab settings." },
         { "source": "docs/testing.md", "slug": "testing", "title": "Testing", "description": "Quick checks, opt-in Nix checks, and nested VM verification." },
         { "source": "docs/usb-dev.md", "slug": "usb-dev", "title": "USB development", "description": "Build, provision, and recover a development USB image." },
-        { "source": "docs/usb-lab.md", "slug": "usb-lab", "title": "Development access", "description": "Remote access through sys-agent and its dom0 RPC permission." },
+        { "source": "docs/usb-lab.md", "slug": "usb-lab", "title": "Development access", "description": "Remote access through usr-assistant and its dom0 RPC permission." },
         { "source": "docs/machine-deployment.md", "slug": "machine-deployment", "title": "Machine deployment", "description": "Submit, activate, verify, and roll back a whole-machine release." },
         { "source": "docs/machine-generation-retention.md", "slug": "generation-retention", "title": "Generation retention", "description": "Retain rollback generations and maintain the shared pool." },
-        { "source": "docs/sys-agent-build-store.md", "slug": "build-store", "title": "Pool-backed build store", "description": "Shared storage and the physical validation of guest builds." },
+        { "source": "docs/usr-assistant-build-store.md", "slug": "build-store", "title": "Pool-backed build store", "description": "Shared storage and the physical validation of guest builds." },
+        { "source": "docs/usr-assistant.md", "slug": "assistant", "title": "Computer assistant", "description": "The assistant workspace, its current tools, and computer operations." },
+        { "source": "docs/usr-assistant-rename.md", "slug": "assistant-rename", "title": "Assistant VM migration", "description": "Preserve the previous VM's private data during the explicit rename transition." },
         { "source": "docs/sys-gui-gnome.md", "slug": "gnome", "title": "GNOME integration", "description": "The current physical desktop and its remaining acceptance work." },
         { "source": "docs/hardware-usability-policy.md", "slug": "hardware-policy", "title": "Hardware usability", "description": "Requirements for usable and recoverable hardware isolation." }
       ]
