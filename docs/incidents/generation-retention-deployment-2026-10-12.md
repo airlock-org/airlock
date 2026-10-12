@@ -74,3 +74,14 @@ boundary. The selected host is
 `/nix/store/gsi4qfc2gb60aqmzvnvijnai8g3mglcz-nixos-system-dom0-26.11.20260904.801bef6`.
 Host boot and automatic retention/GC activation still require reboot and
 post-reboot verification; the user has been told it is now ready to reboot.
+
+Before reboot, the user reported the physical screen froze while closing
+Calculator. At 13:26:59 UTC sys-gui still answered bounded root qrexec; GNOME
+was alive with low CPU usage. Its kernel logged an AMD `flip_done timed out`
+for CRTC 79 at 13:26:19. This supports a physical display failure; it does not
+establish Calculator as the cause. This resembles earlier unresolved AMD
+display failures. Deployment status remained `reboot-required`, without an
+error. Journals for sys-gui and usr-home and the deployment status were saved
+on dom0 under `/var/log/airlock/gui-freeze-2026-10-12-1326/` before recovery.
+No GPU reset or sys-gui restart was attempted. The planned host reboot is the
+next recovery step; it must not be described as a fix for the GPU defect.
