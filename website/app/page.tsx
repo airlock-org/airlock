@@ -95,23 +95,32 @@ export default function Home() {
               <Link href="/docs/architecture/" className="text-link">Explore the architecture <ArrowRight size={17} aria-hidden="true" /></Link>
             </div>
             <figure className="domain-diagram">
-              <div className="diagram-heading"><span>DECLARED DOMAINS</span></div>
+              <div className="diagram-heading"><span>QUBES DOMAINS</span><span>NixOS in every domain</span></div>
               <div className="dom0-card">
-                <img src="/logo.svg" width="48" height="49" alt="" aria-hidden="true" />
-                <div><strong>Dom0 <span>(NixOS / Xen)</span></strong><p>Lifecycle · Devices · Policy · Activation</p></div>
+                <img src="/logo.svg" width="38" height="39" alt="" aria-hidden="true" />
+                <div>
+                  <div className="dom0-heading"><strong>dom0</strong><span>Qubes control domain</span></div>
+                  <ul className="dom0-responsibilities" aria-label="Dom0 responsibilities">
+                    <li>VM lifecycle</li><li>Device assignment</li><li>RPC policy</li><li>Deployment</li>
+                  </ul>
+                </div>
               </div>
-              <div className="domain-branches" aria-hidden="true" />
+              <div className="domain-group-label">SYSTEM DOMAINS</div>
               <div className="system-domains">
                 {systemDomains.map(({ name, role, icon: Icon, href }) => (
                   <Link href={href} className="domain-card" key={name}><Icon size={25} strokeWidth={1.5} aria-hidden="true" /><strong>{name}</strong><span>{role}</span></Link>
                 ))}
               </div>
-              <div className="working-domain-label">WORKING DOMAINS</div>
+              <div className="domain-group-label">WORKING DOMAINS</div>
               <div className="working-domains">
                 <Link href="/docs/guides/assistant/" className="domain-card"><Terminal size={24} strokeWidth={1.5} aria-hidden="true" /><strong>usr-assistant</strong><span>Computer assistant</span></Link>
                 <Link href="/docs/evidence/live-vm-additions/" className="domain-card"><Folder size={24} strokeWidth={1.5} aria-hidden="true" /><strong>usr-home</strong><span>User applications</span></Link>
               </div>
-              <figcaption>VM roles and responsibilities. <Link href="/docs/architecture/#vm-topology">Explore the topology <ArrowUpRight size={12} aria-hidden="true" /></Link></figcaption>
+              <div className="hypervisor-layer">
+                <Box size={18} strokeWidth={1.5} aria-hidden="true" />
+                <strong>Xen hypervisor</strong><span>Shared virtualization foundation</span>
+              </div>
+              <figcaption>Dom0 and all guest VMs run on Xen. <Link href="/docs/architecture/#vm-topology">Network &amp; GUI topology <ArrowUpRight size={12} aria-hidden="true" /></Link></figcaption>
             </figure>
           </div>
         </section>
