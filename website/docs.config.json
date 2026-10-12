@@ -1,0 +1,67 @@
+{
+  "groups": [
+    {
+      "slug": "",
+      "title": "Start here",
+      "pages": [
+        { "source": "docs/overview.md", "slug": "index", "title": "Overview", "description": "An experimental Nix-native system built on the Qubes architecture." },
+        { "source": "docs/getting-started.md", "slug": "getting-started", "title": "Getting started", "description": "Explore the source and run local checks before building a machine." },
+        { "source": "docs/architecture.md", "slug": "architecture", "title": "Architecture", "description": "Qubes mechanisms, Nix declarations, and whole-machine releases." },
+        { "source": "docs/status.md", "slug": "status", "title": "Validation status", "description": "Demonstrated behavior, physical evidence, and open limits." },
+        { "source": "CONTRIBUTING.md", "slug": "contributing", "title": "Contributing", "description": "Prepare a checkout, run checks, and contribute changes." }
+      ]
+    },
+    {
+      "slug": "guides",
+      "title": "Operating guides",
+      "pages": [
+        { "source": "docs/repositories.md", "slug": "repositories", "title": "Repository workflow", "description": "Source ownership and the pinned machine component." },
+        { "source": "docs/lab-configuration.md", "slug": "lab-configuration", "title": "Lab configuration", "description": "Development storage, hardware declarations, and lab settings." },
+        { "source": "docs/testing.md", "slug": "testing", "title": "Testing", "description": "Quick checks, opt-in Nix checks, and nested VM verification." },
+        { "source": "docs/usb-dev.md", "slug": "usb-dev", "title": "USB development", "description": "Build, provision, and recover a development USB image." },
+        { "source": "docs/usb-lab.md", "slug": "usb-lab", "title": "USB lab topology", "description": "The physical development profile and its privileged access." },
+        { "source": "docs/machine-deployment.md", "slug": "machine-deployment", "title": "Machine deployment", "description": "Submit, activate, verify, and roll back a whole-machine release." },
+        { "source": "docs/machine-generation-retention.md", "slug": "generation-retention", "title": "Generation retention", "description": "Retain rollback generations and maintain the shared pool." },
+        { "source": "docs/sys-agent-build-store.md", "slug": "build-store", "title": "Pool-backed build store", "description": "Shared storage and the physical validation of guest builds." },
+        { "source": "docs/sys-gui-gnome.md", "slug": "gnome", "title": "GNOME integration", "description": "The current physical desktop and its remaining acceptance work." },
+        { "source": "docs/hardware-usability-policy.md", "slug": "hardware-policy", "title": "Hardware usability", "description": "Requirements for usable and recoverable hardware isolation." }
+      ]
+    },
+    {
+      "slug": "experiments",
+      "title": "Experiments",
+      "pages": [
+        { "source": "docs/experiments/sys-gui-hyprland.md", "slug": "hyprland", "title": "Hyprland trial", "description": "An opt-in desktop experiment with physical verification pending." },
+        { "source": "docs/experiments/sys-gpu.md", "slug": "sys-gpu", "title": "Additional GPU", "description": "The optional sys-gpu hardware direction." }
+      ]
+    },
+    {
+      "slug": "plans",
+      "title": "Open plans",
+      "pages": [
+        { "source": "docs/todo/first-run-setup-wizard.md", "slug": "setup-wizard", "title": "First-run wizard", "description": "Implementation and acceptance work for first-run setup." },
+        { "source": "docs/todo/13-minimal-vm-declarations.md", "slug": "vm-declarations", "title": "Minimal VM declarations", "description": "A plan for deriving machine behavior from smaller VM declarations." },
+        { "source": "docs/todo/amd-gpu-lifecycle.md", "slug": "gpu-lifecycle", "title": "AMD GPU lifecycle", "description": "Open investigation into reset, restart, and state isolation." }
+      ]
+    },
+    {
+      "slug": "evidence",
+      "title": "Acceptance and history",
+      "pages": [
+        { "source": "docs/completed/usb-lab-network-isolation.md", "slug": "network-isolation", "title": "Network acceptance", "description": "Completed wired-network trials on the named physical lab." },
+        { "source": "docs/completed/07-unified-host-guest-store.md", "slug": "unified-store", "title": "Shared-store acceptance", "description": "Completed host, guest, rollback, and builder storage trials." },
+        { "source": "docs/completed/12-live-vm-additions.md", "slug": "live-vm-additions", "title": "Live VM acceptance", "description": "Completed physical VM addition, persistence, and rollback trials." },
+        { "source": "docs/history/machine-acceptance-2026-09-25-to-29.md", "slug": "machine-trials", "title": "September machine trials", "description": "Dated evidence for controller, deployment, and storage acceptance." }
+      ]
+    },
+    {
+      "slug": "reference",
+      "title": "Project reference",
+      "pages": [
+        { "source": "docs/README.md", "slug": "documentation-map", "title": "Full documentation map", "description": "Current guides, outstanding work, and the complete repository index." },
+        { "source": "SECURITY.md", "slug": "security", "title": "Security reporting", "description": "The experimental security boundary and reporting prerequisites." },
+        { "source": "THIRD_PARTY.md", "slug": "third-party", "title": "Third-party source", "description": "Upstream attribution, licenses, and the unresolved licensing question." }
+      ]
+    }
+  ]
+}

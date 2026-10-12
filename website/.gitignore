@@ -1,0 +1,9 @@
+/node_modules/
+/.generated-docs/
+/.source/
+/.next/
+/out/
+/tsconfig.tsbuildinfo
+/next-env.d.ts
+/.generated-docs-*/
+/.sites-runtime/

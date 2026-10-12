@@ -64,6 +64,9 @@ VM_PREBUILD_ATTRS := \
 	$(VM_GUI_CONFIG_IMAGE_ATTR)
 
 PYTHON_FILES := \
+	website/scripts/prepare-docs.py \
+	website/scripts/dev.py \
+	tests/test_website_docs.py \
 	airlock-machine/lifecycle/misc/modules/sys-gui/application-menus.py \
 	airlock-machine/lifecycle/misc/modules/sys-gui/workspace-launch.py \
 	airlock-machine/lifecycle/misc/modules/sys-gui/capture-transfer.py \
@@ -145,7 +148,7 @@ PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_L
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
 # Run component tests from their canonical checkout, plus parent integration tests.
-PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,airlock-machine/tests tests/test_repository_split.py tests/test_local.py tests/test_gpu.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_host_store_image.py tests/test_machine_deploy_client.py tests/test_sys_agent_machine_source.py)
+PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,airlock-machine/tests tests/test_repository_split.py tests/test_local.py tests/test_gpu.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_host_store_image.py tests/test_machine_deploy_client.py tests/test_sys_agent_machine_source.py tests/test_website_docs.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'$(if $(filter run-nested-gui-smoke-static,$(test)),tests/test_local.py,airlock-machine/tests/test_machine_local.py)::test_local_check[$(test)]')
 
 # One committed configuration, one whole-machine release. No per-VM switches.
@@ -193,6 +196,14 @@ build: ensure-generated-dirs
 test-quick: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
 	AIRLOCK_PYTEST_WARM_STORE=0 uv run --no-sync pytest $(PYTEST_DEFAULT_TARGETS) $(PYTEST_SELECTED) $(PYTEST_WORKERS) $(PYTEST_DISTRIBUTION) $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS) -m "not nix"
+
+# Website dependencies are installed explicitly; these targets never invoke Nix.
+.PHONY: website-dev website-build
+website-dev:
+	pnpm --dir website dev
+
+website-build:
+	pnpm --dir website build
 
 # Explicit opt-in for evaluations, flake checks and package builds.
 test-nix: ensure-generated-dirs

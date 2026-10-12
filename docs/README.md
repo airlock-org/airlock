@@ -1,5 +1,9 @@
 # Documentation map
 
+For an introduction, read [overview](overview.md), [getting started](getting-started.md),
+and [architecture](architecture.md). The [website](../website/README.md) renders a
+selected set of repository Markdown; edit the original documents here.
+
 Start with [project status](status.md), [contributor setup](../CONTRIBUTING.md),
 [lab configuration](lab-configuration.md), and [local public-readiness results](public-readiness.md).
 Physical evidence remains limited to the named hardware and trial scope.
