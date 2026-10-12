@@ -27,13 +27,23 @@ Live evidence from the new sys-gui:
 
 The selected host is
 `/nix/store/fr876fcp25d8x7kxsx5qacc3fi34dscx-nixos-system-dom0-26.11.20260904.801bef6`.
-The host is still running the previous retention generation, so whole-machine
-post-reboot verification remains pending. The PSR mitigation is already active
-in the live guest, but absence of early errors is not evidence of long-term
-stability. Recovery without reboot remains an unmeasured fallback for the next
-naturally occurring freeze, not a demonstrated fix.
+After the requested reboot and physical sign-in, the host ran that selected
+generation and boot-start recorded phase `complete`, without error. All six
+guests matched their expected running/selected systems. The new sys-gui boot ID
+is `ad1acb24-0e38-4956-ad3e-c79b10837981`; its module mask remains 16 and
+the eDP panel reports PSR driver support no. The recovery command survived
+reboot and captured another report at
+`/var/log/airlock/gpu-recovery/1791814586461808087.json`.
 
-Use [the recovery instructions](../gpu-display-recovery.md). Next checks are
-post-reboot host/guest identity, effective PSR state, ordinary window
-open/close/drag behavior, and idle/lock/unlock behavior. Observe power impact
+The post-reboot kernel logged a DMCUB diagnostic error at 14:12:59 UTC even
+with PSR disabled. No flip timeout was found at inspection. Thus the mitigation
+does not eliminate every DMCUB error and long-term freeze prevention remains
+unproven. Recovery without reboot remains an unmeasured fallback for the next
+naturally occurring freeze, not a demonstrated fix. Automatic maintenance
+started after verified boot and was running without error at inspection.
+
+Use [the recovery instructions](../gpu-display-recovery.md). Remaining checks
+are ordinary window open/close/drag behavior and idle/lock/unlock behavior.
+The user was asked to exercise Calculator and report desktop responsiveness.
+Observe power impact
 and freeze recurrence before accepting the mitigation.
