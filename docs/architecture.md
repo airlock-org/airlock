@@ -14,11 +14,36 @@ The proof of concept accepts existing Qubes runtime state such as `qubes.xml`.
 Nix remains the source of truth for declared host/guest systems wherever
 practical. Runtime state and generated release records have distinct ownership.
 
-## Physical development topology
+## VM topology
 
 The current USB lab starts sys-gui, sys-agent, sys-ctrl, sys-net, sys-firewall,
-and usr-home. Sys-net owns physical network devices. Sys-agent, sys-ctrl, and
-usr-home route through sys-firewall. Sys-gui supplies the GNOME desktop.
+and usr-home. The diagram shows this physical development profile, not every
+possible Airlock configuration.
+
+![Physical USB lab VM topology: dom0 hosts six guests; sys-agent, sys-ctrl and usr-home route through sys-firewall and sys-net to the physical network. sys-gui has no NetVM. sys-agent has a development-only dom0 shell.](../website/public/diagrams/vm-topology.svg)
+
+[Open the full-size topology diagram](../website/public/diagrams/vm-topology.svg).
+
+Blue arrows show the upstream network path. The dashed orange arrow is the
+lab's explicitly permitted `sys-agent` → dom0 development shell; it is not a
+network route or a permission granted to every guest.
+
+- **Network:** sys-net owns the physical NICs. Sys-agent, sys-ctrl, and usr-home
+  use sys-firewall as their NetVM; sys-firewall uses sys-net. Dom0 has no default
+  network route in the normal lab profile.
+- **Display:** sys-gui owns the physical desktop GPU and runs GNOME without a
+  NetVM. Sys-agent and usr-home display their application windows in sys-gui
+  through the Qubes GUI transport; their processes and data stay in their VMs.
+- **Deployment:** sys-agent submits committed source to sys-ctrl. Sys-ctrl
+  validates and builds candidates and requests admission/activation from dom0
+  through the supported, policy-gated qrexec operations. Dom0 retains lifecycle
+  and activation authority.
+
+The diagram omits optional experiments and on-demand configuration VMs that
+are not part of this normal six-guest topology. Read the
+[USB lab guide](usb-lab.md) for remote access and the development boundary.
+
+## Declaration and activation
 
 ```text
 Nix host and guest declarations
@@ -34,10 +59,8 @@ Nix host and guest declarations
      declared NixOS guests
 ```
 
-This diagram shows declaration and activation layers. It does not describe
-network routing or grant every guest equal authority. The lab deliberately
-gives sys-agent privileged development access into dom0. Read the
-[USB lab guide](usb-lab.md) for the actual topology and access boundary.
+This flow shows how Nix declarations become a running machine. The VM topology
+above describes the resulting domains and their separate responsibilities.
 
 ## Whole-machine releases
 

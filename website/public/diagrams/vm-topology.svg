@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 840" role="img" aria-labelledby="title description">
+  <title id="title">Airlock physical USB lab VM topology</title>
+  <desc id="description">NixOS dom0 and Xen host six guests. sys-agent, sys-ctrl and usr-home route through sys-firewall, which routes through sys-net to physical network devices. sys-gui owns the GNOME desktop and physical GPU and has no NetVM. sys-agent has a development-only qrexec shell into dom0. sys-agent and usr-home display application windows in sys-gui. Release submission proceeds from sys-agent through sys-ctrl to dom0 using policy-gated qrexec.</desc>
+  <defs>
+    <marker id="network" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#7dc9ec"/></marker>
+    <marker id="development" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#ff986b"/></marker>
+  </defs>
+  <style>
+    text { font-family: Inter, system-ui, sans-serif; fill: #e6edf5; }
+    .name { font-size: 26px; font-weight: 650; }
+    .detail { font-size: 19px; fill: #b4c5d6; }
+    .label { font-size: 19px; font-weight: 600; }
+    .guest { fill: #101e2a; stroke: #44617a; stroke-width: 2; }
+    .route { fill: none; stroke: #7dc9ec; stroke-width: 3; marker-end: url(#network); }
+  </style>
+  <rect width="1000" height="840" rx="18" fill="#071017"/>
+  <text x="32" y="39" class="label">PHYSICAL USB LAB · CURRENT NORMAL PROFILE</text>
+  <rect x="32" y="65" width="936" height="108" rx="12" fill="#142635" stroke="#6686a0" stroke-width="2"/>
+  <text x="56" y="103" class="name">NixOS dom0 · Xen</text>
+  <text x="56" y="135" class="detail">qubesd · libvirt · QubesDB · qrexec · Qubes policy</text>
+  <text x="642" y="103" class="detail">Lifecycle, storage and activation</text>
+  <text x="642" y="135" class="detail">No default network route</text>
+
+  <path d="M186 280V175" fill="none" stroke="#ff986b" stroke-width="3" stroke-dasharray="7 6" marker-end="url(#development)"/>
+  <text x="201" y="207" class="label" style="fill:#ff986b">Development-only dom0 shell</text>
+  <text x="201" y="231" class="detail">Explicit qrexec permission for sys-agent</text>
+
+  <rect x="32" y="253" width="936" height="364" rx="12" fill="none" stroke="#2c4356" stroke-width="2"/>
+  <rect x="66" y="280" width="240" height="95" rx="10" class="guest"/>
+  <text x="86" y="314" class="name">sys-agent</text>
+  <text x="86" y="342" class="detail">Development access</text>
+  <text x="86" y="363" class="detail">Tailnet SSH endpoint</text>
+  <rect x="390" y="280" width="240" height="95" rx="10" class="guest"/>
+  <text x="410" y="314" class="name">sys-ctrl</text>
+  <text x="410" y="342" class="detail">Release controller</text>
+  <text x="410" y="363" class="detail">Validation and builds</text>
+  <rect x="710" y="280" width="240" height="95" rx="10" class="guest"/>
+  <text x="730" y="314" class="name">usr-home</text>
+  <text x="730" y="342" class="detail">User applications</text>
+  <text x="730" y="363" class="detail">Persistent home data</text>
+
+  <path d="M186 375V415H456V489" class="route"/>
+  <path d="M510 375V489" class="route"/>
+  <path d="M830 375V415H564V489" class="route"/>
+  <text x="596" y="455" class="label" style="fill:#7dc9ec">Network routing / NetVM</text>
+
+  <rect x="66" y="490" width="240" height="95" rx="10" class="guest"/>
+  <text x="86" y="524" class="name">sys-gui</text>
+  <text x="86" y="552" class="detail">GNOME · physical GPU</text>
+  <text x="86" y="573" class="detail">No NetVM</text>
+  <rect x="390" y="490" width="240" height="95" rx="10" class="guest"/>
+  <text x="410" y="524" class="name">sys-firewall</text>
+  <text x="410" y="552" class="detail">Network policy</text>
+  <text x="410" y="573" class="detail">NetVM: sys-net</text>
+  <path d="M630 538H708" class="route"/>
+  <rect x="710" y="490" width="240" height="95" rx="10" class="guest"/>
+  <text x="730" y="524" class="name">sys-net</text>
+  <text x="730" y="552" class="detail">Physical NIC owner</text>
+  <text x="730" y="573" class="detail">No upstream NetVM</text>
+
+  <text x="56" y="644" class="detail">Six NixOS guests on the same Xen host</text>
+  <path d="M830 585V672" class="route"/>
+  <rect x="710" y="674" width="240" height="62" rx="10" fill="#142635" stroke="#6686a0" stroke-width="2"/>
+  <text x="730" y="712" class="label">Physical network</text>
+
+  <path d="M32 758H968" stroke="#2c4356"/>
+  <text x="32" y="791" class="detail">GUI display: sys-agent and usr-home → sys-gui (Qubes GUI transport)</text>
+  <text x="32" y="819" class="detail">Release submission: sys-agent → sys-ctrl → dom0 (policy-gated qrexec)</text>
+</svg>

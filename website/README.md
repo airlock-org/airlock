@@ -35,6 +35,9 @@ while the repositories remain private. Relative links are validated before
 replacing the generated collection. Code examples keep their literal paths.
 
 Website assets belong in `public/`; components and styling belong here.
+Documentation diagrams live in `public/diagrams/`. Link to them from repository
+Markdown using a relative path; preparation maps these public assets to their
+local website URLs so static exports do not depend on GitHub image requests.
 `public/logo.svg` is the editable geometric recreation of the supplied logo,
 with a transparent background. The header, hero, documentation, and footer
 share that asset. `public/favicon.svg` uses the same geometry with solid colors
@@ -44,7 +47,6 @@ The landing page follows the supplied navy/orange
 mockup; its desktop preview is an illustration rather than a lab capture.
 The locally served Inter variable font and its license live in `public/fonts/`;
 provenance is recorded in [third-party attribution](../THIRD_PARTY.md).
-Repository Markdown currently uses text and code rather than local image assets.
 Keep navigation and publication metadata in the manifest, and prose in Markdown.
 
 ## Check and build

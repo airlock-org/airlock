@@ -154,6 +154,33 @@ def test_multiline_reference_and_code_links(repository):
     assert "``[also literal](missing.md)``" in result
 
 
+@pytest.mark.parametrize(
+    "markdown,expected",
+    [
+        (
+            "![VM topology](../website/public/diagrams/vm-topology.svg)",
+            "![VM topology](/diagrams/vm-topology.svg)",
+        ),
+        (
+            "[Full-size diagram](../website/public/diagrams/vm-topology.svg#title)",
+            "[Full-size diagram](/diagrams/vm-topology.svg#title)",
+        ),
+        (
+            "[topology]: ../website/public/diagrams/vm-topology.svg",
+            "[topology]: /diagrams/vm-topology.svg",
+        ),
+    ],
+)
+def test_public_assets_use_local_export_urls(repository, markdown, expected):
+    asset = repository / "website/public/diagrams/vm-topology.svg"
+    asset.parent.mkdir(parents=True)
+    asset.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+    assert (
+        DOCS.rewrite_markdown(repository, repository / "docs/overview.md", markdown, {})
+        == expected
+    )
+
+
 def test_component_source_links_work_without_component_checkout(repository):
     source = repository / "docs/overview.md"
     target = "../airlock-machine/flake.nix"
@@ -197,6 +224,7 @@ class HTMLPage(HTMLParser):
     def __init__(self, text):
         super().__init__()
         self.links = []
+        self.images = []
         self.ids = set()
         self.headings = 0
         self.feed(text)
@@ -205,6 +233,8 @@ class HTMLPage(HTMLParser):
         attrs = dict(attributes)
         if tag == "a" and "href" in attrs:
             self.links.append(attrs["href"])
+        if tag == "img" and "src" in attrs:
+            self.images.append(attrs["src"])
         if "id" in attrs:
             self.ids.add(attrs["id"])
         if tag == "h1":
@@ -263,3 +293,24 @@ def test_export_internal_links_and_fragments_resolve(exported_site):
                     f"{source.relative_to(exported_site)}: missing anchor {href}"
                 )
     assert not failures, "\n".join(failures)
+
+
+def test_export_documentation_images_are_local_and_present(exported_site):
+    architecture = HTMLPage(
+        (exported_site / "docs/architecture/index.html").read_text()
+    )
+    for path in (exported_site / "docs").rglob("*.html"):
+        for src in HTMLPage(path.read_text()).images:
+            url = urlsplit(src)
+            assert not url.scheme and not url.netloc, (path, src)
+            assert url.path.startswith("/"), (path, src)
+            assert (exported_site / unquote(url.path).lstrip("/")).is_file(), (
+                path,
+                src,
+            )
+    diagram = (ROOT / "website/public/diagrams/vm-topology.svg").read_bytes()
+    assert any(
+        (exported_site / unquote(urlsplit(src).path).lstrip("/")).read_bytes()
+        == diagram
+        for src in architecture.images
+    )

@@ -88,7 +88,11 @@ def rewrite_target(
         raise ValueError(
             f"Broken repository link in {source.relative_to(root)}: {value}"
         )
-    rewritten = routes.get(path) or source_url(root, path)
+    public = root.resolve() / "website/public"
+    if path.is_relative_to(public) and path.is_file():
+        rewritten = "/" + quote(path.relative_to(public).as_posix())
+    else:
+        rewritten = routes.get(path) or source_url(root, path)
     if url.query:
         rewritten += "?" + url.query
     if url.fragment:
