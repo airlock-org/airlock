@@ -61,7 +61,7 @@ export default function Home() {
             <figcaption>
               <ul aria-label="System foundations"><li>NIXOS</li><li>QUBES</li></ul>
               <span className="emblem-rule" />
-              <p>ONE MACHINE.<br />DISTINCT DOMAINS.</p>
+              <p>DECLARED IN NIX.<br />BUILT ON QUBES.</p>
             </figcaption>
           </figure>
         </section>
