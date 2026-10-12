@@ -29,9 +29,9 @@ GPU reset/restart, GUI recovery, first-run setup acceptance, and broader hardwar
 support remain active work. Nested VM checks and physical acceptance are
 recorded separately.
 
-Airlock has not established Qubes OS security equivalence. The USB lab includes
-privileged development access through sys-agent; read the
-[lab topology](usb-lab.md) before treating that profile as a security boundary.
+Airlock has not established Qubes OS security equivalence. The development
+configuration includes privileged access through sys-agent; read the
+[development access guide](usb-lab.md) before treating that configuration as a security boundary.
 
 ## Project source
 

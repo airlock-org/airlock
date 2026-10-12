@@ -17,8 +17,8 @@ const features = [
 ];
 const systemDomains = [
   { name: "sys-gui", role: "GNOME desktop", icon: Monitor, href: "/docs/guides/gnome/" },
-  { name: "sys-net", role: "Network devices", icon: Globe, href: "/docs/guides/usb-lab/" },
-  { name: "sys-firewall", role: "Network policy", icon: Shield, href: "/docs/guides/usb-lab/" },
+  { name: "sys-net", role: "Network devices", icon: Globe, href: "/docs/architecture/#network-routing" },
+  { name: "sys-firewall", role: "Network policy", icon: Shield, href: "/docs/architecture/#network-routing" },
   { name: "sys-ctrl", role: "Build controller", icon: GitBranch, href: "/docs/guides/machine-deployment/" },
 ];
 
@@ -97,7 +97,7 @@ export default function Home() {
               <Link href="/docs/architecture/" className="text-link">Explore the architecture <ArrowRight size={17} aria-hidden="true" /></Link>
             </div>
             <figure className="domain-diagram">
-              <div className="diagram-heading"><span>DECLARED DOMAINS</span><span className="diagram-tag">USB LAB</span></div>
+              <div className="diagram-heading"><span>DECLARED DOMAINS</span></div>
               <div className="dom0-card">
                 <img src="/logo.svg" width="48" height="49" alt="" aria-hidden="true" />
                 <div><strong>Dom0 <span>(NixOS / Xen)</span></strong><p>Lifecycle · Devices · Policy · Activation</p></div>
@@ -113,7 +113,7 @@ export default function Home() {
                 <Link href="/docs/guides/usb-lab/" className="domain-card"><Terminal size={24} strokeWidth={1.5} aria-hidden="true" /><strong>sys-agent</strong><span>Development access</span></Link>
                 <Link href="/docs/evidence/live-vm-additions/" className="domain-card"><Folder size={24} strokeWidth={1.5} aria-hidden="true" /><strong>usr-home</strong><span>User applications</span></Link>
               </div>
-              <figcaption>Domain overview of the current USB lab. <Link href="/docs/guides/usb-lab/">Read the topology and access policy <ArrowUpRight size={12} aria-hidden="true" /></Link></figcaption>
+              <figcaption>VM roles and responsibilities. <Link href="/docs/architecture/#vm-topology">Explore the topology <ArrowUpRight size={12} aria-hidden="true" /></Link></figcaption>
             </figure>
           </div>
         </section>
@@ -129,14 +129,14 @@ export default function Home() {
                 <pre><code><span className="terminal-comment"># Prepare dependencies</span>{"\n"}<span className="terminal-prompt">$</span> uv sync --locked{"\n\n"}<span className="terminal-comment"># Run local checks</span>{"\n"}<span className="terminal-prompt">$</span> make test-quick{"\n\n"}<span className="terminal-cursor" aria-hidden="true">▌</span></code></pre>
               </div>
             </div>
-            <figcaption>Illustrative desktop layout · current physical lab uses GNOME</figcaption>
+            <figcaption>Desktop layout illustration</figcaption>
           </figure>
           <div className="desktop-copy">
             <p className="eyebrow">A DESKTOP ACROSS DOMAINS</p>
             <h2 id="desktop-title">A familiar desktop.<br />Across separate domains.</h2>
-            <p>GNOME runs in sys-gui in the physical lab. Application windows carry their VM context; system changes follow the documented deployment and recovery workflow.</p>
+            <p>GNOME runs in sys-gui. Application windows carry their VM context; system changes follow the documented deployment and recovery workflow.</p>
             <div className="desktop-details">
-              <Link href="/docs/guides/gnome/"><Monitor size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>GNOME desktop</strong><span>Current physical lab</span></p></Link>
+              <Link href="/docs/guides/gnome/"><Monitor size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>GNOME desktop</strong><span>Runs in sys-gui</span></p></Link>
               <Link href="/docs/guides/gnome/"><Box size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>VM identity</strong><span>Application context</span></p></Link>
               <Link href="/docs/guides/usb-lab/"><Terminal size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Development access</strong><span>Through sys-agent</span></p></Link>
               <Link href="/docs/guides/machine-deployment/"><BookOpen size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Recovery guides</strong><span>Deployment and rollback</span></p></Link>
@@ -146,7 +146,7 @@ export default function Home() {
         </section>
         <section className="status-section site-container" aria-labelledby="status-title">
           <div className="status-panel">
-            <div><p className="eyebrow"><span className="status-dot" /> PROJECT STATUS</p><h2 id="status-title">Experimental. With recorded trials.</h2><p>VM lifecycle, qrexec, deployment, and rollback have recorded evidence. GPU recovery and broader hardware support remain open. The USB lab includes privileged development access; Qubes OS security equivalence has not been established.</p></div>
+            <div><p className="eyebrow"><span className="status-dot" /> PROJECT STATUS</p><h2 id="status-title">Experimental. With recorded trials.</h2><p>VM lifecycle, qrexec, deployment, and rollback have recorded evidence. GPU recovery and broader hardware support remain open. Development access includes a privileged dom0 shell; Qubes OS security equivalence has not been established.</p></div>
             <Link href="/docs/status/" className="site-button secondary">Validation status <ArrowRight size={16} aria-hidden="true" /></Link>
           </div>
         </section>

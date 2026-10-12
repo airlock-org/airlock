@@ -26,9 +26,9 @@ current backlog items.
 ## Current operating guides
 
 - [Repository boundaries](repositories.md): source ownership and submodule workflow.
-- [USB development](usb-dev.md) and [USB lab](usb-lab.md): current image,
+- [USB development](usb-dev.md) and [development access](usb-lab.md): current image,
   provisioning, recovery, and physical topology. The normal Airlock entry uses
-  physical-GPU GNOME; the deployed USB lab release routes sys-agent through
+  physical-GPU GNOME; the current configuration routes sys-agent through
   sys-firewall and sys-net.
 - [Machine deployment](machine-deployment.md): host and sys-agent submission,
   whole-machine activation, verification, rollback, and maintenance.
@@ -52,7 +52,7 @@ historical paths.
 | --- | --- |
 | [First-run wizard](todo/first-run-setup-wizard.md) | Welcome/completion shell implemented; physical GUI and reboot verification pending. Timed trials and rollback remain before disruptive pages. |
 | [USB input setup](todo/usb-input-setup.md) | Planned. First hardware trial consumer; preserve storage and existing connectivity. Ownership depends on hardware. |
-| [USB lab network follow-ups](todo/usb-lab-network-followups.md) | Focused tests, updates proxy, PCI Wi-Fi traffic, and an exact persistence sentinel remain. The wired topology passed physical acceptance. |
+| [Network follow-ups](todo/usb-lab-network-followups.md) | Focused tests, updates proxy, PCI Wi-Fi traffic, and an exact persistence sentinel remain. The wired topology passed physical acceptance. |
 | [Deployment metadata and validation reuse](todo/08-deployment-metadata-validation-reuse.md) | Planned. Reduce repeated preparation work with operation-scoped caches; RAM staging is out of scope. |
 | [Deployment code health](todo/09-deployment-code-health.md) | Implemented and locally verified. Cleanup preserves startup errors; saved records are durable; publication finishing is shared. No live deployment. |
 | [Internal compatibility cleanup](todo/11-simplify-internal-compatibility.md) | Local cleanup implemented; worktree retired and quick tests passed on main (681 passed, 59 skipped). Nix/EROFS checks and persisted-state acceptance remain pending; the development deployment route is retained. |
@@ -117,7 +117,7 @@ profile/evidence scope rather than blindly synchronizing text.
 
 - [Original USB plan](history/usb-dev-plan.md): superseded; original unbuilt/untested
   status and session restrictions do not apply to current work.
-- [USB GUI lab](history/usb-gui-lab.md): earlier AMD experiment, including old boot,
+- [Early GPU/display trials](history/usb-gui-lab.md): earlier AMD experiment, including old boot,
   credentials, and networking procedures. Use current runbooks instead.
 - [AMD investigation](history/amd-gpu-investigation.md), [first assignment](history/amd-gpu-first-assignment.md),
   [VBIOS trial](history/amd-gpu-vbios.md), and [reset findings](history/amd-gpu-assignment-reset-findings.md):

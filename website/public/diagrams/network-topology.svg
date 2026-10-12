@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" role="img" aria-labelledby="title description">
   <title id="title">Airlock network topology</title>
-  <desc id="description">In the normal physical USB lab, sys-agent, sys-ctrl and usr-home use sys-firewall as their NetVM. sys-firewall uses sys-net, which owns the physical network devices. dom0 has no default network route and sys-gui has no NetVM.</desc>
+  <desc id="description">sys-agent, sys-ctrl and usr-home use sys-firewall as their NetVM. sys-firewall uses sys-net, which owns the physical network devices. dom0 has no default network route and sys-gui has no NetVM.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1 9 5 0 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linejoin="round"/></marker>
   </defs>
@@ -17,7 +17,6 @@
   </style>
   <rect x="1" y="1" width="898" height="498" rx="16" fill="var(--canvas)" stroke="var(--line)"/>
   <text x="40" y="40" class="eyebrow">NETWORK ROUTING</text>
-  <text x="860" y="40" class="eyebrow" text-anchor="end">USB LAB</text>
 
   <rect x="40" y="80" width="216" height="80" rx="10" class="node"/>
   <text x="60" y="115" class="name">sys-agent</text>

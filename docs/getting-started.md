@@ -49,7 +49,7 @@ make test-nix
 
 Read [USB development](usb-dev.md) before creating or provisioning an image.
 Writing an image erases the explicitly selected USB device. Read the
-[USB lab topology](usb-lab.md) for the development profile's privileged access.
+[development access](usb-lab.md) for the configuration's privileged access.
 
 Physical updates use the committed [whole-machine deployment
 workflow](machine-deployment.md): plan, apply, verify the running generation,

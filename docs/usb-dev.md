@@ -157,7 +157,7 @@ during personalization; the current development guest login is `user` / `passwor
 Wait for bootstrap to complete before manually starting guests.
 
 For networking and interactive Tailscale enrollment in sys-agent, follow
-[the normal lab guide](usb-lab.md#first-boot). Normal dom0 has no direct network
+[the development access guide](usb-lab.md#first-boot). Normal dom0 has no direct network
 or SSH listener. The enrolled identity persists on sys-agent's private volume;
 no Tailscale auth key or host identity is copied during provisioning.
 

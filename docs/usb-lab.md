@@ -1,8 +1,8 @@
-# General USB lab
+# Development access
 
-`usb-lab` is the development topology for a physical USB boot. It is not a
-hardened profile: `sys-agent` is deliberately privileged and has a
-development-only Qubes RPC shell into dom0.
+`sys-agent` provides remote development access and has an explicitly enabled
+Qubes RPC shell into dom0. This is a privileged development configuration,
+not a hardened profile.
 
 ```text
 development computer --Tailnet SSH--> sys-agent --airlock-dom0-shell--> dom0

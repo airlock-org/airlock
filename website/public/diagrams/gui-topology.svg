@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" role="img" aria-labelledby="title description">
   <title id="title">Airlock GUI topology</title>
-  <desc id="description">In the normal physical USB lab, application processes and data stay in sys-agent and usr-home. Their windows reach sys-gui through the Qubes GUI transport. sys-gui runs GNOME, owns the assigned physical display GPU and has no NetVM. dom0 forwards keyboard and pointer events to sys-gui through the Qubes input proxy.</desc>
+  <desc id="description">Application processes and data stay in sys-agent and usr-home. Their windows reach sys-gui through the Qubes GUI transport. sys-gui runs GNOME, owns the assigned physical display GPU and has no NetVM. dom0 forwards keyboard and pointer events to sys-gui through the Qubes input proxy.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1 9 5 0 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linejoin="round"/></marker>
   </defs>
@@ -16,7 +16,6 @@
   </style>
   <rect x="1" y="1" width="898" height="558" rx="16" fill="var(--canvas)" stroke="var(--line)"/>
   <text x="40" y="40" class="eyebrow">GUI &amp; DISPLAY</text>
-  <text x="860" y="40" class="eyebrow" text-anchor="end">USB LAB</text>
   <text x="40" y="85" class="detail">Application VMs</text>
 
   <rect x="40" y="112" width="216" height="80" rx="10" class="node"/>

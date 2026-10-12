@@ -16,9 +16,9 @@ practical. Runtime state and generated release records have distinct ownership.
 
 ## VM topology
 
-The current USB lab starts sys-gui, sys-agent, sys-ctrl, sys-net, sys-firewall,
+The current configuration starts sys-gui, sys-agent, sys-ctrl, sys-net, sys-firewall,
 and usr-home. All six guests run on the same NixOS dom0 / Xen host. These views
-describe the normal physical development profile; optional experiments and
+describe the development configuration; optional experiments and
 on-demand configuration VMs are omitted.
 
 ### Network routing
@@ -48,9 +48,9 @@ VMs. See [GNOME integration](sys-gui-gnome.md) and
 
 ### Development access
 
-The lab explicitly permits a `sys-agent` → dom0 development shell over qrexec.
+The development configuration explicitly permits a `sys-agent` → dom0 shell over qrexec.
 This privileged RPC is separate from network routing and GUI transport;
-other guests do not inherit it. Read the [USB lab guide](usb-lab.md) for remote
+other guests do not inherit it. Read the [development access guide](usb-lab.md) for remote
 access and the development boundary.
 
 ## Declaration and activation
