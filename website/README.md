@@ -36,8 +36,10 @@ replacing the generated collection. Code examples keep their literal paths.
 
 Website assets belong in `public/`; components and styling belong here.
 `public/logo.svg` is the editable geometric recreation of the supplied logo,
-with a transparent background. The header, hero, documentation, footer, and
-favicon all share that asset. The landing page follows the supplied navy/orange
+with a transparent background. The header, hero, documentation, and footer
+share that asset. `public/favicon.svg` uses the same geometry with solid colors
+and a darker frame for light browser tabs; the frame becomes lighter in dark mode.
+The landing page follows the supplied navy/orange
 mockup; its desktop preview is an illustration rather than a lab capture.
 The locally served Inter variable font and its license live in `public/fonts/`;
 provenance is recorded in [third-party attribution](../THIRD_PARTY.md).
