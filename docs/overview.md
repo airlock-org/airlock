@@ -5,6 +5,10 @@ declares host and guest systems in Nix while preserving the Qubes architecture:
 Xen-based virtualization, VM lifecycle, device ownership, inter-VM RPC through
 qrexec, and Qubes policy.
 
+A shared global store reuses package objects across VM closures. Each guest
+receives a read-only view of its system and dependencies, with separate writable
+private data. The store is global to the machine and managed by dom0.
+
 The [computer assistant](usr-assistant.md) runs in its own user VM,
 `usr-assistant`. It is a workspace for inspecting, configuring, and maintaining
 the computer; the current interface is Codex in Console.

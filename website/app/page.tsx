@@ -86,7 +86,7 @@ export default function Home() {
               <ul className="system-checklist">
                 {[
                   "NixOS in dom0 and declared guests",
-                  "Closure-backed, read-only guest systems",
+                  "Shared global store with read-only VM closure views",
                   "Existing Qubes lifecycle, RPC, and policy",
                   "Whole-machine deployment and recovery",
                   "Persistent private data across updates",

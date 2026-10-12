@@ -14,12 +14,21 @@ and retains the existing Qubes mechanisms:
 - **qubesd and libvirt** provide VM administration and lifecycle machinery.
 - **Qubes policy** defines rules for inter-VM RPC requests.
 
-Airlock builds guests from NixOS closures, with read-only system content and
-persistent private data.
-
 The proof of concept accepts existing Qubes runtime state such as `qubes.xml`.
 Nix remains the source of truth for declared host/guest systems wherever
 practical. Runtime state and generated release records have distinct ownership.
+
+## Shared global store
+
+Airlock builds guest systems as NixOS closures: the system and all of its
+dependencies. A shared global store reuses package objects across VM closures.
+Each VM receives a read-only view of its declared system closure, while its
+private data remains separate and writable.
+
+Here, global means machine-wide. Dom0 manages the shared storage pool and
+provides per-VM closure views; guests do not receive unrestricted access to the
+entire store. Writable build stores remain separate from these read-only system
+views.
 
 ## VM topology
 
