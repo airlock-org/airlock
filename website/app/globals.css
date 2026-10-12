@@ -141,11 +141,6 @@ a, button { -webkit-tap-highlight-color: transparent; }
 .desktop-details > a:hover > svg { border-color: #97593f; color: var(--site-accent); }
 .desktop-details p { min-width: 0; display: grid; gap: 5px; font-size: 13px; }.desktop-details strong { font-weight: 500; }.desktop-details span { color: #a5bbcd; font-size: 12px; line-height: 1.5; }
 
-.status-section { padding-bottom: 52px; }
-.status-panel { display: flex; align-items: center; gap: 38px; padding: 28px 30px; background: #111b24; border: 1px solid #304252; border-radius: 8px; }
-.status-panel > div { flex: 1; }
-.status-panel h2 { font-size: 21px; font-weight: 500; letter-spacing: -.03em; margin-top: 11px; }
-.status-panel > div > p:last-child { font-size: 13px; line-height: 1.8; color: var(--site-muted); margin-top: 12px; }
 .site-footer { border-top: 1px solid #223544; }
 .footer-inner { display: flex; align-items: center; gap: 26px; padding-block: 30px; }
 .footer-inner .airlock-brand { font-size: 16px; color: #9fb8d2; }.footer-inner .brand-logo { width: 34px; height: 35px; }
@@ -184,7 +179,6 @@ a, button { -webkit-tap-highlight-color: transparent; }
   .desktop-section { grid-template-columns: minmax(0, 1fr); gap: 36px; padding-block: 52px; }
   .desktop-preview { width: 100%; max-width: 630px; }
   .desktop-copy { max-width: 620px; }.desktop-details { max-width: 560px; }
-  .status-panel { flex-direction: column; align-items: flex-start; gap: 22px; }
   .footer-inner { flex-wrap: wrap; gap: 20px; }.footer-inner > p { margin-left: auto; }
 }
 @media (max-width: 600px) {
@@ -226,8 +220,6 @@ a, button { -webkit-tap-highlight-color: transparent; }
   .desktop-details { gap: 18px 14px; }.desktop-details p { font-size: 12px; }
   .desktop-details span { font-size: 11px; }.desktop-details > a { gap: 10px; }
   .desktop-details > a > svg { width: 20px; height: 20px; padding: 7px; }
-  .status-section { padding-bottom: 36px; }.status-panel { padding: 23px; }
-  .status-panel h2 { font-size: 22px; }.status-panel > div > p:last-child { font-size: 13px; }
   .footer-inner { gap: 14px; padding-block: 25px; }.footer-inner > p { margin-left: 0; width: 100%; }
   .footer-inner > div { margin-left: 0; gap: 24px; }
 }
@@ -242,7 +234,6 @@ a, button { -webkit-tap-highlight-color: transparent; }
   .desktop-details { grid-template-columns: 1fr; gap: 12px; }
   .desktop-details p { font-size: 13px; }.desktop-details span { font-size: 12px; }
   .desktop-details > a > svg { width: 24px; height: 24px; padding: 8px; }
-  .status-panel { padding: 20px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .airlock-site * { transition: none; }

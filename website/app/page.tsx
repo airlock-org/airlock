@@ -132,12 +132,6 @@ export default function Home() {
             <Link href="/docs/guides/gnome/" className="text-link">Read about the desktop <ArrowRight size={17} aria-hidden="true" /></Link>
           </div>
         </section>
-        <section className="status-section site-container" aria-labelledby="status-title">
-          <div className="status-panel">
-            <div><p className="eyebrow"><span className="status-dot" /> PROJECT STATUS</p><h2 id="status-title">What works today.</h2><p>Qubes VM lifecycle and RPC, deployment, and rollback have recorded evidence. GPU recovery and broader hardware support remain open. Development access includes a privileged dom0 shell; Qubes OS security equivalence has not been established.</p></div>
-            <Link href="/docs/status/" className="site-button secondary">Validation status <ArrowRight size={16} aria-hidden="true" /></Link>
-          </div>
-        </section>
       </main>
       <footer className="site-footer">
         <div className="site-container footer-inner">
