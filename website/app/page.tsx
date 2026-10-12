@@ -51,7 +51,7 @@ export default function Home() {
             <div className="emblem-grid" aria-hidden="true" />
             <img src="/logo.svg" width="280" height="284" alt="Airlock's octagonal doorway emblem" />
             <figcaption>
-              <ul aria-label="System foundations"><li>NIXOS</li><li>QUBES</li></ul>
+              <ul aria-label="System foundations"><li>NIXOS</li><li>QUBES</li><li>XEN</li></ul>
               <span className="emblem-rule" />
               <p>DECLARED IN NIX.<br />BUILT ON QUBES.</p>
             </figcaption>
