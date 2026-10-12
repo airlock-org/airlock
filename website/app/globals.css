@@ -85,7 +85,7 @@ a, button { -webkit-tap-highlight-color: transparent; }
 .hero-emblem figcaption p { font-size: 10px; line-height: 1.9; white-space: nowrap; letter-spacing: .09em; }
 
 .features { padding-bottom: 52px; scroll-margin-top: 112px; }
-.feature-grid { border-top: 1px solid var(--site-line); padding-top: 30px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.feature-grid { border-top: 1px solid var(--site-line); padding-top: 30px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
 .feature-card { position: relative; display: flex; align-items: flex-start; gap: 21px; min-height: 145px; padding: 25px 23px; border: 1px solid #2a4053; border-radius: 8px; background: linear-gradient(145deg, #11202b88, #0a151d33); transition: border-color .18s, background .18s, transform .18s; }
 .feature-card > svg { color: #a8c1db; flex-shrink: 0; }
 .feature-card h3 { font-size: 16px; line-height: 1.35; font-weight: 500; letter-spacing: -.025em; color: var(--site-fg); }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
   ArrowRight, ArrowUpRight, BookOpen, Box, Check, Code2, Database,
-  Folder, Github, GitBranch, Globe, Layers3, Monitor, Network, Shield, Terminal,
+  Folder, Github, GitBranch, Globe, Monitor, Shield, Terminal,
 } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { MobileNav } from "@/components/mobile-nav";
@@ -9,9 +9,7 @@ import { MobileNav } from "@/components/mobile-nav";
 const github = "https://github.com/airlock-org/airlock";
 const features = [
   { icon: Box, title: "NixOS", text: "Declare host and guest systems together, with pinned build inputs.", href: "/docs/architecture/" },
-  { icon: Shield, title: "Qubes architecture", text: "Keep Qubes lifecycle, device ownership, and policy across domains.", href: "/docs/architecture/" },
-  { icon: Layers3, title: "Xen", text: "Run NixOS in dom0 on the Qubes virtualization foundation.", href: "/docs/architecture/" },
-  { icon: Network, title: "qrexec", text: "Communicate between VMs through the existing Qubes machinery.", href: "/docs/architecture/" },
+  { icon: Shield, title: "Qubes architecture", text: "Retain Qubes VM lifecycle, device ownership, and policy, with inter-VM RPC through qrexec.", href: "/docs/architecture/" },
   { icon: GitBranch, title: "Machine releases", text: "Deploy committed configuration with verification and rollback.", href: "/docs/guides/machine-deployment/" },
   { icon: Database, title: "Persistent guests", text: "Read-only NixOS systems. Private data that survives updates.", href: "/docs/guides/build-store/" },
 ];
@@ -50,7 +48,7 @@ export default function Home() {
             <p className="eyebrow hero-eyebrow"><span className="hero-stage">Experimental</span><span>NIX-NATIVE / QUBES</span></p>
             <h1 id="hero-title">Airlock<span>OS</span></h1>
             <p className="hero-tagline">Qubes architecture.<br />Declared in Nix.</p>
-            <p className="hero-description">NixOS in dom0. Declarative guests on Xen. A desktop across domains, with one configuration for the whole machine.</p>
+            <p className="hero-description">NixOS host and guest systems on the Qubes architecture. A desktop across domains, with one configuration for the whole machine.</p>
             <div className="button-row">
               <Link href="/docs/getting-started/" className="site-button primary">Get started <ArrowRight size={17} aria-hidden="true" /></Link>
               <Link href="/docs/" className="site-button secondary"><BookOpen size={16} aria-hidden="true" /> Explore the docs</Link>
@@ -61,14 +59,14 @@ export default function Home() {
             <div className="emblem-grid" aria-hidden="true" />
             <img src="/logo.svg" width="280" height="284" alt="Airlock's octagonal doorway emblem" />
             <figcaption>
-              <ul aria-label="System foundations"><li>NIXOS</li><li>QUBES</li><li>XEN</li><li>QREXEC</li></ul>
+              <ul aria-label="System foundations"><li>NIXOS</li><li>QUBES</li></ul>
               <span className="emblem-rule" />
               <p>ONE MACHINE.<br />DISTINCT DOMAINS.</p>
             </figcaption>
           </figure>
         </section>
         <section className="features site-container" id="features" aria-labelledby="features-title">
-          <h2 id="features-title" className="sr-only">System foundations</h2>
+          <h2 id="features-title" className="sr-only">Features</h2>
           <div className="feature-grid">
             {features.map(({ icon: Icon, title, text, href }) => (
               <Link href={href} className="feature-card" key={title}>
@@ -84,12 +82,12 @@ export default function Home() {
             <div className="system-copy">
               <p className="eyebrow">THE SYSTEM</p>
               <h2 id="architecture-title">Compartmentalized.<br />From the hypervisor up.</h2>
-              <p>Airlock brings declarative NixOS systems to the existing Qubes architecture. Xen runs the guests; Qubes retains lifecycle, communication, device ownership, and policy.</p>
+              <p>Airlock brings declarative NixOS systems to the existing Qubes architecture. Qubes uses Xen for virtualization and qrexec for inter-VM RPC; its lifecycle, device ownership, and policy remain in place.</p>
               <ul className="system-checklist">
                 {[
                   "NixOS in dom0 and declared guests",
                   "Closure-backed, read-only guest systems",
-                  "Xen, qrexec, QubesDB, and Qubes policy",
+                  "Existing Qubes lifecycle, RPC, and policy",
                   "Whole-machine deployment and recovery",
                   "Persistent private data across updates",
                 ].map(item => <li key={item}><Check size={13} strokeWidth={3} aria-hidden="true" />{item}</li>)}
@@ -146,7 +144,7 @@ export default function Home() {
         </section>
         <section className="status-section site-container" aria-labelledby="status-title">
           <div className="status-panel">
-            <div><p className="eyebrow"><span className="status-dot" /> PROJECT STATUS</p><h2 id="status-title">Experimental. With recorded trials.</h2><p>VM lifecycle, qrexec, deployment, and rollback have recorded evidence. GPU recovery and broader hardware support remain open. Development access includes a privileged dom0 shell; Qubes OS security equivalence has not been established.</p></div>
+            <div><p className="eyebrow"><span className="status-dot" /> PROJECT STATUS</p><h2 id="status-title">Experimental. With recorded trials.</h2><p>Qubes VM lifecycle and RPC, deployment, and rollback have recorded evidence. GPU recovery and broader hardware support remain open. Development access includes a privileged dom0 shell; Qubes OS security equivalence has not been established.</p></div>
             <Link href="/docs/status/" className="site-button secondary">Validation status <ArrowRight size={16} aria-hidden="true" /></Link>
           </div>
         </section>

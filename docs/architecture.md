@@ -6,9 +6,16 @@ retain VM lifecycle, inter-VM communication, device ownership, and policy.
 
 ## Qubes mechanisms
 
-Xen provides the virtualization foundation. Airlock runs NixOS in dom0 and
-preserves qrexec, QubesDB, qubesd, libvirt, and Qubes policy. Guests are built
-from NixOS closures, with read-only system content and persistent private data.
+Qubes uses Xen as its virtualization foundation. Airlock runs NixOS in dom0
+and retains the existing Qubes mechanisms:
+
+- **qrexec** provides Qubes' inter-VM remote procedure calls (RPC).
+- **QubesDB** publishes runtime settings for guests.
+- **qubesd and libvirt** provide VM administration and lifecycle machinery.
+- **Qubes policy** defines rules for inter-VM RPC requests.
+
+Airlock builds guests from NixOS closures, with read-only system content and
+persistent private data.
 
 The proof of concept accepts existing Qubes runtime state such as `qubes.xml`.
 Nix remains the source of truth for declared host/guest systems wherever

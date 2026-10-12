@@ -7,8 +7,8 @@ running generation are distinct results.
 
 ## Demonstrated paths
 
-Nested Xen/Qubes trials cover control services, qrexec, closure-backed NixOS
-VM startup, read-only guest stores, config staging/validation/promotion, and
+Nested Qubes trials on Xen cover control services, inter-VM RPC through qrexec,
+closure-backed NixOS VM startup, read-only guest stores, config staging/validation/promotion, and
 host generation switching. See [testing](testing.md) and [config system](config-system.md).
 
 Physical ThinkPad lab trials include wired networking through sys-net and

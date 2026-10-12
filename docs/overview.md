@@ -1,12 +1,13 @@
 # Overview
 
-Airlock is an experimental Nix-native Qubes system. It runs NixOS as Xen dom0
-and declares host and guest systems in Nix while preserving Qubes' Xen,
-qrexec, QubesDB, qubesd, libvirt, policy, and VM lifecycle machinery.
+Airlock is an experimental Nix-native Qubes system. It runs NixOS in dom0 and
+declares host and guest systems in Nix while preserving the Qubes architecture:
+Xen-based virtualization, VM lifecycle, device ownership, inter-VM RPC through
+qrexec, and Qubes policy.
 
 The project explores how declarative systems and whole-machine releases can
-work with the existing Qubes architecture. It has demonstrated VM lifecycle,
-qrexec, closure-backed NixOS guests, configuration validation, and machine
+work with the existing Qubes architecture. It has demonstrated Qubes VM lifecycle
+and inter-VM RPC, closure-backed NixOS guests, configuration validation, and machine
 deployment and rollback.
 
 ## Start here
