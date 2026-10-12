@@ -44,7 +44,12 @@ cases proving untrusted executable provenance remains rejected. Coverage was
 written but not run, respecting the operator instruction.
 
 Both fixes are committed and pinned. Live deployment and physical acceptance
-of the new generation are pending. An initial readiness-only plan is being
-prepared and must be superseded with a plan for the latest combined revision
-before activation. Evidence and controller logs are under
+of the new generation are pending. The initial readiness-only build succeeded, but planning failed
+at dom0 inventory admission: insufficient dom0 store space for release import.
+Available space was 2,092,072,960 bytes against a 2,147,483,648-byte reserve,
+before accounting for missing release objects. No apply was submitted.
+Read-only release inventory lists 87 retained releases, 75 without retention
+blockers; none were pruned. Guarded development-host gc-auto was invoked, but
+does not resolve this separate physical dom0 capacity constraint. The final
+combined revision must be built/planned after controlled storage cleanup. Evidence and controller logs are under
 .airlock-logs/calculator-launch-2026-10-12/.
