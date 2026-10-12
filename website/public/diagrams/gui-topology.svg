@@ -8,9 +8,9 @@
     :root { --canvas: #f8fafc; --surface: #fff; --line: #dce3eb; --text: #243341; --muted: #627284; --accent: #bb512e; --tint: #fff6f0; }
     @media (prefers-color-scheme: dark) { :root { --canvas: #101820; --surface: #17232e; --line: #344655; --text: #e1eaf2; --muted: #a9bac9; --accent: #ffad87; --tint: #30231f; } }
     text { font-family: Inter, system-ui, sans-serif; fill: var(--text); }
-    .eyebrow { font-size: 14px; font-weight: 600; letter-spacing: 1.6px; fill: var(--muted); }
-    .name { font-family: ui-monospace, monospace; font-size: 22px; font-weight: 600; }
-    .detail { font-size: 17px; fill: var(--muted); }
+    .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 1.2px; fill: var(--muted); }
+    .name { font-family: ui-monospace, monospace; font-size: 18px; font-weight: 500; }
+    .detail { font-size: 14px; fill: var(--muted); }
     .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
     .route { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   </style>
@@ -20,30 +20,30 @@
   <text x="40" y="85" class="detail">Application VMs</text>
 
   <rect x="40" y="112" width="216" height="80" rx="10" class="node"/>
-  <text x="60" y="145" class="name">sys-agent</text>
-  <text x="60" y="171" class="detail">Development tools</text>
+  <text x="60" y="147" class="name">sys-agent</text>
+  <text x="60" y="169" class="detail">Development tools</text>
   <rect x="40" y="268" width="216" height="80" rx="10" class="node"/>
-  <text x="60" y="301" class="name">usr-home</text>
-  <text x="60" y="327" class="detail">User applications</text>
+  <text x="60" y="303" class="name">usr-home</text>
+  <text x="60" y="325" class="detail">User applications</text>
   <path d="M256 152H306V308H256" class="route"/>
   <circle cx="306" cy="250" r="3" fill="var(--accent)"/>
   <path d="M306 250H358" class="route" marker-end="url(#arrow)"/>
-  <text x="360" y="156" font-size="17" style="fill:var(--accent)">Qubes GUI transport</text>
+  <text x="360" y="156" font-size="14" style="fill:var(--accent)">Qubes GUI transport</text>
 
   <rect x="360" y="184" width="240" height="132" rx="10" fill="var(--tint)" stroke="var(--accent)" stroke-width="1.5"/>
-  <text x="382" y="217" class="name">sys-gui</text>
-  <text x="382" y="246" class="detail">GNOME desktop</text>
-  <text x="382" y="272" class="detail">Assigned physical GPU</text>
-  <text x="382" y="298" class="detail">No NetVM</text>
+  <text x="382" y="223" class="name">sys-gui</text>
+  <text x="382" y="248" class="detail">GNOME desktop</text>
+  <text x="382" y="270" class="detail">Assigned physical GPU</text>
+  <text x="382" y="292" class="detail">No NetVM</text>
   <path d="M600 250H658" class="route" marker-end="url(#arrow)"/>
   <rect x="660" y="210" width="200" height="80" rx="10" class="node"/>
-  <text x="680" y="243" font-size="18" font-weight="600">Physical display</text>
-  <text x="680" y="269" class="detail">Desktop windows</text>
+  <text x="680" y="245" font-size="16" font-weight="500">Physical display</text>
+  <text x="680" y="267" class="detail">Desktop windows</text>
 
   <text x="40" y="383" class="detail">Input source</text>
   <rect x="40" y="408" width="216" height="80" rx="10" class="node"/>
-  <text x="60" y="441" class="name">dom0</text>
-  <text x="60" y="467" class="detail">Local input devices</text>
+  <text x="60" y="443" class="name">dom0</text>
+  <text x="60" y="465" class="detail">Local input devices</text>
   <path d="M256 448H480V318" fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 6" stroke-linejoin="round" marker-end="url(#arrow)"/>
   <text x="512" y="405" class="detail">Qubes input proxy</text>
   <text x="512" y="431" class="detail">Keyboard and pointer events</text>
