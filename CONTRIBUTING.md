@@ -67,3 +67,13 @@ For sensitive findings, follow [SECURITY.md](SECURITY.md).
 Contributions of original Airlock code are under the MIT license in `LICENSE`.
 Retain existing third-party notices and identify the source and terms of copied
 or derived code. See [THIRD_PARTY.md](THIRD_PARTY.md).
+
+## CI while the component repository is private
+
+The parent's recursive checkout needs access to both repositories. GitHub's
+ordinary job token cannot read a different private repository. Configure the
+parent repository secret `AIRLOCK_CI_READ_TOKEN` with a fine-grained token that
+has only Contents: read access to `airlock-org/airlock` and `airlock-org/machine`.
+The workflow uses the ordinary job token when that secret is absent, which is
+sufficient once the component source is publicly readable. Setting this secret
+is a separate GitHub settings action; never commit or log the token.

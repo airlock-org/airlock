@@ -47,8 +47,9 @@ evaluations or builds**. This exercised the documented local-source override
 while keeping the tracked SSH URLs intact. The clone was removed after checking.
 
 Both CI workflows passed actionlint v1.7.12. A local documentation check
-resolved 580 relative link targets with no missing files. Hosted CI is not claimed
-as run; remote availability and live deployment remain unverified.
+resolved 580 relative link targets with no missing files. These checks describe
+the original local preparation. Later remote clone and hosted CI results are
+recorded below; no live deployment has been performed.
 
 ## Source/history audit
 
@@ -76,9 +77,9 @@ gitleaks git airlock-machine --log-opts='--all' --redact --report-format=json \
 1. Clarify licensing permission for the vendored `CertainLach/nixos-qubes` modules
    and packaging. No license grant was established from the local snapshot or
    upstream license endpoint. Airlock's MIT license does not resolve this.
-2. Make both intended SSH remotes and the pinned component commit accessible
-   when publication is explicitly authorized. A local-source clone only proves
-   local reproducibility; it does not establish remote availability.
+2. **Completed on 2026-10-12:** both existing SSH remotes and the pinned component
+   commit are accessible. A fresh remote recursive SSH clone passed with a clean
+   working tree. Commit transfer does not change repository visibility.
 3. Enable GitHub private vulnerability reporting, or provide a working private
    contact, before inviting security reports. The local policy documents this
    prerequisite; no external reporting settings were changed.
@@ -94,3 +95,25 @@ the local source directory remains `airlock-machine`. The parent uses
 `git@github.com:airlock-org/airlock.git`. The submodule URL, instructions, and
 component security-reporting link now match these existing destinations.
 Repository visibility and hosting settings remain outside this authorization.
+
+Both `main` branches were pushed successfully. A fresh recursive clone over SSH
+verified parent `e776515` and its pinned component `b262e8e`, without a local-source
+URL override. The clone stayed clean and was removed after verification; details
+are in `.airlock-logs/public-readiness/remote-ssh-clone-summary.json`.
+
+## First hosted CI results and private access
+
+The first hosted component run found three tests assuming a Nix executable was
+installed. Host observation now treats absent optional tools as unavailable;
+the mocked apply tests explicitly provide fail-fast Nix command fixtures. A new
+pytest regression covers host observation without Nix or systemd tools. The full
+parent quick suite passed **879 tests, 59 skipped** with Nix tools removed from
+PATH; no evaluations or builds were added to quick tests.
+
+The parent run failed at private component checkout: its ordinary GitHub job
+token has no access to a different private repository. Its workflow now accepts
+`AIRLOCK_CI_READ_TOKEN`, a separately configured read-only credential for both
+repositories, falling back to the ordinary job token. See [CI setup](../CONTRIBUTING.md#ci-while-the-component-repository-is-private).
+No secret or access policy was changed. Parent CI remains blocked until that
+credential is configured or the component becomes publicly readable; visibility
+changes are not part of this task.
