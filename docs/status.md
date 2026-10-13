@@ -8,6 +8,9 @@ running generation are distinct results.
 Current source names the assistant VM `usr-assistant`. Earlier physical trials
 used `sys-agent` or its predecessor; the
 [rename transition](usr-assistant-rename.md) has not been physically verified.
+The [2026-10-13 migration trial](history/usr-assistant-migration-2026-10-13.md)
+passed build/admission and boot preparation; post-shutdown reconnection and
+whole-machine verification are pending.
 
 ## Demonstrated paths
 
