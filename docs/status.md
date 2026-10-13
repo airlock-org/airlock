@@ -5,12 +5,11 @@ It has not demonstrated the full Qubes OS security model or general hardware sup
 A successful build, a passing pytest suite, a selected release, and a verified
 running generation are distinct results.
 
-Current source names the assistant VM `usr-assistant`. Earlier physical trials
-used `sys-agent` or its predecessor; the
-[rename transition](usr-assistant-rename.md) has not been physically verified.
+Current source and the physical machine name the assistant VM `usr-assistant`.
 The [2026-10-13 migration trial](history/usr-assistant-migration-2026-10-13.md)
-passed build/admission and boot preparation; post-shutdown reconnection and
-whole-machine verification are pending.
+completed apply, reboot, whole-machine generation verification and persistence
+checks. An ordinary-release follow-up remains to include the committed
+boot-installation fix and clear the one-shot migration declarations.
 
 ## Demonstrated paths
 
@@ -32,10 +31,10 @@ Evidence is limited to the configuration and trial recorded in each
 - Additional-GPU work remains experimental/deferred.
 - Compatibility cleanup has remaining persisted-state and Nix/EROFS acceptance.
 
-The latest recorded khaki-label deployment (2026-10-09) selected a host requiring
-reboot; its post-reboot verification and physical colour acceptance were pending.
-See [deployment lab evidence](history/machine-deployment-lab-notes-2026-10-09.md).
-This local public-readiness cleanup does not change that live status.
+The 2026-10-13 migration verified a newer running host and all six guest
+generations. Physical colour acceptance from the earlier khaki-label trial
+remains pending. See [deployment lab evidence](history/machine-deployment-lab-notes-2026-10-09.md)
+and the [migration result](history/usr-assistant-migration-2026-10-13.md).
 
 Use the [docs index](README.md) to find current acceptance work. Historical
 pending statements are not automatically current backlog or a support promise.

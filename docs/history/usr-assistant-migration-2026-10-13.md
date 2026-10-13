@@ -1,9 +1,10 @@
 # Assistant migration trial — 2026-10-13
 
-The physical `sys-agent` to `usr-assistant` migration was submitted through the
-incremental controller route. Whole-machine verification and persistence
-acceptance are pending. The last remotely observed phase was `stopping`;
-the old assistant disconnected during the declared shutdown sequence.
+The physical `sys-agent` to `usr-assistant` migration completed through the
+incremental controller route. The machine rebooted into the selected host,
+explicit whole-machine verification passed, and all six selected/running guest
+generations matched. Credentials, session history and workspace state survived
+the independent private-volume copy. The old VM is stopped in recoverable trash.
 
 ## Committed source and preparation
 
@@ -25,7 +26,7 @@ Apply reused the reviewed prepared plan without another build or transfer.
 The plan copies only `sys-agent`'s private volume into `usr-assistant` and retires
 only `sys-agent`, retaining the stopped VM for recovery. It restarts sys-ctrl,
 sys-gui and usr-home. Credentials and session file fingerprints were recorded
-before shutdown; post-copy comparison is still pending. The source checkout
+before shutdown; all recorded fingerprints matched after the copy. The source checkout
 preserves the live Firefox addition and its original local branch.
 
 ## EFI space failure and committed recovery
@@ -62,10 +63,62 @@ waits at most 30 minutes after submission. It reboots only if this exact
 candidate reaches `reboot-required`, the independent private-copy receipt is
 complete, usr-assistant is observed in guest verification, and the selected
 host matches the candidate. A failed resumed transaction exits without reboot.
-The service and its temporary script disappear after reboot; no policy grant
-or runtime configuration override was added.
+The service and its temporary script disappeared after the successful reboot;
+no policy grant or runtime configuration override was added.
 
-## Resume observation and acceptance
+## Verified running generation and persistence
+
+Resume transaction `1791852186369516557` reached `complete`. The running host
+equals the expected host above. The explicit typed verification command passed;
+its first attempt returned an error during concurrent maintenance, so the
+coordinator was also checked directly before the successful retry.
+
+| VM | Selected and running system |
+| --- | --- |
+| sys-ctrl | `/nix/store/w3nyy7lwixf8zwaa7k961yw0zz562fbw-nixos-system-sys-ctrl-26.11` |
+| sys-firewall | `/nix/store/38411k15h38g2sc94947lcahw3pnylxi-nixos-system-sys-firewall-26.11` |
+| sys-gui | `/nix/store/2ly7rvrvsnbvr60rgxh1ik7x6b2jwwz5-nixos-system-sys-gui-26.11` |
+| sys-net | `/nix/store/ydlaf3w0fcrxlzrrfii2afr0l000clcy-nixos-system-sys-net-26.11` |
+| usr-assistant | `/nix/store/xyx1l4fjkj454z4v0lj8paaq0s0d1a03-nixos-system-usr-assistant-26.11` |
+| usr-home | `/nix/store/4r3j73y7p91vylwqrmzhqn13860h232s-nixos-system-usr-home-26.11` |
+
+The private-copy receipt is `complete`, with different source/target VM UUIDs
+and volume IDs. Sys-agent is halted and retained as
+`1791852186369516557-sys-agent`; usr-assistant is running. Exact comparisons
+passed for Codex authentication, configuration and history files, the session
+file count, source revision, and preserved `airlock-before-assistant-rename`
+branch. Managed guidance links point to `/etc/airlock/usr-assistant/`. The
+archived old builder exists under `/rw/airlock-builder-sys-agent-builder`.
+
+Usr-assistant reconnected with the existing Tailscale address `100.104.92.101`
+and the new DNS name `usr-assistant.tail6750b0.ts.net`. GNOME Shell is running,
+and AppSessionReady calls from the actual sys-gui caller succeeded for both
+usr-assistant and usr-home. Usr-home reports Firefox 155.0. These checks do not
+replace physical window, colour, input, or broader GPU recovery acceptance.
+
+## Follow-up and recovery records
+
+The old release's automatic maintenance encountered the same upstream cache
+duplication bug after reboot. Its retry was temporarily paused for recorded
+recovery using the committed coordinator fix. A second guarded cache move
+verified all 20 sealed boot entries and quarantined 202,955,737 bytes at
+`/var/lib/airlock/boot-cache-quarantine/1791854117430608139/`.
+The corrected coordinator completed the interrupted pruning and protected pool
+cleanup with status `passed`, reclaiming 589,664,256 bytes. The normal maintenance
+path was restored, its pending request was cleared, and temporary operation
+files were absent. Final typed whole-machine verification passed again after
+these operational changes were removed. Both assistant and home GUI sessions
+were ready, and the post-reboot persistence comparison matched the original.
+
+At final inspection, the EFI partition had 73,457,664 bytes free and the root
+filesystem about 5.2 GiB free. EFI capacity remains a constraint for another
+host release: review its space requirements before activation. Protected boot
+generations were not removed to force the migration to fit.
+
+An ordinary release containing the boot-installation fix still needs deployment
+to clear the one-shot copy/retirement declarations and include that fix in the
+selected host. The committed standalone fix was used for migration recovery;
+the physically verified whole-machine release remains source `95a3ad3`.
 
 On the physical dom0 console, inspect the recorded state before attempting
 recovery or reboot:
@@ -75,15 +128,11 @@ sudo /var/lib/airlock/machine/controller status
 sudo journalctl -u airlock-machine-deploy-d8e273b55e8b --no-pager -n 100
 ```
 
-The last known assistant Tailscale identity used address `100.104.92.101`.
-Rediscover its current name/address rather than assuming that enrollment changed.
-After reconnection, follow [the migration guide](../usr-assistant-rename.md):
-verify the running host and every guest, compare credentials/session history and
-workspace state, confirm the old VM is retained as stopped trash, and check GUI
-behavior separately. Deploy an ordinary release containing the boot-installation
-fix to clear the one-shot copy/retirement declarations after acceptance.
+Rediscover the assistant's current address when reconnecting. The
+[migration guide](../usr-assistant-rename.md) describes the verification and
+ordinary-release follow-up. Retain the old VM and rollback records until their
+recovery purpose has been reviewed.
 
 Detailed preparation, plans, receipts, worker logs and fingerprint snapshots
 are saved on the development computer under
-`.airlock-logs/assistant-live-rename/`. No successful physical migration or GUI
-acceptance is claimed by this pending report.
+`.airlock-logs/assistant-live-rename/`.

@@ -150,10 +150,12 @@ migration does not automatically purge them.
 
 ## Validation boundary
 
-Local checks exercise the renamed source and migration contracts. This document
-does not record a successful physical migration. Record the actual transaction,
-running host/guest generations, persistence checks, and recovery result after a
-named machine completes the transition.
+The [2026-10-13 physical trial](history/usr-assistant-migration-2026-10-13.md)
+completed the migration, reboot and host/guest generation verification. It also
+verified credentials/session history, workspace state and GUI session readiness.
+The report records an EFI-space failure and committed recovery, and identifies
+the remaining ordinary-release follow-up. This evidence is specific to that
+machine and release.
 
 Wire schema identifiers containing `sys-agent` remain stable so existing
 clients and saved records stay readable. They are protocol identifiers, not
