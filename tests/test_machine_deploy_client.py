@@ -69,12 +69,10 @@ def test_client_builds_the_pinned_airlock_machine_checkout(monkeypatch, tmp_path
 
 
 @pytest.mark.parametrize("arguments", [
-    ["plan", "--target", "old-ssh-target", "--assistant-rename"],
-    ["apply", "--target", "old-ssh-target", "--assistant-rename"],
     ["status", "--target", "old-ssh-target", "--assistant-rename", "--legacy-dom0"],
     ["build", "--profile", "usb-gui-lab", "--assistant-rename"],
 ])
-def test_assistant_rename_rejects_incompatible_transport_before_build(monkeypatch, arguments):
+def test_assistant_rename_rejects_incompatible_action_before_build(monkeypatch, arguments):
     monkeypatch.setattr(client, "build", lambda *_args, **_kwargs: pytest.fail("unexpected build"))
     with pytest.raises(SystemExit) as error:
         client.main(arguments)
@@ -90,6 +88,48 @@ def test_assistant_rename_build_is_explicit_and_does_not_open_a_remote_session(m
     monkeypatch.setattr(client, "Dom0", lambda *_: pytest.fail("unexpected remote session"))
     assert client.main(["build", "--assistant-rename"]) == 0
     assert calls == [("usb-lab", {"assistant_rename": True})]
+
+
+@pytest.mark.parametrize("action", ["plan", "apply"])
+def test_assistant_rename_defaults_to_incremental_controller_submission(monkeypatch, action):
+    calls = []
+    monkeypatch.setattr(client, "build", lambda *_a, **_k: pytest.fail("legacy build attempted"))
+    monkeypatch.setattr(client, "Dom0", lambda *_a: pytest.fail("development shell attempted"))
+    monkeypatch.delenv("AIRLOCK_DEPLOY_SOURCE_COMMAND", raising=False)
+    def run(args, **options):
+        calls.append((args, options))
+    monkeypatch.setattr(client.subprocess, "run", run)
+    monkeypatch.setattr(client.subprocess, "call", lambda args: calls.append(args) or 0)
+    assert client.main([action, "--target", "user@sys-agent", "--assistant-rename"]) == 0
+    assert calls[0][1]["env"]["AIRLOCK_DEPLOY_SOURCE_COMMAND"] == "airlock-sys-agent-machine-source"
+    assert calls[1] == ["ssh", "user@sys-agent", "python3",
+                       "/home/user/airlock-machine/lifecycle/runtime/tools/usr-assistant-machine-deploy.py",
+                       action, "--assistant-rename"]
+
+
+@pytest.mark.parametrize("action", ["plan", "apply"])
+def test_controller_bootstrap_uses_existing_guest_client_and_old_importer(monkeypatch, action):
+    calls = []
+    monkeypatch.delenv("AIRLOCK_DEPLOY_SOURCE_COMMAND", raising=False)
+    monkeypatch.setattr(client, "build", lambda *_a, **_k: pytest.fail("local build attempted"))
+    monkeypatch.setattr(client.subprocess, "run", lambda args, **options: calls.append((args, options)))
+    monkeypatch.setattr(client.subprocess, "call", lambda args: calls.append(args) or 0)
+    assert client.main([action, "--target", "user@sys-agent", "--controller-upgrade"]) == 0
+    assert calls[0][1]["env"]["AIRLOCK_DEPLOY_SOURCE_COMMAND"] == "airlock-sys-agent-machine-source"
+    assert calls[1] == ["ssh", "user@sys-agent", "airlock-sys-agent-machine-deploy",
+                       "guest-" + action, "--target", "sys-ctrl"]
+
+
+@pytest.mark.parametrize("arguments", [
+    ["status", "--controller-upgrade"],
+    ["plan", "--controller-upgrade", "--assistant-rename"],
+    ["plan", "--controller-upgrade", "--legacy-dom0"],
+])
+def test_controller_bootstrap_rejects_other_actions_before_submission(monkeypatch, arguments):
+    monkeypatch.setattr(client.subprocess, "run", lambda *_a, **_k: pytest.fail("source import attempted"))
+    with pytest.raises(SystemExit) as error:
+        client.main([*arguments, "--target", "user@sys-agent"])
+    assert error.value.code == 2
 
 
 def test_low_space_stops_transfer_before_any_write(monkeypatch):

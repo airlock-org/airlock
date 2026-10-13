@@ -326,6 +326,10 @@ def main(argv=None):
         "--assistant-rename", action="store_true",
         help="build the one-shot sys-agent to usr-assistant private-volume migration",
     )
+    parser.add_argument(
+        "--controller-upgrade", action="store_true",
+        help="bootstrap rename support with the existing sys-agent client and a sys-ctrl guest update",
+    )
     args = parser.parse_args(argv)
     args.bridge_vm = args.bridge_vm or (
         "sys-agent" if args.assistant_rename else "usr-assistant"
@@ -338,15 +342,33 @@ def main(argv=None):
         parser.error("--update-coordinator requires guest-plan or guest-apply")
     if args.assistant_rename and (
         args.profile != "usb-lab" or args.action not in {"build", "plan", "apply"}
-        or (args.action != "build" and not args.legacy_dom0)
     ):
-        parser.error("--assistant-rename requires usb-lab build, or plan/apply with --legacy-dom0")
+        parser.error("--assistant-rename requires usb-lab build, plan, or apply")
+    if args.controller_upgrade and (
+        args.profile != "usb-lab" or args.action not in {"plan", "apply"}
+        or args.legacy_dom0 or args.assistant_rename
+    ):
+        parser.error("--controller-upgrade requires usb-lab controller plan/apply without rename or legacy flags")
     if (not args.legacy_dom0 and args.profile == "usb-lab"
             and args.action in {"plan", "apply", "status", "verify", "resume", "rollback"}):
         try:
             if args.action in {"plan", "apply"}:
+                environment = os.environ.copy()
+                if args.assistant_rename or args.controller_upgrade:
+                    environment.setdefault("AIRLOCK_DEPLOY_SOURCE_COMMAND", "airlock-sys-agent-machine-source")
                 subprocess.run([sys.executable, str(ROOT / "lifecycle/misc/tools/scripts/usr-assistant-machine-source.py"),
-                                "push", "--target", args.target], check=True)
+                                "push", "--target", args.target], check=True, env=environment)
+            if args.controller_upgrade:
+                return subprocess.call([
+                    "ssh", args.target, "airlock-sys-agent-machine-deploy",
+                    "guest-" + args.action, "--target", "sys-ctrl",
+                ])
+            if args.assistant_rename:
+                return subprocess.call([
+                    "ssh", args.target, "python3",
+                    "/home/user/airlock-machine/lifecycle/runtime/tools/usr-assistant-machine-deploy.py",
+                    args.action, "--assistant-rename",
+                ])
             return subprocess.call(["ssh", args.target,
                                     os.environ.get("AIRLOCK_DEPLOY_REMOTE_CLIENT", "airlock-usr-assistant-machine-deploy"), args.action])
         except (OSError, subprocess.SubprocessError) as exc:

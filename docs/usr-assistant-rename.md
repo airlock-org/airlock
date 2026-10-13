@@ -28,11 +28,42 @@ AIRLOCK_DEPLOY_SOURCE_COMMAND=airlock-sys-agent-machine-source \
 Do not discard local branches or uncommitted work to make this command pass.
 Resolve that work first; the importer refuses a dirty existing checkout.
 
-Build and review the transition through the supported development transport:
+### Update an older controller first
+
+The incremental migration uses a distinct request schema so an older controller
+rejects it instead of silently building an ordinary release. Bootstrap the
+updated sys-ctrl guest through the existing installed sys-agent client:
 
 ```sh
 make machine-plan DEPLOY_TARGET='<confirmed-current-SSH-target>' \
-  DEPLOY_ASSISTANT_RENAME=1 DEPLOY_LEGACY_DOM0=1
+  DEPLOY_CONTROLLER_UPGRADE=1
+make machine-apply DEPLOY_TARGET='<confirmed-current-SSH-target>' \
+  DEPLOY_CONTROLLER_UPGRADE=1
+```
+
+Review the controller guest plan before applying it. This step updates sys-ctrl
+through the existing journalled guest deployment workflow; it does not rename
+the assistant. Confirm that sys-ctrl's selected and running generations match
+before proceeding. The old development transport can inspect the outcome while
+the installed sys-agent client still uses the previous name:
+
+```sh
+make machine-status DEPLOY_TARGET='<confirmed-current-SSH-target>' \
+  DEPLOY_LEGACY_DOM0=1
+```
+
+The updated controller accepts the old sys-agent caller only for the explicit
+rename protocol. Ordinary source submissions require usr-assistant. Existing
+host Qubes policy still controls whether either caller can reach the service;
+this compatibility path adds no new policy grant.
+
+### Review the incremental migration
+
+Build and review the transition through the controller's shared-pool route:
+
+```sh
+make machine-plan DEPLOY_TARGET='<confirmed-current-SSH-target>' \
+  DEPLOY_ASSISTANT_RENAME=1
 ```
 
 This selects `airlock-machine-release-usb-lab-assistant-rename`, whose machine
@@ -43,9 +74,16 @@ retireDomains = [ "sys-agent" ];
 privateVolumeCopies.usr-assistant = "sys-agent";
 ```
 
-The transport still names the existing bridge VM `sys-agent`. Its dom0 shell
-requires the existing password-protected development access. No new RPC
-capability or policy bypass is added by the migration option.
+The parent submits the migration frontend from the same clean, committed source
+checkout being imported. Sys-ctrl builds the named migration release and uses
+the existing candidate-bound pool admission and prepared-plan checks. Package
+objects already in the pool are reused. Ordinary and migration build/plan
+records have separate paths, so apply cannot reuse the other release's plan.
+
+`DEPLOY_LEGACY_DOM0=1` remains an explicit alternative for machines with enough
+space for its larger closure staging. It uses the existing password-protected
+dom0 development shell. Space preflight does not resize partitions, collect
+protected generations, or change VMs to make a release fit.
 
 ## Apply, reboot, and verify
 
@@ -53,7 +91,7 @@ After reviewing the concrete plan, apply with the same migration settings:
 
 ```sh
 make machine-apply DEPLOY_TARGET='<confirmed-current-SSH-target>' \
-  DEPLOY_ASSISTANT_RENAME=1 DEPLOY_LEGACY_DOM0=1
+  DEPLOY_ASSISTANT_RENAME=1
 ```
 
 Stopping sys-agent disconnects its SSH, Console, and assistant processes. The

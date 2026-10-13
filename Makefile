@@ -156,12 +156,13 @@ DEPLOY_PROFILE ?= usb-lab
 DEPLOY_LEGACY_DOM0 ?= 0
 DEPLOY_TARGET ?=
 DEPLOY_ASSISTANT_RENAME ?=0
+DEPLOY_CONTROLLER_UPGRADE ?=0
 .PHONY: machine-gui-style-plan machine-gui-style-apply
 machine-gui-style-plan machine-gui-style-apply:
 	uv run python lifecycle/misc/tools/scripts/machine-gui-style.py $(patsubst machine-gui-style-%,%,$@) --target "$(DEPLOY_TARGET)"
 .PHONY: machine-build machine-plan machine-apply machine-status machine-verify machine-resume machine-rollback machine-guest-plan machine-guest-apply usr-assistant-machine-source
 machine-build machine-plan machine-apply machine-status machine-verify machine-resume machine-rollback:
-	uv run python lifecycle/misc/tools/scripts/machine-deploy.py $(patsubst machine-%,%,$@) --profile "$(DEPLOY_PROFILE)" $(if $(DEPLOY_TARGET),--target "$(DEPLOY_TARGET)",) $(if $(filter 1,$(DEPLOY_LEGACY_DOM0)),--legacy-dom0,) $(if $(filter 1,$(DEPLOY_ASSISTANT_RENAME)),--assistant-rename --bridge-vm sys-agent,)
+	uv run python lifecycle/misc/tools/scripts/machine-deploy.py $(patsubst machine-%,%,$@) --profile "$(DEPLOY_PROFILE)" $(if $(DEPLOY_TARGET),--target "$(DEPLOY_TARGET)",) $(if $(filter 1,$(DEPLOY_LEGACY_DOM0)),--legacy-dom0,) $(if $(filter 1,$(DEPLOY_ASSISTANT_RENAME)),--assistant-rename --bridge-vm sys-agent,) $(if $(filter 1,$(DEPLOY_CONTROLLER_UPGRADE)),--controller-upgrade,)
 machine-guest-plan machine-guest-apply:
 	@test -n "$(DEPLOY_TARGET)" || { echo 'set DEPLOY_TARGET to the Tailscale usr-assistant host'; exit 2; }
 	@test -n "$(ADMISSION_RECEIPT)" || { echo 'set ADMISSION_RECEIPT to the receipt path inside usr-assistant'; exit 2; }
