@@ -83,8 +83,10 @@ PYTHON_FILES := \
 	airlock-machine/lifecycle/runtime/tools/sys-ctrl-*.py \
 	airlock-machine/tests/test_sys_ctrl_*.py \
 	lifecycle/misc/tools/scripts/machine-deploy.py \
+	lifecycle/misc/tools/scripts/boot-cache-quarantine.py \
 	lifecycle/misc/tools/scripts/usr-assistant-machine-source.py \
 	tests/test_machine_deploy_client.py \
+	tests/test_boot_cache_quarantine.py \
 	tests/test_usr_assistant_machine_source.py \
 	airlock-machine/tests/test_usr_assistant_machine_build.py \
 	airlock-machine/tests/test_usr_assistant_machine_deploy.py \
@@ -148,7 +150,7 @@ PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_L
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
 # Run component tests from their canonical checkout, plus parent integration tests.
-PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,airlock-machine/tests tests/test_repository_split.py tests/test_local.py tests/test_gpu.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_host_store_image.py tests/test_machine_deploy_client.py tests/test_usr_assistant_machine_source.py tests/test_website_docs.py)
+PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,airlock-machine/tests tests/test_repository_split.py tests/test_local.py tests/test_gpu.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_host_store_image.py tests/test_machine_deploy_client.py tests/test_boot_cache_quarantine.py tests/test_usr_assistant_machine_source.py tests/test_website_docs.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'$(if $(filter run-nested-gui-smoke-static,$(test)),tests/test_local.py,airlock-machine/tests/test_machine_local.py)::test_local_check[$(test)]')
 
 # One committed configuration, one whole-machine release. No per-VM switches.

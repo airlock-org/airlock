@@ -94,6 +94,19 @@ make machine-apply DEPLOY_TARGET='<confirmed-current-SSH-target>' \
   DEPLOY_ASSISTANT_RENAME=1
 ```
 
+The EFI partition needs space independently of the root filesystem. If boot
+installation fails before guests are stopped, inspect the transaction's command
+stderr and EFI usage. On machines whose boot entries are all independently
+sealed, `lifecycle/misc/tools/scripts/boot-cache-quarantine.py` can reclaim the
+unreferenced upstream `EFI/nixos` cache. Run this committed maintenance command
+in dom0 first without `--apply` to review its receipt, then with `--apply`.
+It authenticates every retained entry and its embedded Xen payloads, locks out
+concurrent deployment, and copies cache files to the root filesystem before
+removing them from the EFI partition. It refuses unsealed entries, corrupt
+artifacts, symlinks, and insufficient quarantine space. Retained generations,
+recovery artifacts, and Nix store paths remain intact. Resume the existing
+transaction after cleanup; do not reboot an unfinished deployment.
+
 Stopping sys-agent disconnects its SSH, Console, and assistant processes. The
 detached dom0 worker continues. Use the local console to inspect the recorded
 outcome if remote access is unavailable. Reboot into the selected host so the
