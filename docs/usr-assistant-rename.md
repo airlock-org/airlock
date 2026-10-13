@@ -114,7 +114,7 @@ the explicit development route supports:
 
 ```sh
 make machine-resume DEPLOY_TARGET='<confirmed-current-SSH-target>' \
-  DEPLOY_LEGACY_DOM0=1 UPDATE_COORDINATOR=1
+  DEPLOY_LEGACY_DOM0=1 DEPLOY_BRIDGE_VM=sys-agent UPDATE_COORDINATOR=1
 ```
 
 This builds and transfers the standalone coordinator, then resumes the same

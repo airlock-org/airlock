@@ -35,9 +35,13 @@ def test_recovery_can_use_committed_coordinator_without_rebuilding_release(monke
         return json.dumps([{'outputs': {'out': '/nix/store/updated-coordinator'}}])
     monkeypatch.setattr(client, 'Dom0', Session)
     monkeypatch.setattr(client, 'command', command)
-    monkeypatch.setattr(client, 'transfer', lambda *args: calls.append(('transfer', args[2])))
+    def transfer(*args):
+        assert args[1] == 'sys-agent'
+        calls.append(('transfer', args[2]))
+    monkeypatch.setattr(client, 'transfer', transfer)
     monkeypatch.setattr(client, 'build', lambda *a, **kw: pytest.fail('unexpected whole-machine build'))
-    assert client.main([action, '--target', 'user@old-assistant', '--legacy-dom0', '--update-coordinator']) == 0
+    assert client.main([action, '--target', 'user@old-assistant', '--legacy-dom0',
+                        '--bridge-vm', 'sys-agent', '--update-coordinator']) == 0
     assert ('transfer', '/nix/store/updated-coordinator') in calls
     script = next(value for kind, value in calls if kind == 'run')
     assert f'/nix/store/updated-coordinator/bin/airlock-machine-deploy {action}' in script
