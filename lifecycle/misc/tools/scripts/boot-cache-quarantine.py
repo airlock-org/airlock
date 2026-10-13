@@ -112,6 +112,8 @@ def inspect(esp, descriptors):
     if cache.is_symlink():
         raise ValueError("EFI cache is a symlink")
     for path in sorted(cache.iterdir()) if cache.exists() else []:
+        if path.name == ".extra-files" and path.is_dir() and not path.is_symlink() and not list(path.iterdir()):
+            continue
         if path.is_symlink() or not path.is_file():
             raise ValueError("unsupported EFI cache object")
         if not path.name.endswith((".efi", ".tmp")):

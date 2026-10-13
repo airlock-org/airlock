@@ -107,6 +107,20 @@ artifacts, symlinks, and insufficient quarantine space. Retained generations,
 recovery artifacts, and Nix store paths remain intact. Resume the existing
 transaction after cleanup; do not reboot an unfinished deployment.
 
+Boot installation reuses authenticated sealed generations without regenerating
+their upstream payload copies; real profile history stays unchanged. To recover
+a transaction using a committed coordinator fix before its new host has booted,
+the explicit development route supports:
+
+```sh
+make machine-resume DEPLOY_TARGET='<confirmed-current-SSH-target>' \
+  DEPLOY_LEGACY_DOM0=1 UPDATE_COORDINATOR=1
+```
+
+This builds and transfers the standalone coordinator, then resumes the same
+recorded release. Follow with an ordinary release containing the fix after
+the migration is verified.
+
 Stopping sys-agent disconnects its SSH, Console, and assistant processes. The
 detached dom0 worker continues. Use the local console to inspect the recorded
 outcome if remote access is unavailable. Reboot into the selected host so the

@@ -318,7 +318,7 @@ def main(argv=None):
     parser.add_argument(
         "--update-coordinator",
         action="store_true",
-        help="build and transfer the committed coordinator for guest activation",
+        help="build and transfer the committed coordinator for guest activation or recovery",
     )
     parser.add_argument("--legacy-dom0", action="store_true",
                         help="use the development shell and host-built closure transport")
@@ -338,8 +338,11 @@ def main(argv=None):
         parser.error("--target is required")
     if args.action.startswith("guest-") and not args.receipt:
         parser.error("--receipt is required for guest activation")
-    if args.update_coordinator and not args.action.startswith("guest-"):
-        parser.error("--update-coordinator requires guest-plan or guest-apply")
+    if args.update_coordinator and not (
+        args.action.startswith("guest-")
+        or (args.legacy_dom0 and args.action in {"resume", "rollback"})
+    ):
+        parser.error("--update-coordinator requires guest activation or legacy-dom0 resume/rollback")
     if args.assistant_rename and (
         args.profile != "usb-lab" or args.action not in {"build", "plan", "apply"}
     ):
@@ -394,27 +397,22 @@ def main(argv=None):
             if args.action == "build":
                 return 0
         session = Dom0(args.target)
-        if args.action in ("guest-plan", "guest-apply"):
-            engine = deployed_engine(session)
-            if args.update_coordinator:
-                if command("git", "status", "--porcelain", cwd=ROOT):
-                    raise RuntimeError(
-                        "commit repository changes before updating the coordinator"
-                    )
-                result = json.loads(
-                    command(
-                        str(NIX),
-                        "build",
-                        "./airlock-machine#airlock-machine-deploy",
-                        "--json",
-                        "--out-link",
-                        str(ROOT / ".airlock-logs" / "machine-coordinator"),
-                        cwd=ROOT,
-                    )
+        updated_engine = None
+        if args.update_coordinator:
+            if command("git", "status", "--porcelain", cwd=ROOT):
+                raise RuntimeError("commit repository changes before updating the coordinator")
+            result = json.loads(
+                command(
+                    str(NIX), "build", "./airlock-machine#airlock-machine-deploy",
+                    "--json", "--out-link",
+                    str(ROOT / ".airlock-logs" / "machine-coordinator"), cwd=ROOT,
                 )
-                package = result[0]["outputs"]["out"]
-                transfer(args.target, args.bridge_vm, package, session)
-                engine = package + "/bin/airlock-machine-deploy"
+            )
+            package = result[0]["outputs"]["out"]
+            transfer(args.target, args.bridge_vm, package, session)
+            updated_engine = package + "/bin/airlock-machine-deploy"
+        if args.action in ("guest-plan", "guest-apply"):
+            engine = updated_engine or deployed_engine(session)
             receipt = remote_receipt(args.target, args.receipt)
             receipt_path = install_receipt(session, receipt)
             preview = session.run(
@@ -457,7 +455,7 @@ def main(argv=None):
                 return 0
             action = [engine, "apply", release]
         else:
-            action = ["/var/lib/airlock/machine/controller", args.action]
+            action = [updated_engine or "/var/lib/airlock/machine/controller", args.action]
         if args.action in ("status", "verify"):
             script = shlex.join(action)
             if args.action == "status":

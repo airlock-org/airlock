@@ -17,6 +17,38 @@ client = importlib.util.module_from_spec(client_spec)
 client_spec.loader.exec_module(client)
 
 
+@pytest.mark.parametrize('action', ['resume', 'rollback'])
+def test_recovery_can_use_committed_coordinator_without_rebuilding_release(monkeypatch, action):
+    calls = []
+    class Session:
+        def __init__(self, target):
+            calls.append(('target', target))
+        def run(self, script, **kwargs):
+            calls.append(('run', script))
+            return 'started'
+        def close(self):
+            pass
+    def command(*args, **kwargs):
+        if args[0] == 'git':
+            return ''
+        assert args[1:3] == ('build', './airlock-machine#airlock-machine-deploy')
+        return json.dumps([{'outputs': {'out': '/nix/store/updated-coordinator'}}])
+    monkeypatch.setattr(client, 'Dom0', Session)
+    monkeypatch.setattr(client, 'command', command)
+    monkeypatch.setattr(client, 'transfer', lambda *args: calls.append(('transfer', args[2])))
+    monkeypatch.setattr(client, 'build', lambda *a, **kw: pytest.fail('unexpected whole-machine build'))
+    assert client.main([action, '--target', 'user@old-assistant', '--legacy-dom0', '--update-coordinator']) == 0
+    assert ('transfer', '/nix/store/updated-coordinator') in calls
+    script = next(value for kind, value in calls if kind == 'run')
+    assert f'/nix/store/updated-coordinator/bin/airlock-machine-deploy {action}' in script
+
+
+def test_coordinator_recovery_requires_explicit_development_transport():
+    with pytest.raises(SystemExit) as error:
+        client.main(['resume', '--target', 'user@assistant', '--update-coordinator'])
+    assert error.value.code == 2
+
+
 def test_client_refuses_uncommitted_sources(monkeypatch):
     monkeypatch.setattr(
         client, "command", lambda *args, **kwargs: " M configuration.nix"

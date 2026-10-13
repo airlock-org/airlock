@@ -53,6 +53,16 @@ def test_plan_authenticates_boot_and_does_not_mutate(boot):
     assert all((esp / name).read_bytes() == data for name, data in files.items())
 
 
+def test_allows_only_empty_upstream_extra_files_directory(boot):
+    esp, descriptors, _ = boot
+    directory = esp / 'EFI/nixos/.extra-files'
+    directory.mkdir()
+    assert cache.inspect(esp, descriptors)['sealed_entries'] == 1
+    (directory / 'unknown').write_text('keep')
+    with pytest.raises(ValueError, match='unsupported EFI cache object'):
+        cache.inspect(esp, descriptors)
+
+
 @pytest.mark.parametrize("mutation", ["entry", "payload", "link"])
 def test_refuses_unverified_boot_state(boot, mutation):
     esp, descriptors, _ = boot
