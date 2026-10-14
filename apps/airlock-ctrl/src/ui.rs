@@ -174,7 +174,7 @@ impl Controller {
                         ui.heading(RichText::new("Airlock Control").color(BRAND));
                         ui.label(
                             RichText::new(
-                                "Review source. Understand the effects. Make the decision.",
+                                "Compare configuration changes and inspect the deployment plan before approval.",
                             )
                             .color(MUTED),
                         );
