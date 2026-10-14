@@ -91,15 +91,20 @@ Drag across source text to select within either diff column; Shift-click extends
 the selection, double-click selects a word and triple-click selects a line.
 Ctrl+C copies the selection and Ctrl+A selects that side's complete file.
 Right-click opens copy controls for the selection, line, whole file or path.
-The Copy patch icon beside the tabs copies all source changes, regardless of the
-selected file or search filter. The patch is captured from the reviewed commit
-IDs when the window opens; later branch/worktree edits do not change it. It uses
-Git's patch format for `git apply`, including modes, additions/deletions, submodule
-revisions and binary patches, with external diff/text-conversion helpers disabled.
-It contains no deployment-plan data and writes no exported file. The icon briefly
-becomes a green checkmark after copying. `--print-patch` prints the same patch to
-stdout for offline tooling. Non-UTF-8 text patches cannot be copied losslessly;
-the disabled button's tooltip explains the failure rather than replacing bytes.
+The Copy review icon beside the tabs is available in every tab. It copies a
+Markdown report with the change title, review/commit/lock identities, effects
+summary, all changed-file metadata, full supplied deployment JSON (including any
+response wrapper) and the complete source patch. Missing plans and unknown effects
+are explicit. Selection and search filters do not limit the report. The report is
+captured when the window opens; later branch, worktree or plan-file edits do not
+change it. JSON and patch sections use code fences that adapt to embedded fences.
+Extract the Source patch block to use with `git apply`; it preserves modes,
+additions/deletions, submodule revisions and binary patches. External diff and
+text-conversion helpers are disabled. Copying writes no exported file, and the
+icon briefly becomes a green checkmark. `--print-review` prints the same report
+to stdout; `--print-patch` remains available for patch-only offline tooling.
+Non-UTF-8 text patches cannot be copied losslessly; the disabled button's tooltip
+explains the failure rather than replacing bytes or copying a partial review.
 Each column's `⋯` menu offers selection, file-content and path copy actions.
 Copied source preserves the original tabs, Unicode and newlines and excludes
 line numbers, the other column and empty diff alignment rows. The source stays

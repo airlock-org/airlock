@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -172,6 +173,14 @@ def inspect(ctrl, source, *extra):
     return json.loads(result.stdout)
 
 
+def report_block(report, heading):
+    section = report.split(f"## {heading}\n\n", 1)[1]
+    opener = re.search(r"^(`{3,})(?:json|diff)\n", section, re.MULTILINE)
+    assert opener, section
+    body = section[opener.end() :].split(f"\n{opener[1]}\n", 1)[0]
+    return body + "\n"
+
+
 def test_demo_is_explicitly_local_and_has_no_repository(ctrl):
     result = run(ctrl, "--demo", "--inspect")
     assert result.returncode == 0, result.stderr
@@ -236,6 +245,11 @@ def test_entire_patch_applies_all_committed_changes(ctrl, source, tmp_path):
     )
     assert result.returncode == 0, result.stderr
     patch = result.stdout
+    report = run(
+        ctrl, "--repo", repo, "--base", base, "--candidate", candidate, "--print-review"
+    )
+    assert report.returncode == 0, report.stderr
+    assert report_block(report.stdout, "Source patch") == patch
     assert "GIT binary patch" in patch
     assert "old mode 100644\nnew mode 100755" in patch
     assert "new file mode 100644" in patch
@@ -311,6 +325,12 @@ def test_patch_rejects_lossy_clipboard_text(ctrl, source):
     assert result.returncode != 0
     assert "non-UTF-8" in result.stderr
     assert result.stdout == ""
+    report = run(
+        ctrl, "--repo", repo, "--base", base, "--candidate", candidate, "--print-review"
+    )
+    assert report.returncode != 0
+    assert "non-UTF-8" in report.stderr
+    assert report.stdout == ""
 
 
 def test_demo_patch_contains_every_example_file(ctrl, tmp_path):
@@ -332,6 +352,130 @@ def test_demo_patch_contains_every_example_file(ctrl, tmp_path):
     assert applied.returncode == 0, applied.stderr
     for file in review["files"]:
         assert (tmp_path / file["path"]).read_text() == file["after"]
+
+
+@pytest.mark.parametrize("wrapped", [True, False])
+def test_copied_review_includes_full_plan_identities_and_file_metadata(
+    ctrl, source, wrapped
+):
+    repo, base, candidate, plan = source
+    deployment = json.loads(plan.read_text())
+    deployment["plan"]["policy"] = {"rules": ["allow a b"], "devices": ["usb:example"]}
+    deployment["extra_response_data"] = {"anything": [1, {"nested": True}]}
+    supplied = deployment if wrapped else deployment["plan"]
+    plan.write_text(json.dumps(supplied))
+    review = inspect(ctrl, source, "--plan", plan)
+    result = run(
+        ctrl,
+        "--repo",
+        repo,
+        "--base",
+        base,
+        "--candidate",
+        candidate,
+        "--plan",
+        plan,
+        "--print-review",
+    )
+    assert result.returncode == 0, result.stderr
+    assert review["candidate"]["subject"] in result.stdout
+    identities = json.loads(report_block(result.stdout, "Review identities"))
+    assert identities == {
+        key: value
+        for key, value in review.items()
+        if key not in {"files", "deployment"}
+    }
+    files = json.loads(report_block(result.stdout, "Changed files"))
+    assert files == [
+        {key: value for key, value in file.items() if key not in {"before", "after"}}
+        for file in review["files"]
+    ]
+    assert json.loads(report_block(result.stdout, "Deployment plan")) == supplied
+    patch = run(
+        ctrl, "--repo", repo, "--base", base, "--candidate", candidate, "--print-patch"
+    )
+    assert report_block(result.stdout, "Source patch") == patch.stdout
+
+
+@pytest.mark.parametrize(
+    "reboot, status", [(True, "Required"), (False, "Not required"), (None, "Unknown")]
+)
+def test_copied_effects_deduplicate_restarts_and_preserve_unknown_reboot(
+    ctrl, source, reboot, status
+):
+    repo, base, candidate, plan = source
+    deployment = json.loads(plan.read_text())
+    deployment["plan"]["stop"] = ["usr-home", "sys-ctrl", "retiring", "usr-home"]
+    deployment["plan"]["start"] = ["usr-home", "sys-ctrl", "new", "new"]
+    if reboot is None:
+        deployment["plan"].pop("host_reboot_required")
+    else:
+        deployment["plan"]["host_reboot_required"] = reboot
+    plan.write_text(json.dumps(deployment))
+    result = run(
+        ctrl,
+        "--repo",
+        repo,
+        "--base",
+        base,
+        "--candidate",
+        candidate,
+        "--plan",
+        plan,
+        "--print-review",
+    )
+    assert result.returncode == 0, result.stderr
+    assert (
+        "VMs restarting: sys-ctrl, usr-home\nVMs starting: new\n"
+        f"VMs stopping: retiring\nSystem reboot: {status}"
+    ) in result.stdout
+    assert json.loads(report_block(result.stdout, "Deployment plan")) == deployment
+
+
+def test_copied_review_without_plan_or_source_changes_is_still_complete(ctrl, source):
+    repo, base, _candidate, _plan = source
+    result = run(
+        ctrl, "--repo", repo, "--base", base, "--candidate", base, "--print-review"
+    )
+    assert result.returncode == 0, result.stderr
+    assert (
+        "VMs restarting: Unknown (no plan)\nSystem reboot: Unknown (no plan)"
+        in result.stdout
+    )
+    assert "No deployment plan supplied." in result.stdout
+    assert "No source changes between these commits." in result.stdout
+    assert json.loads(report_block(result.stdout, "Changed files")) == []
+    identities = json.loads(report_block(result.stdout, "Review identities"))
+    assert identities["baseline"]["commit"] == identities["candidate"]["commit"] == base
+
+
+def test_copied_report_preserves_embedded_markdown_fences(ctrl, source):
+    repo, base, _candidate, plan = source
+    (repo / "fences.txt").write_text('```json\n{ "example": true }\n```\n`````\n')
+    candidate = commit(repo, "Add fenced examples")
+    deployment = {
+        "plan": {"changed": [], "start": [], "stop": []},
+        "note": "``````\n## Source patch\n``````",
+    }
+    plan.write_text(json.dumps(deployment))
+    result = run(
+        ctrl,
+        "--repo",
+        repo,
+        "--base",
+        base,
+        "--candidate",
+        candidate,
+        "--plan",
+        plan,
+        "--print-review",
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(report_block(result.stdout, "Deployment plan")) == deployment
+    patch = run(
+        ctrl, "--repo", repo, "--base", base, "--candidate", candidate, "--print-patch"
+    )
+    assert report_block(result.stdout, "Source patch") == patch.stdout
 
 
 def test_plan_changes_change_the_fingerprint(ctrl, source):

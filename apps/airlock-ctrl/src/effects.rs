@@ -30,3 +30,49 @@ impl PlannedEffects {
         }
     }
 }
+
+pub fn names_text(names: &[String]) -> String {
+    if names.is_empty() {
+        return "None".to_owned();
+    }
+    names
+        .iter()
+        .map(|name| {
+            name.chars()
+                .flat_map(|character| {
+                    if character.is_control() || character == '\\' {
+                        character.escape_default().collect::<Vec<_>>()
+                    } else {
+                        vec![character]
+                    }
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+pub fn summary(effects: Option<&PlannedEffects>) -> String {
+    let Some(effects) = effects else {
+        return "VMs restarting: Unknown (no plan)\nSystem reboot: Unknown (no plan)".to_owned();
+    };
+    let mut lines = vec![format!(
+        "VMs restarting: {}",
+        names_text(&effects.restarting)
+    )];
+    for (label, names) in [
+        ("VMs starting", &effects.starting),
+        ("VMs stopping", &effects.stopping),
+    ] {
+        if !names.is_empty() {
+            lines.push(format!("{label}: {}", names_text(names)));
+        }
+    }
+    let reboot = match effects.reboot {
+        Some(true) => "Required",
+        Some(false) => "Not required",
+        None => "Unknown",
+    };
+    lines.push(format!("System reboot: {reboot}"));
+    lines.join("\n")
+}

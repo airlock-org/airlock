@@ -1,6 +1,6 @@
 use crate::{
     Decision,
-    effects::PlannedEffects,
+    effects::{self, PlannedEffects, names_text},
     file_tree::{FileTree, RowKind, TreeRow},
     icons::{self, Icon},
     model::{FileChange, Review},
@@ -116,7 +116,7 @@ enum Tab {
 pub struct Controller {
     logo: egui::TextureHandle,
     review: Review,
-    patch: Result<String, String>,
+    clipboard_review: Result<String, String>,
     effects: Option<PlannedEffects>,
     selected: usize,
     tab: Tab,
@@ -145,7 +145,9 @@ impl Controller {
         screenshot: Option<PathBuf>,
     ) -> Self {
         theme::apply(&cc.egui_ctx);
-        let patch = review.patch().map_err(|error| format!("{error:#}"));
+        let clipboard_review = review
+            .clipboard_report()
+            .map_err(|error| format!("{error:#}"));
         let effects = review.plan().map(PlannedEffects::from_plan);
         let diff_rows = review.files.first().map(rows).unwrap_or_default();
         let file_tree = FileTree::new(&review.files);
@@ -162,7 +164,7 @@ impl Controller {
         Self {
             logo,
             review,
-            patch,
+            clipboard_review,
             effects,
             selected: 0,
             tab: Tab::Source,
@@ -865,21 +867,19 @@ impl eframe::App for Controller {
                     ui.selectable_value(&mut self.tab, Tab::Source, "Source changes");
                     ui.selectable_value(&mut self.tab, Tab::Plan, "Deployment plan");
                     ui.selectable_value(&mut self.tab, Tab::Record, "Review record");
-                    if self.tab == Tab::Source {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let value = self.patch.as_ref().ok().filter(|patch| !patch.is_empty());
-                            let response = copy_button(
-                                ui,
-                                "entire patch",
-                                value.map(String::as_str),
-                                &mut self.copy_feedback,
-                            );
-                            if let Err(error) = &self.patch {
-                                response.on_disabled_hover_text(error);
-                            }
-                            ui.label(RichText::new("Copy patch").size(12.0).color(MUTED));
-                        });
-                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let value = self.clipboard_review.as_ref().ok();
+                        let response = copy_button(
+                            ui,
+                            "entire review",
+                            value.map(String::as_str),
+                            &mut self.copy_feedback,
+                        );
+                        if let Err(error) = &self.clipboard_review {
+                            response.on_disabled_hover_text(error);
+                        }
+                        ui.label(RichText::new("Copy review").size(12.0).color(MUTED));
+                    });
                 });
                 ui.add_space(12.0);
                 match self.tab {
@@ -1305,38 +1305,6 @@ fn reboot_state(required: Option<bool>) -> (&'static str, Color32) {
     }
 }
 
-fn names_text(names: &[String]) -> String {
-    if names.is_empty() {
-        "None".to_owned()
-    } else {
-        names
-            .iter()
-            .map(|name| visible_path(name))
-            .collect::<Vec<_>>()
-            .join(", ")
-    }
-}
-
-fn effects_text(effects: Option<&PlannedEffects>) -> String {
-    let Some(effects) = effects else {
-        return "VMs restarting: Unknown (no plan)\nSystem reboot: Unknown (no plan)".to_owned();
-    };
-    let mut lines = vec![format!(
-        "VMs restarting: {}",
-        names_text(&effects.restarting)
-    )];
-    for (label, names) in [
-        ("VMs starting", &effects.starting),
-        ("VMs stopping", &effects.stopping),
-    ] {
-        if !names.is_empty() {
-            lines.push(format!("{label}: {}", names_text(names)));
-        }
-    }
-    lines.push(format!("System reboot: {}", reboot_state(effects.reboot).0));
-    lines.join("\n")
-}
-
 fn effects_summary(ui: &mut egui::Ui, effects: Option<&PlannedEffects>) {
     ui.spacing_mut().item_spacing.y = 5.0;
     let row = |ui: &mut egui::Ui, label: &str, names: &str| {
@@ -1379,7 +1347,7 @@ fn effects_summary(ui: &mut egui::Ui, effects: Option<&PlannedEffects>) {
     )
     .context_menu(|ui| {
         if ui.button("Copy effects summary").clicked() {
-            ui.ctx().copy_text(effects_text(effects));
+            ui.ctx().copy_text(effects::summary(effects));
             ui.close();
         }
     });

@@ -1,4 +1,7 @@
-use crate::Decision;
+use crate::{
+    Decision,
+    effects::{self, PlannedEffects},
+};
 use anyhow::{Context, Result, bail, ensure};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -193,6 +196,18 @@ fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+/// Longer fences preserve source/plan text containing Markdown code fences.
+fn code_block(text: &str, language: &str) -> String {
+    let longest = text
+        .split(|character| character != '`')
+        .map(str::len)
+        .max()
+        .unwrap_or(0);
+    let fence = "`".repeat(3.max(longest + 1));
+    let newline = if text.ends_with('\n') { "" } else { "\n" };
+    format!("{fence}{language}\n{text}{newline}{fence}\n")
+}
+
 impl Review {
     pub fn from_git(repo: &Path, base: &str, candidate: &str, plan: Option<&Path>) -> Result<Self> {
         let repo = repo.canonicalize().context("opening repository")?;
@@ -359,6 +374,62 @@ impl Review {
         self.deployment
             .as_ref()
             .map(|value| value.get("plan").unwrap_or(value))
+    }
+
+    /// A self-contained clipboard report; the patch remains separately extractable.
+    pub fn clipboard_report(&self) -> Result<String> {
+        let patch = self.patch()?;
+        let effects = self.plan().map(PlannedEffects::from_plan);
+        let identities = json!({
+            "schema": self.schema,
+            "mode": self.mode,
+            "repository": self.repository,
+            "baseline": self.baseline,
+            "candidate": self.candidate,
+            "lock_hash": self.lock_hash,
+            "fingerprint": self.fingerprint,
+        });
+        // Keep source text in the patch rather than cloning it into metadata.
+        let files = self
+            .files
+            .iter()
+            .map(|file| {
+                json!({
+                    "path": file.path,
+                    "status": file.status,
+                    "old_mode": file.old_mode,
+                    "new_mode": file.new_mode,
+                    "old_oid": file.old_oid,
+                    "new_oid": file.new_oid,
+                    "opaque": file.opaque,
+                    "additions": file.additions,
+                    "deletions": file.deletions,
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut report = format!(
+            "# Airlock review\n\n{}\n\n## Review identities\n\n{}\n## Deployment effects\n\n{}\n\n## Changed files\n\n{}\n## Deployment plan\n\n",
+            self.candidate.subject,
+            code_block(&serde_json::to_string_pretty(&identities)?, "json"),
+            effects::summary(effects.as_ref()),
+            code_block(&serde_json::to_string_pretty(&files)?, "json"),
+        );
+        if let Some(deployment) = &self.deployment {
+            report.push_str("Supplied plan; machine state has not been verified.\n\n");
+            report.push_str(&code_block(
+                &serde_json::to_string_pretty(deployment)?,
+                "json",
+            ));
+        } else {
+            report.push_str("No deployment plan supplied.\n");
+        }
+        report.push_str("\n## Source patch\n\n");
+        if patch.is_empty() {
+            report.push_str("No source changes between these commits.\n");
+        } else {
+            report.push_str(&code_block(&patch, "diff"));
+        }
+        Ok(report)
     }
 
     /// A complete, applicable patch for the immutable commits being reviewed.

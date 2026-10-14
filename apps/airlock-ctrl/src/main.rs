@@ -43,11 +43,14 @@ struct Args {
     #[arg(long)]
     decisions_dir: Option<PathBuf>,
     /// Print the review and its content fingerprint as JSON without opening a window.
-    #[arg(long, conflicts_with = "print_patch")]
+    #[arg(long, conflicts_with_all = ["print_patch", "print_review"])]
     inspect: bool,
     /// Print the entire reviewed Git patch to stdout without opening a window.
-    #[arg(long, conflicts_with_all = ["screenshot", "record_decision"])]
+    #[arg(long, conflicts_with_all = ["screenshot", "record_decision", "print_review"])]
     print_patch: bool,
+    /// Print the complete clipboard review, including the supplied plan and patch.
+    #[arg(long, conflicts_with_all = ["screenshot", "record_decision"])]
+    print_review: bool,
     /// Record a local decision without a window; intended for offline review tooling.
     #[arg(long, requires = "decisions_dir", conflicts_with = "screenshot")]
     record_decision: Option<Decision>,
@@ -82,6 +85,10 @@ fn main() -> Result<()> {
     }
     if args.print_patch {
         print!("{}", review.patch()?);
+        return Ok(());
+    }
+    if args.print_review {
+        print!("{}", review.clipboard_report()?);
         return Ok(());
     }
     let options = eframe::NativeOptions {
