@@ -119,7 +119,11 @@ identities must match the resolved candidate. The UI shows restart order,
 retirement, restoration, `host_reboot_required` and the complete supplied JSON,
 including policy/device details that are not covered by summary fields.
 The plan view leads with named restarts and system reboot status, then other VM
-effects and configuration changes. On narrow windows the cards stack. Expand
+effects and configuration changes, using compact label/value rows without fixed
+heights or card borders. A small reboot badge sits beside the restart summary;
+on narrow windows it moves above the rows. VM names wrap and remain selectable
+with copy menus. Empty categories show None; missing optional lists show Not
+reported. Expand
 "Technical details" to inspect stop/start order and copy the complete supplied
 JSON. The displayed summary does not modify the supplied plan or its fingerprint.
 An absent plan allows source review and rejection but disables approval.

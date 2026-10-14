@@ -703,62 +703,66 @@ impl Controller {
             ui.heading("Deployment effects");
             if self.review.mode == "demo" {
                 ui.label(RichText::new("Example plan for this preview.").color(ACCENT));
-            } else {
+            } else if self.review.deployment.is_some() {
                 ui.label(RichText::new("Imported JSON · Machine state and candidate binding have not been verified.").color(MUTED));
             }
             ui.add_space(14.0);
             let Some(plan) = self.review.plan() else {
-                plan_frame(ui, 70.0, |ui| {
-                    ui.label(RichText::new("No deployment plan loaded").strong());
-                    ui.label(RichText::new("Source changes alone do not establish which VMs will restart.").color(MUTED));
-                });
+                reboot_badge(ui, None);
+                ui.add_space(8.0);
+                ui.label(RichText::new("No deployment plan loaded").strong());
+                ui.label(RichText::new("Source changes alone do not establish which VMs will restart.").color(MUTED));
                 return;
             };
             let effects = self.effects.as_ref().unwrap();
-            if ui.available_width() >= 600.0 {
-                ui.columns(2, |columns| {
-                    effect_card(&mut columns[0], "VMs restarting", &effects.restarting, ACCENT);
-                    reboot_card(&mut columns[1], effects.reboot);
+            if ui.available_width() >= 620.0 {
+                ui.horizontal_top(|ui| {
+                    let width = (ui.available_width() - 240.0).max(200.0);
+                    ui.allocate_ui_with_layout(Vec2::new(width, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                        plan_row(ui, "Restarting", |ui| vm_names(ui, effects.restarting.iter().map(String::as_str)));
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                        reboot_badge(ui, effects.reboot);
+                    });
                 });
             } else {
-                effect_card(ui, "VMs restarting", &effects.restarting, ACCENT);
-                reboot_card(ui, effects.reboot);
+                reboot_badge(ui, effects.reboot);
+                ui.add_space(8.0);
+                plan_row(ui, "Restarting", |ui| vm_names(ui, effects.restarting.iter().map(String::as_str)));
             }
-            for (title, names, color) in [
-                ("VMs starting without a restart", &effects.starting, GREEN),
-                ("VMs stopping without a restart", &effects.stopping, RED),
+            for (title, names) in [
+                ("Starting", &effects.starting),
+                ("Stopping", &effects.stopping),
             ] {
                 if !names.is_empty() {
-                    effect_card(ui, title, names, color);
+                    plan_row(ui, title, |ui| vm_names(ui, names.iter().map(String::as_str)));
                 }
             }
-            ui.add_space(8.0);
+            ui.add_space(12.0);
+            ui.separator();
+            ui.add_space(4.0);
             ui.label(RichText::new("Configuration changes").strong().size(16.0));
-            if ui.available_width() >= 760.0 {
-                ui.columns(3, |columns| {
-                    plan_card(&mut columns[0], plan, "changed", "Changed VMs", false, ACCENT, 56.0);
-                    plan_card(&mut columns[1], plan, "retire", "Retired VMs", false, MUTED, 56.0);
-                    plan_card(&mut columns[2], plan, "restore", "Restored VMs", false, MUTED, 56.0);
-                });
-            } else {
-                plan_card(ui, plan, "changed", "Changed VMs", false, ACCENT, 56.0);
-                ui.columns(2, |columns| {
-                    plan_card(&mut columns[0], plan, "retire", "Retired VMs", false, MUTED, 56.0);
-                    plan_card(&mut columns[1], plan, "restore", "Restored VMs", false, MUTED, 56.0);
+            for (key, title) in [("changed", "Changed"), ("retire", "Retired"), ("restore", "Restored")] {
+                plan_row(ui, title, |ui| {
+                    if let Some(names) = plan.get(key).and_then(|value| value.as_array()) {
+                        vm_names(ui, names.iter().filter_map(|name| name.as_str()));
+                    } else {
+                        ui.label(RichText::new("Not reported").size(13.0).color(MUTED));
+                    }
                 });
             }
             ui.add_space(8.0);
+            ui.separator();
             egui::CollapsingHeader::new("Technical details").default_open(false).show(ui, |ui| {
                 ui.label(RichText::new("Stop and start sequences, in the supplied order.").color(MUTED).size(12.0));
-                let operation_height = 50.0 + ["stop", "start"].into_iter().map(|key| plan.get(key).and_then(|value| value.as_array()).map_or(0, Vec::len)).max().unwrap_or(0) as f32 * 29.0;
                 if ui.available_width() >= 600.0 {
                     ui.columns(2, |columns| {
-                        plan_card(&mut columns[0], plan, "stop", "Stop VMs", true, RED, operation_height);
-                        plan_card(&mut columns[1], plan, "start", "Start VMs", true, GREEN, operation_height);
+                        ordered_plan(&mut columns[0], plan, "stop", "Stop VMs", RED);
+                        ordered_plan(&mut columns[1], plan, "start", "Start VMs", GREEN);
                     });
                 } else {
-                    plan_card(ui, plan, "stop", "Stop VMs", true, RED, operation_height);
-                    plan_card(ui, plan, "start", "Start VMs", true, GREEN, operation_height);
+                    ordered_plan(ui, plan, "stop", "Stop VMs", RED);
+                    ordered_plan(ui, plan, "start", "Start VMs", GREEN);
                 }
                 ui.add_space(8.0);
                 ui.label(RichText::new("Complete supplied plan · JSON").strong());
@@ -867,6 +871,7 @@ impl eframe::App for Controller {
                     ui.selectable_value(&mut self.tab, Tab::Source, "Source changes");
                     ui.selectable_value(&mut self.tab, Tab::Plan, "Deployment plan");
                     ui.selectable_value(&mut self.tab, Tab::Record, "Review record");
+                    let show_copy_label = ui.available_width() >= 130.0;
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let value = self.clipboard_review.as_ref().ok();
                         let response = copy_button(
@@ -878,7 +883,9 @@ impl eframe::App for Controller {
                         if let Err(error) = &self.clipboard_review {
                             response.on_disabled_hover_text(error);
                         }
-                        ui.label(RichText::new("Copy review").size(12.0).color(MUTED));
+                        if show_copy_label {
+                            ui.label(RichText::new("Copy review").size(12.0).color(MUTED));
+                        }
                     });
                 });
                 ui.add_space(12.0);
@@ -1353,40 +1360,64 @@ fn effects_summary(ui: &mut egui::Ui, effects: Option<&PlannedEffects>) {
     });
 }
 
-fn effect_card(ui: &mut egui::Ui, title: &str, names: &[String], color: Color32) {
-    plan_frame(ui, 70.0, |ui| {
-        ui.label(RichText::new(title).strong().color(color));
-        if names.is_empty() {
-            ui.label(RichText::new("None").color(MUTED));
-        } else {
-            vm_chips(ui, names.iter().map(String::as_str));
-        }
+fn plan_row(ui: &mut egui::Ui, label: &str, content: impl FnOnce(&mut egui::Ui)) {
+    ui.horizontal_top(|ui| {
+        ui.allocate_ui_with_layout(
+            Vec2::new(120.0, 0.0),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                ui.set_width(120.0);
+                ui.label(RichText::new(label).size(13.0).color(MUTED));
+            },
+        );
+        ui.allocate_ui_with_layout(
+            Vec2::new(ui.available_width(), 0.0),
+            egui::Layout::top_down(egui::Align::Min),
+            content,
+        );
     });
 }
 
-fn reboot_card(ui: &mut egui::Ui, required: Option<bool>) {
-    plan_frame(ui, 70.0, |ui| {
-        ui.label(RichText::new("System reboot").strong());
-        let (status, color) = reboot_state(required);
-        ui.label(RichText::new(status).strong().size(20.0).color(color));
-    });
+fn reboot_badge(ui: &mut egui::Ui, required: Option<bool>) {
+    let (status, color) = reboot_state(required);
+    egui::Frame::new()
+        .fill(color.linear_multiply(0.08))
+        .corner_radius(4.0)
+        .inner_margin(egui::Margin::symmetric(9, 5))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new(format!("System reboot: {status}"))
+                    .size(12.0)
+                    .color(color),
+            );
+        });
 }
 
-fn vm_chips<'a>(ui: &mut egui::Ui, names: impl IntoIterator<Item = &'a str>) {
+fn vm_names<'a>(ui: &mut egui::Ui, names: impl IntoIterator<Item = &'a str>) {
+    let mut names = names.into_iter().peekable();
+    if names.peek().is_none() {
+        ui.label(RichText::new("None").size(13.0).color(MUTED));
+        return;
+    }
     ui.horizontal_wrapped(|ui| {
-        for name in names {
-            egui::Frame::new()
-                .fill(BACKGROUND)
-                .stroke(Stroke::new(1.0_f32, BORDER))
-                .corner_radius(4.0)
-                .inner_margin(egui::Margin::symmetric(8, 4))
-                .show(ui, |ui| {
-                    copyable_label(
-                        ui,
-                        RichText::new(visible_path(name)).monospace().size(12.0),
-                        name,
-                    );
-                });
+        ui.spacing_mut().item_spacing = Vec2::new(6.0, 4.0);
+        while let Some(name) = names.next() {
+            let display = format!(
+                "{}{}",
+                visible_path(name),
+                if names.peek().is_some() { "," } else { "" }
+            );
+            ui.add(
+                egui::Label::new(RichText::new(display).monospace().size(13.0))
+                    .selectable(true)
+                    .wrap(),
+            )
+            .context_menu(|ui| {
+                if ui.button("Copy VM name").clicked() {
+                    ui.ctx().copy_text(name.to_owned());
+                    ui.close();
+                }
+            });
         }
     });
 }
@@ -1405,68 +1436,35 @@ fn plan_frame(ui: &mut egui::Ui, minimum_height: f32, content: impl FnOnce(&mut 
     });
 }
 
-fn plan_card(
+fn ordered_plan(
     ui: &mut egui::Ui,
     plan: &serde_json::Value,
     key: &str,
     title: &str,
-    ordered: bool,
     color: Color32,
-    minimum_height: f32,
 ) {
     let names = plan.get(key).and_then(|value| value.as_array());
-    plan_frame(ui, minimum_height, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(title).strong().color(color));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if let Some(names) = names {
-                    ui.label(
-                        RichText::new(format!(
-                            "{} VM{}",
-                            names.len(),
-                            if names.len() == 1 { "" } else { "s" }
-                        ))
-                        .color(MUTED)
-                        .size(12.0),
-                    );
-                }
+    ui.label(RichText::new(title).strong().color(color));
+    let Some(names) = names else {
+        ui.label(RichText::new("Not reported").color(MUTED));
+        return;
+    };
+    if names.is_empty() {
+        ui.label(RichText::new("None").color(MUTED));
+    } else {
+        for (index, name) in names.iter().enumerate() {
+            let name = name.as_str().unwrap_or("[unexpected entry]");
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!("{:02}", index + 1))
+                        .monospace()
+                        .size(12.0)
+                        .color(MUTED),
+                );
+                copyable_label(ui, RichText::new(visible_path(name)).monospace(), name);
             });
-        });
-        let Some(names) = names else {
-            ui.label(RichText::new("Not reported").color(MUTED));
-            return;
-        };
-        if names.is_empty() {
-            ui.label(RichText::new("None").color(MUTED));
-        } else if ordered {
-            for (index, name) in names.iter().enumerate() {
-                let name = name.as_str().unwrap_or("[unexpected entry]");
-                ui.horizontal(|ui| {
-                    egui::Frame::new()
-                        .fill(BACKGROUND)
-                        .stroke(Stroke::new(1.0_f32, BORDER))
-                        .corner_radius(4.0)
-                        .inner_margin(egui::Margin::symmetric(6, 3))
-                        .show(ui, |ui| {
-                            ui.label(
-                                RichText::new(format!("{:02}", index + 1))
-                                    .monospace()
-                                    .size(12.0)
-                                    .color(color),
-                            );
-                        });
-                    copyable_label(ui, RichText::new(name).monospace(), name);
-                });
-            }
-        } else {
-            vm_chips(
-                ui,
-                names
-                    .iter()
-                    .map(|name| name.as_str().unwrap_or("[unexpected entry]")),
-            );
         }
-    });
+    }
 }
 
 fn column_header(
