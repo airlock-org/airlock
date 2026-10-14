@@ -48,6 +48,13 @@ Uncommitted working-tree changes are excluded. Non-UTF-8 paths fail the review
 rather than being silently omitted. Binary/non-UTF-8 blobs and files above
 1 MiB are listed with their object identities and disable approval.
 
+Changed files appear in a collapsible folder tree, with compact directory
+chains, single-line filenames, change markers and aligned addition/deletion
+counts. Full paths are available on hover. Search matches path terms without
+case sensitivity and keeps matching files in their folder context; clearing
+the filter restores the saved expansion state. Previous/Next and Up/Down when
+the tree has focus navigate matching files and reveal the selected path.
+
 `--plan` accepts a saved plan object or a receiver response containing `plan`.
 The plan must contain `changed`, `stop` and `start` arrays of domain names.
 Known optional domain arrays are also checked. Supplied revision and lock

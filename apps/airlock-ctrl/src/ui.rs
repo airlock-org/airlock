@@ -1,5 +1,6 @@
 use crate::{
     Decision,
+    file_tree::{FileTree, RowKind, TreeRow},
     model::{FileChange, Review},
     theme::{
         self, ACCENT, ACCENT_TINT, BACKGROUND, BORDER, BRAND, BUTTON_TEXT, FOREGROUND, GREEN,
@@ -8,6 +9,7 @@ use crate::{
 };
 use eframe::egui::{self, Color32, FontId, RichText, Stroke, Vec2};
 use similar::{ChangeTag, TextDiff};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 struct CodeLine {
@@ -85,6 +87,9 @@ pub struct Controller {
     selected: usize,
     tab: Tab,
     filter: String,
+    file_tree: FileTree,
+    collapsed_folders: BTreeSet<String>,
+    scroll_to_selection: bool,
     diff_rows: Vec<DiffRow>,
     reviewed: bool,
     confirm: Option<Decision>,
@@ -105,6 +110,7 @@ impl Controller {
     ) -> Self {
         theme::apply(&cc.egui_ctx);
         let diff_rows = review.files.first().map(rows).unwrap_or_default();
+        let file_tree = FileTree::new(&review.files);
         let icon = crate::branding::logo()
             .expect("the embedded logo was checked before opening the window");
         let logo = cc.egui_ctx.load_texture(
@@ -121,6 +127,9 @@ impl Controller {
             selected: 0,
             tab: Tab::Source,
             filter: String::new(),
+            file_tree,
+            collapsed_folders: BTreeSet::new(),
+            scroll_to_selection: false,
             diff_rows,
             reviewed: false,
             confirm: None,
@@ -221,74 +230,244 @@ impl Controller {
 
     fn sidebar(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("files")
-            .default_width(280.0)
-            .min_width(210.0)
+            .default_width(330.0)
+            .min_width(270.0)
+            .max_width(520.0)
             .resizable(true)
-            .frame(egui::Frame::new().fill(PANEL).inner_margin(18.0))
+            .frame(egui::Frame::new().fill(PANEL).inner_margin(14.0))
             .show(ctx, |ui| {
                 ui.label(RichText::new("CANDIDATE").size(11.0).color(MUTED).strong());
-                ui.label(RichText::new(&self.review.candidate.subject).strong());
-                ui.add_space(6.0);
-                ui.label(
-                    RichText::new("Baseline to candidate")
-                        .size(12.0)
-                        .color(MUTED),
-                );
-                ui.monospace(format!(
-                    "{} -> {}",
-                    short(&self.review.baseline.commit),
-                    short(&self.review.candidate.commit)
+                ui.add(
+                    egui::Label::new(RichText::new(&self.review.candidate.subject).strong())
+                        .truncate(),
+                )
+                .on_hover_text(&self.review.candidate.subject);
+                ui.add(egui::Label::new(
+                    RichText::new(format!(
+                        "{} -> {}",
+                        short(&self.review.baseline.commit),
+                        short(&self.review.candidate.commit)
+                    ))
+                    .monospace()
+                    .size(11.0)
+                    .color(MUTED),
+                ))
+                .on_hover_text(format!(
+                    "Baseline: {}\nCandidate: {}",
+                    self.review.baseline.commit, self.review.candidate.commit,
                 ));
-                ui.add_space(10.0);
+                ui.add_space(8.0);
                 ui.separator();
                 ui.add_space(6.0);
+                let all_rows =
+                    self.file_tree
+                        .rows(&self.review.files, &self.filter, &BTreeSet::new());
+                let matching: Vec<_> = all_rows
+                    .iter()
+                    .filter_map(|row| match row.kind {
+                        RowKind::File { index } => Some(index),
+                        _ => None,
+                    })
+                    .collect();
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Changed files").strong());
-                    ui.label(RichText::new(self.review.files.len().to_string()).color(MUTED));
+                    ui.label(RichText::new("Changed files").strong().size(15.0));
+                    let count = if self.filter.trim().is_empty() {
+                        self.review.files.len().to_string()
+                    } else {
+                        format!("{} / {}", matching.len(), self.review.files.len())
+                    };
+                    ui.label(RichText::new(count).size(12.0).color(MUTED));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let removed: usize =
+                            self.review.files.iter().map(|file| file.deletions).sum();
+                        let added: usize =
+                            self.review.files.iter().map(|file| file.additions).sum();
+                        ui.label(
+                            RichText::new(format!("−{removed}"))
+                                .monospace()
+                                .size(11.0)
+                                .color(RED),
+                        );
+                        ui.label(
+                            RichText::new(format!("+{added}"))
+                                .monospace()
+                                .size(11.0)
+                                .color(GREEN),
+                        );
+                    });
                 });
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.filter)
-                        .hint_text("Filter files…")
-                        .desired_width(f32::INFINITY),
-                );
-                ui.add_space(8.0);
-                egui::ScrollArea::vertical()
-                    .id_salt("file-list")
-                    .show(ui, |ui| {
-                        for (index, file) in self.review.files.iter().enumerate() {
-                            if !file
-                                .path
-                                .to_lowercase()
-                                .contains(&self.filter.to_lowercase())
-                            {
-                                continue;
+                ui.horizontal(|ui| {
+                    // Reserve the full button width, including its themed padding.
+                    let clear_width = 40.0;
+                    let margin = egui::Margin::symmetric(4, 2);
+                    let text_width = (ui.available_width() - clear_width - ui.spacing().item_spacing.x - margin.sum().x).max(40.0);
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.filter)
+                            .hint_text("Find a file or folder…")
+                            .margin(margin)
+                            .desired_width(text_width),
+                    );
+                    if ui.add_enabled(!self.filter.is_empty(), egui::Button::new("×").small().min_size(Vec2::new(clear_width, 20.0)))
+                            .on_hover_text("Clear file filter")
+                            .clicked()
+                    {
+                        self.filter.clear();
+                    }
+                });
+                ui.horizontal(|ui| {
+                    let searching = !self.filter.trim().is_empty();
+                    if ui
+                        .add_enabled(
+                            !searching,
+                            egui::Button::new(RichText::new("Collapse all").size(11.0)).small(),
+                        )
+                        .clicked()
+                    {
+                        self.collapsed_folders = all_rows
+                            .iter()
+                            .filter_map(|row| match row.kind {
+                                RowKind::Folder { .. } => Some(row.path.clone()),
+                                _ => None,
+                            })
+                            .collect();
+                    }
+                    if ui
+                        .add_enabled(
+                            !searching,
+                            egui::Button::new(RichText::new("Expand all").size(11.0)).small(),
+                        )
+                        .clicked()
+                    {
+                        self.collapsed_folders.clear();
+                    }
+                });
+                ui.add_space(6.0);
+                let visible =
+                    self.file_tree
+                        .rows(&self.review.files, &self.filter, &self.collapsed_folders);
+                let mut select = None;
+                let mut navigate = None;
+                let tree_height = (ui.available_height() - 46.0).max(100.0);
+                ui.scope(|ui| {
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    if visible.is_empty() {
+                        ui.add_space(18.0);
+                        ui.label(
+                            RichText::new(if self.review.files.is_empty() {
+                                "No changed files."
+                            } else {
+                                "No files match this filter."
+                            })
+                            .color(MUTED),
+                        );
+                    }
+                    let mut scroll = egui::ScrollArea::vertical()
+                        .id_salt("file-tree")
+                        .auto_shrink([false, false])
+                        .max_height(tree_height);
+                    if self.scroll_to_selection {
+                        if let Some(position) = visible.iter().position(|row| matches!(row.kind, RowKind::File { index } if index == self.selected)) {
+                            scroll = scroll.vertical_scroll_offset((position as f32 * 29.0 - tree_height / 2.0).max(0.0));
+                        }
+                        self.scroll_to_selection = false;
+                    }
+                    scroll.show_rows(ui, 29.0, visible.len(), |ui, range| {
+                            for index in range {
+                                let row = &visible[index];
+                                let response = tree_row(ui, row, &self.review.files, self.selected);
+                                if response.clicked() {
+                                    response.request_focus();
+                                }
+                                let activated = response.clicked()
+                                    || response.has_focus()
+                                        && ui.input(|input| {
+                                            input.key_pressed(egui::Key::Enter)
+                                                || input.key_pressed(egui::Key::Space)
+                                        });
+                                if response.has_focus() {
+                                    if ui.input(|input| input.key_pressed(egui::Key::ArrowDown)) {
+                                        navigate = Some(true);
+                                    }
+                                    if ui.input(|input| input.key_pressed(egui::Key::ArrowUp)) {
+                                        navigate = Some(false);
+                                    }
+                                }
+                                if activated {
+                                    match row.kind {
+                                        RowKind::File { index } => select = Some(index),
+                                        RowKind::Folder { open, .. }
+                                            if self.filter.trim().is_empty() =>
+                                        {
+                                            if open {
+                                                self.collapsed_folders.insert(row.path.clone());
+                                            } else {
+                                                self.collapsed_folders.remove(&row.path);
+                                            }
+                                        }
+                                        _ => (),
+                                    }
+                                }
                             }
-                            let text = format!(
-                                "{}  {}\n     +{}  −{}",
-                                match file.status.as_str() {
-                                    "Added" => "A",
-                                    "Deleted" => "D",
-                                    _ => "M",
-                                },
-                                visible_path(&file.path),
-                                file.additions,
-                                file.deletions
-                            );
-                            if ui
-                                .add(
-                                    egui::Button::new(RichText::new(text).size(12.0))
-                                        .selected(index == self.selected)
-                                        .min_size(Vec2::new(ui.available_width(), 50.0)),
-                                )
-                                .clicked()
-                            {
-                                self.selected = index;
-                                self.diff_rows = rows(file);
-                                self.tab = Tab::Source;
-                            }
-                            ui.add_space(3.0);
+                        });
+                });
+                ui.separator();
+                ui.horizontal(|ui| {
+                    let position = matching.iter().position(|index| *index == self.selected);
+                    ui.label(
+                        RichText::new(
+                            position
+                                .map(|position| format!("{} of {}", position + 1, matching.len()))
+                                .unwrap_or_else(|| "No selection in filter".into()),
+                        )
+                        .size(11.0)
+                        .color(MUTED),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add_enabled(
+                                !matching.is_empty()
+                                    && position
+                                        .is_none_or(|position| position + 1 < matching.len()),
+                                egui::Button::new("Next").small(),
+                            )
+                            .clicked()
+                        {
+                            navigate = Some(true);
+                        }
+                        if ui
+                            .add_enabled(
+                                !matching.is_empty()
+                                    && position.is_none_or(|position| position > 0),
+                                egui::Button::new("Previous").small(),
+                            )
+                            .clicked()
+                        {
+                            navigate = Some(false);
                         }
                     });
+                    if let Some(forward) = navigate {
+                        let position = match (forward, position) {
+                            (true, Some(position)) => {
+                                (position + 1).min(matching.len().saturating_sub(1))
+                            }
+                            (false, Some(position)) => position.saturating_sub(1),
+                            (true, None) => 0,
+                            (false, None) => matching.len().saturating_sub(1),
+                        };
+                        select = matching.get(position).copied();
+                    }
+                });
+                if let Some(index) = select {
+                    self.file_tree
+                        .reveal(&self.review.files, index, &mut self.collapsed_folders);
+                    self.selected = index;
+                    self.diff_rows = rows(&self.review.files[index]);
+                    self.tab = Tab::Source;
+                    if navigate.is_some() {
+                        self.scroll_to_selection = true;
+                        ctx.memory_mut(|memory| memory.request_focus(tree_id(&self.review.files[index].path)));
+                    }
+                }
             });
     }
 
@@ -586,6 +765,232 @@ impl eframe::App for Controller {
     }
 }
 
+fn tree_row(
+    ui: &mut egui::Ui,
+    row: &TreeRow,
+    files: &[FileChange],
+    selected: usize,
+) -> egui::Response {
+    let width = ui.available_width();
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 29.0), egui::Sense::hover());
+    let response = ui
+        .interact(
+            rect,
+            match row.kind {
+                RowKind::Folder { .. } => egui::Id::new("ctrl-file-tree-folder").with(&row.path),
+                RowKind::File { .. } => tree_id(&row.path),
+            },
+            egui::Sense::click(),
+        )
+        .on_hover_cursor(egui::CursorIcon::PointingHand);
+    let is_selected = matches!(row.kind, RowKind::File { index } if index == selected);
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::SelectableLabel,
+            true,
+            is_selected,
+            visible_path(&row.label),
+        )
+    });
+    if is_selected {
+        ui.painter()
+            .rect_filled(rect.shrink2(Vec2::new(0.0, 1.0)), 4.0, ACCENT_TINT);
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(rect.left_top() + Vec2::new(0.0, 5.0), Vec2::new(2.0, 19.0)),
+            1.0,
+            ACCENT,
+        );
+    } else if response.hovered() {
+        ui.painter().rect_filled(
+            rect.shrink2(Vec2::new(0.0, 1.0)),
+            4.0,
+            Color32::from_rgb(0x18, 0x26, 0x35),
+        );
+    }
+    if response.has_focus() {
+        ui.painter().rect_stroke(
+            rect.shrink(1.0),
+            4.0,
+            Stroke::new(1.0_f32, BORDER),
+            egui::StrokeKind::Inside,
+        );
+    }
+    let indent = row.depth as f32 * 14.0;
+    let center = rect.left_center() + Vec2::new(10.0 + indent, 0.0);
+    for depth in 0..row.depth {
+        let x = rect.left() + 10.0 + depth as f32 * 14.0;
+        ui.painter().line_segment(
+            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+            Stroke::new(1.0_f32, BORDER.linear_multiply(0.5)),
+        );
+    }
+    let font = FontId::proportional(13.0);
+    let text_left = center.x + 30.0;
+    let reserved = match row.kind {
+        RowKind::Folder { open, count } => {
+            let offsets = if open {
+                [
+                    Vec2::new(-3.0, -2.0),
+                    Vec2::new(0.0, 1.0),
+                    Vec2::new(3.0, -2.0),
+                ]
+            } else {
+                [
+                    Vec2::new(-1.0, -3.0),
+                    Vec2::new(2.0, 0.0),
+                    Vec2::new(-1.0, 3.0),
+                ]
+            };
+            ui.painter().add(egui::Shape::line(
+                offsets.into_iter().map(|offset| center + offset).collect(),
+                Stroke::new(1.3_f32, MUTED),
+            ));
+            let origin = center + Vec2::new(10.0, -6.0);
+            let outline = [
+                (0.0, 1.0),
+                (5.0, 1.0),
+                (7.0, 3.0),
+                (14.0, 3.0),
+                (14.0, 12.0),
+                (0.0, 12.0),
+                (0.0, 1.0),
+            ];
+            ui.painter().add(egui::Shape::line(
+                outline
+                    .into_iter()
+                    .map(|(x, y)| origin + Vec2::new(x, y))
+                    .collect(),
+                Stroke::new(1.1_f32, BRAND),
+            ));
+            ui.painter().text(
+                rect.right_center() - Vec2::new(8.0, 0.0),
+                egui::Align2::RIGHT_CENTER,
+                count.to_string(),
+                FontId::proportional(11.0),
+                MUTED,
+            );
+            34.0
+        }
+        RowKind::File { index } => {
+            let file = &files[index];
+            let origin = center + Vec2::new(12.0, -6.0);
+            let outline = [
+                (0.0, 0.0),
+                (7.0, 0.0),
+                (11.0, 4.0),
+                (11.0, 13.0),
+                (0.0, 13.0),
+                (0.0, 0.0),
+            ];
+            ui.painter().add(egui::Shape::line(
+                outline
+                    .into_iter()
+                    .map(|(x, y)| origin + Vec2::new(x, y))
+                    .collect(),
+                Stroke::new(1.0_f32, MUTED),
+            ));
+            ui.painter().add(egui::Shape::line(
+                vec![
+                    origin + Vec2::new(7.0, 0.0),
+                    origin + Vec2::new(7.0, 4.0),
+                    origin + Vec2::new(11.0, 4.0),
+                ],
+                Stroke::new(1.0_f32, MUTED),
+            ));
+            let (status, color) = match file.status.as_str() {
+                "Added" => ("A", GREEN),
+                "Deleted" => ("D", RED),
+                _ => ("M", ACCENT),
+            };
+            let right = rect.right_center() - Vec2::new(8.0, 0.0);
+            let font = FontId::monospace(11.0);
+            if file.opaque.is_some() {
+                ui.painter()
+                    .text(right, egui::Align2::RIGHT_CENTER, "!", font, RED);
+            } else if file.additions == 0 && file.deletions == 0 {
+                ui.painter()
+                    .text(right, egui::Align2::RIGHT_CENTER, "mode", font, MUTED);
+            } else {
+                if file.additions > 0 {
+                    ui.painter().text(
+                        right - Vec2::new(37.0, 0.0),
+                        egui::Align2::RIGHT_CENTER,
+                        format!("+{}", compact_count(file.additions)),
+                        font.clone(),
+                        GREEN,
+                    );
+                }
+                if file.deletions > 0 {
+                    ui.painter().text(
+                        right,
+                        egui::Align2::RIGHT_CENTER,
+                        format!("−{}", compact_count(file.deletions)),
+                        font,
+                        RED,
+                    );
+                }
+            }
+            ui.painter().text(
+                right - Vec2::new(82.0, 0.0),
+                egui::Align2::RIGHT_CENTER,
+                status,
+                FontId::monospace(11.0),
+                color,
+            );
+            108.0
+        }
+    };
+    let mut job = egui::text::LayoutJob::simple(
+        visible_path(&row.label),
+        font,
+        if is_selected { FOREGROUND } else { MUTED },
+        (rect.right() - reserved - text_left).max(20.0),
+    );
+    job.wrap = egui::text::TextWrapping::truncate_at_width(
+        (rect.right() - reserved - text_left).max(20.0),
+    );
+    let galley = ui.painter().layout_job(job);
+    ui.painter().galley(
+        egui::pos2(text_left, rect.center().y - galley.size().y / 2.0),
+        galley,
+        FOREGROUND,
+    );
+    let tooltip = match row.kind {
+        RowKind::Folder { count, .. } => {
+            format!("{}\n{count} changed files", visible_path(&row.path))
+        }
+        RowKind::File { index } => {
+            let file = &files[index];
+            format!(
+                "{}\n{} · +{} / −{}{}",
+                visible_path(&row.path),
+                file.status,
+                file.additions,
+                file.deletions,
+                file.opaque
+                    .as_ref()
+                    .map(|reason| format!("\n{reason}"))
+                    .unwrap_or_default()
+            )
+        }
+    };
+    response.on_hover_text(tooltip)
+}
+
+fn tree_id(path: &str) -> egui::Id {
+    egui::Id::new("ctrl-file-tree-path").with(path)
+}
+
+fn compact_count(count: usize) -> String {
+    if count >= 10_000 {
+        format!("{}k", count / 1000)
+    } else if count >= 1000 {
+        format!("{:.1}k", count as f32 / 1000.0)
+    } else {
+        count.to_string()
+    }
+}
+
 fn code_cell(ui: &mut egui::Ui, line: Option<&CodeLine>, width: f32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 23.0), egui::Sense::hover());
     let background = match line.map(|line| line.kind) {
@@ -651,7 +1056,7 @@ fn visible_path(value: &str) -> String {
     value
         .chars()
         .flat_map(|character| {
-            if character.is_control() {
+            if character.is_control() || character == '\\' {
                 character.escape_default().collect::<Vec<_>>()
             } else {
                 vec![character]

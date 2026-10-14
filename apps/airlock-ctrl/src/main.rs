@@ -1,4 +1,5 @@
 mod branding;
+mod file_tree;
 mod model;
 mod theme;
 mod ui;
