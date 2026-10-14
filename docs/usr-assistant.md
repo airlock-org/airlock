@@ -1,4 +1,4 @@
-# Computer assistant
+# Development workspace
 
 This public user guide is maintained in the sibling `website` project.
-See [Computer assistant](../../website/docs/usr-assistant.md).
+See [Development workspace](../../website/docs/usr-assistant.md).

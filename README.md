@@ -5,9 +5,9 @@ declares host and guest systems in Nix while preserving the Qubes architecture:
 Xen-based virtualization, VM lifecycle, device ownership, inter-VM RPC through
 qrexec, and Qubes policy.
 
-The [computer assistant](docs/usr-assistant.md) has its own user VM,
-`usr-assistant`, for inspecting, configuring, and maintaining the computer.
-The current interface is Codex in Console.
+The [development workspace](docs/usr-assistant.md), `usr-assistant`, holds
+command-line tools and the machine checkout. It stays separate from everyday
+applications and personal files in `usr-home`.
 
 The project has demonstrated Qubes VM lifecycle and inter-VM RPC, closure-backed
 NixOS guests, configuration validation, and whole-machine deployment and rollback. Nested

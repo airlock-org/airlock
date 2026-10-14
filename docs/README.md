@@ -26,7 +26,7 @@ current backlog items.
 
 ## Current operating guides
 
-- [Computer assistant](../airlock-machine/docs/usr-assistant.md): the usr-assistant role, current tools,
+- [Development workspace](../airlock-machine/docs/usr-assistant.md): the usr-assistant role, current tools,
   and the [migration from the previous VM name](usr-assistant-rename.md).
 - [Repository boundaries](repositories.md): source ownership and submodule workflow.
 - [USB development](usb-dev.md) and [development access](usb-lab.md): current image,
