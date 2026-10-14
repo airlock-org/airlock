@@ -31,7 +31,7 @@ edits, leading/trailing context and large unchanged gaps. Other files demonstrat
 an insertion, a replacement, a whole-file addition and a whole-file deletion.
 Click an unchanged-line row to reveal more context, or its expand icon to show
 the complete section. Use the arrows above the diff or F7 / Shift+F7 to move
-through every changed line and across files. Try expanding a gap, switching
+between diff sections and across files. Try expanding a gap, switching
 files and returning: that file's expanded context is preserved. The toolbar's
 expand/collapse icons show the entire file or reset to three lines of context.
 
@@ -96,12 +96,15 @@ context. Nearby sections merge; omitted ranges show their unchanged-line count.
 Clicking a gap reveals up to 20 more lines next to each surrounding change,
 and the gap's expand icon reveals its entire section. Leading/trailing gaps
 expand toward the nearest change. Expanded context is saved per file until
-reset. The toolbar provides previous/next changed-line navigation, a review-wide
+reset. The toolbar provides previous/next diff-section navigation, a review-wide
 counter and show-entire-file/reset-context controls. F7 and Shift+F7 move forward
 and backward except while editing the file search. Navigation crosses files,
 reveals the destination in the tree, clears an obstructing filter and scrolls
-to an outlined change. An aligned deletion/insertion pair is one navigation row;
-metadata-only changes remain accessible through the file tree.
+to the next section, marked by an accent bar in each gutter. A section is one
+hunk with three lines of context: adjacent edits whose context touches are
+grouped together, and expanding gaps does not change navigation destinations.
+Whole-file additions/deletions each form one section; metadata-only changes
+remain accessible through the file tree.
 
 Code uses continuous 22-pixel rows with centred line numbers and change
 markers. Syntax highlighting uses syntect with bat's syntax definitions (via
@@ -128,7 +131,8 @@ icon briefly becomes a green checkmark. `--print-review` prints the same report
 to stdout; `--print-patch` remains available for patch-only offline tooling.
 Non-UTF-8 text patches cannot be copied losslessly; the disabled button's tooltip
 explains the failure rather than replacing bytes or copying a partial review.
-Each column's `⋯` menu offers selection, file-content and path copy actions.
+Each column's `⋯` menu sits next to its Baseline/Candidate label and offers
+selection, file-content and path copy actions.
 Copied source preserves the original tabs, Unicode and newlines and excludes
 line numbers, the other column and empty diff alignment rows. The source stays
 read-only. Folding does not change source offsets or the copied review/patch;

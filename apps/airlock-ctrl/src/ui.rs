@@ -1,7 +1,7 @@
 use crate::{
     Decision,
     approval::Session,
-    diff_context::{ContextView, DisplayRow, adjacent_change},
+    diff_context::{ContextView, DisplayRow, Section, adjacent_section},
     effects::{self, PlannedEffects, names_text},
     file_tree::{FileTree, RowKind, TreeRow},
     icons::{self, Icon},
@@ -138,9 +138,9 @@ pub struct Controller {
     diff_rows: Vec<DiffRow>,
     diff_ops: Vec<Vec<similar::DiffOp>>,
     context_views: Vec<ContextView>,
-    changes: Vec<(usize, usize)>,
-    active_change: Option<usize>,
-    scroll_to_change: Option<usize>,
+    sections: Vec<(usize, Section)>,
+    active_section: Option<usize>,
+    scroll_to_section: Option<usize>,
     source_selection: SourceSelection,
     confirm: Option<Decision>,
     about_open: bool,
@@ -173,7 +173,7 @@ impl Controller {
             .first()
             .map(|file| rows(file, &diff_ops[0]))
             .unwrap_or_default();
-        let mut changes = Vec::new();
+        let mut sections = Vec::new();
         let context_views = diff_ops
             .iter()
             .enumerate()
@@ -187,16 +187,12 @@ impl Controller {
                         )
                     })
                     .collect();
-                changes.extend(
-                    flags
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(row, changed)| changed.then_some((file, row))),
-                );
-                ContextView::new(flags)
+                let view = ContextView::new(flags);
+                sections.extend(view.sections.iter().map(|section| (file, *section)));
+                view
             })
             .collect();
-        let active_change = changes.iter().position(|(file, _)| *file == 0);
+        let active_section = sections.iter().position(|(file, _)| *file == 0);
         let file_tree = FileTree::new(&review.files);
         let icon = crate::branding::logo()
             .expect("the embedded logo was checked before opening the window");
@@ -223,9 +219,9 @@ impl Controller {
             diff_rows,
             diff_ops,
             context_views,
-            changes,
-            active_change,
-            scroll_to_change: None,
+            sections,
+            active_section,
+            scroll_to_section: None,
             source_selection: SourceSelection::default(),
             confirm: None,
             about_open: false,
@@ -676,18 +672,18 @@ impl Controller {
             self.source_selection = SourceSelection::default();
             self.diff_rows = rows(&self.review.files[index], &self.diff_ops[index]);
         }
-        self.active_change = self.changes.iter().position(|(file, _)| *file == index);
-        self.scroll_to_change = None;
+        self.active_section = self.sections.iter().position(|(file, _)| *file == index);
+        self.scroll_to_section = None;
         self.tab = Tab::Source;
     }
 
-    fn navigate_change(&mut self, forward: bool) {
+    fn navigate_section(&mut self, forward: bool) {
         let Some(index) =
-            adjacent_change(&self.changes, self.active_change, self.selected, forward)
+            adjacent_section(&self.sections, self.active_section, self.selected, forward)
         else {
             return;
         };
-        let (file, row) = self.changes[index];
+        let (file, section) = self.sections[index];
         if file != self.selected {
             self.select_file(file);
             // Navigation covers the complete review, including filtered files.
@@ -696,32 +692,33 @@ impl Controller {
                 .reveal(&self.review.files, file, &mut self.collapsed_folders);
             self.scroll_to_selection = true;
         }
-        self.active_change = Some(index);
-        self.scroll_to_change = Some(row);
+        self.active_section = Some(index);
+        self.scroll_to_section = Some(section.first_change);
     }
 
-    fn change_toolbar(&mut self, ui: &mut egui::Ui) {
+    fn section_toolbar(&mut self, ui: &mut egui::Ui) {
         icons::row(ui, |ui| {
             let previous =
-                adjacent_change(&self.changes, self.active_change, self.selected, false).is_some();
-            let next =
-                adjacent_change(&self.changes, self.active_change, self.selected, true).is_some();
+                adjacent_section(&self.sections, self.active_section, self.selected, false)
+                    .is_some();
+            let next = adjacent_section(&self.sections, self.active_section, self.selected, true)
+                .is_some();
             if icons::button(
                 ui,
                 Icon::Previous,
-                "Previous changed line (Shift+F7)",
+                "Previous diff section (Shift+F7)",
                 previous,
             )
             .clicked()
             {
-                self.navigate_change(false);
+                self.navigate_section(false);
             }
-            if icons::button(ui, Icon::Next, "Next changed line (F7)", next).clicked() {
-                self.navigate_change(true);
+            if icons::button(ui, Icon::Next, "Next diff section (F7)", next).clicked() {
+                self.navigate_section(true);
             }
-            let counter = self.active_change.map_or_else(
-                || format!("{} changed lines", self.changes.len()),
-                |index| format!("Change {} of {}", index + 1, self.changes.len()),
+            let counter = self.active_section.map_or_else(
+                || format!("{} diff sections", self.sections.len()),
+                |index| format!("Section {} of {}", index + 1, self.sections.len()),
             );
             ui.label(RichText::new(counter).size(12.0).color(MUTED));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -730,7 +727,9 @@ impl Controller {
                 {
                     self.context_views[self.selected].reset();
                     self.source_selection = SourceSelection::default();
-                    self.scroll_to_change = self.active_change.map(|index| self.changes[index].1);
+                    self.scroll_to_section = self
+                        .active_section
+                        .map(|index| self.sections[index].1.first_change);
                 }
                 if icons::button(ui, Icon::ExpandAll, "Show entire file", true).clicked() {
                     self.context_views[self.selected].show_all();
@@ -741,7 +740,7 @@ impl Controller {
 
     fn source(&mut self, ui: &mut egui::Ui) {
         if !self.review.files.is_empty() {
-            self.change_toolbar(ui);
+            self.section_toolbar(ui);
         }
         let Some(file) = self.review.files.get(self.selected) else {
             ui.centered_and_justified(|ui| {
@@ -840,8 +839,11 @@ impl Controller {
         self.source_selection
             .keyboard(ui, [&file.before, &file.after]);
         let entries = &self.context_views[self.selected].entries;
-        let active_row = self.active_change.map(|index| self.changes[index].1);
-        let target = self.scroll_to_change.take().and_then(|row| {
+        let active_range = self.active_section.map(|index| {
+            let section = self.sections[index].1;
+            section.start..section.end
+        });
+        let target = self.scroll_to_section.take().and_then(|row| {
             entries
                 .iter()
                 .position(|entry| *entry == DisplayRow::Source(row))
@@ -885,7 +887,12 @@ impl Controller {
                                     row.left.as_ref(),
                                     column_width,
                                     0,
-                                    (focus_ids[0], active_row == Some(source_index)),
+                                    (
+                                        focus_ids[0],
+                                        active_range
+                                            .as_ref()
+                                            .is_some_and(|range| range.contains(&source_index)),
+                                    ),
                                     file,
                                     &mut self.source_selection,
                                 );
@@ -896,7 +903,12 @@ impl Controller {
                                     row.right.as_ref(),
                                     column_width,
                                     1,
-                                    (focus_ids[1], active_row == Some(source_index)),
+                                    (
+                                        focus_ids[1],
+                                        active_range
+                                            .as_ref()
+                                            .is_some_and(|range| range.contains(&source_index)),
+                                    ),
                                     file,
                                     &mut self.source_selection,
                                 );
@@ -1129,11 +1141,11 @@ impl eframe::App for Controller {
             && !self.filter_has_focus
         {
             if ctx.input_mut(|input| input.consume_key(egui::Modifiers::SHIFT, egui::Key::F7)) {
-                self.navigate_change(false);
+                self.navigate_section(false);
                 ctx.request_repaint();
             } else if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::F7))
             {
-                self.navigate_change(true);
+                self.navigate_section(true);
                 ctx.request_repaint();
             }
         }
@@ -1761,35 +1773,34 @@ fn column_header(
 ) {
     let source = if side == 0 { &file.before } else { &file.after };
     icons::row(ui, |ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
         ui.label(
             RichText::new(label.to_uppercase())
                 .color(color)
                 .size(11.0)
                 .strong(),
         );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let (response, _) = egui::containers::menu::MenuButton::from_button(icons::control())
-                .ui(ui, |ui| {
-                    let selected = selection.text(source, side);
-                    if ui
-                        .add_enabled(selected.is_some(), egui::Button::new("Copy selection"))
-                        .clicked()
-                    {
-                        ui.ctx().copy_text(selected.unwrap().to_owned());
-                        ui.close();
-                    }
-                    if ui.button("Copy file contents").clicked() {
-                        ui.ctx().copy_text(source.clone());
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui.button("Copy file path").clicked() {
-                        ui.ctx().copy_text(file.path.clone());
-                        ui.close();
-                    }
-                });
-            icons::decorate(ui, response, Icon::More, &format!("{label} file actions"));
-        });
+        let (response, _) =
+            egui::containers::menu::MenuButton::from_button(icons::control()).ui(ui, |ui| {
+                let selected = selection.text(source, side);
+                if ui
+                    .add_enabled(selected.is_some(), egui::Button::new("Copy selection"))
+                    .clicked()
+                {
+                    ui.ctx().copy_text(selected.unwrap().to_owned());
+                    ui.close();
+                }
+                if ui.button("Copy file contents").clicked() {
+                    ui.ctx().copy_text(source.clone());
+                    ui.close();
+                }
+                ui.separator();
+                if ui.button("Copy file path").clicked() {
+                    ui.ctx().copy_text(file.path.clone());
+                    ui.close();
+                }
+            });
+        icons::decorate(ui, response, Icon::More, &format!("{label} file actions"));
     });
 }
 
@@ -1864,11 +1875,10 @@ fn code_cell(
     };
     ui.painter().rect_filled(rect, 0.0, background);
     if active {
-        ui.painter().rect_stroke(
-            rect,
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(rect.min, Vec2::new(2.0, rect.height())),
             0.0,
-            Stroke::new(1.0_f32, ACCENT),
-            egui::StrokeKind::Inside,
+            ACCENT,
         );
     }
     if side == 1 {

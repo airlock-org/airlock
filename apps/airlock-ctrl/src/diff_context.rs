@@ -8,8 +8,41 @@ pub enum DisplayRow {
     Gap { start: usize, end: usize },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Section {
+    pub start: usize,
+    pub end: usize,
+    pub first_change: usize,
+}
+
+/// A section is one hunk at the default context size. Nearby edits belong to
+/// the same section when their context touches. Expanding gaps does not change
+/// these navigation destinations.
+fn sections(changed: &[bool]) -> Vec<Section> {
+    let mut sections: Vec<Section> = Vec::new();
+    for (index, changed_row) in changed.iter().enumerate() {
+        if !changed_row {
+            continue;
+        }
+        let start = index.saturating_sub(CONTEXT_LINES);
+        let end = (index + CONTEXT_LINES + 1).min(changed.len());
+        if let Some(previous) = sections.last_mut()
+            && previous.end >= start
+        {
+            previous.end = end;
+        } else {
+            sections.push(Section {
+                start,
+                end,
+                first_change: index,
+            });
+        }
+    }
+    sections
+}
+
 pub struct ContextView {
-    changed: Vec<bool>,
+    pub sections: Vec<Section>,
     visible: Vec<bool>,
     pub entries: Vec<DisplayRow>,
 }
@@ -18,7 +51,7 @@ impl ContextView {
     pub fn new(changed: Vec<bool>) -> Self {
         let mut view = Self {
             visible: vec![false; changed.len()],
-            changed,
+            sections: sections(&changed),
             entries: Vec::new(),
         };
         view.reset();
@@ -27,12 +60,8 @@ impl ContextView {
 
     pub fn reset(&mut self) {
         self.visible.fill(false);
-        for (index, changed) in self.changed.iter().enumerate() {
-            if *changed {
-                let start = index.saturating_sub(CONTEXT_LINES);
-                let end = (index + CONTEXT_LINES + 1).min(self.visible.len());
-                self.visible[start..end].fill(true);
-            }
+        for section in &self.sections {
+            self.visible[section.start..section.end].fill(true);
         }
         self.rebuild();
     }
@@ -79,23 +108,22 @@ impl ContextView {
     }
 }
 
-/// Navigation follows changed source rows, including aligned replacement pairs.
-/// Metadata-only files have no changed lines, but remain accessible in the tree.
-pub fn adjacent_change(
-    changes: &[(usize, usize)],
+/// Metadata-only files have no diff sections, but remain accessible in the tree.
+pub fn adjacent_section(
+    sections: &[(usize, Section)],
     current: Option<usize>,
     file: usize,
     forward: bool,
 ) -> Option<usize> {
     if let Some(index) = current {
         if forward {
-            return index.checked_add(1).filter(|next| *next < changes.len());
+            return index.checked_add(1).filter(|next| *next < sections.len());
         }
         return index.checked_sub(1);
     }
     if forward {
-        changes.iter().position(|(index, _)| *index >= file)
+        sections.iter().position(|(index, _)| *index >= file)
     } else {
-        changes.iter().rposition(|(index, _)| *index <= file)
+        sections.iter().rposition(|(index, _)| *index <= file)
     }
 }

@@ -25,21 +25,31 @@ def context_runner(tmp_path_factory):
         + json.dumps(str(module))
         + "] mod diff_context;\n"
         + r"""
-use diff_context::{ContextView, DisplayRow, adjacent_change};
+use diff_context::{ContextView, DisplayRow, Section, adjacent_section};
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     if arguments[0] == "navigate" {
-        let changes = [(0, 10), (0, 11), (2, 3), (4, 8)];
+        let sections = [(0, Section { start: 7, end: 15, first_change: 10 }),
+                        (0, Section { start: 27, end: 34, first_change: 30 }),
+                        (2, Section { start: 0, end: 7, first_change: 3 }),
+                        (4, Section { start: 5, end: 12, first_change: 8 })];
         let current = arguments[1].parse().ok();
         let file = arguments[2].parse().unwrap();
         let forward = arguments[3] == "next";
-        match adjacent_change(&changes, current, file, forward) {
+        match adjacent_section(&sections, current, file, forward) {
             Some(index) => println!("{index}"),
             None => println!("null"),
         }
         return;
     }
     let mut view = ContextView::new(arguments[0].chars().map(|c| c == 'X').collect());
+    if arguments.get(1).is_some_and(|action| action == "sections") {
+        let sections: Vec<_> = view.sections.iter()
+            .map(|section| format!("[{},{},{}]", section.start, section.end, section.first_change)).collect();
+        println!("[{}]", sections.join(","));
+        return;
+    }
+    let sections = view.sections.clone();
     for action in &arguments[1..] {
         match action.as_str() {
             "all" => view.show_all(),
@@ -50,6 +60,7 @@ fn main() {
             },
         }
     }
+    assert_eq!(view.sections, sections);
     let rows: Vec<_> = view.entries.iter().map(|row| match row {
         DisplayRow::Source(index) => format!("{index}"),
         DisplayRow::Gap { start, end } => format!("[{start},{end}]"),
@@ -98,6 +109,25 @@ def test_context_keeps_changed_lines_and_merges_nearby_sections(context_runner):
         *range(27, 34),
         [34, 40],
     ]
+
+
+@pytest.mark.parametrize(
+    "source,expected",
+    [
+        (flags(60, 10, 11, 12, 30), [[7, 16, 10], [27, 34, 30]]),
+        (flags(30, 10, 17), [[7, 21, 10]]),
+        (flags(30, 10, 18), [[7, 14, 10], [15, 22, 18]]),
+        ("XXXX", [[0, 4, 0]]),
+        ("....", []),
+        ("", []),
+    ],
+)
+def test_sections_group_edits_with_touching_context_into_one_navigation_stop(
+    context_runner,
+    source,
+    expected,
+):
+    assert context_runner(source, "sections") == expected
 
 
 def test_context_handles_additions_deletions_boundaries_and_metadata_only(
@@ -156,7 +186,7 @@ def test_prefix_and_suffix_expand_toward_the_change(context_runner):
         ("none", 0, "next", 0),
     ],
 )
-def test_changed_line_navigation_crosses_files_and_skips_metadata_only_files(
+def test_section_navigation_crosses_files_and_skips_metadata_only_files(
     context_runner,
     current,
     file,
