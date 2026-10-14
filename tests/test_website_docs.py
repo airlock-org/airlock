@@ -220,6 +220,32 @@ def test_current_publication_has_valid_repository_links():
         DOCS.rewrite_markdown(ROOT, source, source.read_text(), routes)
 
 
+def test_public_guides_exclude_engineering_records_and_links():
+    _, routes = DOCS.publication(ROOT)
+    internal_folders = {"history", "incidents", "completed", "todo", "experiments"}
+    internal_pages = {
+        "README.md", "status.md", "testing.md", "lab-configuration.md",
+        "repositories.md", "usb-dev.md", "usb-lab.md", "machine-deployment.md",
+        "machine-generation-retention.md", "usr-assistant-build-store.md",
+        "usr-assistant-rename.md", "sys-gui-gnome.md", "hardware-usability-policy.md",
+    }
+    for source in routes:
+        relative = source.relative_to(ROOT)
+        assert not internal_folders.intersection(relative.parts), relative
+        assert relative.parent != Path("docs") or relative.name not in internal_pages
+        for match in DOCS.LINK.finditer(source.read_text()):
+            url = urlsplit(match[2].strip("<>"))
+            if url.scheme or url.netloc or not url.path:
+                continue
+            target = (source.parent / unquote(url.path)).resolve()
+            if target.suffix == ".md":
+                # Detailed attribution is the only unpublished Markdown linked
+                # from the user guides; engineering records stay in the repo.
+                assert target in routes or target == ROOT / "THIRD_PARTY.md", (
+                    relative, url.path,
+                )
+
+
 class HTMLPage(HTMLParser):
     def __init__(self, text):
         super().__init__()
@@ -264,6 +290,23 @@ def test_export_contains_every_published_page_and_static_search(exported_site):
     assert index["type"] == "advanced"
     indexed = set(index["internalDocumentIDStore"]["internalIdToId"])
     assert all(route.rstrip("/") in indexed for route in routes.values())
+
+
+def test_export_and_search_contain_no_unpublished_documentation(exported_site):
+    _, routes = DOCS.publication(ROOT)
+    published = {route.rstrip("/") for route in routes.values()}
+    actual = {
+        "/" + path.parent.relative_to(exported_site).as_posix()
+        for path in (exported_site / "docs").rglob("index.html")
+    }
+    assert actual == published
+    index = json.loads((exported_site / "docs/search.json").read_text())
+    for document_id in index["internalDocumentIDStore"]["internalIdToId"]:
+        # Fumadocs indexes each page and its sections as PAGE, PAGE-0, PAGE-1, ...
+        assert any(
+            document_id == route or document_id.removeprefix(route + "-").isdigit()
+            for route in published
+        ), document_id
 
 
 def test_export_internal_links_and_fragments_resolve(exported_site):

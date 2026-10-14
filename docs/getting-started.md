@@ -1,65 +1,34 @@
 # Getting started
 
-Start by inspecting the source and running the local checks. This path requires
-no Xen boot, image build, USB provisioning, or Tailscale enrollment.
+Start with the [desktop](desktop.md), [computer assistant](usr-assistant.md), and
+[architecture](architecture.md) to understand how AirlockOS works.
 
-## Prepare your checkout
+## On a running AirlockOS system
 
-On Linux, install Git, Bash, Make, Python 3.11 or newer, and uv. The parent and
-machine repositories must both be accessible. Hosted SSH clones need a GitHub
-SSH key with access to both sources while they remain private.
+Sign in to the GNOME desktop and open the application overview. Applications run
+in their assigned domains and appear together on the desktop. Everyday apps and
+personal files belong in `usr-home`; the assistant workspace is `usr-assistant`.
 
-```bash
-git clone --recurse-submodules git@github.com:airlock-org/airlock.git
-cd airlock
-uv sync --locked
-make test-quick
-```
+Open **usr-assistant: Console** to use the computer assistant. Start Codex in the
+terminal and complete its authentication if needed. Try asking it to explain the
+running domains or inspect the current configuration before making changes.
 
-Dependency installation is explicit. The quick suite uses prepared dependencies
-and does not evaluate or build Nix. JUnit XML and JSON reports go to the Airlock
-log directory, normally `.airlock-logs/` when the example data mount is absent.
+The [desktop guide](desktop.md) explains application and VM identity. The
+[assistant guide](usr-assistant.md) covers the workspace and examples of useful tasks.
 
-See [contributing](../CONTRIBUTING.md) for all prerequisites,
-[repository workflow](repositories.md) for component changes and local-source
-clones, and [testing](testing.md) for the verification layers.
+## Setting up a machine
 
-## Understand the machine
+AirlockOS currently uses a development disk image built from source. Setting up
+a machine requires building and provisioning that image; a guided installation
+flow is still in development. Writing an image erases the selected target disk.
 
-Read [architecture](architecture.md), [validation status](status.md), and
-[lab configuration](lab-configuration.md) before choosing a hardware profile.
-The existing physical configuration is a development example for named hardware.
+Source and build instructions are available in the
+[Airlock repository](https://github.com/airlock-org/airlock). The deployable system
+configuration lives in the [machine repository](https://github.com/airlock-org/machine).
+Repository access is required while those sources remain private.
 
-Nix builds require flakes and nix-command. The repository wrapper selects an
-isolated Airlock store. Set an explicit storage location when the example lab
-mount is absent:
+## Your first system change
 
-```bash
-export AIRLOCK_DATA_ROOT=/path/to/airlock-data
-make build
-```
-
-Nix checks are a separate, opt-in step:
-
-```bash
-make test-nix
-```
-
-## Work with physical hardware
-
-Read [USB development](usb-dev.md) before creating or provisioning an image.
-Writing an image erases the explicitly selected USB device. Read the
-[development access](usb-lab.md) for the configuration's privileged access.
-
-Physical updates use the committed [whole-machine deployment
-workflow](machine-deployment.md): plan, apply, verify the running generation,
-and retain recovery paths. Build success and live verification are separate
-results. Consult the [hardware usability policy](hardware-usability-policy.md)
-before changing device ownership or connectivity.
-
-## Work on the website
-
-The landing page and Fumadocs application live in `website/`. Documentation is
-edited in repository Markdown and selected by `website/docs.config.json`.
-See the [website development guide](../website/README.md) for installation,
-preview, static builds, and hosting configuration.
+Read [Configuration](configuration.md) to understand how Nix describes the
+machine. For an existing installation, [Updates and rollback](updates.md) explains
+how to review a plan, apply a release, and return to an earlier system.

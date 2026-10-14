@@ -8,10 +8,10 @@ import { MobileNav } from "@/components/mobile-nav";
 
 const github = "https://github.com/airlock-org/airlock";
 const systemDomains = [
-  { name: "sys-gui", role: "GNOME desktop", icon: Monitor, href: "/docs/guides/gnome/" },
+  { name: "sys-gui", role: "GNOME desktop", icon: Monitor, href: "/docs/guides/desktop/" },
   { name: "sys-net", role: "Network devices", icon: Globe, href: "/docs/architecture/#network-routing" },
   { name: "sys-firewall", role: "Network policy", icon: Shield, href: "/docs/architecture/#network-routing" },
-  { name: "sys-ctrl", role: "Build controller", icon: GitBranch, href: "/docs/guides/machine-deployment/" },
+  { name: "sys-ctrl", role: "Build controller", icon: GitBranch, href: "/docs/guides/updates/" },
 ];
 
 export default function Home() {
@@ -93,7 +93,7 @@ export default function Home() {
               <div className="domain-group-label">WORKING DOMAINS</div>
               <div className="working-domains">
                 <Link href="/docs/guides/assistant/" className="domain-card"><Terminal size={24} strokeWidth={1.5} aria-hidden="true" /><strong>usr-assistant</strong><span>Computer assistant</span></Link>
-                <Link href="/docs/evidence/live-vm-additions/" className="domain-card"><Folder size={24} strokeWidth={1.5} aria-hidden="true" /><strong>usr-home</strong><span>User applications</span></Link>
+                <Link href="/docs/guides/desktop/" className="domain-card"><Folder size={24} strokeWidth={1.5} aria-hidden="true" /><strong>usr-home</strong><span>User applications</span></Link>
               </div>
               <div className="hypervisor-layer">
                 <Box size={18} strokeWidth={1.5} aria-hidden="true" />
@@ -122,12 +122,12 @@ export default function Home() {
             <h2 id="desktop-title">A familiar desktop.<br />With a computer assistant.</h2>
             <p>GNOME runs in sys-gui. The usr-assistant workspace helps you inspect, configure, and maintain your computer, while applications keep their VM context and system changes follow the deployment workflow.</p>
             <div className="desktop-details">
-              <Link href="/docs/guides/gnome/"><Monitor size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>GNOME desktop</strong><span>Runs in sys-gui</span></p></Link>
-              <Link href="/docs/guides/gnome/"><Box size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>VM identity</strong><span>Application context</span></p></Link>
+              <Link href="/docs/guides/desktop/"><Monitor size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>GNOME desktop</strong><span>Runs in sys-gui</span></p></Link>
+              <Link href="/docs/guides/desktop/"><Box size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>VM identity</strong><span>Application context</span></p></Link>
               <Link href="/docs/guides/assistant/"><Terminal size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Computer assistant</strong><span>In usr-assistant</span></p></Link>
-              <Link href="/docs/guides/machine-deployment/"><BookOpen size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Recovery guides</strong><span>Deployment and rollback</span></p></Link>
+              <Link href="/docs/guides/updates/"><BookOpen size={24} strokeWidth={1.5} aria-hidden="true" /><p><strong>Updates and rollback</strong><span>Review and apply changes</span></p></Link>
             </div>
-            <Link href="/docs/guides/gnome/" className="text-link">Read about the desktop <ArrowRight size={17} aria-hidden="true" /></Link>
+            <Link href="/docs/guides/desktop/" className="text-link">Read about the desktop <ArrowRight size={17} aria-hidden="true" /></Link>
           </div>
         </section>
       </main>

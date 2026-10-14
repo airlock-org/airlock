@@ -1,61 +1,44 @@
 # Computer assistant
 
-`usr-assistant` is the user's workspace for assistance with their computer.
-Its purpose covers inspection, configuration, maintenance, everyday automation,
-and development. Coding is one use case, rather than the definition of the VM.
+The computer assistant helps you inspect, configure, and maintain your computer.
+It runs in `usr-assistant`, a dedicated VM with its own persistent workspace,
+credentials, and tools.
 
-## Current interface
+## Open the assistant
 
-The current interface is Codex in **usr-assistant: Console**, displayed in
-sys-gui. The VM includes a persistent workspace, the machine checkout, and
-command-line tools. There is no separate graphical assistant application yet.
+Open **usr-assistant: Console** from GNOME and start Codex in the terminal.
+The current interface is a command-line conversation. Complete authentication
+inside this VM; credentials belong in its private storage.
 
-Ask the assistant to inspect a problem, explain the relevant state, propose a
-configuration change, or carry out an authorized task. For example:
+## Things to ask
 
+Start with a question or describe what you want to accomplish:
+
+- “Explain which domains are running and what each one does.”
 - “Why can this application not reach the network?”
-- “Help me create a VM for this project.”
+- “Help me set up a workspace for this project.”
 - “What changed in the last machine update?”
-- “Inspect the rollback options before changing anything.”
+- “Show me the rollback options before changing anything.”
 
-The longer-term direction is conversation as the main entry point for operating
-the computer, with selectors, previews, and progress views where useful.
-Replacing every settings interface is not implemented by this rename.
+You can ask for an explanation or a proposed plan before authorizing changes.
+The assistant can also help with scripts, development, and everyday automation.
 
-## Responsibilities and access
+## How changes happen
 
-The assistant's conversation, credentials, tools, and workspace live in
-usr-assistant. Usr-home owns everyday applications and personal files. Sys-gui
-owns the desktop and displays windows from both VMs.
+System configuration lives in Nix. The assistant can help prepare that
+configuration and submit it through the machine's build and deployment tools.
+Sys-ctrl builds releases; dom0 manages activation and the Qubes lifecycle.
 
-Sys-ctrl validates and builds committed machine source; dom0 retains Qubes
-policy, VM lifecycle, storage, and activation authority. The assistant requests
-changes through those existing interfaces. Nix remains the source of truth,
-and deployment records distinguish a submitted change from a verified machine.
+See [Configuration](configuration.md) and [Updates and rollback](updates.md)
+for the steps involved in changing the system.
 
-The name does not give the assistant unrestricted access to other VMs' files
-or credentials. Access still follows the configured Qubes mechanisms and
-permissions. The current development configuration also explicitly enables
-remote access and a privileged dom0 shell; see [development access](usb-lab.md).
+## Workspace and access
 
-## Start and maintain the workspace
+The assistant's workspace persists across system updates. Your everyday
+applications and files live separately in `usr-home`, with both VMs' windows
+shown by the same desktop.
 
-Open **usr-assistant: Console** from GNOME, enter the persistent machine
-checkout, and start Codex. Authentication belongs in the assistant VM's private
-state and must not be included in Nix configuration or source archives.
-
-The [installed workspace guide](../airlock-machine/docs/usr-assistant.md)
-contains login, source, tool, and deployment instructions. The
-[assistant build store](usr-assistant-build-store.md) documents its persistent
-builder. Read [machine deployment](machine-deployment.md) before changing a
-running machine.
-
-## Existing machines
-
-The previous VM name was `sys-agent`. Current declarations and commands use
-`usr-assistant`; dated reports retain the names observed during their trials.
-Changing the source does not rename an already running VM.
-
-Use the [rename migration](usr-assistant-rename.md) to copy the stopped private
-volume through Qubes and retain the old VM for recovery. The migration is an
-explicit transition release, separate from ordinary releases and fresh images.
+Running the assistant in its own VM does not grant it access to every domain's
+files or credentials. Access follows the configured Qubes permissions. The
+current development configuration includes a privileged dom0 shell, so tasks
+using that access can affect the whole machine. See [Security](security.md).

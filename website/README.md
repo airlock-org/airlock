@@ -20,10 +20,18 @@ regenerates the collection when they change. Next.js handles application edits.
 
 ## Documentation ownership
 
-Edit the canonical Markdown in `../docs/` and the existing root contributor,
-security, and attribution guides. `docs.config.json` is the explicit publication
+Edit the canonical Markdown in `../docs/`. `docs.config.json` is the explicit publication
 list and sidebar order. It supplies titles, descriptions, groups, and URL slugs.
 Add new pages there deliberately; adding a repository file alone does not publish it.
+
+Public documentation introduces AirlockOS and explains everyday use: the desktop,
+assistant, architecture, configuration, and updates. Keep internal testing guides,
+acceptance reports, migration runbooks, plans, incidents, and the exhaustive
+documentation map in the repository. They are excluded from public navigation,
+page generation, and search. Public pages should explain present behavior without
+development chronology, test totals, commit receipts, or links to those records.
+Security and licensing pages cover information relevant to users; detailed policy
+and attribution remain in the root repository documents.
 
 `scripts/prepare-docs.py` creates the ignored `.generated-docs/` collection.
 It removes the source's first H1 in favor of Fumadocs' page title, adds

@@ -2,7 +2,11 @@
 
 For an introduction, read [overview](overview.md), [getting started](getting-started.md),
 and [architecture](architecture.md). The [website](../website/README.md) renders a
-selected set of repository Markdown; edit the original documents here.
+selected set of repository Markdown; edit the original documents here. Public
+guides cover [the desktop](desktop.md), [configuration](configuration.md), and
+[updates and rollback](updates.md). This full map, development runbooks, plans,
+and reports are maintained for repository contributors and are not published
+as public documentation.
 
 Start with [project status](status.md), [contributor setup](../CONTRIBUTING.md),
 [lab configuration](lab-configuration.md), and [local public-readiness results](public-readiness.md).

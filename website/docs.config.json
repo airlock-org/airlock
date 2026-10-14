@@ -4,64 +4,72 @@
       "slug": "",
       "title": "Start here",
       "pages": [
-        { "source": "docs/overview.md", "slug": "index", "title": "Overview", "description": "An experimental Nix-native system built on the Qubes architecture." },
-        { "source": "docs/getting-started.md", "slug": "getting-started", "title": "Getting started", "description": "Explore the source and run local checks before building a machine." },
-        { "source": "docs/architecture.md", "slug": "architecture", "title": "Architecture", "description": "Qubes mechanisms, Nix declarations, and whole-machine releases." },
-        { "source": "docs/status.md", "slug": "status", "title": "Validation status", "description": "Demonstrated behavior, physical evidence, and open limits." },
-        { "source": "CONTRIBUTING.md", "slug": "contributing", "title": "Contributing", "description": "Prepare a checkout, run checks, and contribute changes." }
+        {
+          "source": "docs/overview.md",
+          "slug": "index",
+          "title": "Welcome to AirlockOS",
+          "description": "A Nix-native Qubes system with a desktop across domains and a computer assistant."
+        },
+        {
+          "source": "docs/getting-started.md",
+          "slug": "getting-started",
+          "title": "Getting started",
+          "description": "Explore AirlockOS and find your way around a running system."
+        },
+        {
+          "source": "docs/architecture.md",
+          "slug": "architecture",
+          "title": "Architecture",
+          "description": "How domains, networking, the desktop, and the shared Nix store fit together."
+        }
       ]
     },
     {
       "slug": "guides",
-      "title": "Operating guides",
+      "title": "Using AirlockOS",
       "pages": [
-        { "source": "docs/repositories.md", "slug": "repositories", "title": "Repository workflow", "description": "Source ownership and the pinned machine component." },
-        { "source": "docs/lab-configuration.md", "slug": "lab-configuration", "title": "Lab configuration", "description": "Development storage, hardware declarations, and lab settings." },
-        { "source": "docs/testing.md", "slug": "testing", "title": "Testing", "description": "Quick checks, opt-in Nix checks, and nested VM verification." },
-        { "source": "docs/usb-dev.md", "slug": "usb-dev", "title": "USB development", "description": "Build, provision, and recover a development USB image." },
-        { "source": "docs/usb-lab.md", "slug": "usb-lab", "title": "Development access", "description": "Remote access through usr-assistant and its dom0 RPC permission." },
-        { "source": "docs/machine-deployment.md", "slug": "machine-deployment", "title": "Machine deployment", "description": "Submit, activate, verify, and roll back a whole-machine release." },
-        { "source": "docs/machine-generation-retention.md", "slug": "generation-retention", "title": "Generation retention", "description": "Retain rollback generations and maintain the shared pool." },
-        { "source": "docs/usr-assistant-build-store.md", "slug": "build-store", "title": "Pool-backed build store", "description": "Shared storage and the physical validation of guest builds." },
-        { "source": "docs/usr-assistant.md", "slug": "assistant", "title": "Computer assistant", "description": "The assistant workspace, its current tools, and computer operations." },
-        { "source": "docs/usr-assistant-rename.md", "slug": "assistant-rename", "title": "Assistant VM migration", "description": "Preserve the previous VM's private data during the explicit rename transition." },
-        { "source": "docs/sys-gui-gnome.md", "slug": "gnome", "title": "GNOME integration", "description": "The current physical desktop and its remaining acceptance work." },
-        { "source": "docs/hardware-usability-policy.md", "slug": "hardware-policy", "title": "Hardware usability", "description": "Requirements for usable and recoverable hardware isolation." }
-      ]
-    },
-    {
-      "slug": "experiments",
-      "title": "Experiments",
-      "pages": [
-        { "source": "docs/experiments/sys-gpu.md", "slug": "sys-gpu", "title": "Additional GPU", "description": "The optional sys-gpu hardware direction." }
-      ]
-    },
-    {
-      "slug": "plans",
-      "title": "Open plans",
-      "pages": [
-        { "source": "docs/todo/first-run-setup-wizard.md", "slug": "setup-wizard", "title": "First-run wizard", "description": "Implementation and acceptance work for first-run setup." },
-        { "source": "docs/todo/13-minimal-vm-declarations.md", "slug": "vm-declarations", "title": "Minimal VM declarations", "description": "A plan for deriving machine behavior from smaller VM declarations." },
-        { "source": "docs/todo/amd-gpu-lifecycle.md", "slug": "gpu-lifecycle", "title": "AMD GPU lifecycle", "description": "Open investigation into reset, restart, and state isolation." }
-      ]
-    },
-    {
-      "slug": "evidence",
-      "title": "Acceptance and history",
-      "pages": [
-        { "source": "docs/completed/usb-lab-network-isolation.md", "slug": "network-isolation", "title": "Network acceptance", "description": "Completed wired-network trials on the named physical lab." },
-        { "source": "docs/completed/07-unified-host-guest-store.md", "slug": "unified-store", "title": "Shared-store acceptance", "description": "Completed host, guest, rollback, and builder storage trials." },
-        { "source": "docs/completed/12-live-vm-additions.md", "slug": "live-vm-additions", "title": "Live VM acceptance", "description": "Completed physical VM addition, persistence, and rollback trials." },
-        { "source": "docs/history/machine-acceptance-2026-09-25-to-29.md", "slug": "machine-trials", "title": "September machine trials", "description": "Dated evidence for controller, deployment, and storage acceptance." }
+        {
+          "source": "docs/desktop.md",
+          "slug": "desktop",
+          "title": "Desktop and applications",
+          "description": "Launch applications and understand their domain context."
+        },
+        {
+          "source": "docs/usr-assistant.md",
+          "slug": "assistant",
+          "title": "Computer assistant",
+          "description": "Ask for help inspecting, configuring, and maintaining your computer."
+        },
+        {
+          "source": "docs/configuration.md",
+          "slug": "configuration",
+          "title": "Configuration",
+          "description": "Describe your machine and its software in Nix."
+        },
+        {
+          "source": "docs/updates.md",
+          "slug": "updates",
+          "title": "Updates and rollback",
+          "description": "Review changes, apply releases, and return to an earlier system."
+        }
       ]
     },
     {
       "slug": "reference",
-      "title": "Project reference",
+      "title": "About",
       "pages": [
-        { "source": "docs/README.md", "slug": "documentation-map", "title": "Full documentation map", "description": "Current guides, outstanding work, and the complete repository index." },
-        { "source": "SECURITY.md", "slug": "security", "title": "Security reporting", "description": "The experimental security boundary and reporting prerequisites." },
-        { "source": "THIRD_PARTY.md", "slug": "third-party", "title": "Third-party source", "description": "Upstream attribution, licenses, and the unresolved licensing question." }
+        {
+          "source": "docs/security.md",
+          "slug": "security",
+          "title": "Security",
+          "description": "Understand the domain boundaries and current administrative access."
+        },
+        {
+          "source": "docs/licensing.md",
+          "slug": "third-party",
+          "title": "Licensing",
+          "description": "Original code, dependencies, and redistribution terms."
+        }
       ]
     }
   ]

@@ -1,56 +1,40 @@
-# Overview
+# Welcome to AirlockOS
 
-Airlock is an experimental Nix-native Qubes system. It runs NixOS in dom0 and
-declares host and guest systems in Nix while preserving the Qubes architecture:
-Xen-based virtualization, VM lifecycle, device ownership, inter-VM RPC through
-qrexec, and Qubes policy.
+AirlockOS is a Nix-native Qubes system. It brings together a familiar desktop,
+applications in separate domains, and an assistant to help operate your computer.
+Nix describes the host and guest systems; the Qubes architecture provides VM
+isolation, device ownership, communication, and policy.
 
-A shared global Nix store reuses package objects across VM closures. Each guest
-receives a read-only view of its system and dependencies, with separate writable
-private data. The store is global to the machine and managed by dom0.
+## A desktop across domains
 
-The [computer assistant](usr-assistant.md) runs in its own user VM,
-`usr-assistant`. It is a workspace for inspecting, configuring, and maintaining
-the computer; the current interface is Codex in Console.
+GNOME provides one desktop for applications running in different virtual machines.
+Your everyday applications and files live in `usr-home`. The computer assistant
+has its own workspace in `usr-assistant`. Separate system domains handle the
+display, networking, and system builds.
 
-The project explores how declarative systems and whole-machine releases can
-work with the existing Qubes architecture. It has demonstrated Qubes VM lifecycle
-and inter-VM RPC, closure-backed NixOS guests, configuration validation, and machine
-deployment and rollback.
+Read [Desktop and applications](desktop.md) to see how these pieces feel in use,
+or [Architecture](architecture.md) to understand how they fit together.
 
-## Start here
+## Ask your computer
 
-Begin with [getting started](getting-started.md) to inspect the source and run
-local checks. Read [architecture](architecture.md) for the system boundaries
-and [validation status](status.md) for the demonstrated scope and open limits.
+The [computer assistant](usr-assistant.md) helps you inspect problems, understand
+configuration, and carry out changes. You can ask what changed in an update,
+why an application cannot connect, or how to set up a workspace.
 
-Hardware development uses the [lab configuration](lab-configuration.md),
-[USB development](usb-dev.md), and [machine deployment](machine-deployment.md)
-guides. The [full documentation map](README.md) also links plans, experiments,
-and dated evidence. Website navigation publishes a selected set of those pages;
-other links lead to repository source, which requires access while the
-repositories remain private.
+The current interface is Codex in Console, running in its own VM.
 
-## Current scope
+## A declared system
 
-The physical desktop uses GNOME in sys-gui.
-GPU reset/restart, GUI recovery, first-run setup acceptance, and broader hardware
-support remain active work. Nested VM checks and physical acceptance are
-recorded separately.
+Host and guest configuration live together in Nix. A shared global Nix store
+reuses package objects across their system closures, while each guest receives
+a read-only view of its own system and dependencies. Personal files remain on
+separate writable storage.
 
-Airlock has not established Qubes OS security equivalence. The development
-configuration includes privileged access through usr-assistant; read the
-[development access guide](usb-lab.md) before treating that configuration as a security boundary.
+Changes become whole-machine releases with a reviewable plan and rollback
+options. See [Configuration](configuration.md) and [Updates and rollback](updates.md).
 
-## Project source
+## Start exploring
 
-The [parent repository](https://github.com/airlock-org/airlock) owns image
-assembly, development tooling, integration, documentation, and this website.
-The pinned [machine component](https://github.com/airlock-org/machine) owns
-deployable host/guest configuration, bootstrap, runtime code, and component tests.
-See [repository workflow](repositories.md).
-
-Original Airlock code uses the MIT license. Third-party sources keep their own
-terms, including an outstanding vendored-source licensing question. See
-[third-party attribution](../THIRD_PARTY.md) and
-[contributor guidance](../CONTRIBUTING.md).
+Begin with [Getting started](getting-started.md). AirlockOS is under active
+development; the current images and setup workflow are intended for development
+use. Read [Security](security.md) before deciding what work to entrust to it.
