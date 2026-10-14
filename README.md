@@ -1,4 +1,9 @@
-# AirlockOS
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/airlock-logo-and-text-dark.svg">
+    <img alt="AirlockOS" src="docs/assets/airlock-logo-and-text-light.svg" height="64">
+  </picture>
+</p>
 
 AirlockOS runs NixOS in every virtual machine (VM) using the Qubes architecture.
 Nix defines the machine configuration. Xen runs all VMs, including dom0, the
