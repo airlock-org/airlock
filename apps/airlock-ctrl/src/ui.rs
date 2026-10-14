@@ -205,9 +205,6 @@ impl Controller {
                 if let Some(notice) = &self.notice {
                     ui.label(RichText::new(notice).color(ACCENT));
                 }
-                if let Some(reason) = self.review.approval_blocker() {
-                    ui.label(RichText::new(reason).color(MUTED));
-                }
                 ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let enabled =
@@ -240,6 +237,74 @@ impl Controller {
             });
     }
 
+    fn review_summary(&self, ui: &mut egui::Ui) {
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing.y = 5.0;
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new("REVIEW SUMMARY")
+                        .size(11.0)
+                        .color(MUTED)
+                        .strong(),
+                );
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(&self.review.candidate.subject)
+                            .strong()
+                            .size(15.0),
+                    )
+                    .truncate(),
+                )
+                .on_hover_text(&self.review.candidate.subject)
+                .context_menu(|ui| {
+                    if ui.button("Copy change title").clicked() {
+                        ui.ctx().copy_text(self.review.candidate.subject.clone());
+                        ui.close();
+                    }
+                });
+            });
+            if let Some(plan) = self.review.plan() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    ui.label(RichText::new("Planned VMs:").size(12.0).color(MUTED));
+                    for (key, action, color) in [("stop", "stop", RED), ("start", "start", GREEN)] {
+                        let count = plan
+                            .get(key)
+                            .and_then(|value| value.as_array())
+                            .map_or_else(|| "?".to_owned(), |names| names.len().to_string());
+                        ui.label(
+                            RichText::new(format!("{count} {action}"))
+                                .size(12.0)
+                                .color(color),
+                        )
+                        .on_hover_text("Counts from the supplied deployment plan");
+                        if key == "stop" {
+                            ui.label(RichText::new("·").size(12.0).color(MUTED));
+                        }
+                    }
+                });
+            } else {
+                ui.label(
+                    RichText::new("VM effects unknown · No plan loaded")
+                        .size(12.0)
+                        .color(MUTED),
+                );
+            }
+            if let Some(receipt) = &self.receipt {
+                let (status, color) = if receipt.get("decision").and_then(|value| value.as_str())
+                    == Some("approve")
+                {
+                    ("Approved locally", GREEN)
+                } else {
+                    ("Rejected locally", RED)
+                };
+                ui.label(RichText::new(status).size(12.0).color(color));
+            } else if let Some(reason) = self.review.approval_blocker() {
+                ui.add(egui::Label::new(RichText::new(reason).size(12.0).color(ACCENT)).wrap());
+            }
+        });
+    }
+
     fn sidebar(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("files")
             .default_width(330.0)
@@ -248,29 +313,6 @@ impl Controller {
             .resizable(true)
             .frame(egui::Frame::new().fill(PANEL).inner_margin(14.0))
             .show(ctx, |ui| {
-                ui.label(RichText::new("CANDIDATE").size(11.0).color(MUTED).strong());
-                ui.add(
-                    egui::Label::new(RichText::new(&self.review.candidate.subject).strong())
-                        .truncate(),
-                )
-                .on_hover_text(&self.review.candidate.subject);
-                ui.add(egui::Label::new(
-                    RichText::new(format!(
-                        "{} -> {}",
-                        short(&self.review.baseline.commit),
-                        short(&self.review.candidate.commit)
-                    ))
-                    .monospace()
-                    .size(11.0)
-                    .color(MUTED),
-                ))
-                .on_hover_text(format!(
-                    "Baseline: {}\nCandidate: {}",
-                    self.review.baseline.commit, self.review.candidate.commit,
-                ));
-                ui.add_space(8.0);
-                ui.separator();
-                ui.add_space(6.0);
                 let all_rows =
                     self.file_tree
                         .rows(&self.review.files, &self.filter, &BTreeSet::new());
@@ -822,6 +864,8 @@ impl eframe::App for Controller {
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(BACKGROUND).inner_margin(22.0))
             .show(ctx, |ui| {
+                self.review_summary(ui);
+                ui.separator();
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.tab, Tab::Source, "Source changes");
                     ui.selectable_value(&mut self.tab, Tab::Plan, "Deployment plan");
@@ -1415,10 +1459,6 @@ fn code_cell(
         }
     }
     ui.painter().galley(origin, galley, Color32::WHITE);
-}
-
-fn short(value: &str) -> &str {
-    value.get(..10).unwrap_or(value)
 }
 
 fn visible_path(value: &str) -> String {

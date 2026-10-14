@@ -62,6 +62,11 @@ the tree has focus navigate matching files and reveal the selected path.
 Tree expansion, collapse, navigation, filter clearing and column menus use
 vector icons with descriptive tooltips and keyboard-accessible buttons.
 
+The review summary above the main tabs shows the change title, supplied-plan
+stop/start counts and any approval blocker, or the recorded local decision.
+Without a plan it explicitly marks VM effects as unknown. Commit hashes are in
+Review record; the sidebar is dedicated to finding and navigating changed files.
+
 Drag across source text to select within either diff column; Shift-click extends
 the selection, double-click selects a word and triple-click selects a line.
 Ctrl+C copies the selection and Ctrl+A selects that side's complete file.
