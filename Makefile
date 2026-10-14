@@ -82,6 +82,7 @@ PYTHON_FILES := \
 	lifecycle/misc/tools/scripts/machine-deploy.py \
 	lifecycle/misc/tools/scripts/boot-cache-quarantine.py \
 	lifecycle/misc/tools/scripts/usr-assistant-machine-source.py \
+	lifecycle/misc/tools/scripts/repository-source.py \
 	tests/test_machine_deploy_client.py \
 	tests/test_boot_cache_quarantine.py \
 	tests/test_usr_assistant_machine_source.py \
@@ -220,6 +221,10 @@ test-nix: ensure-generated-dirs
 .PHONY: vm-gui-minimal-image vm-gui-minimal-run vm-gui-minimal-ssh
 
 .PHONY: usb-dev-prepare-inputs usb-builder-offline-check usb-dev-image usb-dev-write usb-dev-provision usb-dev-help
+
+.PHONY: check-publish
+check-publish:
+	python3 lifecycle/misc/tools/scripts/repository-source.py check-publish
 
 USB_PUBLIC_KEY ?= $(HOME)/.ssh/id_ed25519.pub
 USB_INSECURE_DEV_PASSWORD ?= 0

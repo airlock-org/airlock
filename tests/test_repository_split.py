@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import configparser
+import importlib.util
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -8,6 +10,146 @@ import subprocess
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location(
+    "repository_source", ROOT / "lifecycle/misc/tools/scripts/repository-source.py"
+)
+source = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(source)
+
+
+@pytest.fixture
+def source_checkout(tmp_path):
+    repository = tmp_path / "parent with spaces"
+    upstream = tmp_path / "upstream.git"
+    machine = tmp_path / "machine"
+    repository.mkdir()
+    machine.mkdir()
+    for checkout in (repository, machine):
+        source.git(checkout, "init", "--quiet", "--initial-branch=main")
+        source.git(checkout, "config", "user.name", "Test")
+        source.git(checkout, "config", "user.email", "test@example.invalid")
+        (checkout / "README").write_text("initial\n")
+        source.git(checkout, "add", "README")
+        source.git(checkout, "commit", "--quiet", "-m", "Initial")
+    source.git(machine, "clone", "--quiet", "--bare", str(machine), str(upstream))
+    source.git(repository, "-c", "protocol.file.allow=always", "submodule", "add",
+               "--quiet", upstream.as_uri(), "airlock-machine")
+    source.git(repository, "commit", "--quiet", "-am", "Pin machine")
+    return repository, upstream
+
+
+def commit_machine(repository):
+    machine = repository / "airlock-machine"
+    source.git(machine, "config", "user.name", "Test")
+    source.git(machine, "config", "user.email", "test@example.invalid")
+    source.git(machine, "switch", "--quiet", "-c", "feature")
+    (machine / "README").write_text("unpublished feature\n")
+    source.git(machine, "commit", "--quiet", "-am", "Feature")
+    source.git(repository, "commit", "--quiet", "-am", "Pin feature")
+    return source.pinned_revision(repository)
+
+
+def test_local_nix_fetches_exact_unpublished_feature_pin(source_checkout, tmp_path, monkeypatch):
+    repository, upstream = source_checkout
+    revision = commit_machine(repository)
+    machine = repository / "airlock-machine"
+    source.git(machine, "switch", "--quiet", "--detach", revision)
+    original_refs = source.git(machine, "show-ref")
+    snapshot = tmp_path / "fetched.git"
+    report = tmp_path / "nix.json"
+    binary = tmp_path / "bin"
+    binary.mkdir()
+    nix = binary / "nix"
+    nix.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, subprocess, sys\n"
+        "from pathlib import Path\n"
+        f"subprocess.run(['git', 'init', '--quiet', '--bare', {str(snapshot)!r}], check=True)\n"
+        f"subprocess.run(['git', '-C', {str(snapshot)!r}, 'fetch', '--quiet', "
+        f"{upstream.as_uri()!r}, 'refs/heads/main'], check=True)\n"
+        f"revision = subprocess.check_output(['git', '-C', {str(snapshot)!r}, "
+        "'rev-parse', 'FETCH_HEAD'], text=True).strip()\n"
+        "count = int(os.environ['GIT_CONFIG_COUNT'])\n"
+        "keys = {os.environ['GIT_CONFIG_KEY_' + str(i)]: "
+        "os.environ['GIT_CONFIG_VALUE_' + str(i)] for i in range(count)}\n"
+        f"Path({str(report)!r}).write_text(json.dumps(dict(revision=revision, "
+        "args=sys.argv[1:], keys=keys)))\n"
+        "sys.exit(7)\n"
+    )
+    nix.chmod(0o755)
+    monkeypatch.chdir(repository)
+    monkeypatch.setenv("PATH", f"{binary}:{os.environ['PATH']}")
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "example.setting")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "preserved")
+    assert source.run_nix(repository, ["build", ".#image"]) == 7
+    result = json.loads(report.read_text())
+    assert result["revision"] == revision
+    assert result["args"] == ["build", ".#image"]
+    assert result["keys"]["example.setting"] == "preserved"
+    urls = [key[4:-10] for key in result["keys"] if key.endswith(".insteadOf")]
+    from urllib.parse import unquote, urlsplit
+    assert all(not Path(unquote(urlsplit(url).path)).exists() for url in urls)
+    assert source.git(machine, "show-ref") == original_refs
+    assert source.git(repository, "status", "--porcelain") == ""
+    assert source.git(upstream, "rev-parse", "main") != revision
+
+
+@pytest.mark.parametrize("problem", ["missing", "mismatch", "dirty", "staged"])
+def test_local_build_errors_before_nix_for_invalid_machine(source_checkout, problem):
+    repository, _ = source_checkout
+    machine = repository / "airlock-machine"
+    if problem == "missing":
+        source.git(repository, "submodule", "deinit", "--force", "airlock-machine")
+        message = "not initialized"
+    elif problem == "mismatch":
+        commit_machine(repository)
+        source.git(repository, "reset", "--quiet", "HEAD~")
+        message = "does not match"
+    elif problem == "staged":
+        commit_machine(repository)
+        source.git(repository, "reset", "--soft", "HEAD~")
+        source.git(machine, "switch", "--quiet", "--detach", source.pinned_revision(repository))
+        message = "Commit the staged"
+    else:
+        (machine / "README").write_text("dirty\n")
+        message = "Commit or stash"
+    with pytest.raises(RuntimeError, match=message):
+        source.run_nix(repository, ["eval", str(repository) + "#image"])
+
+
+def test_publishing_checks_actual_main_not_cached_or_other_branches(source_checkout):
+    repository, upstream = source_checkout
+    assert source.check_publish(repository) == 0
+    revision = commit_machine(repository)
+    machine = repository / "airlock-machine"
+    # A cached origin/main is insufficient proof, and a feature branch is not
+    # reachable by Nix's default submodule main fetch.
+    source.git(machine, "update-ref", "refs/remotes/origin/main", revision)
+    source.git(machine, "push", "--quiet", str(upstream), "HEAD:refs/heads/feature")
+    with pytest.raises(RuntimeError, match="Publish the machine commit on main"):
+        source.check_publish(repository)
+    source.git(machine, "push", "--quiet", str(upstream), "HEAD:refs/heads/main")
+    assert source.check_publish(repository) == 0
+
+
+def test_unrelated_nix_commands_do_not_require_a_machine(tmp_path, monkeypatch):
+    binary = tmp_path / "bin"
+    binary.mkdir()
+    nix = binary / "nix"
+    nix.write_text("#!/bin/sh\nexit 9\n")
+    nix.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{binary}:{os.environ['PATH']}")
+    monkeypatch.chdir(binary)
+    for arguments in (["--version"], ["store", "gc"], ["shell", "nixpkgs#git"]):
+        assert source.run_nix(tmp_path, arguments) == 9
+
+
+def test_ssh_submodule_urls_cover_nix_and_git_transports():
+    assert source.fetch_urls("git@example.invalid:org/machine.git") == [
+        "git@example.invalid:org/machine.git",
+        "ssh://git@example.invalid/org/machine.git",
+    ]
 
 
 @pytest.mark.parametrize(

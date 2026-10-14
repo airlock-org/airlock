@@ -42,6 +42,14 @@ git submodule sync -- airlock-machine
 git submodule update --init airlock-machine
 ```
 
+Normal builds such as `make usb-dev-image` use the initialized local component
+at the exact committed parent pin. The Nix wrapper checks that the checkout
+matches that pin and is clean, then supplies a temporary local Git source to
+Nix. This works with unpublished commits, feature branches, and detached HEAD;
+it does not change branches, Git configuration, or portable lock files. No
+environment overrides are needed. Missing or mismatched checkouts stop with
+instructions to initialize the component or commit an intentional pin update.
+
 ## Local-source clone
 
 Before hosting is available, clone from local committed repositories. Override
@@ -73,10 +81,24 @@ git add airlock-machine
 git commit -m 'Pin machine change'
 ```
 
-When remote hosting is in use, make the component commit accessible there before
-sharing the parent pointer. Local builds may need a local submodule URL override
-if the committed revision has not been uploaded; never claim that a local clone
-proves remote availability. If editing a separate component checkout, fetch its
+When sharing a parent pin, publish the machine commit on the component's `main`
+first: Nix fetches the submodule through that branch by default. A commit present
+only on another remote branch is insufficient. Verify availability before
+publishing the parent:
+
+```sh
+# Publish the reviewed machine change on upstream main first, then:
+make check-publish
+git push --recurse-submodules=check
+```
+
+`check-publish` fetches the declared component upstream's current `main` into a
+temporary repository and verifies that it contains the committed pin. It never
+pushes, changes your checkout, or trusts cached remote-tracking refs. It needs
+network access and the same GitHub credentials as cloning. It is separate from
+local builds and `test-quick`. Git's additional recursive push check catches
+unpublished submodule pins when pushing; the explicit check also verifies the
+`main` branch required by Nix. If editing a separate component checkout, fetch its
 commit into `airlock-machine/` and check it out before committing the parent pin.
 
 ## Stores and generated files

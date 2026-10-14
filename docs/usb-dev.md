@@ -18,7 +18,10 @@ virtio-only testing does not exercise USB root access.
 ## Build and provision on the development host
 
 Run `make usb-dev-image`. It prepares the committed machine source and pinned
-flake inputs, realizes the declared builder closure, then checks two isolated
+flake inputs from the initialized local submodule, including unpublished commits;
+no temporary Git environment overrides are needed. The checkout must be clean
+and match the committed parent pin. It realizes the declared builder closure,
+then checks two isolated
 offline guest builds before assembling the image. A matching passing receipt
 skips the two trials on later builds with the same inputs. The receipt and
 machine-readable results live under the configured Airlock cache and log

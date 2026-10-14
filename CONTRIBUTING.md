@@ -51,6 +51,9 @@ See [testing](docs/testing.md) for warm and cold nested VM workflows.
 
 Machine runtime changes belong in `airlock-machine`; image/lab integration
 belongs here. Commit each coherent change, then update the parent submodule pin.
+Local builds use that committed pin from your initialized submodule automatically.
+Before sharing a parent pin, publish the machine commit on upstream `main`, run
+`make check-publish`, then use `git push --recurse-submodules=check`.
 New tests use pytest; extend existing coverage rather than adding Bash test scripts.
 Test externally observable behavior and failure handling. State which checks
 ran and their limits; quick tests do not prove physical behavior or isolation.
