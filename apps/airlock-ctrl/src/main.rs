@@ -82,7 +82,7 @@ fn main() -> Result<()> {
             .with_decorations(true)
             .with_app_id("org.airlock.ctrl")
             .with_icon(branding::logo().context("loading the embedded Airlock logo")?)
-            .with_inner_size([1280.0, 820.0])
+            .with_inner_size([1600.0, 820.0])
             .with_min_inner_size([880.0, 600.0]),
         renderer: eframe::Renderer::Glow,
         hardware_acceleration: eframe::HardwareAcceleration::Preferred,

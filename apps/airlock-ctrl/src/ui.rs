@@ -516,11 +516,6 @@ impl Controller {
             ));
             return;
         }
-        ui.label(
-            RichText::new("Drag to select · Right-click to copy · Ctrl+C")
-                .size(12.0)
-                .color(MUTED),
-        );
         ui.separator();
         for (label, content) in [("Baseline", &file.before), ("Candidate", &file.after)] {
             if !content.is_empty() && !content.ends_with('\n') {
