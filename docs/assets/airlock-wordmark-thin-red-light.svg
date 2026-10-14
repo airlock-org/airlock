@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="64" viewBox="0 0 320 64" role="img" aria-labelledby="title description">
+  <title id="title">AirlockOS</title>
+  <desc id="description">AirlockOS wordmark with the simplified thin red octagonal doorway logo.</desc>
+  <svg x="0" y="0" width="64" height="64" viewBox="0 0 128 128" fill="none">
+  <path d="M22 8H106L120 22V106L106 120H22L8 106V22Z" stroke="#ff5832" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M33 22H97L105 31V97L97 105H33L25 97H92L97 92V36L92 30H25Z" fill="#ff5832"/>
+  <path d="M76 45L88 52L76 59ZM76 71L88 78L76 85Z" fill="#ff5832"/>
+  </svg>
+  <text x="82" y="44" font-family="Inter, system-ui, sans-serif" font-size="34" font-weight="600" letter-spacing="1.2" fill="#243341">AIRLOCK<tspan fill="#ff5832">OS</tspan></text>
+</svg>
