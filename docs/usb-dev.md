@@ -28,7 +28,10 @@ machine-readable results live under the configured Airlock cache and log
 directories. Run `make usb-builder-offline-check` to force both trials and
 refresh the receipt.
 Failures stop image assembly. The examples add an `/etc` marker and change an
-existing usr-home service setting using the image's pinned software. They do
+existing usr-home service setting using the image's pinned software. Each trial
+imports the unchanged committed guest module in a temporary checkout and adds
+its setting in a separate module, so application-list changes do not break the
+examples. They do
 not establish offline support for arbitrary new packages or versions.
 
 The v2 USB image marker requires the matching provisioner. Older v1 images

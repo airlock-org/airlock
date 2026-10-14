@@ -16,6 +16,7 @@ gate = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gate)
 
 
+@pytest.mark.nix
 def test_isolated_store_registers_only_selected_paths(tmp_path):
     source = tmp_path / "source-store"
     first = tmp_path / "first"
@@ -79,6 +80,8 @@ def test_examples_change_only_a_temporary_machine_checkout(tmp_path):
         updated = (checkout / gate.GUEST_MODULE).read_text()
         assert updated.count(change) == 1
         assert updated != original
+        baseline = checkout / gate.GUEST_MODULE.with_name("usr-home-guest-offline-baseline.nix")
+        assert baseline.read_text() == original
         assert (checkout / "flake.lock").read_bytes() == (
             machine / "flake.lock"
         ).read_bytes()

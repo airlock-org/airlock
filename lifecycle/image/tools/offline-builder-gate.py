@@ -23,7 +23,6 @@ SOURCE_PATH = re.compile(
 )
 INSTALLABLE = "nixosConfigurations.airlock-domain-usr-home.config.system.build.toplevel"
 GUEST_MODULE = Path("lifecycle/misc/modules/usr-home-guest.nix")
-PACKAGE_LINE = "  environment.systemPackages = map (application: application.package) applications;"
 SCENARIOS = {
     "etc-marker": '  environment.etc."airlock-offline-gate".text = "offline gate marker";',
     "service-setting": '  systemd.services.qubes-qrexec-agent.serviceConfig.TimeoutStartSec = "90s";',
@@ -183,12 +182,19 @@ def checkout_with_change(machine, target, change):
     with tarfile.open(fileobj=BytesIO(archive)) as entries:
         entries.extractall(target, filter="data")
     module = target / GUEST_MODULE
-    text = module.read_text()
-    if text.count(PACKAGE_LINE) != 1:
-        raise RuntimeError(
-            "usr-home guest module changed; update offline gate examples"
-        )
-    module.write_text(text.replace(PACKAGE_LINE, PACKAGE_LINE + "\n" + change, 1))
+    baseline = module.with_name("usr-home-guest-offline-baseline.nix")
+    if baseline.exists():
+        raise RuntimeError(f"offline trial baseline already exists: {baseline}")
+    # Preserve the committed module and its relative imports unchanged. A
+    # separate importing module adds the trial option without depending on the
+    # formatting or application list in the original source.
+    module.rename(baseline)
+    module.write_text(
+        "{\n"
+        f"  imports = [ ./{baseline.name} ];\n"
+        f"{change}\n"
+        "}\n"
+    )
 
 
 def run_trial(args, name, change, paths, registration, inputs, log_dir, temporary):
