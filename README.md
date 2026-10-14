@@ -41,8 +41,11 @@ installation. Results include JUnit XML and JSON under the Airlock log directory
 
 ## Source ownership
 
+- [`apps/`](apps/README.md) owns user-facing applications, starting with
+  `airlock-ctrl`, and groups Rust apps in a Cargo workspace.
 - [`airlock-machine/`](airlock-machine/README.md) is a pinned Git submodule. It
-  owns deployable host/guest configurations, bootstrap, runtime code, and component tests.
+  owns deployable host/guest configurations, bootstrap, machine runtime code,
+  and component tests. Its Git boundary supports deployment consistency checks.
 - [`lifecycle/image/`](lifecycle/image/README.md) assembles USB images and prepared stores.
 - `lifecycle/misc/tools/scripts/` holds development-host and lab orchestration.
 - `tests/` covers parent integration; it runs component tests from their canonical source.

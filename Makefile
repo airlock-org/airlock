@@ -150,7 +150,7 @@ PYTEST_REPORT_ARGS = $(PYTEST_CONFIG_ARGS) --durations=20 --junitxml "$(PYTEST_L
 PYTEST_VM_OUTPUT_ARGS ?= --capture=tee-sys
 PYTEST_VM_STAGED_ARGS ?= --dist loadgroup
 # Run component tests from their canonical checkout, plus parent integration tests.
-PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,airlock-machine/tests tests/test_repository_split.py tests/test_local.py tests/test_gpu.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_host_store_image.py tests/test_machine_deploy_client.py tests/test_boot_cache_quarantine.py tests/test_usr_assistant_machine_source.py tests/test_website_docs.py)
+PYTEST_DEFAULT_TARGETS = $(if $(TESTS),,airlock-machine/tests tests/test_airlock_ctrl.py tests/test_repository_split.py tests/test_local.py tests/test_gpu.py tests/test_usb_dev.py tests/test_usb_lab.py tests/test_prepared_store.py tests/test_host_store_image.py tests/test_machine_deploy_client.py tests/test_boot_cache_quarantine.py tests/test_usr_assistant_machine_source.py tests/test_website_docs.py)
 PYTEST_SELECTED = $(foreach test,$(TESTS),'$(if $(filter run-nested-gui-smoke-static,$(test)),tests/test_local.py,airlock-machine/tests/test_machine_local.py)::test_local_check[$(test)]')
 
 # One committed configuration, one whole-machine release. No per-VM switches.
@@ -201,6 +201,18 @@ build: ensure-generated-dirs
 test-quick: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"
 	AIRLOCK_PYTEST_WARM_STORE=0 uv run --no-sync pytest $(PYTEST_DEFAULT_TARGETS) $(PYTEST_SELECTED) $(PYTEST_WORKERS) $(PYTEST_DISTRIBUTION) $(PYTEST_REPORT_ARGS) $(PYTEST_ARGS) -m "not nix"
+
+.PHONY: ctrl-build ctrl-preview ctrl-check
+ctrl-build:
+	cargo build --locked --manifest-path apps/Cargo.toml -p airlock-ctrl
+
+# Nix supplies the native GUI libraries on NixOS. Only this app is built/run.
+ctrl-preview:
+	$(AIRLOCK_NIX) run .\#airlock-ctrl -- --demo
+
+ctrl-check:
+	cargo fmt --manifest-path apps/Cargo.toml --all -- --check
+	cargo clippy --locked --manifest-path apps/Cargo.toml -p airlock-ctrl -- -D warnings
 
 # Website dependencies are installed explicitly; these targets never invoke Nix.
 .PHONY: website-dev website-build

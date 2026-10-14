@@ -1,10 +1,21 @@
 # Repository boundary and workflow
 
-`airlock-machine` owns deployable whole-machine Nix configuration, dom0 and
-Qubes guests, bootstrap, runtime helpers, its lock file, and component tests.
-It builds independently of this parent repository. The parent owns USB image
-assembly, prepared-store seeding, provisioning, lab transport, and integration
-tests. Keep one editable source per runtime helper and component test.
+`airlock` is the main monorepo for applications, shared development work,
+USB image assembly, prepared-store seeding, provisioning, lab transport,
+documentation, and integration tests. User-facing applications live under
+`apps/`; its Cargo workspace groups the Rust applications.
+
+`airlock-machine` remains a separate pinned Git repository for deployable
+whole-machine Nix configuration, dom0 and Qubes guests, bootstrap, machine
+runtime helpers, its lock file, and component tests. Its independent clean
+checkout, committed revision, and lock hash support deployment provenance and
+consistency checks. Keep one editable source per application, runtime helper,
+and component test.
+
+Machine configuration owns which applications are installed and what authority
+they receive. When an app is integrated, the component must consume pinned app
+source or packages; it must not depend on an adjacent `../apps` checkout.
+Local app development and previews do not require a machine build or deployment.
 
 ## Clone
 

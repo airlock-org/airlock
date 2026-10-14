@@ -1,0 +1,6 @@
+[workspace]
+members = ["airlock-ctrl"]
+resolver = "3"
+
+[profile.release]
+strip = true
