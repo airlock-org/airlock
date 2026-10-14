@@ -60,7 +60,7 @@ the earlier investigation and its evidence.
 
 ## Verified starting point — 2026-09-13
 
-The ThinkPad T14 Gen 3 AMD has booted USB Generation 2, `usb-gui-lab` with Xen.
+The lab machine has booted USB Generation 2, `usb-gui-lab` with Xen.
 SSH to `airlock@airlock-usb` works. The deployed lifecycle fix is `123164a`:
 libvirt uses `ON_BOOT=ignore` and `ON_SHUTDOWN=shutdown`. Its boot service
 succeeded, bootstrap passed, and `sys-gui` remained stopped with HVM mode and

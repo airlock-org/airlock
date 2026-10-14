@@ -1,7 +1,7 @@
 # Lab configuration and other hardware
 
-The named machine and USB outputs retain the existing ThinkPad T14 Gen 3 AMD
-lab example. They are not a hardware-discovery installer. Inspect hardware and
+The named machine and USB outputs use the existing lab configuration.
+They are not a hardware-discovery installer. Inspect hardware and
 GPU/IOMMU topology before building or booting a physical image.
 
 ## Development-host settings
@@ -25,8 +25,8 @@ retains enrollment across updates. No enrollment key is embedded in source or im
 ## Machine hardware
 
 The component's `lib.mkMachineConfiguration` accepts `hardwareModules` and
-`extraModules`. Its default hardware module is
-`lifecycle/image/hardware/thinkpad-t14-gen3-amd.nix`. Replace that list when
+`extraModules`. Hardware modules live in the component's
+`lifecycle/image/hardware/` directory. Set `hardwareModules` when
 constructing another machine; append normal configuration through `extraModules`.
 For example, in your own flake consuming airlock-machine:
 

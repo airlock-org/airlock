@@ -12,10 +12,9 @@ The current interface is Codex in Console.
 The project has demonstrated Qubes VM lifecycle and inter-VM RPC, closure-backed
 NixOS guests, configuration validation, and whole-machine deployment and rollback. Nested
 verification and physical lab acceptance are recorded separately. The current
-physical example uses GNOME in sys-gui and a ThinkPad T14 Gen 3 AMD hardware
-profile. GPU restart/recovery and GUI startup issues remain open. Airlock is
-experimental; it has not established Qubes OS security equivalence or general
-hardware support.
+physical example uses GNOME in sys-gui. GPU restart/recovery and GUI startup
+issues remain open. Airlock is experimental; it has not established Qubes OS
+security equivalence or general hardware support.
 
 ## Start with the local checks
 

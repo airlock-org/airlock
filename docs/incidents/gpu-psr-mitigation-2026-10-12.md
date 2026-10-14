@@ -1,7 +1,7 @@
 # PSR mitigation and recovery tool deployment, 2026-10-12
 
 Component revision `fe437e1fc973a7b4f23a8b66c59184f89d4515b7` adds the
-ThinkPad physical sys-gui kernel option `amdgpu.dcdebugmask=0x10` and the manual
+physical lab sys-gui kernel option `amdgpu.dcdebugmask=0x10` and the manual
 `airlock-gpu-recovery` tool. `make test-quick` passed with 899 passed and 59
 skipped, including eight recovery tests. Nix syntax parsing passed. No
 `test-nix` or deliberate hardware reset was performed.

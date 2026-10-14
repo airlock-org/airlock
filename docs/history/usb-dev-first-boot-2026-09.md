@@ -9,7 +9,7 @@ and [the normal lab topology](../usb-lab.md) for current setup.
 Initial setup prepares sys-gui's storage before launching the login screen.
 The bootstrap screen shows the current phase and elapsed time; preparation
 can take several minutes, and substantially longer on a slow USB drive.
-On the supported ThinkPad, AMD graphics is loaded in the initrd so the panel
+On the lab machine, AMD graphics is loaded in the initrd so the panel
 stays active while Xen hands display control to dom0.
 Do not manually start sys-gui until `airlock-setup-config.service` completes:
 its kernel preference is applied after storage preparation. Starting it early

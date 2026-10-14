@@ -17,7 +17,7 @@ Nested Qubes trials on Xen cover control services, inter-VM RPC through qrexec,
 closure-backed NixOS VM startup, read-only guest stores, config staging/validation/promotion, and
 host generation switching. See [testing](testing.md) and [config system](config-system.md).
 
-Physical ThinkPad lab trials include wired networking through sys-net and
+Physical lab trials include wired networking through sys-net and
 sys-firewall, GNOME/input integration, whole-machine apply/reboot/rollback,
 persistent guest data, direct-pool deployment, and shared host/guest storage.
 Evidence is limited to the configuration and trial recorded in each

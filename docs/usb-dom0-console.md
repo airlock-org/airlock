@@ -2,7 +2,7 @@
 
 This separate, generic x86-64 UEFI image is the first physical boot checkpoint.
 It uses the existing Xen/Qubes dom0 core with no guest topology, automatic VM
-preparation, desktop, or ThinkPad-specific GPU configuration. Linux retains
+preparation, desktop, or machine-specific GPU configuration. Linux retains
 its normal hardware detection and console support. There are no experimental
 GPU boot entries. The ordinary non-Xen recovery entry is explicitly labelled.
 

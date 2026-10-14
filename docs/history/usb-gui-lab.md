@@ -62,7 +62,7 @@ GNOME evidence is recorded separately in [the GNOME milestone](../sys-gui-gnome.
 All manual entries retain direct dom0 networking, SSH and Tailscale. The lab
 reserves **only** `0000:04:00.0`, not audio, USB, PSP, ACP or storage functions.
 It blacklists dom0 AMD drivers but temporarily permits the firmware framebuffer. The
-lab is specific to the inspected ThinkPad; do not select it on other hardware.
+lab is specific to the inspected machine; do not select it on other hardware.
 Airlock dom0 configures libvirt to shut guests down instead of saving their
 memory at host shutdown, and to ignore previously running guests at boot.
 Qubes controls their startup. Older USB builds used libvirt's suspend/resume

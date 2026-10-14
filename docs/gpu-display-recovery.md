@@ -1,6 +1,6 @@
 # Lab AMD display mitigation and recovery
 
-The ThinkPad T14 Gen 3 AMD physical sys-gui configuration disables panel
+The physical lab's sys-gui configuration disables panel
 self-refresh with `amdgpu.dcdebugmask=0x10`. This is a mitigation trial for
 the recorded DMCUB and page-flip stalls, not proof of their cause or a general
 AMD setting. Generated Qubes and closure-store kernel options are preserved.

@@ -33,7 +33,7 @@ repositories remain private.
 
 ## Current scope
 
-The physical example uses GNOME in sys-gui on a ThinkPad T14 Gen 3 AMD.
+The physical desktop uses GNOME in sys-gui.
 GPU reset/restart, GUI recovery, first-run setup acceptance, and broader hardware
 support remain active work. Nested VM checks and physical acceptance are
 recorded separately.

@@ -13,8 +13,8 @@ unbuilt and untested. Actual assignment, reset safety and upstream input-proxy
 integration remain hardware-development follow-ups.
 See [the runbook](../usb-dev.md) for commands. No builds or tests authorized for this change.
 
-Scope: ThinkPad T14 Gen 3 AMD (21CFCTO1WW), persistent removable development
-system, dom0 + sys-gui only. No sys-gpu, inference or alternative desktop work yet.
+Scope: a persistent removable development system on the lab machine,
+dom0 + sys-gui only. No sys-gpu, inference or alternative desktop work yet.
 The existing VM profiles are unchanged.
 
 ## Delivery sequence

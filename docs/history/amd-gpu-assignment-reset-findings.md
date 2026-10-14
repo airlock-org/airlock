@@ -3,7 +3,7 @@
 Subsequent hardware result: [first assignment experiment](amd-gpu-first-assignment.md).
 The account below preserves the preceding read-only review and its limits.
 
-Evidence review: 2026-09-13. Scope: the ThinkPad T14 Gen 3 AMD's Radeon 680M,
+Evidence review: 2026-09-13. Scope: the lab machine's Radeon 680M,
 reserved for Xen in USB Generation 2 `usb-gui-lab`. No guest assignment,
 manual reset, device unbind, policy bypass or production configuration change
 was performed during this review. Automatic pciback reset attempts at boot

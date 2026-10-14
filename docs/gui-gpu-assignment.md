@@ -20,10 +20,10 @@ airlock.guiGpu = {
 };
 ```
 
-The ThinkPad selection lives in
-`airlock-machine/lifecycle/image/hardware/thinkpad-t14-gen3-amd.nix`; only `usb-gui-lab` enables
+The lab selection lives in a hardware module under
+`airlock-machine/lifecycle/image/hardware/`; only `usb-gui-lab` enables
 it. The normal USB still uses the hybrid dom0-driven display. The existing USB
-flake imports this ThinkPad hardware fixture: it is not yet a universal USB
+flake imports this hardware fixture: it is not yet a universal USB
 installer. Future installation/provisioning should generate machine-local
 selection rather than require editing shared OS defaults.
 
