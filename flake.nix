@@ -112,6 +112,16 @@
           airlock-usb-dom0-console-image =
             self.nixosConfigurations.usb-dom0-console.config.system.build.image;
         }
+        // lib.optionalAttrs (builtins.getEnv "AIRLOCK_HOST_REPAIR_SNAPSHOT" != "") {
+          airlock-machine-host-repair =
+            let snapshot = builtins.fromJSON (builtins.readFile (builtins.getEnv "AIRLOCK_HOST_REPAIR_SNAPSHOT"));
+            in import ./lifecycle/image/host-repair.nix {
+              inherit snapshot;
+              baseline = builtins.getFlake snapshot.baselineFlake;
+              repairModule = airlock-machine + "/lifecycle/misc/modules/machine-deployment.nix";
+              repairRevision = snapshot.repairRevision;
+            };
+        }
       );
     };
 }

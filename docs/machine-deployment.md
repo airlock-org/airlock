@@ -79,6 +79,22 @@ make machine-status
 make machine-verify
 ```
 
+For a development-only dom0 repair, retain the currently installed guest
+artifacts and build only the host generation:
+
+```bash
+make machine-plan DEPLOY_TARGET=user@usr-assistant-1 DEPLOY_HOST_REPAIR=1
+make machine-apply DEPLOY_TARGET=user@usr-assistant-1 DEPLOY_HOST_REPAIR=1
+```
+
+This root administrative route recovers the configuration baseline from the
+selected release, or from the boot image's committed machine gitlink. It builds
+the host against that original configuration with the current coordinator code,
+records both source identities, and refuses a stale baseline or any guest topology
+change. Guest software changes stay on the normal approval route. Only missing
+host objects are transferred; no guest closure is exported. Verify after the
+required host reboot. This does not provide controller approval authority.
+
 The same whole-machine release can be built and submitted directly from the
 clean committed checkout included in usr-assistant, without a parent `airlock`
 checkout or development-host build artifacts:

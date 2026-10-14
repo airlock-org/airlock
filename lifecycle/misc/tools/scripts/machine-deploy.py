@@ -7,6 +7,7 @@ import getpass
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import select
 import shlex
@@ -158,6 +159,68 @@ def build(profile, *, assistant_rename=False):
         + "\n"
     )
     return release, os_revision, dev_revision
+
+
+def host_repair_snapshot(session, profile):
+    script = '''from pathlib import Path
+import json
+selection=Path('/var/lib/airlock/machine/selection.json')
+chosen=json.loads(selection.read_text()) if selection.exists() else None
+manifest=json.loads((Path(chosen['release'])/'release.json').read_text()) if chosen else None
+print(json.dumps({'host':str(Path('/run/current-system').resolve()),
+ 'profile':Path('/etc/airlock/machine-profile').read_text().strip(),
+ 'devMode':Path('/etc/airlock/dev-mode').exists(),
+ 'boot':json.loads(Path('/etc/airlock/boot-source.json').read_text()),
+ 'manifest':manifest,'topology':json.loads(Path('/var/lib/airlock/system/current-topology.json').read_text())}))'''
+    snapshot = json.loads(session.run("python3 -c " + shlex.quote(script)))
+    if not snapshot.pop("devMode") or snapshot["profile"] != profile:
+        raise RuntimeError("host repair requires the matching development boot profile")
+    manifest = snapshot.pop("manifest")
+    if manifest:
+        revision = manifest.get("revision")
+        expected_lock = manifest.get("lockHash")
+    else:
+        # The immutable boot label identifies the source used for the image.
+        # Resolve its committed gitlink, never the current guest checkout HEAD.
+        boot_revision = snapshot["boot"].get("revision")
+        if not re.fullmatch(r"[0-9a-f]{40}", str(boot_revision)):
+            raise RuntimeError("image has no verified boot source revision")
+        entry = command("git", "ls-tree", boot_revision, "airlock-machine", cwd=ROOT).split()
+        if len(entry) != 4 or entry[0] != "160000":
+            raise RuntimeError("image source does not identify a committed machine gitlink")
+        revision = entry[2]
+        expected_lock = None
+    if not re.fullmatch(r"[0-9a-f]{40}", str(revision)):
+        raise RuntimeError("host repair has no verified machine source baseline")
+    lock = subprocess.check_output(["git", "show", revision + ":flake.lock"], cwd=ROOT / "airlock-machine")
+    lock_hash = hashlib.sha256(lock).hexdigest()
+    if manifest and expected_lock != lock_hash:
+        raise RuntimeError("selected machine lock differs from its committed source")
+    snapshot.update(revision=revision, lockHash=lock_hash,
+                    topologyHash=hashlib.sha256(json.dumps(snapshot["topology"], sort_keys=True).encode()).hexdigest(),
+                    baselineFlake="git+" + (ROOT / "airlock-machine").as_uri() + "?rev=" + revision,
+                    repairRevision=command("git", "-C", "airlock-machine", "rev-parse", "HEAD", cwd=ROOT))
+    return snapshot
+
+
+def build_host_repair(profile, session):
+    if command("git", "status", "--porcelain", cwd=ROOT):
+        raise RuntimeError("commit repository changes before building a host repair")
+    revision = command("git", "rev-parse", "HEAD", cwd=ROOT)
+    snapshot = host_repair_snapshot(session, profile)
+    log = ROOT / ".airlock-logs/machine-host-repair" / revision
+    log.mkdir(parents=True, exist_ok=True)
+    path = log / "snapshot.json"
+    path.write_text(json.dumps(snapshot, sort_keys=True) + "\n")
+    result = json.loads(command(str(NIX), "build", "--impure", ".#airlock-machine-host-repair",
+                               "--json", "--out-link", str(log / "release"), cwd=ROOT,
+                               env=dict(os.environ, AIRLOCK_HOST_REPAIR_SNAPSHOT=str(path))))
+    if (command("git", "rev-parse", "HEAD", cwd=ROOT) != revision
+            or command("git", "status", "--porcelain", cwd=ROOT)):
+        raise RuntimeError("repository changed during the host repair build")
+    release = result[0]["outputs"]["out"]
+    (log / "build.json").write_text(json.dumps({"release": release, "snapshot": snapshot}, indent=2) + "\n")
+    return release, snapshot["revision"], revision
 
 
 def transfer(target, bridge_vm, release, session):
@@ -340,6 +403,8 @@ def main(argv=None):
     )
     parser.add_argument("--legacy-dom0", action="store_true",
                         help="use the development shell and host-built closure transport")
+    parser.add_argument("--host-repair", action="store_true",
+                        help="Repair dom0 while retaining the verified source baseline and current guest artifacts.")
     parser.add_argument(
         "--assistant-rename", action="store_true",
         help="build the one-shot sys-agent to usr-assistant private-volume migration",
@@ -354,6 +419,8 @@ def main(argv=None):
     )
     if args.action != "build" and not args.target:
         parser.error("--target is required")
+    if args.host_repair and (not args.legacy_dom0 or args.action not in {"plan", "apply"} or args.profile != "usb-lab"):
+        parser.error("--host-repair requires legacy-dom0 plan/apply for usb-lab")
     if args.action.startswith("guest-") and not args.receipt:
         parser.error("--receipt is required for guest activation")
     if args.update_coordinator and not (
@@ -398,10 +465,14 @@ def main(argv=None):
     session = None
     try:
         if args.action in ("build", "plan", "apply"):
-            release, os_revision, dev_revision = (
+            if args.host_repair:
+                session = Dom0(args.target)
+                release, os_revision, dev_revision = build_host_repair(args.profile, session)
+            else:
+                release, os_revision, dev_revision = (
                 build(args.profile, assistant_rename=True) if args.assistant_rename
                 else build(args.profile)
-            )
+                )
             print(
                 json.dumps(
                     {
@@ -414,7 +485,8 @@ def main(argv=None):
             )
             if args.action == "build":
                 return 0
-        session = Dom0(args.target)
+        if session is None:
+            session = Dom0(args.target)
         updated_engine = None
         if args.update_coordinator:
             if command("git", "status", "--porcelain", cwd=ROOT):

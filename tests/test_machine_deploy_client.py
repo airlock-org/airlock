@@ -72,6 +72,45 @@ def test_legacy_apply_selects_explicit_administrative_repair(monkeypatch):
     assert any("apply /nix/store/release --administrative" in script for script in scripts)
 
 
+@pytest.mark.parametrize("arguments", [["apply", "--host-repair"],
+                                       ["status", "--host-repair", "--legacy-dom0"]])
+def test_host_repair_requires_explicit_development_plan_or_apply(arguments):
+    with pytest.raises(SystemExit):
+        client.main([*arguments, "--target", "user@assistant"])
+
+
+def test_host_repair_uses_original_image_gitlink_instead_of_candidate_head(tmp_path, monkeypatch):
+    root = tmp_path / "parent with spaces"
+    root.mkdir()
+    machine = root / "airlock-machine"
+    machine.mkdir()
+    def git(repo, *args):
+        return subprocess.check_output(["git", "-C", str(repo),
+            "-c", "user.name=Test", "-c", "user.email=test@example.invalid", *args], text=True).strip()
+    git(root, "init", "-q")
+    git(machine, "init", "-q")
+    (machine / "flake.lock").write_text('{"original": true}\n')
+    git(machine, "add", "flake.lock")
+    git(machine, "commit", "-qm", "Original machine")
+    baseline = git(machine, "rev-parse", "HEAD")
+    git(root, "update-index", "--add", "--cacheinfo", "160000", baseline, "airlock-machine")
+    git(root, "commit", "-qm", "Original image")
+    image = git(root, "rev-parse", "HEAD")
+    (machine / "flake.lock").write_text('{"candidate": true}\n')
+    git(machine, "commit", "-qam", "Candidate")
+    candidate = git(machine, "rev-parse", "HEAD")
+    class Session:
+        def run(self, _script):
+            return json.dumps({"host": "/nix/store/original-host", "profile": "usb-lab", "devMode": True,
+                               "boot": {"revision": image}, "manifest": None, "topology": {"domains": {}}})
+    monkeypatch.setattr(client, "ROOT", root)
+    snapshot = client.host_repair_snapshot(Session(), "usb-lab")
+    assert snapshot["revision"] == baseline != candidate
+    assert snapshot["lockHash"] == hashlib.sha256(b'{"original": true}\n').hexdigest()
+    assert snapshot["repairRevision"] == candidate
+    assert "%20" in snapshot["baselineFlake"]
+
+
 def test_client_refuses_uncommitted_sources(monkeypatch):
     monkeypatch.setattr(
         client, "command", lambda *args, **kwargs: " M configuration.nix"
