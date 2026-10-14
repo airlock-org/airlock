@@ -136,6 +136,15 @@ data-remanence trade-off is unacceptable. An interrupted write requires
 re-imaging that USB. The host needs Python, util-linux, Git, OpenSSH, OpenSSL,
 and e2fsprogs for these tools.
 
+During device flushing, filesystem flushing, and unmounting, the provisioner
+updates a spinner and elapsed time every five seconds. When Linux device counters
+are available, it also shows completed device writes since that step began,
+the current write rate, and I/O requests in flight. These show activity, not a
+flush percentage or completion estimate; the step finishes only when the real
+flush or unmount returns successfully. Terminals update one line, while captured
+logs retain periodic status lines. Progress changes in the repository apply to
+the next host-side provisioning command without rebuilding the image.
+
 Mount the new USB's `airlock-usb` root partition at a fresh mountpoint, using its
 **USB by-id partition path** (normally `…-part2`). Inspect `lsblk -f` first.
 Do not mount by a potentially duplicated generic label. Then:

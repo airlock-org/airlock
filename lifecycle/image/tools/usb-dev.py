@@ -2,23 +2,28 @@
 """Explicit, guarded USB provisioning. No command runs implicitly at boot."""
 
 import argparse
+from contextlib import contextmanager
 import errno
 import getpass
 import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 MARKER = "airlock-usb-dev-v2\n"
 UID, GID = 1000, 100
 COPY_CHUNK = 8 * 1024 * 1024
 PROGRESS_INTERVAL = 128 * 1024 * 1024
+WAIT_PROGRESS_INTERVAL = 5
+SPINNER = "|/-\\"
 
 
 def run(*args, **kwargs):
@@ -255,6 +260,89 @@ def progress_reporter(label, total):
     return report
 
 
+def device_stats_path(device):
+    if device is None:
+        return None
+    try:
+        info = Path(device).stat()
+        if stat.S_ISBLK(info.st_mode):
+            return Path(f"/sys/dev/block/{os.major(info.st_rdev)}:{os.minor(info.st_rdev)}/stat")
+    except OSError:
+        pass
+    return None
+
+
+def read_device_stats(path):
+    if path is None:
+        return None
+    try:
+        fields = path.read_text().split()
+        written, inflight = int(fields[6]) * 512, int(fields[8])
+        if written >= 0 and inflight >= 0:
+            return written, inflight
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def elapsed_time(seconds):
+    seconds = max(0, int(seconds))
+    minutes, seconds = divmod(seconds, 60)
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+@contextmanager
+def waiting_progress(label, device, interval=WAIT_PROGRESS_INTERVAL):
+    """Show activity while the real blocking operation runs on the main thread."""
+    stream = sys.stdout
+    terminal = stream.isatty()
+    stopped = threading.Event()
+    started = time.monotonic()
+    stats_path = device_stats_path(device)
+    initial = read_device_stats(stats_path)
+
+    def display(message):
+        if terminal:
+            width = max(1, shutil.get_terminal_size().columns - 1)
+            print(f"\r\033[2K{message[:width]}", end="", file=stream, flush=True)
+        else:
+            print(message, file=stream, flush=True)
+
+    def monitor():
+        previous, previous_time = initial, started
+        frame = 0
+        while not stopped.wait(interval):
+            now = time.monotonic()
+            current = read_device_stats(stats_path)
+            message = f"{label}: {SPINNER[frame % 4]} {elapsed_time(now - started)} elapsed"
+            if initial and previous and current and current[0] >= previous[0] >= initial[0]:
+                completed = (current[0] - initial[0]) / 1024**3
+                rate = (current[0] - previous[0]) / 1024**2 / max(now - previous_time, 0.001)
+                message += (
+                    f" | +{completed:.2f} GiB written"
+                    f" | {rate:.1f} MiB/s | {current[1]} I/O in flight"
+                )
+            display(message)
+            previous, previous_time = current, now
+            frame += 1
+
+    display(f"{label}… waiting for completion")
+    worker = threading.Thread(target=monitor, name="airlock-usb-progress", daemon=True)
+    worker.start()
+    try:
+        yield
+    finally:
+        stopped.set()
+        worker.join()
+        if terminal:
+            print(file=stream, flush=True)
+    print(
+        f"{label}: completed after {elapsed_time(time.monotonic() - started)}",
+        file=stream,
+        flush=True,
+    )
+
+
 def copy_full_image(image, destination, progress=None):
     copied = 0
     with image.open("rb") as source:
@@ -388,8 +476,8 @@ def write_image(args):
             written = copy_sparse_image(
                 image, destination, progress_reporter("Writing sparse extents", total)
             )
-        print("Flushing USB device…", flush=True)
-        os.fsync(destination.fileno())
+        with waiting_progress("Flushing USB device", target):
+            os.fsync(destination.fileno())
     print("Refreshing USB partition table…", flush=True)
     run("blockdev", "--rereadpt", str(target))
     if args.verify:
@@ -648,12 +736,12 @@ def provision_latest_image(args):
                 insecure_dev_password=args.insecure_dev_password,
             )
         )
-        print("Flushing personalized USB filesystem…", flush=True)
-        run("sync")
+        with waiting_progress("Flushing personalized USB filesystem", args.device):
+            run("sync")
     finally:
         if os.path.ismount(root):
-            print("Unmounting personalized USB…", flush=True)
-            run("umount", str(root))
+            with waiting_progress("Unmounting personalized USB", args.device):
+                run("umount", str(root))
         root.rmdir()
 
 

@@ -1,12 +1,14 @@
 """Provisioning safety contracts; no actual disks, mounts or credentials used."""
 
 import importlib.util
+import io
 import json
 from pathlib import Path
 import subprocess
 from copy import deepcopy
 from types import SimpleNamespace
 import shutil
+import threading
 
 import pytest
 
@@ -87,6 +89,57 @@ def test_sparse_copy_writes_allocated_extents_only(usb, tmp_path):
         assert stream.read(5) == b"first"
         stream.seek(1024 * 1024)
         assert stream.read(4) == b"last"
+
+
+def test_flush_progress_reports_while_sync_is_blocked(usb, tmp_path, monkeypatch):
+    updated = threading.Event()
+
+    class ProgressOutput(io.StringIO):
+        def write(self, text):
+            result = super().write(text)
+            if "1 I/O in flight" in text:
+                updated.set()
+            return result
+
+    stream = ProgressOutput()
+    stats = tmp_path / "stat"
+    stats.write_text("0 0 0 0 0 0 0 0 2\n")
+    monkeypatch.setattr(usb.sys, "stdout", stream)
+    monkeypatch.setattr(usb, "device_stats_path", lambda _device: stats)
+
+    def blocked_sync(fd):
+        assert fd == 123
+        stats.write_text("0 0 0 0 0 0 32768 0 1\n")
+        assert updated.wait(timeout=2), "no progress while the flush is pending"
+        assert "completed after" not in stream.getvalue()
+
+    monkeypatch.setattr(usb.os, "fsync", blocked_sync)
+    with usb.waiting_progress("Flushing USB device", None, interval=0.01):
+        usb.os.fsync(123)
+    text = stream.getvalue()
+    assert "+0.02 GiB written" in text
+    assert "MiB/s" in text and "1 I/O in flight" in text
+    assert "completed after" in text
+    assert not any(t.name == "airlock-usb-progress" for t in threading.enumerate())
+
+
+def test_failed_flush_stops_monitor_without_reporting_success(usb, monkeypatch):
+    stream = io.StringIO()
+    monkeypatch.setattr(usb.sys, "stdout", stream)
+    with pytest.raises(OSError, match="device disconnected"):
+        with usb.waiting_progress("Flushing USB device", None, interval=0.01):
+            raise OSError("device disconnected")
+    assert "completed after" not in stream.getvalue()
+    assert not any(t.name == "airlock-usb-progress" for t in threading.enumerate())
+
+
+@pytest.mark.parametrize("content", [None, "", "bad data", "0 0 0 0 0 0 -1 0 0"])
+def test_unavailable_device_counters_are_optional(usb, tmp_path, content):
+    path = tmp_path / "stat"
+    if content is not None:
+        path.write_text(content)
+    assert usb.read_device_stats(path) is None
+    assert usb.device_stats_path(tmp_path) is None
 
 
 def test_flatten_includes_descendants(usb):
