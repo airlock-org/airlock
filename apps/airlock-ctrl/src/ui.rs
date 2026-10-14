@@ -118,6 +118,7 @@ pub struct Controller {
     source_selection: SourceSelection,
     confirm: Option<Decision>,
     receipt: Option<serde_json::Value>,
+    copy_feedback: Option<(&'static str, f64)>,
     notice: Option<String>,
     decisions_dir: Option<PathBuf>,
     screenshot: Option<PathBuf>,
@@ -160,6 +161,7 @@ impl Controller {
             source_selection: SourceSelection::default(),
             confirm: None,
             receipt: None,
+            copy_feedback: None,
             notice: None,
             decisions_dir,
             screenshot,
@@ -703,48 +705,69 @@ impl Controller {
         });
     }
 
-    fn record(&self, ui: &mut egui::Ui) {
-        egui::ScrollArea::both()
+    fn record(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
             .id_salt("review-record")
+            .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.heading("Review record");
-                ui.label(
-                    RichText::new("This fingerprint binds the displayed source and supplied plan.")
-                        .color(MUTED),
-                );
                 ui.add_space(12.0);
-                for (label, value) in [
-                    ("Baseline commit", self.review.baseline.commit.as_str()),
-                    ("Candidate commit", self.review.candidate.commit.as_str()),
-                    (
-                        "Candidate lock SHA-256",
-                        self.review.lock_hash.as_deref().unwrap_or("No flake.lock"),
-                    ),
-                    ("Review SHA-256", self.review.fingerprint.as_str()),
-                    (
-                        "Repository",
-                        self.review
-                            .repository
-                            .as_deref()
-                            .unwrap_or("Built-in example"),
-                    ),
-                ] {
-                    ui.label(RichText::new(label).strong());
-                    read_only_text(ui, label, value, false);
-                    ui.add_space(6.0);
-                }
-                ui.separator();
-                if let Some(receipt) = &self.receipt {
-                    ui.label(RichText::new("Local decision").color(ACCENT).strong());
-                    read_only_text(
-                        ui,
-                        "local-decision",
-                        &serde_json::to_string_pretty(receipt).unwrap(),
-                        true,
-                    );
+                if ui.available_width() >= 1200.0 {
+                    ui.columns(2, |columns| {
+                        record_source(&mut columns[0], &self.review, &mut self.copy_feedback);
+                        record_identities(&mut columns[1], &self.review, &mut self.copy_feedback);
+                    });
                 } else {
-                    ui.label("Awaiting your review decision.");
+                    record_source(ui, &self.review, &mut self.copy_feedback);
+                    record_identities(ui, &self.review, &mut self.copy_feedback);
                 }
+                ui.add_space(8.0);
+                let receipt_text = self
+                    .receipt
+                    .as_ref()
+                    .map(|receipt| serde_json::to_string_pretty(receipt).unwrap());
+                plan_frame(ui, 68.0, |ui| {
+                    icons::row(ui, |ui| {
+                        ui.label(RichText::new("Local decision").strong().size(16.0));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            record_copy_button(
+                                ui,
+                                "Decision receipt",
+                                receipt_text.as_deref(),
+                                &mut self.copy_feedback,
+                            );
+                        });
+                    });
+                    let (status, color) = match self
+                        .receipt
+                        .as_ref()
+                        .and_then(|receipt| receipt.get("decision"))
+                        .and_then(|decision| decision.as_str())
+                    {
+                        Some("approve") => ("Approved locally", GREEN),
+                        Some("reject") => ("Rejected locally", RED),
+                        _ => ("Awaiting your review decision", MUTED),
+                    };
+                    ui.label(RichText::new(status).strong().color(color));
+                    if let Some(receipt_text) = &receipt_text {
+                        ui.label(
+                            RichText::new(
+                                if self.review.mode != "demo" && self.decisions_dir.is_some() {
+                                    "Receipt saved locally"
+                                } else {
+                                    "Decision kept in this session"
+                                },
+                            )
+                            .size(12.0)
+                            .color(MUTED),
+                        );
+                        egui::CollapsingHeader::new("Receipt details")
+                            .default_open(false)
+                            .show(ui, |ui| {
+                                read_only_text(ui, "local-decision", receipt_text, true);
+                            });
+                    }
+                });
             });
     }
 
@@ -1118,6 +1141,131 @@ fn compact_count(count: usize) -> String {
     } else {
         count.to_string()
     }
+}
+
+fn record_copy_button(
+    ui: &mut egui::Ui,
+    label: &'static str,
+    value: Option<&str>,
+    feedback: &mut Option<(&'static str, f64)>,
+) {
+    let now = ui.input(|input| input.time);
+    let remaining = feedback
+        .filter(|(field, _)| *field == label)
+        .map_or(0.0, |(_, time)| 1.6 - (now - time));
+    let copied = remaining > 0.0;
+    let tooltip = if copied {
+        format!("{label} copied")
+    } else {
+        format!("Copy {label}")
+    };
+    if icons::button(
+        ui,
+        if copied { Icon::Check } else { Icon::Copy },
+        &tooltip,
+        value.is_some(),
+    )
+    .clicked()
+    {
+        ui.ctx().copy_text(value.unwrap().to_owned());
+        *feedback = Some((label, now));
+        ui.ctx().request_repaint();
+    }
+    if copied {
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs_f64(remaining));
+    }
+}
+
+fn record_field(
+    ui: &mut egui::Ui,
+    label: &'static str,
+    value: Option<&str>,
+    placeholder: &str,
+    feedback: &mut Option<(&'static str, f64)>,
+) {
+    ui.label(RichText::new(label).size(12.0).color(MUTED));
+    let displayed = value.unwrap_or(placeholder);
+    icons::row(ui, |ui| {
+        let frame = egui::Frame::new()
+            .fill(BACKGROUND)
+            .stroke(Stroke::new(1.0_f32, BORDER))
+            .corner_radius(4.0)
+            .inner_margin(egui::Margin::symmetric(8, 3));
+        let width =
+            (ui.available_width() - icons::BUTTON_SIZE - ui.spacing().item_spacing.x).max(40.0);
+        frame
+            .show(ui, |ui| {
+                ui.set_width((width - frame.total_margin().sum().x).max(24.0));
+                read_only_text(ui, label, displayed, false);
+            })
+            .response
+            .on_hover_text(displayed);
+        record_copy_button(ui, label, value, feedback);
+    });
+}
+
+fn record_source(ui: &mut egui::Ui, review: &Review, feedback: &mut Option<(&'static str, f64)>) {
+    plan_frame(ui, 210.0, |ui| {
+        ui.spacing_mut().item_spacing.y = 5.0;
+        ui.label(RichText::new("Source revisions").strong().size(16.0));
+        ui.add_space(5.0);
+        record_field(
+            ui,
+            "Repository",
+            review.repository.as_deref(),
+            "Built-in example",
+            feedback,
+        );
+        ui.add_space(5.0);
+        record_field(
+            ui,
+            "Baseline commit",
+            Some(&review.baseline.commit),
+            "",
+            feedback,
+        );
+        ui.add_space(5.0);
+        record_field(
+            ui,
+            "Candidate commit",
+            Some(&review.candidate.commit),
+            "",
+            feedback,
+        );
+    });
+}
+
+fn record_identities(
+    ui: &mut egui::Ui,
+    review: &Review,
+    feedback: &mut Option<(&'static str, f64)>,
+) {
+    plan_frame(ui, 210.0, |ui| {
+        ui.spacing_mut().item_spacing.y = 5.0;
+        ui.label(RichText::new("Content identities").strong().size(16.0));
+        ui.label(
+            RichText::new("Binds source changes and the supplied plan.")
+                .size(12.0)
+                .color(MUTED),
+        );
+        ui.add_space(5.0);
+        record_field(
+            ui,
+            "Review SHA-256",
+            Some(&review.fingerprint),
+            "",
+            feedback,
+        );
+        ui.add_space(5.0);
+        record_field(
+            ui,
+            "Candidate lock SHA-256",
+            review.lock_hash.as_deref(),
+            "No flake.lock",
+            feedback,
+        );
+    });
 }
 
 fn reboot_state(required: Option<bool>) -> (&'static str, Color32) {

@@ -1,5 +1,5 @@
 //! Small vector controls: no icon font or platform-dependent Unicode glyphs.
-use crate::theme::{ACCENT, MUTED};
+use crate::theme::{ACCENT, GREEN, MUTED};
 use eframe::egui::{self, Color32, Stroke, Vec2};
 
 pub const BUTTON_SIZE: f32 = 28.0;
@@ -12,6 +12,8 @@ pub enum Icon {
     ExpandAll,
     Clear,
     More,
+    Copy,
+    Check,
 }
 
 pub fn control() -> egui::Button<'static> {
@@ -43,6 +45,8 @@ pub fn decorate(
 ) -> egui::Response {
     let color = if !response.enabled() {
         MUTED.linear_multiply(0.35)
+    } else if matches!(icon, Icon::Check) {
+        GREEN
     } else if response.hovered() || response.has_focus() || response.is_pointer_button_down_on() {
         ACCENT
     } else {
@@ -106,6 +110,30 @@ fn paint(ui: &egui::Ui, center: egui::Pos2, icon: Icon, color: Color32) {
             for offset in [-4.5, 0.0, 4.5] {
                 ui.painter().circle_filled(point(offset, 0.0), 1.3, color);
             }
+        }
+        Icon::Copy => {
+            ui.painter().add(egui::Shape::line(
+                vec![
+                    point(-3.0, -4.0),
+                    point(-3.0, -7.0),
+                    point(6.0, -7.0),
+                    point(6.0, 3.0),
+                    point(3.0, 3.0),
+                ],
+                stroke,
+            ));
+            ui.painter().rect_stroke(
+                egui::Rect::from_min_max(point(-7.0, -3.0), point(2.0, 7.0)),
+                1.5,
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+        }
+        Icon::Check => {
+            ui.painter().add(egui::Shape::line(
+                vec![point(-5.0, 0.0), point(-1.5, 3.5), point(5.5, -4.0)],
+                stroke,
+            ));
         }
     }
 }

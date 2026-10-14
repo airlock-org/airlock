@@ -71,6 +71,12 @@ plan or unreported reboot flag remains unknown. Right-click the reboot status
 to copy the complete effects summary. Commit hashes are in Review record; the
 sidebar is dedicated to finding and navigating changed files.
 
+Review record groups source revisions, content identities and the local decision
+into cards. Each available value has a copy icon that copies the complete value
+and briefly changes to a green checkmark. Missing values have disabled copy
+controls. Cards stack on smaller windows; the full receipt is expandable and
+has its own copy button.
+
 Drag across source text to select within either diff column; Shift-click extends
 the selection, double-click selects a word and triple-click selects a line.
 Ctrl+C copies the selection and Ctrl+A selects that side's complete file.
