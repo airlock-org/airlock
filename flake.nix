@@ -63,6 +63,10 @@
           };
           extraSpecialArgs = {
             airlockUsbPreparedStore = preparedStore;
+            airlockMachineSource = if offlineInputs != null && offlineInputs ? revision then
+              assert offlineInputs.lock_hash == builtins.hashFile "sha256" (airlock-machine + "/flake.lock");
+              { revision = offlineInputs.revision; lockHash = offlineInputs.lock_hash; }
+              else null;
             airlockSourceRevision = self.rev or "dirty";
             airlockSourceTimestamp = self.lastModified or 0;
             airlockUsbGuestEntries = entries;

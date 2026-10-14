@@ -86,6 +86,7 @@ def test_offline_input_manifest_records_nested_sources_and_lock(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     data = json.loads(manifest.read_text())
     assert data["schema"] == "airlock.sys-agent-offline-inputs.v1"
+    assert data["revision"] == git(repo, "rev-parse", "HEAD")
     assert (
         data["lock_hash"]
         == hashlib.sha256((repo / "flake.lock").read_bytes()).hexdigest()

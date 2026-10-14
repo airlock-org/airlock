@@ -1,5 +1,6 @@
 """USB general-lab topology and its explicit development-only privilege."""
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -8,6 +9,35 @@ import subprocess
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.nix
+@pytest.mark.parametrize("repository", ["parent", "machine"])
+def test_usb_image_embeds_machine_source_separately_from_parent_boot_label(tmp_path, repository):
+    revision = subprocess.check_output(
+        ["git", "-C", str(ROOT / "airlock-machine"), "rev-parse", "HEAD"], text=True).strip()
+    manifest = tmp_path / "inputs.json"
+    lock_hash = hashlib.sha256((ROOT / "airlock-machine/flake.lock").read_bytes()).hexdigest()
+    manifest.write_text(json.dumps({"revision": revision, "lock_hash": lock_hash, "inputs": {}}))
+    flake = str(ROOT) if repository == "parent" else f"git+file://{ROOT}/airlock-machine"
+    configuration = "usb-dev" if repository == "parent" else "machine"
+    expression = f'''
+      let f = builtins.getFlake "{flake}";
+          host = f.nixosConfigurations.{configuration}.config.specialisation.usb-lab.configuration;
+      in {{
+        source = builtins.fromJSON host.environment.etc."airlock/machine-source.json".text;
+        boot = builtins.fromJSON host.environment.etc."airlock/boot-source.json".text;
+        parentRevision = f.rev or "dirty";
+      }}
+    '''
+    result = subprocess.run([
+        str(ROOT / 'lifecycle/misc/tools/scripts/airlock-nix.sh'),
+        'eval', '--impure', '--json', '--expr', expression,
+    ], cwd=ROOT, env=dict(os.environ, AIRLOCK_MACHINE_OFFLINE_INPUTS=str(manifest),
+                         AIRLOCK_MACHINE_SEED_ARCHIVE=""), capture_output=True, text=True, check=True)
+    report = json.loads(result.stdout)
+    assert report['source'] == {"schema": "airlock.machine-source.v1", "revision": revision, "lockHash": lock_hash}
+    assert report['boot']['revision'] == report['parentRevision']
 
 
 @pytest.mark.nix

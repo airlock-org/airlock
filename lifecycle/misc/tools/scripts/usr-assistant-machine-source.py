@@ -211,6 +211,7 @@ def offline_inputs(destination, repository=MACHINE, archive=None):
         raise RuntimeError("machine flake archive has no inputs")
     data = {
         "schema": OFFLINE_SCHEMA,
+        "revision": output("git", "rev-parse", "HEAD", cwd=repository),
         "lock_hash": sha256(repository / "flake.lock"),
         "inputs": inputs,
     }
