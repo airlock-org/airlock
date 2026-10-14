@@ -52,8 +52,10 @@ Changed files appear in a collapsible folder tree, with compact directory
 chains, single-line filenames, change markers and aligned addition/deletion
 counts. Full paths are available on hover. Search matches path terms without
 case sensitivity and keeps matching files in their folder context; clearing
-the filter restores the saved expansion state. Previous/Next and Up/Down when
+the filter restores the saved expansion state. The up/down icon buttons and Up/Down when
 the tree has focus navigate matching files and reveal the selected path.
+Tree expansion, collapse, navigation, filter clearing and column menus use
+vector icons with descriptive tooltips and keyboard-accessible buttons.
 
 Drag across source text to select within either diff column; Shift-click extends
 the selection, double-click selects a word and triple-click selects a line.

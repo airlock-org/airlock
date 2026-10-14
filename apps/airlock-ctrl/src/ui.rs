@@ -1,6 +1,7 @@
 use crate::{
     Decision,
     file_tree::{FileTree, RowKind, TreeRow},
+    icons::{self, Icon},
     model::{FileChange, Review},
     selection::{self, SourceSelection, copyable_label, read_only_text},
     theme::{
@@ -312,9 +313,8 @@ impl Controller {
                         );
                     });
                 });
-                ui.horizontal(|ui| {
-                    // Reserve the full button width, including its themed padding.
-                    let clear_width = 40.0;
+                icons::row(ui, |ui| {
+                    let clear_width = icons::BUTTON_SIZE;
                     let margin = egui::Margin::symmetric(4, 2);
                     let text_width = (ui.available_width() - clear_width - ui.spacing().item_spacing.x - margin.sum().x).max(40.0);
                     let filter_id = ui.make_persistent_id("file-filter");
@@ -331,21 +331,14 @@ impl Controller {
                         filter.state.clone().store(ui.ctx(), filter_id);
                     }
                     selection::text_edit_menu(&mut filter, &self.filter, true);
-                    if ui.add_enabled(!self.filter.is_empty(), egui::Button::new("×").small().min_size(Vec2::new(clear_width, 20.0)))
-                            .on_hover_text("Clear file filter")
-                            .clicked()
+                    if icons::button(ui, Icon::Clear, "Clear file filter", !self.filter.is_empty()).clicked()
                     {
                         self.filter.clear();
                     }
                 });
-                ui.horizontal(|ui| {
+                icons::row(ui, |ui| {
                     let searching = !self.filter.trim().is_empty();
-                    if ui
-                        .add_enabled(
-                            !searching,
-                            egui::Button::new(RichText::new("Collapse all").size(11.0)).small(),
-                        )
-                        .clicked()
+                    if icons::button(ui, Icon::CollapseAll, "Collapse all folders", !searching).clicked()
                     {
                         self.collapsed_folders = all_rows
                             .iter()
@@ -355,12 +348,7 @@ impl Controller {
                             })
                             .collect();
                     }
-                    if ui
-                        .add_enabled(
-                            !searching,
-                            egui::Button::new(RichText::new("Expand all").size(11.0)).small(),
-                        )
-                        .clicked()
+                    if icons::button(ui, Icon::ExpandAll, "Expand all folders", !searching).clicked()
                     {
                         self.collapsed_folders.clear();
                     }
@@ -371,7 +359,7 @@ impl Controller {
                         .rows(&self.review.files, &self.filter, &self.collapsed_folders);
                 let mut select = None;
                 let mut navigate = None;
-                let tree_height = (ui.available_height() - 46.0).max(100.0);
+                let tree_height = (ui.available_height() - icons::BUTTON_SIZE - 28.0).max(100.0);
                 ui.scope(|ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     if visible.is_empty() {
@@ -435,7 +423,7 @@ impl Controller {
                         });
                 });
                 ui.separator();
-                ui.horizontal(|ui| {
+                icons::row(ui, |ui| {
                     let position = matching.iter().position(|index| *index == self.selected);
                     ui.label(
                         RichText::new(
@@ -447,24 +435,18 @@ impl Controller {
                         .color(MUTED),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .add_enabled(
+                        if icons::button(ui, Icon::Next, "Next changed file",
                                 !matching.is_empty()
                                     && position
                                         .is_none_or(|position| position + 1 < matching.len()),
-                                egui::Button::new("Next").small(),
-                            )
-                            .clicked()
+                            ).clicked()
                         {
                             navigate = Some(true);
                         }
-                        if ui
-                            .add_enabled(
+                        if icons::button(ui, Icon::Previous, "Previous changed file",
                                 !matching.is_empty()
                                     && position.is_none_or(|position| position > 0),
-                                egui::Button::new("Previous").small(),
-                            )
-                            .clicked()
+                            ).clicked()
                         {
                             navigate = Some(false);
                         }
@@ -1115,7 +1097,7 @@ fn column_header(
     selection: &SourceSelection,
 ) {
     let source = if side == 0 { &file.before } else { &file.after };
-    ui.horizontal(|ui| {
+    icons::row(ui, |ui| {
         ui.label(
             RichText::new(label.to_uppercase())
                 .color(color)
@@ -1123,51 +1105,27 @@ fn column_header(
                 .strong(),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.spacing_mut().button_padding = Vec2::new(5.0, 2.0);
-            let (response, _) = egui::containers::menu::MenuButton::from_button(
-                egui::Button::new("")
-                    .frame(false)
-                    .min_size(Vec2::new(26.0, 20.0)),
-            )
-            .ui(ui, |ui| {
-                let selected = selection.text(source, side);
-                if ui
-                    .add_enabled(selected.is_some(), egui::Button::new("Copy selection"))
-                    .clicked()
-                {
-                    ui.ctx().copy_text(selected.unwrap().to_owned());
-                    ui.close();
-                }
-                if ui.button("Copy file contents").clicked() {
-                    ui.ctx().copy_text(source.clone());
-                    ui.close();
-                }
-                ui.separator();
-                if ui.button("Copy file path").clicked() {
-                    ui.ctx().copy_text(file.path.clone());
-                    ui.close();
-                }
-            });
-            let color = if response.hovered() || response.is_pointer_button_down_on() {
-                ACCENT
-            } else {
-                MUTED
-            };
-            for offset in [-4.5, 0.0, 4.5] {
-                ui.painter().circle_filled(
-                    response.rect.center() + Vec2::new(offset, 0.0),
-                    1.3,
-                    color,
-                );
-            }
-            response.widget_info(|| {
-                egui::WidgetInfo::labeled(
-                    egui::WidgetType::Button,
-                    true,
-                    format!("{label} file actions"),
-                )
-            });
-            response.on_hover_text(format!("{label} file actions"));
+            let (response, _) = egui::containers::menu::MenuButton::from_button(icons::control())
+                .ui(ui, |ui| {
+                    let selected = selection.text(source, side);
+                    if ui
+                        .add_enabled(selected.is_some(), egui::Button::new("Copy selection"))
+                        .clicked()
+                    {
+                        ui.ctx().copy_text(selected.unwrap().to_owned());
+                        ui.close();
+                    }
+                    if ui.button("Copy file contents").clicked() {
+                        ui.ctx().copy_text(source.clone());
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.button("Copy file path").clicked() {
+                        ui.ctx().copy_text(file.path.clone());
+                        ui.close();
+                    }
+                });
+            icons::decorate(ui, response, Icon::More, &format!("{label} file actions"));
         });
     });
 }
