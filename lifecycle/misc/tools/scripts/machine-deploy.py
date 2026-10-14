@@ -273,6 +273,24 @@ def install_receipt(session, receipt):
     encoded = base64.b64encode(payload).decode()
     destination = f"/var/lib/airlock/machine/receipts/{digest}.json"
     temporary = destination + ".new"
+    if len(encoded) > 1024:
+        # Admission receipts include transfer timings and can exceed the PTY's
+        # control-line limit. Publish only after every metadata chunk is intact.
+        temporary += "-" + uuid.uuid4().hex
+        session.run(
+            "umask 077; mkdir -p /var/lib/airlock/machine/receipts; "
+            f": > {shlex.quote(temporary)}"
+        )
+        for offset in range(0, len(encoded), 1024):
+            session.run(
+                f"printf %s {shlex.quote(encoded[offset:offset + 1024])} | "
+                f"base64 -d >> {shlex.quote(temporary)}"
+            )
+        session.run(
+            f"echo {shlex.quote(digest + '  ' + temporary)} | sha256sum -c - >/dev/null; "
+            f"mv {shlex.quote(temporary)} {shlex.quote(destination)}"
+        )
+        return destination
     session.run(
         "umask 077; mkdir -p /var/lib/airlock/machine/receipts; "
         f"printf %s {shlex.quote(encoded)} | base64 -d > {shlex.quote(temporary)}; "

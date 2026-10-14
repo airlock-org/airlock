@@ -229,6 +229,32 @@ def test_guest_receipt_is_read_from_usr_assistant_and_installed_for_dom0(monkeyp
     assert "usr-home" not in session.scripts[0]
 
 
+def test_large_receipt_survives_the_real_control_line_limit(tmp_path):
+    transport = client.Dom0.__new__(client.Dom0)
+    transport.process = subprocess.Popen(
+        ["bash", "--noprofile", "--norc"], stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    )
+    transport.buffer = b""
+    local_directory = tmp_path / "receipts"
+
+    class Session:
+        def run(self, script):
+            return transport.run(script.replace(
+                "/var/lib/airlock/machine/receipts", str(local_directory),
+            ))
+
+    receipt = {"schema": "admission", "timings": {"details": "payload-'`$()" * 1000}}
+    try:
+        destination = client.install_receipt(Session(), receipt)
+        actual = local_directory / Path(destination).name
+        assert json.loads(actual.read_text()) == receipt
+        assert actual.stat().st_mode & 0o777 == 0o600
+        assert list(local_directory.iterdir()) == [actual]
+    finally:
+        transport.close()
+
+
 @pytest.mark.parametrize(
     "report,error",
     [
