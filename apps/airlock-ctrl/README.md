@@ -70,6 +70,10 @@ permanently stopped. Names are deduplicated and sorted for display. A missing
 plan or unreported reboot flag remains unknown. Right-click the reboot status
 to copy the complete effects summary. Commit hashes are in Review record; the
 sidebar is dedicated to finding and navigating changed files.
+The footer keeps the effects summary and decision controls together. The header's
+information icon opens About Airlock Control, explaining plan provenance, the
+local-only review mode and receipt storage. Close the dialog with its Close
+button, Escape or a click outside it.
 
 Review record groups source revisions and content identities into cards.
 Each available value has a copy icon that copies the complete value

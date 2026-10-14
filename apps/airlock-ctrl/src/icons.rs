@@ -14,6 +14,7 @@ pub enum Icon {
     More,
     Copy,
     Check,
+    Info,
 }
 
 pub fn control() -> egui::Button<'static> {
@@ -134,6 +135,11 @@ fn paint(ui: &egui::Ui, center: egui::Pos2, icon: Icon, color: Color32) {
                 vec![point(-5.0, 0.0), point(-1.5, 3.5), point(5.5, -4.0)],
                 stroke,
             ));
+        }
+        Icon::Info => {
+            ui.painter().circle_stroke(center, 7.0, stroke);
+            ui.painter().circle_filled(point(0.0, -3.5), 1.0, color);
+            line(point(0.0, -0.5), point(0.0, 4.0));
         }
     }
 }

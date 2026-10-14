@@ -127,6 +127,7 @@ pub struct Controller {
     diff_rows: Vec<DiffRow>,
     source_selection: SourceSelection,
     confirm: Option<Decision>,
+    about_open: bool,
     receipt: Option<serde_json::Value>,
     copy_feedback: Option<(&'static str, f64)>,
     notice: Option<String>,
@@ -172,6 +173,7 @@ impl Controller {
             diff_rows,
             source_selection: SourceSelection::default(),
             confirm: None,
+            about_open: false,
             receipt: None,
             copy_feedback: None,
             notice: None,
@@ -198,6 +200,9 @@ impl Controller {
                         );
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if icons::button(ui, Icon::Info, "About Airlock Control", true).clicked() {
+                            self.about_open = true;
+                        }
                         let label = if self.review.mode == "demo" {
                             "LOCAL PREVIEW"
                         } else {
@@ -225,9 +230,13 @@ impl Controller {
                 }
                 ui.horizontal(|ui| {
                     let effects_width = (ui.available_width() - 190.0).max(100.0);
-                    ui.allocate_ui_with_layout(Vec2::new(effects_width, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                        effects_summary(ui, self.effects.as_ref());
-                    });
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(effects_width, 0.0),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            effects_summary(ui, self.effects.as_ref());
+                        },
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let enabled =
                             self.receipt.is_none() && self.review.approval_blocker().is_none();
@@ -249,17 +258,44 @@ impl Controller {
                         }
                     });
                 });
-                if self.receipt.is_none() && let Some(reason) = self.review.approval_blocker() {
+                if self.receipt.is_none()
+                    && let Some(reason) = self.review.approval_blocker()
+                {
                     ui.add(egui::Label::new(RichText::new(reason).size(12.0).color(ACCENT)).wrap());
                 }
-                ui.label(
-                    RichText::new(
-                        "Effects from supplied plan · No deployment connection · Decisions are local review records only",
-                    )
-                    .size(12.0)
-                    .color(MUTED),
-                );
             });
+    }
+
+    fn about(&mut self, ctx: &egui::Context) {
+        if !self.about_open {
+            return;
+        }
+        let dialog = egui::Modal::new(egui::Id::new("about-airlock-control")).show(ctx, |ui| {
+            ui.set_width(440.0);
+            ui.horizontal(|ui| {
+                ui.add(egui::Image::new(&self.logo).fit_to_exact_size(Vec2::splat(44.0)));
+                ui.vertical(|ui| {
+                    ui.heading("Airlock Control");
+                    ui.label(RichText::new(env!("CARGO_PKG_VERSION")).color(MUTED));
+                });
+            });
+            ui.add_space(12.0);
+            ui.label("Review source changes and deployment effects.");
+            ui.label("Deployment effects come from the supplied plan.");
+            ui.add_space(8.0);
+            ui.label("No machine is connected. Approve and Reject record a local review decision; they do not start deployment.");
+            ui.add_space(8.0);
+            ui.label("With a receipt directory configured, decisions are saved locally. Otherwise, they remain in this session.");
+            ui.add_space(12.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Close").clicked() {
+                    ui.close();
+                }
+            });
+        });
+        if dialog.should_close() {
+            self.about_open = false;
+        }
     }
 
     fn review_title(&self, ui: &mut egui::Ui) {
@@ -853,6 +889,7 @@ impl eframe::App for Controller {
                 }
             });
         self.confirmation(ctx);
+        self.about(ctx);
         self.frames += 1;
         if self.screenshot.is_some() && !self.screenshot_requested {
             if self.frames >= 4 {
