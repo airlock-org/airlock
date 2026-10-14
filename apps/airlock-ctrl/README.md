@@ -59,6 +59,7 @@ Drag across source text to select within either diff column; Shift-click extends
 the selection, double-click selects a word and triple-click selects a line.
 Ctrl+C copies the selection and Ctrl+A selects that side's complete file.
 Right-click opens copy controls for the selection, line, whole file or path.
+Each column's `⋯` menu offers selection, file-content and path copy actions.
 Copied source preserves the original tabs, Unicode and newlines and excludes
 line numbers, the other column and empty diff alignment rows. The source stays
 read-only. File-tree rows have path/filename and whole-file copy menus; plan

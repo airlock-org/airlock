@@ -534,21 +534,11 @@ impl Controller {
             ));
             return;
         }
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new("Drag to select · Right-click to copy · Ctrl+C")
-                    .size(12.0)
-                    .color(MUTED),
-            );
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("Copy candidate").clicked() {
-                    ui.ctx().copy_text(file.after.clone());
-                }
-                if ui.small_button("Copy baseline").clicked() {
-                    ui.ctx().copy_text(file.before.clone());
-                }
-            });
-        });
+        ui.label(
+            RichText::new("Drag to select · Right-click to copy · Ctrl+C")
+                .size(12.0)
+                .color(MUTED),
+        );
         ui.separator();
         for (label, content) in [("Baseline", &file.before), ("Candidate", &file.after)] {
             if !content.is_empty() && !content.ends_with('\n') {
@@ -560,8 +550,22 @@ impl Controller {
             }
         }
         ui.columns(2, |columns| {
-            columns[0].label(RichText::new("BASELINE").color(MUTED).size(11.0).strong());
-            columns[1].label(RichText::new("CANDIDATE").color(ACCENT).size(11.0).strong());
+            column_header(
+                &mut columns[0],
+                "Baseline",
+                MUTED,
+                file,
+                0,
+                &self.source_selection,
+            );
+            column_header(
+                &mut columns[1],
+                "Candidate",
+                ACCENT,
+                file,
+                1,
+                &self.source_selection,
+            );
         });
         let available = ui.available_width();
         let max_chars = self
@@ -1100,6 +1104,72 @@ fn compact_count(count: usize) -> String {
     } else {
         count.to_string()
     }
+}
+
+fn column_header(
+    ui: &mut egui::Ui,
+    label: &str,
+    color: Color32,
+    file: &FileChange,
+    side: usize,
+    selection: &SourceSelection,
+) {
+    let source = if side == 0 { &file.before } else { &file.after };
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(label.to_uppercase())
+                .color(color)
+                .size(11.0)
+                .strong(),
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().button_padding = Vec2::new(5.0, 2.0);
+            let (response, _) = egui::containers::menu::MenuButton::from_button(
+                egui::Button::new("")
+                    .frame(false)
+                    .min_size(Vec2::new(26.0, 20.0)),
+            )
+            .ui(ui, |ui| {
+                let selected = selection.text(source, side);
+                if ui
+                    .add_enabled(selected.is_some(), egui::Button::new("Copy selection"))
+                    .clicked()
+                {
+                    ui.ctx().copy_text(selected.unwrap().to_owned());
+                    ui.close();
+                }
+                if ui.button("Copy file contents").clicked() {
+                    ui.ctx().copy_text(source.clone());
+                    ui.close();
+                }
+                ui.separator();
+                if ui.button("Copy file path").clicked() {
+                    ui.ctx().copy_text(file.path.clone());
+                    ui.close();
+                }
+            });
+            let color = if response.hovered() || response.is_pointer_button_down_on() {
+                ACCENT
+            } else {
+                MUTED
+            };
+            for offset in [-4.5, 0.0, 4.5] {
+                ui.painter().circle_filled(
+                    response.rect.center() + Vec2::new(offset, 0.0),
+                    1.3,
+                    color,
+                );
+            }
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(
+                    egui::WidgetType::Button,
+                    true,
+                    format!("{label} file actions"),
+                )
+            });
+            response.on_hover_text(format!("{label} file actions"));
+        });
+    });
 }
 
 fn code_cell(
