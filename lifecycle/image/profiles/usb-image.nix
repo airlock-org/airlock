@@ -59,7 +59,8 @@ in
     copyChannel = false;
     diskSize = config.virtualisation.diskSize;
     partitionTableType = "efi";
-    bootSize = "1G";
+    # Reserve room for retained Xen/kernel/initrd generations and install staging.
+    bootSize = "3G";
     label = "airlock-usb";
     contents = [
       {

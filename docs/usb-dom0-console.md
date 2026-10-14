@@ -13,7 +13,9 @@ make usb-dom0-console-write USB_SERIAL=YOUR_USB_SERIAL
 
 The writer unmounts the identified USB and overwrites it with the console
 image, using the existing sparse writer. This replaces previous personalization.
-The fixed disk capacity is 12 GiB including a 1 GiB EFI partition; no partition
+The fixed disk capacity is 12 GiB including a 3 GiB EFI partition for boot
+generations and installer staging. This layout applies to newly built images;
+existing installations are not repartitioned by a deployment. No partition
 or filesystem expansion runs on boot. No personalization is needed: local
 login is `airlock` / `password`. No repository or credentials are copied.
 

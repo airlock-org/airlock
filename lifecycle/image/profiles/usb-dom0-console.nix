@@ -68,7 +68,8 @@
     inherit (config.image) baseName format;
     diskSize = config.virtualisation.diskSize;
     partitionTableType = "efi";
-    bootSize = "1G";
+    # Match the developer image's space for boot generations and install staging.
+    bootSize = "3G";
     label = "airlock-console";
   });
 

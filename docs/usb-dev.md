@@ -33,7 +33,10 @@ retain their `airlock` dom0 account; this change does not migrate them.
 
 The image result link identifies the current image without
 exposing its changing Nix store path. The current image is a fixed 32 GiB
-seed image, so it fits a nominal 64 GB USB. `usb-dev-provision` expands its
+seed image with a 3 GiB EFI partition, so it fits a nominal 64 GB USB. EFI space
+holds retained Xen, kernel and initrd files as well as temporary installer copies.
+This layout applies to newly built images; normal deployments do not resize an
+existing USB's partitions. `usb-dev-provision` expands its
 root partition and ext4 filesystem to the USB's capacity after writing, before
 personalization. The build/flash does not need to write a larger empty image.
 Larger media provides more headroom for longer-lived development.
@@ -84,7 +87,7 @@ These are recovery metadata, **not backups of data erased by flashing**. Do not
 restore a smaller old partition boundary over an already enlarged filesystem.
 
 The roughly 58.2-GiB USB with serial `YOUR_USB_SERIAL` should get a roughly
-57.2-GiB root partition instead of 31 GiB. Dom0 needs that space because it hosts
+55.2-GiB root partition instead of 29 GiB. Dom0 needs that space because it hosts
 the shared VM package store, writable VM disks and retained rollback generations.
 The deployment workflow also imports/stages new Nix closures before changing
 running VMs; the first transfer can temporarily duplicate packages already packed
