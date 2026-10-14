@@ -1,7 +1,32 @@
 {
   "nodes": {
+    "airlock-apps": {
+      "inputs": {
+        "nixpkgs": [
+          "airlock-machine",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "dir": "apps",
+        "lastModified": 1791989430,
+        "narHash": "sha256-wQXhnJzEnkOmzeWYu5TUadeAhZYiPZQtVwfaOxvgmxk=",
+        "rev": "27f542b91975983f4da468a84f8a267899479003",
+        "revCount": 1008,
+        "submodules": false,
+        "type": "git",
+        "url": "https://github.com/airlock-org/airlock.git"
+      },
+      "original": {
+        "dir": "apps",
+        "rev": "27f542b91975983f4da468a84f8a267899479003",
+        "type": "git",
+        "url": "https://github.com/airlock-org/airlock.git"
+      }
+    },
     "airlock-machine": {
       "inputs": {
+        "airlock-apps": "airlock-apps",
         "dank-material-shell": "dank-material-shell",
         "nixos-qubes": "nixos-qubes",
         "nixpkgs": "nixpkgs",
