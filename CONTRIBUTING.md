@@ -28,10 +28,9 @@ Set `AIRLOCK_LOG_DIR` to choose another destination.
 
 ## Optional build environment
 
-Website development has separate Node.js/pnpm dependencies and explicit
-`make website-dev` / `make website-build` targets. Documentation stays in
-repository Markdown. See the [website guide](website/README.md); these tools
-are not required by `make test-quick`.
+Website development lives in the sibling `../website` project, with its own
+Node.js/pnpm dependencies, Python checks, and CI. Run `pnpm dev` or `pnpm build`
+there. It is independent of this repository's quick tests and Nix builds.
 
 Nix builds target x86_64-linux and require flakes and nix-command. The repo's
 Nix wrapper selects an isolated Airlock store. Choose a storage location with

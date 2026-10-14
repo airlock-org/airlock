@@ -1,12 +1,9 @@
 # Documentation map
 
-For an introduction, read [overview](overview.md), [getting started](getting-started.md),
-and [architecture](architecture.md). The [website](../website/README.md) renders a
-selected set of repository Markdown; edit the original documents here. Public
-guides cover [the desktop](desktop.md), [configuration](configuration.md), and
-[updates and rollback](updates.md). This full map, development runbooks, plans,
-and reports are maintained for repository contributors and are not published
-as public documentation.
+The sibling `website` project owns the landing page and public user guides in
+its `docs/` directory. Edit public introductions and everyday-use documentation
+there. This repository keeps development runbooks, implementation plans,
+incidents, and historical evidence. This full map is not public documentation.
 
 Start with [project status](status.md), [contributor setup](../CONTRIBUTING.md),
 [lab configuration](lab-configuration.md), and [local public-readiness results](public-readiness.md).
@@ -29,7 +26,7 @@ current backlog items.
 
 ## Current operating guides
 
-- [Computer assistant](usr-assistant.md): the usr-assistant role, current tools,
+- [Computer assistant](../airlock-machine/docs/usr-assistant.md): the usr-assistant role, current tools,
   and the [migration from the previous VM name](usr-assistant-rename.md).
 - [Repository boundaries](repositories.md): source ownership and submodule workflow.
 - [USB development](usb-dev.md) and [development access](usb-lab.md): current image,

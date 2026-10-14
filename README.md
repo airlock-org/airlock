@@ -50,8 +50,8 @@ installation. Results include JUnit XML and JSON under the Airlock log directory
 - `lifecycle/misc/tools/scripts/` holds development-host and lab orchestration.
 - `tests/` covers parent integration; it runs component tests from their canonical source.
 - [`docs/`](docs/README.md) indexes current guides, experiments, plans, and dated evidence.
-- [`website/`](website/README.md) builds the landing page and selected documentation
-  as a static Fumadocs site, using repository Markdown as its source.
+- The sibling `../website` project builds the landing page and public documentation
+  as a static Fumadocs site, using its own Markdown sources and build checks.
 
 Keep machine changes in the component repository, then commit its new pointer
 here. See [repository workflow](docs/repositories.md).

@@ -20,16 +20,11 @@ Patch directories group changes by upstream project; patch headers retain
 provenance. A package's Nix license metadata is not a license grant for all
 source in this repository.
 
-## Website typeface
+## Website
 
-The website bundles the unmodified Inter variable font by Rasmus Andersson
-under the SIL Open Font License 1.1. Its license is retained at
-[`website/public/fonts/LICENSE.txt`](website/public/fonts/LICENSE.txt).
-The font and license come from
-[rsms/inter revision 353b61b](https://github.com/rsms/inter/tree/353b61b9f4430d5f420d56605a6e7993e0941470);
-the source font is `docs/font-files/InterVariable.woff2`. The bundled font's
-SHA-256 is `693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3`.
-The website serves it locally, with no runtime font-service dependency.
+The landing page, public user documentation, bundled Inter font, and font
+license notices are maintained in the sibling `website` project. Its
+`THIRD_PARTY.md` records the website asset provenance.
 
 ## Outstanding vendored-source terms
 

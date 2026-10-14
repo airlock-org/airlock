@@ -12,6 +12,12 @@ checkout, committed revision, and lock hash support deployment provenance and
 consistency checks. Keep one editable source per application, runtime helper,
 and component test.
 
+The sibling `../website` checkout is an independent Git repository for the
+landing page and public user documentation. It owns its Markdown, assets,
+dependencies, tests, and static build. Development guides and reports remain
+here. Shared reference images and copies of served website assets live in
+`../assets`; the website builds from its own `public/` directory.
+
 Machine configuration owns which applications are installed and what authority
 they receive. When an app is integrated, the component must consume pinned app
 source or packages; it must not depend on an adjacent `../apps` checkout.
