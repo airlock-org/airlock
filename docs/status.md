@@ -8,8 +8,10 @@ running generation are distinct results.
 Current source and the physical machine name the assistant VM `usr-assistant`.
 The [2026-10-13 migration trial](history/usr-assistant-migration-2026-10-13.md)
 completed apply, reboot, whole-machine generation verification and persistence
-checks. An ordinary-release follow-up remains to include the committed
-boot-installation fix and clear the one-shot migration declarations.
+checks. The [2026-10-14 assistant update](history/usr-assistant-git-identity-2026-10-14.md)
+deployed repository Git identity defaults and verified the host and all six
+guest generations. Its guest candidate cleared the completed migration actions.
+A host-release follow-up remains to include the committed boot-installation fix.
 
 ## Demonstrated paths
 
