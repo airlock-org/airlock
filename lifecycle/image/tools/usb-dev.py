@@ -820,6 +820,16 @@ def readonly_root_file(path, data):
         os.fsync(stream.fileno())
 
 
+def local_password(insecure_dev_password):
+    if insecure_dev_password:
+        print("DEVELOPMENT MODE: using the literal password for dom0 and sys-gui.")
+        return "password"
+    password = getpass.getpass("New local dom0 password (sys-gui uses password): ")
+    require(bool(password), "Password cannot be empty.")
+    require(password == getpass.getpass("Confirm password: "), "Passwords differ.")
+    return password
+
+
 def personalize(args):
     root = checked_root(args.root)
     require(root != Path("/"), "Personalize offline, before the first USB boot.")
@@ -847,17 +857,7 @@ def personalize(args):
         not output(*git, "status", "--porcelain"), "Commit the repo before copying it."
     )
     commit = output(*git, "rev-parse", "HEAD")
-    if args.insecure_dev_password:
-        # Explicitly opt-in development convenience. Never make this a default
-        # or put it in the reusable image.
-        password = "password"
-        print(
-            "DEVELOPMENT MODE: using the insecure literal password for dom0 and sys-gui."
-        )
-    else:
-        password = getpass.getpass("New local dom0 password (sys-gui uses password): ")
-        require(len(password) >= 12, "Use at least 12 characters.")
-        require(password == getpass.getpass("Confirm password: "), "Passwords differ.")
+    password = local_password(args.insecure_dev_password)
     password_hash = run(
         "openssl",
         "passwd",

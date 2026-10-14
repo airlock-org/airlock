@@ -123,7 +123,8 @@ for supported configurations and failure handling. The lower-level
 `usb-dev.py --amd-vfct` option remains available only for reproducing older
 manual experiments; the automatic startup path never reads that file.
 
-Provisioning prompts for a local dom0 password. Use
+Provisioning prompts for a non-empty local dom0 password and confirmation.
+The developer USB accepts `password`; there is no minimum-length requirement. Use
 `USB_INSECURE_DEV_PASSWORD=1` only to select the literal development password
 `password` on a physically controlled USB. It requires exactly one attached whole-disk USB with that serial, **erases
 it**, flushes the device, and does not touch firmware boot variables. It copies

@@ -74,6 +74,26 @@ def test_private_file_never_overwrites(usb, tmp_path):
     assert target.read_text() == "keep"
 
 
+def test_password_prompt_accepts_literal_development_password(usb, monkeypatch):
+    answers = iter(["password", "password"])
+    monkeypatch.setattr(usb.getpass, "getpass", lambda _prompt: next(answers))
+    assert usb.local_password(False) == "password"
+
+
+def test_development_password_flag_does_not_prompt(usb, monkeypatch):
+    monkeypatch.setattr(usb.getpass, "getpass", lambda _: pytest.fail("unexpected prompt"))
+    assert usb.local_password(True) == "password"
+
+
+@pytest.mark.parametrize("answers, error", [([""], "cannot be empty"),
+                                           (["password", "different"], "Passwords differ")])
+def test_password_prompt_still_checks_empty_and_mismatched_values(usb, monkeypatch, answers, error):
+    values = iter(answers)
+    monkeypatch.setattr(usb.getpass, "getpass", lambda _prompt: next(values))
+    with pytest.raises(ValueError, match=error):
+        usb.local_password(False)
+
+
 def test_sparse_copy_writes_allocated_extents_only(usb, tmp_path):
     image = tmp_path / "seed.img"
     with image.open("wb") as stream:
