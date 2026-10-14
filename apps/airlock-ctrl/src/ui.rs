@@ -313,9 +313,9 @@ impl Controller {
                         );
                     });
                 });
-                icons::row(ui, |ui| {
+                ui.allocate_ui_with_layout(Vec2::new(ui.available_width(), 36.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     let clear_width = icons::BUTTON_SIZE;
-                    let margin = egui::Margin::symmetric(4, 2);
+                    let margin = egui::Margin::symmetric(10, 8);
                     let text_width = (ui.available_width() - clear_width - ui.spacing().item_spacing.x - margin.sum().x).max(40.0);
                     let filter_id = ui.make_persistent_id("file-filter");
                     let previous_cursor = egui::TextEdit::load_state(ui.ctx(), filter_id)
@@ -324,6 +324,8 @@ impl Controller {
                             .id(filter_id)
                             .hint_text("Find a file or folder…")
                             .margin(margin)
+                            .min_size(Vec2::new(0.0, 36.0))
+                            .vertical_align(egui::Align::Center)
                             .desired_width(text_width)
                             .show(ui);
                     if filter.response.contains_pointer() && ui.input(|input| input.pointer.secondary_pressed()) {
