@@ -272,29 +272,73 @@ impl Controller {
         if !self.about_open {
             return;
         }
-        let dialog = egui::Modal::new(egui::Id::new("about-airlock-control")).show(ctx, |ui| {
-            ui.set_width(440.0);
-            ui.horizontal(|ui| {
-                ui.add(egui::Image::new(&self.logo).fit_to_exact_size(Vec2::splat(44.0)));
-                ui.vertical(|ui| {
-                    ui.heading("Airlock Control");
-                    ui.label(RichText::new(env!("CARGO_PKG_VERSION")).color(MUTED));
+        let frame = egui::Frame::new()
+            .fill(PANEL)
+            .stroke(Stroke::new(1.0_f32, BORDER))
+            .corner_radius(10.0)
+            .inner_margin(24.0)
+            .shadow(ctx.style().visuals.window_shadow);
+        let dialog = egui::Modal::new(egui::Id::new("about-airlock-control"))
+            .frame(frame)
+            .show(ctx, |ui| {
+                ui.set_width(420.0);
+                ui.spacing_mut().item_spacing.y = 6.0;
+                ui.vertical_centered(|ui| {
+                    ui.add(egui::Image::new(&self.logo).fit_to_exact_size(Vec2::splat(64.0)));
+                    ui.add_space(6.0);
+                    ui.heading(RichText::new("Airlock Control").color(BRAND));
+                    ui.label(
+                        RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION")))
+                            .size(12.0)
+                            .color(MUTED),
+                    );
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new("Compare configuration changes and inspect deployment effects.")
+                            .size(13.0)
+                            .color(MUTED),
+                    );
+                });
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(12.0);
+                for (title, description) in [
+                    (
+                        "Deployment effects",
+                        if self.review.mode == "demo" {
+                            "The deployment plan is an example."
+                        } else if self.review.deployment.is_some() {
+                            "Shown from the supplied deployment plan."
+                        } else {
+                            "No deployment plan is loaded."
+                        },
+                    ),
+                    (
+                        "Review decisions",
+                        "No machine is connected. Approve and Reject record your decision locally without starting deployment.",
+                    ),
+                    (
+                        "Decision storage",
+                        if self.review.mode == "demo" {
+                            "Example decisions stay in memory for this session."
+                        } else if self.decisions_dir.is_some() {
+                            "Decision receipts are saved to the configured local directory."
+                        } else {
+                            "Decisions stay in memory for this session."
+                        },
+                    ),
+                ] {
+                    ui.label(RichText::new(title).strong().size(13.0));
+                    ui.label(RichText::new(description).size(13.0).color(MUTED));
+                    ui.add_space(10.0);
+                }
+                ui.add_space(4.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Close").clicked() {
+                        ui.close();
+                    }
                 });
             });
-            ui.add_space(12.0);
-            ui.label("Review source changes and deployment effects.");
-            ui.label("Deployment effects come from the supplied plan.");
-            ui.add_space(8.0);
-            ui.label("No machine is connected. Approve and Reject record a local review decision; they do not start deployment.");
-            ui.add_space(8.0);
-            ui.label("With a receipt directory configured, decisions are saved locally. Otherwise, they remain in this session.");
-            ui.add_space(12.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Close").clicked() {
-                    ui.close();
-                }
-            });
-        });
         if dialog.should_close() {
             self.about_open = false;
         }

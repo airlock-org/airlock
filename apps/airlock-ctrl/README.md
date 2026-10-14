@@ -72,7 +72,9 @@ to copy the complete effects summary. Commit hashes are in Review record; the
 sidebar is dedicated to finding and navigating changed files.
 The footer keeps the effects summary and decision controls together. The header's
 information icon opens About Airlock Control, explaining plan provenance, the
-local-only review mode and receipt storage. Close the dialog with its Close
+local-only review mode and receipt storage. The dialog has a centred app identity
+and version, with separate sections explaining the current plan and decision
+storage rather than describing configuration options. Close it with its Close
 button, Escape or a click outside it.
 
 Review record groups source revisions and content identities into cards.
