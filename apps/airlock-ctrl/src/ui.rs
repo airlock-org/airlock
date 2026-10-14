@@ -1,5 +1,6 @@
 use crate::{
     Decision,
+    effects::PlannedEffects,
     file_tree::{FileTree, RowKind, TreeRow},
     icons::{self, Icon},
     model::{FileChange, Review},
@@ -106,6 +107,7 @@ enum Tab {
 pub struct Controller {
     logo: egui::TextureHandle,
     review: Review,
+    effects: Option<PlannedEffects>,
     selected: usize,
     tab: Tab,
     filter: String,
@@ -131,6 +133,7 @@ impl Controller {
         screenshot: Option<PathBuf>,
     ) -> Self {
         theme::apply(&cc.egui_ctx);
+        let effects = review.plan().map(PlannedEffects::from_plan);
         let diff_rows = review.files.first().map(rows).unwrap_or_default();
         let file_tree = FileTree::new(&review.files);
         let icon = crate::branding::logo()
@@ -146,6 +149,7 @@ impl Controller {
         Self {
             logo,
             review,
+            effects,
             selected: 0,
             tab: Tab::Source,
             filter: String::new(),
@@ -206,6 +210,10 @@ impl Controller {
                     ui.label(RichText::new(notice).color(ACCENT));
                 }
                 ui.horizontal(|ui| {
+                    let effects_width = (ui.available_width() - 190.0).max(100.0);
+                    ui.allocate_ui_with_layout(Vec2::new(effects_width, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                        effects_summary(ui, self.effects.as_ref());
+                    });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let enabled =
                             self.receipt.is_none() && self.review.approval_blocker().is_none();
@@ -227,9 +235,12 @@ impl Controller {
                         }
                     });
                 });
+                if self.receipt.is_none() && let Some(reason) = self.review.approval_blocker() {
+                    ui.add(egui::Label::new(RichText::new(reason).size(12.0).color(ACCENT)).wrap());
+                }
                 ui.label(
                     RichText::new(
-                        "No deployment connection · Decisions are local review records only",
+                        "Effects from supplied plan · No deployment connection · Decisions are local review records only",
                     )
                     .size(12.0)
                     .color(MUTED),
@@ -237,70 +248,20 @@ impl Controller {
             });
     }
 
-    fn review_summary(&self, ui: &mut egui::Ui) {
-        ui.scope(|ui| {
-            ui.spacing_mut().item_spacing.y = 5.0;
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new("REVIEW SUMMARY")
-                        .size(11.0)
-                        .color(MUTED)
-                        .strong(),
-                );
-                ui.add(
-                    egui::Label::new(
-                        RichText::new(&self.review.candidate.subject)
-                            .strong()
-                            .size(15.0),
-                    )
-                    .truncate(),
-                )
-                .on_hover_text(&self.review.candidate.subject)
-                .context_menu(|ui| {
-                    if ui.button("Copy change title").clicked() {
-                        ui.ctx().copy_text(self.review.candidate.subject.clone());
-                        ui.close();
-                    }
-                });
-            });
-            if let Some(plan) = self.review.plan() {
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing.x = 6.0;
-                    ui.label(RichText::new("Planned VMs:").size(12.0).color(MUTED));
-                    for (key, action, color) in [("stop", "stop", RED), ("start", "start", GREEN)] {
-                        let count = plan
-                            .get(key)
-                            .and_then(|value| value.as_array())
-                            .map_or_else(|| "?".to_owned(), |names| names.len().to_string());
-                        ui.label(
-                            RichText::new(format!("{count} {action}"))
-                                .size(12.0)
-                                .color(color),
-                        )
-                        .on_hover_text("Counts from the supplied deployment plan");
-                        if key == "stop" {
-                            ui.label(RichText::new("·").size(12.0).color(MUTED));
-                        }
-                    }
-                });
-            } else {
-                ui.label(
-                    RichText::new("VM effects unknown · No plan loaded")
-                        .size(12.0)
-                        .color(MUTED),
-                );
-            }
-            if let Some(receipt) = &self.receipt {
-                let (status, color) = if receipt.get("decision").and_then(|value| value.as_str())
-                    == Some("approve")
-                {
-                    ("Approved locally", GREEN)
-                } else {
-                    ("Rejected locally", RED)
-                };
-                ui.label(RichText::new(status).size(12.0).color(color));
-            } else if let Some(reason) = self.review.approval_blocker() {
-                ui.add(egui::Label::new(RichText::new(reason).size(12.0).color(ACCENT)).wrap());
+    fn review_title(&self, ui: &mut egui::Ui) {
+        ui.add(
+            egui::Label::new(
+                RichText::new(&self.review.candidate.subject)
+                    .strong()
+                    .size(15.0),
+            )
+            .truncate(),
+        )
+        .on_hover_text(&self.review.candidate.subject)
+        .context_menu(|ui| {
+            if ui.button("Copy change title").clicked() {
+                ui.ctx().copy_text(self.review.candidate.subject.clone());
+                ui.close();
             }
         });
     }
@@ -694,6 +655,26 @@ impl Controller {
                 });
                 return;
             };
+            let effects = self.effects.as_ref().unwrap();
+            if ui.available_width() >= 600.0 {
+                ui.columns(2, |columns| {
+                    effect_card(&mut columns[0], "VMs restarting", &effects.restarting, ACCENT);
+                    reboot_card(&mut columns[1], effects.reboot);
+                });
+            } else {
+                effect_card(ui, "VMs restarting", &effects.restarting, ACCENT);
+                reboot_card(ui, effects.reboot);
+            }
+            for (title, names, color) in [
+                ("VMs starting without a restart", &effects.starting, GREEN),
+                ("VMs stopping without a restart", &effects.stopping, RED),
+            ] {
+                if !names.is_empty() {
+                    effect_card(ui, title, names, color);
+                }
+            }
+            ui.add_space(8.0);
+            ui.label(RichText::new("Configuration changes").strong().size(16.0));
             if ui.available_width() >= 760.0 {
                 ui.columns(3, |columns| {
                     plan_card(&mut columns[0], plan, "changed", "Changed VMs", false, ACCENT, 56.0);
@@ -708,37 +689,20 @@ impl Controller {
                 });
             }
             ui.add_space(8.0);
-            ui.label(RichText::new("VM operations").strong().size(16.0));
-            ui.label(RichText::new("Stop and start sequences, in the supplied order.").color(MUTED).size(12.0));
-            let operation_height = 50.0 + ["stop", "start"].into_iter().map(|key| plan.get(key).and_then(|value| value.as_array()).map_or(0, Vec::len)).max().unwrap_or(0) as f32 * 29.0;
-            if ui.available_width() >= 600.0 {
-                ui.columns(2, |columns| {
-                    plan_card(&mut columns[0], plan, "stop", "Stop VMs", true, RED, operation_height);
-                    plan_card(&mut columns[1], plan, "start", "Start VMs", true, GREEN, operation_height);
-                });
-            } else {
-                for (key, title, ordered, color, height) in [
-                    ("stop", "Stop VMs", true, RED, operation_height),
-                    ("start", "Start VMs", true, GREEN, operation_height),
-                ] {
-                    plan_card(ui, plan, key, title, ordered, color, height);
+            egui::CollapsingHeader::new("Technical details").default_open(false).show(ui, |ui| {
+                ui.label(RichText::new("Stop and start sequences, in the supplied order.").color(MUTED).size(12.0));
+                let operation_height = 50.0 + ["stop", "start"].into_iter().map(|key| plan.get(key).and_then(|value| value.as_array()).map_or(0, Vec::len)).max().unwrap_or(0) as f32 * 29.0;
+                if ui.available_width() >= 600.0 {
+                    ui.columns(2, |columns| {
+                        plan_card(&mut columns[0], plan, "stop", "Stop VMs", true, RED, operation_height);
+                        plan_card(&mut columns[1], plan, "start", "Start VMs", true, GREEN, operation_height);
+                    });
+                } else {
+                    plan_card(ui, plan, "stop", "Stop VMs", true, RED, operation_height);
+                    plan_card(ui, plan, "start", "Start VMs", true, GREEN, operation_height);
                 }
-            }
-            ui.add_space(8.0);
-            plan_frame(ui, 52.0, |ui| {
-                ui.label(RichText::new("Host activation").strong());
-                let (status, color) = match plan.get("host_reboot_required").and_then(|value| value.as_bool()) {
-                    Some(true) => ("Reboot required for host activation", ACCENT),
-                    Some(false) => ("No reboot required", GREEN),
-                    None => ("Reboot requirement not reported", MUTED),
-                };
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new(status).color(color).strong());
-                    ui.label(RichText::new("According to the supplied plan").color(MUTED).size(12.0));
-                });
-            });
-            ui.add_space(8.0);
-            egui::CollapsingHeader::new("Complete supplied plan · JSON").default_open(false).show(ui, |ui| {
+                ui.add_space(8.0);
+                ui.label(RichText::new("Complete supplied plan · JSON").strong());
                 read_only_text(ui, "supplied-plan", &serde_json::to_string_pretty(self.review.deployment.as_ref().unwrap()).unwrap(), true);
             });
         });
@@ -864,7 +828,7 @@ impl eframe::App for Controller {
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(BACKGROUND).inner_margin(22.0))
             .show(ctx, |ui| {
-                self.review_summary(ui);
+                self.review_title(ui);
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.tab, Tab::Source, "Source changes");
@@ -1161,6 +1125,132 @@ fn compact_count(count: usize) -> String {
     }
 }
 
+fn reboot_state(required: Option<bool>) -> (&'static str, Color32) {
+    match required {
+        Some(true) => ("Required", ACCENT),
+        Some(false) => ("Not required", GREEN),
+        None => ("Unknown", MUTED),
+    }
+}
+
+fn names_text(names: &[String]) -> String {
+    if names.is_empty() {
+        "None".to_owned()
+    } else {
+        names
+            .iter()
+            .map(|name| visible_path(name))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+fn effects_text(effects: Option<&PlannedEffects>) -> String {
+    let Some(effects) = effects else {
+        return "VMs restarting: Unknown (no plan)\nSystem reboot: Unknown (no plan)".to_owned();
+    };
+    let mut lines = vec![format!(
+        "VMs restarting: {}",
+        names_text(&effects.restarting)
+    )];
+    for (label, names) in [
+        ("VMs starting", &effects.starting),
+        ("VMs stopping", &effects.stopping),
+    ] {
+        if !names.is_empty() {
+            lines.push(format!("{label}: {}", names_text(names)));
+        }
+    }
+    lines.push(format!("System reboot: {}", reboot_state(effects.reboot).0));
+    lines.join("\n")
+}
+
+fn effects_summary(ui: &mut egui::Ui, effects: Option<&PlannedEffects>) {
+    ui.spacing_mut().item_spacing.y = 5.0;
+    let row = |ui: &mut egui::Ui, label: &str, names: &str| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(format!("{label}:")).size(12.0).color(MUTED));
+            ui.add(egui::Label::new(RichText::new(names).monospace().size(13.0)).truncate())
+                .on_hover_text(names)
+                .context_menu(|ui| {
+                    if ui.button("Copy VM names").clicked() {
+                        ui.ctx().copy_text(names.to_owned());
+                        ui.close();
+                    }
+                });
+        });
+    };
+    row(
+        ui,
+        "VMs restarting",
+        &effects.map_or_else(
+            || "Unknown (no plan)".to_owned(),
+            |effects| names_text(&effects.restarting),
+        ),
+    );
+    if let Some(effects) = effects {
+        for (label, names) in [
+            ("VMs starting", &effects.starting),
+            ("VMs stopping", &effects.stopping),
+        ] {
+            if !names.is_empty() {
+                row(ui, label, &names_text(names));
+            }
+        }
+    }
+    let (status, color) = reboot_state(effects.and_then(|effects| effects.reboot));
+    ui.label(
+        RichText::new(format!("System reboot: {status}"))
+            .strong()
+            .size(12.0)
+            .color(color),
+    )
+    .context_menu(|ui| {
+        if ui.button("Copy effects summary").clicked() {
+            ui.ctx().copy_text(effects_text(effects));
+            ui.close();
+        }
+    });
+}
+
+fn effect_card(ui: &mut egui::Ui, title: &str, names: &[String], color: Color32) {
+    plan_frame(ui, 70.0, |ui| {
+        ui.label(RichText::new(title).strong().color(color));
+        if names.is_empty() {
+            ui.label(RichText::new("None").color(MUTED));
+        } else {
+            vm_chips(ui, names.iter().map(String::as_str));
+        }
+    });
+}
+
+fn reboot_card(ui: &mut egui::Ui, required: Option<bool>) {
+    plan_frame(ui, 70.0, |ui| {
+        ui.label(RichText::new("System reboot").strong());
+        let (status, color) = reboot_state(required);
+        ui.label(RichText::new(status).strong().size(20.0).color(color));
+    });
+}
+
+fn vm_chips<'a>(ui: &mut egui::Ui, names: impl IntoIterator<Item = &'a str>) {
+    ui.horizontal_wrapped(|ui| {
+        for name in names {
+            egui::Frame::new()
+                .fill(BACKGROUND)
+                .stroke(Stroke::new(1.0_f32, BORDER))
+                .corner_radius(4.0)
+                .inner_margin(egui::Margin::symmetric(8, 4))
+                .show(ui, |ui| {
+                    copyable_label(
+                        ui,
+                        RichText::new(visible_path(name)).monospace().size(12.0),
+                        name,
+                    );
+                });
+        }
+    });
+}
+
 fn plan_frame(ui: &mut egui::Ui, minimum_height: f32, content: impl FnOnce(&mut egui::Ui)) {
     let width = ui.available_width();
     let frame = egui::Frame::new()
@@ -1229,19 +1319,12 @@ fn plan_card(
                 });
             }
         } else {
-            ui.horizontal_wrapped(|ui| {
-                for name in names {
-                    let name = name.as_str().unwrap_or("[unexpected entry]");
-                    egui::Frame::new()
-                        .fill(BACKGROUND)
-                        .stroke(Stroke::new(1.0_f32, BORDER))
-                        .corner_radius(4.0)
-                        .inner_margin(egui::Margin::symmetric(8, 4))
-                        .show(ui, |ui| {
-                            copyable_label(ui, RichText::new(name).monospace().size(12.0), name);
-                        });
-                }
-            });
+            vm_chips(
+                ui,
+                names
+                    .iter()
+                    .map(|name| name.as_str().unwrap_or("[unexpected entry]")),
+            );
         }
     });
 }

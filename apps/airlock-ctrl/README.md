@@ -62,10 +62,14 @@ the tree has focus navigate matching files and reveal the selected path.
 Tree expansion, collapse, navigation, filter clearing and column menus use
 vector icons with descriptive tooltips and keyboard-accessible buttons.
 
-The review summary above the main tabs shows the change title, supplied-plan
-stop/start counts and any approval blocker, or the recorded local decision.
-Without a plan it explicitly marks VM effects as unknown. Commit hashes are in
-Review record; the sidebar is dedicated to finding and navigating changed files.
+The change title appears above the main tabs. Beside Approve/Reject, the effects
+summary names the VMs that will restart and states whether a system reboot is
+required. VMs present in both stop/start lists are restarts; start-only and
+stop-only VMs appear separately, without assuming they are newly created or
+permanently stopped. Names are deduplicated and sorted for display. A missing
+plan or unreported reboot flag remains unknown. Right-click the reboot status
+to copy the complete effects summary. Commit hashes are in Review record; the
+sidebar is dedicated to finding and navigating changed files.
 
 Drag across source text to select within either diff column; Shift-click extends
 the selection, double-click selects a word and triple-click selects a line.
@@ -84,10 +88,10 @@ Known optional domain arrays are also checked. Supplied revision and lock
 identities must match the resolved candidate. The UI shows restart order,
 retirement, restoration, `host_reboot_required` and the complete supplied JSON,
 including policy/device details that are not covered by summary fields.
-The plan view groups changed/retired/restored VMs into cards, displays stop/start
-operations as numbered sequences, and separates host activation status. On
-narrow windows the operation cards stack. Expand "Complete supplied plan · JSON"
-below the summary to inspect or copy the full input.
+The plan view leads with named restarts and system reboot status, then other VM
+effects and configuration changes. On narrow windows the cards stack. Expand
+"Technical details" to inspect stop/start order and copy the complete supplied
+JSON. The displayed summary does not modify the supplied plan or its fingerprint.
 An absent plan allows source review and rejection but disables approval.
 
 Review the source and effects, then click Approve or Reject to open the decision
