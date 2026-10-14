@@ -14,22 +14,9 @@ Dom0 manages a shared global Nix store. The other VMs receive read-only views of
 their system closures, with separate writable private storage. Configuration
 changes are built into machine releases with deployment planning and rollback.
 
-## Development
-
-See [contributor setup](CONTRIBUTING.md) for prerequisites and repository access.
-To clone the source and run the local checks:
-
-```sh
-git clone --recurse-submodules git@github.com:airlock-org/airlock.git
-cd airlock
-uv sync --locked
-make test-quick
-```
-
-The quick checks do not require Xen or Nix builds.
-
 ## Documentation
 
+- [Contributor setup](CONTRIBUTING.md).
 - [Repository workflow](docs/repositories.md): source ownership and the pinned machine configuration repository.
 - [Image building and provisioning](docs/usb-dev.md).
 - [Deployment and rollback](docs/machine-deployment.md).
