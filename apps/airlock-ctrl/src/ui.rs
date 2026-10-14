@@ -742,53 +742,6 @@ impl Controller {
                     record_source(ui, &self.review, &mut self.copy_feedback);
                     record_identities(ui, &self.review, &mut self.copy_feedback);
                 }
-                ui.add_space(8.0);
-                let receipt_text = self
-                    .receipt
-                    .as_ref()
-                    .map(|receipt| serde_json::to_string_pretty(receipt).unwrap());
-                plan_frame(ui, 68.0, |ui| {
-                    icons::row(ui, |ui| {
-                        ui.label(RichText::new("Local decision").strong().size(16.0));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            record_copy_button(
-                                ui,
-                                "Decision receipt",
-                                receipt_text.as_deref(),
-                                &mut self.copy_feedback,
-                            );
-                        });
-                    });
-                    let (status, color) = match self
-                        .receipt
-                        .as_ref()
-                        .and_then(|receipt| receipt.get("decision"))
-                        .and_then(|decision| decision.as_str())
-                    {
-                        Some("approve") => ("Approved locally", GREEN),
-                        Some("reject") => ("Rejected locally", RED),
-                        _ => ("Awaiting your review decision", MUTED),
-                    };
-                    ui.label(RichText::new(status).strong().color(color));
-                    if let Some(receipt_text) = &receipt_text {
-                        ui.label(
-                            RichText::new(
-                                if self.review.mode != "demo" && self.decisions_dir.is_some() {
-                                    "Receipt saved locally"
-                                } else {
-                                    "Decision kept in this session"
-                                },
-                            )
-                            .size(12.0)
-                            .color(MUTED),
-                        );
-                        egui::CollapsingHeader::new("Receipt details")
-                            .default_open(false)
-                            .show(ui, |ui| {
-                                read_only_text(ui, "local-decision", receipt_text, true);
-                            });
-                    }
-                });
             });
     }
 

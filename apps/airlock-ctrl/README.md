@@ -71,11 +71,10 @@ plan or unreported reboot flag remains unknown. Right-click the reboot status
 to copy the complete effects summary. Commit hashes are in Review record; the
 sidebar is dedicated to finding and navigating changed files.
 
-Review record groups source revisions, content identities and the local decision
-into cards. Each available value has a copy icon that copies the complete value
+Review record groups source revisions and content identities into cards.
+Each available value has a copy icon that copies the complete value
 and briefly changes to a green checkmark. Missing values have disabled copy
-controls. Cards stack on smaller windows; the full receipt is expandable and
-has its own copy button.
+controls. Cards stack on smaller windows.
 
 Source diffs use continuous 22-pixel rows with centred line numbers and change
 markers. Syntax highlighting uses syntect with bat's syntax definitions (via
