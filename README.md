@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-AirlockOS runs NixOS in every virtual machine (VM) using the Qubes architecture.
+AirlockOS runs [NixOS](https://nixos.org/) in every virtual machine (VM) using the [Qubes](https://www.qubes-os.org/) architecture.
 Nix defines the machine configuration. Xen runs all VMs, including dom0, the
 privileged control VM.
 
