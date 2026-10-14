@@ -55,6 +55,16 @@ case sensitivity and keeps matching files in their folder context; clearing
 the filter restores the saved expansion state. Previous/Next and Up/Down when
 the tree has focus navigate matching files and reveal the selected path.
 
+Drag across source text to select within either diff column; Shift-click extends
+the selection, double-click selects a word and triple-click selects a line.
+Ctrl+C copies the selection and Ctrl+A selects that side's complete file.
+Right-click opens copy controls for the selection, line, whole file or path.
+Copied source preserves the original tabs, Unicode and newlines and excludes
+line numbers, the other column and empty diff alignment rows. The source stays
+read-only. File-tree rows have path/filename and whole-file copy menus; plan
+JSON and review details support text selection and right-click copy controls.
+The editable file search also provides cut and paste in its context menu.
+
 `--plan` accepts a saved plan object or a receiver response containing `plan`.
 The plan must contain `changed`, `stop` and `start` arrays of domain names.
 Known optional domain arrays are also checked. Supplied revision and lock

@@ -2,6 +2,7 @@ use crate::{
     Decision,
     file_tree::{FileTree, RowKind, TreeRow},
     model::{FileChange, Review},
+    selection::{self, SourceSelection, copyable_label, read_only_text},
     theme::{
         self, ACCENT, ACCENT_TINT, BACKGROUND, BORDER, BRAND, BUTTON_TEXT, FOREGROUND, GREEN,
         MUTED, PANEL, RED,
@@ -14,6 +15,7 @@ use std::path::PathBuf;
 
 struct CodeLine {
     number: usize,
+    source_start: usize,
     segments: Vec<(bool, String)>,
     kind: ChangeTag,
 }
@@ -24,6 +26,19 @@ struct DiffRow {
 }
 
 fn rows(file: &FileChange) -> Vec<DiffRow> {
+    let starts = |source: &str| {
+        let mut offset = 0;
+        source
+            .split_inclusive('\n')
+            .map(|line| {
+                let start = offset;
+                offset += line.len();
+                start
+            })
+            .collect::<Vec<_>>()
+    };
+    let before_starts = starts(&file.before);
+    let after_starts = starts(&file.after);
     let diff = TextDiff::configure()
         .timeout(std::time::Duration::from_millis(250))
         .diff_lines(&file.before, &file.after);
@@ -34,6 +49,11 @@ fn rows(file: &FileChange) -> Vec<DiffRow> {
         for change in diff.iter_inline_changes(op) {
             let line = CodeLine {
                 number: change.old_index().or(change.new_index()).unwrap_or(0) + 1,
+                source_start: if let Some(index) = change.old_index() {
+                    before_starts[index]
+                } else {
+                    after_starts[change.new_index().unwrap()]
+                },
                 segments: change
                     .iter_strings_lossy()
                     .map(|(emphasized, value)| {
@@ -49,6 +69,7 @@ fn rows(file: &FileChange) -> Vec<DiffRow> {
                 ChangeTag::Equal => {
                     let right = CodeLine {
                         number: change.new_index().unwrap_or(0) + 1,
+                        source_start: after_starts[change.new_index().unwrap()],
                         segments: line.segments.clone(),
                         kind: ChangeTag::Equal,
                     };
@@ -91,6 +112,7 @@ pub struct Controller {
     collapsed_folders: BTreeSet<String>,
     scroll_to_selection: bool,
     diff_rows: Vec<DiffRow>,
+    source_selection: SourceSelection,
     reviewed: bool,
     confirm: Option<Decision>,
     receipt: Option<serde_json::Value>,
@@ -131,6 +153,7 @@ impl Controller {
             collapsed_folders: BTreeSet::new(),
             scroll_to_selection: false,
             diff_rows,
+            source_selection: SourceSelection::default(),
             reviewed: false,
             confirm: None,
             receipt: None,
@@ -301,12 +324,20 @@ impl Controller {
                     let clear_width = 40.0;
                     let margin = egui::Margin::symmetric(4, 2);
                     let text_width = (ui.available_width() - clear_width - ui.spacing().item_spacing.x - margin.sum().x).max(40.0);
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.filter)
+                    let filter_id = ui.make_persistent_id("file-filter");
+                    let previous_cursor = egui::TextEdit::load_state(ui.ctx(), filter_id)
+                        .and_then(|state| state.cursor.char_range());
+                    let mut filter = egui::TextEdit::singleline(&mut self.filter)
+                            .id(filter_id)
                             .hint_text("Find a file or folder…")
                             .margin(margin)
-                            .desired_width(text_width),
-                    );
+                            .desired_width(text_width)
+                            .show(ui);
+                    if filter.response.contains_pointer() && ui.input(|input| input.pointer.secondary_pressed()) {
+                        filter.state.cursor.set_char_range(previous_cursor);
+                        filter.state.clone().store(ui.ctx(), filter_id);
+                    }
+                    selection::text_edit_menu(&mut filter, &self.filter, true);
                     if ui.add_enabled(!self.filter.is_empty(), egui::Button::new("×").small().min_size(Vec2::new(clear_width, 20.0)))
                             .on_hover_text("Clear file filter")
                             .clicked()
@@ -461,6 +492,7 @@ impl Controller {
                     self.file_tree
                         .reveal(&self.review.files, index, &mut self.collapsed_folders);
                     self.selected = index;
+                    self.source_selection = SourceSelection::default();
                     self.diff_rows = rows(&self.review.files[index]);
                     self.tab = Tab::Source;
                     if navigate.is_some() {
@@ -479,7 +511,11 @@ impl Controller {
             return;
         };
         ui.horizontal(|ui| {
-            ui.label(RichText::new(visible_path(&file.path)).strong().monospace());
+            copyable_label(
+                ui,
+                RichText::new(visible_path(&file.path)).strong().monospace(),
+                &file.path,
+            );
             ui.label(RichText::new(format!("+{}", file.additions)).color(GREEN));
             ui.label(RichText::new(format!("−{}", file.deletions)).color(RED));
         });
@@ -507,7 +543,7 @@ impl Controller {
         }
         ui.horizontal(|ui| {
             ui.label(
-                RichText::new("Read-only comparison · Includes unchanged context")
+                RichText::new("Drag to select · Right-click to copy · Ctrl+C")
                     .size(12.0)
                     .color(MUTED),
             );
@@ -549,7 +585,18 @@ impl Controller {
             .max()
             .unwrap_or(0);
         let column_width = (available / 2.0).max(max_chars as f32 * 7.9 + 75.0);
-        egui::ScrollArea::both()
+        // Keep selection focus alive when its starting row scrolls out of the virtual list.
+        let focus_ids = [0, 1].map(|side| ui.id().with(("source-selection", self.selected, side)));
+        for id in focus_ids {
+            ui.interact(
+                egui::Rect::NOTHING,
+                id,
+                egui::Sense::focusable_noninteractive(),
+            );
+        }
+        self.source_selection
+            .keyboard(ui, [&file.before, &file.after]);
+        let scroll = egui::ScrollArea::both()
             .id_salt(("source", self.selected))
             .auto_shrink([false, false])
             .show_rows(ui, 23.0, self.diff_rows.len(), |ui, range| {
@@ -558,11 +605,59 @@ impl Controller {
                     let row = &self.diff_rows[index];
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 0.0;
-                        code_cell(ui, row.left.as_ref(), column_width);
-                        code_cell(ui, row.right.as_ref(), column_width);
+                        ui.push_id((self.selected, index, 0), |ui| {
+                            code_cell(
+                                ui,
+                                row.left.as_ref(),
+                                column_width,
+                                0,
+                                focus_ids[0],
+                                file,
+                                &mut self.source_selection,
+                            );
+                        });
+                        ui.push_id((self.selected, index, 1), |ui| {
+                            code_cell(
+                                ui,
+                                row.right.as_ref(),
+                                column_width,
+                                1,
+                                focus_ids[1],
+                                file,
+                                &mut self.source_selection,
+                            );
+                        });
                     });
                 }
             });
+        if self.source_selection.dragging
+            && let Some(pointer) = ui.input(|input| input.pointer.interact_pos())
+            && pointer.x >= scroll.inner_rect.left()
+            && pointer.x <= scroll.inner_rect.right()
+        {
+            let edge = 18.0;
+            let delta = if pointer.y < scroll.inner_rect.top() + edge {
+                pointer.y - (scroll.inner_rect.top() + edge)
+            } else if pointer.y > scroll.inner_rect.bottom() - edge {
+                pointer.y - (scroll.inner_rect.bottom() - edge)
+            } else {
+                0.0
+            };
+            if delta != 0.0 {
+                let mut state = scroll.state;
+                let elapsed = ui.input(|input| input.stable_dt).min(0.05);
+                state.offset.y = (state.offset.y + delta.clamp(-60.0, 60.0) * elapsed * 12.0)
+                    .clamp(
+                        0.0,
+                        (scroll.content_size.y - scroll.inner_rect.height()).max(0.0),
+                    );
+                state.store(ui.ctx(), scroll.id);
+                ui.ctx().request_repaint();
+            }
+        }
+        if !ui.input(|input| input.pointer.primary_down()) {
+            self.source_selection.dragging = false;
+        }
     }
 
     fn plan(&self, ui: &mut egui::Ui) {
@@ -581,7 +676,8 @@ impl Controller {
             for (key, label) in [("changed", "Changed VMs"), ("stop", "VMs stopped, in order"), ("start", "VMs started, in order"), ("retire", "Retired VMs"), ("restore", "Restored VMs")] {
                 ui.label(RichText::new(label).strong());
                 let names = plan.get(key).and_then(|value| value.as_array()).map(|items| items.iter().map(|value| value.as_str().unwrap_or("[unexpected entry]")).collect::<Vec<_>>().join(", "));
-                ui.label(RichText::new(names.filter(|names| !names.is_empty()).unwrap_or_else(|| if plan.get(key).is_some() { "None" } else { "Not reported" }.into())).color(MUTED));
+                let names = names.filter(|names| !names.is_empty()).unwrap_or_else(|| if plan.get(key).is_some() { "None" } else { "Not reported" }.into());
+                copyable_label(ui, RichText::new(&names).color(MUTED), &names);
                 ui.add_space(6.0);
             }
             ui.separator();
@@ -593,7 +689,7 @@ impl Controller {
             ui.label(RichText::new(reboot).color(ACCENT));
             ui.add_space(12.0);
             egui::CollapsingHeader::new("Complete supplied plan").default_open(true).show(ui, |ui| {
-                ui.add(egui::Label::new(RichText::new(serde_json::to_string_pretty(self.review.deployment.as_ref().unwrap()).unwrap()).monospace().size(12.0)).selectable(true));
+                read_only_text(ui, "supplied-plan", &serde_json::to_string_pretty(self.review.deployment.as_ref().unwrap()).unwrap(), true);
             });
         });
     }
@@ -625,19 +721,17 @@ impl Controller {
                     ),
                 ] {
                     ui.label(RichText::new(label).strong());
-                    ui.add(egui::Label::new(RichText::new(value).monospace()).selectable(true));
+                    read_only_text(ui, label, value, false);
                     ui.add_space(6.0);
                 }
                 ui.separator();
                 if let Some(receipt) = &self.receipt {
                     ui.label(RichText::new("Local decision").color(ACCENT).strong());
-                    ui.add(
-                        egui::Label::new(
-                            RichText::new(serde_json::to_string_pretty(receipt).unwrap())
-                                .monospace()
-                                .size(12.0),
-                        )
-                        .selectable(true),
+                    read_only_text(
+                        ui,
+                        "local-decision",
+                        &serde_json::to_string_pretty(receipt).unwrap(),
+                        true,
                     );
                 } else {
                     ui.label("Awaiting your review decision.");
@@ -974,6 +1068,30 @@ fn tree_row(
             )
         }
     };
+    response.context_menu(|ui| {
+        if ui.button("Copy path").clicked() {
+            ui.ctx().copy_text(row.path.clone());
+            ui.close();
+        }
+        if let RowKind::File { index } = row.kind {
+            if ui.button("Copy filename").clicked() {
+                ui.ctx()
+                    .copy_text(row.path.rsplit('/').next().unwrap_or(&row.path).to_owned());
+                ui.close();
+            }
+            if files[index].opaque.is_none() {
+                ui.separator();
+                if ui.button("Copy baseline").clicked() {
+                    ui.ctx().copy_text(files[index].before.clone());
+                    ui.close();
+                }
+                if ui.button("Copy candidate").clicked() {
+                    ui.ctx().copy_text(files[index].after.clone());
+                    ui.close();
+                }
+            }
+        }
+    });
     response.on_hover_text(tooltip)
 }
 
@@ -991,8 +1109,17 @@ fn compact_count(count: usize) -> String {
     }
 }
 
-fn code_cell(ui: &mut egui::Ui, line: Option<&CodeLine>, width: f32) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 23.0), egui::Sense::hover());
+fn code_cell(
+    ui: &mut egui::Ui,
+    line: Option<&CodeLine>,
+    width: f32,
+    side: usize,
+    focus_id: egui::Id,
+    file: &FileChange,
+    selection: &mut SourceSelection,
+) {
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(width, 23.0), egui::Sense::click_and_drag());
     let background = match line.map(|line| line.kind) {
         Some(ChangeTag::Delete) => Color32::from_rgb(58, 31, 40),
         Some(ChangeTag::Insert) => Color32::from_rgb(23, 49, 40),
@@ -1040,12 +1167,119 @@ fn code_cell(ui: &mut egui::Ui, line: Option<&CodeLine>, width: f32) {
             },
         );
     }
-    let galley = ui.painter().layout_job(job);
-    ui.painter().galley(
-        rect.left_top() + Vec2::new(52.0, 4.0),
-        galley,
-        Color32::WHITE,
-    );
+    let mut galley = ui.painter().layout_job(job);
+    let origin = rect.left_top() + Vec2::new(52.0, 4.0);
+    let source = if side == 0 { &file.before } else { &file.after };
+    let raw_line = source[line.source_start..].split('\n').next().unwrap_or("");
+    let pointer = ui.input(|input| input.pointer.interact_pos());
+    let pointer_byte = pointer.map(|position| {
+        line.source_start
+            + selection::source_byte(raw_line, galley.cursor_from_pos(position - origin).index)
+    });
+    let at_vertical_edge = pointer.is_some_and(|position| {
+        position.x >= rect.left()
+            && position.x <= rect.right()
+            && ((position.y < ui.clip_rect().top()
+                && rect.contains(egui::pos2(position.x, ui.clip_rect().top())))
+                || (position.y > ui.clip_rect().bottom()
+                    && rect.contains(egui::pos2(position.x, ui.clip_rect().bottom()))))
+    });
+    if response.contains_pointer() || selection.dragging && at_vertical_edge {
+        if response.contains_pointer() && ui.input(|input| input.pointer.primary_pressed()) {
+            let byte = pointer_byte.unwrap_or(line.source_start);
+            if !ui.input(|input| input.modifiers.shift) || selection.side != side {
+                selection.anchor = byte;
+            }
+            selection.side = side;
+            selection.cursor = byte;
+            selection.dragging = true;
+            selection.focus = Some(focus_id);
+            ui.memory_mut(|memory| memory.request_focus(focus_id));
+        }
+        if selection.dragging && selection.side == side {
+            selection.cursor = pointer_byte.unwrap_or(selection.cursor);
+            ui.ctx().request_repaint();
+        }
+    }
+    if response.triple_clicked() {
+        selection.anchor = line.source_start;
+        selection.cursor = (line.source_start + raw_line.len() + 1).min(source.len());
+    } else if response.double_clicked() {
+        let range = selection::word_range(source, pointer_byte.unwrap_or(line.source_start));
+        selection.anchor = range.start;
+        selection.cursor = range.end;
+    }
+    response.clone().on_hover_cursor(egui::CursorIcon::Text);
+    response.context_menu(|ui| {
+        let selected = selection.text(source, side);
+        if ui
+            .add_enabled(selected.is_some(), egui::Button::new("Copy selection"))
+            .clicked()
+        {
+            ui.ctx().copy_text(selected.unwrap().to_owned());
+            ui.close();
+        }
+        if ui.button("Copy line").clicked() {
+            ui.ctx().copy_text(raw_line.to_owned());
+            ui.close();
+        }
+        if ui
+            .button(if side == 0 {
+                "Copy baseline"
+            } else {
+                "Copy candidate"
+            })
+            .clicked()
+        {
+            ui.ctx().copy_text(source.clone());
+            ui.close();
+        }
+        if ui.button("Select all").clicked() {
+            selection.select_all(source, side, focus_id);
+            ui.memory_mut(|memory| memory.request_focus(focus_id));
+            ui.close();
+        }
+        ui.separator();
+        if ui.button("Copy file path").clicked() {
+            ui.ctx().copy_text(file.path.clone());
+            ui.close();
+        }
+    });
+    if selection.side == side {
+        let range = selection.range();
+        let start = range
+            .start
+            .saturating_sub(line.source_start)
+            .min(raw_line.len());
+        let end = range
+            .end
+            .saturating_sub(line.source_start)
+            .min(raw_line.len());
+        if start < end {
+            egui::text_selection::visuals::paint_text_selection(
+                &mut galley,
+                ui.visuals(),
+                &egui::text::CCursorRange::two(
+                    egui::text::CCursor::new(selection::displayed_cursor(raw_line, start)),
+                    egui::text::CCursor::new(selection::displayed_cursor(raw_line, end)),
+                ),
+                None,
+            );
+        }
+        if range.start <= line.source_start + raw_line.len()
+            && range.end > line.source_start + raw_line.len()
+        {
+            ui.painter().rect_filled(
+                egui::Rect::from_min_size(
+                    origin + Vec2::new(galley.size().x, 0.0),
+                    Vec2::new(7.9, galley.size().y.max(13.0)),
+                ),
+                0.0,
+                ui.visuals().selection.bg_fill,
+            );
+        }
+    }
+    ui.painter().galley(origin, galley, Color32::WHITE);
 }
 
 fn short(value: &str) -> &str {
