@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/airlock-logo-and-text-dark.svg">
-    <img alt="AirlockOS" src="docs/assets/airlock-logo-and-text-light.svg" height="64">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/airlock-wordmark-thin-red-dark.svg">
+    <img alt="AirlockOS" src="docs/assets/airlock-wordmark-thin-red-light.svg" height="64">
   </picture>
 </p>
 
