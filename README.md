@@ -18,9 +18,6 @@ privileged control VM.
 
 [![VM layout: Xen runs dom0 and the system and user VMs. Dom0 manages the shared Nix store and provides read-only closure views to the other VMs.](docs/assets/system-overview.svg)](docs/assets/system-overview.svg)
 
-System rollback restores software and configuration; private data remains at
-its current state.
-
 ## Documentation
 
 - [Contributor setup](CONTRIBUTING.md).
