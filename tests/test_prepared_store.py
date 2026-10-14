@@ -16,6 +16,11 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_SPEC = importlib.util.spec_from_file_location(
+    "prepared_runtime", ROOT / "lifecycle/image/tools/prepare-runtime.py"
+)
+runtime = importlib.util.module_from_spec(RUNTIME_SPEC)
+RUNTIME_SPEC.loader.exec_module(runtime)
 ENGINE_SOURCE = (
     ROOT / "airlock-machine/lifecycle/runtime/tools/pkgs/airlock-qubes-storage/src"
 )
@@ -28,6 +33,55 @@ from airlock_qubes_storage._engine import (  # noqa: E402
     prepared,
     views,
 )
+
+
+@pytest.fixture
+def label_app():
+    labels = {i: SimpleNamespace(index=i, name=f"default-{i}", color="0x000000")
+              for i in range(1, 9)}
+
+    def get_label(name):
+        for label in labels.values():
+            if label.name == name:
+                return label
+        raise KeyError(name)
+
+    return SimpleNamespace(labels=labels, get_label=get_label)
+
+
+def custom_label_domain(color="0x6b7a3d"):
+    return {"label": "khaki", "features": {"airlock-label-color": color}}
+
+
+def label_factory(index, color, name):
+    return SimpleNamespace(index=index, color=color, name=name)
+
+
+def test_prepared_labels_preserve_defaults_and_deduplicate_declared_colors(label_app):
+    defaults = dict(label_app.labels)
+    domains = {"usr-home": custom_label_domain(), "another": custom_label_domain()}
+    runtime.register_custom_labels(label_app, domains, label_factory, 8)
+    runtime.register_custom_labels(label_app, domains, label_factory, 8)
+    assert len(label_app.labels) == 9
+    assert all(label_app.labels[index] is label for index, label in defaults.items())
+    label = label_app.get_label("khaki")
+    assert label.index == 9 and label.color == "0x6b7a3d"
+
+
+@pytest.mark.parametrize("color", ["not-a-color", "#6b7a3d", 42])
+def test_prepared_labels_reject_invalid_declarations(label_app, color):
+    with pytest.raises(ValueError, match="invalid managed custom label"):
+        runtime.register_custom_labels(label_app, {"usr-home": custom_label_domain(color)},
+                                       label_factory, 8)
+    assert len(label_app.labels) == 8
+
+
+def test_prepared_labels_reject_conflicting_existing_color(label_app):
+    label_app.labels[9] = label_factory(9, "0xffffff", "khaki")
+    with pytest.raises(ValueError, match="colour differs"):
+        runtime.register_custom_labels(label_app, {"usr-home": custom_label_domain()},
+                                       label_factory, 8)
+    assert label_app.labels[9].color == "0xffffff"
 
 
 def test_incremental_reuse_needs_no_source_or_payload_read(seed, monkeypatch):
@@ -1207,7 +1261,8 @@ def test_prepared_usb_runtime_closure():
 
 
 @pytest.mark.nix
-def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs):
+@pytest.mark.parametrize("label", ["red", "khaki"])
+def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs, label):
     from xml.etree import ElementTree as ET
 
     specs, _, _ = seed_inputs
@@ -1229,7 +1284,7 @@ def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs):
         "domains": {
             "sys-gui": {
                 "class": "StandaloneVM",
-                "label": "red",
+                "label": label,
                 "netvm": None,
                 "prefs": {"autostart": False, "guivm": None, "virt_mode": "hvm"},
                 "features": {"qrexec": True},
@@ -1246,13 +1301,15 @@ def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs):
             }
         },
     }
+    if label == "khaki":
+        topology["domains"]["sys-gui"]["features"]["airlock-label-color"] = "0x6b7a3d"
     config = tmp_path / "topology.json"
     config.write_text(json.dumps(topology))
     output = tmp_path / "runtime"
     command = [
-        "nix",
+        str(ROOT / "lifecycle/misc/tools/scripts/airlock-nix.sh"),
         "shell",
-        "path:.#airlock-prepare-runtime",
+        ".#airlock-prepare-runtime",
         "-c",
         "airlock-prepare-runtime",
         str(config),
@@ -1270,6 +1327,11 @@ def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs):
         for vm in tree.findall("./domains/domain")
         if vm.findtext("./properties/property[@name='name']") == "sys-gui"
     )
+    label_ref = guest.findtext("./properties/property[@name='label']")
+    declared = next(item for item in tree.findall("./labels/label") if item.text == label)
+    assert label_ref in (declared.text, declared.attrib["id"])
+    if label == "khaki":
+        assert declared.attrib["color"] == "0x6b7a3d"
     assert guest.findtext("./features/feature[@name='airlock-root-source']") == str(
         root_image
     )

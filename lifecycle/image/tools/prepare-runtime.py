@@ -5,6 +5,7 @@ import asyncio
 import importlib.util
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import uuid
@@ -21,6 +22,27 @@ def feature(value):
     if isinstance(value, bool):
         return "1" if value else ""
     return str(value)
+
+
+def register_custom_labels(app, domains, label_factory, max_default_label):
+    """Match setup-config's managed labels using Qubes' offline label API."""
+    for _, domain in sorted(domains.items()):
+        color = domain.get("features", {}).get("airlock-label-color")
+        if not color:
+            continue
+        name = domain.get("label", "green")
+        if name != "khaki" or not isinstance(color, str) or not re.fullmatch(
+            r"0x[0-9a-fA-F]{6}", color
+        ):
+            raise ValueError("invalid managed custom label")
+        try:
+            existing = app.get_label(name)
+        except KeyError:
+            index = max(max_default_label, *app.labels.keys()) + 1
+            app.labels[index] = label_factory(index, color, name)
+        else:
+            if existing.color.lower().replace("#", "0x") != color.lower():
+                raise ValueError("existing custom label colour differs; migration required")
 
 
 def kernelopts(domain):
@@ -146,6 +168,9 @@ async def prepare(topology, physical_pool, output, storage_helper):
     app.events_enabled = False
     app.default_kernel = ""
     app.default_template = None
+    register_custom_labels(
+        app, topology["domains"], qubes.Label, qubes.config.max_default_label
+    )
     app.pools["airlock-closure"] = ClosurePool(
         name="airlock-closure", root_dir=str(RUNTIME_POOL)
     )
@@ -258,6 +283,11 @@ async def prepare(topology, physical_pool, output, storage_helper):
     checked = qubes.Qubes(str(qubes_root / "qubes.xml"), offline_mode=True)
     for name, domain in topology["domains"].items():
         vm = checked.domains[name]
+        if vm.label.name != domain.get("label", "green"):
+            raise ValueError(f"label did not survive reload: {name}")
+        color = domain.get("features", {}).get("airlock-label-color")
+        if color and vm.label.color.lower().replace("#", "0x") != color.lower():
+            raise ValueError(f"custom label colour did not survive reload: {name}")
         helper.validate_native_volume_isolation(checked, vm)
         if vm.features["airlock-root-source"] != domain["backend"]["root"]["source"]:
             raise ValueError(f"root identity did not survive reload: {name}")
