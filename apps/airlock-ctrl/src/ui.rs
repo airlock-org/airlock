@@ -113,7 +113,6 @@ pub struct Controller {
     scroll_to_selection: bool,
     diff_rows: Vec<DiffRow>,
     source_selection: SourceSelection,
-    reviewed: bool,
     confirm: Option<Decision>,
     receipt: Option<serde_json::Value>,
     notice: Option<String>,
@@ -154,7 +153,6 @@ impl Controller {
             scroll_to_selection: false,
             diff_rows,
             source_selection: SourceSelection::default(),
-            reviewed: false,
             confirm: None,
             receipt: None,
             notice: None,
@@ -210,14 +208,9 @@ impl Controller {
                     ui.label(RichText::new(reason).color(MUTED));
                 }
                 ui.horizontal(|ui| {
-                    ui.checkbox(
-                        &mut self.reviewed,
-                        "I reviewed the source and deployment plan",
-                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let enabled = self.receipt.is_none()
-                            && self.reviewed
-                            && self.review.approval_blocker().is_none();
+                        let enabled =
+                            self.receipt.is_none() && self.review.approval_blocker().is_none();
                         let label = if self.review.mode == "demo" {
                             "Approve preview"
                         } else {

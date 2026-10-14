@@ -73,8 +73,8 @@ retirement, restoration, `host_reboot_required` and the complete supplied JSON,
 including policy/device details that are not covered by summary fields.
 An absent plan allows source review and rejection but disables approval.
 
-Before confirming a decision, review the source and effects, then select the
-review checkbox. Without `--decisions-dir`, a local decision stays in memory.
+Review the source and effects, then click Approve or Reject to open the decision
+confirmation. Without `--decisions-dir`, a local decision stays in memory.
 With it, the app atomically writes a private receipt named after the review's
 SHA-256 fingerprint; existing decisions cannot be overwritten. The fingerprint
 binds source commits, blob identities, file modes, displayed content, lock hash
