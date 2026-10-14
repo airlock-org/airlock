@@ -74,6 +74,10 @@ Known optional domain arrays are also checked. Supplied revision and lock
 identities must match the resolved candidate. The UI shows restart order,
 retirement, restoration, `host_reboot_required` and the complete supplied JSON,
 including policy/device details that are not covered by summary fields.
+The plan view groups changed/retired/restored VMs into cards, displays stop/start
+operations as numbered sequences, and separates host activation status. On
+narrow windows the operation cards stack. Expand "Complete supplied plan · JSON"
+below the summary to inspect or copy the full input.
 An absent plan allows source review and rejection but disables approval.
 
 Review the source and effects, then click Approve or Reject to open the decision

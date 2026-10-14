@@ -642,7 +642,7 @@ impl Controller {
     }
 
     fn plan(&self, ui: &mut egui::Ui) {
-        egui::ScrollArea::vertical().id_salt("plan").show(ui, |ui| {
+        egui::ScrollArea::vertical().id_salt("plan").auto_shrink([false, false]).show(ui, |ui| {
             ui.heading("Deployment effects");
             if self.review.mode == "demo" {
                 ui.label(RichText::new("Example plan for this preview.").color(ACCENT));
@@ -651,25 +651,57 @@ impl Controller {
             }
             ui.add_space(14.0);
             let Some(plan) = self.review.plan() else {
-                ui.label("No deployment plan loaded. Source changes alone do not establish which VMs will restart.");
+                plan_frame(ui, 70.0, |ui| {
+                    ui.label(RichText::new("No deployment plan loaded").strong());
+                    ui.label(RichText::new("Source changes alone do not establish which VMs will restart.").color(MUTED));
+                });
                 return;
             };
-            for (key, label) in [("changed", "Changed VMs"), ("stop", "VMs stopped, in order"), ("start", "VMs started, in order"), ("retire", "Retired VMs"), ("restore", "Restored VMs")] {
-                ui.label(RichText::new(label).strong());
-                let names = plan.get(key).and_then(|value| value.as_array()).map(|items| items.iter().map(|value| value.as_str().unwrap_or("[unexpected entry]")).collect::<Vec<_>>().join(", "));
-                let names = names.filter(|names| !names.is_empty()).unwrap_or_else(|| if plan.get(key).is_some() { "None" } else { "Not reported" }.into());
-                copyable_label(ui, RichText::new(&names).color(MUTED), &names);
-                ui.add_space(6.0);
+            if ui.available_width() >= 760.0 {
+                ui.columns(3, |columns| {
+                    plan_card(&mut columns[0], plan, "changed", "Changed VMs", false, ACCENT, 56.0);
+                    plan_card(&mut columns[1], plan, "retire", "Retired VMs", false, MUTED, 56.0);
+                    plan_card(&mut columns[2], plan, "restore", "Restored VMs", false, MUTED, 56.0);
+                });
+            } else {
+                plan_card(ui, plan, "changed", "Changed VMs", false, ACCENT, 56.0);
+                ui.columns(2, |columns| {
+                    plan_card(&mut columns[0], plan, "retire", "Retired VMs", false, MUTED, 56.0);
+                    plan_card(&mut columns[1], plan, "restore", "Restored VMs", false, MUTED, 56.0);
+                });
             }
-            ui.separator();
-            let reboot = match plan.get("host_reboot_required").and_then(|value| value.as_bool()) {
-                Some(true) => "Host changed · Reboot required for host activation",
-                Some(false) => "No host reboot required according to the supplied plan",
-                None => "Host reboot requirement is not reported in this plan",
-            };
-            ui.label(RichText::new(reboot).color(ACCENT));
-            ui.add_space(12.0);
-            egui::CollapsingHeader::new("Complete supplied plan").default_open(true).show(ui, |ui| {
+            ui.add_space(8.0);
+            ui.label(RichText::new("VM operations").strong().size(16.0));
+            ui.label(RichText::new("Stop and start sequences, in the supplied order.").color(MUTED).size(12.0));
+            let operation_height = 50.0 + ["stop", "start"].into_iter().map(|key| plan.get(key).and_then(|value| value.as_array()).map_or(0, Vec::len)).max().unwrap_or(0) as f32 * 29.0;
+            if ui.available_width() >= 600.0 {
+                ui.columns(2, |columns| {
+                    plan_card(&mut columns[0], plan, "stop", "Stop VMs", true, RED, operation_height);
+                    plan_card(&mut columns[1], plan, "start", "Start VMs", true, GREEN, operation_height);
+                });
+            } else {
+                for (key, title, ordered, color, height) in [
+                    ("stop", "Stop VMs", true, RED, operation_height),
+                    ("start", "Start VMs", true, GREEN, operation_height),
+                ] {
+                    plan_card(ui, plan, key, title, ordered, color, height);
+                }
+            }
+            ui.add_space(8.0);
+            plan_frame(ui, 52.0, |ui| {
+                ui.label(RichText::new("Host activation").strong());
+                let (status, color) = match plan.get("host_reboot_required").and_then(|value| value.as_bool()) {
+                    Some(true) => ("Reboot required for host activation", ACCENT),
+                    Some(false) => ("No reboot required", GREEN),
+                    None => ("Reboot requirement not reported", MUTED),
+                };
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new(status).color(color).strong());
+                    ui.label(RichText::new("According to the supplied plan").color(MUTED).size(12.0));
+                });
+            });
+            ui.add_space(8.0);
+            egui::CollapsingHeader::new("Complete supplied plan · JSON").default_open(false).show(ui, |ui| {
                 read_only_text(ui, "supplied-plan", &serde_json::to_string_pretty(self.review.deployment.as_ref().unwrap()).unwrap(), true);
             });
         });
@@ -1088,6 +1120,91 @@ fn compact_count(count: usize) -> String {
     } else {
         count.to_string()
     }
+}
+
+fn plan_frame(ui: &mut egui::Ui, minimum_height: f32, content: impl FnOnce(&mut egui::Ui)) {
+    let width = ui.available_width();
+    let frame = egui::Frame::new()
+        .fill(PANEL)
+        .stroke(Stroke::new(1.0_f32, BORDER))
+        .inner_margin(14.0)
+        .corner_radius(6.0);
+    frame.show(ui, |ui| {
+        ui.set_width((width - frame.total_margin().sum().x).max(0.0));
+        ui.set_min_height(minimum_height);
+        content(ui);
+    });
+}
+
+fn plan_card(
+    ui: &mut egui::Ui,
+    plan: &serde_json::Value,
+    key: &str,
+    title: &str,
+    ordered: bool,
+    color: Color32,
+    minimum_height: f32,
+) {
+    let names = plan.get(key).and_then(|value| value.as_array());
+    plan_frame(ui, minimum_height, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(title).strong().color(color));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if let Some(names) = names {
+                    ui.label(
+                        RichText::new(format!(
+                            "{} VM{}",
+                            names.len(),
+                            if names.len() == 1 { "" } else { "s" }
+                        ))
+                        .color(MUTED)
+                        .size(12.0),
+                    );
+                }
+            });
+        });
+        let Some(names) = names else {
+            ui.label(RichText::new("Not reported").color(MUTED));
+            return;
+        };
+        if names.is_empty() {
+            ui.label(RichText::new("None").color(MUTED));
+        } else if ordered {
+            for (index, name) in names.iter().enumerate() {
+                let name = name.as_str().unwrap_or("[unexpected entry]");
+                ui.horizontal(|ui| {
+                    egui::Frame::new()
+                        .fill(BACKGROUND)
+                        .stroke(Stroke::new(1.0_f32, BORDER))
+                        .corner_radius(4.0)
+                        .inner_margin(egui::Margin::symmetric(6, 3))
+                        .show(ui, |ui| {
+                            ui.label(
+                                RichText::new(format!("{:02}", index + 1))
+                                    .monospace()
+                                    .size(12.0)
+                                    .color(color),
+                            );
+                        });
+                    copyable_label(ui, RichText::new(name).monospace(), name);
+                });
+            }
+        } else {
+            ui.horizontal_wrapped(|ui| {
+                for name in names {
+                    let name = name.as_str().unwrap_or("[unexpected entry]");
+                    egui::Frame::new()
+                        .fill(BACKGROUND)
+                        .stroke(Stroke::new(1.0_f32, BORDER))
+                        .corner_radius(4.0)
+                        .inner_margin(egui::Margin::symmetric(8, 4))
+                        .show(ui, |ui| {
+                            copyable_label(ui, RichText::new(name).monospace().size(12.0), name);
+                        });
+                }
+            });
+        }
+    });
 }
 
 fn column_header(
