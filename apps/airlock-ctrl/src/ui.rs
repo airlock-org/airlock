@@ -212,15 +212,10 @@ impl Controller {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let enabled =
                             self.receipt.is_none() && self.review.approval_blocker().is_none();
-                        let label = if self.review.mode == "demo" {
-                            "Approve preview"
-                        } else {
-                            "Approve local review"
-                        };
                         if ui
                             .add_enabled(
                                 enabled,
-                                egui::Button::new(RichText::new(label).color(BUTTON_TEXT))
+                                egui::Button::new(RichText::new("Approve").color(BUTTON_TEXT))
                                     .fill(ACCENT),
                             )
                             .clicked()
