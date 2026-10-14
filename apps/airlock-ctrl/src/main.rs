@@ -1,5 +1,6 @@
 mod approval;
 mod branding;
+mod diff_context;
 mod effects;
 mod file_tree;
 mod icons;

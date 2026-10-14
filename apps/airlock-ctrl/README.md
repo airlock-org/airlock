@@ -26,6 +26,15 @@ its example decisions stay in memory. No VM, machine service or deployment
 client is contacted. You can also run the built binary with `--demo` where
 the GUI libraries are available.
 
+The example opens a roughly 200-line desktop configuration with three separated
+edits, leading/trailing context and large unchanged gaps. Other files demonstrate
+an insertion, a replacement, a whole-file addition and a whole-file deletion.
+Click an unchanged-line row to reveal more context, or its expand icon to show
+the complete section. Use the arrows above the diff or F7 / Shift+F7 to move
+through every changed line and across files. Try expanding a gap, switching
+files and returning: that file's expanded context is preserved. The toolbar's
+expand/collapse icons show the entire file or reset to three lines of context.
+
 ## Review committed source
 
 ```sh
@@ -82,7 +91,19 @@ Each available value has a copy icon that copies the complete value
 and briefly changes to a green checkmark. Missing values have disabled copy
 controls. Cards stack on smaller windows.
 
-Source diffs use continuous 22-pixel rows with centred line numbers and change
+Source diffs initially show each changed line and three lines of surrounding
+context. Nearby sections merge; omitted ranges show their unchanged-line count.
+Clicking a gap reveals up to 20 more lines next to each surrounding change,
+and the gap's expand icon reveals its entire section. Leading/trailing gaps
+expand toward the nearest change. Expanded context is saved per file until
+reset. The toolbar provides previous/next changed-line navigation, a review-wide
+counter and show-entire-file/reset-context controls. F7 and Shift+F7 move forward
+and backward except while editing the file search. Navigation crosses files,
+reveals the destination in the tree, clears an obstructing filter and scrolls
+to an outlined change. An aligned deletion/insertion pair is one navigation row;
+metadata-only changes remain accessible through the file tree.
+
+Code uses continuous 22-pixel rows with centred line numbers and change
 markers. Syntax highlighting uses syntect with bat's syntax definitions (via
 two-face), including Nix and JSON for `flake.lock`. Each side is highlighted
 independently, preserving multiline string/comment state through diff alignment
@@ -110,7 +131,9 @@ explains the failure rather than replacing bytes or copying a partial review.
 Each column's `⋯` menu offers selection, file-content and path copy actions.
 Copied source preserves the original tabs, Unicode and newlines and excludes
 line numbers, the other column and empty diff alignment rows. The source stays
-read-only. File-tree rows have path/filename and whole-file copy menus; plan
+read-only. Folding does not change source offsets or the copied review/patch;
+selections spanning a folded gap include the original source between endpoints.
+File-tree rows have path/filename and whole-file copy menus; plan
 JSON and review details support text selection and right-click copy controls.
 The editable file search also provides cut and paste in its context menu.
 

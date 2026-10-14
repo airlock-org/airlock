@@ -190,6 +190,22 @@ def test_demo_is_explicitly_local_and_has_no_repository(ctrl):
     assert review["deployment"]["example"] is True
 
 
+def test_demo_exercises_separated_changes_large_gaps_and_added_deleted_files(ctrl):
+    review = json.loads(run(ctrl, "--demo", "--inspect").stdout)
+    files = review["files"]
+    assert [file["path"] for file in files] == sorted(file["path"] for file in files)
+    desktop = files[0]
+    assert len(desktop["before"].splitlines()) > 190
+    before, after = desktop["before"], desktop["after"]
+    assert "firefox" in before and "keepassxc" in after
+    assert 'primary-color = "#10202b";' in after
+    assert 'custom-font = "Monospace 12";' in after
+    patch = run(ctrl, "--demo", "--print-patch").stdout
+    desktop_patch = patch.split("diff --git ")[1]
+    assert desktop_patch.count("\n@@ ") == 3
+    assert {file["status"] for file in files} >= {"Added", "Deleted", "Modified"}
+
+
 def test_review_uses_committed_blobs_and_includes_all_changed_files(ctrl, source):
     repo, base, candidate, plan = source
     (repo / "domain.nix").write_text("uncommitted and must not appear\n")

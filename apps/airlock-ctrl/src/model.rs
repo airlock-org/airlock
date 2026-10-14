@@ -487,9 +487,19 @@ impl Review {
     pub fn demo() -> Self {
         let examples = [
             (
-                "configuration/domains/usr-home.nix",
-                "{ pkgs, ... }: {\n  label = \"green\";\n  netvm = \"sys-firewall\";\n  packages = with pkgs; [\n    firefox\n  ];\n}\n",
-                "{ pkgs, ... }: {\n  label = \"green\";\n  netvm = \"sys-firewall\";\n  packages = with pkgs; [\n    firefox\n    keepassxc\n  ];\n}\n",
+                "configuration/desktop/usr-home.nix",
+                include_str!("../examples/diff-context/usr-home.before.nix"),
+                include_str!("../examples/diff-context/usr-home.after.nix"),
+            ),
+            (
+                "configuration/domains/usr-media.nix",
+                "",
+                "{ pkgs, ... }: {\n  label = \"purple\";\n  netvm = \"sys-firewall\";\n  packages = [ pkgs.vlc ];\n}\n",
+            ),
+            (
+                "configuration/legacy-browser.nix",
+                "{ pkgs, ... }: {\n  packages = [ pkgs.firefox ];\n  defaultBrowser = \"firefox\";\n}\n",
+                "",
             ),
             (
                 "configuration/domains/sys-ctrl.nix",
@@ -502,7 +512,7 @@ impl Review {
                 "{\n  rules = [\n    \"airlock.Ctrl.MachineControl + sys-ctrl dom0 allow\"\n    \"qubes.OpenURL * usr-home @dispvm ask\"\n  ];\n}\n",
             ),
         ];
-        let files = examples
+        let mut files: Vec<_> = examples
             .into_iter()
             .map(|(path, before, after)| {
                 let old = Entry {
@@ -515,14 +525,15 @@ impl Review {
                 };
                 change(
                     path.into(),
-                    Some(&old),
-                    Some(&new),
+                    (!before.is_empty()).then_some(&old),
+                    (!after.is_empty()).then_some(&new),
                     before.into(),
                     after.into(),
                     None,
                 )
             })
             .collect();
+        files.sort_by(|left, right| left.path.cmp(&right.path));
         let mut review = Self {
             schema: "airlock.ctrl-local-review.v1",
             mode: "demo",
@@ -533,12 +544,13 @@ impl Review {
             },
             candidate: Revision {
                 commit: "example-candidate".into(),
-                subject: "Add a password manager and controller GUI · example".into(),
+                subject: "Update desktop applications, preferences and controller GUI · example"
+                    .into(),
             },
             lock_hash: None,
             files,
             deployment: Some(
-                json!({"plan": {"changed": ["sys-ctrl", "usr-home"], "stop": ["usr-home", "sys-ctrl"], "start": ["sys-ctrl", "usr-home"], "retire": [], "restore": [], "host_reboot_required": false}, "phase": "prepared", "example": true}),
+                json!({"plan": {"changed": ["sys-ctrl", "usr-home", "usr-media"], "stop": ["usr-home", "sys-ctrl"], "start": ["sys-ctrl", "usr-home", "usr-media"], "retire": [], "restore": [], "host_reboot_required": false}, "phase": "prepared", "example": true}),
             ),
             fingerprint: String::new(),
         };

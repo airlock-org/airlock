@@ -1,6 +1,7 @@
 use crate::{
     Decision,
     approval::Session,
+    diff_context::{ContextView, DisplayRow, adjacent_change},
     effects::{self, PlannedEffects, names_text},
     file_tree::{FileTree, RowKind, TreeRow},
     icons::{self, Icon},
@@ -29,7 +30,15 @@ struct DiffRow {
     right: Option<CodeLine>,
 }
 
-fn rows(file: &FileChange) -> Vec<DiffRow> {
+fn operations(file: &FileChange) -> Vec<similar::DiffOp> {
+    TextDiff::configure()
+        .timeout(std::time::Duration::from_millis(250))
+        .diff_lines(&file.before, &file.after)
+        .ops()
+        .to_vec()
+}
+
+fn rows(file: &FileChange, ops: &[similar::DiffOp]) -> Vec<DiffRow> {
     let starts = |source: &str| {
         let mut offset = 0;
         source
@@ -49,7 +58,7 @@ fn rows(file: &FileChange) -> Vec<DiffRow> {
         .timeout(std::time::Duration::from_millis(250))
         .diff_lines(&file.before, &file.after);
     let mut result = Vec::new();
-    for op in diff.ops() {
+    for op in ops {
         let mut deleted = Vec::new();
         let mut inserted = Vec::new();
         for change in diff.iter_inline_changes(op) {
@@ -122,10 +131,16 @@ pub struct Controller {
     selected: usize,
     tab: Tab,
     filter: String,
+    filter_has_focus: bool,
     file_tree: FileTree,
     collapsed_folders: BTreeSet<String>,
     scroll_to_selection: bool,
     diff_rows: Vec<DiffRow>,
+    diff_ops: Vec<Vec<similar::DiffOp>>,
+    context_views: Vec<ContextView>,
+    changes: Vec<(usize, usize)>,
+    active_change: Option<usize>,
+    scroll_to_change: Option<usize>,
     source_selection: SourceSelection,
     confirm: Option<Decision>,
     about_open: bool,
@@ -152,7 +167,36 @@ impl Controller {
             .clipboard_report()
             .map_err(|error| format!("{error:#}"));
         let effects = review.plan().map(PlannedEffects::from_plan);
-        let diff_rows = review.files.first().map(rows).unwrap_or_default();
+        let diff_ops: Vec<_> = review.files.iter().map(operations).collect();
+        let diff_rows = review
+            .files
+            .first()
+            .map(|file| rows(file, &diff_ops[0]))
+            .unwrap_or_default();
+        let mut changes = Vec::new();
+        let context_views = diff_ops
+            .iter()
+            .enumerate()
+            .map(|(file, ops)| {
+                let flags: Vec<_> = ops
+                    .iter()
+                    .flat_map(|op| {
+                        std::iter::repeat_n(
+                            op.tag() != similar::DiffTag::Equal,
+                            op.old_range().len().max(op.new_range().len()),
+                        )
+                    })
+                    .collect();
+                changes.extend(
+                    flags
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(row, changed)| changed.then_some((file, row))),
+                );
+                ContextView::new(flags)
+            })
+            .collect();
+        let active_change = changes.iter().position(|(file, _)| *file == 0);
         let file_tree = FileTree::new(&review.files);
         let icon = crate::branding::logo()
             .expect("the embedded logo was checked before opening the window");
@@ -172,10 +216,16 @@ impl Controller {
             selected: 0,
             tab: Tab::Source,
             filter: String::new(),
+            filter_has_focus: false,
             file_tree,
             collapsed_folders: BTreeSet::new(),
             scroll_to_selection: false,
             diff_rows,
+            diff_ops,
+            context_views,
+            changes,
+            active_change,
+            scroll_to_change: None,
             source_selection: SourceSelection::default(),
             confirm: None,
             about_open: false,
@@ -470,6 +520,7 @@ impl Controller {
                             .vertical_align(egui::Align::Center)
                             .desired_width(text_width)
                             .show(ui);
+                    self.filter_has_focus = filter.response.has_focus();
                     if filter.response.contains_pointer() && ui.input(|input| input.pointer.secondary_pressed()) {
                         filter.state.cursor.set_char_range(previous_cursor);
                         filter.state.clone().store(ui.ctx(), filter_id);
@@ -610,10 +661,7 @@ impl Controller {
                 if let Some(index) = select {
                     self.file_tree
                         .reveal(&self.review.files, index, &mut self.collapsed_folders);
-                    self.selected = index;
-                    self.source_selection = SourceSelection::default();
-                    self.diff_rows = rows(&self.review.files[index]);
-                    self.tab = Tab::Source;
+                    self.select_file(index);
                     if navigate.is_some() {
                         self.scroll_to_selection = true;
                         ctx.memory_mut(|memory| memory.request_focus(tree_id(&self.review.files[index].path)));
@@ -622,7 +670,79 @@ impl Controller {
             });
     }
 
+    fn select_file(&mut self, index: usize) {
+        if self.selected != index {
+            self.selected = index;
+            self.source_selection = SourceSelection::default();
+            self.diff_rows = rows(&self.review.files[index], &self.diff_ops[index]);
+        }
+        self.active_change = self.changes.iter().position(|(file, _)| *file == index);
+        self.scroll_to_change = None;
+        self.tab = Tab::Source;
+    }
+
+    fn navigate_change(&mut self, forward: bool) {
+        let Some(index) =
+            adjacent_change(&self.changes, self.active_change, self.selected, forward)
+        else {
+            return;
+        };
+        let (file, row) = self.changes[index];
+        if file != self.selected {
+            self.select_file(file);
+            // Navigation covers the complete review, including filtered files.
+            self.filter.clear();
+            self.file_tree
+                .reveal(&self.review.files, file, &mut self.collapsed_folders);
+            self.scroll_to_selection = true;
+        }
+        self.active_change = Some(index);
+        self.scroll_to_change = Some(row);
+    }
+
+    fn change_toolbar(&mut self, ui: &mut egui::Ui) {
+        icons::row(ui, |ui| {
+            let previous =
+                adjacent_change(&self.changes, self.active_change, self.selected, false).is_some();
+            let next =
+                adjacent_change(&self.changes, self.active_change, self.selected, true).is_some();
+            if icons::button(
+                ui,
+                Icon::Previous,
+                "Previous changed line (Shift+F7)",
+                previous,
+            )
+            .clicked()
+            {
+                self.navigate_change(false);
+            }
+            if icons::button(ui, Icon::Next, "Next changed line (F7)", next).clicked() {
+                self.navigate_change(true);
+            }
+            let counter = self.active_change.map_or_else(
+                || format!("{} changed lines", self.changes.len()),
+                |index| format!("Change {} of {}", index + 1, self.changes.len()),
+            );
+            ui.label(RichText::new(counter).size(12.0).color(MUTED));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if icons::button(ui, Icon::CollapseAll, "Reset to 3 lines of context", true)
+                    .clicked()
+                {
+                    self.context_views[self.selected].reset();
+                    self.source_selection = SourceSelection::default();
+                    self.scroll_to_change = self.active_change.map(|index| self.changes[index].1);
+                }
+                if icons::button(ui, Icon::ExpandAll, "Show entire file", true).clicked() {
+                    self.context_views[self.selected].show_all();
+                }
+            });
+        });
+    }
+
     fn source(&mut self, ui: &mut egui::Ui) {
+        if !self.review.files.is_empty() {
+            self.change_toolbar(ui);
+        }
         let Some(file) = self.review.files.get(self.selected) else {
             ui.centered_and_justified(|ui| {
                 ui.label("No source changes between these commits.");
@@ -692,9 +812,13 @@ impl Controller {
             });
         });
         let available = ui.available_width();
-        let max_chars = self
-            .diff_rows
+        let max_chars = self.context_views[self.selected]
+            .entries
             .iter()
+            .filter_map(|entry| match entry {
+                DisplayRow::Source(index) => Some(&self.diff_rows[*index]),
+                DisplayRow::Gap { .. } => None,
+            })
             .flat_map(|row| [&row.left, &row.right])
             .filter_map(|line| line.as_ref())
             .map(|line| line.job.text.chars().count())
@@ -715,51 +839,77 @@ impl Controller {
         }
         self.source_selection
             .keyboard(ui, [&file.before, &file.after]);
+        let entries = &self.context_views[self.selected].entries;
+        let active_row = self.active_change.map(|index| self.changes[index].1);
+        let target = self.scroll_to_change.take().and_then(|row| {
+            entries
+                .iter()
+                .position(|entry| *entry == DisplayRow::Source(row))
+        });
+        let mut expansion = None;
         let scroll = ui
             .scope(|ui| {
                 // show_rows includes item spacing in its row stride. Code has no gaps.
                 ui.spacing_mut().item_spacing.y = 0.0;
-                egui::ScrollArea::both()
+                let mut area = egui::ScrollArea::both()
                     .id_salt(("source", self.selected))
-                    .auto_shrink([false, false])
-                    .show_rows(
-                        ui,
-                        syntax::LINE_HEIGHT,
-                        self.diff_rows.len(),
-                        |ui, range| {
-                            ui.set_min_width(column_width * 2.0);
-                            for index in range {
-                                let row = &self.diff_rows[index];
-                                ui.horizontal(|ui| {
-                                    ui.spacing_mut().item_spacing.x = 0.0;
-                                    ui.push_id((self.selected, index, 0), |ui| {
-                                        code_cell(
-                                            ui,
-                                            row.left.as_ref(),
-                                            column_width,
-                                            0,
-                                            focus_ids[0],
-                                            file,
-                                            &mut self.source_selection,
-                                        );
-                                    });
-                                    ui.push_id((self.selected, index, 1), |ui| {
-                                        code_cell(
-                                            ui,
-                                            row.right.as_ref(),
-                                            column_width,
-                                            1,
-                                            focus_ids[1],
-                                            file,
-                                            &mut self.source_selection,
-                                        );
-                                    });
-                                });
+                    .auto_shrink([false, false]);
+                if let Some(index) = target {
+                    area = area.vertical_scroll_offset(
+                        (index as f32 * syntax::LINE_HEIGHT - ui.available_height() / 3.0).max(0.0),
+                    );
+                }
+                area.show_rows(ui, syntax::LINE_HEIGHT, entries.len(), |ui, range| {
+                    ui.set_min_width(column_width * 2.0);
+                    for index in range {
+                        let source_index = match entries[index] {
+                            DisplayRow::Gap { start, end } => {
+                                if let Some(all) = ui
+                                    .push_id((self.selected, start, end), |ui| {
+                                        context_gap(ui, start, end, column_width * 2.0)
+                                    })
+                                    .inner
+                                {
+                                    expansion = Some((start, end, all));
+                                }
+                                continue;
                             }
-                        },
-                    )
+                            DisplayRow::Source(row) => row,
+                        };
+                        let row = &self.diff_rows[source_index];
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            ui.push_id((self.selected, source_index, 0), |ui| {
+                                code_cell(
+                                    ui,
+                                    row.left.as_ref(),
+                                    column_width,
+                                    0,
+                                    (focus_ids[0], active_row == Some(source_index)),
+                                    file,
+                                    &mut self.source_selection,
+                                );
+                            });
+                            ui.push_id((self.selected, source_index, 1), |ui| {
+                                code_cell(
+                                    ui,
+                                    row.right.as_ref(),
+                                    column_width,
+                                    1,
+                                    (focus_ids[1], active_row == Some(source_index)),
+                                    file,
+                                    &mut self.source_selection,
+                                );
+                            });
+                        });
+                    }
+                })
             })
             .inner;
+        if let Some((start, end, all)) = expansion {
+            self.context_views[self.selected].expand(start, end, all);
+            ui.ctx().request_repaint();
+        }
         if self.source_selection.dragging
             && let Some(pointer) = ui.input(|input| input.pointer.interact_pos())
             && pointer.x >= scroll.inner_rect.left()
@@ -973,6 +1123,20 @@ impl eframe::App for Controller {
         self.header(ctx);
         self.footer(ctx);
         self.sidebar(ctx);
+        if self.tab == Tab::Source
+            && self.confirm.is_none()
+            && !self.about_open
+            && !self.filter_has_focus
+        {
+            if ctx.input_mut(|input| input.consume_key(egui::Modifiers::SHIFT, egui::Key::F7)) {
+                self.navigate_change(false);
+                ctx.request_repaint();
+            } else if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::F7))
+            {
+                self.navigate_change(true);
+                ctx.request_repaint();
+            }
+        }
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(BACKGROUND).inner_margin(22.0))
             .show(ctx, |ui| {
@@ -1629,15 +1793,66 @@ fn column_header(
     });
 }
 
+fn context_gap(ui: &mut egui::Ui, start: usize, end: usize, width: f32) -> Option<bool> {
+    let mut expand = None;
+    let (rect, _) =
+        ui.allocate_exact_size(Vec2::new(width, syntax::LINE_HEIGHT), egui::Sense::hover());
+    ui.painter().rect_filled(rect, 0.0, PANEL);
+    ui.painter()
+        .hline(rect.x_range(), rect.top(), Stroke::new(1.0_f32, BORDER));
+    ui.painter()
+        .hline(rect.x_range(), rect.bottom(), Stroke::new(1.0_f32, BORDER));
+    // Keep controls inside the visible viewport even when long code scrolls horizontally.
+    let visible = rect.intersect(ui.clip_rect());
+    ui.scope_builder(egui::UiBuilder::new().max_rect(visible), |ui| {
+        ui.spacing_mut().interact_size.y = syntax::LINE_HEIGHT;
+        ui.spacing_mut().button_padding.y = 0.0;
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.add_space(8.0);
+            if ui
+                .add(
+                    egui::Button::new(
+                        RichText::new(format!(
+                            "{} unchanged {}",
+                            end - start,
+                            if end - start == 1 { "line" } else { "lines" }
+                        ))
+                        .color(MUTED)
+                        .size(12.0),
+                    )
+                    .frame(false),
+                )
+                .on_hover_text("Reveal up to 20 more lines next to each surrounding change")
+                .clicked()
+            {
+                expand = Some(false);
+            }
+            let response = ui.add(icons::control().min_size(Vec2::splat(syntax::LINE_HEIGHT)));
+            if icons::decorate(
+                ui,
+                response,
+                Icon::ExpandAll,
+                "Show this entire unchanged section",
+            )
+            .clicked()
+            {
+                expand = Some(true);
+            }
+        });
+    });
+    expand
+}
+
 fn code_cell(
     ui: &mut egui::Ui,
     line: Option<&CodeLine>,
     width: f32,
     side: usize,
-    focus_id: egui::Id,
+    focus: (egui::Id, bool),
     file: &FileChange,
     selection: &mut SourceSelection,
 ) {
+    let (focus_id, active) = focus;
     let (rect, response) = ui.allocate_exact_size(
         Vec2::new(width, syntax::LINE_HEIGHT),
         egui::Sense::click_and_drag(),
@@ -1648,6 +1863,14 @@ fn code_cell(
         _ => BACKGROUND,
     };
     ui.painter().rect_filled(rect, 0.0, background);
+    if active {
+        ui.painter().rect_stroke(
+            rect,
+            0.0,
+            Stroke::new(1.0_f32, ACCENT),
+            egui::StrokeKind::Inside,
+        );
+    }
     if side == 1 {
         ui.painter().line_segment(
             [rect.left_top(), rect.left_bottom()],
