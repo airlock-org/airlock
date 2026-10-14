@@ -1,3 +1,4 @@
+mod approval;
 mod branding;
 mod effects;
 mod file_tree;
@@ -21,7 +22,7 @@ pub enum Decision {
 #[derive(Parser, Debug)]
 #[command(
     version,
-    about = "Review Airlock source locally. Never connects to or deploys a machine."
+    about = "Review Airlock source, deployment plans and controller approval requests."
 )]
 struct Args {
     /// Show the built-in example (also the default when no repository is supplied).
@@ -51,6 +52,9 @@ struct Args {
     /// Print the complete clipboard review, including the supplied plan and patch.
     #[arg(long, conflicts_with_all = ["screenshot", "record_decision"])]
     print_review: bool,
+    /// Controller-owned pre-build approval request. Decisions return on stdout.
+    #[arg(long, requires = "repo", conflicts_with_all = ["plan", "decisions_dir", "record_decision", "print_patch", "screenshot"])]
+    approval_request: Option<PathBuf>,
     /// Record a local decision without a window; intended for offline review tooling.
     #[arg(long, requires = "decisions_dir", conflicts_with = "screenshot")]
     record_decision: Option<Decision>,
@@ -74,6 +78,11 @@ fn main() -> Result<()> {
         }
         model::Review::demo()
     };
+    let approval = args
+        .approval_request
+        .as_deref()
+        .map(|path| approval::Request::load(path, &review))
+        .transpose()?;
     if let Some(decision) = args.record_decision {
         let path = review.record_decision(decision, args.decisions_dir.as_deref().unwrap())?;
         println!("{}", path.display());
@@ -88,9 +97,29 @@ fn main() -> Result<()> {
         return Ok(());
     }
     if args.print_review {
-        print!("{}", review.clipboard_report()?);
+        if let Some(request) = approval {
+            let session = approval::Session {
+                allowed_vms: request.scope.allowed_vms.join(", "),
+                allow_reboot: request.scope.allow_reboot,
+                request,
+                reply: Default::default(),
+            };
+            print!("{}", session.copy_text(&review.clipboard_report()?)?);
+        } else {
+            print!("{}", review.clipboard_report()?);
+        }
         return Ok(());
     }
+    let reply: approval::Reply = Default::default();
+    let cancelled = approval
+        .as_ref()
+        .map(|request| request.response(&review, "cancelled", request.scope.clone()));
+    let session = approval.map(|request| approval::Session {
+        allowed_vms: request.scope.allowed_vms.join(", "),
+        allow_reboot: request.scope.allow_reboot,
+        request,
+        reply: reply.clone(),
+    });
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Airlock Control")
@@ -112,9 +141,14 @@ fn main() -> Result<()> {
                 review,
                 args.decisions_dir,
                 args.screenshot,
+                session,
             )))
         }),
     )
     .map_err(|error| anyhow::anyhow!(error.to_string()))
-    .context("opening Airlock Control")
+    .context("opening Airlock Control")?;
+    if let Some(response) = reply.lock().unwrap().take().or(cancelled) {
+        println!("{}", serde_json::to_string(&response)?);
+    }
+    Ok(())
 }

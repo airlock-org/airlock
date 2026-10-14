@@ -478,6 +478,106 @@ def test_copied_report_preserves_embedded_markdown_fences(ctrl, source):
     assert report_block(result.stdout, "Source patch") == patch.stdout
 
 
+def approval_request(source, tmp_path, review):
+    path = tmp_path / "approval.json"
+    value = {
+        "schema": "airlock.ctrl-approval-request.v1",
+        "request_id": "a" * 64,
+        "baseline": source[1],
+        "revision": source[2],
+        "lock_hash": review["lock_hash"],
+        "family": "machine",
+        "target": None,
+        "scope": {"allowed_vms": ["usr-home", "sys-ctrl"], "allow_reboot": False},
+    }
+    path.write_text(json.dumps(value))
+    return path, value
+
+
+def test_prebuild_review_copies_source_and_explicit_scope_without_a_plan(
+    ctrl, source, tmp_path
+):
+    path, expected = approval_request(source, tmp_path, inspect(ctrl, source))
+    result = run(
+        ctrl,
+        "--repo",
+        source[0],
+        "--base",
+        source[1],
+        "--candidate",
+        source[2],
+        "--approval-request",
+        path,
+        "--print-review",
+    )
+    assert result.returncode == 0, result.stderr
+    scope = json.loads(result.stdout.split("## Approval scope\n\n", 1)[1])
+    assert scope["scope"]["allowed_vms"] == sorted(expected["scope"]["allowed_vms"])
+    assert scope["scope"]["allow_reboot"] == expected["scope"]["allow_reboot"]
+    assert scope["request_id"] == expected["request_id"]
+    assert "final deployment plan is not yet known" in scope["purpose"]
+    assert "diff --git" in report_block(result.stdout, "Source patch")
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"schema": "other"},
+        {"request_id": "bad"},
+        {"baseline": "b" * 40},
+        {"revision": "b" * 40},
+        {"lock_hash": "b" * 64},
+        {"target": "usr-home"},
+        {"scope": {"allowed_vms": ["../usr-home"], "allow_reboot": False}},
+        {"approve": True},
+    ],
+)
+def test_prebuild_request_must_match_source_and_typed_scope(
+    ctrl, source, tmp_path, change
+):
+    path, request = approval_request(source, tmp_path, inspect(ctrl, source))
+    request.update(change)
+    path.write_text(json.dumps(request))
+    result = run(
+        ctrl,
+        "--repo",
+        source[0],
+        "--base",
+        source[1],
+        "--candidate",
+        source[2],
+        "--approval-request",
+        path,
+        "--print-review",
+    )
+    assert result.returncode != 0
+    assert result.stdout == ""
+
+
+def test_headless_local_receipt_cannot_authorize_controller_builds(
+    ctrl, source, tmp_path
+):
+    path, _ = approval_request(source, tmp_path, inspect(ctrl, source))
+    directory = tmp_path / "decisions"
+    result = run(
+        ctrl,
+        "--repo",
+        source[0],
+        "--base",
+        source[1],
+        "--candidate",
+        source[2],
+        "--approval-request",
+        path,
+        "--record-decision",
+        "approve",
+        "--decisions-dir",
+        directory,
+    )
+    assert result.returncode != 0
+    assert not directory.exists()
+
+
 def test_plan_changes_change_the_fingerprint(ctrl, source):
     plan = source[3]
     first = inspect(ctrl, source, "--plan", plan)

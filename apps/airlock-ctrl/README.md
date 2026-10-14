@@ -138,13 +138,24 @@ binds source commits, blob identities, file modes, displayed content, lock hash
 and the supplied plan. The record uses the distinct
 `airlock.ctrl-local-decision.v1` schema and `local-review-only` authority.
 
-**These receipts are not deployment approvals.** Plans are imported local
-files, not authenticated observations of machine state. There is no qrexec
-connection, deployment action, machine module installation or policy change
-in this version. Live integration must require approval of the exact prepared
-candidate, check staleness in dom0, and prevent submission clients from granting
-human approval. Existing typed recovery operations must remain available when
-sys-ctrl is stopped.
+**Standalone receipts are not deployment approvals.** Local/demo mode retains
+the local-only receipt behavior. The installed controller launches the separate
+`--approval-request` mode with a typed, source-bound request from dom0. This mode
+reviews source before evaluation/build and shows the permitted VM impact and
+reboot permission. The final plan is explicitly unknown until building finishes.
+One Approve action returns a source fingerprint and scope to the controller on
+stdout; Reject returns rejection, and closing the window returns cancellation.
+There is no headless command for granting controller approval. Copy review also
+includes the pre-build scope. The app itself does not invoke qrexec or deploy.
+
+The controller records the decision in dom0's protected review state, checks the
+source again before building, and binds the resulting candidate to that approval.
+Dom0 checks the exact revision, lock hash, baseline and permitted impact before
+activation; exceeding the scope stops deployment. Plan then apply reuses the same
+approval for unchanged source and baseline. Detached controller jobs provide
+durable, machine-readable feedback to usr-assistant. Existing typed recovery
+remains available when sys-ctrl is stopped. The lab's separate development dom0
+administrative route remains outside this normal submission workflow.
 
 ## Inspect and check
 

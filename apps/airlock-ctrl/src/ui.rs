@@ -1,5 +1,6 @@
 use crate::{
     Decision,
+    approval::Session,
     effects::{self, PlannedEffects, names_text},
     file_tree::{FileTree, RowKind, TreeRow},
     icons::{self, Icon},
@@ -128,6 +129,7 @@ pub struct Controller {
     source_selection: SourceSelection,
     confirm: Option<Decision>,
     about_open: bool,
+    approval: Option<Session>,
     receipt: Option<serde_json::Value>,
     copy_feedback: Option<(&'static str, f64)>,
     notice: Option<String>,
@@ -143,6 +145,7 @@ impl Controller {
         review: Review,
         decisions_dir: Option<PathBuf>,
         screenshot: Option<PathBuf>,
+        approval: Option<Session>,
     ) -> Self {
         theme::apply(&cc.egui_ctx);
         let clipboard_review = review
@@ -176,6 +179,7 @@ impl Controller {
             source_selection: SourceSelection::default(),
             confirm: None,
             about_open: false,
+            approval,
             receipt: None,
             copy_feedback: None,
             notice: None,
@@ -196,7 +200,8 @@ impl Controller {
                         ui.heading(RichText::new("Airlock Control").color(BRAND));
                         ui.label(
                             RichText::new(
-                                "Compare configuration changes and inspect the deployment plan before approval.",
+                                if self.approval.is_some() { "Approve the source and permitted impact before evaluation or building." }
+                                else { "Compare configuration changes and inspect the deployment plan before approval." },
                             )
                             .color(MUTED),
                         );
@@ -205,7 +210,7 @@ impl Controller {
                         if icons::button(ui, Icon::Info, "About Airlock Control", true).clicked() {
                             self.about_open = true;
                         }
-                        let label = if self.review.mode == "demo" {
+                        let label = if self.approval.is_some() { "APPROVAL REQUIRED" } else if self.review.mode == "demo" {
                             "LOCAL PREVIEW"
                         } else {
                             "LOCAL REVIEW"
@@ -236,12 +241,30 @@ impl Controller {
                         Vec2::new(effects_width, 0.0),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            effects_summary(ui, self.effects.as_ref());
+                            if let Some(session) = &self.approval {
+                                ui.label(
+                                    RichText::new(format!(
+                                        "Permitted VM changes: {}",
+                                        session.allowed_vms
+                                    ))
+                                    .size(12.0),
+                                );
+                                ui.label(
+                                    RichText::new(if session.allow_reboot {
+                                        "System reboot: Permitted"
+                                    } else {
+                                        "System reboot: Not permitted"
+                                    })
+                                    .size(12.0)
+                                    .color(MUTED),
+                                );
+                            } else {
+                                effects_summary(ui, self.effects.as_ref());
+                            }
                         },
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let enabled =
-                            self.receipt.is_none() && self.review.approval_blocker().is_none();
+                        let enabled = self.receipt.is_none() && self.blocker().is_none();
                         if ui
                             .add_enabled(
                                 enabled,
@@ -250,22 +273,46 @@ impl Controller {
                             )
                             .clicked()
                         {
-                            self.confirm = Some(Decision::Approve);
+                            if let Some(session) = &self.approval {
+                                session.finish(&self.review, "approve");
+                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            } else {
+                                self.confirm = Some(Decision::Approve);
+                            }
                         }
                         if ui
                             .add_enabled(self.receipt.is_none(), egui::Button::new("Reject"))
                             .clicked()
                         {
-                            self.confirm = Some(Decision::Reject);
+                            if let Some(session) = &self.approval {
+                                session.finish(&self.review, "reject");
+                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            } else {
+                                self.confirm = Some(Decision::Reject);
+                            }
                         }
                     });
                 });
                 if self.receipt.is_none()
-                    && let Some(reason) = self.review.approval_blocker()
+                    && let Some(reason) = self.blocker()
                 {
                     ui.add(egui::Label::new(RichText::new(reason).size(12.0).color(ACCENT)).wrap());
                 }
             });
+    }
+
+    fn blocker(&self) -> Option<&str> {
+        if let Some(session) = &self.approval {
+            if session.scope().is_none() {
+                return Some("Enter valid permitted VM names in Deployment plan.");
+            }
+            if self.review.files.iter().any(|file| file.opaque.is_some()) {
+                return Some("Some changed files cannot be displayed. Approval is disabled.");
+            }
+            None
+        } else {
+            self.review.approval_blocker()
+        }
     }
 
     fn about(&mut self, ctx: &egui::Context) {
@@ -315,11 +362,12 @@ impl Controller {
                     ),
                     (
                         "Review decisions",
-                        "No machine is connected. Approve and Reject record your decision locally without starting deployment.",
+                        if self.approval.is_some() { "Approve permits evaluation, building and deployment of this source within the permitted impact. Reject returns feedback to the assistant." }
+                        else { "No machine is connected. Approve and Reject record your decision locally without starting deployment." },
                     ),
                     (
                         "Decision storage",
-                        if self.review.mode == "demo" {
+                        if self.approval.is_some() { "The controller retains the request and outcome. Closing this window cancels approval." } else if self.review.mode == "demo" {
                             "Example decisions stay in memory for this session."
                         } else if self.decisions_dir.is_some() {
                             "Decision receipts are saved to the configured local directory."
@@ -742,7 +790,26 @@ impl Controller {
         }
     }
 
-    fn plan(&self, ui: &mut egui::Ui) {
+    fn plan(&mut self, ui: &mut egui::Ui) {
+        if let Some(session) = &mut self.approval {
+            ui.heading("Permitted impact");
+            ui.label(RichText::new("The final deployment plan will be computed after building. Deployment stops if it exceeds this scope.").color(MUTED));
+            ui.add_space(16.0);
+            ui.label("VMs allowed to change, start, stop or restart");
+            let mut output = egui::TextEdit::multiline(&mut session.allowed_vms)
+                .desired_width(f32::INFINITY)
+                .desired_rows(3)
+                .show(ui);
+            let text = session.allowed_vms.clone();
+            selection::text_edit_menu(&mut output, &text, true);
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                ui.label("System reboot");
+                ui.radio_value(&mut session.allow_reboot, false, "Not permitted");
+                ui.radio_value(&mut session.allow_reboot, true, "Permitted");
+            });
+            return;
+        }
         egui::ScrollArea::vertical().id_salt("plan").auto_shrink([false, false]).show(ui, |ui| {
             ui.heading("Deployment effects");
             if self.review.mode == "demo" {
@@ -917,14 +984,23 @@ impl eframe::App for Controller {
                     ui.selectable_value(&mut self.tab, Tab::Record, "Review record");
                     let show_copy_label = ui.available_width() >= 130.0;
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let value = self.clipboard_review.as_ref().ok();
+                        let live_copy = self.approval.as_ref().map(|session| {
+                            self.clipboard_review
+                                .as_ref()
+                                .map_err(Clone::clone)
+                                .and_then(|base| {
+                                    session.copy_text(base).map_err(|error| error.to_string())
+                                })
+                        });
+                        let clipboard = live_copy.as_ref().unwrap_or(&self.clipboard_review);
+                        let value = clipboard.as_ref().ok();
                         let response = copy_button(
                             ui,
                             "entire review",
                             value.map(String::as_str),
                             &mut self.copy_feedback,
                         );
-                        if let Err(error) = &self.clipboard_review {
+                        if let Err(error) = clipboard {
                             response.on_disabled_hover_text(error);
                         }
                         if show_copy_label {
