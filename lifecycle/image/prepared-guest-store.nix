@@ -17,7 +17,10 @@ let
   }) entries;
   # These roots cover the build hooks and tools missing from the first usr-assistant
   # guest change. The view shares objects already present in guest closures.
-  routineBuildInputs = with pkgs; [
+  # Guest /etc images must use their own package set. The image assembler has
+  # additional overlays (including EROFS patches) that change Composefs's inputs.
+  guestBuildPkgs = if entries ? usr-home then entries.usr-home.configuration.pkgs else pkgs;
+  routineBuildInputs = with guestBuildPkgs; [
     composefs
     composefs.lib
     composefs.dev
@@ -25,7 +28,7 @@ let
     file
     gnu-config
     libcap
-    pkgs."libcap-text-verifier"
+    guestBuildPkgs."libcap-text-verifier"
     makeShellWrapper
     patchelf
     stdenvNoCC

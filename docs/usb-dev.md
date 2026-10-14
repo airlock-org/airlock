@@ -31,7 +31,8 @@ Failures stop image assembly. The examples add an `/etc` marker and change an
 existing usr-home service setting using the image's pinned software. Each trial
 imports the unchanged committed guest module in a temporary checkout and adds
 its setting in a separate module, so application-list changes do not break the
-examples. They do
+examples. The declared build tools use the guest's package set, including the
+Composefs tools needed to rebuild its `/etc` image. They do
 not establish offline support for arbitrary new packages or versions.
 
 The v2 USB image marker requires the matching provisioner. Older v1 images
