@@ -78,6 +78,7 @@ fn main() -> Result<()> {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Airlock Control")
+            .with_decorations(true)
             .with_app_id("org.airlock.ctrl")
             .with_icon(branding::logo().context("loading the embedded Airlock logo")?)
             .with_inner_size([1280.0, 820.0])

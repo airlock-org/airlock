@@ -10,6 +10,9 @@
   libxi,
   libxrandr,
   git,
+  dbus,
+  glib,
+  fontconfig,
 }:
 rustPlatform.buildRustPackage {
   pname = "airlock-ctrl";
@@ -25,7 +28,7 @@ rustPlatform.buildRustPackage {
   nativeBuildInputs = [ makeWrapper ];
   postInstall = ''
     wrapProgram "$out/bin/airlock-ctrl" \
-      --prefix PATH : ${lib.makeBinPath [ git ]} \
+      --prefix PATH : ${lib.makeBinPath [ git dbus glib fontconfig ]} \
       --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [
         libGL libxkbcommon wayland libx11 libxcursor libxi libxrandr
       ]}

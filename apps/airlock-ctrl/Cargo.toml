@@ -15,3 +15,8 @@ serde_json = "1.0"
 sha2 = "0.10"
 similar = { version = "2.7", features = ["inline"] }
 tempfile = "3.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Enable the standard GNOME decorations when Wayland requires a client title bar.
+# This unifies with eframe's winit; desktop-provided decorations remain preferred.
+winit = { version = "=0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }

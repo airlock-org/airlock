@@ -13,6 +13,11 @@ website's font; code remains monospace, with green/red diff colours.
 Theme tokens live in `src/theme.rs`; font provenance and regeneration are
 documented in [assets/fonts/](assets/fonts/README.md).
 
+Window decorations are separate from the app theme: the desktop supplies the
+title bar and window controls where supported. On Wayland desktops that require
+client decorations, the build enables winit's standard Adwaita title bar in its
+automatic light/dark mode. Airlock does not draw or colour the window controls.
+
 ## Local preview
 
 From the repository root, `make ctrl-preview` opens a built-in example using
