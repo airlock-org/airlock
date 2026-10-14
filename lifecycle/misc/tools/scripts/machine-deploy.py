@@ -518,7 +518,14 @@ def main(argv=None):
                 != "y"
             ):
                 return 0
-            action = [engine, "guest-apply", receipt_path]
+            if args.legacy_dom0:
+                candidate = json.loads(preview).get("candidate")
+                if (not isinstance(candidate, str)
+                        or not candidate.startswith("/var/lib/airlock/machine/candidates/")):
+                    raise RuntimeError("guest plan did not return a local machine candidate")
+                action = [engine, "apply", candidate, "--administrative"]
+            else:
+                action = [engine, "guest-apply", receipt_path]
         elif args.action in ("plan", "apply"):
             transfer(args.target, args.bridge_vm, release, session)
             manifest = json.loads(

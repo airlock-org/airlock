@@ -184,6 +184,13 @@ paths through the existing development transport. The candidate records that
 coordinator, and apply roots it against GC. This avoids rebuilding/flashing the
 USB for a coordinator-only fix; it does not update other host components.
 
+For an explicitly authorized development repair of an admitted guest, add
+`DEPLOY_LEGACY_DOM0=1` to `machine-guest-apply`. It applies the validated local
+candidate shown by the guest plan through the root-only administrative route,
+records that mode in the deployment journal, and retains the host and other
+guests. Dom0 still requires root and its development-mode marker. Without this
+option, guest application requires the normal source-review authorization.
+
 `machine-build` needs no remote machine. All commands default to the internal
 `usb-lab` deployment profile; this is not a boot-menu entry.
 `DEPLOY_PROFILE=usb-gui-lab` builds that complete profile instead, but its usual

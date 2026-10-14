@@ -72,6 +72,39 @@ def test_legacy_apply_selects_explicit_administrative_repair(monkeypatch):
     assert any("apply /nix/store/release --administrative" in script for script in scripts)
 
 
+@pytest.mark.parametrize("legacy", [False, True])
+def test_guest_repair_requires_explicit_administrative_transport(monkeypatch, legacy):
+    scripts = []
+    candidate = "/var/lib/airlock/machine/candidates/validated-guest"
+
+    class Session:
+        def __init__(self, target):
+            assert target == "user@assistant"
+
+        def run(self, script, **kwargs):
+            scripts.append(script)
+            return json.dumps({"candidate": candidate, "plan": {}})
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(client, "Dom0", Session)
+    monkeypatch.setattr(client, "deployed_engine", lambda _: "/nix/store/engine/bin/deploy")
+    monkeypatch.setattr(client, "remote_receipt", lambda *_: {})
+    monkeypatch.setattr(client, "install_receipt", lambda *_: "/receipt.json")
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+    arguments = ["guest-apply", "--target", "user@assistant", "--receipt", "/remote.json"]
+    if legacy:
+        arguments.append("--legacy-dom0")
+    assert client.main(arguments) == 0
+    assert "guest-plan /receipt.json" in scripts[0]
+    if legacy:
+        assert f"apply {candidate} --administrative" in scripts[-1]
+    else:
+        assert "guest-apply /receipt.json" in scripts[-1]
+        assert "--administrative" not in scripts[-1]
+
+
 @pytest.mark.parametrize("arguments", [["apply", "--host-repair"],
                                        ["status", "--host-repair", "--legacy-dom0"]])
 def test_host_repair_requires_explicit_development_plan_or_apply(arguments):
