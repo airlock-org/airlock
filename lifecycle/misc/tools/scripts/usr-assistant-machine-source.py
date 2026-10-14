@@ -189,6 +189,15 @@ def offline_inputs(destination, repository=MACHINE, archive=None):
                 path,
             ):
                 raise RuntimeError(f"archived input lacks a store path: {input_name}")
+            directory = nodes[node_id].get("locked", {}).get("dir", "")
+            if directory:
+                if not isinstance(directory, str) or any(
+                    part in {"", ".", ".."} for part in directory.split("/")
+                ):
+                    raise RuntimeError(f"invalid archived flake directory: {input_name}")
+                # flake archive reports the repository's store root even when
+                # the locked flake lives in a subdirectory such as apps/.
+                path = posixpath.join(path, directory)
             inputs[input_name] = path
             collect(node.get("inputs", {}), path, node_id, input_name)
 

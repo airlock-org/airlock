@@ -93,6 +93,48 @@ def test_offline_input_manifest_records_nested_sources_and_lock(tmp_path: Path):
     assert data["inputs"] == {"nixos-qubes": source_a, "nixos-qubes/shelly": source_b}
 
 
+@pytest.mark.parametrize("directory", ["", "apps", "../apps", "/apps", "apps/../other"])
+def test_offline_input_manifest_preserves_locked_flake_directory(tmp_path: Path, directory):
+    repo = tmp_path / "machine"
+    repository(repo)
+    (repo / "flake.lock").write_text(json.dumps({
+        "root": "root",
+        "nodes": {
+            "root": {"inputs": {"airlock-apps": "airlock-apps"}},
+            "airlock-apps": {
+                "locked": {"type": "git", "dir": directory},
+                "inputs": {"vendor": "vendor"},
+            },
+            "vendor": {"locked": {"path": "./vendor"}, "inputs": {}},
+        },
+    }) + "\n")
+    git(repo, "add", "flake.lock")
+    git(repo, "commit", "-m", "Lock a flake subdirectory")
+    source = "/nix/store/" + "a" * 32 + "-source"
+    manifest = tmp_path / "offline-inputs.json"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "offline-inputs", "--repository", str(repo),
+         "--output", str(manifest)],
+        input=json.dumps({
+            "path": "/nix/store/" + "b" * 32 + "-machine",
+            "inputs": {"airlock-apps": {
+                "path": source, "inputs": {"vendor": {"inputs": {}}},
+            }},
+        }),
+        capture_output=True, text=True,
+    )
+    if directory not in {"", "apps"}:
+        assert result.returncode != 0
+        assert "invalid archived flake directory" in result.stderr
+        assert not manifest.exists()
+        return
+    assert result.returncode == 0, result.stderr
+    expected = source + ("/apps" if directory else "")
+    assert json.loads(manifest.read_text())["inputs"] == {
+        "airlock-apps": expected, "airlock-apps/vendor": expected + "/vendor",
+    }
+
+
 def test_offline_input_manifest_resolves_local_input_in_machine_archive(tmp_path: Path):
     repo = tmp_path / "machine"
     repository(repo)
