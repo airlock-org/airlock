@@ -53,6 +53,25 @@ def test_coordinator_recovery_requires_explicit_development_transport():
     assert error.value.code == 2
 
 
+def test_legacy_apply_selects_explicit_administrative_repair(monkeypatch):
+    scripts = []
+    manifest = {"revision": "machine-revision", "profile": "usb-lab", "coordinator": "/nix/store/engine/bin/deploy"}
+    class Session:
+        def __init__(self, target):
+            assert target == "user@assistant"
+        def run(self, script, **kwargs):
+            scripts.append(script)
+            return json.dumps(manifest) if script.startswith("cat ") else '{}'
+        def close(self):
+            pass
+    monkeypatch.setattr(client, "Dom0", Session)
+    monkeypatch.setattr(client, "build", lambda *_: ("/nix/store/release", "machine-revision", "parent-revision"))
+    monkeypatch.setattr(client, "transfer", lambda *_: None)
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+    assert client.main(["apply", "--target", "user@assistant", "--legacy-dom0"]) == 0
+    assert any("apply /nix/store/release --administrative" in script for script in scripts)
+
+
 def test_client_refuses_uncommitted_sources(monkeypatch):
     monkeypatch.setattr(
         client, "command", lambda *args, **kwargs: " M configuration.nix"

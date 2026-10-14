@@ -472,6 +472,8 @@ def main(argv=None):
             ):
                 return 0
             action = [engine, "apply", release]
+            if args.legacy_dom0:
+                action.append("--administrative")
         else:
             action = [updated_engine or "/var/lib/airlock/machine/controller", args.action]
         if args.action in ("status", "verify"):
