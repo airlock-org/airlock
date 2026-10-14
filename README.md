@@ -1,26 +1,23 @@
-# Airlock
+# AirlockOS
 
-Airlock is an experimental Nix-native Qubes system. It runs NixOS as Xen dom0
-and declares host and guest systems in Nix while preserving Qubes' Xen,
-qrexec, QubesDB, qubesd, libvirt, policy, and VM lifecycle machinery.
+AirlockOS runs NixOS in every virtual machine (VM) using the Qubes architecture.
+Nix defines the machine configuration. Xen runs all VMs, including dom0, the
+privileged control VM.
 
-The project has demonstrated VM lifecycle, qrexec, closure-backed NixOS guests,
-configuration validation, and whole-machine deployment and rollback. Nested
-verification and physical lab acceptance are recorded separately. The current
-physical example uses GNOME in sys-gui and a ThinkPad T14 Gen 3 AMD hardware
-profile. GPU restart/recovery and GUI startup issues remain open. Airlock is
-experimental; it has not established Qubes OS security equivalence or general
-hardware support.
+[![VM layout: Xen runs dom0 and the system and user VMs. Dom0 manages the shared Nix store and provides read-only closure views to the other VMs.](docs/assets/system-overview.svg)](docs/assets/system-overview.svg)
 
-## Start with the local checks
+GNOME displays application windows from separate VMs on one desktop. Personal
+applications and files stay in `usr-home`; `usr-assistant` provides the system
+workspace for configuration and administration.
 
-You can inspect the source and run the quick suite without booting Xen, building
-an image, attaching a USB disk, or enrolling in Tailscale. You need Git, Bash,
-Make, Python 3.11 or newer, and uv. Linux is the development target; Nix builds
-support x86_64-linux. See [contributor setup](CONTRIBUTING.md) for prerequisites
-and explicit dependency installation.
+Dom0 manages a shared global Nix store. The other VMs receive read-only views of
+their system closures, with separate writable private storage. Configuration
+changes are built into machine releases with deployment planning and rollback.
 
-Once both repositories are available at the intended hosting locations:
+## Development
+
+See [contributor setup](CONTRIBUTING.md) for prerequisites and repository access.
+To clone the source and run the local checks:
 
 ```sh
 git clone --recurse-submodules git@github.com:airlock-org/airlock.git
@@ -29,54 +26,17 @@ uv sync --locked
 make test-quick
 ```
 
-The component URL is prepared locally; this preparation does not publish it.
-While the component remote is unavailable, use the
-[local-source clone procedure](docs/repositories.md#local-source-clone).
-`make test-quick` runs pytest without Nix evaluations, builds, or dependency
-installation. Results include JUnit XML and JSON under the Airlock log directory.
+The quick checks do not require Xen or Nix builds.
 
-## Source ownership
+## Documentation
 
-- [`airlock-machine/`](airlock-machine/README.md) is a pinned Git submodule. It
-  owns deployable host/guest configurations, bootstrap, runtime code, and component tests.
-- [`lifecycle/image/`](lifecycle/image/README.md) assembles USB images and prepared stores.
-- `lifecycle/misc/tools/scripts/` holds development-host and lab orchestration.
-- `tests/` covers parent integration; it runs component tests from their canonical source.
-- [`docs/`](docs/README.md) indexes current guides, experiments, plans, and dated evidence.
+- [Repository workflow](docs/repositories.md): source ownership and the pinned machine configuration repository.
+- [Image building and provisioning](docs/usb-dev.md).
+- [Deployment and rollback](docs/machine-deployment.md).
+- [Development documentation](docs/README.md).
 
-Keep machine changes in the component repository, then commit its new pointer
-here. See [repository workflow](docs/repositories.md).
+AirlockOS is under active development. Qubes OS security equivalence has not
+been established. See [Security](SECURITY.md) for limitations and reporting.
 
-## Builds and hardware development
-
-Nix is needed for builds, with flakes and nix-command enabled. Use the repository
-Nix wrapper and an explicit `AIRLOCK_DATA_ROOT` when the example lab data mount
-is absent. It uses an isolated store and refuses to fall back to the host store.
-See [lab configuration](docs/lab-configuration.md) before using the example machine.
-
-```sh
-export AIRLOCK_DATA_ROOT=/path/to/airlock-data
-make build
-# Optional Nix evaluations and package checks:
-make test-nix
-```
-
-Read [USB provisioning](docs/usb-dev.md) before building or writing an image.
-Writing/provisioning erases the explicitly selected USB. Codex is available as
-an application in sys-agent; Airlock does not copy or manage its credentials.
-Tailscale enrollment is interactive after boot, with state retained in the VM's
-private volume.
-
-Physical updates follow the committed
-[whole-machine deployment workflow](docs/machine-deployment.md). Build success
-and live deployment verification are separate results. This repository cleanup
-has not deployed or verified a new live generation.
-
-## Contributing and licensing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md), [security reporting](SECURITY.md), and
-[validation status](docs/status.md). Original Airlock code is MIT licensed.
-Third-party source and derived patches retain their own terms; see
-[THIRD_PARTY.md](THIRD_PARTY.md), including the outstanding vendored-source
-licensing question. [Local publication preparation](docs/public-readiness.md)
-records checks and remaining hosting prerequisites.
+Original code is [MIT licensed](LICENSE). Dependencies retain their own terms;
+see [third-party notices](THIRD_PARTY.md).
