@@ -4,6 +4,7 @@ mod file_tree;
 mod icons;
 mod model;
 mod selection;
+mod syntax;
 mod theme;
 mod ui;
 

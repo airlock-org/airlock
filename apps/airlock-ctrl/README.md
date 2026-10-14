@@ -77,6 +77,13 @@ and briefly changes to a green checkmark. Missing values have disabled copy
 controls. Cards stack on smaller windows; the full receipt is expandable and
 has its own copy button.
 
+Source diffs use continuous 22-pixel rows with centred line numbers and change
+markers. Syntax highlighting uses syntect with bat's syntax definitions (via
+two-face), including Nix and JSON for `flake.lock`. Each side is highlighted
+independently, preserving multiline string/comment state through diff alignment
+gaps. Unknown file types use plain text. Red/green row backgrounds and stronger
+inline-change backgrounds remain visible alongside syntax colours.
+
 Drag across source text to select within either diff column; Shift-click extends
 the selection, double-click selects a word and triple-click selects a line.
 Ctrl+C copies the selection and Ctrl+A selects that side's complete file.

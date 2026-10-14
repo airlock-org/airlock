@@ -5,6 +5,7 @@ use crate::{
     icons::{self, Icon},
     model::{FileChange, Review},
     selection::{self, SourceSelection, copyable_label, read_only_text},
+    syntax,
     theme::{
         self, ACCENT, ACCENT_TINT, BACKGROUND, BORDER, BRAND, BUTTON_TEXT, FOREGROUND, GREEN,
         MUTED, PANEL, RED,
@@ -18,7 +19,7 @@ use std::path::PathBuf;
 struct CodeLine {
     number: usize,
     source_start: usize,
-    segments: Vec<(bool, String)>,
+    job: egui::text::LayoutJob,
     kind: ChangeTag,
 }
 
@@ -41,6 +42,8 @@ fn rows(file: &FileChange) -> Vec<DiffRow> {
     };
     let before_starts = starts(&file.before);
     let after_starts = starts(&file.after);
+    let before_syntax = syntax::highlight(&file.path, &file.before);
+    let after_syntax = syntax::highlight(&file.path, &file.after);
     let diff = TextDiff::configure()
         .timeout(std::time::Duration::from_millis(250))
         .diff_lines(&file.before, &file.after);
@@ -49,6 +52,20 @@ fn rows(file: &FileChange) -> Vec<DiffRow> {
         let mut deleted = Vec::new();
         let mut inserted = Vec::new();
         for change in diff.iter_inline_changes(op) {
+            let segments = change
+                .iter_strings_lossy()
+                .map(|(emphasized, value)| {
+                    (
+                        emphasized,
+                        value.trim_end_matches('\n').replace('\t', "    "),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let highlighted = if let Some(index) = change.old_index() {
+                &before_syntax[index]
+            } else {
+                &after_syntax[change.new_index().unwrap()]
+            };
             let line = CodeLine {
                 number: change.old_index().or(change.new_index()).unwrap_or(0) + 1,
                 source_start: if let Some(index) = change.old_index() {
@@ -56,15 +73,7 @@ fn rows(file: &FileChange) -> Vec<DiffRow> {
                 } else {
                     after_starts[change.new_index().unwrap()]
                 },
-                segments: change
-                    .iter_strings_lossy()
-                    .map(|(emphasized, value)| {
-                        (
-                            emphasized,
-                            value.trim_end_matches('\n').replace('\t', "    "),
-                        )
-                    })
-                    .collect(),
+                job: syntax::diff_line(highlighted, &segments, change.tag()),
                 kind: change.tag(),
             };
             match change.tag() {
@@ -72,7 +81,7 @@ fn rows(file: &FileChange) -> Vec<DiffRow> {
                     let right = CodeLine {
                         number: change.new_index().unwrap_or(0) + 1,
                         source_start: after_starts[change.new_index().unwrap()],
-                        segments: line.segments.clone(),
+                        job: after_syntax[change.new_index().unwrap()].clone(),
                         kind: ChangeTag::Equal,
                     };
                     result.push(DiffRow {
@@ -528,23 +537,26 @@ impl Controller {
                 );
             }
         }
-        ui.columns(2, |columns| {
-            column_header(
-                &mut columns[0],
-                "Baseline",
-                MUTED,
-                file,
-                0,
-                &self.source_selection,
-            );
-            column_header(
-                &mut columns[1],
-                "Candidate",
-                ACCENT,
-                file,
-                1,
-                &self.source_selection,
-            );
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            ui.columns(2, |columns| {
+                column_header(
+                    &mut columns[0],
+                    "Baseline",
+                    MUTED,
+                    file,
+                    0,
+                    &self.source_selection,
+                );
+                column_header(
+                    &mut columns[1],
+                    "Candidate",
+                    ACCENT,
+                    file,
+                    1,
+                    &self.source_selection,
+                );
+            });
         });
         let available = ui.available_width();
         let max_chars = self
@@ -552,15 +564,13 @@ impl Controller {
             .iter()
             .flat_map(|row| [&row.left, &row.right])
             .filter_map(|line| line.as_ref())
-            .map(|line| {
-                line.segments
-                    .iter()
-                    .map(|(_, text)| text.chars().count())
-                    .sum::<usize>()
-            })
+            .map(|line| line.job.text.chars().count())
             .max()
             .unwrap_or(0);
-        let column_width = (available / 2.0).max(max_chars as f32 * 7.9 + 75.0);
+        let character_width =
+            ui.fonts_mut(|fonts| fonts.glyph_width(&FontId::monospace(syntax::FONT_SIZE), ' '));
+        let column_width =
+            (available / 2.0).max(max_chars as f32 * character_width + syntax::TEXT_LEFT + 16.0);
         // Keep selection focus alive when its starting row scrolls out of the virtual list.
         let focus_ids = [0, 1].map(|side| ui.id().with(("source-selection", self.selected, side)));
         for id in focus_ids {
@@ -572,40 +582,51 @@ impl Controller {
         }
         self.source_selection
             .keyboard(ui, [&file.before, &file.after]);
-        let scroll = egui::ScrollArea::both()
-            .id_salt(("source", self.selected))
-            .auto_shrink([false, false])
-            .show_rows(ui, 23.0, self.diff_rows.len(), |ui, range| {
-                ui.set_min_width(column_width * 2.0);
-                for index in range {
-                    let row = &self.diff_rows[index];
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 0.0;
-                        ui.push_id((self.selected, index, 0), |ui| {
-                            code_cell(
-                                ui,
-                                row.left.as_ref(),
-                                column_width,
-                                0,
-                                focus_ids[0],
-                                file,
-                                &mut self.source_selection,
-                            );
-                        });
-                        ui.push_id((self.selected, index, 1), |ui| {
-                            code_cell(
-                                ui,
-                                row.right.as_ref(),
-                                column_width,
-                                1,
-                                focus_ids[1],
-                                file,
-                                &mut self.source_selection,
-                            );
-                        });
-                    });
-                }
-            });
+        let scroll = ui
+            .scope(|ui| {
+                // show_rows includes item spacing in its row stride. Code has no gaps.
+                ui.spacing_mut().item_spacing.y = 0.0;
+                egui::ScrollArea::both()
+                    .id_salt(("source", self.selected))
+                    .auto_shrink([false, false])
+                    .show_rows(
+                        ui,
+                        syntax::LINE_HEIGHT,
+                        self.diff_rows.len(),
+                        |ui, range| {
+                            ui.set_min_width(column_width * 2.0);
+                            for index in range {
+                                let row = &self.diff_rows[index];
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 0.0;
+                                    ui.push_id((self.selected, index, 0), |ui| {
+                                        code_cell(
+                                            ui,
+                                            row.left.as_ref(),
+                                            column_width,
+                                            0,
+                                            focus_ids[0],
+                                            file,
+                                            &mut self.source_selection,
+                                        );
+                                    });
+                                    ui.push_id((self.selected, index, 1), |ui| {
+                                        code_cell(
+                                            ui,
+                                            row.right.as_ref(),
+                                            column_width,
+                                            1,
+                                            focus_ids[1],
+                                            file,
+                                            &mut self.source_selection,
+                                        );
+                                    });
+                                });
+                            }
+                        },
+                    )
+            })
+            .inner;
         if self.source_selection.dragging
             && let Some(pointer) = ui.input(|input| input.pointer.interact_pos())
             && pointer.x >= scroll.inner_rect.left()
@@ -1523,14 +1544,22 @@ fn code_cell(
     file: &FileChange,
     selection: &mut SourceSelection,
 ) {
-    let (rect, response) =
-        ui.allocate_exact_size(Vec2::new(width, 23.0), egui::Sense::click_and_drag());
+    let (rect, response) = ui.allocate_exact_size(
+        Vec2::new(width, syntax::LINE_HEIGHT),
+        egui::Sense::click_and_drag(),
+    );
     let background = match line.map(|line| line.kind) {
         Some(ChangeTag::Delete) => Color32::from_rgb(58, 31, 40),
         Some(ChangeTag::Insert) => Color32::from_rgb(23, 49, 40),
         _ => BACKGROUND,
     };
     ui.painter().rect_filled(rect, 0.0, background);
+    if side == 1 {
+        ui.painter().line_segment(
+            [rect.left_top(), rect.left_bottom()],
+            Stroke::new(1.0_f32, BORDER),
+        );
+    }
     ui.painter().line_segment(
         [rect.right_top(), rect.right_bottom()],
         Stroke::new(1.0_f32, BORDER),
@@ -1539,41 +1568,26 @@ fn code_cell(
         return;
     };
     ui.painter().text(
-        rect.left_top() + Vec2::new(36.0, 4.0),
-        egui::Align2::RIGHT_TOP,
+        rect.left_center() + Vec2::new(34.0, 0.0),
+        egui::Align2::RIGHT_CENTER,
         line.number.to_string(),
         FontId::monospace(12.0),
         MUTED,
     );
-    let mut job = egui::text::LayoutJob::default();
-    for (emphasized, text) in &line.segments {
-        let color = match line.kind {
-            ChangeTag::Delete => RED,
-            ChangeTag::Insert => GREEN,
-            ChangeTag::Equal => FOREGROUND,
-        };
-        let background = if *emphasized {
-            match line.kind {
-                ChangeTag::Delete => Color32::from_rgb(100, 43, 53),
-                ChangeTag::Insert => Color32::from_rgb(35, 87, 62),
-                _ => Color32::TRANSPARENT,
-            }
-        } else {
-            Color32::TRANSPARENT
-        };
-        job.append(
-            text,
-            0.0,
-            egui::TextFormat {
-                font_id: FontId::monospace(13.0),
-                color,
-                background,
-                ..Default::default()
-            },
-        );
-    }
-    let mut galley = ui.painter().layout_job(job);
-    let origin = rect.left_top() + Vec2::new(52.0, 4.0);
+    let (marker, marker_color) = match line.kind {
+        ChangeTag::Delete => ("−", RED),
+        ChangeTag::Insert => ("+", GREEN),
+        ChangeTag::Equal => ("", MUTED),
+    };
+    ui.painter().text(
+        rect.left_center() + Vec2::new(46.0, 0.0),
+        egui::Align2::CENTER_CENTER,
+        marker,
+        FontId::monospace(12.0),
+        marker_color,
+    );
+    let mut galley = ui.painter().layout_job(line.job.clone());
+    let origin = rect.left_top() + Vec2::new(syntax::TEXT_LEFT, 0.0);
     let source = if side == 0 { &file.before } else { &file.after };
     let raw_line = source[line.source_start..].split('\n').next().unwrap_or("");
     let pointer = ui.input(|input| input.pointer.interact_pos());
