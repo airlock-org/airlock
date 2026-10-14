@@ -361,6 +361,58 @@ impl Review {
             .map(|value| value.get("plan").unwrap_or(value))
     }
 
+    /// A complete, applicable patch for the immutable commits being reviewed.
+    /// Never includes the worktree, executes diff helpers or applies the patch.
+    pub fn patch(&self) -> Result<String> {
+        if self.mode == "demo" {
+            let mut patch = String::new();
+            for file in &self.files {
+                let before = format!("a/{}", file.path);
+                let after = format!("b/{}", file.path);
+                patch.push_str(&format!("diff --git {before} {after}\n"));
+                patch.push_str(
+                    &TextDiff::from_lines(&file.before, &file.after)
+                        .unified_diff()
+                        .context_radius(3)
+                        .header(&before, &after)
+                        .to_string(),
+                );
+            }
+            return Ok(patch);
+        }
+        let repo = Path::new(
+            self.repository
+                .as_deref()
+                .context("review has no repository")?,
+        );
+        let bytes = git(
+            repo,
+            &[
+                "-c",
+                "core.quotePath=true",
+                "diff",
+                "--binary",
+                "--full-index",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-color",
+                "--no-renames",
+                "--no-relative",
+                "--src-prefix=a/",
+                "--dst-prefix=b/",
+                "--submodule=short",
+                "--ignore-submodules=none",
+                "--unified=3",
+                &self.baseline.commit,
+                &self.candidate.commit,
+                "--",
+            ],
+        )?;
+        String::from_utf8(bytes).context(
+            "Git patch contains non-UTF-8 text and cannot be copied without changing its bytes",
+        )
+    }
+
     pub fn demo() -> Self {
         let examples = [
             (

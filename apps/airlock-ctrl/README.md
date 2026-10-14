@@ -87,6 +87,15 @@ Drag across source text to select within either diff column; Shift-click extends
 the selection, double-click selects a word and triple-click selects a line.
 Ctrl+C copies the selection and Ctrl+A selects that side's complete file.
 Right-click opens copy controls for the selection, line, whole file or path.
+The Copy patch icon beside the tabs copies all source changes, regardless of the
+selected file or search filter. The patch is captured from the reviewed commit
+IDs when the window opens; later branch/worktree edits do not change it. It uses
+Git's patch format for `git apply`, including modes, additions/deletions, submodule
+revisions and binary patches, with external diff/text-conversion helpers disabled.
+It contains no deployment-plan data and writes no exported file. The icon briefly
+becomes a green checkmark after copying. `--print-patch` prints the same patch to
+stdout for offline tooling. Non-UTF-8 text patches cannot be copied losslessly;
+the disabled button's tooltip explains the failure rather than replacing bytes.
 Each column's `⋯` menu offers selection, file-content and path copy actions.
 Copied source preserves the original tabs, Unicode and newlines and excludes
 line numbers, the other column and empty diff alignment rows. The source stays

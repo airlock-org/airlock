@@ -116,6 +116,7 @@ enum Tab {
 pub struct Controller {
     logo: egui::TextureHandle,
     review: Review,
+    patch: Result<String, String>,
     effects: Option<PlannedEffects>,
     selected: usize,
     tab: Tab,
@@ -143,6 +144,7 @@ impl Controller {
         screenshot: Option<PathBuf>,
     ) -> Self {
         theme::apply(&cc.egui_ctx);
+        let patch = review.patch().map_err(|error| format!("{error:#}"));
         let effects = review.plan().map(PlannedEffects::from_plan);
         let diff_rows = review.files.first().map(rows).unwrap_or_default();
         let file_tree = FileTree::new(&review.files);
@@ -159,6 +161,7 @@ impl Controller {
         Self {
             logo,
             review,
+            patch,
             effects,
             selected: 0,
             tab: Tab::Source,
@@ -826,6 +829,21 @@ impl eframe::App for Controller {
                     ui.selectable_value(&mut self.tab, Tab::Source, "Source changes");
                     ui.selectable_value(&mut self.tab, Tab::Plan, "Deployment plan");
                     ui.selectable_value(&mut self.tab, Tab::Record, "Review record");
+                    if self.tab == Tab::Source {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let value = self.patch.as_ref().ok().filter(|patch| !patch.is_empty());
+                            let response = copy_button(
+                                ui,
+                                "entire patch",
+                                value.map(String::as_str),
+                                &mut self.copy_feedback,
+                            );
+                            if let Err(error) = &self.patch {
+                                response.on_disabled_hover_text(error);
+                            }
+                            ui.label(RichText::new("Copy patch").size(12.0).color(MUTED));
+                        });
+                    }
                 });
                 ui.add_space(12.0);
                 match self.tab {
@@ -1117,12 +1135,12 @@ fn compact_count(count: usize) -> String {
     }
 }
 
-fn record_copy_button(
+fn copy_button(
     ui: &mut egui::Ui,
     label: &'static str,
     value: Option<&str>,
     feedback: &mut Option<(&'static str, f64)>,
-) {
+) -> egui::Response {
     let now = ui.input(|input| input.time);
     let remaining = feedback
         .filter(|(field, _)| *field == label)
@@ -1133,14 +1151,13 @@ fn record_copy_button(
     } else {
         format!("Copy {label}")
     };
-    if icons::button(
+    let response = icons::button(
         ui,
         if copied { Icon::Check } else { Icon::Copy },
         &tooltip,
         value.is_some(),
-    )
-    .clicked()
-    {
+    );
+    if response.clicked() {
         ui.ctx().copy_text(value.unwrap().to_owned());
         *feedback = Some((label, now));
         ui.ctx().request_repaint();
@@ -1149,6 +1166,7 @@ fn record_copy_button(
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_secs_f64(remaining));
     }
+    response
 }
 
 fn record_field(
@@ -1175,7 +1193,7 @@ fn record_field(
             })
             .response
             .on_hover_text(displayed);
-        record_copy_button(ui, label, value, feedback);
+        copy_button(ui, label, value, feedback);
     });
 }
 

@@ -214,6 +214,126 @@ def test_git_replace_cannot_change_the_reviewed_commit(ctrl, source):
     assert review["candidate"]["subject"] == "Candidate"
 
 
+def test_entire_patch_applies_all_committed_changes(ctrl, source, tmp_path):
+    repo, base, original_candidate, _plan = source
+    git(repo, "checkout", base)
+    (repo / "binary.dat").write_bytes(b"\0before\xff\n")
+    (repo / "link").symlink_to("old-target")
+    base = commit(repo, "Patch baseline")
+    git(repo, "checkout", original_candidate, "--", ".")
+    (repo / "remove.nix").unlink()
+    (repo / "binary.dat").write_bytes(b"\0after\xfe\n")
+    (repo / "link").unlink()
+    (repo / "link").symlink_to("new-target")
+    (repo / "helper.py").chmod(0o755)
+    (repo / "added.nix").write_text("new declaration without a final newline")
+    git(repo, "mv", "domain.nix", "renamed domain.nix")
+    candidate = commit(repo, "Complete patch candidate")
+    (repo / "renamed domain.nix").write_text("uncommitted text must not appear")
+    (repo / "untracked.nix").write_text("untracked text must not appear")
+    result = run(
+        ctrl, "--repo", repo, "--base", base, "--candidate", candidate, "--print-patch"
+    )
+    assert result.returncode == 0, result.stderr
+    patch = result.stdout
+    assert "GIT binary patch" in patch
+    assert "old mode 100644\nnew mode 100755" in patch
+    assert "new file mode 100644" in patch
+    assert "deleted file mode 100644" in patch
+    assert "\\ No newline at end of file" in patch
+    assert "uncommitted text" not in patch
+    assert "untracked text" not in patch
+    # Applying every hunk must reconstruct the candidate tree exactly, including
+    # executable bits, binary bytes, unusual filenames and symlink targets.
+    target = tmp_path / "apply"
+    git(tmp_path, "clone", "--no-hardlinks", str(repo), str(target))
+    git(target, "checkout", base)
+    applied = subprocess.run(
+        ["git", "-C", str(target), "apply", "--index", "--binary", "-"],
+        input=patch,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert applied.returncode == 0, applied.stderr
+    assert git(target, "write-tree") == git(repo, "rev-parse", f"{candidate}^{{tree}}")
+
+
+def test_patch_ignores_git_helpers_configuration_and_replacements(
+    ctrl, source, tmp_path
+):
+    repo, base, candidate, _plan = source
+    marker = tmp_path / "helper-was-run"
+    helper = tmp_path / "diff-helper"
+    helper.write_text(
+        f"#!{sys.executable}\nfrom pathlib import Path\nPath({str(marker)!r}).touch()\n"
+    )
+    helper.chmod(0o755)
+    (repo / ".gitattributes").write_text("*.nix diff=custom\n")
+    for key, value in [
+        ("diff.external", str(helper)),
+        ("diff.custom.command", str(helper)),
+        ("diff.custom.textconv", str(helper)),
+        ("diff.noprefix", "true"),
+        ("diff.relative", "true"),
+        ("color.ui", "always"),
+    ]:
+        git(repo, "config", key, value)
+    git(repo, "replace", candidate, base)
+    result = run(
+        ctrl, "--repo", repo, "--base", base, "--candidate", candidate, "--print-patch"
+    )
+    assert result.returncode == 0, result.stderr
+    assert "diff --git a/domain.nix b/domain.nix" in result.stdout
+    assert "keepassxc" in result.stdout
+    assert "\x1b" not in result.stdout
+    assert not marker.exists()
+
+
+def test_patch_without_changes_is_empty(ctrl, source):
+    repo, base, _candidate, _plan = source
+    result = run(
+        ctrl, "--repo", repo, "--base", base, "--candidate", base, "--print-patch"
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+
+
+def test_patch_rejects_lossy_clipboard_text(ctrl, source):
+    repo, _base, _candidate, _plan = source
+    (repo / "latin1.txt").write_bytes(b"before \xff\n")
+    base = commit(repo, "Non-UTF-8 baseline")
+    (repo / "latin1.txt").write_bytes(b"after \xff\n")
+    candidate = commit(repo, "Non-UTF-8 candidate")
+    result = run(
+        ctrl, "--repo", repo, "--base", base, "--candidate", candidate, "--print-patch"
+    )
+    assert result.returncode != 0
+    assert "non-UTF-8" in result.stderr
+    assert result.stdout == ""
+
+
+def test_demo_patch_contains_every_example_file(ctrl, tmp_path):
+    review = json.loads(run(ctrl, "--demo", "--inspect").stdout)
+    result = run(ctrl, "--demo", "--print-patch")
+    assert result.returncode == 0, result.stderr
+    git(tmp_path, "init", "-b", "main")
+    for file in review["files"]:
+        path = tmp_path / file["path"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(file["before"])
+    applied = subprocess.run(
+        ["git", "-C", str(tmp_path), "apply", "-"],
+        input=result.stdout,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert applied.returncode == 0, applied.stderr
+    for file in review["files"]:
+        assert (tmp_path / file["path"]).read_text() == file["after"]
+
+
 def test_plan_changes_change_the_fingerprint(ctrl, source):
     plan = source[3]
     first = inspect(ctrl, source, "--plan", plan)

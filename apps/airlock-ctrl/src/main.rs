@@ -43,8 +43,11 @@ struct Args {
     #[arg(long)]
     decisions_dir: Option<PathBuf>,
     /// Print the review and its content fingerprint as JSON without opening a window.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "print_patch")]
     inspect: bool,
+    /// Print the entire reviewed Git patch to stdout without opening a window.
+    #[arg(long, conflicts_with_all = ["screenshot", "record_decision"])]
+    print_patch: bool,
     /// Record a local decision without a window; intended for offline review tooling.
     #[arg(long, requires = "decisions_dir", conflicts_with = "screenshot")]
     record_decision: Option<Decision>,
@@ -75,6 +78,10 @@ fn main() -> Result<()> {
     }
     if args.inspect {
         println!("{}", serde_json::to_string_pretty(&review)?);
+        return Ok(());
+    }
+    if args.print_patch {
+        print!("{}", review.patch()?);
         return Ok(());
     }
     let options = eframe::NativeOptions {
