@@ -207,8 +207,9 @@ ctrl-build:
 	cargo build --locked --manifest-path apps/Cargo.toml -p airlock-ctrl
 
 # Nix supplies the native GUI libraries on NixOS. Only this app is built/run.
+CTRL_PREVIEW_ARGS ?= --demo
 ctrl-preview:
-	$(AIRLOCK_NIX) run .\#airlock-ctrl -- --demo
+	$(AIRLOCK_NIX) run ./apps\#airlock-ctrl --no-write-lock-file -- $(CTRL_PREVIEW_ARGS)
 
 ctrl-check:
 	cargo fmt --manifest-path apps/Cargo.toml --all -- --check

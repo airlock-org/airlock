@@ -6,11 +6,83 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
+import sys
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_preview_uses_standalone_app_flake(tmp_path):
+    runner = tmp_path / "fake-nix"
+    runner.write_text(
+        f"#!{sys.executable}\nimport json, sys\nprint(json.dumps(sys.argv[1:]))\n"
+    )
+    runner.chmod(0o755)
+    result = subprocess.run(
+        ["make", "--no-print-directory", "-s", "ctrl-preview", f"AIRLOCK_NIX={runner}"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert json.loads(result.stdout) == [
+        "run",
+        "./apps#airlock-ctrl",
+        "--no-write-lock-file",
+        "--",
+        "--demo",
+    ]
+
+
+@pytest.mark.nix
+def test_clean_app_flake_does_not_fetch_an_unavailable_machine_submodule(tmp_path):
+    repo = tmp_path / "checkout"
+    repo.mkdir()
+    shutil.copytree(
+        ROOT / "apps",
+        repo / "apps",
+        ignore=shutil.ignore_patterns("target", "decisions"),
+    )
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.name", "Airlock test")
+    git(repo, "config", "user.email", "test@example.invalid")
+    git(repo, "config", "commit.gpgsign", "false")
+    (repo / "flake.nix").write_text(
+        '{ inputs.self.submodules = true; outputs = _: throw "root flake must not be loaded"; }\n'
+    )
+    (repo / ".gitmodules").write_text(
+        '[submodule "airlock-machine"]\n'
+        "\tpath = airlock-machine\n"
+        f"\turl = file://{tmp_path}/unavailable-machine.git\n"
+    )
+    git(repo, "add", "--all")
+    git(
+        repo,
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        f"160000,{'1' * 40},airlock-machine",
+    )
+    git(repo, "commit", "-m", "Clean apps with an unavailable machine pin")
+    (repo / "airlock-machine").mkdir()
+    assert git(repo, "status", "--porcelain") == ""
+    result = subprocess.run(
+        [
+            str(ROOT / "lifecycle/misc/tools/scripts/airlock-nix.sh"),
+            "eval",
+            "--raw",
+            "--no-write-lock-file",
+            f"{repo}/apps#packages.x86_64-linux.airlock-ctrl.drvPath",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.endswith("-airlock-ctrl-0.1.0.drv")
 
 
 @pytest.fixture(scope="module")

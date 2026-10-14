@@ -17,10 +17,17 @@ make ctrl-check
 ```
 
 `ctrl-build` explicitly fetches Cargo dependencies and builds the app.
-`ctrl-preview` uses the guarded Nix wrapper to build/run just the app, supplying
-its native GUI dependencies. On other Linux environments with those libraries
+`ctrl-preview` uses the guarded Nix wrapper and the standalone `apps/flake.nix`
+to build/run just the app, supplying its native GUI dependencies. The app flake
+explicitly disables submodule fetching and does not load machine inputs.
+Its Git source includes tracked files, excluding Cargo build artifacts.
+`apps/flake.lock` pins its own nixpkgs input, initially matching the machine's
+existing pin. On other Linux environments with those libraries
 available, use `cargo run --locked --manifest-path apps/Cargo.toml -p airlock-ctrl`.
 Neither command installs or deploys machine configuration.
+
+Supply `CTRL_PREVIEW_ARGS` to review real source or capture a preview, for example
+`make ctrl-preview CTRL_PREVIEW_ARGS='--demo --screenshot /tmp/airlock-ctrl.png'`.
 
 The quick pytest suite never builds apps or installs Rust tools. Tests requiring
 the app run when `apps/target/debug/airlock-ctrl` exists, or when

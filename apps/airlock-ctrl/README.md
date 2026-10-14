@@ -27,7 +27,7 @@ apps/target/debug/airlock-ctrl \
 On NixOS, launch through the package wrapper instead:
 
 ```sh
-./lifecycle/misc/tools/scripts/airlock-nix.sh run .#airlock-ctrl -- \
+./lifecycle/misc/tools/scripts/airlock-nix.sh run ./apps#airlock-ctrl --no-write-lock-file -- \
   --repo airlock-machine --base <baseline-commit> --candidate <candidate-commit>
 ```
 
@@ -83,7 +83,12 @@ It cannot write demo decisions or initiate deployment.
 display such as Xvfb for visual checks that should not open a desktop window.
 The screenshot command does not create review decisions.
 
-The parent flake exports `packages.x86_64-linux.airlock-ctrl`. It packages the
-workspace with its committed Cargo lock and wraps the native libraries and Git.
+The standalone `apps/flake.nix` exports `packages.x86_64-linux.airlock-ctrl`.
+It packages the workspace with its committed Cargo lock and wraps the native
+libraries and Git. Use `./apps#airlock-ctrl` for local builds/previews; the app
+flake explicitly disables submodule fetching and needs only its own pinned
+nixpkgs input. The parent flake
+retains its app package export for integration; that entry point also loads
+machine inputs and can require fetching the pinned machine Git submodule.
 Future Rust apps can join the workspace; the diff view stays an internal module
 until another app has a concrete need for a shared crate.
