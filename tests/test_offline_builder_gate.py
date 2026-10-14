@@ -16,6 +16,32 @@ gate = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gate)
 
 
+def test_subdirectory_overrides_preserve_the_archived_store_root():
+    root = "/nix/store/" + "a" * 32 + "-source"
+    assert gate.input_reference(root) == "path:" + root
+    assert gate.input_reference(root + "/apps") == "path:" + root + "?dir=apps"
+    assert gate.input_reference(root + "/vendor/nixos-qubes") == (
+        "path:" + root + "?dir=vendor/nixos-qubes"
+    )
+
+
+def test_trial_etc_materializes_files_without_host_store_links(tmp_path):
+    source = tmp_path / "host-etc"
+    source.mkdir()
+    for name in ("passwd", "group", "nsswitch.conf"):
+        original = tmp_path / name
+        original.write_text(name + "\n")
+        (source / name).symlink_to(original)
+    target = tmp_path / "trial-etc"
+    gate.prepare_etc(target, source)
+    for name in ("passwd", "group", "nsswitch.conf"):
+        assert not (target / name).is_symlink()
+        assert (target / name).read_text() == name + "\n"
+    assert "localhost" in (target / "hosts").read_text()
+    assert (target / "resolv.conf").read_text() == ""
+    assert not (target / "nix").exists()
+
+
 @pytest.mark.nix
 def test_isolated_store_registers_only_selected_paths(tmp_path):
     source = tmp_path / "source-store"

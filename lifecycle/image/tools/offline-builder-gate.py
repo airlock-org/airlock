@@ -15,6 +15,7 @@ import tarfile
 import tempfile
 import time
 import uuid
+from urllib.parse import quote
 
 
 STORE_PATH = re.compile(r"/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^/]+")
@@ -71,7 +72,7 @@ def input_identity(args, revision, lock_hash, paths, registration, manifest):
         "target_system": "x86_64-linux",
         "trial_timeout_seconds": args.timeout,
         "source_store_root": str(args.source_store_root.resolve()),
-        "isolation": "bwrap-unshare-net-empty-store-no-substitutes-sandbox-v1",
+        "isolation": "bwrap-unshare-net-empty-store-no-substitutes-sandbox-v2",
         "paths": len(paths),
         "hashes": sources,
     }
@@ -197,6 +198,31 @@ def checkout_with_change(machine, target, change):
     )
 
 
+def input_reference(path):
+    root = store_root(path)
+    directory = str(path)[len(root):].lstrip("/")
+    # Fetch the original store root and select its flake directory. Fetching a
+    # subtree as a new root changes source paths embedded in package derivations.
+    return f"path:{root}" + (f"?dir={quote(directory, safe='/')}" if directory else "")
+
+
+def prepare_etc(target, source=Path("/etc")):
+    target.mkdir()
+    for name in ("passwd", "group", "nsswitch.conf"):
+        shutil.copyfile(source / name, target / name)
+    (target / "hosts").write_text("127.0.0.1 localhost\n::1 localhost\n")
+    (target / "resolv.conf").write_text("")
+
+
+def trial_shell(source_root, paths):
+    for path in sorted(paths):
+        if re.fullmatch(r"[0-9abcdfghijklmnpqrsvwxyz]{32}-bash-[0-9].*", Path(path).name):
+            shell = path + "/bin/bash"
+            if physical(source_root, shell).is_file():
+                return shell
+    raise RuntimeError("the pinned builder closure lacks Bash for /bin/sh")
+
+
 def run_trial(args, name, change, paths, registration, inputs, log_dir, temporary):
     trial = temporary / name
     trial.mkdir()
@@ -207,9 +233,11 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
     checkout_with_change(args.machine, checkout, change)
     for directory in (trial / "home", trial / "cache", trial / "tmp"):
         directory.mkdir()
+    prepare_etc(trial / "etc")
+    shell = trial_shell(args.source_store_root, paths)
     overrides = []
     for input_name, path in sorted(inputs.items()):
-        overrides.extend(("--override-input", input_name, f"path:{path}"))
+        overrides.extend(("--override-input", input_name, input_reference(path)))
     input_mounts = []
     for path in sorted(paths):
         original = physical(args.source_store_root, path)
@@ -233,6 +261,9 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
         str(store / "nix"),
         "/nix",
         *input_mounts,
+        "--ro-bind",
+        str(trial / "etc"),
+        "/etc",
         "--dev-bind",
         "/dev",
         "/dev",
@@ -266,6 +297,9 @@ def run_trial(args, name, change, paths, registration, inputs, log_dir, temporar
         "--option",
         "sandbox-fallback",
         "false",
+        "--option",
+        "sandbox-paths",
+        f"/bin/sh={shell}",
         "--option",
         "extra-sandbox-paths",
         "",
