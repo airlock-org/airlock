@@ -16,7 +16,7 @@ rustPlatform.buildRustPackage {
   version = "0.1.0";
   src = lib.fileset.toSource {
     root = ../.;
-    fileset = lib.fileset.unions [ ../Cargo.toml ../Cargo.lock ./Cargo.toml ./src ];
+    fileset = lib.fileset.unions [ ../Cargo.toml ../Cargo.lock ./Cargo.toml ./src ./assets ];
   };
   cargoLock.lockFile = ../Cargo.lock;
   cargoBuildFlags = [ "-p" "airlock-ctrl" ];

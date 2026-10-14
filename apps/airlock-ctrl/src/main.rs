@@ -1,3 +1,4 @@
+mod branding;
 mod model;
 mod ui;
 
@@ -74,6 +75,7 @@ fn main() -> Result<()> {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Airlock Control")
             .with_app_id("org.airlock.ctrl")
+            .with_icon(branding::logo().context("loading the embedded Airlock logo")?)
             .with_inner_size([1280.0, 820.0])
             .with_min_inner_size([880.0, 600.0]),
         renderer: eframe::Renderer::Glow,

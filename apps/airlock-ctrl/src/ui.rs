@@ -82,6 +82,7 @@ enum Tab {
 }
 
 pub struct Controller {
+    logo: egui::TextureHandle,
     review: Review,
     selected: usize,
     tab: Tab,
@@ -124,7 +125,18 @@ impl Controller {
                 .insert(egui::TextStyle::Monospace, FontId::monospace(13.0));
         });
         let diff_rows = review.files.first().map(rows).unwrap_or_default();
+        let icon = crate::branding::logo()
+            .expect("the embedded logo was checked before opening the window");
+        let logo = cc.egui_ctx.load_texture(
+            "airlock-logo",
+            egui::ColorImage::from_rgba_unmultiplied(
+                [icon.width as usize, icon.height as usize],
+                &icon.rgba,
+            ),
+            egui::TextureOptions::LINEAR,
+        );
         Self {
+            logo,
             review,
             selected: 0,
             tab: Tab::Source,
@@ -146,7 +158,7 @@ impl Controller {
             .frame(egui::Frame::new().fill(PANEL).inner_margin(20.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("A").size(30.0).strong().color(ACCENT));
+                    ui.add(egui::Image::new(&self.logo).fit_to_exact_size(Vec2::splat(44.0)));
                     ui.vertical(|ui| {
                         ui.heading("Airlock Control");
                         ui.label(
