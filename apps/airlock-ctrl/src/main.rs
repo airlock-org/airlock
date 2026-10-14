@@ -1,5 +1,6 @@
 mod branding;
 mod model;
+mod theme;
 mod ui;
 
 use anyhow::{Context, Result, bail};

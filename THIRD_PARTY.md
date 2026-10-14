@@ -26,6 +26,14 @@ The landing page, public user documentation, bundled Inter font, and font
 license notices are maintained in the sibling `website` project. Its
 `THIRD_PARTY.md` records the website asset provenance.
 
+## Application typeface
+
+`airlock-ctrl` bundles Inter by the Inter Project Authors under the SIL Open
+Font License 1.1. The original website WOFF2 source, native TTF instances and
+license are retained in [`apps/airlock-ctrl/assets/fonts/`](apps/airlock-ctrl/assets/fonts/README.md),
+which records the upstream revision, checksum and regeneration procedure.
+These font files retain their own license rather than Airlock's MIT license.
+
 ## Outstanding vendored-source terms
 
 The inspected `nixos-qubes` snapshot has no LICENSE/COPYING file or explicit

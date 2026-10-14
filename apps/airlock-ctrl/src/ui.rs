@@ -1,16 +1,14 @@
 use crate::{
     Decision,
     model::{FileChange, Review},
+    theme::{
+        self, ACCENT, ACCENT_TINT, BACKGROUND, BORDER, BRAND, BUTTON_TEXT, FOREGROUND, GREEN,
+        MUTED, PANEL, RED,
+    },
 };
 use eframe::egui::{self, Color32, FontId, RichText, Stroke, Vec2};
 use similar::{ChangeTag, TextDiff};
 use std::path::PathBuf;
-
-const ACCENT: Color32 = Color32::from_rgb(101, 220, 189);
-const MUTED: Color32 = Color32::from_rgb(146, 163, 183);
-const RED: Color32 = Color32::from_rgb(248, 148, 153);
-const GREEN: Color32 = Color32::from_rgb(128, 222, 168);
-const PANEL: Color32 = Color32::from_rgb(22, 29, 40);
 
 struct CodeLine {
     number: usize,
@@ -105,25 +103,7 @@ impl Controller {
         decisions_dir: Option<PathBuf>,
         screenshot: Option<PathBuf>,
     ) -> Self {
-        let mut visuals = egui::Visuals::dark();
-        visuals.panel_fill = PANEL;
-        visuals.window_fill = Color32::from_rgb(26, 34, 46);
-        visuals.extreme_bg_color = Color32::from_rgb(15, 21, 30);
-        visuals.selection.bg_fill = Color32::from_rgb(35, 77, 72);
-        cc.egui_ctx.set_visuals(visuals);
-        cc.egui_ctx.style_mut(|style| {
-            style.spacing.item_spacing = Vec2::new(10.0, 9.0);
-            style.spacing.button_padding = Vec2::new(14.0, 8.0);
-            style
-                .text_styles
-                .insert(egui::TextStyle::Heading, FontId::proportional(25.0));
-            style
-                .text_styles
-                .insert(egui::TextStyle::Body, FontId::proportional(14.0));
-            style
-                .text_styles
-                .insert(egui::TextStyle::Monospace, FontId::monospace(13.0));
-        });
+        theme::apply(&cc.egui_ctx);
         let diff_rows = review.files.first().map(rows).unwrap_or_default();
         let icon = crate::branding::logo()
             .expect("the embedded logo was checked before opening the window");
@@ -160,7 +140,7 @@ impl Controller {
                 ui.horizontal(|ui| {
                     ui.add(egui::Image::new(&self.logo).fit_to_exact_size(Vec2::splat(44.0)));
                     ui.vertical(|ui| {
-                        ui.heading("Airlock Control");
+                        ui.heading(RichText::new("Airlock Control").color(BRAND));
                         ui.label(
                             RichText::new(
                                 "Review source. Understand the effects. Make the decision.",
@@ -175,7 +155,8 @@ impl Controller {
                             "LOCAL REVIEW"
                         };
                         egui::Frame::new()
-                            .fill(Color32::from_rgb(35, 61, 60))
+                            .fill(ACCENT_TINT)
+                            .stroke(Stroke::new(1.0_f32, ACCENT))
                             .inner_margin(8.0)
                             .corner_radius(5.0)
                             .show(ui, |ui| {
@@ -213,12 +194,8 @@ impl Controller {
                         if ui
                             .add_enabled(
                                 enabled,
-                                egui::Button::new(
-                                    RichText::new(label)
-                                        .color(Color32::from_rgb(13, 40, 34))
-                                        .strong(),
-                                )
-                                .fill(ACCENT),
+                                egui::Button::new(RichText::new(label).color(BUTTON_TEXT))
+                                    .fill(ACCENT),
                             )
                             .clicked()
                         {
@@ -562,11 +539,7 @@ impl eframe::App for Controller {
         self.footer(ctx);
         self.sidebar(ctx);
         egui::CentralPanel::default()
-            .frame(
-                egui::Frame::new()
-                    .fill(Color32::from_rgb(17, 23, 33))
-                    .inner_margin(22.0),
-            )
+            .frame(egui::Frame::new().fill(BACKGROUND).inner_margin(22.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.tab, Tab::Source, "Source changes");
@@ -618,12 +591,12 @@ fn code_cell(ui: &mut egui::Ui, line: Option<&CodeLine>, width: f32) {
     let background = match line.map(|line| line.kind) {
         Some(ChangeTag::Delete) => Color32::from_rgb(58, 31, 40),
         Some(ChangeTag::Insert) => Color32::from_rgb(23, 49, 40),
-        _ => Color32::from_rgb(17, 23, 33),
+        _ => BACKGROUND,
     };
     ui.painter().rect_filled(rect, 0.0, background);
     ui.painter().line_segment(
         [rect.right_top(), rect.right_bottom()],
-        Stroke::new(1.0_f32, Color32::from_rgb(48, 58, 72)),
+        Stroke::new(1.0_f32, BORDER),
     );
     let Some(line) = line else {
         return;
@@ -640,7 +613,7 @@ fn code_cell(ui: &mut egui::Ui, line: Option<&CodeLine>, width: f32) {
         let color = match line.kind {
             ChangeTag::Delete => RED,
             ChangeTag::Insert => GREEN,
-            ChangeTag::Equal => Color32::from_rgb(215, 222, 233),
+            ChangeTag::Equal => FOREGROUND,
         };
         let background = if *emphasized {
             match line.kind {

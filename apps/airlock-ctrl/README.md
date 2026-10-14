@@ -5,6 +5,14 @@ deployment responsibilities. This first version is a local Rust/egui app with
 source review, deployment-plan inspection and local approval/rejection records.
 It uses `similar` for line and inline diffs.
 
+The native theme follows the sibling landing page's `app/globals.css`: deep
+navy background (`#071017`), blue-grey cards (`#0a141d`), pale text (`#d5e4f6`),
+muted text (`#a4b8cd`), borders (`#253b4d`) and orange accents (`#ff5832`).
+Interface text uses bundled Inter regular/medium/semibold instances from the
+website's font; code remains monospace, with green/red diff colours.
+Theme tokens live in `src/theme.rs`; font provenance and regeneration are
+documented in [assets/fonts/](assets/fonts/README.md).
+
 ## Local preview
 
 From the repository root, `make ctrl-preview` opens a built-in example using
