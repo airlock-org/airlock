@@ -3,7 +3,7 @@ use airlock_nix::{
     identity::JobId,
     job::JobSnapshot,
     review::{DeploymentPlan, ReviewRequest, ReviewResponse},
-    state::read_json,
+    state::{ResourceKey, StateStore, read_json},
 };
 use clap::{Parser, Subcommand};
 use serde::Serialize;
@@ -43,6 +43,15 @@ enum Command {
     /// Inspect a bare deployment plan and its complete known VM impact.
     #[command(name = "inspect-plan")]
     Plan { file: PathBuf },
+    /// Observe a reserved store lock and verify its owner without acquiring it.
+    #[command(name = "inspect-lock")]
+    Lock {
+        store: PathBuf,
+        resource: ResourceKey,
+        /// Inspect a record writer instead of a long-running operation.
+        #[arg(long)]
+        record: bool,
+    },
 }
 
 fn inspect(command: Command) -> Result<serde_json::Value> {
@@ -75,6 +84,21 @@ fn inspect(command: Command) -> Result<serde_json::Value> {
             let record: DeploymentPlan = read_json(&file, 4 * 1024 * 1024)?;
             Ok(json!({"kind": "plan", "record": record,
                 "affected_vms": record.affected_vms(), "reboot": record.reboot_requirement()}))
+        }
+        Command::Lock {
+            store,
+            resource,
+            record,
+        } => {
+            let store = StateStore::open(&store)?;
+            let observation = if record {
+                store
+                    .record::<serde_json::Value>(resource, 4 * 1024 * 1024)?
+                    .lock_status()?
+            } else {
+                store.operation_status(&resource)?
+            };
+            Ok(json!({"kind": "lock", "observation": observation}))
         }
     }
 }

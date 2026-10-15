@@ -1,4 +1,5 @@
 use crate::identity::VmName;
+use crate::state::LockHolder;
 use serde::Serialize;
 use std::{
     io,
@@ -26,8 +27,12 @@ pub enum Error {
     RebootNotApproved,
     #[error("invalid controller job: {reason}")]
     InvalidJob { reason: &'static str },
-    #[error("operation lock is held: {}", path.display())]
-    Busy { path: PathBuf },
+    #[error("operation lock is held: {}: {holder}", path.display())]
+    Busy { path: PathBuf, holder: LockHolder },
+    #[error("record changed since it was observed: {}", path.display())]
+    ConcurrentUpdate { path: PathBuf },
+    #[error("state directory is writable by others or its identity changed: {}", path.display())]
+    InvalidStateDirectory { path: PathBuf },
     #[error("expected a regular file: {}", path.display())]
     NotRegularFile { path: PathBuf },
     #[error("operation lock was unlinked, replaced or has multiple hard links: {}", path.display())]
@@ -70,6 +75,8 @@ impl Error {
             Self::ScopeExceeded { .. } | Self::RebootNotApproved => "scope_exceeded",
             Self::InvalidJob { .. } => "invalid_job",
             Self::Busy { .. } => "busy",
+            Self::ConcurrentUpdate { .. } => "concurrent_update",
+            Self::InvalidStateDirectory { .. } => "invalid_state_directory",
             Self::NotRegularFile { .. } => "invalid_file",
             Self::LockReplaced { .. } => "lock_replaced",
             Self::Io { .. } => "io_error",
@@ -93,11 +100,16 @@ impl Error {
             },
             Self::RebootNotApproved => ErrorDetails::RebootNotApproved,
             Self::InvalidJob { reason } => ErrorDetails::InvalidJob { reason },
-            Self::Busy { path } | Self::NotRegularFile { path } | Self::LockReplaced { path } => {
-                ErrorDetails::Path {
-                    path: path.as_path().into(),
-                }
-            }
+            Self::Busy { path, holder } => ErrorDetails::Busy {
+                path: path.as_path().into(),
+                holder: holder.clone(),
+            },
+            Self::ConcurrentUpdate { path }
+            | Self::InvalidStateDirectory { path }
+            | Self::NotRegularFile { path }
+            | Self::LockReplaced { path } => ErrorDetails::Path {
+                path: path.as_path().into(),
+            },
             Self::Io {
                 operation,
                 path,
@@ -173,6 +185,10 @@ enum ErrorDetails {
     },
     Path {
         path: DiagnosticPath,
+    },
+    Busy {
+        path: DiagnosticPath,
+        holder: LockHolder,
     },
     Io {
         operation: &'static str,

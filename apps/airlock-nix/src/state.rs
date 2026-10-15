@@ -1,13 +1,20 @@
-//! Local primitives only; no production paths are selected by this module.
+//! Local storage capabilities. Observations never acquire a writer lock.
 //!
-//! These do not replace Python's durable state or verified lock-owner sidecars.
-//! In particular, this initial lock guard exposes its owner to its caller but
-//! does not publish an on-disk owner record or identify another process's owner.
+//! A store reserves separate lock/record namespaces. Publication is private and
+//! requires the matching resource guard and a current, unforgeable snapshot.
+//! The directory owner must keep this namespace trusted and stable.
+
+mod lock;
+mod store;
+
+pub use lock::{
+    LockHolder, LockObservation, LockOwnerDetails, OperationKind, OperationLock, OperationOwner,
+};
+pub use store::{Record, RecordSnapshot, RecordWriter, ResourceKey, StateStore};
 
 use crate::{
     Error, Result,
     error::io_error,
-    identity::{JobId, ReviewId},
     wire::{validate_json, validate_json_reader},
 };
 use rustix::fs::{Mode, OFlags, open};
@@ -15,8 +22,8 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::{
     fs::{self, File, Permissions},
     io::{Read, Seek, Write},
-    os::unix::fs::{MetadataExt, PermissionsExt},
-    path::{Path, PathBuf},
+    os::unix::fs::PermissionsExt,
+    path::Path,
 };
 
 fn open_file(path: &Path, flags: OFlags, mode: Mode) -> Result<File> {
@@ -43,6 +50,10 @@ fn open_file(path: &Path, flags: OFlags, mode: Mode) -> Result<File> {
 /// directories and FIFOs are rejected. Never repair or skip a damaged record.
 pub fn read_json<T: DeserializeOwned>(path: &Path, limit: u64) -> Result<T> {
     let file = open_file(path, OFlags::RDONLY, Mode::empty())?;
+    read_file_json(&file, path, limit)
+}
+
+fn read_file_json<T: DeserializeOwned>(file: &File, path: &Path, limit: u64) -> Result<T> {
     let read_limit = limit.checked_add(1).ok_or(Error::InvalidField {
         field: "record limit",
         expected: "a byte limit smaller than u64::MAX",
@@ -92,12 +103,13 @@ fn serialization_error(path: &Path, source: serde_json::Error) -> Error {
 
 /// Unique temporary file, file fsync, atomic rename, directory fsync. A failure
 /// after rename is reported even though the destination may already be updated.
-/// The parent directory must already exist. The caller owns the directory,
-/// keeps its namespace stable, and serializes competing logical updates.
-pub fn atomic_json<T: Serialize>(
+/// Private: only resource-bound writers may publish records.
+fn publish_json<T: Serialize>(
     path: &Path,
     value: &T,
     permissions: RecordPermissions,
+    limit: u64,
+    before_publish: impl FnOnce() -> Result<()>,
 ) -> Result<()> {
     let parent = path
         .parent()
@@ -136,6 +148,18 @@ pub fn atomic_json<T: Serialize>(
         .as_file_mut()
         .write_all(b"\n")
         .map_err(|error| io_error("write record", path, error))?;
+    if temporary
+        .as_file()
+        .metadata()
+        .map_err(|error| io_error("inspect temporary record", path, error))?
+        .len()
+        > limit
+    {
+        return Err(Error::RecordTooLarge {
+            path: path.to_owned(),
+            limit,
+        });
+    }
     temporary
         .as_file_mut()
         .rewind()
@@ -151,6 +175,7 @@ pub fn atomic_json<T: Serialize>(
         .as_file()
         .sync_all()
         .map_err(|error| io_error("sync record", path, error))?;
+    before_publish()?;
     temporary
         .persist(path)
         .map_err(|error| io_error("publish record", path, error.error))?;
@@ -159,138 +184,6 @@ pub fn atomic_json<T: Serialize>(
         .map_err(|source| Error::PublishedButNotDurable {
             path: path.to_owned(),
             source,
-        })
-}
-
-#[derive(Clone, Copy, Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum OperationKind {
-    SourceImport,
-    Review,
-    Build,
-    Deployment,
-    Recovery,
-    Maintenance,
-}
-
-#[derive(Clone, Debug)]
-pub struct OperationOwner {
-    name: String,
-    reason: String,
-    operation: OperationKind,
-    job_id: Option<JobId>,
-    review_id: Option<ReviewId>,
-}
-
-impl OperationOwner {
-    pub fn new(name: String, reason: String, operation: OperationKind) -> Result<Self> {
-        if [name.as_str(), reason.as_str()].iter().any(|value| {
-            value.trim().is_empty() || value.len() > 1024 || value.chars().any(char::is_control)
-        }) {
-            return Err(Error::InvalidField {
-                field: "lock owner/reason",
-                expected: "nonblank text up to 1024 bytes, without control characters",
-            });
-        }
-        Ok(Self {
-            name,
-            reason,
-            operation,
-            job_id: None,
-            review_id: None,
-        })
-    }
-
-    pub fn with_job(mut self, job_id: JobId) -> Self {
-        self.job_id = Some(job_id);
-        self
-    }
-    pub fn with_review(mut self, review_id: ReviewId) -> Self {
-        self.review_id = Some(review_id);
-        self
-    }
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    pub fn reason(&self) -> &str {
-        &self.reason
-    }
-    pub fn operation(&self) -> OperationKind {
-        self.operation
-    }
-    pub fn job_id(&self) -> Option<&JobId> {
-        self.job_id.as_ref()
-    }
-    pub fn review_id(&self) -> Option<&ReviewId> {
-        self.review_id.as_ref()
-    }
-}
-
-/// The kernel lock is held by an unexposed File and released on drop. It is not
-/// Clone, does not unlink its lock file, and is not inherited across exec.
-#[derive(Debug)]
-#[must_use = "the operation lock is released when its guard is dropped"]
-pub struct OperationLock {
-    file: File,
-    path: PathBuf,
-    owner: OperationOwner,
-}
-
-impl OperationLock {
-    /// The caller creates and owns the parent directory. Acquisition is always
-    /// nonblocking; waiting/retry policy belongs to a future runtime adapter.
-    pub fn try_acquire(path: &Path, owner: OperationOwner) -> Result<Self> {
-        let file = open_file(path, OFlags::RDWR | OFlags::CREATE, Mode::RUSR | Mode::WUSR)?;
-        match file.try_lock() {
-            Ok(()) => {
-                let guard = Self {
-                    file,
-                    path: path.to_owned(),
-                    owner,
-                };
-                guard.check_path()?;
-                Ok(guard)
-            }
-            Err(std::fs::TryLockError::WouldBlock) => Err(Error::Busy {
-                path: path.to_owned(),
-            }),
-            Err(std::fs::TryLockError::Error(error)) => {
-                Err(io_error("acquire operation lock", path, error))
-            }
-        }
-    }
-
-    /// Detect namespace replacement. A trusted owner must still prevent anyone
-    /// unlinking/renaming the lock path while it protects an operation.
-    pub fn check_path(&self) -> Result<()> {
-        let held = self
-            .file
-            .metadata()
-            .map_err(|error| io_error("inspect held lock", &self.path, error))?;
-        let named = match fs::symlink_metadata(&self.path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Error::LockReplaced {
-                    path: self.path.clone(),
-                });
-            }
-            Err(error) => return Err(io_error("inspect lock path", &self.path, error)),
-        };
-        if !named.is_file()
-            || held.nlink() != 1
-            || (held.dev(), held.ino()) != (named.dev(), named.ino())
-        {
-            return Err(Error::LockReplaced {
-                path: self.path.clone(),
-            });
-        }
-        Ok(())
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-    pub fn owner(&self) -> &OperationOwner {
-        &self.owner
-    }
+        })?;
+    Ok(())
 }

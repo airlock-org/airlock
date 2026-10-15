@@ -29,7 +29,7 @@ worker's latest status. The other examples describe one guest-source review and
 a matching deployment plan. These files are sample data, not authorizations.
 
 `inspect-job FILE --request-id ID` also verifies the expected 32-character job
-identity. All inspection commands read only the explicit local file, print JSON
+identity. All record inspection commands read only the explicit local file, print JSON
 and exit; they never contact a VM, modify a record or execute its contents.
 Only regular files are accepted; final-component symlinks, FIFOs, devices and
 directories are rejected. Job/plan inputs are bounded to 4 MiB, review inputs
@@ -85,9 +85,11 @@ the application into any machine configuration.
   Build completion and deployment handoff never claim successful activation.
   Additional request/result metadata is retained as untrusted data; inspection
   does not promote it into a validated submission or deployment capability.
-- `state`: bounded JSON reads; atomic JSON publication with explicit permission
-  policy, unique temporary files, file fsync, rename and directory fsync; and a
-  nonblocking kernel lock guard with a required named owner and reason.
+- `state`: bounded JSON reads; a trusted state store with separate record and
+  lock namespaces; resource-bound writers with snapshot conflict detection; and
+  nonblocking kernel locks with verified owner observations. Publication uses
+  explicit permissions, unique temporary files, file fsync, rename and directory
+  fsync. There is no public publisher accepting an arbitrary path.
 - `error`: typed failures for source/baseline mismatches, scope violations,
   invalid records, lock contention, serialization and I/O, converted to JSON at
   the CLI boundary without losing paths, OS errors or affected VM names. Scope
@@ -128,21 +130,67 @@ must use `state::parse_json` (after bounding their input) to reject duplicate
 keys before Serde or metadata maps can discard them. `state::read_json` already
 uses this parser.
 
-The lock's `File` is private, non-clonable through this API, and released when
-the guard is dropped. Owner/reason and typed operation IDs are available to the
-holder. This initial primitive does not publish Python-compatible owner
-sidecars, inspect another process's owner or preserve a lock across exec;
-those runtime requirements remain implemented by Python. Lock acquisition rejects
-symlinks, nonregular files and multiple hard links, and verifies that the name
-still refers to the held inode. `check_path` can detect later replacement; the
-trusted directory owner must prevent unlink/rename while the operation runs.
-State writes require an existing trusted parent directory with a stable namespace;
-directory creation/durability belongs to explicit state initialization. Callers
-must serialize logical read/modify/write updates. Temporary files stay private
-until fully serialized and validated for unique JSON keys, and nonregular
-destinations are rejected. Serialization/validation failures leave the old
-record in place; write I/O failures retain their I/O error classification.
-Atomic publication prevents partial files, not lost updates between writers.
+`StateStore::initialize(root)` explicitly creates and syncs `records` and `.locks`
+inside an existing trusted root. `StateStore::open(root)` only opens that layout;
+it never initializes or repairs it. Root and child directories reject symlinks
+and group/other write permission. Their identities are retained and checked.
+The caller must trust the directory owner and all ancestors, keep the namespace
+stable, and use one schema/limit per resource. These primitives do not defend
+against an equally privileged process deliberately modifying their files.
+
+A validated `ResourceKey` selects `records/KEY.json`. Record writer locks live
+at `.locks/record-KEY.lock`; long-running operations use
+`.locks/operation-KEY.lock`. Neither keys nor public lock APIs accept arbitrary
+paths. A record writer cannot select a lock file as its output. Acquiring an
+operation lock does not block unrelated record writes or observations.
+
+`Record::read` returns a lock-free `RecordSnapshot<T>`, including absence for a
+new record. To publish, acquire `Record::try_write(owner)` and call
+`writer.commit(&snapshot, &value, permissions)`. The writer checks its matching
+lock, resource and exact current file version before serialization and again
+immediately before rename. Snapshots retain their file descriptor to prevent
+inode reuse from making an old snapshot current. A stale snapshot returns
+`ConcurrentUpdate`; a snapshot from another resource returns `BindingMismatch`.
+After conflict, reread and reconsider the update rather than blindly replaying
+old data against a new snapshot. Snapshots are observations, not evidence of
+source approval; domain workflow checks are still required.
+
+Temporary files stay private until fully serialized and validated for unique
+JSON keys. Oversized records, serialization failures and failed version checks
+leave the destination unchanged. Write failures preserve OS error context.
+After rename, directory fsync failure returns `PublishedButNotDurable`: the new
+record may already be visible, so reread before deciding what to do next.
+
+Each lock requires a name, reason and operation kind, with optional phase,
+job ID and review ID. The descriptor is private, non-clonable through this API,
+released on drop and closed across exec. Lock files are never renamed or
+unlinked by the crate. `check_path` detects replacement and hard-link aliases;
+every record publication checks it automatically. A runtime adapter must also
+check it immediately before protected external effects. Preserving a lock
+across intentional exec handoff remains a Python runtime capability.
+
+Owner diagnostics are written in place through the held lock descriptor,
+without moving its acquisition-specific seek position. Readers verify the
+kernel flock, PID/start time, boot ID, holder descriptor/inode and acquisition
+position. An old record cannot identify a later acquisition just because the
+PID or descriptor was reused. The random position distinguishes acquisitions;
+this diagnostic verification is not an authentication boundary. Missing,
+incomplete, stale or inaccessible metadata reports an unknown owner. Metadata
+publication is best effort: failures are exposed by `diagnostic_error()` and do
+not fail an otherwise valid operation. `update_phase` refreshes diagnostics.
+After release, old diagnostic bytes have no authority over kernel lock state.
+
+Operation/record lock observations read Linux procfs without acquiring a lock,
+creating files or writing records. They distinguish `unlocked`, `held` with a
+verified/unknown owner, and `unknown` when kernel visibility is unavailable.
+Procfs must expose the holder in the same PID namespace; these observations are
+momentary diagnostics, never a permission to proceed. Busy acquisition errors
+include the verified holder when available in both text and JSON. For inspection:
+
+```sh
+apps/target/release/airlock-nix inspect-lock /path/to/state deployment
+apps/target/release/airlock-nix inspect-lock /path/to/state job-id --record
+```
 
 Future controller and dom0 executables can be packaged separately under this
 subsystem, with only the dependencies and authority each VM needs. This crate
