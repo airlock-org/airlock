@@ -1,0 +1,15 @@
+{
+  "request_id": "11111111111111111111111111111111",
+  "status": "failed",
+  "decision": "approved",
+  "authorization_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "error": "Example: build failed after the user approved. The approval decision is still reported.",
+  "request": {
+    "schema": "airlock.sys-ctrl-guest-request.v1",
+    "action": "apply",
+    "target": "usr-home",
+    "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "lock_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "archive_bytes": 1024
+  }
+}

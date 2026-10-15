@@ -1,0 +1,12 @@
+{
+  "schema": "airlock.ctrl-approval-response.v1",
+  "request_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "lock_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "review_fingerprint": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "decision": "approve",
+  "scope": {
+    "allowed_vms": ["usr-home", "sys-ctrl"],
+    "allow_reboot": true
+  }
+}

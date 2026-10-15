@@ -1,12 +1,16 @@
 # Airlock applications
 
-This directory owns user-facing Airlock applications. Rust apps are members of
-the Cargo workspace here, sharing `Cargo.lock` and build output in `target/`.
+This directory owns Airlock applications and their backends. Rust apps are
+members of the Cargo workspace here, sharing `Cargo.lock` and build output in `target/`.
 Other app technologies can live alongside the Rust crates.
 
-The first app is [airlock-ctrl](airlock-ctrl/README.md), the desktop interface
-for source and deployment review. Its current version runs locally and does
-not connect to a deployment target.
+- [airlock-ctrl](airlock-ctrl/README.md) is the desktop interface for source and
+  deployment review. It supports local previews and the installed controller's
+  approval protocol; the GUI itself does not execute deployments.
+- [airlock-nix](airlock-nix/README.md) starts the Rust Nix subsystem with validated
+  identities, review/plan transitions, job observations and local state primitives.
+  Its CLI inspects local JSON records. It is not wired into machine services;
+  the existing Python backend remains in use.
 
 From the repository root:
 
@@ -26,6 +30,17 @@ existing pin. On other Linux environments with those libraries
 available, use `cargo run --locked --manifest-path apps/Cargo.toml -p airlock-ctrl`.
 Neither command installs or deploys machine configuration.
 
+Build and check the Nix backend separately, without GUI dependencies:
+
+```sh
+make airlock-nix-build
+make airlock-nix-check
+apps/target/release/airlock-nix inspect-job apps/airlock-nix/examples/job.json
+```
+
+The standalone flake also exports `./apps#airlock-nix` as a release package.
+Cargo/Nix builds are explicit development actions, separate from `test-quick`.
+
 Supply `CTRL_PREVIEW_ARGS` to review real source or capture a preview, for example
 `make ctrl-preview CTRL_PREVIEW_ARGS='--demo --screenshot /tmp/airlock-ctrl.png'`.
 
@@ -33,7 +48,7 @@ The quick pytest suite never builds apps or installs Rust tools. Tests requiring
 the app run when `apps/target/debug/airlock-ctrl` exists, or when
 `AIRLOCK_CTRL_BIN` explicitly points to a built binary. Otherwise they skip.
 
-`airlock-machine` remains independently deployable. It will consume pinned app
-source or packages when machine integration is added, and continue to own app
+`airlock-machine` remains independently deployable. It consumes pinned app
+source or packages for integrated applications, and continues to own app
 installation, VM settings, qrexec policy and deployment authority. See
 [repository boundaries](../docs/repositories.md).

@@ -218,6 +218,14 @@ ctrl-check:
 	cargo fmt --manifest-path apps/Cargo.toml --all -- --check
 	cargo clippy --locked --manifest-path apps/Cargo.toml -p airlock-ctrl -- -D warnings
 
+.PHONY: airlock-nix-build airlock-nix-check
+airlock-nix-build:
+	cargo build --locked --release --manifest-path apps/Cargo.toml -p airlock-nix
+
+airlock-nix-check:
+	cargo fmt --manifest-path apps/Cargo.toml -p airlock-nix -- --check
+	cargo clippy --locked --manifest-path apps/Cargo.toml -p airlock-nix --all-targets -- -D warnings
+
 # Explicit opt-in for evaluations, flake checks and package builds.
 test-nix: ensure-generated-dirs
 	@mkdir -p "$(PYTEST_LOG_DIR)"

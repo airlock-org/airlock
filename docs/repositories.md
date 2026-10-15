@@ -2,7 +2,7 @@
 
 `airlock` is the main monorepo for applications, shared development work,
 USB image assembly, prepared-store seeding, provisioning, lab transport,
-documentation, and integration tests. User-facing applications live under
+documentation, and integration tests. Applications and their backends live under
 `apps/`; its Cargo workspace groups the Rust applications.
 
 `airlock-machine` remains a separate pinned Git repository for deployable

@@ -1,5 +1,5 @@
 [workspace]
-members = ["airlock-ctrl"]
+members = ["airlock-ctrl", "airlock-nix"]
 resolver = "3"
 
 [profile.release]

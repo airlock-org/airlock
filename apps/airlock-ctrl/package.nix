@@ -19,7 +19,11 @@ rustPlatform.buildRustPackage {
   version = "0.1.0";
   src = lib.fileset.toSource {
     root = ../.;
-    fileset = lib.fileset.unions [ ../Cargo.toml ../Cargo.lock ./Cargo.toml ./src ./assets ./examples ];
+    # Cargo discovers sibling targets even when building only this app.
+    fileset = lib.fileset.unions [
+      ../Cargo.toml ../Cargo.lock ./Cargo.toml ./src ./assets ./examples
+      ../airlock-nix/Cargo.toml ../airlock-nix/src/lib.rs ../airlock-nix/src/main.rs
+    ];
   };
   cargoLock.lockFile = ../Cargo.lock;
   cargoBuildFlags = [ "-p" "airlock-ctrl" ];

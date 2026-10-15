@@ -14,6 +14,7 @@
         let pkgs = import nixpkgs { inherit system; };
         in {
           airlock-ctrl = pkgs.callPackage ./airlock-ctrl/package.nix { };
+          airlock-nix = pkgs.callPackage ./airlock-nix/package.nix { };
           default = self.packages.${system}.airlock-ctrl;
         });
     };
