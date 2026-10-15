@@ -44,9 +44,12 @@ binary under test. Prepare it explicitly before running those tests:
 
 ```bash
 make ctrl-build
-# Alternatively, build with the pinned Nix toolchain and native libraries:
-make ctrl-build CTRL_BUILD_METHOD=nix
 AIRLOCK_REQUIRE_CTRL_TESTS=1 make test-quick PYTEST_ARGS="-k 'airlock_ctrl or ctrl_artifact'"
+
+# Alternatively, build with pinned Nix tools, then prepare that runtime before pytest:
+make ctrl-build CTRL_BUILD_METHOD=nix
+./lifecycle/misc/tools/scripts/airlock-nix.sh shell ./apps#airlock-ctrl --command \
+  env AIRLOCK_REQUIRE_CTRL_TESTS=1 make test-quick PYTEST_ARGS="-k 'airlock_ctrl or ctrl_artifact'"
 ```
 
 Missing GUI builds are optional in an ordinary quick run. A required run fails
