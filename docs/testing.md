@@ -35,6 +35,10 @@ CI runs this layer on Linux without Nix or Xen and retains JUnit/JSON reports.
 The quick layer should pass on ordinary Linux development hosts. It does not
 prove that Xen boots or that Qubes services run.
 
+Test observable behavior and failure handling. Keep optional package choices in
+Nix, rather than repeating them as test inventories, and prefer exercising a
+helper over checking its source text. See the [component test guidance](../airlock-machine/docs/testing.md).
+
 By default, local tests and Nix builds use the shared Airlock store under
 `${AIRLOCK_DATA_ROOT:-/run/media/user/data/airlock}/nix-root`, not the host
 `/nix/store`. That shared store is expected and acts as the test/build cache.

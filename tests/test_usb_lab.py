@@ -89,9 +89,6 @@ def test_usb_lab_routes_usr_assistant_through_firewall_and_retains_development_a
         guiPci = host.airlock.qubes.domains.sys-gui.devices.pci;
         guiHostname = gui.networking.hostName;
         labGuiHasDom0Terminal = labGui.airlock.devDom0Terminal.guest.enable;
-        labGuiPackages = map (package: package.pname or package.name) labGui.environment.systemPackages;
-        labGuiGsettingsOverridePackages = map (package: package.pname or package.name)
-          labGui.services.desktopManager.gnome.extraGSettingsOverridePackages;
         tailscaleLauncher = builtins.readFile "${{tailscaleLauncher}}/bin/airlock-start-usr-assistant-tailscale";
         tailscaleDesktop = builtins.readFile "${{tailscaleDesktop}}/share/applications/airlock-start-usr-assistant-tailscale.desktop";
         tailscaleHandler = builtins.readFile dev.environment.etc."qubes-rpc/airlock.DevTailscaleUp".source;
@@ -148,7 +145,6 @@ def test_usb_lab_routes_usr_assistant_through_firewall_and_retains_development_a
           tailscaleSsh = dev.services.tailscale.extraUpFlags;
           dom0Shell = dev.airlock.devDom0Terminal.guest.enable;
           networkManager = dev.networking.networkmanager.enable;
-          packages = map (package: package.pname or package.name) dev.environment.systemPackages;
           configNixStoreRoot = dev.airlock.qubeGuest.configNixStoreRoot;
           poolInit = dev.systemd.services.airlock-usr-assistant-build-store.serviceConfig;
           poolDevices = dev.systemd.services.airlock-usr-assistant-build-store.requires;
@@ -246,11 +242,6 @@ def test_usb_lab_routes_usr_assistant_through_firewall_and_retains_development_a
     assert report["ctrlBuildJobs"] == 1
     assert report["guiHostname"] == "sys-gui"
     assert not report["labGuiHasDom0Terminal"]
-    assert "airlock-start-usr-assistant-tailscale" in report["labGuiPackages"]
-    assert "airlock-start-usr-assistant-tailscale.desktop" in report["labGuiPackages"]
-    # Connected desktop profiles keep everyday applications in usr-home.
-    assert "nautilus" not in report["labGuiPackages"]
-    assert report["labGuiGsettingsOverridePackages"] == ["gnome-shell"]
     assert "/bin/xterm -hold " in report["tailscaleLauncher"]
     assert "-fs 16" in report["tailscaleLauncher"]
     assert "force-user='root'" in report["tailscaleRpcConfig"]
@@ -336,7 +327,6 @@ def test_usb_lab_routes_usr_assistant_through_firewall_and_retains_development_a
     assert (
         "--nix-store" not in report["dev"]["poolSend"]
     )  # Query through the overlay-aware wrapper.
-    assert "airlock-pool-send" in report["dev"]["packages"]
     assert {
         key: report["dev"][key]
         for key in (
@@ -357,7 +347,6 @@ def test_usb_lab_routes_usr_assistant_through_firewall_and_retains_development_a
         "userSelection": True,
         "providesNetwork": False,
     }
-    assert "jq" in report["dev"]["packages"]
 
 
 @pytest.mark.nix
