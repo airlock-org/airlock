@@ -7,11 +7,12 @@ runbook. The USB lab uses physical-GPU GNOME; see [USB lab](usb-lab.md),
 
 `sys-gui` owns LightDM's login screen, desktop session, Qubes Manager,
 application menus, tray widgets, notifications, and graphical settings tools.
-The offline `usr-home` desktop-work VM owns the Files and Terminal processes
-and the user's persistent home directory; their windows render in `sys-gui`.
-Its GNOME application catalog also includes local document, image, media,
-calendar, contact, editor, utility and help applications. `sys-gui` exposes
-each through a fixed launcher; it does not install GNOME's broad core app set.
+The `usr-home` personal VM owns application processes and the user's persistent
+home directory; their windows render in `sys-gui`. Application selection and
+MIME defaults live in the
+[guest configuration](../airlock-machine/lifecycle/misc/modules/usr-home-guest.nix).
+Applications supply their own desktop entries for Qubes menu discovery;
+`sys-gui` does not install GNOME's broad personal app set.
 The bootstrap and initial runtime configurations use **user / airlock** for
 the guest login. The dom0 console account remains **airlock / airlock**.
 These are development credentials. Deployments should configure the GUI
@@ -72,9 +73,8 @@ existing Nix-native guest builder. The full image profiles remain unchanged.
 - The sole guest has no NetVM and no PCI assignments.
 - Network, configuration, application and `sys-gpu` VM images are not selected
   as dependencies of this image. Their flake outputs remain available.
-- Files/Firefox launchers, their panel bootstrap and their MIME defaults are
-  omitted because `usr-home` and `usr-browser` do not exist here. The normal
-  GUI guest keeps those launchers.
+- Personal-VM application menus and web-link forwarding are unavailable because
+  `usr-home` does not exist here.
 - A single boot setup unit applies and records the entire small topology;
   no deferred provisioning, network-provider startup or config workflow runs.
 - The full development toolset and the proxy targeting `sys-firewall` are

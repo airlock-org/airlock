@@ -23,6 +23,11 @@
   changes, review the diff and check formatting; executable tests are unnecessary.
   Preserve clear logs and machine-readable output under `.airlock-logs/`.
 - Do not add tests that merely repeat the configured package list.
+- Routine package-list additions/removals do not require documentation updates
+  unless they change documented behavior, instructions or supported capabilities.
+  Keep package selections in Nix; link to that configuration rather than maintain
+  package inventories or installation/removal logs in docs. Git and deployment
+  records provide the change history. Preserve dated validation evidence.
 - Keep `test-quick` free of Nix evaluations, builds and automatic tool provisioning.
   `make test-nix` is opt-in; do not run it as a routine pre-deployment gate.
 - New tests should be written in the pytest framework. Do not add new Bash test
