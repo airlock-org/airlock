@@ -206,6 +206,18 @@ def test_assistant_rename_rejects_incompatible_action_before_build(monkeypatch, 
     assert error.value.code == 2
 
 
+@pytest.mark.parametrize("action", ["plan", "apply", "status", "verify", "resume", "rollback"])
+def test_normal_commands_use_the_airlock_machine_namespace(monkeypatch, action):
+    calls = []
+    monkeypatch.delenv("AIRLOCK_DEPLOY_REMOTE_CLIENT", raising=False)
+    monkeypatch.setattr(client, "Dom0", lambda *_: pytest.fail("unexpected development shell"))
+    monkeypatch.setattr(client.subprocess, "run", lambda argv, **_kwargs: calls.append(argv))
+    monkeypatch.setattr(client.subprocess, "call", lambda argv: calls.append(argv) or 0)
+    assert client.main([action, "--target", "user@usr-assistant"]) == 0
+    assert calls[-1] == ["ssh", "user@usr-assistant", "airlock", "machine", action]
+    assert len(calls) == (2 if action in {"plan", "apply"} else 1)
+
+
 def test_assistant_rename_build_is_explicit_and_does_not_open_a_remote_session(monkeypatch):
     calls = []
     def build(profile, **options):
@@ -230,8 +242,8 @@ def test_assistant_rename_defaults_to_incremental_controller_submission(monkeypa
     assert client.main([action, "--target", "user@sys-agent", "--assistant-rename"]) == 0
     assert calls[0][1]["env"]["AIRLOCK_DEPLOY_SOURCE_COMMAND"] == "airlock-sys-agent-machine-source"
     assert calls[1] == ["ssh", "user@sys-agent", "python3",
-                       "/home/user/airlock-machine/lifecycle/runtime/tools/usr-assistant-machine-deploy.py",
-                       action, "--assistant-rename"]
+                       "/home/user/airlock-machine/lifecycle/runtime/tools/airlock.py",
+                       "machine", action, "--assistant-rename"]
 
 
 @pytest.mark.parametrize("action", ["plan", "apply"])

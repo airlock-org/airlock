@@ -76,7 +76,7 @@ PYTHON_FILES := \
 	lifecycle/image/tools/prepare-runtime.py \
 	airlock-machine/lifecycle/runtime/tools/machine-deploy.py \
 	airlock-machine/lifecycle/runtime/tools/airlock_machine_deploy/*.py \
-	airlock-machine/lifecycle/runtime/tools/usr-assistant-machine-deploy.py \
+	airlock-machine/lifecycle/runtime/tools/airlock.py \
 	airlock-machine/lifecycle/runtime/tools/sys-ctrl-*.py \
 	airlock-machine/tests/test_sys_ctrl_*.py \
 	lifecycle/misc/tools/scripts/machine-deploy.py \
@@ -89,7 +89,7 @@ PYTHON_FILES := \
 	tests/test_boot_cache_quarantine.py \
 	tests/test_usr_assistant_machine_source.py \
 	airlock-machine/tests/test_usr_assistant_machine_build.py \
-	airlock-machine/tests/test_usr_assistant_machine_deploy.py \
+	airlock-machine/tests/test_airlock_cli.py \
 	airlock-machine/tests/test_usr_assistant_workspace.py \
 	airlock-machine/tests/test_qubes_guest_session.py \
 	airlock-machine/lifecycle/misc/tools/pkgs/airlock-gui-gpu-check/src/check.py \

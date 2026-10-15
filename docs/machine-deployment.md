@@ -120,11 +120,11 @@ clean committed checkout included in usr-assistant, without a parent `airlock`
 checkout or development-host build artifacts:
 
 ```bash
-airlock-usr-assistant-machine-deploy build
-airlock-usr-assistant-machine-deploy plan
-airlock-usr-assistant-machine-deploy apply
-airlock-usr-assistant-machine-deploy status
-airlock-usr-assistant-machine-deploy verify
+airlock machine build
+airlock machine plan
+airlock machine apply
+airlock machine status
+airlock machine verify
 ```
 
 The usr-assistant client sends a versioned source bundle to `sys-ctrl`. The
@@ -154,7 +154,7 @@ Normal controller submissions require [source approval](../airlock-machine/docs/
 before evaluation/build. The user approves the exact source and permitted impact
 once; dom0 rejects a resulting plan outside that scope. The submission waits and
 streams durable feedback. A request can be queried with
-`airlock-usr-assistant-machine-deploy review-status --request-id REQUEST_ID`.
+`airlock machine review-status --request-id REQUEST_ID`.
 The legacy development administrative route is separate from this gate.
 The unique root inventory avoids counting a shared immutable base once per VM.
 Unchanged roots seeded by image creation are verified and reused without another
@@ -168,8 +168,8 @@ For a committed single-guest update, the controller route is:
 
 ```bash
 # Run inside usr-assistant from its clean airlock-machine checkout.
-airlock-usr-assistant-machine-deploy guest-plan --target usr-home
-airlock-usr-assistant-machine-deploy guest-apply --target usr-home
+airlock machine guest-plan --target usr-home
+airlock machine guest-apply --target usr-home
 ```
 
 The client sends a versioned source archive over qrexec. `sys-ctrl` verifies
@@ -504,10 +504,10 @@ pruned. Use the deployed coordinator to inspect all recorded releases, their
 roots, removable Nix boot generations, and protection reasons:
 
 ```bash
-airlock-usr-assistant-machine-deploy release-list
-airlock-usr-assistant-machine-deploy release-prune-plan --release /nix/store/RELEASE
-airlock-usr-assistant-machine-deploy release-retain --release /nix/store/RELEASE --retain true
-airlock-usr-assistant-machine-deploy release-prune --release /nix/store/RELEASE \
+airlock machine release-list
+airlock machine release-prune-plan --release /nix/store/RELEASE
+airlock machine release-retain --release /nix/store/RELEASE --retain true
+airlock machine release-prune --release /nix/store/RELEASE \
   --confirm /nix/store/RELEASE
 ```
 
@@ -529,9 +529,9 @@ To empty a specific trash record before its deadline, inspect the effective
 prune plan and prune each release that references the VM:
 
 ```bash
-airlock-usr-assistant-machine-deploy release-prune-plan --release /nix/store/RELEASE \
+airlock machine release-prune-plan --release /nix/store/RELEASE \
   --allow-unexpired-trash TRANSACTION-VM
-airlock-usr-assistant-machine-deploy release-prune --release /nix/store/RELEASE \
+airlock machine release-prune --release /nix/store/RELEASE \
   --confirm /nix/store/RELEASE --allow-unexpired-trash TRANSACTION-VM
 ```
 
@@ -559,7 +559,7 @@ sudo /var/lib/airlock/machine/controller trash-purge TRANSACTION-VM \
   --confirm TRANSACTION-VM
 ```
 
-The usr-assistant equivalent is `airlock-usr-assistant-machine-deploy trash-purge
+The usr-assistant equivalent is `airlock machine trash-purge
 --identity TRANSACTION-VM --confirm TRANSACTION-VM`. Prune and purge use detached
 dom0 workers and survive SSH disconnection; `trash-list` reports purge status.
 Before expiry, add `--before-expiry` to that exact purge command. This waives

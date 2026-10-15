@@ -566,7 +566,7 @@ sys-net topology can claim the host network-class PCI devices.
 
 If an external domain is referenced by a candidate but does not exist yet, setup
 defers that NetVM assignment until the domain exists and setup is rerun.
-The self-hosted `airlock check` and `airlock apply` path is stricter: after the
+The prototype config validation path is stricter: after the
 validator emits a topology, dom0 verifies that referenced domains are either
 declared by the candidate or already exist in Qubes, and rejects the candidate
 before promotion or activation if a referenced NetVM is missing. For external
@@ -600,31 +600,10 @@ image family without dom0 direct DHCP, the dev marker, or dev-only dom0 tools.
 Explicit flake outputs are also available, for example
 `airlock-vm-gui-config-dev-image` and `airlock-vm-gui-config-release-image`.
 
-The expected repository path is:
-
-```text
-/path/to/airlock
-```
-
-Airlock does not bake a mutable checkout into the immutable VM closure. If that
-path already exists it is preserved. On a fresh VM, clone or move the repository
-there once, then use:
-
-```text
-cd ~/dev/airlock
-zellij --version
-codex
-nix flake check
-make test-quick
-airlock status
-airlock check
-airlock apply
-```
-
-`usr-cmd` remains an ordinary unprivileged domain, not a `sys-*` service VM. Its
-qrexec authority is the narrow config-control path granted to `usr-cmd`; it
-does not receive sys-config-staging, sys-config-validator, sys-config-vault, dom0 filesystem,
-or arbitrary dom0 command-execution services.
+The `cmd` role remains in nested development profiles. Its earlier configuration
+CLI has been removed. The installed machine uses `airlock machine` from
+`~/airlock-machine` in usr-assistant; see the [workspace guide](../airlock-machine/docs/usr-assistant.md).
+The prototype control services below are disabled in the supplied profiles.
 
 Dom0 host changes are declared under:
 
@@ -682,26 +661,18 @@ current deployment records, current host generation links, pending reboot
 state, pending VM restart state, and the Airlock-managed qrexec policy file as
 JSON.
 
-## Command VM Control Path
+## Prototype config control backend
 
-The ordinary `usr-cmd` is allowed to request narrow config
-generation operations from dom0:
+The earlier configuration backend remains for internal helpers and tests.
+Its public CLI has been removed. RPC entry points and policy are gated by
+`airlock.qubes.configAccessPolicy.enable`, which defaults to false and is
+explicitly disabled in the supplied bootstrap profiles. No supplied profile
+grants a VM access through `allowedSubmitters`.
 
-```text
-usr-cmd
-    airlock status/check/apply/rollback
-        ↓ qrexec
-dom0 airlock-config-control
-        ↓
-sys-config-validator / sys-config-vault / dom0 apply or rollback
-```
-
-The VM-facing `airlock` command submits a clean Git commit as a `config.bundle`
-plus a `airlock.config-candidate.v1` manifest. The manifest records the commit,
-tree, branch, source role, qrexec transport, requested target class, and the
-dom0 status observed by the client before submission. Dom0 and
-`sys-config-validator` do not trust this status to decide validity; it is candidate
-identity/context only.
+The backend accepts a `config.bundle` and an `airlock.config-candidate.v1`
+manifest. The manifest records the commit, tree, branch, source role, qrexec
+transport, requested target class, and observed dom0 status. Dom0 and
+sys-config-validator do not trust that status as proof of candidate validity.
 
 The dom0 qrexec entry point is fixed to four operations:
 
@@ -715,7 +686,7 @@ airlock.Config.Rollback
 `Check` and `Apply` accept only the staged candidate tar shape
 `config.bundle + manifest.json`. They then call the existing
 `airlock-config-archive-candidate` and `airlock-config-apply` machinery with that
-candidate tar. `usr-cmd` never receives a qrexec primitive for shell commands,
+candidate tar. These services do not provide qrexec primitives for shell commands,
 scripts, arbitrary file writes, direct dom0 filesystem access, or direct Nix
 store writes.
 

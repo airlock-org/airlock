@@ -454,11 +454,11 @@ def main(argv=None):
             if args.assistant_rename:
                 return subprocess.call([
                     "ssh", args.target, "python3",
-                    "/home/user/airlock-machine/lifecycle/runtime/tools/usr-assistant-machine-deploy.py",
-                    args.action, "--assistant-rename",
+                    "/home/user/airlock-machine/lifecycle/runtime/tools/airlock.py",
+                    "machine", args.action, "--assistant-rename",
                 ])
             return subprocess.call(["ssh", args.target,
-                                    os.environ.get("AIRLOCK_DEPLOY_REMOTE_CLIENT", "airlock-usr-assistant-machine-deploy"), args.action])
+                                    os.environ.get("AIRLOCK_DEPLOY_REMOTE_CLIENT", "airlock"), "machine", args.action])
         except (OSError, subprocess.SubprocessError) as exc:
             print(f"machine-deploy: controller submission failed: {exc}", file=sys.stderr)
             return 1
