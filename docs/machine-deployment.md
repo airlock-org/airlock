@@ -152,9 +152,13 @@ host NAR/compressed bytes, build time and transfer/admission/validation timings.
 
 Normal controller submissions require [source approval](../airlock-machine/docs/controller-review.md)
 before evaluation/build. The user approves the exact source and permitted impact
-once; dom0 rejects a resulting plan outside that scope. The submission waits and
-streams durable feedback. A request can be queried with
-`airlock machine review-status --request-id REQUEST_ID`.
+once; dom0 rejects a resulting plan outside that scope. The submission waits for
+the decision, then exits with structured feedback and a request ID so the calling
+agent can resume reasoning. Approved work continues in the detached controller
+job; approval does not confirm deployment success. Follow the request with
+`airlock machine review-status --request-id REQUEST_ID`, wait for `planned`
+before applying, and use status/verify for actual deployment completion.
+Rejection or cancellation should lead to discussion rather than automatic retry.
 The legacy development administrative route is separate from this gate.
 The unique root inventory avoids counting a shared immutable base once per VM.
 Unchanged roots seeded by image creation are verified and reused without another
