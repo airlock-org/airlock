@@ -88,13 +88,17 @@ def test_clean_app_flake_does_not_fetch_an_unavailable_machine_submodule(tmp_pat
 
 @pytest.fixture(scope="module")
 def ctrl():
+    from ctrl_artifact import RECEIPT, verify
+
     configured = os.environ.get("AIRLOCK_CTRL_BIN")
-    binary = Path(configured) if configured else ROOT / "apps/target/debug/airlock-ctrl"
-    if not binary.is_file():
-        if configured:
-            pytest.fail(f"AIRLOCK_CTRL_BIN does not exist: {binary}")
-        pytest.skip("build airlock-ctrl explicitly or set AIRLOCK_CTRL_BIN")
-    return binary.resolve()
+    if not RECEIPT.is_file():
+        if configured or os.environ.get("AIRLOCK_REQUIRE_CTRL_TESTS") == "1":
+            pytest.fail("GUI build receipt is missing; run make ctrl-build before pytest")
+        pytest.skip("run make ctrl-build explicitly to verify the current GUI sources")
+    try:
+        return verify(configured=configured)
+    except (OSError, ValueError, KeyError) as exc:
+        pytest.fail(str(exc))
 
 
 def run(ctrl, *args):

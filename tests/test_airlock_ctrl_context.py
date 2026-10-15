@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def context_runner(tmp_path_factory):
     compiler = shutil.which("rustc")
     if not compiler:
+        if os.environ.get("AIRLOCK_REQUIRE_CTRL_TESTS") == "1":
+            pytest.fail("Prepare the Rust compiler before running required GUI context tests")
         pytest.skip("Rust compiler is not installed; no automatic provisioning")
     directory = tmp_path_factory.mktemp("ctrl-context")
     harness = directory / "main.rs"

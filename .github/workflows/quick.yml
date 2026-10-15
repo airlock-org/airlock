@@ -25,7 +25,7 @@ jobs:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
       - name: Prepare host tools
-        run: sudo apt-get update && sudo apt-get install -y jq util-linux e2fsprogs ripgrep
+        run: sudo apt-get update && sudo apt-get install -y jq util-linux e2fsprogs ripgrep build-essential
       - name: Prepare locked Python dependencies
         run: uv sync --locked --python 3.12
       - name: Run quick suite
@@ -35,6 +35,81 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: quick-test-reports
+          path: .airlock-logs/
+          include-hidden-files: true
+          retention-days: 7
+
+  storage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      AIRLOCK_USE_HOST_NIX_STORE: '1'
+      AIRLOCK_LOG_DIR: ${{ github.workspace }}/.airlock-logs/storage
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+          token: ${{ secrets.AIRLOCK_CI_READ_TOKEN || github.token }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+        with:
+          determinate: false
+      - name: Prepare locked Python dependencies
+        run: uv sync --locked --python 3.12
+      - name: Prepare native host tools
+        run: sudo apt-get update && sudo apt-get install -y jq util-linux e2fsprogs build-essential
+      - name: Run storage tests with required patched EROFS tools
+        run: >-
+          nix shell ./airlock-machine#airlock-erofs-utils --command uv run --no-sync pytest
+          tests/test_prepared_store.py airlock-machine/tests/test_incremental_store_index.py -m 'not nix' --require-erofs -q
+          --json-report --json-report-file .airlock-logs/storage/pytest-report.json
+      - name: Retain storage reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: storage-test-reports
+          path: .airlock-logs/
+          include-hidden-files: true
+          retention-days: 7
+
+  gui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      AIRLOCK_USE_HOST_NIX_STORE: '1'
+      AIRLOCK_REQUIRE_CTRL_TESTS: '1'
+      AIRLOCK_LOG_DIR: ${{ github.workspace }}/.airlock-logs/gui
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+          token: ${{ secrets.AIRLOCK_CI_READ_TOKEN || github.token }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+        with:
+          determinate: false
+      - name: Prepare locked Python dependencies
+        run: uv sync --locked --python 3.12
+      - name: Build current GUI and record its source and binary identities
+        run: make ctrl-build CTRL_BUILD_METHOD=nix
+      - name: Run GUI review and context tests
+        run: >-
+          nix shell --inputs-from ./apps nixpkgs#rustc --command
+          uv run --no-sync pytest tests/test_airlock_ctrl.py tests/test_airlock_ctrl_context.py
+          -m 'not nix' -q --json-report --json-report-file .airlock-logs/gui/pytest-report.json
+      - name: Retain GUI reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gui-test-reports
           path: .airlock-logs/
           include-hidden-files: true
           retention-days: 7

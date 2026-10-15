@@ -39,6 +39,24 @@ Test observable behavior and failure handling. Keep optional package choices in
 Nix, rather than repeating them as test inventories, and prefer exercising a
 helper over checking its source text. See the [component test guidance](../airlock-machine/docs/testing.md).
 
+GUI tests use a build receipt that binds the current application inputs to the
+binary under test. Prepare it explicitly before running those tests:
+
+```bash
+make ctrl-build
+# Alternatively, build with the pinned Nix toolchain and native libraries:
+make ctrl-build CTRL_BUILD_METHOD=nix
+AIRLOCK_REQUIRE_CTRL_TESTS=1 make test-quick PYTEST_ARGS="-k 'airlock_ctrl or ctrl_artifact'"
+```
+
+Missing GUI builds are optional in an ordinary quick run. A required run fails
+if the build receipt is missing, and a stale source or changed binary always
+requires another explicit build. The separate GUI CI job builds current source
+before testing; it also prepares the Rust compiler for the context/navigation
+tests. The storage CI job prepares the pinned, patched EROFS tools and uses
+`--require-erofs` so missing tools cannot turn that job into skipped coverage.
+Neither preparation happens automatically inside `test-quick`.
+
 By default, local tests and Nix builds use the shared Airlock store under
 `${AIRLOCK_DATA_ROOT:-/run/media/user/data/airlock}/nix-root`, not the host
 `/nix/store`. That shared store is expected and acts as the test/build cache.
