@@ -6,22 +6,16 @@ use crate::{
     identity::{JobId, ReviewId},
     wire::string_enum,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use std::collections::BTreeMap;
 
 string_enum! {
     pub enum JobStatus ("controller job status") {
-        Queued => "queued",
-        AwaitingApproval => "awaiting_approval",
-        Building => "building",
-        Planned => "planned",
-        Built => "built",
-        DeploymentStarted => "deployment_started",
-        Rejected => "rejected",
-        Cancelled => "cancelled",
-        ScopeExceeded => "scope_exceeded",
-        StaleReview => "stale_review",
-        Failed => "failed",
+        Queued => "queued", AwaitingApproval => "awaiting_approval",
+        Building => "building", Planned => "planned", Built => "built",
+        DeploymentStarted => "deployment_started", Rejected => "rejected",
+        Cancelled => "cancelled", ScopeExceeded => "scope_exceeded",
+        StaleReview => "stale_review", Failed => "failed",
     }
 }
 
@@ -39,24 +33,100 @@ impl JobStatus {
             | Self::Failed => false,
         }
     }
+}
 
-    fn terminal_exit_code(self) -> Option<u8> {
+string_enum! {
+    pub enum PendingStatus ("pending job status") {
+        Queued => "queued", AwaitingApproval => "awaiting_approval",
+    }
+}
+
+string_enum! {
+    pub enum ApprovedStatus ("approved job status") {
+        Building => "building", Planned => "planned", Built => "built",
+        DeploymentStarted => "deployment_started", ScopeExceeded => "scope_exceeded",
+        StaleReview => "stale_review", Failed => "failed",
+    }
+}
+
+string_enum! {
+    pub enum StopReason ("stopped job status") {
+        Rejected => "rejected", Cancelled => "cancelled", ScopeExceeded => "scope_exceeded",
+        StaleReview => "stale_review", Failed => "failed",
+    }
+}
+
+impl From<PendingStatus> for JobStatus {
+    fn from(value: PendingStatus) -> Self {
+        match value {
+            PendingStatus::Queued => Self::Queued,
+            PendingStatus::AwaitingApproval => Self::AwaitingApproval,
+        }
+    }
+}
+
+impl From<ApprovedStatus> for JobStatus {
+    fn from(value: ApprovedStatus) -> Self {
+        match value {
+            ApprovedStatus::Building => Self::Building,
+            ApprovedStatus::Planned => Self::Planned,
+            ApprovedStatus::Built => Self::Built,
+            ApprovedStatus::DeploymentStarted => Self::DeploymentStarted,
+            ApprovedStatus::ScopeExceeded => Self::ScopeExceeded,
+            ApprovedStatus::StaleReview => Self::StaleReview,
+            ApprovedStatus::Failed => Self::Failed,
+        }
+    }
+}
+
+impl From<StopReason> for JobStatus {
+    fn from(value: StopReason) -> Self {
+        match value {
+            StopReason::Rejected => Self::Rejected,
+            StopReason::Cancelled => Self::Cancelled,
+            StopReason::ScopeExceeded => Self::ScopeExceeded,
+            StopReason::StaleReview => Self::StaleReview,
+            StopReason::Failed => Self::Failed,
+        }
+    }
+}
+
+impl StopReason {
+    pub fn exit_code(self) -> u8 {
         match self {
-            Self::Queued | Self::AwaitingApproval | Self::Building => None,
-            Self::Planned | Self::Built | Self::DeploymentStarted => Some(0),
-            Self::Rejected => Some(20),
-            Self::Cancelled => Some(21),
-            Self::ScopeExceeded => Some(22),
-            Self::StaleReview => Some(23),
-            Self::Failed => Some(1),
+            Self::Rejected => 20,
+            Self::Cancelled => 21,
+            Self::ScopeExceeded => 22,
+            Self::StaleReview => 23,
+            Self::Failed => 1,
+        }
+    }
+}
+
+impl TryFrom<JobStatus> for StopReason {
+    type Error = Error;
+
+    fn try_from(status: JobStatus) -> Result<Self> {
+        match status {
+            JobStatus::Rejected => Ok(Self::Rejected),
+            JobStatus::Cancelled => Ok(Self::Cancelled),
+            JobStatus::ScopeExceeded => Ok(Self::ScopeExceeded),
+            JobStatus::StaleReview => Ok(Self::StaleReview),
+            JobStatus::Failed => Ok(Self::Failed),
+            JobStatus::Queued
+            | JobStatus::AwaitingApproval
+            | JobStatus::Building
+            | JobStatus::Planned
+            | JobStatus::Built
+            | JobStatus::DeploymentStarted => Err(Error::InvalidJob {
+                reason: "job status does not describe a stopped request",
+            }),
         }
     }
 }
 
 string_enum! {
-    pub enum StoredDecision ("stored decision") {
-        Approved => "approved",
-    }
+    pub enum StoredDecision ("stored decision") { Approved => "approved" }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -67,120 +137,222 @@ struct JobWire {
     decision: Option<StoredDecision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     authorization_id: Option<ReviewId>,
-    // Preserve request/result/diagnostic extensions from the Python writer.
-    // They remain untrusted data, never executable commands or capabilities.
+    // Request/result extensions remain untrusted observations, not executable
+    // intents or evidence that the supplied source was actually authorized.
     #[serde(flatten)]
     details: BTreeMap<String, serde_json::Value>,
 }
 
+// A recorded approval always carries its authorization ID and a post-approval
+// phase. Pending and stopped jobs cannot accidentally acquire that decision.
+#[derive(Clone, Debug)]
+enum JobState {
+    Queued {
+        authorization_id: Option<ReviewId>,
+    },
+    AwaitingApproval {
+        authorization_id: ReviewId,
+    },
+    Approved {
+        authorization_id: ReviewId,
+        status: ApprovedStatus,
+    },
+    Stopped {
+        authorization_id: Option<ReviewId>,
+        reason: StopReason,
+    },
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(try_from = "JobWire", into = "JobWire")]
-pub struct JobSnapshot(JobWire);
+pub struct JobSnapshot {
+    request_id: JobId,
+    state: JobState,
+    details: BTreeMap<String, serde_json::Value>,
+}
 
 impl TryFrom<JobWire> for JobSnapshot {
     type Error = Error;
 
     fn try_from(value: JobWire) -> Result<Self> {
-        if value.status == JobStatus::AwaitingApproval && value.authorization_id.is_none() {
-            return Err(Error::InvalidJob {
-                reason: "awaiting approval is missing its authorization ID",
-            });
-        }
-        if value.decision.is_some() && value.authorization_id.is_none() {
-            return Err(Error::InvalidJob {
-                reason: "approved decision is missing its authorization ID",
-            });
-        }
-        if matches!(
-            value.status,
-            JobStatus::Building
-                | JobStatus::Planned
-                | JobStatus::Built
-                | JobStatus::DeploymentStarted
-        ) && value.decision != Some(StoredDecision::Approved)
-        {
-            return Err(Error::InvalidJob {
-                reason: "work started without a recorded approval decision",
-            });
-        }
-        if value.decision.is_some()
-            && matches!(
-                value.status,
-                JobStatus::Queued
+        let state = match value.decision {
+            Some(StoredDecision::Approved) => {
+                let authorization_id = value.authorization_id.ok_or(Error::InvalidJob {
+                    reason: "approved decision is missing its authorization ID",
+                })?;
+                let status = match value.status {
+                    JobStatus::Building => ApprovedStatus::Building,
+                    JobStatus::Planned => ApprovedStatus::Planned,
+                    JobStatus::Built => ApprovedStatus::Built,
+                    JobStatus::DeploymentStarted => ApprovedStatus::DeploymentStarted,
+                    JobStatus::ScopeExceeded => ApprovedStatus::ScopeExceeded,
+                    JobStatus::StaleReview => ApprovedStatus::StaleReview,
+                    JobStatus::Failed => ApprovedStatus::Failed,
+                    JobStatus::Queued
                     | JobStatus::AwaitingApproval
                     | JobStatus::Rejected
-                    | JobStatus::Cancelled
-            )
-        {
-            return Err(Error::InvalidJob {
-                reason: "approval decision conflicts with job status",
-            });
-        }
-        Ok(Self(value))
+                    | JobStatus::Cancelled => {
+                        return Err(Error::InvalidJob {
+                            reason: "approval decision conflicts with job status",
+                        });
+                    }
+                };
+                JobState::Approved {
+                    authorization_id,
+                    status,
+                }
+            }
+            None => match value.status {
+                JobStatus::Queued => JobState::Queued {
+                    authorization_id: value.authorization_id,
+                },
+                JobStatus::AwaitingApproval => JobState::AwaitingApproval {
+                    authorization_id: value.authorization_id.ok_or(Error::InvalidJob {
+                        reason: "awaiting approval is missing its authorization ID",
+                    })?,
+                },
+                JobStatus::Building
+                | JobStatus::Planned
+                | JobStatus::Built
+                | JobStatus::DeploymentStarted => {
+                    return Err(Error::InvalidJob {
+                        reason: "work started without a recorded approval decision",
+                    });
+                }
+                status @ (JobStatus::Rejected
+                | JobStatus::Cancelled
+                | JobStatus::ScopeExceeded
+                | JobStatus::StaleReview
+                | JobStatus::Failed) => {
+                    let reason = StopReason::try_from(status)?;
+                    JobState::Stopped {
+                        authorization_id: value.authorization_id,
+                        reason,
+                    }
+                }
+            },
+        };
+        Ok(Self {
+            request_id: value.request_id,
+            state,
+            details: value.details,
+        })
     }
 }
 
 impl From<JobSnapshot> for JobWire {
     fn from(value: JobSnapshot) -> Self {
-        value.0
+        let (status, decision, authorization_id) = match value.state {
+            JobState::Queued { authorization_id } => (JobStatus::Queued, None, authorization_id),
+            JobState::AwaitingApproval { authorization_id } => {
+                (JobStatus::AwaitingApproval, None, Some(authorization_id))
+            }
+            JobState::Approved {
+                authorization_id,
+                status,
+            } => (
+                status.into(),
+                Some(StoredDecision::Approved),
+                Some(authorization_id),
+            ),
+            JobState::Stopped {
+                authorization_id,
+                reason,
+            } => (reason.into(), None, authorization_id),
+        };
+        Self {
+            request_id: value.request_id,
+            status,
+            decision,
+            authorization_id,
+            details: value.details,
+        }
     }
 }
 
 impl JobSnapshot {
     pub fn request_id(&self) -> &JobId {
-        &self.0.request_id
+        &self.request_id
     }
     pub fn status(&self) -> JobStatus {
-        self.0.status
+        self.submission_feedback().job_status()
     }
     pub fn decision(&self) -> Option<StoredDecision> {
-        self.0.decision
+        match &self.state {
+            JobState::Approved { .. } => Some(StoredDecision::Approved),
+            JobState::Queued { .. }
+            | JobState::AwaitingApproval { .. }
+            | JobState::Stopped { .. } => None,
+        }
     }
     pub fn authorization_id(&self) -> Option<&ReviewId> {
-        self.0.authorization_id.as_ref()
+        match &self.state {
+            JobState::Queued { authorization_id }
+            | JobState::Stopped {
+                authorization_id, ..
+            } => authorization_id.as_ref(),
+            JobState::AwaitingApproval { authorization_id }
+            | JobState::Approved {
+                authorization_id, ..
+            } => Some(authorization_id),
+        }
     }
 
-    /// Approval stays observable even if the worker has already finished or
-    /// failed by the time the submitting client polls again.
+    /// Approval stays observable after later work finishes or fails.
     pub fn submission_feedback(&self) -> SubmissionFeedback {
-        match self.0.decision {
-            Some(StoredDecision::Approved) => SubmissionFeedback::Approved {
-                job_status: self.0.status,
-                continuing: self.0.status.is_active(),
-            },
-            None if self.0.status.is_active() => SubmissionFeedback::Pending {
-                job_status: self.0.status,
-            },
-            None => SubmissionFeedback::Stopped {
-                job_status: self.0.status,
-            },
+        match &self.state {
+            JobState::Queued { .. } => SubmissionFeedback::Pending(PendingStatus::Queued),
+            JobState::AwaitingApproval { .. } => {
+                SubmissionFeedback::Pending(PendingStatus::AwaitingApproval)
+            }
+            JobState::Approved { status, .. } => SubmissionFeedback::Approved(*status),
+            JobState::Stopped { reason, .. } => SubmissionFeedback::Stopped(*reason),
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
+/// Each category accepts only its own phases. In particular a pending failure
+/// and an approved queued job cannot be constructed. Continuing is derived.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SubmissionFeedback {
-    Approved {
-        job_status: JobStatus,
-        continuing: bool,
-    },
-    Pending {
-        job_status: JobStatus,
-    },
-    Stopped {
-        job_status: JobStatus,
-    },
+    Approved(ApprovedStatus),
+    Pending(PendingStatus),
+    Stopped(StopReason),
 }
 
 impl SubmissionFeedback {
-    /// A durable approval ends the submission successfully, even if later work
-    /// has failed. A work-status exit code alone would lose that distinction.
-    pub fn exit_code(&self) -> Option<u8> {
+    pub fn job_status(self) -> JobStatus {
         match self {
-            Self::Approved { .. } => Some(0),
-            Self::Pending { .. } => None,
-            Self::Stopped { job_status } => job_status.terminal_exit_code(),
+            Self::Approved(status) => status.into(),
+            Self::Pending(status) => status.into(),
+            Self::Stopped(reason) => reason.into(),
         }
+    }
+
+    pub fn exit_code(self) -> Option<u8> {
+        match self {
+            Self::Approved(_) => Some(0),
+            Self::Pending(_) => None,
+            Self::Stopped(reason) => Some(reason.exit_code()),
+        }
+    }
+}
+
+impl Serialize for SubmissionFeedback {
+    fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+        let approved = matches!(self, Self::Approved(_));
+        let mut output =
+            serializer.serialize_struct("SubmissionFeedback", if approved { 3 } else { 2 })?;
+        let status = match self {
+            Self::Approved(_) => "approved",
+            Self::Pending(_) => "pending",
+            Self::Stopped(_) => "stopped",
+        };
+        output.serialize_field("status", status)?;
+        output.serialize_field("job_status", &self.job_status())?;
+        if approved {
+            output.serialize_field("continuing", &self.job_status().is_active())?;
+        }
+        output.end()
     }
 }

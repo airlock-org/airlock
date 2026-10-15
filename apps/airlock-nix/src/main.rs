@@ -85,18 +85,7 @@ fn print_json(value: &impl Serialize) -> io::Result<()> {
     stdout.write_all(b"\n")
 }
 
-fn main() -> ExitCode {
-    let result = inspect(Args::parse().command);
-    let (output, code) = match result {
-        Ok(value) => (
-            json!({"schema": "airlock.nix-inspection.v1", "authority": "local-inspection-only", "inspection": value}),
-            ExitCode::SUCCESS,
-        ),
-        Err(error) => (
-            json!({"schema": "airlock.nix-error.v1", "status": "failed", "code": error.code(), "error": error.to_string()}),
-            ExitCode::FAILURE,
-        ),
-    };
+fn respond(output: impl Serialize, code: ExitCode) -> ExitCode {
     if let Err(error) = print_json(&output) {
         if error.kind() == io::ErrorKind::BrokenPipe {
             return code;
@@ -105,4 +94,14 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     code
+}
+
+fn main() -> ExitCode {
+    match inspect(Args::parse().command) {
+        Ok(value) => respond(
+            json!({"schema": "airlock.nix-inspection.v1", "authority": "local-inspection-only", "inspection": value}),
+            ExitCode::SUCCESS,
+        ),
+        Err(error) => respond(error.report(), ExitCode::FAILURE),
+    }
 }

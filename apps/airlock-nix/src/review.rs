@@ -53,12 +53,10 @@ impl Scope {
             .affected_vms()
             .into_iter()
             .filter(|name| self.allowed_vms.binary_search(name).is_err())
-            .map(VmName::as_str)
+            .cloned()
             .collect::<Vec<_>>();
         if !outside.is_empty() {
-            return Err(Error::ScopeExceeded {
-                names: outside.join(", "),
-            });
+            return Err(Error::ScopeExceeded { names: outside });
         }
         if !self.allow_reboot && plan.reboot_requirement() != RebootRequirement::NotRequired {
             return Err(Error::RebootNotApproved);
@@ -87,7 +85,7 @@ impl From<Scope> for ScopeWire {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DeploymentTarget {
     Machine,
-    Guest(VmName),
+    Guest(GuestName),
 }
 
 /// Source plus the operation's machine/guest target. A Git revision alone does
@@ -126,7 +124,7 @@ struct RequestWire {
     revision: GitRevision,
     lock_hash: LockHash,
     family: Family,
-    target: Option<VmName>,
+    target: Option<GuestName>,
     scope: Scope,
 }
 

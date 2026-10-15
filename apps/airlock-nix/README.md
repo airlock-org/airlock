@@ -44,6 +44,10 @@ Successful output uses `airlock.nix-inspection.v1` and explicitly labels its
 authority `local-inspection-only`. Invalid records produce
 `airlock.nix-error.v1`, a diagnostic and exit status 1. CLI argument errors use
 Clap's normal diagnostics and exit status 2. No record is skipped or repaired.
+Failures retain typed `details`: record paths and JSON locations, I/O operation
+and OS error number, or scope/publication context as applicable. Diagnostic paths
+have a `display` string and include `raw_bytes` for non-UTF-8 names, preserving
+the filename's identity without making error serialization fail.
 Inspection's exit status describes whether the record is valid. Job inspection
 also reports `submission_exit_code`: approval returns 0 even after a later work
 failure, pending decisions return null, and stopped requests retain their
@@ -57,8 +61,12 @@ the application into any machine configuration.
 
 - `identity`: distinct, validated `JobId` (32 hex), `ReviewId` (64 hex),
   `GitRevision` (40 hex), `LockHash`, `ReviewFingerprint`,
-  `BaselineFingerprint` and `VmName`. JSON decoding uses the same validation as
-  Rust constructors. Git revisions follow the existing SHA-1 protocol; moving
+  `BaselineFingerprint`, `VmName` and `GuestName`. VM names follow dom0's guest
+  admission grammar: 1–31 ASCII characters, starting with a letter, followed by
+  letters, digits, underscores, dots or hyphens. `VmName` can represent dom0;
+  `GuestName` excludes it, so a guest deployment cannot select the host. JSON
+  decoding uses the same validation as Rust constructors. Git revisions follow
+  the existing SHA-1 protocol; moving
   to another Git object format will need an explicit protocol change.
 - `review`: existing `airlock.ctrl-approval-{request,response}.v1` wire formats,
   a source-and-target `CandidateIdentity`, a machine-or-guest target enum,
@@ -66,16 +74,25 @@ the application into any machine configuration.
   decisions, and consuming workflow transitions. A machine request cannot carry
   a guest target; a guest request must name one.
 - `job`: exhaustive job statuses, distinct job/authorization IDs, and a durable
-  approval decision separate from work progress. Building/planned/built/handoff
+  approval decision separate from work progress. Internal states carry the
+  authorization ID wherever required. Feedback uses separate `PendingStatus`,
+  `ApprovedStatus` and `StopReason` types, making contradictory categories
+  unconstructible; `continuing` is computed instead of supplied by a caller.
+  The existing JSON status/decision/feedback format remains unchanged.
+  Building/planned/built/handoff
   snapshots require recorded approval and its authorization ID. These are
   current reviewed-controller records, not arbitrary legacy deployment logs.
   Build completion and deployment handoff never claim successful activation.
+  Additional request/result metadata is retained as untrusted data; inspection
+  does not promote it into a validated submission or deployment capability.
 - `state`: bounded JSON reads; atomic JSON publication with explicit permission
   policy, unique temporary files, file fsync, rename and directory fsync; and a
   nonblocking kernel lock guard with a required named owner and reason.
 - `error`: typed failures for source/baseline mismatches, scope violations,
   invalid records, lock contention, serialization and I/O, converted to JSON at
-  the CLI boundary. Publication followed by failed directory fsync has a distinct
+  the CLI boundary without losing paths, OS errors or affected VM names. Scope
+  failures retain a typed list of names rather than a comma-separated string.
+  Publication followed by failed directory fsync has a distinct
   `PublishedButNotDurable` error; callers must not assume the old record remains.
 
 The review workflow is:

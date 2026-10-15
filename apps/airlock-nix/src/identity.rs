@@ -108,8 +108,13 @@ impl TryFrom<String> for VmName {
     type Error = Error;
 
     fn try_from(value: String) -> Result<Self> {
-        if !value.is_empty()
-            && value.len() <= 128
+        // Match dom0's guest-admission DOMAIN grammar, rather than treating
+        // arbitrary path components or command options as deployment names.
+        if value
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphabetic)
+            && value.len() <= 31
             && value
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
@@ -118,7 +123,7 @@ impl TryFrom<String> for VmName {
         } else {
             Err(Error::InvalidField {
                 field: "VM name",
-                expected: "1–128 ASCII letters, digits, underscores, dots or hyphens",
+                expected: "1–31 ASCII characters, starting with a letter; then letters, digits, underscores, dots or hyphens",
             })
         }
     }
@@ -141,6 +146,54 @@ impl From<VmName> for String {
 impl fmt::Display for VmName {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
+    }
+}
+
+/// A guest target cannot refer to the privileged dom0 administrative domain.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "VmName", into = "VmName")]
+pub struct GuestName(VmName);
+
+impl GuestName {
+    pub fn as_vm_name(&self) -> &VmName {
+        &self.0
+    }
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl TryFrom<VmName> for GuestName {
+    type Error = Error;
+
+    fn try_from(name: VmName) -> Result<Self> {
+        if name.as_str() == "dom0" {
+            return Err(Error::InvalidField {
+                field: "guest target",
+                expected: "a VM name other than dom0",
+            });
+        }
+        Ok(Self(name))
+    }
+}
+
+impl FromStr for GuestName {
+    type Err = Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        Self::try_from(value.parse::<VmName>()?)
+    }
+}
+
+impl From<GuestName> for VmName {
+    fn from(value: GuestName) -> Self {
+        value.0
+    }
+}
+
+impl fmt::Display for GuestName {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
     }
 }
 
