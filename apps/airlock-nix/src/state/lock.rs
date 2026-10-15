@@ -1,22 +1,17 @@
-use super::{open_file, parse_json};
+use super::{linux_owner::OwnerDiagnostics, open_file};
 use crate::{
     Error, Result,
     error::io_error,
     identity::{JobId, ReviewId},
     wire::string_enum,
 };
-use rustix::fs::{Mode, OFlags, major, minor};
+use rustix::fs::{Mode, OFlags};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
-    fs::{self, File, Metadata},
-    io::{Read, Seek, SeekFrom},
-    os::{
-        fd::AsRawFd,
-        unix::fs::{FileExt, MetadataExt},
-    },
+    fs::{self, File},
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 string_enum! {
@@ -80,9 +75,13 @@ impl OperationOwner {
         self
     }
     pub fn with_phase(mut self, phase: String) -> Result<Self> {
+        self.set_phase(phase)?;
+        Ok(self)
+    }
+    pub(super) fn set_phase(&mut self, phase: String) -> Result<()> {
         validate_text(&phase)?;
         self.phase = Some(phase);
-        Ok(self)
+        Ok(())
     }
     pub fn name(&self) -> &str {
         &self.name
@@ -139,6 +138,14 @@ pub struct LockOwnerDetails {
 }
 
 impl LockOwnerDetails {
+    pub(super) fn new(owner: OperationOwner, pid: u32, acquired_unix_seconds: u64) -> Self {
+        Self {
+            owner,
+            pid,
+            acquired_unix_seconds,
+        }
+    }
+
     pub fn owner(&self) -> &OperationOwner {
         &self.owner
     }
@@ -187,19 +194,6 @@ pub enum LockObservation {
     Unknown,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct OwnerRecord {
-    schema: String,
-    owner: OperationOwner,
-    pid: u32,
-    process_start: u64,
-    boot_id: String,
-    lock_fd: i32,
-    lock_position: u64,
-    acquired_unix_seconds: u64,
-}
-
 /// Nonblocking kernel exclusion. Only a StateStore can select the path. Its
 /// private, non-clonable descriptor is released on drop and closed across exec.
 #[derive(Debug)]
@@ -207,35 +201,23 @@ struct OwnerRecord {
 pub struct OperationLock {
     file: File,
     path: PathBuf,
-    owner: OperationOwner,
-    record: Option<OwnerRecord>,
-    diagnostic_error: Option<String>,
+    diagnostics: OwnerDiagnostics,
 }
 
 impl OperationLock {
     pub(super) fn try_acquire(path: &Path, owner: OperationOwner) -> Result<Self> {
-        let file = open_file(path, OFlags::RDWR | OFlags::CREATE, Mode::RUSR | Mode::WUSR)?;
+        let mut file = open_file(path, OFlags::RDWR | OFlags::CREATE, Mode::RUSR | Mode::WUSR)?;
         match file.try_lock() {
             Ok(()) => {
-                let mut guard = Self {
+                check_named(&file, path)?;
+                // Identification/publication are best effort after exclusion.
+                let mut diagnostics = OwnerDiagnostics::capture(&mut file, owner);
+                diagnostics.publish(&file);
+                Ok(Self {
                     file,
                     path: path.to_owned(),
-                    owner,
-                    record: None,
-                    diagnostic_error: None,
-                };
-                guard.check_path()?;
-                // Diagnostic failure must never turn successful exclusion into
-                // an operation failure. A fresh descriptor starts at position
-                // zero, which cannot verify an old record's nonzero nonce.
-                match guard.identify() {
-                    Ok(record) => {
-                        guard.record = Some(record);
-                        guard.publish_owner();
-                    }
-                    Err(error) => guard.diagnostic_error = Some(error.to_string()),
-                }
-                Ok(guard)
+                    diagnostics,
+                })
             }
             Err(std::fs::TryLockError::WouldBlock) => {
                 let holder = match Self::observe(path) {
@@ -253,85 +235,14 @@ impl OperationLock {
         }
     }
 
-    fn identify(&mut self) -> std::io::Result<OwnerRecord> {
-        let mut random = [0_u8; 4];
-        File::open("/dev/urandom")?.read_exact(&mut random)?;
-        // Keep this within ordinary filesystem seek limits; no file allocation
-        // occurs because diagnostic writes use positional I/O at offset zero.
-        let position = u64::from(u32::from_ne_bytes(random)) + 1;
-        self.file.seek(SeekFrom::Start(position))?;
-        let pid = std::process::id();
-        Ok(OwnerRecord {
-            schema: "airlock.nix-lock-owner.v1".to_owned(),
-            owner: self.owner.clone(),
-            pid,
-            process_start: process_start(pid)
-                .ok_or_else(|| std::io::Error::other("process identity unavailable"))?,
-            boot_id: boot_id().ok_or_else(|| std::io::Error::other("boot identity unavailable"))?,
-            lock_fd: self.file.as_raw_fd(),
-            lock_position: position,
-            acquired_unix_seconds: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_err(std::io::Error::other)?
-                .as_secs(),
-        })
-    }
-
-    fn publish_owner(&mut self) {
-        let Some(record) = &self.record else {
-            return;
-        };
-        let result = (|| -> std::io::Result<()> {
-            let bytes = serde_json::to_vec(record)?;
-            // Never rename/unlink a lock file. Positional writes preserve the
-            // acquisition nonce in the kernel descriptor's seek position.
-            // Readers may see an incomplete diagnostic and report Unknown.
-            self.file.set_len(0)?;
-            self.file.write_all_at(&bytes, 0)?;
-            Ok(())
-        })();
-        self.diagnostic_error = result.err().map(|error| error.to_string());
-    }
-
-    /// Phase publication is best effort. Only invalid input or loss of the
-    /// actual lock namespace fails the operation; diagnostic_error reports I/O.
+    /// Invalid phases and a replaced lock path fail; diagnostic I/O is best effort.
     pub fn update_phase(&mut self, phase: String) -> Result<()> {
-        validate_text(&phase)?;
         self.check_path()?;
-        self.owner.phase = Some(phase.clone());
-        if let Some(record) = &mut self.record {
-            record.owner.phase = Some(phase);
-        }
-        self.publish_owner();
-        Ok(())
+        self.diagnostics.update_phase(&self.file, phase)
     }
 
-    /// Read-only kernel/owner inspection: no file creation, repair or lock probe.
-    /// Linux procfs must expose the holder in this PID namespace. Unavailable
-    /// procfs or stale metadata never establishes an unlocked/verified owner.
     pub(super) fn observe(path: &Path) -> Result<LockObservation> {
-        let file = match open_file(path, OFlags::RDONLY, Mode::empty()) {
-            Ok(file) => file,
-            Err(Error::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(LockObservation::Unlocked);
-            }
-            Err(error) => return Err(error),
-        };
-        let metadata = file
-            .metadata()
-            .map_err(|error| io_error("inspect lock", path, error))?;
-        check_named(&file, path)?;
-        let Some(held) = kernel_holder(&metadata) else {
-            return Ok(LockObservation::Unknown);
-        };
-        let Some(pid) = held else {
-            return Ok(LockObservation::Unlocked);
-        };
-        let holder = verify_owner(&file, path, &metadata, pid)
-            .map_or(LockHolder::Unknown, |details| {
-                LockHolder::Verified(Box::new(details))
-            });
-        Ok(LockObservation::Held { holder })
+        super::linux_owner::observe(path)
     }
 
     pub fn check_path(&self) -> Result<()> {
@@ -341,14 +252,14 @@ impl OperationLock {
         &self.path
     }
     pub fn owner(&self) -> &OperationOwner {
-        &self.owner
+        self.diagnostics.owner()
     }
     pub fn diagnostic_error(&self) -> Option<&str> {
-        self.diagnostic_error.as_deref()
+        self.diagnostics.error()
     }
 }
 
-fn check_named(file: &File, path: &Path) -> Result<()> {
+pub(super) fn check_named(file: &File, path: &Path) -> Result<()> {
     let held = file
         .metadata()
         .map_err(|error| io_error("inspect held lock", path, error))?;
@@ -370,115 +281,4 @@ fn check_named(file: &File, path: &Path) -> Result<()> {
         });
     }
     Ok(())
-}
-
-fn bounded_text(path: &Path, limit: u64) -> Option<String> {
-    let file = open_file(path, OFlags::RDONLY, Mode::empty()).ok()?;
-    let mut bytes = Vec::new();
-    file.take(limit + 1).read_to_end(&mut bytes).ok()?;
-    (bytes.len() as u64 <= limit)
-        .then(|| String::from_utf8(bytes).ok())
-        .flatten()
-}
-
-fn process_start(pid: u32) -> Option<u64> {
-    let stat = bounded_text(Path::new(&format!("/proc/{pid}/stat")), 8192)?;
-    stat.rsplit_once(')')?
-        .1
-        .split_whitespace()
-        .nth(19)?
-        .parse()
-        .ok()
-}
-
-fn boot_id() -> Option<String> {
-    let boot = bounded_text(Path::new("/proc/sys/kernel/random/boot_id"), 128)?;
-    let boot = boot.trim();
-    (!boot.is_empty()).then(|| boot.to_owned())
-}
-
-fn matches_inode(text: &str, metadata: &Metadata) -> bool {
-    let fields: Vec<_> = text.split(':').collect();
-    fields.len() == 3
-        && u32::from_str_radix(fields[0], 16).ok() == Some(major(metadata.dev()))
-        && u32::from_str_radix(fields[1], 16).ok() == Some(minor(metadata.dev()))
-        && fields[2].parse::<u64>().ok() == Some(metadata.ino())
-}
-
-// Outer None: visibility unavailable; inner None: no kernel flock on this inode.
-fn kernel_holder(metadata: &Metadata) -> Option<Option<u32>> {
-    let locks = bounded_text(Path::new("/proc/locks"), 4 * 1024 * 1024)?;
-    for line in locks.lines() {
-        let fields: Vec<_> = line.split_whitespace().collect();
-        if fields.len() == 8 && fields[1] == "FLOCK" && matches_inode(fields[5], metadata) {
-            // Multiple shared holders cannot be identified as one named writer.
-            return Some(Some(if fields[3] == "WRITE" {
-                fields[4].parse().ok()?
-            } else {
-                0
-            }));
-        }
-    }
-    Some(None)
-}
-
-fn verify_owner(
-    file: &File,
-    path: &Path,
-    metadata: &Metadata,
-    pid: u32,
-) -> Option<LockOwnerDetails> {
-    let mut bytes = Vec::new();
-    file.take(65537).read_to_end(&mut bytes).ok()?;
-    if bytes.len() > 65536 {
-        return None;
-    }
-    let record: OwnerRecord = parse_json(&bytes, path).ok()?;
-    if pid == 0
-        || record.pid != pid
-        || record.schema != "airlock.nix-lock-owner.v1"
-        || record.lock_fd < 0
-        || record.lock_position == 0
-        || process_start(pid)? != record.process_start
-        || boot_id()? != record.boot_id
-    {
-        return None;
-    }
-    let descriptor = PathBuf::from(format!("/proc/{pid}/fd/{}", record.lock_fd));
-    let actual = fs::metadata(descriptor).ok()?;
-    if (actual.dev(), actual.ino()) != (metadata.dev(), metadata.ino()) {
-        return None;
-    }
-    let info = bounded_text(
-        Path::new(&format!("/proc/{pid}/fdinfo/{}", record.lock_fd)),
-        65536,
-    )?;
-    let position: u64 = info
-        .lines()
-        .find_map(|line| line.strip_prefix("pos:"))?
-        .trim()
-        .parse()
-        .ok()?;
-    if position != record.lock_position {
-        return None;
-    }
-    let held = info
-        .lines()
-        .filter_map(|line| line.strip_prefix("lock:"))
-        .any(|line| {
-            let fields: Vec<_> = line.split_whitespace().collect();
-            fields.len() == 8
-                && fields[1] == "FLOCK"
-                && fields[3] == "WRITE"
-                && fields[4].parse::<u32>().ok() == Some(pid)
-                && matches_inode(fields[5], metadata)
-        });
-    if !held || process_start(pid)? != record.process_start || check_named(file, path).is_err() {
-        return None;
-    }
-    Some(LockOwnerDetails {
-        owner: record.owner,
-        pid,
-        acquired_unix_seconds: record.acquired_unix_seconds,
-    })
 }

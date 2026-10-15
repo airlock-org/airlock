@@ -156,8 +156,9 @@ old data against a new snapshot. Snapshots are observations, not evidence of
 source approval; domain workflow checks are still required.
 
 Temporary files stay private until fully serialized and validated for unique
-JSON keys. Oversized records, serialization failures and failed version checks
-leave the destination unchanged. Write failures preserve OS error context.
+JSON keys. Serialization stops before output would exceed the byte limit,
+including the final newline. Oversized records, serialization failures and failed
+version checks leave the destination unchanged. Write failures preserve OS error context.
 After rename, directory fsync failure returns `PublishedButNotDurable`: the new
 record may already be visible, so reread before deciding what to do next.
 

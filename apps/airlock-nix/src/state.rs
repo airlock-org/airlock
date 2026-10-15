@@ -4,6 +4,7 @@
 //! requires the matching resource guard and a current, unforgeable snapshot.
 //! The directory owner must keep this namespace trusted and stable.
 
+mod linux_owner;
 mod lock;
 mod store;
 
@@ -101,6 +102,30 @@ fn serialization_error(path: &Path, source: serde_json::Error) -> Error {
     }
 }
 
+/// Stop serialization before its output can exceed the record's disk budget.
+/// Keep the limit failure separate from underlying I/O errors, including errno.
+struct BoundedWriter<'a> {
+    file: &'a mut File,
+    remaining: u64,
+    exceeded: bool,
+}
+
+impl Write for BoundedWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        if self.exceeded || bytes.len() as u64 > self.remaining {
+            self.exceeded = true;
+            return Err(std::io::Error::other("record byte limit exceeded"));
+        }
+        let written = self.file.write(bytes)?;
+        self.remaining -= written as u64;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.file.flush()
+    }
+}
+
 /// Unique temporary file, file fsync, atomic rename, directory fsync. A failure
 /// after rename is reported even though the destination may already be updated.
 /// Private: only resource-bound writers may publish records.
@@ -142,23 +167,26 @@ fn publish_json<T: Serialize>(
     };
     let mut temporary = tempfile::NamedTempFile::new_in(parent)
         .map_err(|error| io_error("create temporary record", path, error))?;
-    serde_json::to_writer_pretty(temporary.as_file_mut(), value)
-        .map_err(|source| serialization_error(path, source))?;
-    temporary
-        .as_file_mut()
-        .write_all(b"\n")
-        .map_err(|error| io_error("write record", path, error))?;
-    if temporary
-        .as_file()
-        .metadata()
-        .map_err(|error| io_error("inspect temporary record", path, error))?
-        .len()
-        > limit
     {
-        return Err(Error::RecordTooLarge {
-            path: path.to_owned(),
-            limit,
-        });
+        let mut output = BoundedWriter {
+            file: temporary.as_file_mut(),
+            remaining: limit,
+            exceeded: false,
+        };
+        let result = serde_json::to_writer_pretty(&mut output, value)
+            .map_err(|source| serialization_error(path, source))
+            .and_then(|()| {
+                output
+                    .write_all(b"\n")
+                    .map_err(|error| io_error("write record", path, error))
+            });
+        if output.exceeded {
+            return Err(Error::RecordTooLarge {
+                path: path.to_owned(),
+                limit,
+            });
+        }
+        result?;
     }
     temporary
         .as_file_mut()
