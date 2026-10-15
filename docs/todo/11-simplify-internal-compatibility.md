@@ -224,8 +224,8 @@ unsuffixed VM configuration names as aliases of explicit development variants:
 | `packages.x86_64-linux.airlock-vm-gui-config-image` | `packages.x86_64-linux.airlock-vm-gui-config-dev-image` |
 
 The parent flake forwards component outputs. Existing consumers of the old
-configuration names include `sync-nested-dom0-tools.sh`, `tests/test_local.py`,
-and `airlock-machine/tests/machine_pychecks.py`. The image README explicitly
+configuration names include `sync-nested-dom0-tools.sh` and the checks under
+`airlock-machine/tests/local_checks/`. The image README explicitly
 describes the historic unsuffixed outputs as development-mode aliases.
 
 The component also exports `nixosConfigurations.usb-dev =
