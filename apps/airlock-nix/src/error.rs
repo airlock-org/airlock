@@ -22,6 +22,10 @@ pub enum Error {
     InvalidJob { reason: &'static str },
     #[error("operation lock is held: {}", path.display())]
     Busy { path: PathBuf },
+    #[error("expected a regular file: {}", path.display())]
+    NotRegularFile { path: PathBuf },
+    #[error("operation lock was unlinked, replaced or has multiple hard links: {}", path.display())]
+    LockReplaced { path: PathBuf },
     #[error("{operation} {}: {source}", path.display())]
     Io {
         operation: &'static str,
@@ -34,6 +38,18 @@ pub enum Error {
         path: PathBuf,
         #[source]
         source: serde_json::Error,
+    },
+    #[error("cannot serialize record {}: {source}", path.display())]
+    Serialization {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("record {} was published, but directory durability is unconfirmed: {source}", path.display())]
+    PublishedButNotDurable {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
     },
     #[error("record {} exceeds the {limit}-byte limit", path.display())]
     RecordTooLarge { path: PathBuf, limit: u64 },
@@ -48,8 +64,12 @@ impl Error {
             Self::ScopeExceeded { .. } | Self::RebootNotApproved => "scope_exceeded",
             Self::InvalidJob { .. } => "invalid_job",
             Self::Busy { .. } => "busy",
+            Self::NotRegularFile { .. } => "invalid_file",
+            Self::LockReplaced { .. } => "lock_replaced",
             Self::Io { .. } => "io_error",
             Self::Json { .. } => "invalid_record",
+            Self::Serialization { .. } => "serialization_error",
+            Self::PublishedButNotDurable { .. } => "durability_unconfirmed",
             Self::RecordTooLarge { .. } => "record_too_large",
         }
     }

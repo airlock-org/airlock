@@ -68,6 +68,7 @@ name = "airlock-nix"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "rustix 1.1.5",
  "serde",
  "serde_json",
  "tempfile",

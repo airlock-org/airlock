@@ -57,8 +57,10 @@ fn inspect(command: Command) -> Result<serde_json::Value> {
                     field: "controller job ID",
                 });
             }
+            let feedback = job.submission_feedback();
             Ok(
-                json!({"kind": "job", "record": job, "submission_feedback": job.submission_feedback()}),
+                json!({"kind": "job", "record": job, "submission_feedback": feedback,
+                "submission_exit_code": feedback.exit_code()}),
             )
         }
         Command::Review { file } => {
@@ -97,7 +99,7 @@ fn main() -> ExitCode {
     };
     if let Err(error) = print_json(&output) {
         if error.kind() == io::ErrorKind::BrokenPipe {
-            return ExitCode::SUCCESS;
+            return code;
         }
         eprintln!("airlock-nix: could not write response: {error}");
         return ExitCode::FAILURE;

@@ -90,6 +90,14 @@ pub enum DeploymentTarget {
     Guest(VmName),
 }
 
+/// Source plus the operation's machine/guest target. A Git revision alone does
+/// not identify a guest candidate: several guests can be built from one commit.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CandidateIdentity {
+    pub source: SourceIdentity,
+    pub target: DeploymentTarget,
+}
+
 string_enum! {
     pub enum RequestSchema ("approval request schema") {
         V1 => "airlock.ctrl-approval-request.v1",
@@ -127,8 +135,7 @@ struct RequestWire {
 pub struct ReviewRequest {
     request_id: ReviewId,
     baseline: GitRevision,
-    source: SourceIdentity,
-    target: DeploymentTarget,
+    candidate: CandidateIdentity,
     scope: Scope,
 }
 
@@ -140,10 +147,13 @@ impl ReviewRequest {
         &self.baseline
     }
     pub fn source(&self) -> &SourceIdentity {
-        &self.source
+        &self.candidate.source
     }
     pub fn target(&self) -> &DeploymentTarget {
-        &self.target
+        &self.candidate.target
+    }
+    pub fn candidate(&self) -> &CandidateIdentity {
+        &self.candidate
     }
     pub fn scope(&self) -> &Scope {
         &self.scope
@@ -167,11 +177,13 @@ impl TryFrom<RequestWire> for ReviewRequest {
         Ok(Self {
             request_id: value.request_id,
             baseline: value.baseline,
-            source: SourceIdentity {
-                revision: value.revision,
-                lock_hash: value.lock_hash,
+            candidate: CandidateIdentity {
+                source: SourceIdentity {
+                    revision: value.revision,
+                    lock_hash: value.lock_hash,
+                },
+                target,
             },
-            target,
             scope: value.scope,
         })
     }
@@ -179,7 +191,7 @@ impl TryFrom<RequestWire> for ReviewRequest {
 
 impl From<ReviewRequest> for RequestWire {
     fn from(value: ReviewRequest) -> Self {
-        let (family, target) = match value.target {
+        let (family, target) = match value.candidate.target {
             DeploymentTarget::Machine => (Family::Machine, None),
             DeploymentTarget::Guest(name) => (Family::Guest, Some(name)),
         };
@@ -187,8 +199,8 @@ impl From<ReviewRequest> for RequestWire {
             schema: RequestSchema::V1,
             request_id: value.request_id,
             baseline: value.baseline,
-            revision: value.source.revision,
-            lock_hash: value.source.lock_hash,
+            revision: value.candidate.source.revision,
+            lock_hash: value.candidate.source.lock_hash,
             family,
             target,
             scope: value.scope,
@@ -223,7 +235,7 @@ pub struct ReviewResponse {
 pub struct ReviewObservation {
     pub baseline: GitRevision,
     pub baseline_state: BaselineFingerprint,
-    pub source: SourceIdentity,
+    pub candidate: CandidateIdentity,
 }
 
 #[derive(Debug)]
@@ -241,9 +253,9 @@ pub enum ReviewOutcome {
 
 impl PendingReview {
     pub fn new(request: ReviewRequest, observed: &ReviewObservation) -> Result<Self> {
-        if request.baseline != observed.baseline || request.source != observed.source {
+        if request.baseline != observed.baseline || request.candidate != observed.candidate {
             return Err(Error::BindingMismatch {
-                field: "reviewed source or deployed baseline",
+                field: "reviewed source, target or deployed baseline",
             });
         }
         Ok(Self {
@@ -264,8 +276,8 @@ impl PendingReview {
                 field: "review request ID",
             });
         }
-        if response.revision != self.request.source.revision
-            || response.lock_hash != self.request.source.lock_hash
+        if response.revision != self.request.candidate.source.revision
+            || response.lock_hash != self.request.candidate.source.lock_hash
         {
             return Err(Error::BindingMismatch {
                 field: "review response source",
@@ -314,9 +326,9 @@ impl ApprovedChange {
         {
             return Err(Error::StaleReview);
         }
-        if self.request.source != current.source {
+        if self.request.candidate != current.candidate {
             return Err(Error::BindingMismatch {
-                field: "current candidate source",
+                field: "current candidate source or target",
             });
         }
         Ok(())
@@ -325,23 +337,18 @@ impl ApprovedChange {
     pub fn bind_plan(
         self,
         current: &ReviewObservation,
-        plan: DeploymentPlan,
+        prepared: PreparedPlan,
     ) -> Result<ApprovedDeployment> {
         self.recheck(current)?;
-        if plan.revision.as_ref() != Some(&self.request.source.revision)
-            || plan
-                .lock_hash
-                .as_ref()
-                .is_some_and(|hash| hash != &self.request.source.lock_hash)
-        {
+        if prepared.candidate != self.request.candidate {
             return Err(Error::BindingMismatch {
-                field: "deployment plan source",
+                field: "deployment plan source or target",
             });
         }
-        self.scope.check(&plan)?;
+        self.scope.check(&prepared.plan)?;
         Ok(ApprovedDeployment {
             approval: self,
-            plan,
+            prepared,
         })
     }
 }
@@ -351,12 +358,47 @@ impl ApprovedChange {
 #[derive(Debug)]
 pub struct ApprovedDeployment {
     approval: ApprovedChange,
-    plan: DeploymentPlan,
+    prepared: PreparedPlan,
 }
 
 impl ApprovedDeployment {
     pub fn approval(&self) -> &ApprovedChange {
         &self.approval
+    }
+    pub fn plan(&self) -> &DeploymentPlan {
+        &self.prepared.plan
+    }
+    pub fn candidate(&self) -> &CandidateIdentity {
+        &self.prepared.candidate
+    }
+}
+
+/// A plan paired with the complete candidate identity obtained by its producer.
+/// Runtime adapters must obtain that identity from the actual build manifest;
+/// this value does not authenticate the producer or grant deployment authority.
+#[derive(Debug)]
+pub struct PreparedPlan {
+    candidate: CandidateIdentity,
+    plan: DeploymentPlan,
+}
+
+impl PreparedPlan {
+    pub fn new(candidate: CandidateIdentity, plan: DeploymentPlan) -> Result<Self> {
+        if plan.revision.as_ref() != Some(&candidate.source.revision)
+            || plan
+                .lock_hash
+                .as_ref()
+                .is_some_and(|hash| hash != &candidate.source.lock_hash)
+        {
+            return Err(Error::BindingMismatch {
+                field: "deployment plan source",
+            });
+        }
+        Ok(Self { candidate, plan })
+    }
+
+    pub fn candidate(&self) -> &CandidateIdentity {
+        &self.candidate
     }
     pub fn plan(&self) -> &DeploymentPlan {
         &self.plan
@@ -376,43 +418,98 @@ pub enum RebootRequirement {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeploymentPlan {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revision: Option<GitRevision>,
+    revision: Option<GitRevision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lock_hash: Option<LockHash>,
-    pub changed: Vec<VmName>,
-    pub stop: Vec<VmName>,
-    pub start: Vec<VmName>,
+    lock_hash: Option<LockHash>,
+    changed: Vec<VmName>,
+    stop: Vec<VmName>,
+    start: Vec<VmName>,
     #[serde(default)]
-    pub retire: Vec<VmName>,
+    retire: Vec<VmName>,
     #[serde(default)]
-    pub restore: Vec<VmName>,
+    restore: Vec<VmName>,
     #[serde(default)]
-    pub stage: Vec<VmName>,
+    stage: Vec<VmName>,
     #[serde(default)]
-    pub affected: Vec<VmName>,
+    affected: Vec<VmName>,
     #[serde(default)]
-    pub private_copies: Vec<PrivateCopy>,
-    pub host_reboot_required: Option<bool>,
+    private_copies: Vec<PrivateCopy>,
+    host_reboot_required: Option<bool>,
     #[serde(flatten)]
-    pub details: BTreeMap<String, serde_json::Value>,
+    details: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PrivateCopy {
-    pub source: PrivateCopySource,
-    pub target_name: VmName,
+    source: PrivateCopySource,
+    target_name: VmName,
     #[serde(flatten)]
-    pub details: BTreeMap<String, serde_json::Value>,
+    details: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PrivateCopySource {
-    pub domain: VmName,
+    domain: VmName,
     #[serde(flatten)]
-    pub details: BTreeMap<String, serde_json::Value>,
+    details: BTreeMap<String, serde_json::Value>,
+}
+
+impl PrivateCopy {
+    pub fn source(&self) -> &PrivateCopySource {
+        &self.source
+    }
+    pub fn target_name(&self) -> &VmName {
+        &self.target_name
+    }
+    pub fn details(&self) -> &BTreeMap<String, serde_json::Value> {
+        &self.details
+    }
+}
+
+impl PrivateCopySource {
+    pub fn domain(&self) -> &VmName {
+        &self.domain
+    }
+    pub fn details(&self) -> &BTreeMap<String, serde_json::Value> {
+        &self.details
+    }
 }
 
 impl DeploymentPlan {
+    pub fn revision(&self) -> Option<&GitRevision> {
+        self.revision.as_ref()
+    }
+    pub fn lock_hash(&self) -> Option<&LockHash> {
+        self.lock_hash.as_ref()
+    }
+    pub fn changed(&self) -> &[VmName] {
+        &self.changed
+    }
+    pub fn stop(&self) -> &[VmName] {
+        &self.stop
+    }
+    pub fn start(&self) -> &[VmName] {
+        &self.start
+    }
+    pub fn retire(&self) -> &[VmName] {
+        &self.retire
+    }
+    pub fn restore(&self) -> &[VmName] {
+        &self.restore
+    }
+    pub fn stage(&self) -> &[VmName] {
+        &self.stage
+    }
+    pub fn affected(&self) -> &[VmName] {
+        &self.affected
+    }
+    pub fn private_copies(&self) -> &[PrivateCopy] {
+        &self.private_copies
+    }
+    pub fn details(&self) -> &BTreeMap<String, serde_json::Value> {
+        &self.details
+    }
+
     pub fn affected_vms(&self) -> BTreeSet<&VmName> {
         let mut names = [
             &self.changed,

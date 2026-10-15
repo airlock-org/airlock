@@ -40,9 +40,7 @@ impl JobStatus {
         }
     }
 
-    /// Existing submission exit codes. DeploymentStarted acknowledges handoff,
-    /// not successful activation. Successful outcomes require separate status.
-    pub fn exit_code(self) -> Option<u8> {
+    fn terminal_exit_code(self) -> Option<u8> {
         match self {
             Self::Queued | Self::AwaitingApproval | Self::Building => None,
             Self::Planned | Self::Built | Self::DeploymentStarted => Some(0),
@@ -83,6 +81,11 @@ impl TryFrom<JobWire> for JobSnapshot {
     type Error = Error;
 
     fn try_from(value: JobWire) -> Result<Self> {
+        if value.status == JobStatus::AwaitingApproval && value.authorization_id.is_none() {
+            return Err(Error::InvalidJob {
+                reason: "awaiting approval is missing its authorization ID",
+            });
+        }
         if value.decision.is_some() && value.authorization_id.is_none() {
             return Err(Error::InvalidJob {
                 reason: "approved decision is missing its authorization ID",
@@ -103,7 +106,10 @@ impl TryFrom<JobWire> for JobSnapshot {
         if value.decision.is_some()
             && matches!(
                 value.status,
-                JobStatus::Queued | JobStatus::AwaitingApproval | JobStatus::Rejected
+                JobStatus::Queued
+                    | JobStatus::AwaitingApproval
+                    | JobStatus::Rejected
+                    | JobStatus::Cancelled
             )
         {
             return Err(Error::InvalidJob {
@@ -165,4 +171,16 @@ pub enum SubmissionFeedback {
     Stopped {
         job_status: JobStatus,
     },
+}
+
+impl SubmissionFeedback {
+    /// A durable approval ends the submission successfully, even if later work
+    /// has failed. A work-status exit code alone would lose that distinction.
+    pub fn exit_code(&self) -> Option<u8> {
+        match self {
+            Self::Approved { .. } => Some(0),
+            Self::Pending { .. } => None,
+            Self::Stopped { job_status } => job_status.terminal_exit_code(),
+        }
+    }
 }

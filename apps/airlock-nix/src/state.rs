@@ -8,20 +8,47 @@ use crate::{
     Error, Result,
     error::io_error,
     identity::{JobId, ReviewId},
+    wire::{validate_json, validate_json_reader},
 };
+use rustix::fs::{Mode, OFlags, open};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
-    fs::{self, File, OpenOptions, Permissions},
-    io::{Read, Write},
-    os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    fs::{self, File, Permissions},
+    io::{Read, Seek, Write},
+    os::unix::fs::{MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
 };
 
-/// Read one bounded snapshot. Never repair or skip a damaged record.
+fn open_file(path: &Path, flags: OFlags, mode: Mode) -> Result<File> {
+    let descriptor = open(
+        path,
+        flags | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::NONBLOCK,
+        mode,
+    )
+    .map_err(|error| io_error("open file", path, error.into()))?;
+    let file = File::from(descriptor);
+    if !file
+        .metadata()
+        .map_err(|error| io_error("inspect file", path, error))?
+        .is_file()
+    {
+        return Err(Error::NotRegularFile {
+            path: path.to_owned(),
+        });
+    }
+    Ok(file)
+}
+
+/// Read one bounded regular-file snapshot. Final-component symlinks, devices,
+/// directories and FIFOs are rejected. Never repair or skip a damaged record.
 pub fn read_json<T: DeserializeOwned>(path: &Path, limit: u64) -> Result<T> {
-    let file = File::open(path).map_err(|error| io_error("open record", path, error))?;
+    let file = open_file(path, OFlags::RDONLY, Mode::empty())?;
+    let read_limit = limit.checked_add(1).ok_or(Error::InvalidField {
+        field: "record limit",
+        expected: "a byte limit smaller than u64::MAX",
+    })?;
     let mut bytes = Vec::new();
-    file.take(limit.saturating_add(1))
+    file.take(read_limit)
         .read_to_end(&mut bytes)
         .map_err(|error| io_error("read record", path, error))?;
     if bytes.len() as u64 > limit {
@@ -30,10 +57,19 @@ pub fn read_json<T: DeserializeOwned>(path: &Path, limit: u64) -> Result<T> {
             limit,
         });
     }
-    serde_json::from_slice(&bytes).map_err(|source| Error::Json {
-        path: path.to_owned(),
-        source,
-    })
+    parse_json(&bytes, path)
+}
+
+/// Parse one complete record without ambiguous duplicate keys, including in
+/// unknown metadata. Callers receiving transport bytes can use this boundary
+/// without the filesystem reader. The caller must bound those input bytes.
+pub fn parse_json<T: DeserializeOwned>(bytes: &[u8], origin: &Path) -> Result<T> {
+    validate_json(bytes)
+        .and_then(|()| serde_json::from_slice(bytes))
+        .map_err(|source| Error::Json {
+            path: origin.to_owned(),
+            source,
+        })
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -43,9 +79,21 @@ pub enum RecordPermissions {
     PreserveExisting,
 }
 
+fn serialization_error(path: &Path, source: serde_json::Error) -> Error {
+    if source.is_io() {
+        io_error("write or validate record", path, source.into())
+    } else {
+        Error::Serialization {
+            path: path.to_owned(),
+            source,
+        }
+    }
+}
+
 /// Unique temporary file, file fsync, atomic rename, directory fsync. A failure
 /// after rename is reported even though the destination may already be updated.
-/// The caller owns the directory and serializes competing logical updates.
+/// The parent directory must already exist. The caller owns the directory,
+/// keeps its namespace stable, and serializes competing logical updates.
 pub fn atomic_json<T: Serialize>(
     path: &Path,
     value: &T,
@@ -55,30 +103,50 @@ pub fn atomic_json<T: Serialize>(
         .parent()
         .filter(|path| !path.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
-    fs::create_dir_all(parent)
-        .map_err(|error| io_error("create state directory", parent, error))?;
+    let directory = File::from(
+        open(
+            parent,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(|error| io_error("open state directory", parent, error.into()))?,
+    );
+    let existing = match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() => Some(metadata),
+        Ok(_) => {
+            return Err(Error::NotRegularFile {
+                path: path.to_owned(),
+            });
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(io_error("inspect destination record", path, error)),
+    };
     let mode = match permissions {
         RecordPermissions::Private => 0o600,
         RecordPermissions::Public => 0o644,
-        RecordPermissions::PreserveExisting => match fs::metadata(path) {
-            Ok(metadata) => metadata.permissions().mode() & 0o777,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0o600,
-            Err(error) => return Err(io_error("read record permissions", path, error)),
-        },
+        RecordPermissions::PreserveExisting => {
+            existing.map_or(0o600, |metadata| metadata.permissions().mode() & 0o777)
+        }
     };
     let mut temporary = tempfile::NamedTempFile::new_in(parent)
         .map_err(|error| io_error("create temporary record", path, error))?;
+    serde_json::to_writer_pretty(temporary.as_file_mut(), value)
+        .map_err(|source| serialization_error(path, source))?;
+    temporary
+        .as_file_mut()
+        .write_all(b"\n")
+        .map_err(|error| io_error("write record", path, error))?;
+    temporary
+        .as_file_mut()
+        .rewind()
+        .map_err(|error| io_error("rewind record", path, error))?;
+    validate_json_reader(temporary.as_file_mut())
+        .map_err(|source| serialization_error(path, source))?;
+    // Incomplete temporary files remain private, even for public destinations.
     temporary
         .as_file()
         .set_permissions(Permissions::from_mode(mode))
         .map_err(|error| io_error("set record permissions", path, error))?;
-    serde_json::to_writer_pretty(&mut temporary, value).map_err(|source| Error::Json {
-        path: path.to_owned(),
-        source,
-    })?;
-    temporary
-        .write_all(b"\n")
-        .map_err(|error| io_error("write record", path, error))?;
     temporary
         .as_file()
         .sync_all()
@@ -86,9 +154,12 @@ pub fn atomic_json<T: Serialize>(
     temporary
         .persist(path)
         .map_err(|error| io_error("publish record", path, error.error))?;
-    File::open(parent)
-        .and_then(|directory| directory.sync_all())
-        .map_err(|error| io_error("sync state directory", parent, error))
+    directory
+        .sync_all()
+        .map_err(|source| Error::PublishedButNotDurable {
+            path: path.to_owned(),
+            source,
+        })
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -160,7 +231,7 @@ impl OperationOwner {
 #[derive(Debug)]
 #[must_use = "the operation lock is released when its guard is dropped"]
 pub struct OperationLock {
-    _file: File,
+    file: File,
     path: PathBuf,
     owner: OperationOwner,
 }
@@ -169,20 +240,17 @@ impl OperationLock {
     /// The caller creates and owns the parent directory. Acquisition is always
     /// nonblocking; waiting/retry policy belongs to a future runtime adapter.
     pub fn try_acquire(path: &Path, owner: OperationOwner) -> Result<Self> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .mode(0o600)
-            .open(path)
-            .map_err(|error| io_error("open operation lock", path, error))?;
+        let file = open_file(path, OFlags::RDWR | OFlags::CREATE, Mode::RUSR | Mode::WUSR)?;
         match file.try_lock() {
-            Ok(()) => Ok(Self {
-                _file: file,
-                path: path.to_owned(),
-                owner,
-            }),
+            Ok(()) => {
+                let guard = Self {
+                    file,
+                    path: path.to_owned(),
+                    owner,
+                };
+                guard.check_path()?;
+                Ok(guard)
+            }
             Err(std::fs::TryLockError::WouldBlock) => Err(Error::Busy {
                 path: path.to_owned(),
             }),
@@ -190,6 +258,33 @@ impl OperationLock {
                 Err(io_error("acquire operation lock", path, error))
             }
         }
+    }
+
+    /// Detect namespace replacement. A trusted owner must still prevent anyone
+    /// unlinking/renaming the lock path while it protects an operation.
+    pub fn check_path(&self) -> Result<()> {
+        let held = self
+            .file
+            .metadata()
+            .map_err(|error| io_error("inspect held lock", &self.path, error))?;
+        let named = match fs::symlink_metadata(&self.path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(Error::LockReplaced {
+                    path: self.path.clone(),
+                });
+            }
+            Err(error) => return Err(io_error("inspect lock path", &self.path, error)),
+        };
+        if !named.is_file()
+            || held.nlink() != 1
+            || (held.dev(), held.ino()) != (named.dev(), named.ino())
+        {
+            return Err(Error::LockReplaced {
+                path: self.path.clone(),
+            });
+        }
+        Ok(())
     }
 
     pub fn path(&self) -> &Path {
