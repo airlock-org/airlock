@@ -14,8 +14,15 @@
   A successful build is not a successful live deployment; report both separately.
 - Keep development observation separate from production behavior. Observation
   tools should report state without expanding Qubes control authority.
-- `make test-quick` is the primary feedback loop. Preserve clear logs and
-  machine-readable output under `.airlock-logs/`.
+- Match verification to the change. For routine package-list additions/removals,
+  skip repository tests: review and commit the exact diff, obtain required source
+  approval before evaluation/build, then apply and verify the requested package
+  state. Keep normal Nix build checks enabled.
+- For implementation, service, policy or deployment changes, run relevant tests;
+  use `make test-quick` when shared behavior could be affected. For documentation
+  changes, review the diff and check formatting; executable tests are unnecessary.
+  Preserve clear logs and machine-readable output under `.airlock-logs/`.
+- Do not add tests that merely repeat the configured package list.
 - Keep `test-quick` free of Nix evaluations, builds and automatic tool provisioning.
   `make test-nix` is opt-in; do not run it as a routine pre-deployment gate.
 - New tests should be written in the pytest framework. Do not add new Bash test

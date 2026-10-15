@@ -7,6 +7,14 @@ Airlock exposes four test-suite targets. They are intentionally not aliases:
 - `make test-warm`
 - `make test-slow`
 
+Match verification to the change. Routine package-list additions/removals skip
+repository tests: review and commit the exact diff, obtain required source approval
+before evaluation/build, then apply and verify the requested package state. Keep
+normal Nix build checks enabled. For implementation, service, policy or deployment
+changes, run relevant tests and use `make test-quick` when shared behavior could be
+affected. Documentation changes need diff and formatting review rather than
+executable tests.
+
 ## Quick
 
 ```bash
