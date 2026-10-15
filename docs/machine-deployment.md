@@ -57,6 +57,25 @@ for open GPU/GUI failures and pending host verification.
 
 ## Normal loop
 
+Before editing deployable configuration for a live target, inspect its read-only
+status/verification and recorded deployed-source provenance. Compare the deployed
+source tree with the checkout, including committed and uncommitted changes, and
+record the baseline and starting checkout revision. A clean Git tree or successful
+build does not prove that source is deployed; a single-guest update does not
+establish that the entire checkout is active on the host and every VM.
+
+Stop new system edits if older deployable changes, an unfinished/failed current
+deployment, a required reboot or an unknown baseline remain. Report what is pending
+and ask whether to deploy, discard or isolate that work first. Do not resolve it
+automatically or include it in a new request. Explicitly requested backlog
+resolution may proceed. Documentation/instruction-only changes do not require
+deployment; inspect mixed commits by content.
+
+Recheck immediately before submission. Stop if the baseline, deployment state or
+checkout changed beyond the recorded starting state and the user's authorized
+change. Use read-only state and source comparisons, without evaluating/building
+a candidate or bypassing source approval just to check for pending work.
+
 Commit component changes and update the parent pin as described in
 [repository workflow](repositories.md). Remote builds need access to the pinned
 component commit. Before hosting is available, use a local-source checkout and
@@ -64,7 +83,8 @@ an explicit local URL override; the public URL alone cannot fetch unpublished
 commits. Do not upload source as part of a local-only preparation task.
 
 ```bash
-# Make the change in this repository, then:
+# After checking the target baseline, make the change in this repository.
+# For implementation changes affecting shared behavior, run:
 make test-quick
 git add <the relevant files>
 git commit -m 'Describe the change'

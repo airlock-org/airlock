@@ -14,6 +14,20 @@
   A successful build is not a successful live deployment; report both separately.
 - Keep development observation separate from production behavior. Observation
   tools should report state without expanding Qubes control authority.
+- Before editing deployable system configuration for a live target, inspect its
+  recorded deployed source and read-only status/verification. Compare that source
+  with the checkout, including committed and uncommitted changes; a clean Git
+  tree does not prove deployment. Record the baseline and starting revision.
+- If older deployable changes, an unfinished/failed current deployment or a
+  required reboot remain, stop new work and report them. Ask the user whether to
+  deploy, discard or isolate the older work; do not do so automatically. If the
+  deployed baseline cannot be established, stop rather than assume a match.
+  Documentation/instruction-only changes do not require deployment; inspect mixed
+  commits by content. Explicitly requested work to resolve the backlog may proceed.
+- Recheck the baseline, deployment state and checkout immediately before
+  submission. Stop if they changed beyond the user's authorized change; do not
+  bundle intervening work into its review. Never bypass source approval or build
+  a candidate just to discover whether older changes are pending.
 - Match verification to the change. For routine package-list additions/removals,
   skip repository tests: review and commit the exact diff, obtain required source
   approval before evaluation/build, then apply and verify the requested package
