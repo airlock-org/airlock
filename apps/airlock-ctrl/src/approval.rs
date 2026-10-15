@@ -40,6 +40,9 @@ pub struct Response {
 
 pub type Reply = Arc<Mutex<Option<Response>>>;
 
+pub const REBOOT_NOTICE: &str =
+    "May be required. Confirmed after building; you choose when to restart.";
+
 impl Request {
     pub fn load(path: &Path, review: &Review) -> Result<Self> {
         ensure!(
@@ -108,7 +111,6 @@ pub fn valid_name(name: &str) -> bool {
 pub struct Session {
     pub request: Request,
     pub allowed_vms: String,
-    pub allow_reboot: bool,
     pub reply: Reply,
 }
 
@@ -123,14 +125,18 @@ impl Session {
         (!names.is_empty() && names.len() <= 4096 && names.iter().all(|name| valid_name(name)))
             .then(|| Scope {
                 allowed_vms: names.into_iter().collect(),
-                allow_reboot: self.allow_reboot,
+                // Approve covers the reviewed change, including a required
+                // reboot. Activation still leaves reboot timing to the user.
+                allow_reboot: true,
             })
     }
 
     pub fn finish(&self, review: &Review, decision: &'static str) {
-        let scope = self
-            .scope()
-            .or_else(|| (decision != "approve").then(|| self.request.scope.clone()));
+        let scope = if decision == "approve" {
+            self.scope()
+        } else {
+            Some(self.request.scope.clone())
+        };
         if let Some(scope) = scope {
             *self.reply.lock().unwrap() = Some(self.request.response(review, decision, scope));
         }
@@ -142,7 +148,8 @@ impl Session {
         report.push_str(&serde_json::to_string_pretty(&serde_json::json!({
             "request_id": self.request.request_id, "family": self.request.family,
             "target": self.request.target, "scope": self.scope(),
-            "purpose": "Approval permits evaluation, building and deployment within this scope. The final deployment plan is not yet known."
+            "system_reboot": REBOOT_NOTICE,
+            "purpose": "Approval permits evaluation, building and deployment within this scope, including changes that require a reboot. The final deployment plan is not yet known."
         }))?);
         report.push('\n');
         Ok(report)

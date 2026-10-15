@@ -101,7 +101,6 @@ fn main() -> Result<()> {
         if let Some(request) = approval {
             let session = approval::Session {
                 allowed_vms: request.scope.allowed_vms.join(", "),
-                allow_reboot: request.scope.allow_reboot,
                 request,
                 reply: Default::default(),
             };
@@ -117,7 +116,6 @@ fn main() -> Result<()> {
         .map(|request| request.response(&review, "cancelled", request.scope.clone()));
     let session = approval.map(|request| approval::Session {
         allowed_vms: request.scope.allowed_vms.join(", "),
-        allow_reboot: request.scope.allow_reboot,
         request,
         reply: reply.clone(),
     });

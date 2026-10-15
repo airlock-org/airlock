@@ -168,8 +168,11 @@ and the supplied plan. The record uses the distinct
 **Standalone receipts are not deployment approvals.** Local/demo mode retains
 the local-only receipt behavior. The installed controller launches the separate
 `--approval-request` mode with a typed, source-bound request from dom0. This mode
-reviews source before evaluation/build and shows the permitted VM impact and
-reboot permission. The final plan is explicitly unknown until building finishes.
+reviews source before evaluation/build and shows the permitted VM impact. Reboot
+is informational: Approve covers changes that need a reboot, with no separate
+permission control. Before building, the requirement is shown as potentially
+necessary; the final plan confirms it after building. A required reboot remains
+pending until the user restarts the machine.
 One Approve action returns a source fingerprint and scope to the controller on
 stdout; Reject returns rejection, and closing the window returns cancellation.
 There is no headless command for granting controller approval. Copy review also

@@ -514,10 +514,13 @@ def approval_request(source, tmp_path, review):
     return path, value
 
 
-def test_prebuild_review_copies_source_and_explicit_scope_without_a_plan(
-    ctrl, source, tmp_path
+@pytest.mark.parametrize("previous_reboot_permission", [False, True])
+def test_prebuild_review_covers_reboot_without_a_separate_permission(
+    ctrl, source, tmp_path, previous_reboot_permission
 ):
     path, expected = approval_request(source, tmp_path, inspect(ctrl, source))
+    expected["scope"]["allow_reboot"] = previous_reboot_permission
+    path.write_text(json.dumps(expected))
     result = run(
         ctrl,
         "--repo",
@@ -533,9 +536,11 @@ def test_prebuild_review_copies_source_and_explicit_scope_without_a_plan(
     assert result.returncode == 0, result.stderr
     scope = json.loads(result.stdout.split("## Approval scope\n\n", 1)[1])
     assert scope["scope"]["allowed_vms"] == sorted(expected["scope"]["allowed_vms"])
-    assert scope["scope"]["allow_reboot"] == expected["scope"]["allow_reboot"]
+    assert scope["scope"]["allow_reboot"] is True
     assert scope["request_id"] == expected["request_id"]
     assert "final deployment plan is not yet known" in scope["purpose"]
+    assert "confirmed after building" in scope["system_reboot"].lower()
+    assert "you choose when to restart" in scope["system_reboot"]
     assert "diff --git" in report_block(result.stdout, "Source patch")
 
 

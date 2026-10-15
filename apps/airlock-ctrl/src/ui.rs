@@ -295,15 +295,10 @@ impl Controller {
                                     ))
                                     .size(12.0),
                                 );
-                                ui.label(
-                                    RichText::new(if session.allow_reboot {
-                                        "System reboot: Permitted"
-                                    } else {
-                                        "System reboot: Not permitted"
-                                    })
-                                    .size(12.0)
-                                    .color(MUTED),
-                                );
+                                ui.add(egui::Label::new(
+                                    RichText::new(format!("System reboot: {}", crate::approval::REBOOT_NOTICE))
+                                        .size(12.0).color(MUTED),
+                                ).wrap());
                             } else {
                                 effects_summary(ui, self.effects.as_ref());
                             }
@@ -408,7 +403,7 @@ impl Controller {
                     ),
                     (
                         "Review decisions",
-                        if self.approval.is_some() { "Approve permits evaluation, building and deployment of this source within the permitted impact. Reject returns feedback to the assistant." }
+                        if self.approval.is_some() { "Approve permits evaluation, building and deployment of this source within the permitted VM impact, including changes that require a reboot. You choose when to restart. Reject returns feedback to the assistant." }
                         else { "No machine is connected. Approve and Reject record your decision locally without starting deployment." },
                     ),
                     (
@@ -954,8 +949,8 @@ impl Controller {
 
     fn plan(&mut self, ui: &mut egui::Ui) {
         if let Some(session) = &mut self.approval {
-            ui.heading("Permitted impact");
-            ui.label(RichText::new("The final deployment plan will be computed after building. Deployment stops if it exceeds this scope.").color(MUTED));
+            ui.heading("Deployment impact");
+            ui.label(RichText::new("The final deployment plan will be computed after building. Deployment stops if it exceeds the permitted VM impact. Approve includes changes that require a reboot.").color(MUTED));
             ui.add_space(16.0);
             ui.label("VMs allowed to change, start, stop or restart");
             let mut output = egui::TextEdit::multiline(&mut session.allowed_vms)
@@ -965,11 +960,7 @@ impl Controller {
             let text = session.allowed_vms.clone();
             selection::text_edit_menu(&mut output, &text, true);
             ui.add_space(12.0);
-            ui.horizontal(|ui| {
-                ui.label("System reboot");
-                ui.radio_value(&mut session.allow_reboot, false, "Not permitted");
-                ui.radio_value(&mut session.allow_reboot, true, "Permitted");
-            });
+            ui.label(RichText::new(format!("System reboot: {}", crate::approval::REBOOT_NOTICE)).color(MUTED));
             return;
         }
         egui::ScrollArea::vertical().id_salt("plan").auto_shrink([false, false]).show(ui, |ui| {
