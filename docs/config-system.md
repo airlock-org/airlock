@@ -575,9 +575,8 @@ network, and that `sys-net` has no upstream NetVM when it is used as the
 physical uplink.
 
 The `cmd` role layers development tools on top of the minimal Qubes guest base.
-It includes `git`, the private-store Nix CLI wrapper, Rust and Python tooling
-used by this repository, `make`, shell/editor basics, the `airlock` VM control
-CLI, and the pinned nixpkgs `codex` and `zellij` packages.
+Its package selection is defined in the
+[guest module](../airlock-machine/lifecycle/misc/modules/qube-guest.nix).
 
 The VM keeps `/nix/store` as the read-only activated generation identity.
 Interactive Nix commands run through `airlock-config-nix`, which stores mutable
