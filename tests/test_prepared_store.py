@@ -49,38 +49,78 @@ def label_app():
     return SimpleNamespace(labels=labels, get_label=get_label)
 
 
-def custom_label_domain(color="0x6b7a3d"):
-    return {"label": "khaki", "features": {"airlock-label-color": color}}
+def custom_label_domain(color="0x6b7a3d", *, name="khaki"):
+    return {"label": name, "features": {"airlock-label-color": color}}
 
 
 def label_factory(index, color, name):
     return SimpleNamespace(index=index, color=color, name=name)
 
 
-def test_prepared_labels_preserve_defaults_and_deduplicate_declared_colors(label_app):
+@pytest.fixture(params=["image", "setup"])
+def register_labels(request, monkeypatch):
+    if request.param == "image":
+        return lambda app, domains: runtime.register_custom_labels(app, domains, label_factory, 8)
+
+    # Execute the actual setup-config Python at its Qubes Admin API boundary.
+    source = (ROOT / "airlock-machine/lifecycle/misc/tools/scripts/setup-config.sh").read_text()
+    source = source.split('run_or_plan "$QUBESADMIN_PYTHON" -c \'\n', 1)[1]
+    source = source.split('\n\' "$custom_label" "$custom_label_color"', 1)[0]
+    code = compile(source, "setup-config managed labels", "exec")
+
+    def register(app, domains):
+        class Labels:
+            def __getitem__(self, name):
+                return app.get_label(name)
+
+        def create(destination, method, name, payload):
+            assert (destination, method) == ("dom0", "admin.label.Create")
+            index = max(app.labels) + 1
+            app.labels[index] = label_factory(index, payload.decode("ascii"), name)
+
+        client = SimpleNamespace(labels=Labels(), qubesd_call=create)
+        monkeypatch.setitem(sys.modules, "qubesadmin", SimpleNamespace(Qubes=lambda: client))
+        for _, domain in sorted(domains.items()):
+            color = domain.get("features", {}).get("airlock-label-color")
+            if color:
+                # setup-config passes command arguments as strings.
+                monkeypatch.setattr(sys, "argv", ["managed-label", domain["label"], str(color)])
+                exec(code, {})
+
+    return register
+
+
+@pytest.mark.parametrize("name,color", [("khaki", "0x6b7a3d"), ("light-gray", "0xd3d3d3")])
+def test_prepared_labels_preserve_defaults_and_deduplicate_declared_colors(label_app, register_labels, name, color):
     defaults = dict(label_app.labels)
-    domains = {"usr-home": custom_label_domain(), "another": custom_label_domain()}
-    runtime.register_custom_labels(label_app, domains, label_factory, 8)
-    runtime.register_custom_labels(label_app, domains, label_factory, 8)
+    domain = custom_label_domain(color, name=name)
+    domains = {"work": domain, "another": domain}
+    register_labels(label_app, domains)
+    register_labels(label_app, domains)
     assert len(label_app.labels) == 9
     assert all(label_app.labels[index] is label for index, label in defaults.items())
-    label = label_app.get_label("khaki")
-    assert label.index == 9 and label.color == "0x6b7a3d"
+    label = label_app.get_label(name)
+    assert label.index == 9 and label.color == color
 
 
 @pytest.mark.parametrize("color", ["not-a-color", "#6b7a3d", 42])
-def test_prepared_labels_reject_invalid_declarations(label_app, color):
+def test_prepared_labels_reject_invalid_declarations(label_app, register_labels, color):
     with pytest.raises(ValueError, match="invalid managed custom label"):
-        runtime.register_custom_labels(label_app, {"usr-home": custom_label_domain(color)},
-                                       label_factory, 8)
+        register_labels(label_app, {"work": custom_label_domain(color)})
     assert len(label_app.labels) == 8
 
 
-def test_prepared_labels_reject_conflicting_existing_color(label_app):
-    label_app.labels[9] = label_factory(9, "0xffffff", "khaki")
+def test_prepared_labels_cannot_recolor_builtin_labels(label_app, register_labels):
+    with pytest.raises(ValueError, match="invalid managed custom label"):
+        register_labels(label_app, {"work": custom_label_domain("0xffffff", name="red")})
+    assert len(label_app.labels) == 8
+
+
+@pytest.mark.parametrize("name", ["khaki", "light-gray"])
+def test_prepared_labels_reject_conflicting_existing_color(label_app, register_labels, name):
+    label_app.labels[9] = label_factory(9, "0xffffff", name)
     with pytest.raises(ValueError, match="colour differs"):
-        runtime.register_custom_labels(label_app, {"usr-home": custom_label_domain()},
-                                       label_factory, 8)
+        register_labels(label_app, {"work": custom_label_domain(name=name)})
     assert label_app.labels[9].color == "0xffffff"
 
 
@@ -1261,8 +1301,8 @@ def test_prepared_usb_runtime_closure():
 
 
 @pytest.mark.nix
-@pytest.mark.parametrize("label", ["red", "khaki"])
-def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs, label):
+@pytest.mark.parametrize("label,color", [("red", None), ("khaki", "0x6b7a3d"), ("light-gray", "0xd3d3d3")])
+def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs, label, color):
     from xml.etree import ElementTree as ET
 
     specs, _, _ = seed_inputs
@@ -1301,8 +1341,8 @@ def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs, lab
             }
         },
     }
-    if label == "khaki":
-        topology["domains"]["sys-gui"]["features"]["airlock-label-color"] = "0x6b7a3d"
+    if color:
+        topology["domains"]["sys-gui"]["features"]["airlock-label-color"] = color
     config = tmp_path / "topology.json"
     config.write_text(json.dumps(topology))
     output = tmp_path / "runtime"
@@ -1330,8 +1370,8 @@ def test_prepared_runtime_uses_real_qubes_offline_api(tmp_path, seed_inputs, lab
     label_ref = guest.findtext("./properties/property[@name='label']")
     declared = next(item for item in tree.findall("./labels/label") if item.text == label)
     assert label_ref in (declared.text, declared.attrib["id"])
-    if label == "khaki":
-        assert declared.attrib["color"] == "0x6b7a3d"
+    if color:
+        assert declared.attrib["color"] == color
     assert guest.findtext("./features/feature[@name='airlock-root-source']") == str(
         root_image
     )

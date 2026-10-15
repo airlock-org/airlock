@@ -31,8 +31,10 @@ def register_custom_labels(app, domains, label_factory, max_default_label):
         if not color:
             continue
         name = domain.get("label", "green")
-        if name != "khaki" or not isinstance(color, str) or not re.fullmatch(
-            r"0x[0-9a-fA-F]{6}", color
+        if (
+            name not in {"khaki", "light-gray"}
+            or not isinstance(color, str)
+            or not re.fullmatch(r"0x[0-9a-fA-F]{6}", color)
         ):
             raise ValueError("invalid managed custom label")
         try:
