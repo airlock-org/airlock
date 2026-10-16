@@ -104,7 +104,7 @@
           "airlock-machine-release-usb-gui-lab"
         ]
         // {
-          airlock-ctrl = (import nixpkgs { inherit system; }).callPackage ./apps/airlock-ctrl/package.nix { };
+          airlock-ctrl-gui = (import nixpkgs { inherit system; }).callPackage ./apps/airlock-ctrl-gui/package.nix { };
           airlock-prepare-runtime = import ./lifecycle/image/tools/prepare-runtime.nix { pkgs = usbConfiguration.pkgs; };
           airlock-usb-builder-input-closure = usbConfiguration.config.system.build.usbPreparedGuestStore.builderInputClosure;
           airlock-usb-builder-nix = usbConfiguration.config.system.build.usbPreparedGuestStore.builderNix;
