@@ -212,19 +212,19 @@ ctrl-build:
 # Nix supplies the native GUI libraries on NixOS. Only this app is built/run.
 CTRL_PREVIEW_ARGS ?= --demo
 ctrl-preview:
-	$(AIRLOCK_NIX) run ./apps\#airlock-ctrl --no-write-lock-file -- $(CTRL_PREVIEW_ARGS)
+	$(AIRLOCK_NIX) run ./apps\#airlock-ctrl-gui --no-write-lock-file -- $(CTRL_PREVIEW_ARGS)
 
 ctrl-check:
 	cargo fmt --manifest-path apps/Cargo.toml --all -- --check
-	cargo clippy --locked --manifest-path apps/Cargo.toml -p airlock-ctrl -- -D warnings
+	cargo clippy --locked --manifest-path apps/Cargo.toml -p airlock-ctrl-gui -- -D warnings
 
 .PHONY: airlock-nix-build airlock-nix-check
 airlock-nix-build:
-	cargo build --locked --release --manifest-path apps/Cargo.toml -p airlock-nix
+	cargo build --locked --release --manifest-path apps/Cargo.toml -p airlock-nix -p airlock-cli -p airlock-nix-service
 
 airlock-nix-check:
-	cargo fmt --manifest-path apps/Cargo.toml -p airlock-nix -- --check
-	cargo clippy --locked --manifest-path apps/Cargo.toml -p airlock-nix --all-targets -- -D warnings
+	cargo fmt --manifest-path apps/Cargo.toml -p airlock-nix -p airlock-cli -p airlock-nix-service -- --check
+	cargo clippy --locked --manifest-path apps/Cargo.toml -p airlock-nix -p airlock-cli -p airlock-nix-service --all-targets -- -D warnings
 
 # Explicit opt-in for evaluations, flake checks and package builds.
 test-nix: ensure-generated-dirs

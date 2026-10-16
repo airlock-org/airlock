@@ -2,11 +2,11 @@
 
 The Rust home for Airlock's Nix subsystem: configuration sources, builds, store
 contents, generations, activation and recovery. It provides typed foundations,
-a read-only inspector, and separate client and controller executables.
+a read-only inspector, and shared code for the separate CLI and service crates.
 
-`airlock-nix-client` submits committed sources from `usr-assistant` and returns
-when the human review decision is recorded. `airlock-nix-controller` runs in
-`sys-ctrl`: it imports sources, opens `airlock-ctrl`, owns detached jobs, drives
+`airlock-cli` (the `airlock` command) submits committed sources from `usr-assistant` and returns
+when the human review decision is recorded. `airlock-nix-service` runs in
+`sys-ctrl`: it imports sources, opens `airlock-ctrl-gui`, owns detached jobs, drives
 Nix builds and sends validated artifacts to the existing dom0 services.
 Dom0 remains the authority for protected approval records, admission, activation,
 reboot and recovery. The GUI remains a separate application. Python controller
@@ -57,7 +57,7 @@ failure, pending decisions return null, and stopped requests retain their
 rejection/cancellation/failure code.
 
 The standalone apps flake exports `./apps#airlock-nix` (inspection),
-`./apps#airlock-nix-client` and `./apps#airlock-nix-controller`. Each package
+`./apps#airlock-cli` and `./apps#airlock-nix-service`. Each package
 builds and installs only its selected executable in release mode, with no GUI
 libraries. Machine configuration installs the client in `usr-assistant` and the
 controller in `sys-ctrl`, through the existing `airlock-sys-ctrl-guest-deploy`

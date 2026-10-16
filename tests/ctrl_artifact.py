@@ -23,11 +23,11 @@ def source_digest(root=ROOT):
     files = [
         root / "apps/Cargo.toml",
         root / "apps/Cargo.lock",
-        root / "apps/airlock-ctrl/Cargo.toml",
+        root / "apps/airlock-ctrl-gui/Cargo.toml",
     ]
     for name in ("src", "assets", "examples"):
         files.extend(
-            p for p in (root / "apps/airlock-ctrl" / name).rglob("*") if p.is_file()
+            p for p in (root / "apps/airlock-ctrl-gui" / name).rglob("*") if p.is_file()
         )
     digest = hashlib.sha256()
     for path in sorted(files):
@@ -61,19 +61,19 @@ def build(builder):
                 "--manifest-path",
                 "apps/Cargo.toml",
                 "-p",
-                "airlock-ctrl",
+                "airlock-ctrl-gui",
             ],
             cwd=ROOT,
             check=True,
         )
         target = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "apps/target"))
-        binary = target / "debug/airlock-ctrl"
+        binary = target / "debug/airlock-ctrl-gui"
     else:
         result = subprocess.check_output(
             [
                 str(ROOT / "lifecycle/misc/tools/scripts/airlock-nix.sh"),
                 "build",
-                "./apps#airlock-ctrl",
+                "./apps#airlock-ctrl-gui",
                 "--no-write-lock-file",
                 "--no-link",
                 "--json",
@@ -87,7 +87,7 @@ def build(builder):
             if os.environ.get("AIRLOCK_USE_HOST_NIX_STORE") == "1"
             else os.environ.get("AIRLOCK_NIX_ROOT", "")
         )
-        binary = Path(store_root + output) / "bin/airlock-ctrl"
+        binary = Path(store_root + output) / "bin/airlock-ctrl-gui"
     if source_digest() != before:
         raise RuntimeError(
             "GUI sources changed during the build; rebuild before testing"

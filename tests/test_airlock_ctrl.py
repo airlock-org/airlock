@@ -31,7 +31,7 @@ def test_preview_uses_standalone_app_flake(tmp_path):
     )
     assert json.loads(result.stdout) == [
         "run",
-        "./apps#airlock-ctrl",
+        "./apps#airlock-ctrl-gui",
         "--no-write-lock-file",
         "--",
         "--demo",
@@ -76,14 +76,14 @@ def test_clean_app_flake_does_not_fetch_an_unavailable_machine_submodule(tmp_pat
             "eval",
             "--raw",
             "--no-write-lock-file",
-            f"{repo}/apps#packages.x86_64-linux.airlock-ctrl.drvPath",
+            f"{repo}/apps#packages.x86_64-linux.airlock-ctrl-gui.drvPath",
         ],
         text=True,
         capture_output=True,
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.endswith("-airlock-ctrl-0.1.0.drv")
+    assert result.stdout.endswith("-airlock-ctrl-gui-0.1.0.drv")
 
 
 @pytest.fixture(scope="module")

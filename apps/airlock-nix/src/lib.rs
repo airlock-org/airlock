@@ -11,6 +11,7 @@ pub mod error;
 pub mod identity;
 pub mod job;
 pub mod review;
+#[cfg(any(feature = "client", feature = "service"))]
 pub mod runtime;
 pub mod state;
 mod wire;

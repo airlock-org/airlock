@@ -1,30 +1,15 @@
-{ lib, rustPlatform, role ? "inspect" }:
-let
-  executable = {
-    inspect = "airlock-nix";
-    client = "airlock-nix-client";
-    controller = "airlock-nix-controller";
-  }.${role};
-in
+{ lib, rustPlatform }:
 rustPlatform.buildRustPackage {
-  pname = executable;
+  pname = "airlock-nix";
   version = "0.1.0";
-  src = lib.fileset.toSource {
-    root = ../.;
-    # Cargo resolves every workspace manifest, even for a single selected app.
-    # The sibling entry point is included for target discovery, not compilation.
-    fileset = lib.fileset.unions [
-      ../Cargo.toml ../Cargo.lock ./Cargo.toml ./src
-      ../airlock-ctrl/Cargo.toml ../airlock-ctrl/src/main.rs
-    ];
-  };
+  src = import ../package-source.nix { inherit lib; };
   cargoLock.lockFile = ../Cargo.lock;
-  cargoBuildFlags = [ "-p" "airlock-nix" "--bin" executable ];
+  cargoBuildFlags = [ "-p" "airlock-nix" "--bin" "airlock-nix" ];
   doCheck = false;
   meta = {
-    description = "Airlock Nix ${role} executable";
+    description = "Inspect Airlock Nix records locally";
     license = lib.licenses.mit;
-    mainProgram = executable;
+    mainProgram = "airlock-nix";
     platforms = lib.platforms.linux;
   };
 }

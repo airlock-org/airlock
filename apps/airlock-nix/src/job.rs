@@ -273,6 +273,7 @@ impl From<JobSnapshot> for JobWire {
 impl JobSnapshot {
     // Runtime construction is confined to the worker. These remain local
     // observations; the protected dom0 grant is checked separately.
+    #[cfg(feature = "service")]
     pub(crate) fn queued(request_id: JobId) -> Self {
         Self {
             request_id,
@@ -283,6 +284,7 @@ impl JobSnapshot {
         }
     }
 
+    #[cfg(feature = "service")]
     pub(crate) fn awaiting(&mut self, authorization_id: ReviewId) -> Result<()> {
         if !matches!(self.state, JobState::Queued { .. }) {
             return Err(Error::InvalidJob {
@@ -293,6 +295,7 @@ impl JobSnapshot {
         Ok(())
     }
 
+    #[cfg(feature = "service")]
     pub(crate) fn approved(&mut self, authorization_id: &ReviewId) -> Result<()> {
         if !matches!(&self.state, JobState::AwaitingApproval { authorization_id: id } if id == authorization_id)
         {
@@ -307,6 +310,7 @@ impl JobSnapshot {
         Ok(())
     }
 
+    #[cfg(feature = "service")]
     pub(crate) fn finish(&mut self, status: ApprovedStatus) -> Result<()> {
         let JobState::Approved {
             status: current, ..
@@ -325,6 +329,7 @@ impl JobSnapshot {
         Ok(())
     }
 
+    #[cfg(feature = "service")]
     pub(crate) fn stop(&mut self, reason: StopReason) -> Result<()> {
         if let JobState::Approved { .. } = &self.state {
             let status = match reason {
@@ -346,10 +351,12 @@ impl JobSnapshot {
         Ok(())
     }
 
+    #[cfg(feature = "service")]
     pub(crate) fn detail(&self, key: &str) -> Option<&serde_json::Value> {
         self.details.get(key)
     }
 
+    #[cfg(feature = "service")]
     pub(crate) fn set_detail(&mut self, key: &str, value: serde_json::Value) {
         assert!(!matches!(
             key,

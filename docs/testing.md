@@ -56,7 +56,7 @@ AIRLOCK_REQUIRE_CTRL_TESTS=1 make test-quick PYTEST_ARGS="-k 'airlock_ctrl or ct
 
 # Alternatively, build with pinned Nix tools, then prepare that runtime before pytest:
 make ctrl-build CTRL_BUILD_METHOD=nix
-./lifecycle/misc/tools/scripts/airlock-nix.sh shell ./apps#airlock-ctrl --command \
+./lifecycle/misc/tools/scripts/airlock-nix.sh shell ./apps#airlock-ctrl-gui --command \
   env AIRLOCK_REQUIRE_CTRL_TESTS=1 make test-quick PYTEST_ARGS="-k 'airlock_ctrl or ctrl_artifact'"
 ```
 

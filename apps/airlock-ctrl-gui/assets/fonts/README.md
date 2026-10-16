@@ -19,7 +19,7 @@ Regenerate from the repository root with these explicitly provisioned tools:
 
 ```sh
 uv run --no-project --with fonttools==4.58.5 --with brotli==1.1.0 \
-  python apps/airlock-ctrl/assets/fonts/generate.py
+  python apps/airlock-ctrl-gui/assets/fonts/generate.py
 ```
 
 Generation preserves the source timestamps for reproducible output.

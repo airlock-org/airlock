@@ -1,17 +1,26 @@
-use super::{Result, decode, process, require};
+#[cfg(feature = "service")]
+use super::decode;
+use super::{Result, process, require};
 use crate::{
     identity::{GuestName, SourceIdentity},
     review::{CandidateIdentity, DeploymentTarget},
     wire::string_enum,
 };
-use flate2::{Compression, read::MultiGzDecoder, write::GzEncoder};
+#[cfg(feature = "service")]
+use flate2::read::MultiGzDecoder;
+#[cfg(feature = "client")]
+use flate2::{Compression, write::GzEncoder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
+    path::Path,
+};
+
+#[cfg(feature = "service")]
+use std::{
     io::{self, Read, Seek},
     os::fd::AsFd,
-    path::Path,
     time::{Duration, Instant},
 };
 
@@ -25,9 +34,11 @@ impl Action {
             Self::MachineBuild | Self::MachinePlan | Self::MachineApply
         )
     }
+    #[cfg(feature = "service")]
     pub fn is_plan(self) -> bool {
         matches!(self, Self::GuestPlan | Self::MachinePlan)
     }
+    #[cfg(feature = "service")]
     pub fn is_apply(self) -> bool {
         matches!(self, Self::GuestApply | Self::MachineApply)
     }
@@ -85,6 +96,7 @@ impl Header {
                 .unwrap_or(DeploymentTarget::Machine),
         })
     }
+    #[cfg(feature = "service")]
     pub fn rename(&self) -> bool {
         self.schema == RequestSchema::Rename
     }
@@ -108,6 +120,7 @@ pub(super) fn identity(repo: &Path) -> Result<SourceIdentity> {
         lock_hash,
     })
 }
+#[cfg(feature = "client")]
 pub(super) fn source_archive(repo: &Path, directory: &Path) -> Result<(SourceIdentity, File)> {
     let source = identity(repo)?;
     let repo_arg = repo
@@ -161,10 +174,12 @@ pub(super) fn source_archive(repo: &Path, directory: &Path) -> Result<(SourceIde
 
 /// One deadline covers the header and compressed body. Read directly from the
 /// fd after poll: buffered reads must not wait past that deadline.
+#[cfg(feature = "service")]
 pub(super) struct Upload {
     input: io::Stdin,
     deadline: Instant,
 }
+#[cfg(feature = "service")]
 impl Upload {
     pub fn new() -> Self {
         Self {
@@ -227,6 +242,7 @@ impl Upload {
         Ok(archive)
     }
 }
+#[cfg(feature = "service")]
 impl Read for Upload {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         if buffer.is_empty() {

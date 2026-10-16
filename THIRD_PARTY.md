@@ -28,9 +28,9 @@ license notices are maintained in the sibling `website` project. Its
 
 ## Application typeface
 
-`airlock-ctrl` bundles Inter by the Inter Project Authors under the SIL Open
+`airlock-ctrl-gui` bundles Inter by the Inter Project Authors under the SIL Open
 Font License 1.1. The original website WOFF2 source, native TTF instances and
-license are retained in [`apps/airlock-ctrl/assets/fonts/`](apps/airlock-ctrl/assets/fonts/README.md),
+license are retained in [`apps/airlock-ctrl-gui/assets/fonts/`](apps/airlock-ctrl-gui/assets/fonts/README.md),
 which records the upstream revision, checksum and regeneration procedure.
 These font files retain their own license rather than Airlock's MIT license.
 

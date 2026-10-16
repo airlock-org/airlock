@@ -6,6 +6,11 @@ rust-version = "1.89"
 license = "MIT"
 description = "Typed review, jobs and deployment orchestration for Airlock Nix management"
 
+[features]
+default = []
+client = []
+service = []
+
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 flate2 = "1.1"

@@ -13,14 +13,14 @@ def artifact(tmp_path):
     for name in (
         "apps/Cargo.toml",
         "apps/Cargo.lock",
-        "apps/airlock-ctrl/Cargo.toml",
-        "apps/airlock-ctrl/src/main.rs",
-        "apps/airlock-ctrl/assets/logo.svg",
+        "apps/airlock-ctrl-gui/Cargo.toml",
+        "apps/airlock-ctrl-gui/src/main.rs",
+        "apps/airlock-ctrl-gui/assets/logo.svg",
     ):
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(name)
-    binary = tmp_path / "airlock-ctrl"
+    binary = tmp_path / "airlock-ctrl-gui"
     binary.write_bytes(b"built binary")
     receipt = tmp_path / "build.json"
     receipt.write_text(
@@ -43,7 +43,7 @@ def test_current_build_is_accepted(artifact):
 @pytest.mark.parametrize("changed", ["src/main.rs", "assets/logo.svg", "Cargo.toml"])
 def test_changed_gui_input_requires_explicit_rebuild(artifact, changed):
     root, _, receipt = artifact
-    (root / "apps/airlock-ctrl" / changed).write_text("changed")
+    (root / "apps/airlock-ctrl-gui" / changed).write_text("changed")
     with pytest.raises(ValueError, match="sources changed"):
         ctrl_artifact.verify(receipt, root=root)
 

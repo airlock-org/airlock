@@ -1,0 +1,10 @@
+[package]
+name = "airlock-nix-service"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+description = "Airlock Nix review and deployment service"
+
+[dependencies]
+airlock-nix = { path = "../airlock-nix", features = ["service"] }

@@ -152,6 +152,7 @@ pub(super) fn text(program: &str, args: &[&str]) -> Result<String> {
         .trim()
         .to_owned())
 }
+#[cfg(feature = "service")]
 pub(super) fn rpc(
     service: &str,
     request: &impl serde::Serialize,
@@ -201,6 +202,7 @@ pub(super) fn rpc(
 
 /// A failed deployment phase is a successful status observation. Preserve its
 /// diagnostic `error` field rather than treating it as a failed RPC operation.
+#[cfg(feature = "service")]
 pub(super) fn machine_status() -> Result<serde_json::Value> {
     let bytes = serde_json::to_vec(
         &serde_json::json!({"schema":"airlock.machine-control.v1","action":"status"}),

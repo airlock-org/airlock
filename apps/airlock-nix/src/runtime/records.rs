@@ -15,11 +15,7 @@ use std::{
 };
 
 pub(super) const LIMIT: u64 = 32 * 1024 * 1024;
-pub(super) fn home() -> Result<PathBuf> {
-    Ok(PathBuf::from(std::env::var_os("HOME").ok_or_else(
-        || super::Error::Message("HOME is unavailable".into()),
-    )?))
-}
+pub(super) use super::home;
 pub(super) fn root() -> Result<PathBuf> {
     Ok(home()?.join(".local/share/airlock/controller/rust-v1"))
 }

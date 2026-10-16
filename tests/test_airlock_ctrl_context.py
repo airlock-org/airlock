@@ -22,7 +22,7 @@ def context_runner(tmp_path_factory):
         pytest.skip("Rust compiler is not installed; no automatic provisioning")
     directory = tmp_path_factory.mktemp("ctrl-context")
     harness = directory / "main.rs"
-    module = ROOT / "apps/airlock-ctrl/src/diff_context.rs"
+    module = ROOT / "apps/airlock-ctrl-gui/src/diff_context.rs"
     harness.write_text(
         "#[path = "
         + json.dumps(str(module))

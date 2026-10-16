@@ -1,5 +1,5 @@
 [package]
-name = "airlock-ctrl"
+name = "airlock-ctrl-gui"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"

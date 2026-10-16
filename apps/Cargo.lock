@@ -47,7 +47,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "airlock-ctrl"
+name = "airlock-cli"
+version = "0.1.0"
+dependencies = [
+ "airlock-nix",
+]
+
+[[package]]
+name = "airlock-ctrl-gui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -76,6 +83,13 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "airlock-nix-service"
+version = "0.1.0"
+dependencies = [
+ "airlock-nix",
 ]
 
 [[package]]

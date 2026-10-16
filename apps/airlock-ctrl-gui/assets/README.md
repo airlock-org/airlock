@@ -11,7 +11,7 @@ window icon; running or building the app needs no external asset directory.
 To regenerate it from the repository root with Inkscape installed:
 
 ```sh
-inkscape apps/airlock-ctrl/assets/logo.svg \
+inkscape apps/airlock-ctrl-gui/assets/logo.svg \
   --export-area-page --export-width=512 --export-height=512 \
-  --export-filename=apps/airlock-ctrl/assets/logo.png
+  --export-filename=apps/airlock-ctrl-gui/assets/logo.png
 ```

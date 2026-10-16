@@ -1,15 +1,23 @@
 //! Role-specific runtime adapters. Dom0 retains approval and activation authority.
+#[cfg(feature = "service")]
 mod build;
+#[cfg(feature = "client")]
 mod client;
+#[cfg(feature = "service")]
 mod controller;
 mod process;
 mod protocol;
+#[cfg(feature = "service")]
 mod records;
 
-pub use client::main as client_main;
-pub use controller::main as controller_main;
+#[cfg(feature = "client")]
+pub use client::main_from as client_main_from;
+#[cfg(feature = "service")]
+pub use controller::main as service_main;
 
-use crate::{Error as CoreError, job::StopReason};
+use crate::Error as CoreError;
+#[cfg(feature = "service")]
+use crate::job::StopReason;
 use serde_json::{Value, json};
 use std::{io, path::Path, process::ExitCode};
 
@@ -30,6 +38,7 @@ enum Error {
     Json(#[from] serde_json::Error),
     #[error("{0}")]
     Message(String),
+    #[cfg(feature = "service")]
     #[error("request stopped: {}", .0.as_str())]
     Stopped(StopReason),
     #[error("{operation} failed: {message}")]
@@ -57,6 +66,7 @@ fn emit(value: &impl serde::Serialize) -> Result<()> {
     out.flush()?;
     Ok(())
 }
+#[cfg(feature = "service")]
 fn now() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -69,6 +79,7 @@ fn report(result: Result<u8>) -> ExitCode {
         Err(error) => {
             let code = match &error {
                 Error::Core(CoreError::Busy { .. }) => 24,
+                #[cfg(feature = "service")]
                 Error::Stopped(reason) => reason.exit_code(),
                 _ => 1,
             };
@@ -90,4 +101,10 @@ fn report(result: Result<u8>) -> ExitCode {
             ExitCode::from(code)
         }
     }
+}
+
+fn home() -> Result<std::path::PathBuf> {
+    Ok(std::path::PathBuf::from(
+        std::env::var_os("HOME").ok_or_else(|| Error::Message("HOME is unavailable".into()))?,
+    ))
 }

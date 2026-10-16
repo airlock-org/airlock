@@ -295,10 +295,17 @@ impl Controller {
                                     ))
                                     .size(12.0),
                                 );
-                                ui.add(egui::Label::new(
-                                    RichText::new(format!("System reboot: {}", crate::approval::REBOOT_NOTICE))
-                                        .size(12.0).color(MUTED),
-                                ).wrap());
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(format!(
+                                            "System reboot: {}",
+                                            crate::approval::REBOOT_NOTICE
+                                        ))
+                                        .size(12.0)
+                                        .color(MUTED),
+                                    )
+                                    .wrap(),
+                                );
                             } else {
                                 effects_summary(ui, self.effects.as_ref());
                             }
@@ -960,7 +967,10 @@ impl Controller {
             let text = session.allowed_vms.clone();
             selection::text_edit_menu(&mut output, &text, true);
             ui.add_space(12.0);
-            ui.label(RichText::new(format!("System reboot: {}", crate::approval::REBOOT_NOTICE)).color(MUTED));
+            ui.label(
+                RichText::new(format!("System reboot: {}", crate::approval::REBOOT_NOTICE))
+                    .color(MUTED),
+            );
             return;
         }
         egui::ScrollArea::vertical().id_salt("plan").auto_shrink([false, false]).show(ui, |ui| {
@@ -1208,7 +1218,7 @@ impl eframe::App for Controller {
                     image.height() as u32,
                     image::ColorType::Rgba8,
                 ) {
-                    eprintln!("airlock-ctrl: saving screenshot failed: {error}");
+                    eprintln!("airlock-ctrl-gui: saving screenshot failed: {error}");
                 }
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }

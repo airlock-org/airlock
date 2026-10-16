@@ -27,6 +27,7 @@ use std::{
 
 #[derive(Parser)]
 #[command(
+    name = "airlock-nix-service",
     version,
     about = "Controller-side source review, detached jobs and Nix deployment orchestration"
 )]
@@ -403,7 +404,7 @@ fn authorize(
         let name = format!("review-{}", ctx.request_id);
         records::save(store, &name, &request)?;
         let app = std::env::var("AIRLOCK_CTRL_BIN")
-            .unwrap_or_else(|_| "/run/current-system/sw/bin/airlock-ctrl".into());
+            .unwrap_or_else(|_| "/run/current-system/sw/bin/airlock-ctrl-gui".into());
         let mut command = user_command(&app);
         let exported = process::run(
             user_command("systemctl").args(["--user", "show-environment"]),

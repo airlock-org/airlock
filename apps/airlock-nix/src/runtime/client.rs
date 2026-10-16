@@ -2,7 +2,7 @@ use super::{
     Result, decode, emit,
     process::{self, OwnedChild},
     protocol::{self, Action, Header, RequestSchema},
-    records, report,
+    report,
 };
 use crate::identity::{GuestName, JobId};
 use clap::{Parser, Subcommand};
@@ -56,8 +56,8 @@ enum ClientCommand {
         request_id: JobId,
     },
 }
-pub fn main() -> ExitCode {
-    report(run(Args::parse().command))
+pub fn main_from(args: impl IntoIterator<Item = std::ffi::OsString>) -> ExitCode {
+    report(run(Args::parse_from(args).command))
 }
 fn run(command: ClientCommand) -> Result<u8> {
     let (action, target, repo, rename) = match command {
@@ -89,7 +89,7 @@ fn run(command: ClientCommand) -> Result<u8> {
             return Ok(code);
         }
     };
-    let repo = repo.unwrap_or(records::home()?.join("airlock-machine"));
+    let repo = repo.unwrap_or(super::home()?.join("airlock-machine"));
     let temp = tempfile::Builder::new()
         .prefix("airlock-nix-submit-")
         .tempdir()?;

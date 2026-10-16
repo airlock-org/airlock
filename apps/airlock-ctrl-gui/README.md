@@ -1,4 +1,4 @@
-# airlock-ctrl
+# airlock-ctrl-gui
 
 Airlock Control is the user-facing interface for sys-ctrl's configuration and
 deployment responsibilities. This first version is a local Rust/egui app with
@@ -38,18 +38,18 @@ expand/collapse icons show the entire file or reset to three lines of context.
 ## Review committed source
 
 ```sh
-apps/target/debug/airlock-ctrl \
+apps/target/debug/airlock-ctrl-gui \
   --repo airlock-machine \
   --base <baseline-commit> \
   --candidate <candidate-commit> \
   --plan /path/to/saved-plan.json \
-  --decisions-dir .airlock-logs/airlock-ctrl/decisions
+  --decisions-dir .airlock-logs/airlock-ctrl-gui/decisions
 ```
 
 On NixOS, launch through the package wrapper instead:
 
 ```sh
-./lifecycle/misc/tools/scripts/airlock-nix.sh run ./apps#airlock-ctrl --no-write-lock-file -- \
+./lifecycle/misc/tools/scripts/airlock-nix.sh run ./apps#airlock-ctrl-gui --no-write-lock-file -- \
   --repo airlock-machine --base <baseline-commit> --candidate <candidate-commit>
 ```
 
@@ -192,9 +192,9 @@ administrative route remains outside this normal submission workflow.
 ```sh
 make ctrl-build
 make ctrl-check
-apps/target/debug/airlock-ctrl --demo --inspect
-apps/target/debug/airlock-ctrl --repo airlock-machine --base HEAD~1 --inspect
-AIRLOCK_CTRL_BIN="$PWD/apps/target/debug/airlock-ctrl" make test-quick
+apps/target/debug/airlock-ctrl-gui --demo --inspect
+apps/target/debug/airlock-ctrl-gui --repo airlock-machine --base HEAD~1 --inspect
+AIRLOCK_CTRL_BIN="$PWD/apps/target/debug/airlock-ctrl-gui" make test-quick
 ```
 
 `--inspect` prints the review JSON without a display server. For offline tools,
@@ -206,9 +206,9 @@ It cannot write demo decisions or initiate deployment.
 display such as Xvfb for visual checks that should not open a desktop window.
 The screenshot command does not create review decisions.
 
-The standalone `apps/flake.nix` exports `packages.x86_64-linux.airlock-ctrl`.
+The standalone `apps/flake.nix` exports `packages.x86_64-linux.airlock-ctrl-gui`.
 It packages the workspace with its committed Cargo lock and wraps the native
-libraries and Git. Use `./apps#airlock-ctrl` for local builds/previews; the app
+libraries and Git. Use `./apps#airlock-ctrl-gui` for local builds/previews; the app
 flake explicitly disables submodule fetching and needs only its own pinned
 nixpkgs input. The parent flake
 retains its app package export for integration; that entry point also loads
