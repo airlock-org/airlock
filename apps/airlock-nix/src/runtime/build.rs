@@ -374,6 +374,58 @@ fn machine_metadata(topology: &Topology) -> Result<BTreeMap<StorePath, Value>> {
     )?;
     Ok(result)
 }
+/// Admission provenance belongs to the retained generation. An unchanged
+/// generation keeps its original source identity; dom0 verifies its immutable
+/// artifacts against this candidate before accepting the receipt.
+#[derive(Deserialize)]
+struct GuestAdmission {
+    schema: String,
+    transport: String,
+    status: String,
+    activated: bool,
+    retained: bool,
+    domain: GuestName,
+    generation: u64,
+    system: StorePath,
+    root_source: StoreFile,
+    kernel_name: String,
+    source_revision: GitRevision,
+    lock_hash: LockHash,
+    #[serde(default)]
+    generation_reused: bool,
+}
+fn check_guest_admission(
+    receipt: &Value,
+    guest: &GuestName,
+    backend: &Backend,
+    grant: &Grant,
+) -> Result<()> {
+    let admission: GuestAdmission = decode(&serde_json::to_vec(receipt)?)?;
+    let (system, _, root, kernel) = backend.sources()?;
+    require(
+        admission.schema == "airlock.closure-store.admission.v1"
+            && admission.transport == "qrexec"
+            && admission.status == "passed"
+            && admission.retained
+            && !admission.activated
+            && admission.generation > 0
+            && &admission.domain == guest
+            && &admission.system == system
+            && admission.root_source.0 == root.0
+            && admission.kernel_name == kernel,
+        &format!("guest admission artifacts differ from approved candidate for {guest}"),
+    )?;
+    if !admission.generation_reused {
+        require(
+            admission.source_revision == grant.header.revision
+                && admission.lock_hash == grant.header.lock_hash,
+            &format!(
+                "fresh guest admission provenance differs from approved candidate for {guest}"
+            ),
+        )?;
+    }
+    Ok(())
+}
 fn send_release(
     store: &StateStore,
     grant: &Grant,
@@ -477,12 +529,7 @@ fn send_release(
                 && receipt.get("root_artifact") == roots.get(name.as_str()),
             "admitted root differs from built release",
         )?;
-        require(
-            receipt.get("domain") == Some(&json!(name))
-                && receipt.get("source_revision") == Some(&json!(grant.header.revision))
-                && receipt.get("lock_hash") == Some(&json!(grant.header.lock_hash)),
-            "guest receipt differs from approved candidate",
-        )?;
+        check_guest_admission(&receipt, name, &domain.backend, grant)?;
         receipts.insert(name.clone(), receipt);
         records::save(store, &super::build::name(grant, "admissions"), &receipts)?;
     }
