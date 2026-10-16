@@ -60,6 +60,38 @@ impl StorePath {
         Path::new("/rw/airlock-builder/merged").join(self.0.trim_start_matches('/'))
     }
 }
+/// A file inside a store object, distinct from a store-object root used by Nix
+/// metadata and export operations. Topology root images use this form.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+struct StoreFile(String);
+impl TryFrom<String> for StoreFile {
+    type Error = Error;
+    fn try_from(path: String) -> Result<Self> {
+        let tail = path
+            .strip_prefix("/nix/store/")
+            .ok_or_else(|| Error::Message("expected a file in the Nix store".into()))?;
+        let (object, relative) = tail
+            .split_once('/')
+            .ok_or_else(|| Error::Message("expected a file inside a Nix store object".into()))?;
+        StorePath::try_from(format!("/nix/store/{object}"))?;
+        require(
+            relative.split('/').all(|part| {
+                !part.is_empty()
+                    && part != "."
+                    && part != ".."
+                    && !part.chars().any(char::is_control)
+            }),
+            "invalid file path inside a Nix store object",
+        )?;
+        Ok(Self(path))
+    }
+}
+impl From<StoreFile> for String {
+    fn from(path: StoreFile) -> Self {
+        path.0
+    }
+}
 #[derive(Deserialize)]
 struct Manifest {
     schema: String,
@@ -231,19 +263,19 @@ struct Backend {
     kind: String,
     system: Option<Source>,
     store: Option<Source>,
-    root: Option<Source>,
+    root: Option<Source<StoreFile>>,
     kernel: Option<Kernel>,
 }
 #[derive(Deserialize)]
-struct Source {
-    source: StorePath,
+struct Source<T = StorePath> {
+    source: T,
 }
 #[derive(Deserialize)]
 struct Kernel {
     name: String,
 }
 impl Backend {
-    fn sources(&self) -> Result<(&StorePath, &StorePath, &StorePath, &str)> {
+    fn sources(&self) -> Result<(&StorePath, &StorePath, &StoreFile, &str)> {
         let system = self
             .system
             .as_ref()
