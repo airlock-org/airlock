@@ -38,7 +38,13 @@ struct Args {
 #[derive(Subcommand)]
 enum ControllerCommand {
     Serve,
-    Work { request_id: JobId },
+    Work {
+        request_id: JobId,
+    },
+    /// Retry a failed approved request, preserving the original record.
+    Retry {
+        request_id: JobId,
+    },
     Observe,
     ReviewStatusServe,
 }
@@ -49,6 +55,7 @@ fn run(command: ControllerCommand) -> Result<u8> {
     match command {
         ControllerCommand::Serve => serve(),
         ControllerCommand::Work { request_id } => work(request_id),
+        ControllerCommand::Retry { request_id } => retry(request_id),
         ControllerCommand::Observe => observe(),
         ControllerCommand::ReviewStatusServe => {
             require(
@@ -216,6 +223,11 @@ fn serve() -> Result<u8> {
         "controller checkout differs from submitted source",
     )?;
     lock.check_path()?;
+    let id = start_job(&store, &header, None)?;
+    drop(lock);
+    wait(&id)
+}
+fn start_job(store: &StateStore, header: &Header, retry_of: Option<&JobId>) -> Result<JobId> {
     let mut random = [0; 16];
     use std::io::Read;
     File::open("/dev/urandom")?.read_exact(&mut random)?;
@@ -225,9 +237,12 @@ fn serve() -> Result<u8> {
         .collect::<String>()
         .parse()?;
     let mut job = JobSnapshot::queued(id.clone());
-    job.set_detail("request", serde_json::to_value(&header)?);
+    if let Some(previous) = retry_of {
+        job.set_detail("retry_of", json!(previous));
+    }
+    job.set_detail("request", serde_json::to_value(header)?);
     job.set_detail("created_at", json!(now()));
-    records::save_job(&store, &mut job)?;
+    records::save_job(store, &mut job)?;
     let exe = std::env::current_exe()?;
     let result = process::run(
         user_command("systemd-run")
@@ -249,11 +264,54 @@ fn serve() -> Result<u8> {
     if let Err(error) = result.and_then(|r| r.checked("start controller worker")) {
         job.stop(StopReason::Failed)?;
         job.set_detail("error", json!(error.to_string()));
-        records::save_job(&store, &mut job)?;
+        records::save_job(store, &mut job)?;
     }
+    Ok(id)
+}
+fn retry(previous_id: JobId) -> Result<u8> {
+    let store = records::initialize()?;
+    let owner = records::owner(
+        "Controller retry",
+        "Retry failed work after checking source and protected approval",
+        OperationKind::Review,
+    )?
+    .with_job(previous_id.clone());
+    let lock = store.try_operation(&operation_key()?, owner)?;
+    ensure_idle()?;
+    let previous = records::job(&previous_id)?;
+    require(
+        previous.status() == JobStatus::Failed && previous.decision().is_some(),
+        "only a failed approved request can be retried",
+    )?;
+    require(
+        !worker_alive(&previous_id)?,
+        "previous worker is still active",
+    )?;
+    let header: Header = decode(&serde_json::to_vec(
+        previous
+            .detail("request")
+            .ok_or_else(|| Error::Message("job request missing".into()))?,
+    )?)?;
+    header.candidate()?;
+    require(
+        protocol::identity(&repo())? == header.source(),
+        "controller source changed since the failed request",
+    )?;
+    let authorization = previous
+        .authorization_id()
+        .ok_or_else(|| Error::Message("approved job has no authorization".into()))?;
+    let checked = control(&json!({"op":"check", "request_id":authorization,
+        "revision":header.revision, "lock_hash":header.lock_hash}))?;
+    require(
+        checked.get("status") == Some(&json!("approved")),
+        "protected approval no longer permits retry",
+    )?;
+    lock.check_path()?;
+    let id = start_job(&store, &header, Some(&previous_id))?;
     drop(lock);
     wait(&id)
 }
+
 fn wait(id: &JobId) -> Result<u8> {
     let mut previous = None;
     loop {
