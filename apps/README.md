@@ -7,10 +7,10 @@ Other app technologies can live alongside the Rust crates.
 - [airlock-ctrl](airlock-ctrl/README.md) is the desktop interface for source and
   deployment review. It supports local previews and the installed controller's
   approval protocol; the GUI itself does not execute deployments.
-- [airlock-nix](airlock-nix/README.md) starts the Rust Nix subsystem with validated
-  identities, review/plan transitions, job observations and local state primitives.
-  Its CLI inspects local JSON records. It is not wired into machine services;
-  the existing Python backend remains in use.
+- [airlock-nix](airlock-nix/README.md) provides the Rust Nix subsystem: validated
+  identities, source review, detached jobs, build/transfer orchestration and local
+  record inspection. Separate client and controller packages keep each VM limited
+  to its role; existing dom0 services retain activation authority.
 
 From the repository root:
 

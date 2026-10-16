@@ -2,8 +2,8 @@
 //!
 //! Parsed records describe data; they do not authenticate its sender. In
 //! particular, the checked workflow in [`review`] is not a replacement for dom0's
-//! protected approval state or Qubes qrexec policy. There is no execution backend
-//! in this crate yet.
+//! protected approval state or Qubes qrexec policy. Role-specific runtime
+//! executables use those existing services and keep observation read-only.
 
 #![forbid(unsafe_code)]
 
@@ -11,6 +11,7 @@ pub mod error;
 pub mod identity;
 pub mod job;
 pub mod review;
+pub mod runtime;
 pub mod state;
 mod wire;
 

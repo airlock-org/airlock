@@ -1,6 +1,13 @@
-{ lib, rustPlatform }:
+{ lib, rustPlatform, role ? "inspect" }:
+let
+  executable = {
+    inspect = "airlock-nix";
+    client = "airlock-nix-client";
+    controller = "airlock-nix-controller";
+  }.${role};
+in
 rustPlatform.buildRustPackage {
-  pname = "airlock-nix";
+  pname = executable;
   version = "0.1.0";
   src = lib.fileset.toSource {
     root = ../.;
@@ -12,12 +19,12 @@ rustPlatform.buildRustPackage {
     ];
   };
   cargoLock.lockFile = ../Cargo.lock;
-  cargoBuildFlags = [ "-p" "airlock-nix" ];
+  cargoBuildFlags = [ "-p" "airlock-nix" "--bin" executable ];
   doCheck = false;
   meta = {
-    description = "Typed foundations and local record inspection for Airlock Nix management";
+    description = "Airlock Nix ${role} executable";
     license = lib.licenses.mit;
-    mainProgram = "airlock-nix";
+    mainProgram = executable;
     platforms = lib.platforms.linux;
   };
 }

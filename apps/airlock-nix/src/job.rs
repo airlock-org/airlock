@@ -271,6 +271,93 @@ impl From<JobSnapshot> for JobWire {
 }
 
 impl JobSnapshot {
+    // Runtime construction is confined to the worker. These remain local
+    // observations; the protected dom0 grant is checked separately.
+    pub(crate) fn queued(request_id: JobId) -> Self {
+        Self {
+            request_id,
+            state: JobState::Queued {
+                authorization_id: None,
+            },
+            details: BTreeMap::new(),
+        }
+    }
+
+    pub(crate) fn awaiting(&mut self, authorization_id: ReviewId) -> Result<()> {
+        if !matches!(self.state, JobState::Queued { .. }) {
+            return Err(Error::InvalidJob {
+                reason: "only a queued job can start review",
+            });
+        }
+        self.state = JobState::AwaitingApproval { authorization_id };
+        Ok(())
+    }
+
+    pub(crate) fn approved(&mut self, authorization_id: &ReviewId) -> Result<()> {
+        if !matches!(&self.state, JobState::AwaitingApproval { authorization_id: id } if id == authorization_id)
+        {
+            return Err(Error::InvalidJob {
+                reason: "approval differs from the pending review",
+            });
+        }
+        self.state = JobState::Approved {
+            authorization_id: authorization_id.clone(),
+            status: ApprovedStatus::Building,
+        };
+        Ok(())
+    }
+
+    pub(crate) fn finish(&mut self, status: ApprovedStatus) -> Result<()> {
+        let JobState::Approved {
+            status: current, ..
+        } = &mut self.state
+        else {
+            return Err(Error::InvalidJob {
+                reason: "work cannot finish without recorded approval",
+            });
+        };
+        if *current != ApprovedStatus::Building {
+            return Err(Error::InvalidJob {
+                reason: "job has already finished",
+            });
+        }
+        *current = status;
+        Ok(())
+    }
+
+    pub(crate) fn stop(&mut self, reason: StopReason) -> Result<()> {
+        if let JobState::Approved { .. } = &self.state {
+            let status = match reason {
+                StopReason::Failed => ApprovedStatus::Failed,
+                StopReason::ScopeExceeded => ApprovedStatus::ScopeExceeded,
+                StopReason::StaleReview => ApprovedStatus::StaleReview,
+                StopReason::Rejected | StopReason::Cancelled => {
+                    return Err(Error::InvalidJob {
+                        reason: "an approved decision cannot be withdrawn by observation",
+                    });
+                }
+            };
+            return self.finish(status);
+        }
+        self.state = JobState::Stopped {
+            authorization_id: self.authorization_id().cloned(),
+            reason,
+        };
+        Ok(())
+    }
+
+    pub(crate) fn detail(&self, key: &str) -> Option<&serde_json::Value> {
+        self.details.get(key)
+    }
+
+    pub(crate) fn set_detail(&mut self, key: &str, value: serde_json::Value) {
+        assert!(!matches!(
+            key,
+            "request_id" | "status" | "decision" | "authorization_id"
+        ));
+        self.details.insert(key.to_owned(), value);
+    }
+
     pub fn request_id(&self) -> &JobId {
         &self.request_id
     }

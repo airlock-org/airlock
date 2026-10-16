@@ -144,8 +144,9 @@ activation. Normal status/verify/resume/rollback and retention commands use a
 typed dom0 interface, including when sys-ctrl is unavailable. The explicitly
 selected `--legacy-dom0` development route remains separate.
 
-The controller records source archives and requests in
-`~/.local/share/airlock/controller/candidates/<revision>/`; its observation timer
+The Rust controller records source archives and typed records in
+`~/.local/share/airlock/controller/rust-v1/`; existing Python history remains
+under `controller/candidates/` and `controller/jobs/`. Its observation timer
 records actual dom0 outcomes. Submission is not success. The final report
 includes package and sparse-root payload counts, root logical/allocated bytes,
 host NAR/compressed bytes, build time and transfer/admission/validation timings.

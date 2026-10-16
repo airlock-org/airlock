@@ -1,13 +1,16 @@
 # airlock-nix
 
 The Rust home for Airlock's Nix subsystem: configuration sources, builds, store
-contents, generations, activation and recovery. This first version provides
-typed foundations and a local, read-only record inspector. It does not implement
-Nix execution, qrexec transport, worker scheduling or deployment yet.
+contents, generations, activation and recovery. It provides typed foundations,
+a read-only inspector, and separate client and controller executables.
 
-The existing Python backend in `airlock-machine` remains authoritative and
-unchanged. No services, installed packages, VM permissions or deployment routes
-are switched to this crate. `airlock-ctrl` remains the separate review GUI.
+`airlock-nix-client` submits committed sources from `usr-assistant` and returns
+when the human review decision is recorded. `airlock-nix-controller` runs in
+`sys-ctrl`: it imports sources, opens `airlock-ctrl`, owns detached jobs, drives
+Nix builds and sends validated artifacts to the existing dom0 services.
+Dom0 remains the authority for protected approval records, admission, activation,
+reboot and recovery. The GUI remains a separate application. Python controller
+sources are retained; the machine defaults select the Rust role packages.
 
 ## Build and inspect
 
@@ -53,9 +56,12 @@ also reports `submission_exit_code`: approval returns 0 even after a later work
 failure, pending decisions return null, and stopped requests retain their
 rejection/cancellation/failure code.
 
-The standalone apps flake exports `./apps#airlock-nix`. It builds only this
-executable in release mode and requires no GUI libraries. It does not install
-the application into any machine configuration.
+The standalone apps flake exports `./apps#airlock-nix` (inspection),
+`./apps#airlock-nix-client` and `./apps#airlock-nix-controller`. Each package
+builds and installs only its selected executable in release mode, with no GUI
+libraries. Machine configuration installs the client in `usr-assistant` and the
+controller in `sys-ctrl`, through the existing `airlock-sys-ctrl-guest-deploy`
+compatibility command. `airlock machine` remains the normal user interface.
 
 ## Types and boundaries
 
@@ -193,6 +199,49 @@ apps/target/release/airlock-nix inspect-lock /path/to/state deployment
 apps/target/release/airlock-nix inspect-lock /path/to/state job-id --record
 ```
 
-Future controller and dom0 executables can be packaged separately under this
-subsystem, with only the dependencies and authority each VM needs. This crate
-currently has a library plus one inspection binary; it installs no workers.
+## Installed runtime
+
+The client accepts `plan TARGET`, `apply TARGET`, `machine-build`, `machine-plan`,
+`machine-apply`, and `review-status REQUEST_ID`. Submission commands accept
+`--repo PATH`; whole-machine commands also accept `--assistant-rename` for the
+existing migration protocol. The controller accepts only `serve`, `work ID`,
+`observe`, and `review-status-serve`; those commands are absent from the client.
+The compatibility wrapper supplies the existing source/build/pool/qrexec tools.
+It adds no Qubes policy permission or dom0 shell capability.
+
+A typed source header and bounded gzip/tar archive travel through the existing
+`airlock.Ctrl.GuestDeploy` service. One 120-second deadline covers the 4 KiB
+header and up to 512 MiB compressed archive. Only regular `manifest.json` and
+`repo.bundle` members are accepted. The existing source importer validates the
+manifest, Git bundle and lock. The controller rechecks the clean Git identity
+before review and before executing approved work.
+
+The GUI reply is checked against the source, target and deployed baseline, then
+recorded through dom0's protected ReviewControl service. Nix adapters require a
+private grant containing the checked `ApprovedChange`; they recheck it through
+dom0 before evaluation/build and submission. The resulting plan must match the
+source and allowed VM scope. Dom0 independently validates and enforces the grant
+again when admitting and activating the candidate.
+
+The submission returns an `approved` reply as soon as that decision is durable,
+with `job_status`, `continuing`, and a `status_command`. A later failed build
+preserves the decision. Rejection exits 20, cancellation 21, scope failure 22,
+stale review 23, and busy exclusion 24. Work continues in a detached user systemd
+unit. Closing the submission connection does not cancel it. Applying an unchanged
+prepared plan reuses dom0's existing source-and-baseline-bound approval.
+
+Rust records live in `~/.local/share/airlock/controller/rust-v1/`, with separate
+`records/` and `.locks/` namespaces. Job files are `records/job-ID.json`; review,
+build, plan, apply and observed outcome records use distinct resource keys.
+Source archives and build GC roots are retained beside those directories.
+Legacy Python job history remains intact and can still be queried by request ID.
+Before a new submission, active legacy workers block it, and damaged legacy
+records require explicit recovery. Inactive interrupted records do not acquire
+fresh approval or get rewritten by status checks.
+
+Status reads never acquire the controller operation lock or publish job state.
+They report that lock's verified owner/reason/phase when procfs allows it,
+project interruption from systemd liveness without editing history, and retain
+the worker snapshot if a bounded dom0 status request fails. The observation timer
+records dom0 outcomes separately and updates `current` only for a complete,
+matching running host generation.
