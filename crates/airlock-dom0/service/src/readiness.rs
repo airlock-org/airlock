@@ -1,0 +1,350 @@
+//! Boot-time VM readiness and declared network-provider startup through existing Qubes tools.
+//! These local boot commands retain their own policy, separate from reviewed deployment execution.
+
+use crate::process::{Captured, Runner};
+use airlock_nix_core::identity::GuestName;
+use anyhow::{Context, Result, bail, ensure};
+use clap::Args;
+use serde_json::{Value, json};
+use std::{
+    collections::BTreeSet,
+    ffi::OsString,
+    fs::{self, File, OpenOptions},
+    io::Write,
+    path::PathBuf,
+    thread,
+    time::{Duration, Instant},
+};
+
+/// Start one declared VM and wait for its exact generation and provider services.
+#[derive(Args)]
+pub(crate) struct Ready {
+    /// Exact declared guest identity; also used as one log filename component.
+    domain: GuestName,
+    /// Desired topology; the environment override applies when omitted.
+    topology: Option<PathBuf>,
+}
+
+/// Read a path override without requiring its bytes to be UTF-8.
+fn path(key: &str, default: &str) -> PathBuf {
+    std::env::var_os(key).map_or_else(|| default.into(), PathBuf::from)
+}
+
+/// Read a finite whole-second command deadline, including zero for immediate expiry.
+fn seconds(key: &str, default: u64) -> Result<Duration> {
+    let seconds = match std::env::var(key) {
+        Ok(value) => value.parse().with_context(|| format!("invalid {key}"))?,
+        Err(std::env::VarError::NotPresent) => default,
+        Err(error) => return Err(error.into()),
+    };
+    // Refuse unrepresentable Instant deadlines before requesting external effects.
+    let duration = Duration::from_secs(seconds);
+    ensure!(
+        Instant::now().checked_add(duration).is_some(),
+        "{key} is too large"
+    );
+    Ok(duration)
+}
+
+/// Run a bounded peer and retain both successful output and failed diagnostics.
+fn capture(
+    log: &mut File,
+    key: &str,
+    default: &str,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<Captured> {
+    let program = path(key, default);
+    writeln!(log, "+ {program} {args:?}", program = program.display())?;
+    let output = Runner::default().capture(
+        program.as_os_str(),
+        &args.iter().map(OsString::from).collect::<Vec<_>>(),
+        timeout,
+        &[],
+    )?;
+    log.write_all(&output.stdout)?;
+    log.write_all(&output.stderr)?;
+    Ok(output)
+}
+
+/// Notify the existing supervisor without granting this command additional RPC authority.
+fn supervise(action: &str, domain: &str, detail: &str) -> Result<()> {
+    Runner::default().run(
+        path("AIRLOCK_BOOT_SERVICE", "airlock-dom0-service"),
+        &[
+            "boot-supervisor".into(),
+            action.into(),
+            format!("qube:{domain}").into(),
+            detail.into(),
+        ],
+        Duration::from_secs(60),
+        &[],
+    )?;
+    Ok(())
+}
+
+/// Match the existing guest probe; each forwarding unit must independently be active.
+const PROVIDER_HEALTH: &str = r#"root:for unit in qubes-antispoof qubes-iptables qubes-firewall qubes-network; do systemctl is-active --quiet "$unit.service" || { echo "Network provider unhealthy: $unit.service" >&2; exit 1; }; done; if test -e /run/qubes-service/network-manager; then systemctl is-active --quiet NetworkManager.service; fi"#;
+
+/// Start and poll after the supervisor has recorded the expected generation.
+fn wait(
+    log: &mut File,
+    domain: &str,
+    expected: &str,
+    provider: bool,
+    start: Duration,
+    ready: Duration,
+) -> Result<()> {
+    let output = capture(
+        log,
+        "AIRLOCK_QVM_START",
+        "qvm-start",
+        &["--skip-if-running", "--", domain],
+        start,
+    )?;
+    ensure!(
+        !output.limited && output.status.success(),
+        "{domain} startup failed or timed out"
+    );
+
+    let deadline = Instant::now() + ready;
+    let mut attempt = 0;
+    while Instant::now() < deadline {
+        attempt += 1;
+        writeln!(log, "readiness attempt={attempt}")?;
+        let _ = capture(
+            log,
+            "AIRLOCK_QVM_CHECK",
+            "qvm-check",
+            &["--running", domain],
+            Duration::from_secs(15),
+        )?;
+        let _ = capture(
+            log,
+            "AIRLOCK_QVM_LS",
+            "qvm-ls",
+            &["--raw-data", "--fields", "NAME,STATE,XID", domain],
+            Duration::from_secs(15),
+        )?;
+        let output = capture(
+            log,
+            "AIRLOCK_QREXEC_CLIENT",
+            "qrexec-client",
+            &["-d", domain, "user:readlink -f /run/current-system"],
+            Duration::from_secs(15),
+        )?;
+        if !output.limited && output.status.success() {
+            let actual = std::str::from_utf8(&output.stdout)?.trim_end_matches('\n');
+            ensure!(
+                actual == expected,
+                "{domain} reported {actual}; expected {expected}"
+            );
+            let healthy = if provider {
+                let output = capture(
+                    log,
+                    "AIRLOCK_QREXEC_CLIENT",
+                    "qrexec-client",
+                    &["-d", domain, PROVIDER_HEALTH],
+                    Duration::from_secs(15),
+                )?;
+                !output.limited && output.status.success()
+            } else {
+                true
+            };
+            if healthy {
+                let output = capture(
+                    log,
+                    "AIRLOCK_QVM_CHECK",
+                    "qvm-check",
+                    &["--running", domain],
+                    Duration::from_secs(15),
+                )?;
+                ensure!(
+                    !output.limited && output.status.success(),
+                    "{domain} stopped during readiness checks"
+                );
+                return supervise(
+                    "stage",
+                    domain,
+                    &format!("{domain} is qrexec-ready on {expected}"),
+                );
+            }
+            writeln!(
+                log,
+                "Network provider firewall or forwarding services are not ready."
+            )?;
+        }
+        thread::sleep(
+            Duration::from_secs(3).min(deadline.saturating_duration_since(Instant::now())),
+        );
+    }
+    bail!(
+        "{domain} did not become qrexec-ready with required network services within {seconds}s",
+        seconds = ready.as_secs()
+    )
+}
+
+/// Preserve per-VM boot evidence and report failures through the existing supervisor.
+pub(crate) fn start(request: Ready) -> Result<()> {
+    let topology = request.topology.unwrap_or_else(|| {
+        path(
+            "AIRLOCK_QUBES_TOPOLOGY",
+            "/var/lib/airlock/system/current-topology.json",
+        )
+    });
+    let raw: Value = crate::state::read(&topology)?;
+    let domain = request.domain.as_str();
+    let definition = raw["domains"]
+        .get(domain)
+        .context("VM is not declared by topology")?;
+    let expected = definition["backend"]["system"]["source"]
+        .as_str()
+        .filter(|source| !source.is_empty())
+        .context("missing expected system generation")?;
+    let provider = definition["prefs"]["provides_network"] == true;
+    let start = seconds("AIRLOCK_QUBE_START_TIMEOUT", 240)?;
+    let ready = seconds("AIRLOCK_QUBE_READY_TIMEOUT", 180)?;
+    let boot_id = fs::read_to_string(path(
+        "AIRLOCK_BOOT_ID_FILE",
+        "/proc/sys/kernel/random/boot_id",
+    ))?;
+    let default = format!(
+        "/var/log/airlock/boot-attempts/{boot_id}",
+        boot_id = boot_id.trim()
+    );
+    let directory = path("AIRLOCK_BOOT_ATTEMPT_LOG_DIR", &default);
+    fs::create_dir_all(&directory)?;
+    let mut log = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(directory.join(format!("start-{domain}.log")))?;
+    let result = (|| {
+        supervise(
+            "stage",
+            domain,
+            &format!("starting {domain}; expecting {expected}"),
+        )?;
+        writeln!(
+            log,
+            "domain={domain} expected={expected} start_timeout={start:?} ready_timeout={ready:?}"
+        )?;
+        wait(&mut log, domain, expected, provider, start, ready)
+    })();
+    if let Err(error) = &result {
+        writeln!(log, "{error:#}")?;
+        let _ = supervise("fail", domain, &format!("{error:#}"));
+    }
+    result
+}
+
+/// Select only autostart providers and order explicit local NetVM dependencies among them.
+fn providers(topology: &Value) -> Result<Vec<String>> {
+    let Some(domains) = topology.get("domains") else {
+        return Ok(Vec::new());
+    };
+    let domains = domains
+        .as_object()
+        .context("topology domains must be an object")?;
+    let mut pending = domains
+        .iter()
+        .filter(|(_, vm)| {
+            vm["prefs"]["provides_network"] == true && vm["prefs"]["autostart"] == true
+        })
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
+    for name in &pending {
+        let _: GuestName = name.parse()?;
+    }
+    let selected: BTreeSet<_> = pending.iter().cloned().collect();
+    let mut ordered = Vec::new();
+    while !pending.is_empty() {
+        let before = pending.len();
+        let mut next = Vec::new();
+        for name in pending {
+            let dependency = domains[&name]["netvm"].as_str().filter(|target| {
+                !target.is_empty()
+                    && !target.eq_ignore_ascii_case("none")
+                    && selected.contains(*target)
+            });
+            if dependency.is_none_or(|target| ordered.iter().any(|name| name == target)) {
+                ordered.push(name);
+            } else {
+                next.push(name);
+            }
+        }
+        ensure!(
+            next.len() < before,
+            "declared autostart network-provider NetVM dependency cycle: {next:?}"
+        );
+        pending = next;
+    }
+    Ok(ordered)
+}
+
+/// Start every selected provider, collecting failures without skipping independent providers.
+pub(crate) fn start_providers() -> Result<()> {
+    let topology = path("AIRLOCK_QUBES_TOPOLOGY", "/etc/airlock/qubes-topology.json");
+    let directory = path("AIRLOCK_LOG_DIR", "/var/log/airlock");
+    fs::create_dir_all(&directory)?;
+    let command_log = directory.join("start-network-providers.commands.log");
+    let mut log = File::create(&command_log)?;
+    let raw: Value = crate::state::read(&topology)?;
+    let providers = providers(&raw)?;
+    let mut started = Vec::new();
+    let mut failed = Vec::new();
+    for name in &providers {
+        let output = capture(
+            &mut log,
+            "AIRLOCK_START_QUBE_READY",
+            "airlock-start-qube-ready",
+            &[name, topology.to_str().context("non-UTF-8 topology path")?],
+            seconds("AIRLOCK_QUBE_START_TIMEOUT", 240)?
+                + seconds("AIRLOCK_QUBE_READY_TIMEOUT", 180)?
+                + Duration::from_secs(240),
+        );
+        match output {
+            Ok(output) if !output.limited && output.status.success() => started.push(name),
+            Ok(_) => failed.push(name),
+            Err(error) => {
+                writeln!(log, "{name}: {error:#}")?;
+                failed.push(name);
+            }
+        }
+    }
+    let result = json!({"schema":"airlock.start-network-providers.v1", "status":if failed.is_empty() {"passed"} else {"failed"}, "topology":topology, "command_log":command_log, "providers":providers, "started_or_running":started, "failed":failed});
+    crate::setup_config::report::save(&directory.join("start-network-providers.json"), &result)?;
+    println!("{result}");
+    ensure!(
+        failed.is_empty(),
+        "one or more network providers failed to start"
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Only selected providers participate in ordering; external and disabled peers stay excluded.
+    #[test]
+    fn provider_order_keeps_the_selected_subgraph() -> Result<()> {
+        let topology = json!({"domains":{
+            "a-child":{"prefs":{"autostart":true,"provides_network":true},"netvm":"z-parent"},
+            "b-external":{"prefs":{"autostart":true,"provides_network":true},"netvm":"outside"},
+            "disabled":{"prefs":{"autostart":false,"provides_network":true}},
+            "z-parent":{"prefs":{"autostart":true,"provides_network":true},"netvm":"disabled"}
+        }});
+        assert_eq!(providers(&topology)?, ["b-external", "z-parent", "a-child"]);
+        Ok(())
+    }
+
+    /// A cycle among selected providers must fail before any startup is attempted.
+    #[test]
+    fn provider_cycles_are_rejected() {
+        let topology = json!({"domains":{
+            "a":{"prefs":{"autostart":true,"provides_network":true},"netvm":"b"},
+            "b":{"prefs":{"autostart":true,"provides_network":true},"netvm":"a"}
+        }});
+        assert!(providers(&topology).is_err());
+    }
+}

@@ -1,0 +1,372 @@
+//! Supervise boot stages without allowing a failed hardware check to become a successful boot.
+
+use airlock_build::{Workspace, script::substitute, tools::Tool};
+use rusix::{
+    interop::{
+        NixExpression, NixPath,
+        raw::{NixRepresentation, NixValue},
+    },
+    nix_record, nix_text,
+    nixos::{ContextualModule, ModuleBody, ModuleContext},
+};
+
+/// Install persistent boot supervision and the guarded desktop status RPCs.
+pub(super) fn module(source: &NixPath, workspace: &Workspace) -> NixValue {
+    ContextualModule::new(|context| {
+        let service = Tool::Dom0
+            .build(&context.pkgs, workspace, source)
+            .as_expression();
+        let config = service.bind(|service| configuration(&context, service));
+        let declaration = nix_record! {
+            "options": nix_record! {
+                "airlock": nix_record! {
+                    "bootSupervisor": nix_record! {
+                        "enable": context
+                            .lib
+                            .clone()
+                            .select("mkEnableOption")
+                            .call("persistent guarded VM boot supervision"),
+                    },
+                },
+            },
+        };
+
+        ModuleBody::new(
+            context
+                .lib
+                .clone()
+                .select("mkIf")
+                .call(
+                    context
+                        .config
+                        .clone()
+                        .select("airlock.bootSupervisor.enable"),
+                )
+                .call(config),
+        )
+        .key("airlock.host.boot-supervisor")
+        .import_value(declaration)
+    })
+    .into_expression()
+}
+
+/// Compose startup gates, failure recording and recovery consoles around the native supervisor.
+fn configuration(context: &ModuleContext, service: NixValue) -> NixValue {
+    let package = |name| context.pkgs.clone().select(name);
+    let when = |condition, value| {
+        context
+            .lib
+            .clone()
+            .select("mkIf")
+            .call(condition)
+            .call(value)
+    };
+    let command = |operation: &str| {
+        nix_text!(
+            "{service}/bin/airlock-dom0-service boot-supervisor {operation}",
+            service = service.clone(),
+            operation = operation,
+        )
+    };
+    let desktop = context
+        .config
+        .clone()
+        .select("airlock.guiGpu.enable")
+        .and(context.config.clone().select("airlock.guiGpu.startOnBoot"));
+    let split = desktop.clone().and(
+        context
+            .config
+            .clone()
+            .select("airlock.machineDeployment.enable"),
+    );
+    let gate: NixValue = nix_text!(
+        "{coreutils}/bin/test ! -e /run/airlock/boot-supervisor/recovery-required.json",
+        coreutils = package("coreutils"),
+    )
+    .into();
+    let failure = strings(&["airlock-boot-failure@%n.service"]);
+    let background = strings(&["airlock-boot-background-failure.service"]);
+    let preparation = strings(&["airlock-boot-attempt-prepare.service"]);
+    let guarded = |on_failure: NixValue, timeout: i64| {
+        nix_record! {
+            "unitConfig": nix_record! {
+                "OnFailure": on_failure,
+            },
+            "serviceConfig": nix_record! {
+                "ExecCondition": NixValue::list([gate.clone()]),
+                "TimeoutStartSec": timeout,
+            },
+        }
+    };
+    let mut services = vec![
+        (
+            "airlock-boot-shutdown-record",
+            nix_record! {
+                "wantedBy": strings(&["shutdown.target"]),
+                "before": strings(&["shutdown.target"]),
+                "unitConfig": nix_record! {
+                    "DefaultDependencies": false,
+                },
+                "serviceConfig": nix_record! {
+                    "Type": "oneshot",
+                    "ExecStart": command("shutdown-requested"),
+                },
+            },
+        ),
+        (
+            "airlock-boot-background-failure",
+            when(
+                desktop.clone(),
+                nix_record! {
+                    "serviceConfig": nix_record! {
+                        "Type": "oneshot",
+                        "ExecStart": command("degraded"),
+                    },
+                },
+            ),
+        ),
+        (
+            "getty@tty1",
+            nix_record! {
+                "enable": false,
+            },
+        ),
+        (
+            "autovt@tty1",
+            nix_record! {
+                "enable": false,
+            },
+        ),
+        (
+            "airlock-boot-attempt-prepare",
+            nix_record! {
+                "description": "Recover an interrupted Airlock boot before VM logs are reopened",
+                "wantedBy": strings(&["multi-user.target"]),
+                "before": strings(&[
+                    "xenconsoled.service",
+                    "qubesd.service",
+                    "airlock-setup-config.service",
+                ]),
+                "serviceConfig": nix_record! {
+                    "Type": "oneshot",
+                    "RemainAfterExit": true,
+                    "ExecStart": command("prepare"),
+                },
+            },
+        ),
+        (
+            "airlock-boot-failure@",
+            nix_record! {
+                "description": "Capture Airlock boot failure for %i",
+                "serviceConfig": nix_record! {
+                    "Type": "oneshot",
+                    "ExecStart": command("fail unit:%i 'systemd boot stage failed'"),
+                    // Even a failure to record diagnostics must leave a usable login console.
+                    "ExecStopPost": nix_text!(
+                        "{systemd}/bin/systemctl --no-block start airlock-boot-failure-console.service",
+                        systemd = package("systemd"),
+                    ),
+                    "TimeoutStartSec": 90_i64,
+                },
+            },
+        ),
+        (
+            "airlock-boot-failure-console",
+            nix_record! {
+                "description": "Show an actionable console after a supervised boot failure",
+                "conflicts": strings(&["airlock-boot-recovery-console.service"]),
+                "after": strings(&[
+                    "airlock-setup-config.service",
+                    "airlock-boot-recovery-console.service",
+                ]),
+                "serviceConfig": console(context, &service, false),
+            },
+        ),
+        (
+            "airlock-boot-recovery-console",
+            nix_record! {
+                "description": "Keep an interrupted Airlock boot on a diagnostic console",
+                "wantedBy": strings(&["multi-user.target"]),
+                "after": preparation.clone(),
+                "unitConfig": nix_record! {
+                    "ConditionPathExists": "/run/airlock/boot-supervisor/recovery-required.json",
+                },
+                "serviceConfig": console(context, &service, true),
+            },
+        ),
+        (
+            "airlock-setup-config",
+            nix_record! {
+                "after": preparation.clone(),
+                "unitConfig": nix_record! {
+                    "OnFailure": failure.clone(),
+                },
+                "serviceConfig": nix_record! {
+                    "ExecCondition": NixValue::list([gate.clone()]),
+                    "ExecStartPre": NixValue::list([command(
+                        "stage topology 'checking startup configuration'",
+                    )
+                    .into()]),
+                },
+            },
+        ),
+        (
+            "airlock-setup-config-deferred",
+            when(
+                split.clone(),
+                nix_record! {
+                    "unitConfig": nix_record! {
+                        "OnFailure": background.clone(),
+                    },
+                    "serviceConfig": nix_record! {
+                        "ExecCondition": NixValue::list([gate.clone()]),
+                        "TimeoutStartSec": 1800_i64,
+                        "ExecStartPre": NixValue::list([command("desktop-ready").into()]),
+                    },
+                },
+            ),
+        ),
+        (
+            "airlock-start-network-providers",
+            guarded(
+                NixValue::if_else(split.clone(), background.clone(), failure.clone()),
+                300,
+            ),
+        ),
+        ("airlock-start-gui-gpu", guarded(failure.clone(), 300)),
+        (
+            "airlock-input-boot-guard",
+            when(
+                context
+                    .config
+                    .clone()
+                    .select("airlock.inputProxy.sender.enable"),
+                nix_record! {
+                    "requires": preparation.clone(),
+                    "after": preparation.clone(),
+                    "unitConfig": nix_record! {
+                        "OnFailure": failure.clone(),
+                    },
+                    "serviceConfig": nix_record! {
+                        "ExecCondition": NixValue::list([gate.clone()]),
+                    },
+                },
+            ),
+        ),
+        (
+            "airlock-gui-input-connect",
+            when(
+                split.clone().and(
+                    context
+                        .config
+                        .clone()
+                        .select("airlock.inputProxy.sender.enable"),
+                ),
+                nix_record! {
+                    "unitConfig": nix_record! {
+                        "OnFailure": failure.clone(),
+                    },
+                    "serviceConfig": nix_record! {
+                        "ExecCondition": NixValue::list([gate.clone()]),
+                    },
+                },
+            ),
+        ),
+        (
+            "airlock-machine-autostart",
+            nix_record! {
+                "unitConfig": nix_record! {
+                    "OnFailure": NixValue::if_else(desktop.clone(), background, failure),
+                },
+                "serviceConfig": nix_record! {
+                    "ExecStartPre": NixValue::if_else(
+                        desktop.clone().and(split.equals(false)),
+                        NixValue::list([command("desktop-ready").into()]),
+                        NixValue::list([]),
+                    ),
+                    "ExecCondition": NixValue::list([gate]),
+                    "TimeoutStartSec": 1800_i64,
+                },
+            },
+        ),
+    ];
+    for name in ["xenconsoled", "qubesd"] {
+        services.push((
+            name,
+            nix_record! {
+                "requires": preparation.clone(),
+                "after": preparation.clone(),
+            },
+        ));
+    }
+
+    context.lib.clone().select("mkMerge").call(NixValue::list([
+        nix_record! {
+            "environment": nix_record! {
+                "systemPackages": NixValue::list([service.clone()]),
+            },
+            "systemd": nix_record! {
+                "services": NixValue::record(services),
+            },
+        },
+        when(
+            desktop,
+            super::setup::desktop_rpcs(
+                context,
+                &service,
+                "boot-supervisor",
+                "40-airlock-boot-desktop.policy",
+                &[
+                    ("airlock.BootStatus", "desktop-status"),
+                    ("airlock.BootRetry", "retry-services"),
+                ],
+            ),
+        ),
+    ]))
+}
+
+/// Open a tty1 login after reporting preserved evidence; never clear failure state implicitly.
+fn console(context: &ModuleContext, service: &NixValue, recovery: bool) -> NixValue {
+    let name = if recovery {
+        "airlock-boot-recovery-console"
+    } else {
+        "airlock-boot-failure-console"
+    };
+    let script = if recovery {
+        include_str!("boot/recovery-console.sh")
+    } else {
+        include_str!("boot/failure-console.sh")
+    };
+    let executable = context
+        .pkgs
+        .clone()
+        .select("writeShellScript")
+        .call(name)
+        .call(substitute(
+            script,
+            [
+                ("service", service.clone()),
+                ("ncurses", context.pkgs.clone().select("ncurses")),
+                ("coreutils", context.pkgs.clone().select("coreutils")),
+                ("utilLinux", context.pkgs.clone().select("util-linux")),
+            ],
+        ));
+
+    nix_record! {
+        "Type": "idle",
+        "ExecStart": executable.to_text(),
+        "Restart": "always",
+        "RestartSec": 1_i64,
+        "StandardInput": "tty",
+        "StandardOutput": "tty",
+        "StandardError": "tty",
+        "TTYPath": "/dev/tty1",
+        "TTYReset": true,
+        "TTYVHangup": true,
+    }
+}
+
+/// Preserve static systemd dependency order.
+fn strings(values: &[&str]) -> NixValue {
+    NixValue::list(values.iter().map(|value| (*value).into()))
+}

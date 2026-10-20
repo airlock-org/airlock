@@ -1,0 +1,13 @@
+{
+  "schema": "airlock.ctrl-approval-request.v1",
+  "request_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "baseline": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "lock_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "family": "guest",
+  "target": "usr-home",
+  "scope": {
+    "allowed_vms": ["usr-home", "sys-ctrl"],
+    "allow_reboot": true
+  }
+}

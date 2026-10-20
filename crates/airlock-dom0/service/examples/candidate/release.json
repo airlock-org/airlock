@@ -1,0 +1,22 @@
+{
+  "schema": "airlock.machine-release.v1",
+  "profile": "usb-lab",
+  "host": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-host-v2",
+  "setup": "/nix/store/cccccccccccccccccccccccccccccccc-setup/bin/airlock-setup-config",
+  "revision": "2222222222222222222222222222222222222222",
+  "lockHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "stagedGenerations": {
+    "usr-home": 2
+  },
+  "guestTransport": "direct-pool-v1",
+  "sourceRelease": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-host-v2",
+  "hostPool": {
+    "schema": "example-only"
+  },
+  "guestRootArtifacts": {
+    "usr-home": {
+      "schema": "example-only",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+//! Explicit per-VM Admin API operations available to Qubes Manager.
+
+/// Operations redirected to qubesd without granting host administration.
+pub(super) const METHODS: &[&str] = &[
+    "admin.vm.CurrentState",
+    "admin.vm.property.List",
+    "admin.vm.property.Get",
+    "admin.vm.property.GetAll",
+    "admin.vm.property.Help",
+    "admin.vm.property.GetDefault",
+    "admin.vm.property.Set",
+    "admin.vm.property.Reset",
+    "admin.vm.feature.List",
+    "admin.vm.feature.Get",
+    "admin.vm.feature.CheckWithTemplate",
+    "admin.vm.feature.CheckWithNetvm",
+    "admin.vm.feature.CheckWithAdminVM",
+    "admin.vm.feature.Set",
+    "admin.vm.feature.Remove",
+    "admin.vm.tag.List",
+    "admin.vm.volume.List",
+    "admin.vm.volume.Info",
+    "admin.vm.volume.ListSnapshots",
+    "admin.vm.volume.Resize",
+    "admin.vm.firewall.Get",
+    "admin.vm.firewall.Set",
+    "admin.vm.Start",
+    "admin.vm.Shutdown",
+    "admin.vm.Kill",
+    "admin.vm.Pause",
+    "admin.vm.Unpause",
+    "admin.vm.Remove",
+];

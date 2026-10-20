@@ -1,0 +1,816 @@
+//! Attach committed immutable generations using upstream Qubes storage objects.
+//! A running VM keeps its existing boot identity; additive builder handoffs wait
+//! until it stops, and qubesd is restored even when an offline update fails.
+
+mod snapshot;
+
+use self::snapshot::Snapshot;
+use super::{
+    builder,
+    domain_cli::{Ensure, Target},
+    fs::*,
+    generations::{self, Admission},
+    pool_cli, prepared, records,
+};
+use airlock_nix_core::identity::GuestName;
+use anyhow::{Context, Result, anyhow, ensure};
+use serde_json::{Value, json};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+    time::Duration,
+};
+
+fn bridge(request: &Value) -> Result<Snapshot> {
+    let program = std::env::var_os("AIRLOCK_QUBES_OBJECTS_BIN")
+        .map(PathBuf::from)
+        .map(Ok)
+        .unwrap_or_else(std::env::current_exe)?;
+    let output = airlock_nix_core::runtime::process::run(
+        Command::new(&program).args(["storage", "qubes-objects"]),
+        Some(serde_json::to_vec(request)?),
+        Some(Duration::from_secs(120)),
+    )?
+    .checked(&program.to_string_lossy())?;
+    let snapshot: Snapshot = serde_json::from_slice(&output)?;
+    let domain: GuestName = serde_json::from_value(request["domain"].clone())?;
+    snapshot.validate(&domain)?;
+    Ok(snapshot)
+}
+
+fn snapshot(domain: &GuestName) -> Result<Snapshot> {
+    bridge(&json!({"operation":"snapshot","domain":domain}))
+}
+
+/// Reject shared or derived writable state before importing a root image.
+pub(super) fn verify_native(domain: &GuestName) -> Result<()> {
+    snapshot(domain)?.verify_isolation()
+}
+
+/// Check the image constructor's reloaded Qubes objects without contacting a daemon.
+pub(super) fn verify_snapshot(domain: &GuestName, request: &Value) -> Result<()> {
+    let snapshot: Snapshot = serde_json::from_value(request["snapshot"].clone())?;
+    snapshot.validate(domain)?;
+    snapshot.verify_isolation()?;
+    let configs: Vec<Value> = serde_json::from_value(request["volumes"].clone())?;
+    let metadata = configs
+        .iter()
+        .find(|config| config["name"] == "store")
+        .context("missing expected metadata volume")?;
+    let data = configs
+        .iter()
+        .find(|config| config["name"] == "store-data")
+        .context("missing expected external-data volume")?;
+    for (feature, value) in [
+        ("airlock-store-generation", &metadata["generation"]),
+        ("airlock-store-closure-hash", &metadata["closure_hash"]),
+        ("airlock-store-view-image", &metadata["view_path"]),
+        ("airlock-store-blob-map", &data["blob_map_path"]),
+    ] {
+        ensure!(
+            value.as_str() == Some(snapshot.feature(feature)),
+            "prepared store feature binding mismatch: {feature}"
+        );
+    }
+
+    ensure!(
+        snapshot.matches(&configs),
+        "prepared store would require boot-time mutation: {domain}"
+    );
+    ensure!(
+        snapshot.feature("airlock-store-source")
+            == request["source"]
+                .as_str()
+                .context("missing source binding")?
+            && snapshot.feature("airlock-store-mode") == "shared-closure"
+            && snapshot.feature("airlock-store-view-backend") == "erofs-objectmap",
+        "prepared store feature mismatch"
+    );
+    let mut expected = vec![("store", "xvde"), ("store-data", "xvdf")];
+    if ["usr-assistant", "sys-ctrl"].contains(&domain.as_str()) {
+        expected.extend([("builder-store", "xvdg"), ("builder-data", "xvdh")]);
+    }
+    snapshot.frontends(&[], &expected)
+}
+
+fn load(target: &Target, generation: u64) -> Result<Value> {
+    let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
+    generations::load(
+        &target.pool_root,
+        &target.pool_root,
+        target.domain.as_str(),
+        generation,
+    )
+}
+
+/// Describe the immutable volume pair; offline callers supply its physical image size.
+pub(super) fn shared_configs(
+    target: &Target,
+    admission: &Value,
+    metadata_size: Option<u64>,
+) -> Result<Vec<Value>> {
+    ensure!(
+        admission["view_backend"] == "erofs-objectmap",
+        "unsupported store view backend"
+    );
+    for (key, expected) in [
+        ("device", &target.device),
+        ("blob_device", &target.blob_device),
+        ("mountpoint", &target.mountpoint),
+    ] {
+        ensure!(
+            admission[key].as_str() == Some(expected.as_str()),
+            "store generation {key} binding mismatch"
+        );
+    }
+    let generation = number(admission, "generation")?.to_string();
+    ensure!(
+        number(admission, "generation")? > 0,
+        "invalid store generation"
+    );
+    let metadata = text(admission, "metadata_image")?;
+    let metadata_size = match metadata_size {
+        Some(size) => size,
+        None => fs::metadata(&metadata)?.len(),
+    };
+    ensure!(metadata_size > 0, "empty metadata image");
+    let mut configs = Vec::new();
+    for name in ["store", "store-data"] {
+        let mut config = json!({
+            "name":name,"pool":target.pool_name,
+            "vid":format!("domains/{}/generations/{generation}/{name}", target.domain),
+            "rw":false,"snap_on_start":false,"save_on_stop":true,"source":null,
+            "revisions_to_keep":0,"domain_name":target.domain,"generation":generation,
+            "closure_hash":admission["closure_hash"],"manifest_path":admission["manifest"],
+        });
+        if name == "store" {
+            config["size"] = json!(metadata_size);
+            config["view_kind"] = json!("metadata-image");
+            config["view_path"] = json!(metadata);
+        } else {
+            config["size"] = json!(number(admission, "blob_logical_size")?);
+            config["view_kind"] = json!("erofs-blob-map");
+            config["blob_map_path"] = admission["blob_map"].clone();
+            config["blob_logical_size"] = config["size"].clone();
+        }
+        configs.push(config);
+    }
+    Ok(configs)
+}
+
+fn check_features(target: &Target, vm: &Snapshot) -> Result<Option<Value>> {
+    let generation = vm.feature("airlock-store-generation");
+    if generation.is_empty() {
+        return Ok(None);
+    }
+    let admission = load(target, generation.parse()?)?;
+    let source = vm.feature("airlock-store-source");
+    ensure!(
+        source.is_empty()
+            || admission["source"] == source
+            || admission["approval_source"] == source,
+        "Nix-native store feature/source mismatch"
+    );
+    for (feature, key) in [
+        ("airlock-store-closure-hash", "closure_hash"),
+        ("airlock-store-view-image", "metadata_image"),
+        ("airlock-store-blob-map", "blob_map"),
+    ] {
+        let expected = vm.feature(feature);
+        ensure!(
+            expected.is_empty() || admission[key] == expected,
+            "Nix-native store feature/{key} mismatch"
+        );
+    }
+    Ok(Some(admission))
+}
+
+fn boot_matches(admission: &Value, args: &Ensure) -> bool {
+    admission["system"] == args.system
+        && admission["root_source"] == args.root
+        && admission["kernel_name"] == args.kernel
+}
+
+fn staged(args: &Ensure) -> Result<Option<Value>> {
+    let supplied = match std::env::var_os("AIRLOCK_STAGED_GENERATIONS") {
+        Some(path) => {
+            let mapping: Value = read(Path::new(&path))?;
+            mapping
+                .get(args.target.domain.as_str())
+                .map(|g| {
+                    g.as_u64()
+                        .or_else(|| g.as_str()?.parse().ok())
+                        .context("invalid staged generation")
+                })
+                .transpose()?
+        }
+        None => None,
+    };
+    if let (Some(expected), Some(supplied)) = (args.generation, supplied) {
+        ensure!(
+            expected == supplied,
+            "staged generation differs from request"
+        );
+    }
+    let Some(generation) = args.generation.or(supplied) else {
+        return Ok(None);
+    };
+    ensure!(generation > 0, "invalid requested generation");
+    let admission = load(&args.target, generation)?;
+    ensure!(
+        boot_matches(&admission, args)
+            && admission["source"].as_str() == args.artifact.to_str()
+            && admission["approval_source"] == args.source
+            && admission["view_backend"] == args.view_backend
+            && admission["device"] == args.target.device
+            && admission["blob_device"] == args.target.blob_device
+            && admission["mountpoint"] == args.target.mountpoint,
+        "staged generation identity mismatch for {}",
+        args.target.domain
+    );
+    Ok(Some(admission))
+}
+
+fn admit(args: &Ensure) -> Result<Value> {
+    let target = &args.target;
+    let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
+    if args.artifact.join("prepared.json").try_exists()? {
+        let generation = prepared::verify_prepared(&serde_json::to_value(args)?)?;
+        return generations::load(
+            &target.pool_root,
+            &target.pool_root,
+            target.domain.as_str(),
+            generation.as_u64().context("invalid prepared generation")?,
+        );
+    }
+
+    let physical = pool_cli::physical_store();
+    let source_identity = args.artifact.to_str().context("non-UTF-8 closure source")?;
+    let source = if source_identity.starts_with("/nix/store/") {
+        physical.join(entry(source_identity)?)
+    } else {
+        args.artifact.clone()
+    };
+    ensure!(
+        !args.require_retained,
+        "reviewed deployment requires a retained or prepared generation; refusing implicit admission"
+    );
+    generations::admit(&Admission {
+        pool: &target.pool_root,
+        domain: target.domain.as_str(),
+        system: &args.system,
+        source: &source,
+        source_identity,
+        root_source: &args.root,
+        kernel: &args.kernel,
+        physical: &physical,
+        segment_target: pool_cli::target(None)?,
+        verification: &args.verify_mode,
+        approved_by: "dom0",
+        approval_source: &args.source,
+        activate: false,
+        retain: true,
+        previous_index: None,
+        device: &target.device,
+        blob_device: &target.blob_device,
+        mountpoint: &target.mountpoint,
+    })
+}
+
+/// Reuse the exact current boot identity or attach an approved successor to a stopped VM.
+pub(super) fn ensure(args: &Ensure) -> Result<Value> {
+    let target = &args.target;
+    let vm = snapshot(&target.domain)?;
+    vm.verify_pool(target)?;
+    let mut projected = vec![json!({"name":"store"}), json!({"name":"store-data"})];
+    let mut frontends = vec![
+        ("store", target.device.as_str()),
+        ("store-data", target.blob_device.as_str()),
+    ];
+    if ["usr-assistant", "sys-ctrl"].contains(&target.domain.as_str()) {
+        let (configs, descriptor) = builder_configs(target)?;
+        if configs.is_empty() {
+            ensure!(
+                !vm.volumes
+                    .iter()
+                    .any(|volume| volume.name.starts_with("builder-")),
+                "attached builder volumes have no authenticated descriptor"
+            );
+        } else {
+            check_builder(target, &vm, &configs, &descriptor)?;
+            projected.extend(configs);
+            frontends.extend([("builder-store", "xvdg"), ("builder-data", "xvdh")]);
+        }
+    }
+    vm.frontends(&projected, &frontends)?;
+
+    let source_current = vm.feature("airlock-store-source") == args.source
+        && vm.feature("airlock-store-mode") == "shared-closure"
+        && vm.feature("airlock-store-view-backend") == args.view_backend;
+    let current = if source_current {
+        check_features(target, &vm)?
+    } else {
+        None
+    };
+    // Authenticate staged data before the idempotent path, even for a running VM.
+    let staged = staged(args)?;
+    let reusable = current.as_ref().filter(|admission| {
+        boot_matches(admission, args)
+            && staged
+                .as_ref()
+                .is_none_or(|requested| requested["generation"] == admission["generation"])
+    });
+    let unchanged = if let Some(admission) = reusable {
+        vm.matches(&shared_configs(target, admission, None)?)
+    } else {
+        false
+    };
+
+    let result = if unchanged {
+        vm.frontends(
+            &[],
+            &[
+                ("store", &target.device),
+                ("store-data", &target.blob_device),
+            ],
+        )?;
+        let admission = reusable.context("missing reusable generation")?;
+        receipt(target, admission, &args.source, Attachment::default())
+    } else {
+        ensure!(
+            !vm.running,
+            "shared store source changed but domain is running: {}",
+            target.domain
+        );
+        let admission = match staged.or_else(|| reusable.cloned()) {
+            Some(admission) => admission,
+            None => admit(args)?,
+        };
+        install_shared(target, &admission, &vm, &args.source)?
+    };
+
+    if ["usr-assistant", "sys-ctrl"].contains(&target.domain.as_str()) {
+        ensure_builder(target)?;
+    }
+    Ok(result)
+}
+
+/// Select and attach an existing committed generation without admitting new package bytes.
+pub(super) fn switch(target: &Target, generation: u64) -> Result<Value> {
+    let admission = load(target, generation)?;
+    let vm = snapshot(&target.domain)?;
+    ensure!(
+        !vm.running,
+        "shared store generation switch requested but domain is running: {}",
+        target.domain
+    );
+    install_shared(
+        target,
+        &admission,
+        &vm,
+        admission["source"].as_str().unwrap_or(""),
+    )
+}
+
+fn install(target: &Target, before: &Snapshot, configs: &[Value]) -> Result<Snapshot> {
+    before.verify_pool(target)?;
+    let result = bridge(&json!({
+        "operation":"install","domain":target.domain,"expected":before,
+        "pool":{"name":target.pool_name,"driver":"airlock-closure","root_dir":target.pool_root,"revisions_to_keep":0},
+        "volumes":configs,
+    }))?;
+    ensure!(
+        !result.running && result.matches(configs),
+        "installed Qubes volumes differ from requested configuration"
+    );
+    // Reload after save: the in-memory objects alone do not establish persistence.
+    let persisted = snapshot(&target.domain)?;
+    persisted.verify_pool(target)?;
+    ensure!(
+        !persisted.running && persisted.matches(configs),
+        "Qubes volume configuration was not persisted"
+    );
+    Ok(persisted)
+}
+
+fn install_shared(
+    target: &Target,
+    admission: &Value,
+    inspected: &Snapshot,
+    source: &str,
+) -> Result<Value> {
+    let configs = shared_configs(target, admission, None)?;
+    let frontends = [
+        ("store", target.device.as_str()),
+        ("store-data", target.blob_device.as_str()),
+    ];
+    inspected.frontends(&configs, &frontends)?;
+    let created = configs
+        .iter()
+        .filter_map(|c| c["name"].as_str())
+        .filter(|name| inspected.volume(name).is_none())
+        .map(str::to_owned)
+        .collect();
+    let pool_created = !inspected.pools.contains_key(&target.pool_name);
+    let ((), restarted, was_active) = with_qubesd_stopped(&integration_root(), || {
+        let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
+        let retained = generations::load(
+            &target.pool_root,
+            &target.pool_root,
+            target.domain.as_str(),
+            number(admission, "generation")?,
+        )?;
+        ensure!(
+            shared_configs(target, &retained, None)? == configs,
+            "generation changed before attachment"
+        );
+        let before = snapshot(&target.domain)?;
+        ensure!(
+            serde_json::to_value(&before)? == serde_json::to_value(inspected)?,
+            "Qubes storage changed before installation"
+        );
+        ensure!(
+            !before.running,
+            "domain started before storage installation"
+        );
+        let persisted = install(target, &before, &configs)?;
+        persisted.frontends(&[], &frontends)?;
+
+        generations::switch(
+            &target.pool_root,
+            target.domain.as_str(),
+            number(admission, "generation")?,
+            false,
+        )?;
+        Ok(())
+    })?;
+    Ok(receipt(
+        target,
+        admission,
+        source,
+        Attachment {
+            changed: true,
+            pool_created,
+            created,
+            restarted,
+            was_active,
+        },
+    ))
+}
+
+#[derive(Default)]
+struct Attachment {
+    // Whether the Qubes definition changed during this invocation.
+    changed: bool,
+    // Whether this invocation registered the immutable closure pool.
+    pool_created: bool,
+    // Volume keys absent before the update; replacements are not creations.
+    created: Vec<String>,
+    // Whether qubesd was restored after an offline configuration update.
+    restarted: bool,
+    // Whether the daemon was active before this invocation stopped it.
+    was_active: bool,
+}
+
+fn receipt(target: &Target, admission: &Value, source: &str, outcome: Attachment) -> Value {
+    let mut result = admission.clone();
+    let update = json!({
+        "schema": "airlock.nix-domain-storage.v1",
+        "domain": target.domain,
+        "volume": "store",
+        "mode": "shared-closure",
+        "source": source,
+        "read_only": true,
+        "volume_created": !outcome.created.is_empty(),
+        "volumes_created": outcome.created,
+        "metadata_changed": outcome.changed,
+        "qubesd_restart_required": outcome.changed && !outcome.restarted,
+        "qubesd_restarted": outcome.restarted,
+        "qubesd_was_active": outcome.was_active,
+        "pool": target.pool_name,
+        "pool_created": outcome.pool_created,
+        "pool_root": target.pool_root,
+    });
+    for (key, value) in update.as_object().expect("receipt object") {
+        result[key] = value.clone();
+    }
+    if outcome.changed {
+        result["engine_current_generation"] = admission["generation"].clone();
+    }
+    result
+}
+
+fn builder_configs(target: &Target) -> Result<(Vec<Value>, Value)> {
+    let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
+    let configs = builder::volume_configs(
+        &target.pool_root,
+        &target.pool_root,
+        &target.pool_name,
+        target.domain.as_str(),
+    )?;
+    if configs
+        .as_object()
+        .context("invalid builder volumes")?
+        .is_empty()
+    {
+        return Ok((Vec::new(), Value::Null));
+    }
+    let descriptor = read(
+        &target
+            .pool_root
+            .join("builders")
+            .join(format!("{}.json", target.domain)),
+    )?;
+    // Metadata must precede external data regardless of JSON map key ordering.
+    Ok((
+        ["builder-store", "builder-data"]
+            .iter()
+            .map(|name| configs[name].clone())
+            .collect(),
+        descriptor,
+    ))
+}
+
+fn check_builder(
+    target: &Target,
+    vm: &Snapshot,
+    configs: &[Value],
+    descriptor: &Value,
+) -> Result<bool> {
+    for volume in &vm.volumes {
+        ensure!(
+            !volume.name.starts_with("builder-")
+                || ["builder-store", "builder-data"].contains(&volume.name.as_str()),
+            "unsupported builder volume: {}",
+            volume.name
+        );
+    }
+    let attached = configs
+        .iter()
+        .filter(|c| vm.volume(c["name"].as_str().unwrap_or("")).is_some())
+        .count();
+    ensure!(
+        attached == 0 || attached == configs.len(),
+        "incomplete persistent builder volume configuration"
+    );
+    if attached == 0 || vm.matches(configs) {
+        return Ok(attached != 0);
+    }
+
+    // A changed pair must be one complete, authenticated predecessor. Matching
+    // its generation/digest alone must not excuse writable or redirected volumes.
+    let current = &vm
+        .volume("builder-store")
+        .context("missing builder metadata")?
+        .config;
+    let generation = current["generation"]
+        .as_str()
+        .context("invalid builder generation")?
+        .parse::<u64>()?;
+    ensure!(
+        descriptor["predecessors"]
+            .as_array()
+            .is_some_and(|old| old.iter().any(|old| old["generation"] == generation
+                && old["closure_hash"] == current["closure_hash"])),
+        "unapproved persistent builder base transition"
+    );
+    let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
+    let domain = format!("{}-builder", target.domain);
+    let manifest = records::generation(&target.pool_root, &domain, generation)?;
+    ensure!(
+        descriptor["predecessors"]
+            .as_array()
+            .is_some_and(|old| old.iter().any(|old| old["generation"] == generation
+                && old["closure_hash"] == manifest["builder"]["closure_hash"]
+                && old["registration_sha256"] == manifest["builder"]["registration_sha256"])),
+        "builder predecessor registration binding mismatch"
+    );
+    let previous = builder::configs_for_generation(
+        &target.pool_root,
+        &target.pool_root,
+        &target.pool_name,
+        &domain,
+        &manifest,
+    )?;
+    let expected = ["builder-store", "builder-data"]
+        .iter()
+        .map(|name| previous[name].clone())
+        .collect::<Vec<_>>();
+    ensure!(
+        vm.matches(&expected),
+        "builder volumes do not match one complete immutable predecessor"
+    );
+    Ok(true)
+}
+
+fn ensure_builder(target: &Target) -> Result<()> {
+    let (configs, descriptor) = builder_configs(target)?;
+    let vm = snapshot(&target.domain)?;
+    if configs.is_empty() {
+        ensure!(
+            !vm.volumes
+                .iter()
+                .any(|volume| volume.name.starts_with("builder-")),
+            "attached builder volumes have no authenticated descriptor"
+        );
+        return Ok(());
+    }
+    let attached = check_builder(target, &vm, &configs, &descriptor)?;
+    let frontends = [("builder-store", "xvdg"), ("builder-data", "xvdh")];
+    vm.frontends(&configs, &frontends)?;
+    let unchanged = vm.matches(&configs);
+    if attached && vm.running {
+        return Ok(());
+    }
+    if unchanged {
+        let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
+        if !builder::predecessors_pending(&target.pool_root, target.domain.as_str(), &descriptor)? {
+            return Ok(());
+        }
+    }
+    ensure!(
+        !vm.running,
+        "stop {} before attaching its persistent builder base",
+        target.domain
+    );
+
+    with_qubesd_stopped(&integration_root(), || {
+        let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
+        let current = builder::volume_configs(
+            &target.pool_root,
+            &target.pool_root,
+            &target.pool_name,
+            target.domain.as_str(),
+        )?;
+        ensure!(
+            ["builder-store", "builder-data"]
+                .iter()
+                .map(|name| current[name].clone())
+                .collect::<Vec<_>>()
+                == configs,
+            "builder base changed before attachment"
+        );
+        ensure!(
+            read::<Value>(
+                &target
+                    .pool_root
+                    .join("builders")
+                    .join(format!("{}.json", target.domain))
+            )? == descriptor,
+            "builder descriptor changed before attachment"
+        );
+        let before = snapshot(&target.domain)?;
+        ensure!(
+            serde_json::to_value(&before)? == serde_json::to_value(&vm)?,
+            "Qubes storage changed before builder installation"
+        );
+        ensure!(
+            !before.running,
+            "builder started before completing its handoff"
+        );
+        let persisted = if unchanged {
+            ensure!(
+                before.matches(&configs),
+                "builder volumes changed before completing handoff"
+            );
+            before
+        } else {
+            install(target, &before, &configs)?
+        };
+        persisted.frontends(&[], &frontends)?;
+
+        builder::release_predecessors(&target.pool_root, target.domain.as_str(), &descriptor)?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// One host-wide namespace serializes qubesd updates across every closure pool.
+pub(super) fn integration_root() -> PathBuf {
+    std::env::var_os("AIRLOCK_QUBES_STORAGE_STATE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/var/lib/airlock/qubes-storage"))
+}
+
+#[derive(PartialEq, Eq)]
+enum DaemonState {
+    // Neither an inactive nor a failed service is serving the Qubes database.
+    Offline,
+    // Startup completed and the daemon is available to its clients.
+    Active,
+    // A start, stop, reload or maintenance transition has not completed.
+    Changing,
+}
+
+fn daemon_state() -> Result<DaemonState> {
+    let output = airlock_nix_core::runtime::process::run(
+        Command::new("systemctl").args([
+            "show",
+            "--property=ActiveState",
+            "--value",
+            "qubesd.service",
+        ]),
+        None,
+        Some(Duration::from_secs(60)),
+    )?
+    .checked("inspect qubesd state")?;
+    match std::str::from_utf8(&output)?.trim() {
+        "inactive" | "failed" => Ok(DaemonState::Offline),
+        "active" => Ok(DaemonState::Active),
+        "activating" | "deactivating" | "reloading" | "maintenance" | "refreshing" => {
+            Ok(DaemonState::Changing)
+        }
+        state => Err(anyhow!("unknown qubesd service state: {state:?}")),
+    }
+}
+
+fn active() -> Result<bool> {
+    if let Ok(forced) = std::env::var("AIRLOCK_NIX_DOMAIN_STORAGE_QUBESD_ACTIVE") {
+        return match forced.as_str() {
+            "1" | "true" | "yes" => Ok(true),
+            "0" | "false" | "no" => Ok(false),
+            _ => Err(anyhow!("invalid qubesd state override")),
+        };
+    }
+    Ok(daemon_state()? != DaemonState::Offline)
+}
+
+fn systemctl(action: &str) -> Result<()> {
+    eprintln!(
+        "{}",
+        json!({"event":"service-command-start","service":"qubesd.service","action":action})
+    );
+    let result = crate::process::Runner::default().text("systemctl", &[action, "qubesd.service"]);
+    eprintln!(
+        "{}",
+        json!({"event":if result.is_ok(){"service-command-finish"}else{"service-command-error"},"service":"qubesd.service","action":action})
+    );
+    result?;
+    let expected = if action == "stop" {
+        DaemonState::Offline
+    } else {
+        DaemonState::Active
+    };
+    ensure!(
+        daemon_state()? == expected,
+        "qubesd did not reach its requested {action} state"
+    );
+    Ok(())
+}
+
+/// Restore a daemon left stopped by an interrupted storage update, even on a no-op retry.
+pub(super) fn restore_daemon(state_root: &Path) -> Result<()> {
+    let pending = state_root.join("qubesd-restart.json");
+    if !pending.try_exists()? {
+        return Ok(());
+    }
+    let intent: Value = crate::state::read(&pending)?;
+    ensure!(
+        intent == json!({"service":"qubesd.service","restore":true}),
+        "invalid qubesd restart intent"
+    );
+    systemctl("start")?;
+    fs::remove_file(&pending)?;
+    sync_dir(pending.parent().context("restart record has no parent")?)
+}
+
+fn with_qubesd_stopped<T>(
+    state_root: &Path,
+    operation: impl FnOnce() -> Result<T>,
+) -> Result<(T, bool, bool)> {
+    let pending = state_root.join("qubesd-restart.json");
+    let was_active = active()?;
+    let interrupted = pending.try_exists()?;
+    if !was_active && !interrupted {
+        return operation().map(|result| (result, false, false));
+    }
+    // Persist restart intent before stopping the daemon, so a retried operation
+    // also restores it after a previous process was interrupted.
+    write(
+        &pending,
+        &json!({"service":"qubesd.service","restore":true}),
+        0o600,
+    )?;
+    let stopped = if was_active {
+        systemctl("stop")
+    } else {
+        Ok(())
+    };
+    // Even a failed or timed-out stop may have taken effect. Always request start.
+    let result = stopped.and_then(|()| operation());
+    let restarted = systemctl("start").and_then(|()| {
+        fs::remove_file(&pending)?;
+        sync_dir(pending.parent().context("restart record has no parent")?)
+    });
+    match (result, restarted) {
+        (Ok(value), Ok(())) => Ok((value, true, true)),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(_), Err(error)) => {
+            Err(error.context("storage updated but qubesd could not be restored"))
+        }
+        (Err(error), Err(restart)) => Err(anyhow!(
+            "{error:#}; additionally could not restore qubesd: {restart:#}"
+        )),
+    }
+}

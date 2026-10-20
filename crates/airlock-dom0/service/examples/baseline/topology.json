@@ -1,0 +1,37 @@
+{
+  "schema": "airlock.qubes-topology.v1",
+  "domains": {
+    "usr-home": {
+      "class": "StandaloneVM",
+      "prefs": {
+        "autostart": true
+      },
+      "features": {},
+      "services": {},
+      "devices": {},
+      "backend": {
+        "type": "nix-closure",
+        "system": {
+          "source": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-guest"
+        },
+        "root": {
+          "source": "/nix/store/dddddddddddddddddddddddddddddddd-root/root.img"
+        },
+        "kernel": {
+          "name": "airlock-vm"
+        },
+        "store": {
+          "source": "/nix/store/ffffffffffffffffffffffffffffffff-closure",
+          "mode": "shared-closure",
+          "mountpoint": "/nix/store",
+          "device": "/dev/xvdc",
+          "blobDevice": "/dev/xvdd",
+          "viewBackend": "erofs"
+        },
+        "state": {
+          "persistent": "/rw"
+        }
+      }
+    }
+  }
+}

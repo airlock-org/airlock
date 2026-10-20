@@ -1,0 +1,14 @@
+[package]
+name = "airlock-build"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+publish = false
+description = "Airlock application source selection and package construction"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+rusix = { path = "../../vendor/rusix/crates/rusix", default-features = false }

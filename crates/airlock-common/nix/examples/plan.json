@@ -1,0 +1,8 @@
+{
+  "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "changed": ["usr-home"],
+  "stop": ["usr-home", "sys-ctrl"],
+  "start": ["sys-ctrl", "usr-home"],
+  "host_reboot_required": false,
+  "policy": {"description": "Example metadata retained during inspection"}
+}

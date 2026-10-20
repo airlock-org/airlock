@@ -1,0 +1,18 @@
+[package]
+name = "airlock-machine-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+publish = false
+description = "Shared Airlock machine records, dependency semantics and pure planning"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+airlock-machine-planning = { path = "../machine-planning" }
+airlock-nix-core = { path = "../nix" }
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

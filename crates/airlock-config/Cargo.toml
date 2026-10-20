@@ -1,0 +1,27 @@
+[package]
+name = "airlock-config"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+publish = false
+description = "Airlock machine configuration authoring and compilation"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "airlock-config"
+path = "src/main.rs"
+
+[dependencies]
+airlock-build = { path = "../airlock-common/build" }
+airlock-machine-core = { path = "../airlock-common/machine" }
+# Pinned source and provenance are checked in alongside the workspace.
+rusix = { path = "../vendor/rusix/crates/rusix", default-features = false }
+airlock-nix-core = { path = "../airlock-common/nix" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3.0"
+airlock-sys-gui-service = { path = "../airlock-sys-gui/service", default-features = false, features = ["authoring"] }

@@ -1,0 +1,75 @@
+# Based on Qubes' qvm/template-gui.jinja for the hybrid sys-gui domain.
+policy.EvalGUI +qubes.ClipboardPaste sys-gui dom0 allow
+qubes.GetImageRGBA * sys-gui @tag:guivm-sys-gui allow autostart=no
+qubes.GetAppmenus * sys-gui @tag:guivm-sys-gui allow autostart=no
+qubes.GetAppmenus * sys-gui @type:TemplateVM allow autostart=no
+# The display-manager session enters the GUI domain through this RPC.
+# Keep it limited to dom0 starting the declared sys-gui domain.
+qubes.GuiVMSession * dom0 sys-gui allow
+qubes.GuiVMSession * @anyvm @anyvm deny
+# The normal GUI policy grants a clean power-off, not a dom0 shell.
+# Development USB shells require the separate explicit dev policy.
+airlock.Dom0Poweroff + sys-gui dom0 allow
+airlock.Dom0Poweroff * @anyvm @anyvm deny
+qubes.ClipboardCopy + sys-gui @tag:guivm-sys-gui allow
+qubes.ClipboardPaste + sys-gui @tag:guivm-sys-gui allow
+qubes.SetMonitorLayout * sys-gui @tag:guivm-sys-gui allow
+airlock.OpenUrl * sys-gui @tag:guivm-sys-gui allow
+airlock.OpenUrl * @anyvm @anyvm deny
+qubes.StartApp * sys-gui @tag:guivm-sys-gui allow
+qubes.StartApp * sys-gui @dispvm:@tag:guivm-sys-gui allow
+qubes.SyncAppMenus * @tag:guivm-sys-gui dom0 allow target=sys-gui
+qubes.WindowIconUpdater * @tag:guivm-sys-gui dom0 allow target=sys-gui
+qubes.Notifications * @tag:guivm-sys-gui @default allow target=sys-gui autostart=no
+qubes.WaitForSession * sys-gui @tag:guivm-sys-gui allow
+# Cross-VM desktop launchers use this narrow barrier before StartApp.  The
+# guest handler proves its graphical user session can open X and D-Bus.
+airlock.AppSessionReady + sys-gui @tag:guivm-sys-gui allow
+airlock.AppSessionReady * @anyvm @anyvm deny
+admin.vm.List * sys-gui dom0 allow
+admin.vm.List * sys-gui @tag:guivm-sys-gui allow target=dom0
+admin.Events * sys-gui dom0 allow
+admin.Events * sys-gui @tag:guivm-sys-gui allow target=dom0
+# System domains do not carry the app-VM GUI tag. Make their presence and
+# state visible to Qubes Manager without exposing every domain globally.
+@systemDomains@
+admin.label.Get * sys-gui dom0 allow
+admin.label.Index * sys-gui dom0 allow
+admin.vm.feature.Set +keyboard-layout sys-gui sys-gui allow target=dom0
+admin.vm.property.Get * sys-gui dom0 allow
+admin.vm.volume.List * sys-gui dom0 allow
+admin.vm.device.pci.Available * sys-gui dom0 allow
+admin.vm.device.mic.Available * sys-gui dom0 allow
+admin.vm.feature.Get +internal sys-gui dom0 allow
+admin.vm.feature.Get +servicevm sys-gui dom0 allow
+admin.vm.CurrentState * sys-gui dom0 allow
+
+# Desktop management uses the Admin API, never a dom0 shell. Reads of
+# global metadata are explicit; host writes remain denied.
+admin.property.List * sys-gui dom0 allow
+admin.property.Get * sys-gui dom0 allow
+admin.property.GetAll * sys-gui dom0 allow
+admin.property.GetDefault * sys-gui dom0 allow
+admin.vm.property.List * sys-gui dom0 allow
+admin.vm.property.GetAll * sys-gui dom0 allow
+admin.vm.property.GetDefault * sys-gui dom0 allow
+admin.label.List * sys-gui dom0 allow
+admin.pool.List * sys-gui dom0 allow
+admin.pool.Info * sys-gui dom0 allow
+admin.pool.UsageDetails * sys-gui dom0 allow
+admin.pool.ListDrivers * sys-gui dom0 allow
+admin.vmclass.List * sys-gui dom0 allow
+# Qubes Manager's domain widget consumes the global read-only CPU and
+# memory event stream. Without it, the widget retries once per second.
+admin.vm.Stats * sys-gui dom0 allow
+# Creation is a global API call, but only these VM classes are permitted.
+@classes@
+* * sys-gui dom0 deny
+
+# VM Manager and per-VM settings. In particular there is no wildcard
+# admin permission, no policy editing, and no host device assignment.
+# Per-VM Admin API requests are addressed by their VM name, but qubesd
+# itself runs in dom0. Redirect each explicit operation there; without the
+# redirect Qubes Manager cannot read even a VM's qid and exits at startup.
+@methods@
+* * sys-gui @anyvm deny

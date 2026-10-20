@@ -1,0 +1,170 @@
+{
+  "nodes": {
+    "airlock-apps": {
+      "locked": {
+        "dir": "crates",
+        "lastModified": 1792513386,
+        "narHash": "sha256-f/MJugxevNs3Z5P3ZeDxAHoDMrV0KnAVc0f3+mcS/j0=",
+        "ref": "refs/heads/main",
+        "rev": "a204d93487f0f7349bbdb90a716c2072bb118b9f",
+        "submodules": false,
+        "type": "git",
+        "url": "https://github.com/airlock-org/airlock.git"
+      },
+      "original": {
+        "dir": "crates",
+        "rev": "a204d93487f0f7349bbdb90a716c2072bb118b9f",
+        "type": "git",
+        "url": "https://github.com/airlock-org/airlock.git",
+        "ref": "main"
+      },
+      "flake": false
+    },
+    "airlock-machine": {
+      "inputs": {
+        "airlock-apps": "airlock-apps",
+        "nixos-qubes": "nixos-qubes",
+        "nixpkgs": "nixpkgs",
+        "nixpkgs-libvirt_10_5": "nixpkgs-libvirt_10_5"
+      },
+      "locked": {
+        "path": "./airlock-machine",
+        "type": "path"
+      },
+      "original": {
+        "path": "./airlock-machine",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "flake-parts": {
+      "inputs": {
+        "nixpkgs-lib": [
+          "airlock-machine",
+          "nixos-qubes",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1775087534,
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "3107b77cd68437b9a76194f0f7f9c55f2329ca5b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "nixos-qubes": {
+      "inputs": {
+        "flake-parts": "flake-parts",
+        "nixpkgs": [
+          "airlock-machine",
+          "nixpkgs"
+        ],
+        "nixpkgs-libvirt_10_5": [
+          "airlock-machine",
+          "nixpkgs-libvirt_10_5"
+        ],
+        "shelly": "shelly",
+        "treefmt-nix": "treefmt-nix"
+      },
+      "locked": {
+        "path": "./vendor/nixos-qubes",
+        "type": "path"
+      },
+      "original": {
+        "path": "./vendor/nixos-qubes",
+        "type": "path"
+      },
+      "parent": [
+        "airlock-machine"
+      ]
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1788531059,
+        "narHash": "sha256-hLD4l3QOGBQhkVp3mQ2lJ/YbEi99qUgKapb40KovZ88=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "801bef6abd86b91e51083066b83fb354a11fc640",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs-libvirt_10_5": {
+      "locked": {
+        "lastModified": 1727211877,
+        "narHash": "sha256-zy/ar3GpnzuGRCwrr6zV/QicoZcqd2kNNhkRDECfStU=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "e0464e47880a69896f0fb1810f00e0de469f770a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "e0464e47880a69896f0fb1810f00e0de469f770a",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "airlock-machine": "airlock-machine",
+        "nixos-qubes": [
+          "airlock-machine",
+          "nixos-qubes"
+        ],
+        "nixpkgs": [
+          "airlock-machine",
+          "nixpkgs"
+        ]
+      }
+    },
+    "shelly": {
+      "locked": {
+        "lastModified": 1756323923,
+        "owner": "CertainLach",
+        "repo": "shelly",
+        "rev": "b5dd29a500db04f54a9f1c2bf81cdd84df8b0cd7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "CertainLach",
+        "repo": "shelly",
+        "type": "github"
+      }
+    },
+    "treefmt-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "airlock-machine",
+          "nixos-qubes",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1775636079,
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "rev": "790751ff7fd3801feeaf96d7dc416a8d581265ba",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

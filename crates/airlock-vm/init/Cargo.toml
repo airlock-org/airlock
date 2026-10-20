@@ -1,0 +1,18 @@
+[package]
+name = "airlock-vm-init"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+license = "MIT"
+description = "Static VM init that mounts the read-only store before starting NixOS"
+
+[[bin]]
+name = "airlock-vm-init"
+path = "src/main.rs"
+
+[dependencies]
+rustix = { version = "1.1", features = ["fs", "mount"] }
+
+[dev-dependencies]
+tempfile = "3.0"

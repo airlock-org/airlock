@@ -1,0 +1,4 @@
+# A retired domain remains registered while its data is recoverable.  Its
+# tag is applied before the deployment changes the active topology.
+* * @tag:airlock-retired @anyvm deny
+* * @anyvm @tag:airlock-retired deny

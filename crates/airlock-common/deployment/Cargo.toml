@@ -1,0 +1,21 @@
+[package]
+name = "airlock-deployment-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+license = "MIT"
+description = "Deployment approval, durable publication and permitted execution requests"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+airlock-machine-planning = { path = "../machine-planning" }
+vstd = "=0.0.0-2026-10-18-0147"
+
+[package.metadata.verus]
+verify = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(verus_keep_ghost)', 'cfg(verus_only)'] }

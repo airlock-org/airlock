@@ -1,0 +1,27 @@
+[workspace]
+exclude = ["vendor/rusix"]
+members = [
+    "airlock-config",
+    "airlock-tests",
+    "airlock-common/nix",
+    "airlock-common/machine",
+    "airlock-common/deployment",
+    "airlock-common/machine-planning",
+    "airlock-common/build",
+    "airlock-common/qubes",
+    "airlock-qubes-python",
+    "airlock-cli",
+    "airlock-image",
+    "airlock-dev",
+    "airlock-dom0/service",
+    "airlock-sys-ctrl/gui",
+    "airlock-sys-ctrl/service",
+    "airlock-sys-gui/service",
+    "airlock-sys-gui/setup",
+    "airlock-vm/service",
+    "airlock-vm/init",
+]
+resolver = "3"
+
+[profile.release]
+strip = true

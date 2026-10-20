@@ -1,0 +1,389 @@
+//! Stateful Qubes command replies for native machine transaction scenarios in a disposable namespace.
+
+use airlock_vm_service::support;
+use anyhow::{Context, Result, bail, ensure};
+use serde_json::{Value, json};
+use std::{
+    fs,
+    io::Write,
+    os::unix::{fs::symlink, process::CommandExt},
+    path::Path,
+    process::Command,
+    time::Duration,
+};
+
+/// Read one named command argument without guessing a Qubes command's option order.
+fn option<'a>(arguments: &'a [String], option: &str) -> Result<&'a str> {
+    arguments
+        .iter()
+        .position(|value| value == option)
+        .and_then(|index| arguments.get(index + 1))
+        .map(String::as_str)
+        .with_context(|| format!("missing argument {option}"))
+}
+
+/// Persist only fixture data and return supplied upstream replies; production code owns every decision.
+pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
+    let path = root.join("data.json");
+    let mut data: Value = serde_json::from_slice(&fs::read(&path)?)?;
+    let mut program = program.to_owned();
+    let mut arguments = original;
+    if program == "airlock-dom0-service" {
+        if arguments.first().map(String::as_str) != Some("storage") {
+            return Err(Command::new(
+                std::env::var_os("AIRLOCK_FIXTURE_DOM0_BINARY").context("native dom0 binary")?,
+            )
+            .args(arguments)
+            .exec()
+            .into());
+        }
+        program = format!(
+            "storage-{action}",
+            action = arguments.get(1).context("storage action")?
+        );
+        arguments = &arguments[2..];
+    }
+    let mut row = vec![json!(program)];
+    row.extend(arguments.iter().map(|value| json!(value)));
+    let mut calls = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(root.join("calls.jsonl"))?;
+    let call = Value::Array(row);
+    writeln!(calls, "{call}")?;
+    if program == "airlock-setup-config" && arguments == ["--protocol"] {
+        if data["native_setup"] == true {
+            println!("airlock.setup.v2");
+            return Ok(());
+        }
+        // Match the admitted legacy script's unsupported-option response without
+        // applying staged generations or reporting configuration completion.
+        eprintln!("Usage: airlock-setup-config (--plan|--apply)");
+        std::process::exit(1);
+    }
+    if data["delay"] == program {
+        std::thread::sleep(Duration::from_secs(2));
+    }
+    ensure!(data["fail"] != program, "simulated helper failure");
+
+    let last = || {
+        arguments
+            .last()
+            .map(String::as_str)
+            .context("command target")
+    };
+    match program.as_str() {
+        "qvm-ls" => {
+            if arguments.iter().any(|value| value == "--raw-list") {
+                println!("dom0");
+                for name in data["selected"].as_object().unwrap().keys() {
+                    println!("{name}");
+                }
+            } else {
+                let selected = data["selected"].as_object().unwrap();
+                let names: Vec<_> = if selected.contains_key(last()?) {
+                    vec![last()?]
+                } else {
+                    selected.keys().map(String::as_str).collect()
+                };
+                for name in names {
+                    let state = if let Some(state) = data["power_states"][name].as_str() {
+                        state
+                    } else if data["running"].as_array().unwrap().contains(&json!(name)) {
+                        "Running"
+                    } else {
+                        "Halted"
+                    };
+                    match option(arguments, "--fields").unwrap_or("NAME,STATE") {
+                        "NAME" => println!("{name}"),
+                        "NAME,CLASS" => println!("{name}|StandaloneVM"),
+                        _ => println!("{name}|{state}"),
+                    }
+                }
+            }
+        }
+        "qvm-features" => {
+            let name = &arguments[0];
+            let key = &arguments[1];
+            if arguments.len() == 3 {
+                if data["features"].is_null() {
+                    data["features"] = json!({});
+                }
+                if data["features"][name].is_null() {
+                    data["features"][name] = json!({});
+                }
+                data["features"][name][key] = json!(arguments[2]);
+            } else if let Some(value) = data["features"][name][key].as_str() {
+                println!("{value}");
+            } else {
+                let generation = &data["selected"][name];
+                let info = &data["generations"][format!("{name}:{generation}")];
+                let value = match key.as_str() {
+                    "airlock-store-generation" => generation.clone(),
+                    "airlock-root-source" => info["root_source"].clone(),
+                    "airlock-root-artifact" => info["root_artifact"]["sha256"].clone(),
+                    "airlock-store-source" => info["closure_source"].clone(),
+                    "airlock-store-mode" => json!("shared-closure"),
+                    _ => info["system"].clone(),
+                };
+                println!(
+                    "{value}",
+                    value = value
+                        .as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| value.to_string())
+                );
+            }
+        }
+        "qvm-volume" => {
+            let name = arguments[1].split_once(':').context("volume target")?.0;
+            match arguments[0].as_str() {
+                "info" => println!(
+                    "size  {size}",
+                    size = data["private_sizes"][name].as_u64().unwrap_or(100)
+                ),
+                "resize" => {
+                    if data["private_sizes"].is_null() {
+                        data["private_sizes"] = json!({});
+                    }
+                    data["private_sizes"][name] = json!(arguments[2].parse::<u64>()?);
+                    data["resize_count"] = json!(data["resize_count"].as_u64().unwrap_or(0) + 1);
+                }
+                "import" => {
+                    data["root_import_count"] =
+                        json!(data["root_import_count"].as_u64().unwrap_or(0) + 1);
+                    if data["lose_root_reply"] == true {
+                        fs::write(&path, serde_json::to_vec(&data)?)?;
+                        bail!("simulated lost root-import reply");
+                    }
+                }
+                _ => bail!("unexpected volume operation"),
+            }
+        }
+        "storage-domain" => match arguments[0].as_str() {
+            "verify-native-volumes" => println!("{}", json!({"native_volume_isolation":"passed"})),
+            "ensure-store" => {
+                let name = &arguments[1];
+                let staged: Value = serde_json::from_slice(&fs::read(
+                    std::env::var_os("AIRLOCK_STAGED_GENERATIONS").context("staged mapping")?,
+                )?)?;
+                let generation = staged[name].clone();
+                ensure!(!generation.is_null(), "missing staged fixture generation");
+                let mut receipt = data["generations"][format!("{name}:{generation}")].clone();
+                data["selected"][name] = generation;
+                data["store_install_count"] =
+                    json!(data["store_install_count"].as_u64().unwrap_or(0) + 1);
+                receipt["source"] = if data["wrong_store_receipt"] == true {
+                    json!("/different-closure")
+                } else {
+                    receipt["closure_source"].clone()
+                };
+                receipt["qubesd_restart_required"] = json!(data["store_restart_required"] == true);
+                receipt["qubesd_restarted"] = json!(false);
+                receipt["closure_hash"] = receipt["store"]["closure_hash"].clone();
+                receipt["view_image"] = json!("/var/lib/airlock/pool/metadata.img");
+                if data["lose_store_reply"] == true {
+                    fs::write(&path, serde_json::to_vec(&data)?)?;
+                    bail!("simulated lost store-install reply");
+                }
+                println!("{receipt}");
+            }
+            _ => bail!("unexpected domain storage operation"),
+        },
+        "storage-pool" => match arguments.first().map(String::as_str) {
+            Some("describe-generation") => {
+                let name = option(arguments, "--domain")?;
+                let generation: u64 = option(arguments, "--generation")?.parse()?;
+                let mut info = data["generations"][format!("{name}:{generation}")].clone();
+                info["selected"] = json!(data["selected"][name] == generation);
+                println!("{info}");
+            }
+            Some("resolve-root") => {
+                let name = option(arguments, "--domain")?;
+                let source = option(arguments, "--root-source")?;
+                println!(
+                    "{}",
+                    json!({"domain":name, "root_source":source,
+                    "image":"/var/lib/airlock/pool/root.img", "artifact":{"sha256":"c".repeat(64)}})
+                );
+            }
+            Some("gc" | "retire-generation" | "set-retention") => {
+                println!("{}", json!({"status": "passed"}))
+            }
+            _ => bail!("unexpected pool operation"),
+        },
+        "storage-host" => {
+            if ["validate", "publish"].contains(&arguments[0].as_str()) {
+                println!("{}", data["host_pool"]);
+            }
+        }
+        "storage-artifact" => {
+            if data["artifact_error"] == true {
+                println!(
+                    "{}",
+                    json!({"schema": "airlock.pool-artifact-error.v1", "error": "simulated storage rejection"})
+                );
+                std::process::exit(1);
+            }
+            println!(
+                "{}",
+                json!({"schema": "airlock.closure-store.admission.v1", "status": "passed", "activated": false})
+            );
+        }
+        "nix-store" => {
+            if arguments.iter().any(|value| value == "--add-root") {
+                let link = Path::new(option(arguments, "--add-root")?);
+                fs::create_dir_all(link.parent().context("GC root parent")?)?;
+                if fs::symlink_metadata(link).is_ok() {
+                    fs::remove_file(link)?;
+                }
+                symlink(last()?, link)?;
+                println!("{target}", target = last()?);
+            } else if arguments.iter().any(|value| value == "--print-live") {
+                println!("{host}", host = data["host_pool"]["host"].as_str().unwrap());
+            }
+        }
+        "qvm-shutdown" => {
+            data["running"]
+                .as_array_mut()
+                .unwrap()
+                .retain(|value| value != last().unwrap());
+            // Model an independent administrator restarting the target before the next observation.
+            if data["restart_after_shutdown"] == true {
+                data["running"].as_array_mut().unwrap().push(json!(last()?));
+            }
+        }
+        "qvm-start" => {
+            let name = json!(last()?);
+            let running = data["running"].as_array_mut().unwrap();
+            if !running.contains(&name) {
+                running.push(name);
+            }
+        }
+        "qvm-prefs" => {
+            if arguments.len() == 2 && arguments[1] == "uuid" {
+                let suffix = if arguments[0] == "usr-home" { "0" } else { "1" };
+                if let Some(uuid) = data["uuids"][&arguments[0]].as_str() {
+                    println!("{uuid}");
+                } else {
+                    println!("123e4567-e89b-12d3-a456-42661417400{suffix}");
+                }
+            }
+        }
+        "qvm-tags" => {
+            let name = &arguments[0];
+            if data["tags"].is_null() {
+                data["tags"] = json!({});
+            }
+            if data["tags"][name].is_null() {
+                data["tags"][name] = json!([]);
+            }
+            let tags = data["tags"][name].as_array_mut().unwrap();
+            match arguments[1].as_str() {
+                "add" => {
+                    let tag = json!(arguments[2]);
+                    if !tags.contains(&tag) {
+                        tags.push(tag);
+                    }
+                }
+                "del" => tags.retain(|tag| tag != &arguments[2]),
+                "list" => {
+                    for tag in tags {
+                        println!("{tag}", tag = tag.as_str().unwrap());
+                    }
+                }
+                _ => bail!("unexpected tag operation"),
+            }
+        }
+        "qvm-remove" => {
+            data["selected"].as_object_mut().unwrap().remove(last()?);
+        }
+        "qrexec-client" => {
+            let name = option(arguments, "-d")?;
+            let generation = &data["selected"][name];
+            println!(
+                "{system}",
+                system = data["generations"][format!("{name}:{generation}")]["system"]
+                    .as_str()
+                    .unwrap()
+            );
+        }
+        "airlock-setup-config" => {
+            if data["native_setup"] != true
+                && let Some(staged) = std::env::var_os("AIRLOCK_STAGED_GENERATIONS")
+            {
+                let staged: Value = serde_json::from_slice(&fs::read(staged)?)?;
+                data["selected"]
+                    .as_object_mut()
+                    .unwrap()
+                    .extend(staged.as_object().unwrap().clone());
+            }
+            let output = std::env::var_os("AIRLOCK_LOG_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| root.join("log"));
+            fs::create_dir_all(&output)?;
+            fs::write(
+                output.join("setup-config.json"),
+                serde_json::to_vec(&json!({
+                    "schema": "airlock.setup-config.v1", "status": "passed", "restart_required": false, "unsupported_domains_count": 0
+                }))?,
+            )?;
+        }
+        "machine-lock-race" => {
+            let binary =
+                std::env::var_os("AIRLOCK_FIXTURE_DOM0_BINARY").context("native dom0 binary")?;
+            let mut worker = Command::new(&binary)
+                .args(["prepared-check", &arguments[0]])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()?;
+            let result = (|| -> Result<()> {
+                for _ in 0..100 {
+                    if root.join("machine/lock.owner.json").exists() {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                let mut replies = Vec::new();
+                for operation in ["status", "check"] {
+                    let mut request = json!({"op": operation, "request_id": arguments[1]});
+                    if operation == "check" {
+                        request["revision"] = json!("e".repeat(40));
+                        request["lock_hash"] = json!("b".repeat(64));
+                    }
+                    let mut frame = serde_json::to_vec(&request)?;
+                    frame.push(b'\n');
+                    let output = support::run(
+                        Command::new(&binary).arg("review-control"),
+                        Some(support::Input::bytes(frame)),
+                        Duration::from_secs(5),
+                    )?;
+                    replies.push(serde_json::from_slice::<Value>(&output.stdout)?);
+                }
+                println!("{}", Value::Array(replies));
+                Ok(())
+            })();
+            if result.is_err() {
+                worker.kill()?;
+            }
+            ensure!(worker.wait()?.success(), "prepared validation failed");
+            result?;
+        }
+        "nix-env" | "systemctl" | "airlock-start-qube-ready" => {}
+        _ => bail!("unexpected machine peer {program}"),
+    }
+    // The concurrent validation driver must not overwrite data its child updated.
+    if program != "machine-lock-race" {
+        fs::write(path, serde_json::to_vec(&data)?)?;
+        let matches = |key: &str| data[key] == program || data[key] == call;
+        if matches("crash_after") {
+            // The inert peer runs only in the disposable namespace. Kill the actual coordinator,
+            // after the external outcome was saved but before its phase can be acknowledged.
+            let parent = rustix::process::getppid().context("fixture coordinator PID")?;
+            rustix::process::kill_process(parent, rustix::process::Signal::KILL)?;
+            std::process::exit(86);
+        }
+        ensure!(!matches("fail_after"), "simulated uncertain helper outcome");
+    }
+    Ok(())
+}

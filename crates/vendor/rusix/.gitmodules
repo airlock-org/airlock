@@ -1,0 +1,4 @@
+[submodule "vendor/nixpkgs"]
+	path = vendor/nixpkgs
+	url = https://github.com/NixOS/nixpkgs.git
+	shallow = true

@@ -1,0 +1,38 @@
+[package]
+publish = false
+name = "airlock-nix-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+description = "Shared Nix types, validation and runtime support for Airlock applications"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = []
+runtime = []
+job-writer = []
+artifacts = ["runtime", "dep:anyhow", "dep:tar", "dep:flate2"]
+
+[dependencies]
+airlock-machine-planning = { path = "../machine-planning" }
+rustix = { version = "1.1", features = ["fs", "event", "process"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+tempfile = "3.0"
+thiserror = "2.0"
+
+[dependencies.anyhow]
+version = "1.0"
+optional = true
+
+[dependencies.tar]
+version = "0.4"
+optional = true
+
+[dependencies.flate2]
+version = "1.1"
+optional = true

@@ -1,0 +1,3 @@
+[submodule "airlock-machine"]
+	path = airlock-machine
+	url = git@github.com:airlock-org/machine.git

@@ -1,0 +1,205 @@
+//! Extend upstream package sets with Airlock's Qubes integration patches.
+
+use rusix::{
+    interop::{
+        NixPath,
+        raw::{NixRepresentation, NixValue},
+    },
+    nix_record, nix_text,
+};
+
+/// Select the complete pinned Codex distribution on supported hosts.
+pub fn codex() -> NixValue {
+    NixValue::function(|final_pkgs| {
+        NixValue::function(|previous| {
+            nix_record! {
+                "codex": NixValue::if_else(
+                    previous.clone().select("stdenv.hostPlatform.system").equals("x86_64-linux"),
+                    super::upstream::codex(&final_pkgs).as_expression(),
+                    previous.select("codex"),
+                ),
+            }
+        })
+    })
+}
+
+/// Retain existing patches and append the machine's protocol extensions in order.
+pub fn gui_window_state(machine: &NixPath) -> NixValue {
+    NixValue::function(|_| {
+        NixValue::function(|previous| {
+            NixValue::record(
+                [
+                    (
+                        "qubes-gui-common",
+                        &[
+                            "0001-protocol-add-maximize-window-flags.patch",
+                            "0002-protocol-add-interactive-window-move-message.patch",
+                        ][..],
+                    ),
+                    (
+                        "qubes-gui-agent-linux",
+                        &[
+                            "0001-gui-agent-forward-minimize-and-maximize-requests.patch",
+                            "0002-gui-agent-forward-interactive-window-move-requests.patch",
+                            "0003-preserve-xorg-across-guivm-restart.patch",
+                        ][..],
+                    ),
+                    (
+                        "qubes-gui-daemon",
+                        &[
+                            "0001-gui-daemon-apply-maximize-window-flags.patch",
+                            "0002-gui-daemon-apply-interactive-window-move-requests.patch",
+                        ][..],
+                    ),
+                ]
+                .map(|(package, patches)| {
+                    let updated = previous.clone().select(package).override_attrs(
+                        NixValue::function(|old| {
+                            nix_record! {
+                                "patches": NixValue::concat_lists([
+                                    old.attr_or("patches", NixValue::list([])),
+                                    NixValue::list(patches.iter().map(|patch| machine.join_relative(
+                                        &format!("patches/{package}/{patch}"),
+                                    ).unwrap().as_expression())),
+                                ]),
+                            }
+                        }),
+                    );
+
+                    (package, updated)
+                }),
+            )
+        })
+    })
+}
+
+/// Correct per-CPU memory accounting and run upstream integration checks against the patch.
+pub fn memory_accounting(machine: &NixPath) -> NixValue {
+    NixValue::function(|_| {
+        NixValue::function(|previous| {
+            let file = |path| machine.join_relative(path).unwrap();
+            let smoke = previous
+                .clone()
+                .select("writeText")
+                .call("memory-accounting-smoke.c")
+                .call(include_str!(
+                    "../../../airlock-tests/fixtures/memory_accounting.c"
+                ));
+            nix_record! {
+                "qubes-linux-utils": previous.select("qubes-linux-utils").override_attrs(
+                    NixValue::function(|old| nix_record! {
+                        "patches": NixValue::concat_lists([
+                            old.clone().attr_or("patches", NixValue::list([])),
+                            NixValue::list([file(
+                                "patches/qubes-linux-utils/\
+                                 0001-account-for-per-cpu-free-pages.patch",
+                            ).as_expression()]),
+                        ]),
+                        "postPatch": NixValue::concat_text([
+                            old.clone().attr_or("postPatch", ""),
+                            nix_text!(r#"
+                            cp {header} qmemman/memory-accounting.h
+                        "#, header = file(
+                            "patches/qubes-linux-utils/memory-accounting.h",
+                        ).snapshot()).into(),
+                        ]),
+                        "doCheck": true,
+                        "checkPhase": nix_text!(r#"
+                        runHook preCheck
+                        $CC -std=c11 -Wall -Wextra -Werror -DAIRLOCK_MEMORY_SELFTEST \
+                          -I qmemman {smoke} -o memory-accounting-check
+                        ./memory-accounting-check
+                        runHook postCheck
+                    "#, smoke = smoke),
+                    }),
+                ),
+            }
+        })
+    })
+}
+
+/// Remove unsupported upstream template installation actions while retaining the VM manager.
+pub fn template_tools() -> NixValue {
+    NixValue::function(|_| NixValue::function(|previous| without_template_tools(&previous)))
+}
+
+/// Build the optional manager override against the package set being extended.
+fn without_template_tools(previous: &NixValue) -> NixValue {
+    let script = NixValue::builtin("replaceStrings")
+        .call(NixValue::list(["@sitePackages@".into()]))
+        .call(NixValue::list([previous
+            .clone()
+            .select("python3.sitePackages")]))
+        .call(include_str!("template-tools.sh"));
+    let manager = previous.clone().select("qubes-manager").override_attrs(NixValue::function(|old| {
+        nix_record! {
+            "passthru": old.clone().attr_or("passthru", nix_record! {}).merge_attrs(nix_record! {
+                "airlockTemplateToolsRemoved": true,
+            }),
+            "postInstall": NixValue::concat_text([old.attr_or("postInstall", ""), script]),
+        }
+    }));
+
+    NixValue::if_else(
+        previous.clone().has_attr("qubes-manager"),
+        nix_record! { "qubes-manager": manager },
+        nix_record! {},
+    )
+}
+
+/// Apply image-builder fixes and hide unsupported template operations in the host package set.
+pub fn image_tools(machine: &NixPath) -> NixValue {
+    NixValue::function(|_| {
+        NixValue::function(|previous| {
+            let lib = previous.clone().select("lib");
+            let erofs = previous
+                .clone()
+                .select("erofs-utils")
+                .override_attrs(NixValue::function(|old| {
+                    let affected = lib
+                        .clone()
+                        .select("versionAtLeast")
+                        .call(old.clone().select("version"))
+                        .call("1.9")
+                        .and(
+                            lib.select("versionOlder")
+                                .call(old.clone().select("version"))
+                                .call("1.9.4"),
+                        );
+                    let patch = |name| {
+                        machine
+                            .join_relative(&format!("patches/erofs-utils/{name}"))
+                            .unwrap()
+                            .as_expression()
+                    };
+
+                    nix_record! {
+                        "patches": NixValue::concat_lists([
+                            old.attr_or("patches", NixValue::list([])),
+                            NixValue::if_else(
+                                affected,
+                                NixValue::list([patch("erofs-incremental-data.patch")]),
+                                NixValue::list([]),
+                            ),
+                            NixValue::list([patch("erofs-tar-index-offset.patch")]),
+                        ]),
+                    }
+                }));
+            let lkl = previous
+                .clone()
+                .select("lkl")
+                .override_attrs(NixValue::function(|old| {
+                    nix_record! { "postPatch": NixValue::concat_text([
+                        old.attr_or("postPatch", ""),
+                        nix_text!(r#"
+                            substituteInPlace tools/lkl/cptofs.c \
+                      --replace-fail 'lkl_start_kernel("mem=100M")' 'lkl_start_kernel("mem=1024M")'
+                "#).into(),
+                    ]) }
+                }));
+
+            nix_record! { "erofs-utils": erofs, "lkl": lkl }
+                .merge_attrs(without_template_tools(&previous))
+        })
+    })
+}

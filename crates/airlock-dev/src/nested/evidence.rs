@@ -1,0 +1,215 @@
+//! Narrow environment forwarding and diagnostic names retained by the nested test protocol.
+
+/// Existing explicit environment allowlist for this live scenario.
+pub(super) const BOOTSTRAP: &[&str] = &[
+    "AIRLOCK_QUBES_TEMPLATE",
+    "AIRLOCK_QUBES_TEMPLATE_URL",
+    "AIRLOCK_QUBES_TEMPLATE_RPM",
+    "AIRLOCK_QUBES_KERNEL_NAME",
+    "AIRLOCK_QUBES_KERNEL_VERSION",
+    "AIRLOCK_QUBES_KERNEL_FEDORA",
+    "AIRLOCK_QUBES_KERNEL_URL",
+    "AIRLOCK_QUBES_KERNEL_MODULES_URL",
+    "AIRLOCK_QUBES_KERNEL_RPM",
+    "AIRLOCK_QUBES_KERNEL_MODULES_RPM",
+    "AIRLOCK_QUBES_GPG_KEY_URL",
+    "AIRLOCK_QUBES_GPG_KEY",
+    "AIRLOCK_QUBES_VERIFY_RPMS",
+    "AIRLOCK_QUBES_DEFAULT_DVM",
+    "AIRLOCK_QUBES_UPDATEVM",
+];
+
+/// Existing explicit environment allowlist for this live scenario.
+pub(super) const CONFIG: &[&str] = &[
+    "AIRLOCK_CONFIG_APPLY_MESSAGE",
+    "AIRLOCK_CONFIG_APPLY_STAGE",
+    "AIRLOCK_CONFIG_CREATED_QUBE",
+    "AIRLOCK_CONFIG_DOM0_SYSTEM_REASON",
+    "AIRLOCK_CONFIG_DOM0_SYSTEM_SWITCH_ACTION",
+    "AIRLOCK_CONFIG_INPUTS_IMPORT_SERVICE",
+    "AIRLOCK_CONFIG_INPUTS_QREXEC_TIMEOUT",
+    "AIRLOCK_CONFIG_INPUTS_SOURCE",
+    "AIRLOCK_CONFIG_STAGING_VM",
+    "AIRLOCK_CONFIG_VALIDATOR_VM",
+    "AIRLOCK_CONFIG_VAULT_VM",
+    "AIRLOCK_CONFIG_VMS_IMPORT_INPUTS",
+    "AIRLOCK_CONFIG_VMS_SMOKE_MODE",
+    "AIRLOCK_DOM0_SERVICE",
+    "AIRLOCK_SETUP_CONFIG_COMMAND",
+];
+
+/// Existing explicit environment allowlist for this live scenario.
+pub(super) const INPUTS: &[&str] = &[
+    "AIRLOCK_CONFIG_INPUTS_IMPORT_SERVICE",
+    "AIRLOCK_CONFIG_INPUTS_QREXEC_TIMEOUT",
+    "AIRLOCK_CONFIG_INPUTS_SOURCE",
+    "AIRLOCK_CONFIG_STAGING_VM",
+    "AIRLOCK_CONFIG_VALIDATOR_VM",
+];
+
+/// Existing explicit environment allowlist for this live scenario.
+pub(super) const BOOT: &[&str] = &[
+    "AIRLOCK_EXPECTED_APPLIED_MESSAGE",
+    "AIRLOCK_EXPECTED_HOST_SYSTEM_SOURCE",
+];
+
+/// Existing explicit environment allowlist for this live scenario.
+pub(super) const CLOSURE: &[&str] = &[
+    "AIRLOCK_CONFIG_APPLY_NIX_OFFLINE",
+    "AIRLOCK_CONFIG_STAGING_VM",
+    "AIRLOCK_CONFIG_VALIDATOR_VM",
+    "AIRLOCK_CONFIG_VAULT_VM",
+    "AIRLOCK_NIX_CLOSURE_APPLY_MESSAGE",
+    "AIRLOCK_NIX_CLOSURE_DOMAIN",
+    "AIRLOCK_NIX_CLOSURE_GUI_PROBE",
+    "AIRLOCK_NIX_CLOSURE_PEER_DOMAIN",
+    "AIRLOCK_NIX_CLOSURE_QREXEC_TIMEOUT_SECONDS",
+    "AIRLOCK_NIX_CLOSURE_REBOOT_PROBE",
+    "AIRLOCK_NIX_CLOSURE_WAIT_SECONDS",
+    "AIRLOCK_QUBE_USER",
+    "AIRLOCK_SETUP_CONFIG_COMMAND",
+];
+
+/// Best-effort evidence copied after successful or failed live execution.
+pub(super) const DIAGNOSTICS: &[(&str, &str)] = &[
+    (
+        "/var/log/airlock/qubes-bootstrap.commands.log",
+        "vm-gui-bootstrap.commands.log",
+    ),
+    (
+        "/var/log/airlock/setup-config.json",
+        "vm-gui-setup-config-boot.json",
+    ),
+    (
+        "/var/log/airlock/setup-config.commands.log",
+        "vm-gui-setup-config-boot.commands.log",
+    ),
+    (
+        "/var/log/airlock/setup-config.commands.log",
+        "vm-gui-setup-config.commands.log",
+    ),
+    (
+        "/var/log/airlock/config-vms-smoke.commands.log",
+        "vm-gui-config-vms-smoke.commands.log",
+    ),
+    (
+        "/var/log/airlock/config-vms-config-staging-update.log",
+        "vm-gui-config-vms-config-staging-update.log",
+    ),
+    (
+        "/var/log/airlock/config-vms-config-staging-update.sh",
+        "vm-gui-config-vms-config-staging-update.sh",
+    ),
+    (
+        "/var/log/airlock/config-inputs-import.json",
+        "vm-gui-config-inputs-import.json",
+    ),
+    (
+        "/var/log/airlock/config-inputs-import.stderr.log",
+        "vm-gui-config-inputs-import.stderr.log",
+    ),
+    (
+        "/var/log/airlock/config-archive.json",
+        "vm-gui-config-archive.json",
+    ),
+    (
+        "/var/log/airlock/config-archive.commands.log",
+        "vm-gui-config-archive.commands.log",
+    ),
+    (
+        "/var/log/airlock/config-apply.json",
+        "vm-gui-config-apply.json",
+    ),
+    (
+        "/var/log/airlock/config-apply.commands.log",
+        "vm-gui-config-apply.commands.log",
+    ),
+    (
+        "/var/log/airlock/config-apply-template-builds.json",
+        "vm-gui-config-apply-template-builds.json",
+    ),
+    (
+        "/var/log/airlock/config-apply-template-builds.log",
+        "vm-gui-config-apply-template-builds.log",
+    ),
+    (
+        "/var/log/airlock/config-apply-system-builds.json",
+        "vm-gui-config-apply-system-builds.json",
+    ),
+    (
+        "/var/log/airlock/config-apply-system-builds.log",
+        "vm-gui-config-apply-system-builds.log",
+    ),
+    (
+        "/var/log/airlock/config-apply-nix-domain-builds.json",
+        "vm-gui-config-apply-nix-domain-builds.json",
+    ),
+    (
+        "/var/log/airlock/config-apply-nix-domain-builds.log",
+        "vm-gui-config-apply-nix-domain-builds.log",
+    ),
+    (
+        "/var/log/airlock/config-apply-nix-domain-materializations.json",
+        "vm-gui-config-apply-nix-domain-materializations.json",
+    ),
+    (
+        "/var/log/airlock/config-system-apply.json",
+        "vm-gui-config-system-apply.json",
+    ),
+    (
+        "/var/log/airlock/config-system-apply.log",
+        "vm-gui-config-system-apply.log",
+    ),
+    (
+        "/var/log/airlock/config-system-profile-activation.log",
+        "vm-gui-config-system-profile-activation.log",
+    ),
+    (
+        "/var/log/airlock/config-vms-journal.log",
+        "vm-gui-config-vms-journal.log",
+    ),
+    (
+        "/var/log/airlock/config-vms-libxl.log",
+        "vm-gui-config-vms-libxl.log",
+    ),
+    (
+        "/var/log/airlock/config-vms-qvm-prefs.log",
+        "vm-gui-config-vms-qvm-prefs.log",
+    ),
+    (
+        "/var/log/airlock/config-vms-config-status.json",
+        "vm-gui-config-vms-config-status.json",
+    ),
+    (
+        "/var/log/airlock/config-vms-config-vault-console.log",
+        "vm-gui-config-vms-config-vault-console.log",
+    ),
+    (
+        "/var/log/airlock/config-vms-config-staging-console.log",
+        "vm-gui-config-vms-config-staging-console.log",
+    ),
+    (
+        "/var/log/airlock/config-vms-config-validator-console.log",
+        "vm-gui-config-vms-config-validator-console.log",
+    ),
+    (
+        "/var/log/airlock/config-boot-verify.json",
+        "vm-gui-config-boot-verify.json",
+    ),
+    (
+        "/var/log/airlock/config-boot-verify-status.json",
+        "vm-gui-config-boot-verify-status.json",
+    ),
+    (
+        "/var/log/airlock/config-boot-verify-marker.log",
+        "vm-gui-config-boot-verify-marker.log",
+    ),
+    (
+        "/var/log/airlock/nix-closure-domain-smoke.json",
+        "vm-gui-nix-closure-domain-smoke.json",
+    ),
+    (
+        "/var/log/airlock/nix-closure-domain-smoke.commands.log",
+        "vm-gui-nix-closure-domain-smoke.commands.log",
+    ),
+];

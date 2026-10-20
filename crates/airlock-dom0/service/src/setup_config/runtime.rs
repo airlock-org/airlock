@@ -1,0 +1,300 @@
+//! Shared setup session: command evidence, predicted changes and compatibility receipts.
+
+use crate::process::Runner;
+use anyhow::{Context, Result, ensure};
+use serde_json::{Value, json};
+use std::{
+    ffi::OsString,
+    fs::{self, File, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+    time::Duration,
+};
+
+/// Runtime paths and informational evidence for one setup invocation.
+pub(super) struct Session {
+    /// Decoded desired topology; never inferred from current Qubes settings.
+    pub topology: Value,
+    /// Apply external changes, or only record their intended requests.
+    pub apply: bool,
+    /// Child/helper receipts and command evidence belonging to this invocation.
+    pub directory: PathBuf,
+    /// Mutable compatibility receipt; not an authorization or transaction record.
+    pub result: Value,
+    /// Staged generation mapping retained for every storage subprocess.
+    pub staged: Option<PathBuf>,
+    /// Append-only command diagnostics, separate from protocol output.
+    log: File,
+}
+
+/// Read an optional runtime path override without changing process-global environment.
+pub(super) fn path(key: &str, default: &str) -> PathBuf {
+    std::env::var_os(key).map_or_else(|| default.into(), PathBuf::from)
+}
+
+/// Render Qubes scalar settings without accepting arbitrary structured values.
+pub(super) fn text(value: &Value) -> Result<String> {
+    Ok(match value {
+        Value::Null => "none".into(),
+        Value::Bool(true) => "True".into(),
+        Value::Bool(false) => "False".into(),
+        Value::String(value) => value.clone(),
+        Value::Number(value) => value.to_string(),
+        _ => anyhow::bail!("Qubes setting must be a scalar"),
+    })
+}
+
+impl Session {
+    /// Initialize a receipt and reset only this invocation's fixed evidence files.
+    pub fn new(topology: &Path, apply: bool, scope: &str, phase: &str) -> Result<Self> {
+        let directory = path("AIRLOCK_LOG_DIR", "/var/log/airlock");
+        Self::at(topology, apply, scope, phase, directory)
+    }
+
+    /// Initialize an isolated child receipt without mutating the caller's environment.
+    pub fn at(
+        topology: &Path,
+        apply: bool,
+        scope: &str,
+        phase: &str,
+        directory: PathBuf,
+    ) -> Result<Self> {
+        fs::create_dir_all(&directory)?;
+        for name in ["live-actions", "restart-actions", "unsupported-domains"] {
+            File::create(directory.join(format!("setup-config-{name}.jsonl")))?;
+        }
+        if phase != "finish-only" {
+            File::create(directory.join("rust-vm-actions.jsonl"))?;
+            File::create(directory.join("rust-setup-helpers.jsonl"))?;
+        }
+        let command_log = directory.join("setup-config.commands.log");
+        let log = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(phase == "finish-only")
+            .truncate(phase != "finish-only")
+            .open(&command_log)?;
+        let policy_dir = path(
+            "AIRLOCK_QUBES_POLICY_DIR",
+            "/var/lib/airlock/qubes-policy.d",
+        );
+        let policy_name = std::env::var("AIRLOCK_QUBES_MANAGED_POLICY_FILE")
+            .unwrap_or_else(|_| "90-airlock.policy".into());
+        ensure!(
+            Path::new(&policy_name)
+                .file_name()
+                .is_some_and(|name| name == policy_name.as_str()),
+            "invalid managed policy filename"
+        );
+        let mut result = json!({"schema":"airlock.setup-config.v1", "status":"failed", "mode":if apply {"apply"} else {"plan"}, "scope":scope, "phase":phase,
+            "run_id":std::env::var("AIRLOCK_SETUP_RUN_ID").unwrap_or_else(|_| std::process::id().to_string()), "reason":"setup interrupted", "topology":topology,
+            "live_actions":[], "restart_actions":[], "unsupported_domains":[], "restart_required":false,
+            "live_actions_log":directory.join("setup-config-live-actions.jsonl"), "restart_actions_log":directory.join("setup-config-restart-actions.jsonl"), "unsupported_domains_log":directory.join("setup-config-unsupported-domains.jsonl"),
+            "qrexec_policy_file":policy_dir.join(&policy_name), "qrexec_policy_rendered":directory.join(format!("{policy_name}.rendered")), "command_log":command_log});
+        for count in [
+            "templates_changed",
+            "kernels_changed",
+            "domains_changed",
+            "prefs_changed",
+            "features_changed",
+            "services_changed",
+            "devices_changed",
+            "qrexec_policy_changed",
+            "root_images_changed",
+            "store_volumes_changed",
+            "state_volumes_changed",
+            "store_views_changed",
+            "qubesd_restarts",
+            "unsupported_domains_count",
+        ] {
+            result[count] = json!(0);
+        }
+        Ok(Self {
+            topology: crate::state::read(topology).unwrap_or(Value::Null),
+            apply,
+            directory,
+            staged: std::env::var_os("AIRLOCK_STAGED_GENERATIONS").map(PathBuf::from),
+            result,
+            log,
+        })
+    }
+
+    /// Retain both helper streams, accepting output only after bounded successful completion.
+    pub fn command(&mut self, program: &str, args: &[&str]) -> Result<String> {
+        writeln!(self.log, "+ {program} {args:?}")?;
+        let mut environment = vec![(
+            "AIRLOCK_SETUP_RUN_ID".into(),
+            self.result["run_id"]
+                .as_str()
+                .context("setup run ID")?
+                .into(),
+        )];
+        if let Some(staged) = &self.staged {
+            environment.push((
+                "AIRLOCK_STAGED_GENERATIONS".into(),
+                staged.as_os_str().to_owned(),
+            ));
+        }
+        let output = Runner::default().capture(
+            program,
+            &args.iter().map(OsString::from).collect::<Vec<_>>(),
+            Duration::from_secs(600),
+            &environment,
+        )?;
+        self.log.write_all(&output.stdout)?;
+        self.log.write_all(&output.stderr)?;
+        ensure!(
+            !output.limited && output.status.success(),
+            "{program} failed or exceeded its limits: {stderr}",
+            stderr = String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(String::from_utf8(output.stdout)?
+            .trim_end_matches('\n')
+            .into())
+    }
+
+    /// Dispatch an existing dom0 storage/setup API using the selected native helper.
+    pub fn service(&mut self, args: &[&str]) -> Result<String> {
+        let program = path("AIRLOCK_DOM0_SERVICE", "airlock-dom0-service");
+        self.command(program.to_str().context("non-UTF-8 service path")?, args)
+    }
+
+    /// Record a mutating request in both modes; only apply mode invokes its adapter.
+    pub fn change(&mut self, program: &str, args: &[&str]) -> Result<()> {
+        if self.apply {
+            self.command(program, args)?;
+        } else {
+            writeln!(self.log, "+ {program} {args:?}")?;
+        }
+        Ok(())
+    }
+
+    /// Increment an informational compatibility count with checked arithmetic.
+    pub fn count(&mut self, name: &str) -> Result<()> {
+        self.result[name] = json!(
+            self.result[name]
+                .as_u64()
+                .context("unknown setup count")?
+                .checked_add(1)
+                .context("setup count overflow")?
+        );
+        Ok(())
+    }
+
+    /// Append an observable setup action, omitting unused optional fields.
+    pub fn action(
+        &mut self,
+        kind: &str,
+        action: &str,
+        domain: &str,
+        field: &str,
+        value: &str,
+    ) -> Result<Value> {
+        let mut event = json!({"type":kind, "action":action});
+        for (key, value) in [("domain", domain), ("field", field), ("value", value)] {
+            if !value.is_empty() {
+                event[key] = json!(value);
+            }
+        }
+        self.result["live_actions"]
+            .as_array_mut()
+            .unwrap()
+            .push(event.clone());
+        super::report::append(&self.directory, "setup-config-live-actions.jsonl", &event)?;
+        Ok(event)
+    }
+
+    /// Observe a VM's Qubes state without treating unavailable observations as halted.
+    pub fn state(&mut self, domain: &str) -> Result<String> {
+        let output = self.command(
+            "qvm-ls",
+            &["--raw-data", "--fields", "NAME,STATE", "--no-spinner"],
+        )?;
+        let mut rows = output
+            .lines()
+            .filter_map(|line| line.split_once('|'))
+            .filter(|(name, _)| *name == domain);
+        let (_, state) = rows.next().context("VM power state is missing")?;
+        ensure!(rows.next().is_none(), "VM power state is ambiguous");
+        Ok(state.into())
+    }
+
+    /// Defer every known active state; missing and unsupported observations are errors.
+    pub fn running(&mut self, domain: &str) -> Result<bool> {
+        if !self.apply {
+            return Ok(false);
+        }
+        let state = airlock_deployment_core::inventory::PowerState::classify(&self.state(domain)?);
+        ensure!(state.is_known(), "VM power state is unknown");
+        Ok(!state.is_halted())
+    }
+
+    /// Preserve a storage-change restart requirement without changing the live boot identity.
+    pub fn defer(&mut self, domain: &str, kind: &str, field: &str, value: &str) -> Result<()> {
+        let state = self.state(domain).unwrap_or_default();
+        let event = json!({"type":kind,"action":"restart","domain":domain,"field":field,"value":value,"state":state,"reason":"domain is running; stop it and re-run setup-config for this storage change to take effect"});
+        self.result["restart_actions"]
+            .as_array_mut()
+            .unwrap()
+            .push(event.clone());
+        self.result["restart_required"] = json!(true);
+        super::report::append(
+            &self.directory,
+            "setup-config-restart-actions.jsonl",
+            &event,
+        )
+    }
+
+    /// Reconcile a derived boot property or feature, retaining existing restart evidence.
+    pub fn setting(&mut self, program: &str, domain: &str, key: &str, value: &str) -> Result<()> {
+        if self.apply
+            && self.command(program, &[domain, key]).is_ok_and(|current| {
+                airlock_deployment_core::configuration::value_matches(value, Some(&current))
+            })
+        {
+            return Ok(());
+        }
+        self.change(program, &[domain, key, value])?;
+        let feature = program == "qvm-features";
+        self.count(if feature {
+            "features_changed"
+        } else {
+            "prefs_changed"
+        })?;
+        let kind = if feature {
+            "domain-feature"
+        } else {
+            "domain-pref"
+        };
+        let mut event = self.action(kind, "set", domain, key, value)?;
+        if self.apply && self.state(domain).is_ok_and(|state| state == "Running") {
+            event["action"] = json!("restart");
+            event["state"] = json!("Running");
+            self.result["restart_actions"]
+                .as_array_mut()
+                .unwrap()
+                .push(event.clone());
+            self.result["restart_required"] = json!(true);
+            super::report::append(
+                &self.directory,
+                "setup-config-restart-actions.jsonl",
+                &event,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Write the compatible result on success or failure and merge child receipts once.
+    pub fn finish(&mut self, result: &Result<()>) -> Result<()> {
+        self.result["status"] = json!(if result.is_ok() { "passed" } else { "failed" });
+        self.result["reason"] = json!(match result {
+            Ok(()) => "Qubes config setup completed".into(),
+            Err(error) => format!("{error:#}"),
+        });
+        let file = self.directory.join("setup-config.json");
+        super::report::save(&file, &self.result)?;
+        super::report::finalize(&file)?;
+        self.result = crate::state::read(&file)?;
+        Ok(())
+    }
+}
