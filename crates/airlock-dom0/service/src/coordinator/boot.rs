@@ -2,6 +2,7 @@
 //! Boot still checks saved storage identities and each started guest's readiness.
 
 use super::*;
+use airlock_machine_core::boot::BootInputs;
 use airlock_nix_core::identity::LockHash;
 use serde::{Deserialize, Serialize};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -97,8 +98,9 @@ impl Coordinator {
                 self.store().image_staged()?,
             )
         };
-        let topology: Topology = serde_json::from_value(raw.clone())?;
-        topology.validate()?;
+        let inputs = BootInputs::new(raw)?;
+        let raw = inputs.raw().clone();
+        let topology = inputs.topology().clone();
         let generations = staged
             .as_ref()
             .map(|p| state::read::<Value>(p))

@@ -28,6 +28,7 @@ default = ["qubes"]
 qubes = ["dep:pyo3", "dep:airlock-qubes"]
 
 [dependencies]
+airlock-machine-core = { path = "../airlock-common/machine" }
 airlock-qubes = { path = "../airlock-common/qubes", optional = true }
 airlock-nix-core = { path = "../airlock-common/nix", features = ["runtime"] }
 anyhow = "1.0"

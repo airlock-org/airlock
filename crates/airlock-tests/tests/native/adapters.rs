@@ -249,6 +249,7 @@ fn image_plan_and_reloaded_snapshot_are_checked() -> Result<()> {
         let root_image = directory.join("root.img");
         fs::write(&root_image, b"fixture")?;
         let topology = json!({
+            "schema":"airlock.qubes-topology.v1",
             "kernels": {
                 "test-kernel": {
                     "source": kernel
@@ -284,13 +285,15 @@ fn image_plan_and_reloaded_snapshot_are_checked() -> Result<()> {
                     "backend": {
                         "type": "nix-closure",
                         "system": {
-                            "source": "/system"
+                            "source": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-system"
                         },
                         "root": {
-                            "source": "/root.img"
+                            "source": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-root/root.img"
                         },
                         "store": {
-                            "source": "/prepared"
+                            "source": "/nix/store/cccccccccccccccccccccccccccccccc-descriptors/usr-home",
+                            "mode":"shared-closure", "mountpoint":"/nix/store",
+                            "device":"/dev/xvde", "blobDevice":"/dev/xvdf", "viewBackend":"erofs-objectmap"
                         },
                         "kernel": {
                             "name": "test-kernel"
@@ -390,7 +393,10 @@ fn image_plan_and_reloaded_snapshot_are_checked() -> Result<()> {
                     .contains(&json!("verify-snapshot"))
             })
             .unwrap();
-        assert_eq!(verified["request"]["source"], "/prepared");
+        assert_eq!(
+            verified["request"]["source"],
+            "/nix/store/cccccccccccccccccccccccccccccccc-descriptors/usr-home"
+        );
         let snapshot = &verified["request"]["snapshot"];
         assert_eq!(snapshot["domain"], "usr-home");
         assert_eq!(snapshot["klass"], "StandaloneVM");

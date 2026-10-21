@@ -59,6 +59,9 @@ impl Session {
         phase: &str,
         directory: PathBuf,
     ) -> Result<Self> {
+        // Decode before opening/truncating evidence: retain the actual read error.
+        let decoded = crate::state::configuration(topology)?;
+
         fs::create_dir_all(&directory)?;
         for name in ["live-actions", "restart-actions", "unsupported-domains"] {
             File::create(directory.join(format!("setup-config-{name}.jsonl")))?;
@@ -110,7 +113,7 @@ impl Session {
             result[count] = json!(0);
         }
         Ok(Self {
-            topology: crate::state::configuration(topology).unwrap_or(Value::Null),
+            topology: decoded,
             apply,
             directory,
             staged: std::env::var_os("AIRLOCK_STAGED_GENERATIONS").map(PathBuf::from),
@@ -295,6 +298,29 @@ impl Session {
         super::report::save(&file, &self.result)?;
         super::report::finalize(&file)?;
         self.result = crate::state::read(&file)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Invalid input retains its read diagnostic and does not truncate earlier setup evidence.
+    #[test]
+    fn invalid_configuration_preserves_diagnostics_and_previous_logs() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let topology = temporary.path().join("topology.json");
+        let logs = temporary.path().join("logs");
+        fs::create_dir(&logs)?;
+        let evidence = logs.join("setup-config-live-actions.jsonl");
+        fs::write(&evidence, "previous evidence\n")?;
+        fs::write(&topology, b"{broken")?;
+        let error = Session::at(&topology, true, "all", "all", logs)
+            .err()
+            .context("invalid input accepted")?;
+        assert!(format!("{error:#}").contains("topology.json"));
+        assert_eq!(fs::read_to_string(evidence)?, "previous evidence\n");
         Ok(())
     }
 }

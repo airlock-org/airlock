@@ -6,6 +6,8 @@
 
 pub mod model;
 
+pub mod boot;
+
 pub mod planning;
 
 pub mod relationships;

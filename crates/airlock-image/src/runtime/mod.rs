@@ -38,7 +38,8 @@ struct Args {
 
 pub(crate) fn main() -> Result<()> {
     let args = Args::parse();
-    let topology: Topology = serde_json::from_value(json(&args.topology)?)?;
+    let inputs = airlock_machine_core::boot::BootInputs::new(json(&args.topology)?)?;
+    let topology: Topology = serde_json::from_value(inputs.raw().clone())?;
     validate(&topology)?;
     ensure!(
         !args.output.try_exists()? && !args.output.is_symlink(),

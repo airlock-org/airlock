@@ -140,6 +140,7 @@ dependencies = [
 name = "airlock-image"
 version = "0.1.0"
 dependencies = [
+ "airlock-machine-core",
  "airlock-nix-core",
  "airlock-qubes",
  "airlock-tests",

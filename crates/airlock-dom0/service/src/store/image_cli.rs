@@ -118,9 +118,10 @@ pub(super) fn run(command: Request) -> Result<Value> {
             prepared::verify_outputs(&root, &descriptors)
         }
         Operation::VerifyTopology { topology } => {
-            let topology: crate::model::Topology = crate::state::configuration(&topology)?;
-            topology.validate()?;
-            Ok(json!({"status":"passed","domains":topology.domains.len()}))
+            let inputs = airlock_machine_core::boot::BootInputs::new(crate::state::configuration(
+                &topology,
+            )?)?;
+            Ok(json!({"status":"passed","domains":inputs.topology().domains.len()}))
         }
         Operation::PrepareHost {
             seed,
