@@ -136,51 +136,87 @@ pub(super) fn admit(args: &Admission<'_>) -> Result<Value> {
         }
     }
 
-    let mut verified = if args.verification == "incremental" {
-        let additions: Vec<_> = paths
-            .iter()
-            .filter(|path| !cached.contains_key(*path))
-            .cloned()
-            .collect();
-        let mut result = verification(&additions, "nix-store", false)?;
-        result["mode"] = json!("incremental");
-        result["verified_objects"] = json!(additions.len());
-        result["reused_objects"] = json!(cached.len());
-        result
-    } else {
-        verification(&[args.system.to_owned()], args.verification, true)?
-    };
+    let mut verified = super::progress::phase(
+        &format!("{domain}: verifying objects", domain = args.domain),
+        || {
+            Ok(if args.verification == "incremental" {
+                let additions: Vec<_> = paths
+                    .iter()
+                    .filter(|path| !cached.contains_key(*path))
+                    .cloned()
+                    .collect();
+                let mut result = verification(&additions, "nix-store", false)?;
+                result["mode"] = json!("incremental");
+                result["verified_objects"] = json!(additions.len());
+                result["reused_objects"] = json!(cached.len());
+                result
+            } else {
+                verification(&[args.system.to_owned()], args.verification, true)?
+            })
+        },
+    )?;
     let verification_seconds = started.elapsed().as_secs_f64();
 
     let started = Instant::now();
-    let mut admitted = Vec::new();
-    let mut reused = Vec::new();
-    for path in &paths {
-        let value = match cached.get(path) {
-            Some(value) => value.clone(),
-            None => segments::admit(root, path, args.physical, &transaction, args.segment_target)?,
-        };
-        if value["admitted"] == true {
-            admitted.push(value);
-        } else {
-            reused.push(value);
-        }
-    }
+    let (admitted, reused) = super::progress::phase(
+        &format!("{domain}: admitting objects", domain = args.domain),
+        || {
+            let mut admitted = Vec::new();
+            let mut reused = Vec::new();
+
+            for (index, path) in paths.iter().enumerate() {
+                super::progress::detail(&format!(
+                    "{index}/{total} objects, {added} added, {reused} reused | {path}",
+                    total = paths.len(),
+                    added = admitted.len(),
+                    reused = reused.len()
+                ));
+                let value = match cached.get(path) {
+                    Some(value) => value.clone(),
+                    None => segments::admit(
+                        root,
+                        path,
+                        args.physical,
+                        &transaction,
+                        args.segment_target,
+                    )?,
+                };
+                if value["admitted"] == true {
+                    admitted.push(value);
+                } else {
+                    reused.push(value);
+                }
+            }
+
+            super::progress::detail(&format!(
+                "{total}/{total} objects, {added} added, {reused} reused",
+                total = paths.len(),
+                added = admitted.len(),
+                reused = reused.len()
+            ));
+            Ok((admitted, reused))
+        },
+    )?;
     let admission_seconds = started.elapsed().as_secs_f64();
 
     let closure = closure_hash(&paths, args.system, args.root_source, args.kernel);
 
     let started = Instant::now();
-    let mut store = views::materialize(views::ViewRequest {
-        root,
-        generation_dir,
-        paths: &paths,
-        closure: &closure,
-        transaction: &transaction,
-        target: args.segment_target,
-        trusted: &cached.keys().cloned().collect(),
-        previous: args.previous_index,
-    })?;
+    let mut store = super::progress::phase(
+        &format!("{domain}: preparing storage index", domain = args.domain),
+        || {
+            views::materialize(views::ViewRequest {
+                root,
+                generation_dir,
+                paths: &paths,
+                closure: &closure,
+                transaction: &transaction,
+                target: args.segment_target,
+                trusted: &cached.keys().cloned().collect(),
+                previous: args.previous_index,
+            })
+        },
+    )?;
     let mut timings = store["preparation"].clone();
     let view_created = store["image_created"].clone();
     store

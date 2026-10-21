@@ -183,7 +183,7 @@ fn disk(
     );
     let install: NixValue = nix_text!(
         r#"
-        echo "Installing prepared Qubes runtime state"
+        echo "USB image: installing prepared Qubes runtime state" >&2
         if test -e /mnt/var/lib/qubes/qubes.xml; then
           echo "Refusing to replace an existing Qubes database during image preparation" >&2
           exit 1
@@ -191,15 +191,19 @@ fn disk(
 
         # Reconstruct sparse allocation even when a substituted seed contains dense files.
         mkdir -p /mnt/var/lib/airlock/closure-store
-        cp -a --sparse=always {unified}/pool/. /mnt/var/lib/airlock/closure-store/
-        chmod -R {mode} /mnt/var/lib/airlock/closure-store
+        {native}/bin/airlock-dom0-service storage build-progress --label "USB image: copying unified store" -- \
+          cp -a --sparse=always {unified}/pool/. /mnt/var/lib/airlock/closure-store/
+        {native}/bin/airlock-dom0-service storage build-progress --label "USB image: setting store permissions" -- \
+          chmod -R {mode} /mnt/var/lib/airlock/closure-store
         mkdir -p /mnt/var/lib/qubes
-        cp -a --sparse=always {runtime}/qubes/. /mnt/var/lib/qubes/
+        {native}/bin/airlock-dom0-service storage build-progress --label "USB image: copying VM disks and Qubes state" -- \
+          cp -a --sparse=always {runtime}/qubes/. /mnt/var/lib/qubes/
         cp -a {runtime}/pool-selections/. /mnt/var/lib/airlock/closure-store/
         chmod -R u+rwX /mnt/var/lib/qubes
         cp {runtime}/receipt.json /mnt/var/lib/airlock/prepared-runtime.json
     "#,
         unified = unified.clone(),
+        native = native.clone(),
         mode = mode,
         runtime = runtime.clone(),
     )
@@ -207,11 +211,12 @@ fn disk(
     let ownership: NixValue = nix_text!(
         r#"
         # Activation must create the installed qubes group before resolving its GID.
-        nixos-enter --root /mnt -- chown -R root:qubes /var/lib/qubes
+        {native}/bin/airlock-dom0-service storage build-progress --label "USB image: setting Qubes ownership" -- \
+          nixos-enter --root /mnt -- chown -R root:qubes /var/lib/qubes
         chmod 0660 /mnt/var/lib/qubes/qubes.xml
         {native}/bin/airlock-dom0-service storage image install-host /mnt {closure}/store-paths {recovery}
     "#,
-        native = native,
+        native = native.clone(),
         closure = closure,
         recovery = recovery,
     )
@@ -241,6 +246,8 @@ fn disk(
             let command = old.clone().select("buildCommand");
             let mounted = "mount $rootDisk $mountPoint";
             let unmount = "umount -R /mnt";
+            let publish = "mv $diskImage $out/";
+            let post_vm = old.clone().select("postVM");
             let valid = context
                 .lib
                 .clone()
@@ -254,6 +261,11 @@ fn disk(
                         .select("hasInfix")
                         .call(unmount)
                         .call(command.clone()),
+                )
+                .and(
+                    context.lib.clone().select("hasInfix")
+                        .call(publish)
+                        .call(post_vm.clone()),
                 );
             let replaced = NixValue::builtin("replaceStrings")
                 .call(NixValue::list([
@@ -272,15 +284,28 @@ fn disk(
                 .call(command);
             let definitions = nix_record! {
                 "buildCommand": replaced,
+                "postVM": NixValue::builtin("replaceStrings")
+                    .call(NixValue::list([publish.into()]))
+                    .call(NixValue::list([nix_text!(
+                        "{native}/bin/airlock-dom0-service storage build-progress --label 'USB image: publishing disk image' -- {publish}",
+                        native = native.clone(),
+                        publish = publish,
+                    ).into()]))
+                    .call(post_vm),
                 "preVM": NixValue::concat_text([
                     nix_text!(
                         r#"
-                            echo "Validating prepared VM store before image assembly"
+                            echo "USB image: validating prepared store before disk assembly" >&2
                             {check}
                         "#,
                         check = unified.clone().select("checkCommand"),
                     ).into(),
                     old.select("preVM"),
+                    nix_text!(
+                        r#"
+                            echo 'USB image: disk prepared; starting offline installation' >&2
+                        "#,
+                    ).into(),
                 ]),
             };
 
@@ -288,7 +313,7 @@ fn disk(
                 valid,
                 definitions,
                 NixValue::builtin("throw").call(
-                    "Upstream disk assembly no longer exposes the required mount and unmount hooks."
+                    "Upstream disk assembly no longer exposes the required mount, unmount and image-publication hooks."
                 ),
             )
         }))

@@ -446,6 +446,9 @@ pub fn main() -> ExitCode {
     let direct = matches!(
         args.command,
         Action::AdmissionAdapter(_)
+            | Action::Storage {
+                command: store::Command::BuildProgress(_),
+            }
             | Action::Config(_)
             | Action::Input(_)
             | Action::Gpu(_)

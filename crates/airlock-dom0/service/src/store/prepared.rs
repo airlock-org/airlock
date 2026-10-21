@@ -5,7 +5,7 @@ use super::{
     builder,
     fs::*,
     generations::{self, Admission},
-    host, records, runtime_namespace, segments,
+    host, progress, records, runtime_namespace, segments,
 };
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
@@ -61,39 +61,61 @@ pub(super) fn seal(root: &Path) -> Result<()> {
 }
 
 pub(super) fn verify_files(root: &Path, files: &Value, trust_payload: bool) -> Result<usize> {
-    let root_canonical = fs::canonicalize(root)?;
-    let files = files
-        .as_object()
-        .context("missing prepared file fingerprints")?;
-    for (relative, expected) in files {
-        let relative_path = Path::new(relative);
-        ensure!(
-            !relative_path.is_absolute()
-                && !relative_path
-                    .components()
-                    .any(|c| c == std::path::Component::ParentDir),
-            "prepared checksum path escapes pool"
-        );
-        let path = root.join(relative);
-        ensure!(
-            fs::canonicalize(&path)?.starts_with(&root_canonical),
-            "prepared checksum symlink escapes pool"
-        );
-        ensure!(
-            fs::metadata(&path)?.len() == number(expected, "size")?,
-            "prepared file missing or size mismatch: {relative}"
-        );
-        if !(trust_payload
-            && relative_path.parent() == Some(Path::new("objects/segments"))
-            && relative_path.extension().is_some_and(|s| s == "blob"))
-        {
+    progress::phase("Verifying prepared file checksums", || {
+        let root_canonical = fs::canonicalize(root)?;
+        let files = files
+            .as_object()
+            .context("missing prepared file fingerprints")?;
+        let total = files.iter().try_fold(0u64, |total, (relative, expected)| {
+            let path = Path::new(relative);
+            if trust_payload
+                && path.parent() == Some(Path::new("objects/segments"))
+                && path.extension().is_some_and(|s| s == "blob")
+            {
+                return Ok(total);
+            }
+            total
+                .checked_add(number(expected, "size")?)
+                .context("verification byte total overflow")
+        })?;
+        progress::bytes(total);
+
+        for (index, (relative, expected)) in files.iter().enumerate() {
+            progress::detail(&format!(
+                "{index}/{total} files | {relative}",
+                total = files.len()
+            ));
+            let relative_path = Path::new(relative);
             ensure!(
-                hash(&path)? == text(expected, "sha256")?,
-                "prepared integrity check failed: {relative}"
+                !relative_path.is_absolute()
+                    && !relative_path
+                        .components()
+                        .any(|c| c == std::path::Component::ParentDir),
+                "prepared checksum path escapes pool"
             );
+            let path = root.join(relative);
+            ensure!(
+                fs::canonicalize(&path)?.starts_with(&root_canonical),
+                "prepared checksum symlink escapes pool"
+            );
+            ensure!(
+                fs::metadata(&path)?.len() == number(expected, "size")?,
+                "prepared file missing or size mismatch: {relative}"
+            );
+            if !(trust_payload
+                && relative_path.parent() == Some(Path::new("objects/segments"))
+                && relative_path.extension().is_some_and(|s| s == "blob"))
+            {
+                ensure!(
+                    hash(&path)? == text(expected, "sha256")?,
+                    "prepared integrity check failed: {relative}"
+                );
+            }
         }
-    }
-    Ok(files.len())
+
+        progress::detail(&format!("{total}/{total} files", total = files.len()));
+        Ok(files.len())
+    })
 }
 
 fn fingerprint(root: &Path, relative: &str) -> Result<Value> {
@@ -392,35 +414,42 @@ pub(super) fn prepare_host(
 ) -> Result<Value> {
     mkdir(output)?;
     let root = output.join("pool");
-    command(
-        "cp",
-        &[
-            "-a",
-            "--sparse=always",
-            &seed.join("pool").to_string_lossy(),
-            &root.to_string_lossy(),
-        ],
-        None,
-    )?;
-    for path in std::iter::once(root.clone()).chain(descendants(&root)?) {
-        let metadata = fs::symlink_metadata(&path)?;
-        if metadata.is_dir() {
-            fs::set_permissions(
-                path,
-                fs::Permissions::from_mode(metadata.permissions().mode() | 0o200),
-            )?;
+    progress::phase("Copying prepared guest pool", || {
+        command(
+            "cp",
+            &[
+                "-a",
+                "--sparse=always",
+                &seed.join("pool").to_string_lossy(),
+                &root.to_string_lossy(),
+            ],
+            None,
+        )
+    })?;
+
+    progress::phase("Preparing pool metadata", || {
+        for path in std::iter::once(root.clone()).chain(descendants(&root)?) {
+            let metadata = fs::symlink_metadata(&path)?;
+            if metadata.is_dir() {
+                fs::set_permissions(
+                    path,
+                    fs::Permissions::from_mode(metadata.permissions().mode() | 0o200),
+                )?;
+            }
         }
-    }
-    for path in [
-        root.join("admission.lock"),
-        root.join("objects/segments.lock"),
-    ] {
-        ensure!(!path.is_symlink(), "seed coordination lock is a symlink");
-        if path.try_exists()? {
-            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        for path in [
+            root.join("admission.lock"),
+            root.join("objects/segments.lock"),
+        ] {
+            ensure!(!path.is_symlink(), "seed coordination lock is a symlink");
+            if path.try_exists()? {
+                fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+            }
         }
-    }
-    relocate_pool(&root, host::POOL, &root.to_string_lossy())?;
+        relocate_pool(&root, host::POOL, &root.to_string_lossy())?;
+        Ok(())
+    })?;
+
     let registration_text = fs::read_to_string(registration)?;
     let mut systems = vec![system.to_owned()];
     systems.extend(
@@ -433,61 +462,96 @@ pub(super) fn prepare_host(
     );
     systems.sort();
     systems.dedup();
-    host::publish(&root, system, &registration_text, &systems, false)?;
+
+    progress::phase("Publishing dom0 runtime store", || {
+        host::publish(&root, system, &registration_text, &systems, false)
+    })?;
+
     for role in ["sys-ctrl", "usr-assistant"] {
         if root
             .join("builders")
             .join(format!("{role}.json"))
             .try_exists()?
         {
-            host::refresh_builder(&root, role, &registration_text, false, None)?;
+            progress::phase(&format!("Preparing {role}-build-store"), || {
+                host::refresh_builder(&root, role, &registration_text, false, None)
+            })?;
         }
     }
-    write(&root.join("host/aliases.json"), choices, 0o644)?;
-    seal(&root)?;
-    relocate_pool(&root, &root.to_string_lossy(), host::POOL)?;
-    for path in children(&root.join("host/boots"))? {
-        let mut value: Value = read(&path)?;
-        let blob = root.join(Path::new(&text(&value, "blob_map")?).strip_prefix(host::POOL)?);
-        value["blob_map_sha256"] = json!(hash(&blob)?);
-        write(&path, &value, 0o644)?;
-    }
-    let mut fingerprints = json!({});
-    for path in descendants(&root)? {
-        if !path.is_symlink() && path.is_file() && path.file_name().is_some_and(|s| s != "root.img")
-        {
+
+    progress::phase("Sealing unified store", || {
+        write(&root.join("host/aliases.json"), choices, 0o644)?;
+        seal(&root)?;
+        relocate_pool(&root, &root.to_string_lossy(), host::POOL)?;
+        for path in children(&root.join("host/boots"))? {
+            let mut value: Value = read(&path)?;
+            let blob = root.join(Path::new(&text(&value, "blob_map")?).strip_prefix(host::POOL)?);
+            value["blob_map_sha256"] = json!(hash(&blob)?);
+            write(&path, &value, 0o644)?;
+        }
+        Ok(())
+    })?;
+
+    let fingerprints = progress::phase("Calculating unified-store checksums", || {
+        let paths: Vec<_> = descendants(&root)?
+            .into_iter()
+            .filter(|path| {
+                !path.is_symlink()
+                    && path.is_file()
+                    && path.file_name().is_some_and(|s| s != "root.img")
+            })
+            .collect();
+        let total = paths.iter().try_fold(0u64, |total, path| {
+            total
+                .checked_add(fs::metadata(path)?.len())
+                .context("checksum byte total overflow")
+        })?;
+        progress::bytes(total);
+        let mut fingerprints = json!({});
+
+        for path in paths {
             let relative = path
                 .strip_prefix(&root)?
                 .to_str()
                 .context("invalid seed file path")?;
+            progress::detail(relative);
             fingerprints[relative] = fingerprint(&root, relative)?;
         }
-    }
+
+        Ok(fingerprints)
+    })?;
     write(&output.join("pool-fingerprints.json"), &fingerprints, 0o644)?;
 
-    let receipt = json!({"schema":"airlock.unified-seed.v1","systems":systems,"pool_allocated_bytes":host::allocated(&root)?,"registration_sha256":hash(registration)?});
-    write(&output.join("receipt.json"), &receipt, 0o644)?;
-    Ok(receipt)
+    progress::phase("Writing unified-store receipt", || {
+        let receipt = json!({"schema":"airlock.unified-seed.v1","systems":systems,"pool_allocated_bytes":host::allocated(&root)?,"registration_sha256":hash(registration)?});
+        write(&output.join("receipt.json"), &receipt, 0o644)?;
+        Ok(receipt)
+    })
 }
 
 pub(super) fn verify_host(seed: &Path) -> Result<Value> {
     let root = seed.join("pool");
     verify_files(&root, &read(&seed.join("pool-fingerprints.json"))?, false)?;
-    for path in records::manifests(&root)? {
-        records::root_image(&root, &read(&path)?)?;
-    }
-    for path in children(&root.join("host/boots"))? {
-        let record: Value = read(&path)?;
-        host::validate(
-            &root,
-            Path::new(host::POOL),
-            &text(&record, "system")?,
-            false,
-        )?;
-    }
-    for role in ["usr-assistant", "sys-ctrl"] {
-        builder::volume_configs(&root, Path::new(host::POOL), "airlock-closure", role)?;
-    }
+
+    progress::phase("Checking root artifacts and host boot records", || {
+        for path in records::manifests(&root)? {
+            records::root_image(&root, &read(&path)?)?;
+        }
+        for path in children(&root.join("host/boots"))? {
+            let record: Value = read(&path)?;
+            host::validate(
+                &root,
+                Path::new(host::POOL),
+                &text(&record, "system")?,
+                false,
+            )?;
+        }
+        for role in ["usr-assistant", "sys-ctrl"] {
+            builder::volume_configs(&root, Path::new(host::POOL), "airlock-closure", role)?;
+        }
+        Ok(())
+    })?;
+
     Ok(json!({"schema":"airlock.unified-seed-check.v1","status":"passed"}))
 }
 

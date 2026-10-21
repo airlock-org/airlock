@@ -7,6 +7,11 @@ use clap::Subcommand;
 /// Native storage operations, grouped by the resources and protocols they own.
 #[derive(Subcommand)]
 pub(crate) enum Command {
+    /// Observe a build-time subprocess while preserving its standard streams.
+    BuildProgress(
+        /// Phase label and literal executable arguments.
+        super::progress::Request,
+    ),
     /// Read view definitions and filesystem accounting for upstream Qubes objects.
     QubesInspect,
     /// Access upstream Qubes objects in a supervised, short-lived native worker.
@@ -48,6 +53,7 @@ pub(crate) enum Command {
 /// Execute one operation while keeping artifact protocol output owned by its receiver.
 pub(crate) fn execute(command: Command) -> Result<()> {
     let result = match command {
+        Command::BuildProgress(request) => return super::progress::execute(request),
         #[cfg(feature = "qubes")]
         Command::QubesObjects => airlock_qubes::storage::execute(
             &crate::input_value("-")?,

@@ -512,6 +512,7 @@ pub(super) fn materialize(request: ViewRequest<'_>) -> Result<Value> {
         let mut items = Vec::new();
         let mut segments = BTreeMap::new();
         let mut logical = 0u64;
+        super::progress::detail("Assembling object map");
         for name in order
             .iter()
             .map(String::as_str)
@@ -655,6 +656,7 @@ pub(super) fn materialize(request: ViewRequest<'_>) -> Result<Value> {
             source,
         ]);
 
+        super::progress::detail("Building EROFS metadata index");
         let result = command(
             &tool("mkfs.erofs", "AIRLOCK_MKFS_EROFS"),
             &args.iter().map(String::as_str).collect::<Vec<_>>(),

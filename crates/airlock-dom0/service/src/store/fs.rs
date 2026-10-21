@@ -129,6 +129,7 @@ pub(super) fn hash(path: &Path) -> Result<String> {
             break;
         }
         digest.update(&buffer[..size]);
+        super::progress::advance(size as u64);
     }
     Ok(hex(&digest.finalize()))
 }
@@ -189,13 +190,15 @@ fn remove_tree(path: &Path, meta: &fs::Metadata) -> Result<()> {
 }
 
 pub(super) fn command(program: &str, args: &[&str], input: Option<&[u8]>) -> Result<String> {
-    let output = airlock_nix_core::runtime::process::run(
-        Command::new(program).args(args),
-        input.map(Vec::from),
-        None,
-    )
-    .with_context(|| format!("run {program}"))?;
-    Ok(String::from_utf8(output.checked(program)?)?)
+    super::progress::command(program, || {
+        let output = airlock_nix_core::runtime::process::run(
+            Command::new(program).args(args),
+            input.map(Vec::from),
+            None,
+        )
+        .with_context(|| format!("run {program}"))?;
+        Ok(String::from_utf8(output.checked(program)?)?)
+    })
 }
 
 pub(super) fn tool(name: &str, override_name: &str) -> String {

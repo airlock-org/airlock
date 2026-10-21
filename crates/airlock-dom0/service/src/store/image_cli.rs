@@ -114,6 +114,18 @@ fn request(path: &Path) -> Result<Value> {
 }
 
 pub(super) fn run(command: Request) -> Result<Value> {
+    let label = match &command.operation {
+        Operation::PreparePool { .. } => "Guest store",
+        Operation::PrepareHost { .. } => "Unified store",
+        Operation::VerifyOutputs { .. } => "Verify guest store",
+        Operation::VerifyHost { .. } => "Verify unified store",
+        Operation::InstallHost { .. } => "Install host store",
+        _ => return execute(command),
+    };
+    super::progress::run(label, || execute(command))
+}
+
+fn execute(command: Request) -> Result<Value> {
     match command.operation {
         Operation::PreparePool {
             root,
@@ -154,7 +166,9 @@ pub(super) fn run(command: Request) -> Result<Value> {
             root,
             recovery_paths,
             recovery_system,
-        } => prepared::install_host(&root, &recovery_paths, &recovery_system),
+        } => super::progress::phase("Installing recovery and sealing host boot", || {
+            prepared::install_host(&root, &recovery_paths, &recovery_system)
+        }),
         Operation::VerifyHost { seed } => prepared::verify_host(&seed),
         Operation::VerifyPrepared { request: path } => prepared::verify_prepared(&request(&path)?),
         Operation::InspectPrepared { request: path } => {

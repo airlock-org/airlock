@@ -10,6 +10,44 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Build logging preserves literal arguments, stdin/stdout and child failure without adding JSON receipts.
+#[test]
+fn build_progress_keeps_tool_streams_and_reports_failure() -> Result<()> {
+    let service = common::binary("AIRLOCK_DOM0_BIN", "airlock-dom0-service");
+    let input = br#"{"status":"tool reply"}"#.to_vec();
+    let success = common::run(
+        Command::new(&service)
+            .args(["storage", "build-progress", "--label", "fixture copy", "--"])
+            .arg(common::peer())
+            .arg("cat"),
+        Some(input.clone()),
+    )?;
+    assert!(success.status.success());
+    assert_eq!(success.stdout, input);
+    assert!(String::from_utf8_lossy(&success.stderr).contains("completed"));
+
+    let directory = tempfile::tempdir()?;
+    let peer = common::peer_link(directory.path(), "journalctl")?;
+    let failure = common::run(
+        Command::new(&service)
+            .args([
+                "storage",
+                "build-progress",
+                "--label",
+                "fixture failure",
+                "--",
+            ])
+            .arg(peer)
+            .env("AIRLOCK_TEST_EXIT_CODE", "37"),
+        None,
+    )?;
+    assert!(!failure.status.success());
+    assert_eq!(failure.stdout, b"early boot evidence\n");
+    let log = String::from_utf8_lossy(&failure.stderr);
+    assert!(log.contains("failed") && !log.contains("completed"));
+    Ok(())
+}
+
 /// A detached pipe holder must be cleaned up even when an assertion fails.
 struct Escaped {
     // The fixture writes only its own process ID here after leaving the helper group.

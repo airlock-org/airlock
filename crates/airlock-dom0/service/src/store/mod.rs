@@ -43,6 +43,8 @@ mod host_install;
 
 mod prepared;
 
+mod progress;
+
 mod image_cli;
 
 pub(crate) mod handoff;
