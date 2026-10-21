@@ -149,7 +149,7 @@ fn artifact_manifest_rejection_preserves_existing_generations() -> Result<()> {
                 "--pool-root",
                 store.pool_text(),
                 "--domain",
-                "usr-home",
+                "usr-home-runtime-store",
                 "--generation",
                 &prior["generation"].to_string()
             ])?["selected"],
@@ -403,7 +403,7 @@ fn unsupported_pool_formats_and_invalid_extents_fail_before_mutation() -> Result
                     "--pool-root",
                     store.pool_text(),
                     "--domain",
-                    "usr-home",
+                    "usr-home-runtime-store",
                     "--generation",
                     "1"
                 ]),
@@ -495,7 +495,7 @@ fn compaction_preserves_running_segments_until_pin_release() -> Result<()> {
         "--pool-root",
         store.pool_text(),
         "--domain",
-        "usr-home",
+        "usr-home-runtime-store",
         "--generation",
         &generation,
         "--volume",
@@ -521,7 +521,7 @@ fn compaction_preserves_running_segments_until_pin_release() -> Result<()> {
         "--pool-root",
         store.pool_text(),
         "--domain",
-        "usr-home",
+        "usr-home-runtime-store",
         "--generation",
         &generation,
         "--volume",
@@ -548,7 +548,7 @@ fn compaction_preserves_running_segments_until_pin_release() -> Result<()> {
             "--pool-root",
             store.pool_text(),
             "--domain",
-            "usr-home",
+            "usr-home-runtime-store",
             "--generation",
             &generation
         ])?["selected"],
@@ -584,7 +584,7 @@ fn interrupted_or_corrupt_compaction_preserves_selected_data() -> Result<()> {
             "--pool-root",
             store.pool_text(),
             "--domain",
-            "usr-home",
+            "usr-home-runtime-store",
             "--generation",
             &receipt["generation"].to_string(),
         ])?;
@@ -703,7 +703,7 @@ fn packaged_erofs_indexes_preserve_predecessors_and_reject_corruption() -> Resul
             "--pool-root",
             store.pool_text(),
             "--domain",
-            "usr-home",
+            "usr-home-runtime-store",
             "--generation",
             &first["generation"].to_string()
         ])?["selected"],
@@ -827,7 +827,7 @@ fn recovery_distinguishes_active_objects_from_committed_unselected_generations()
     store.run(&["pool", "recover", "--pool-root", store.pool_text()])?;
     assert!(
         store.run(&["pool", "status", "--pool-root", store.pool_text()])?["domains"]
-            .get("usr-home")
+            .get("usr-home-runtime-store")
             .is_none()
     );
     let gc = store.run(&[
@@ -858,7 +858,7 @@ fn recovery_distinguishes_active_objects_from_committed_unselected_generations()
         read(
             store
                 .pool
-                .join("domains/usr-home/generations/1/manifest.json")
+                .join("domains/usr-home-runtime-store/generations/1/manifest.json")
         )?["status"],
         "prepared"
     );
@@ -875,7 +875,7 @@ fn recovery_distinguishes_active_objects_from_committed_unselected_generations()
             .as_array()
             .unwrap()
             .iter()
-            .any(|entry| entry["domain"] == "usr-home" && entry["generation"] == 1)
+            .any(|entry| entry["domain"] == "usr-home-runtime-store" && entry["generation"] == 1)
     );
     let recovered = store.run(&["pool", "recover", "--pool-root", store.pool_text()])?;
     assert_eq!(
@@ -883,9 +883,9 @@ fn recovery_distinguishes_active_objects_from_committed_unselected_generations()
         1
     );
     let status = store.run(&["pool", "status", "--pool-root", store.pool_text()])?;
-    assert!(status["domains"]["usr-home"]["current"].is_null());
+    assert!(status["domains"]["usr-home-runtime-store"]["current"].is_null());
     assert_eq!(
-        status["domains"]["usr-home"]["generations"][0]["generation"],
+        status["domains"]["usr-home-runtime-store"]["generations"][0]["generation"],
         1
     );
     Ok(())
@@ -915,7 +915,7 @@ fn interrupted_switch_and_gc_preserve_the_last_published_selection() -> Result<(
                     "--pool-root",
                     store.pool_text(),
                     "--domain",
-                    "usr-home",
+                    "usr-home-runtime-store",
                     "--generation",
                     "2",
                 ])
@@ -925,7 +925,7 @@ fn interrupted_switch_and_gc_preserve_the_last_published_selection() -> Result<(
         assert!(!output.status.success());
         store.run(&["pool", "recover", "--pool-root", store.pool_text()])?;
         assert_eq!(
-            store.run(&["pool", "status", "--pool-root", store.pool_text()])?["domains"]["usr-home"]
+            store.run(&["pool", "status", "--pool-root", store.pool_text()])?["domains"]["usr-home-runtime-store"]
                 ["current"],
             expected
         );
@@ -936,7 +936,7 @@ fn interrupted_switch_and_gc_preserve_the_last_published_selection() -> Result<(
         "--pool-root",
         store.pool_text(),
         "--domain",
-        "usr-home",
+        "usr-home-runtime-store",
         "--generation",
         "1",
     ])?;
@@ -959,9 +959,9 @@ fn interrupted_switch_and_gc_preserve_the_last_published_selection() -> Result<(
     assert!(!output.status.success());
     store.run(&["pool", "recover", "--pool-root", store.pool_text()])?;
     let status = store.run(&["pool", "status", "--pool-root", store.pool_text()])?;
-    assert_eq!(status["domains"]["usr-home"]["current"], 1);
+    assert_eq!(status["domains"]["usr-home-runtime-store"]["current"], 1);
     assert_eq!(
-        status["domains"]["usr-home"]["generations"]
+        status["domains"]["usr-home-runtime-store"]["generations"]
             .as_array()
             .unwrap()
             .len(),

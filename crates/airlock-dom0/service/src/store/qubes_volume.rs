@@ -67,10 +67,19 @@ pub(super) fn normalize(
             .and_then(Value::as_str)
             .unwrap_or("store");
         component(name)?;
-        config.insert(
-            "vid".into(),
-            json!(format!("domains/{domain}/generations/{generation}/{name}")),
-        );
+        let fallback = if matches!(name, "builder-store" | "builder-data") {
+            format!("{domain}-build-store")
+        } else {
+            super::runtime_namespace(domain.as_str())
+        };
+        let namespace = config
+            .get("domain_name")
+            .and_then(Value::as_str)
+            .unwrap_or(&fallback);
+        let vid = format!("domains/{namespace}/generations/{generation}/{name}");
+        let namespace = namespace.to_owned();
+        config.insert("vid".into(), json!(vid));
+        config.insert("domain_name".into(), json!(namespace));
     }
 
     let kind = config

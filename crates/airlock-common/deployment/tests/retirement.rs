@@ -96,7 +96,7 @@ fn reversible_requests_select_exact_vm_and_retention_commands() {
                         "--pool-root",
                         "/var/lib/airlock/closure-store",
                         "--domain",
-                        "usr-old",
+                        "usr-old-runtime-store",
                         "--generation",
                         "7",
                         "--retain",

@@ -239,6 +239,60 @@ impl fmt::Display for GuestName {
     }
 }
 
+/// Guest storage identity, separate from a Qubes VM name.
+///
+/// A validated guest name is followed by `-runtime-store` or `-build-store`.
+/// The suffix does not count toward Qubes' 31-character VM-name limit.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct StoreNamespace(
+    /// Validated guest identity and storage-purpose suffix.
+    String,
+);
+
+impl StoreNamespace {
+    /// Borrow the complete storage identity, including its purpose suffix.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for StoreNamespace {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self> {
+        let guest = value
+            .strip_suffix("-runtime-store")
+            .or_else(|| value.strip_suffix("-build-store"))
+            .ok_or(Error::InvalidField {
+                field: "store namespace",
+                expected: "a guest name followed by -runtime-store or -build-store",
+            })?;
+        let _: GuestName = guest.parse()?;
+        Ok(Self(value))
+    }
+}
+
+impl FromStr for StoreNamespace {
+    type Err = Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        Self::try_from(value.to_owned())
+    }
+}
+
+impl From<StoreNamespace> for String {
+    fn from(value: StoreNamespace) -> Self {
+        value.0
+    }
+}
+
+impl fmt::Display for StoreNamespace {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
 /// Source tree and dependency selection that together identify a build input.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -247,4 +301,38 @@ pub struct SourceIdentity {
     pub revision: GitRevision,
     /// SHA-256 of flake.lock, binding the source to its dependency versions.
     pub lock_hash: LockHash,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GuestName, StoreNamespace};
+
+    /// Purpose suffixes extend storage identities without shortening valid VM names.
+    #[test]
+    fn storage_namespaces_validate_guest_and_purpose_separately() {
+        let guest = "v".repeat(31);
+        assert!(guest.parse::<GuestName>().is_ok());
+        for suffix in ["-runtime-store", "-build-store"] {
+            let name = format!("{guest}{suffix}");
+            let namespace: StoreNamespace = name.parse().unwrap();
+            assert_eq!(namespace.as_str(), name);
+            assert_eq!(namespace.to_string(), name);
+            let encoded = serde_json::to_string(&namespace).unwrap();
+            assert_eq!(
+                serde_json::from_str::<StoreNamespace>(&encoded).unwrap(),
+                namespace
+            );
+        }
+        for name in [
+            "usr-home",
+            "usr-home-store",
+            "dom0-runtime-store",
+            "../usr-home-runtime-store",
+            "-runtime-store",
+            &format!("v{guest}-runtime-store"),
+        ] {
+            assert!(name.parse::<StoreNamespace>().is_err(), "{name}");
+            assert!(serde_json::from_value::<StoreNamespace>(serde_json::json!(name)).is_err());
+        }
+    }
 }

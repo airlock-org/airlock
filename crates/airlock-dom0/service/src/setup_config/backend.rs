@@ -342,12 +342,13 @@ fn reconcile_with(
     let mut root_hash = String::new();
     let mut resolved = None;
     if generation.is_some() || !Path::new(root).exists() {
+        let namespace = crate::store::runtime_namespace(domain);
         let mut args = vec![
             "storage",
             "pool",
             "resolve-root",
             "--domain",
-            domain,
+            &namespace,
             "--root-source",
             root,
         ];
@@ -355,6 +356,10 @@ fn reconcile_with(
             args.extend(["--generation", generation]);
         }
         let record: Value = serde_json::from_str(&session.service(&args)?)?;
+        ensure!(
+            record["domain"] == namespace,
+            "resolved root namespace mismatch"
+        );
         root_image = PathBuf::from(
             record["image"]
                 .as_str()
@@ -390,12 +395,7 @@ fn reconcile_with(
         )?;
         if let Some(authority) = authority {
             let artifact = verified::RootArtifact {
-                name: resolved
-                    .as_ref()
-                    .map_or(Ok(domain), |r| {
-                        r["domain"].as_str().context("resolved root domain missing")
-                    })?
-                    .into(),
+                name: domain.into(),
                 source: resolved
                     .as_ref()
                     .map_or(Ok(root), |r| {

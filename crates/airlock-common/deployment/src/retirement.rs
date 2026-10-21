@@ -303,13 +303,13 @@ impl<'a> RetirementRequest<'a> {
             args.is_some() ==> args.unwrap().len() == 11
                 && args.unwrap()[0]@ == "storage"@ && args.unwrap()[1]@ == "pool"@ && args.unwrap()[2]@ == "set-retention"@
                 && args.unwrap()[3]@ == "--pool-root"@ && args.unwrap()[4]@ == "/var/lib/airlock/closure-store"@
-                && args.unwrap()[5]@ == "--domain"@ && args.unwrap()[6]@ == self@.0.name@
+                && args.unwrap()[5]@ == "--domain"@ && args.unwrap()[6]@ == self@.0.name@ + "-runtime-store"@
                 && args.unwrap()[7]@ == "--generation"@ && args.unwrap()[8]@ == self@.2.generation@
                 && args.unwrap()[9]@ == "--retain"@ && args.unwrap()[10]@ == "true"@,
     {
         match self.kind {
             Kind::Retire => Some(vec!["storage".to_string(), "pool".to_string(), "set-retention".to_string(), "--pool-root".to_string(),
-                "/var/lib/airlock/closure-store".to_string(), "--domain".to_string(), self.target().to_string(),
+                "/var/lib/airlock/closure-store".to_string(), "--domain".to_string(), crate::attachment::runtime_namespace(self.target()),
                 "--generation".to_string(), self.generation().to_string(), "--retain".to_string(), "true".to_string()]),
             Kind::Restore => None,
         }

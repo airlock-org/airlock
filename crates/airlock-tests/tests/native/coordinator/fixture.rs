@@ -173,7 +173,7 @@ impl Machine {
         for version in [1, 2] {
             let backend = &declaration("usr-home", version)["backend"];
             data["generations"][format!("usr-home:{version}")] = json!({
-                "schema": "airlock.closure-store.generation-info.v1", "status": "passed", "domain": "usr-home", "generation": version,
+                "schema": "airlock.closure-store.generation-info.v1", "status": "passed", "domain": "usr-home-runtime-store", "generation": version,
                 "manifest": format!("/var/lib/airlock/pool/usr-home/{version}/manifest.json"),
                 "system": backend["system"]["source"], "root_source": backend["root"]["source"],
                 "closure_source": backend["store"]["source"], "kernel_name": "qubes-kernel", "root_artifact": artifact(),
@@ -435,6 +435,7 @@ impl Machine {
         ] {
             receipt[key] = info[key].clone();
         }
+        receipt["domain"] = json!("usr-home");
         receipt
     }
 
@@ -451,7 +452,7 @@ impl Machine {
             .unwrap()
             .push(json!("sys-gui"));
         let mut info = self.data["generations"]["usr-home:1"].clone();
-        info["domain"] = json!("sys-gui");
+        info["domain"] = json!("sys-gui-runtime-store");
         info["system"] = json!(store("sys-gui-system", 1));
         info["root_source"] = json!(format!(
             "{source}/root.img",
@@ -523,7 +524,7 @@ impl Machine {
         ] {
             info[field] = backend[source]["source"].clone();
         }
-        info["domain"] = json!("usr-new");
+        info["domain"] = json!("usr-new-runtime-store");
         info["manifest"] = json!("/var/lib/airlock/pool/usr-new/2/manifest.json");
         info["approval"]["source"] = info["closure_source"].clone();
         self.data["generations"]["usr-new:2"] = info;

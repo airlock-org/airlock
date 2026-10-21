@@ -25,7 +25,10 @@ pub(crate) fn prepared(
             NixValue::function(|entry| {
                 nix_record! {
                     "name": name,
-                    "domain": entry.clone().attr_or("preparedDomainName", "sys-gui"),
+                    "domain": nix_text!(
+                        "{domain}-runtime-store",
+                        domain = entry.clone().attr_or("preparedDomainName", "sys-gui"),
+                    ),
                     "system": entry
                         .clone()
                         .select("configuration.config.system.build.toplevel")

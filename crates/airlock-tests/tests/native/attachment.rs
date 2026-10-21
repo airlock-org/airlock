@@ -49,7 +49,7 @@ impl Attachment {
                 .arg(&store.pool)
                 .args([
                     "--domain",
-                    "usr-home",
+                    "usr-home-runtime-store",
                     "--system",
                     &store.system,
                     "--closure-source",
@@ -337,7 +337,10 @@ fn attachment_rejects_invalid_state_before_qubes_mutation() -> Result<()> {
 fn attachment_failure_restores_daemon_and_preserves_selected_pool() -> Result<()> {
     let mut attachment = Attachment::new()?;
     attachment.daemon("active", false, false)?;
-    let current = attachment.store.pool.join("domains/usr-home/current");
+    let current = attachment
+        .store
+        .pool
+        .join("domains/usr-home-runtime-store/current");
     let selected = fs::read_link(&current)?;
     let output = common::run(
         attachment
@@ -455,7 +458,10 @@ fn attachment_checks_preservation_before_selection_and_reconciles_lost_reply() -
         "AIRLOCK_TEST_STORAGE_LOSE_REPLY",
     ] {
         let attachment = Attachment::new()?;
-        let current = attachment.store.pool.join("domains/usr-home/current");
+        let current = attachment
+            .store
+            .pool
+            .join("domains/usr-home-runtime-store/current");
         let selected = fs::read_link(&current)?;
         let result = common::run(attachment.command(&[])?.env(fault, "1"), None)?;
         assert!(!result.status.success());

@@ -164,13 +164,12 @@ pub(super) fn run(command: Request) -> Result<Value> {
                 descriptor["schema"] == "airlock.closure-store.prepared.v1",
                 "unsupported prepared descriptor"
             );
-            for key in [
-                "domain",
-                "pool_root",
-                "system",
-                "root_source",
-                "kernel_name",
-            ] {
+            let namespace = super::runtime_namespace(&text(&request, "domain")?);
+            ensure!(
+                descriptor["domain"] == namespace,
+                "prepared domain mismatch"
+            );
+            for key in ["pool_root", "system", "root_source", "kernel_name"] {
                 ensure!(descriptor[key] == request[key], "prepared {key} mismatch");
             }
             let physical = PathBuf::from(text(&request, "physical_pool")?);
@@ -178,7 +177,7 @@ pub(super) fn run(command: Request) -> Result<Value> {
             let result = generations::load(
                 &physical,
                 &logical,
-                &text(&request, "domain")?,
+                &namespace,
                 number(&descriptor, "generation")?,
             )?;
             for key in ["system", "root_source", "kernel_name", "closure_hash"] {

@@ -55,7 +55,7 @@ fn prepared_descriptor_children_decode_across_runtime_records() {
         let backend = &topology.domains[&"sys-gui".parse().unwrap()].backend;
         let info: GenerationInfo = serde_json::from_value(json!({
             "schema":"airlock.closure-store.generation-info.v1", "status":"passed",
-            "domain":"sys-gui", "generation":1, "system":backend.system.source,
+            "domain":"sys-gui-runtime-store", "generation":1, "system":backend.system.source,
             "root_source":backend.root.source, "kernel_name":backend.kernel.name,
             "closure_source":source, "store":{
                 "mode":"shared-closure", "mountpoint":backend.store.mountpoint,

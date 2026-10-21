@@ -138,8 +138,8 @@ fn qubes_installation_guard_uses_native_fresh_state() -> Result<()> {
     });
     let volumes = ["store", "store-data"].map(|name| {
         let mut definition = json!({
-            "name":name, "pool":"airlock-closure", "vid":format!("domains/usr-home/generations/1/{name}"),
-            "domain_name":"usr-home", "generation":"1", "closure_hash":"a".repeat(64),
+            "name":name, "pool":"airlock-closure", "vid":format!("domains/usr-home-runtime-store/generations/1/{name}"),
+            "domain_name":"usr-home-runtime-store", "generation":"1", "closure_hash":"a".repeat(64),
             "manifest_path":"/pool/manifest.json", "rw":false, "snap_on_start":false,
             "save_on_stop":true, "source":null, "revisions_to_keep":0, "size":4096,
         });
@@ -442,7 +442,7 @@ fn image_plan_and_reloaded_snapshot_are_checked() -> Result<()> {
             b"kernel"
         );
         assert_eq!(
-            fs::read_link(output.join("pool-selections/domains/usr-home/current"))?,
+            fs::read_link(output.join("pool-selections/domains/usr-home-runtime-store/current"))?,
             Path::new("generations/7")
         );
         assert!(

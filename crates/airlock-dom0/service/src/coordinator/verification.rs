@@ -41,7 +41,8 @@ impl Coordinator {
         let info = self.generation(name, generation)?;
         let b = &r.topology.domains[name].backend;
         ensure!(
-            info.domain == *name && info.generation == generation,
+            info.domain.as_str() == crate::store::runtime_namespace(name.as_str())
+                && info.generation == generation,
             "{name}: generation identity differs"
         );
         ensure!(

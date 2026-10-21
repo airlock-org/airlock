@@ -45,7 +45,7 @@ impl Coordinator {
         let value: Value = self.store().describe(name, generation)?;
         let info: GenerationInfo = serde_json::from_value(value.clone())?;
         ensure!(
-            info.domain == *name
+            info.domain.as_str() == crate::store::runtime_namespace(name.as_str())
                 && info.generation == generation
                 && info.status == CheckStatus::Passed,
             "generation identity differs"
@@ -70,8 +70,8 @@ impl Coordinator {
         let revision: GitRevision = serde_json::from_value(receipt["source_revision"].clone())?;
         let lock_hash: LockHash = serde_json::from_value(receipt["lock_hash"].clone())?;
         let actual = self.generation_value(&name, generation)?;
+        // The receipt addresses the VM; generation_value binds its runtime namespace.
         for key in [
-            "domain",
             "generation",
             "manifest",
             "system",

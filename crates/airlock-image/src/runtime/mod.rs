@@ -138,7 +138,10 @@ pub(crate) fn main() -> Result<()> {
             &json!({"snapshot":observed["snapshot"],"volumes":vm.volumes,"source":vm.source}),
         )?;
 
-        let selection = args.output.join("pool-selections/domains").join(&vm.name);
+        let selection = args
+            .output
+            .join("pool-selections/domains")
+            .join(format!("{name}-runtime-store", name = vm.name));
         fs::create_dir_all(&selection)?;
         std::os::unix::fs::symlink(
             format!("generations/{}", vm.features["airlock-store-generation"]),

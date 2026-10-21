@@ -167,7 +167,7 @@ pub struct Definition {
     pub slot: Slot,
     /// Pool containing the immutable view.
     pub pool: String,
-    /// Generation namespace; builder bases have their own namespace.
+    /// Storage namespace with a runtime-store or build-store suffix, separate from the VM name.
     pub domain: String,
     /// Positive generation selected for this view.
     pub generation: u64,
@@ -185,6 +185,15 @@ pub struct Definition {
     pub persistent: bool,
     /// Immutable views never request Qubes snapshot derivation.
     pub snap_on_start: bool,
+}
+
+/// Name the runtime storage namespace separately from its consuming VM.
+pub fn runtime_namespace(target: &str) -> (out: String)
+    ensures out@ == target@ + "-runtime-store"@,
+{
+    let mut namespace = target.to_string();
+    namespace.push_str("-runtime-store");
+    namespace
 }
 
 /// Meaning of projecting one committed software generation into its two volume roles.
@@ -214,10 +223,10 @@ impl StorePair {
     /// Refuse empty identities, invalid sizes and a generation belonging to another VM.
     pub fn new(target: &str, pool: String, generation: Generation) -> (out: Option<Self>)
         ensures out.is_some() ==> out.unwrap()@ == (generation, pool@)
-            && generation.domain@ == target@ && target@.len() > 0 && pool@.len() > 0
+            && generation.domain@ == target@ + "-runtime-store"@ && target@.len() > 0 && pool@.len() > 0
             && generation.number > 0 && generation.metadata_size > 0 && generation.data_size > 0,
     {
-        if target.is_empty() || pool.is_empty() || generation.domain.as_str() != target
+        if target.is_empty() || pool.is_empty() || generation.domain != runtime_namespace(target)
             || generation.number == 0 || generation.metadata_size == 0 || generation.data_size == 0
             || generation.closure_hash.is_empty() || generation.manifest.is_empty()
             || generation.metadata.is_empty() || generation.data.is_empty() { return None; }
@@ -250,7 +259,7 @@ pub open spec fn pair(target: Seq<char>, defs: Seq<Definition>) -> bool {
         && defs[0].closure_hash@.len() > 0 && defs[0].manifest@.len() > 0
         && (forall|i: int| 0 <= i < defs.len() ==> !defs[i].writable
             && defs[i].persistent && !defs[i].snap_on_start && #[trigger] defs[i].size > 0 && defs[i].path@.len() > 0)
-        && ((defs[0].slot is Store && defs[1].slot is StoreData && defs[0].domain@ == target)
+        && ((defs[0].slot is Store && defs[1].slot is StoreData && defs[0].domain@ == target + "-runtime-store"@)
             || (defs[0].slot is BuilderStore && defs[1].slot is BuilderData
                 && (target == "usr-assistant"@ || target == "sys-ctrl"@)
                 && defs[0].domain@ == target + "-build-store"@))
@@ -276,7 +285,7 @@ fn valid_pair(target: &str, defs: &[Definition]) -> (yes: bool)
         assert(j == 0 || j == 1);
     }
     match (&a.slot, &b.slot) {
-        (Slot::Store, Slot::StoreData) => a.domain.as_str() == target,
+        (Slot::Store, Slot::StoreData) => a.domain == runtime_namespace(target),
         (Slot::BuilderStore, Slot::BuilderData) => {
             if target != "usr-assistant" && target != "sys-ctrl" { return false; }
             let mut namespace = target.to_string();

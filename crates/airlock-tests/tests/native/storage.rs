@@ -58,7 +58,7 @@ fn admission_selection_running_pins_and_gc() -> Result<()> {
             "--pool-root",
             store.pool_text(),
             "--domain",
-            "usr-home",
+            "usr-home-runtime-store",
             "--generation",
             "1"
         ])?["selected"],
@@ -71,7 +71,7 @@ fn admission_selection_running_pins_and_gc() -> Result<()> {
         "--pool-root",
         store.pool_text(),
         "--domain",
-        "usr-home",
+        "usr-home-runtime-store",
         "--generation",
         "2",
         "--volume",
@@ -89,7 +89,7 @@ fn admission_selection_running_pins_and_gc() -> Result<()> {
         collected["retained_generations"]
             .as_array()
             .unwrap()
-            .contains(&json!({"domain":"usr-home","generation":2}))
+            .contains(&json!({"domain":"usr-home-runtime-store","generation":2}))
     );
     store.run(&[
         "pool",
@@ -97,7 +97,7 @@ fn admission_selection_running_pins_and_gc() -> Result<()> {
         "--pool-root",
         store.pool_text(),
         "--domain",
-        "usr-home",
+        "usr-home-runtime-store",
         "--generation",
         "2",
         "--volume",
@@ -112,7 +112,7 @@ fn admission_selection_running_pins_and_gc() -> Result<()> {
             "--keep-generations",
             "0"
         ])?["removed_generations"],
-        json!([{"domain":"usr-home","generation":2}])
+        json!([{"domain":"usr-home-runtime-store","generation":2}])
     );
     store.run(&[
         "pool",
@@ -120,7 +120,7 @@ fn admission_selection_running_pins_and_gc() -> Result<()> {
         "--pool-root",
         store.pool_text(),
         "--domain",
-        "usr-home",
+        "usr-home-runtime-store",
         "--generation",
         "1",
     ])?;
@@ -177,7 +177,7 @@ fn interrupted_admissions_preserve_the_selected_committed_view() -> Result<()> {
                 "--pool-root",
                 store.pool_text(),
                 "--domain",
-                "usr-home",
+                "usr-home-runtime-store",
                 "--generation",
                 "1"
             ])?["selected"],
@@ -205,7 +205,15 @@ fn full_artifact_is_retained_inactive() -> Result<()> {
     assert_eq!(receipt["retained"], true);
     assert_eq!(receipt["activated"], false);
     assert_eq!(receipt["objects_admitted"], 1);
-    assert!(!store.pool.join("domains/usr-home/current").exists());
+    assert_eq!(receipt["domain"], "usr-home");
+    let manifest = read(receipt["manifest"].as_str().unwrap())?;
+    assert_eq!(manifest["domain"], "usr-home-runtime-store");
+    assert!(
+        !store
+            .pool
+            .join("domains/usr-home-runtime-store/current")
+            .exists()
+    );
     Ok(())
 }
 
@@ -330,7 +338,7 @@ fn missing_map_cannot_create_an_empty_pin() -> Result<()> {
             "--pool-root",
             store.pool_text(),
             "--domain",
-            "usr-home",
+            "usr-home-runtime-store",
             "--generation",
             "1",
             "--volume",
@@ -367,7 +375,7 @@ fn transaction_must_belong_to_its_generation() -> Result<()> {
                 "--pool-root",
                 store.pool_text(),
                 "--domain",
-                "usr-home",
+                "usr-home-runtime-store",
                 "--generation",
                 "1",
             ]),
@@ -411,7 +419,12 @@ fn discarded_generation_numbers_are_never_reissued() -> Result<()> {
             .take(if cleanup == "gc" { 6 } else { 4 })
             .collect::<Vec<_>>(),
         )?;
-        assert!(!store.pool.join("domains/usr-home/generations/2").exists());
+        assert!(
+            !store
+                .pool
+                .join("domains/usr-home-runtime-store/generations/2")
+                .exists()
+        );
         assert!(store.admit(true)?["generation"].as_u64().unwrap() > 2);
     }
     Ok(())
@@ -484,7 +497,12 @@ fn damaged_selected_generation_is_kept() -> Result<()> {
         .success()
     );
     assert_eq!(read(path)?["schema"], "damaged");
-    assert!(store.pool.join("domains/usr-home/current").is_symlink());
+    assert!(
+        store
+            .pool
+            .join("domains/usr-home-runtime-store/current")
+            .is_symlink()
+    );
     Ok(())
 }
 
@@ -631,7 +649,7 @@ fn bad_current_pointer_stops_recovery() -> Result<()> {
     ] {
         let store = Store::new()?;
         let receipt = store.admit(true)?;
-        let pointer = store.pool.join("domains/usr-home/current");
+        let pointer = store.pool.join("domains/usr-home-runtime-store/current");
         fs::remove_file(&pointer)?;
         if let Some(target) = target {
             std::os::unix::fs::symlink(target, pointer)?;

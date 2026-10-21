@@ -393,7 +393,7 @@ fn images(session: &mut Session, domain: &str, boot: &Boot) -> Result<()> {
             "pool",
             "attach-blob-view",
             "--domain",
-            domain,
+            &format!("{domain}-runtime-store"),
             "--generation",
             &generation,
         ],
@@ -459,7 +459,7 @@ fn images(session: &mut Session, domain: &str, boot: &Boot) -> Result<()> {
             "pool",
             "detach-blob-view",
             "--domain",
-            domain,
+            &format!("{domain}-runtime-store"),
             "--generation",
             &generation,
         ],
@@ -697,9 +697,10 @@ fn pool(session: &mut Session, args: &[&str], output: &str) -> Result<Value> {
 /// Check exact generation membership in one pool report field.
 fn contains(value: &Value, key: &str, domain: &str, generation: u64) -> bool {
     value[key].as_array().is_some_and(|entries| {
-        entries
-            .iter()
-            .any(|entry| entry["domain"] == domain && entry["generation"] == generation)
+        entries.iter().any(|entry| {
+            entry["domain"] == format!("{domain}-runtime-store")
+                && entry["generation"] == generation
+        })
     })
 }
 
@@ -1230,11 +1231,11 @@ pub(super) fn execute() -> Result<()> {
             ensure!(
                 running["running"]
                     .as_array()
-                    .is_some_and(
-                        |entries| entries.iter().any(|entry| entry["domain"] == domain
+                    .is_some_and(|entries| entries
+                        .iter()
+                        .any(|entry| entry["domain"] == format!("{domain}-runtime-store")
                             && entry["generation"] == second.generation
-                            && entry["volume"] == volume)
-                    ),
+                            && entry["volume"] == volume)),
                 "running references omit {volume}"
             );
         }
@@ -1263,7 +1264,7 @@ pub(super) fn execute() -> Result<()> {
             &[
                 "set-retention",
                 "--domain",
-                &domain,
+                &format!("{domain}-runtime-store"),
                 "--generation",
                 &second.generation.to_string(),
                 "--retain",

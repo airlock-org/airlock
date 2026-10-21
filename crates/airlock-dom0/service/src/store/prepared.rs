@@ -5,7 +5,7 @@ use super::{
     builder,
     fs::*,
     generations::{self, Admission},
-    host, records, segments,
+    host, records, runtime_namespace, segments,
 };
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
@@ -322,7 +322,6 @@ pub(super) fn verify_prepared(request: &Value) -> Result<Value> {
     );
     for (field, expected) in [
         ("pool_root", "pool_root"),
-        ("domain", "domain"),
         ("system", "system"),
         ("root_source", "root"),
         ("kernel_name", "kernel"),
@@ -332,6 +331,11 @@ pub(super) fn verify_prepared(request: &Value) -> Result<Value> {
             "prepared {field} mismatch"
         );
     }
+    let namespace = runtime_namespace(&text(request, "domain")?);
+    ensure!(
+        descriptor["domain"] == namespace,
+        "prepared domain mismatch"
+    );
     let generation = number(&descriptor, "generation")?;
     ensure!(generation > 0, "invalid prepared generation");
     let paths = store_paths(&artifact, &text(request, "system")?)?;
@@ -345,7 +349,7 @@ pub(super) fn verify_prepared(request: &Value) -> Result<Value> {
         descriptor["closure_hash"] == closure,
         "prepared closure mismatch"
     );
-    let manifest_path = records::manifest_path(&root, &text(request, "domain")?, generation)?;
+    let manifest_path = records::manifest_path(&root, &namespace, generation)?;
     ensure!(
         descriptor["files"]
             .get(
@@ -358,7 +362,7 @@ pub(super) fn verify_prepared(request: &Value) -> Result<Value> {
         "prepared manifest checksum missing"
     );
     verify_files(&root, &descriptor["files"], true)?;
-    let manifest = records::generation(&root, &text(request, "domain")?, generation)?;
+    let manifest = records::generation(&root, &namespace, generation)?;
     records::root_image(&root, &manifest)?;
     let store = &manifest["store"];
     ensure!(

@@ -139,7 +139,7 @@ fn namespace_image_handoff_and_first_boot() -> Result<()> {
         .join("dddddddddddddddddddddddddddddddd-root/root.img");
     fs::create_dir_all(root_image.parent().unwrap())?;
     fs::copy(&store.root, &root_image)?;
-    let specs = json!([{"name":"sys-gui", "domain":"sys-gui", "system":store.system,
+    let specs = json!([{"name":"sys-gui", "domain":"sys-gui-runtime-store", "system":store.system,
         "root_source":root_source, "kernel_name":"test", "closure_source":store.closure,
         "physical_store_root":store.physical}]);
     let specs_path = store.temporary.path().join("specs.json");
@@ -394,7 +394,7 @@ fn namespace_image_handoff_and_first_boot() -> Result<()> {
     assert_eq!(setup.peers.calls()?.len(), calls);
     fs::write(prepared, &original)?;
 
-    let manifest = pool.join("domains/sys-gui/generations/1/manifest.json");
+    let manifest = pool.join("domains/sys-gui-runtime-store/generations/1/manifest.json");
     let committed = fs::read(&manifest)?;
     fs::write(&manifest, b"corrupted")?;
     assert!(!common::run(&mut boot()?, None)?.status.success());

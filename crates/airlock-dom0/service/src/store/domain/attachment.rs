@@ -6,7 +6,7 @@ use super::{Snapshot, Target, generations, snapshot::Volume};
 use airlock_deployment_core::attachment::{
     self, AttachmentPlan, Definition, Generation, Slot, StorePair, WritablePair,
 };
-use airlock_nix_core::identity::GuestName;
+use airlock_nix_core::identity::{GuestName, StoreNamespace};
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -25,7 +25,7 @@ impl CommittedGeneration {
             receipt: generations::load(
                 &target.pool_root,
                 &target.pool_root,
-                target.domain.as_str(),
+                &super::super::runtime_namespace(target.domain.as_str()),
                 generation,
             )?,
         })
@@ -135,8 +135,8 @@ struct WireDefinition {
     source: Option<Value>,
     // Qubes-managed revisions are unsupported for these immutable views.
     revisions_to_keep: u64,
-    // Generation namespace, distinct from the consuming VM for builder bases.
-    domain_name: GuestName,
+    // Storage namespace, distinct from the consuming VM for both runtime and build views.
+    domain_name: StoreNamespace,
     // Canonical positive decimal generation as persisted by Qubes.
     generation: String,
     // Closure identity common to the complete pair.

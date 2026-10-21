@@ -170,6 +170,7 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
                 let generation = staged[name].clone();
                 ensure!(!generation.is_null(), "missing staged fixture generation");
                 let mut receipt = data["generations"][format!("{name}:{generation}")].clone();
+                receipt["domain"] = json!(name);
                 data["selected"][name] = generation;
                 data["store_install_count"] =
                     json!(data["store_install_count"].as_u64().unwrap_or(0) + 1);
@@ -192,7 +193,10 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
         },
         "storage-pool" => match arguments.first().map(String::as_str) {
             Some("describe-generation") => {
-                let name = option(arguments, "--domain")?;
+                let namespace = option(arguments, "--domain")?;
+                let name = namespace
+                    .strip_suffix("-runtime-store")
+                    .context("runtime namespace required")?;
                 let generation: u64 = option(arguments, "--generation")?.parse()?;
                 let mut info = data["generations"][format!("{name}:{generation}")].clone();
                 info["selected"] = json!(data["selected"][name] == generation);

@@ -2,7 +2,7 @@
 //! Record loading, filesystem observations and JSON projection remain adapter duties;
 //! the equality and complete-set decision executes the deployment core's Verus code.
 
-use super::{fs::*, generations, prepared};
+use super::{fs::*, generations, prepared, runtime_namespace};
 use crate::model::{Backend, GenerationId, Topology};
 use airlock_deployment_core::boot::{Handoff, Selection};
 use airlock_machine_core::boot::BootInputs;
@@ -38,7 +38,10 @@ pub(crate) fn expected(
 /// Decode a loaded or described committed generation using its actual identity fields.
 pub(crate) fn observed(value: &Value, store: &Value, source: &str) -> Result<Selection> {
     Ok(Selection {
-        domain: text(value, "domain")?,
+        domain: text(value, "domain")?
+            .strip_suffix("-runtime-store")
+            .context("boot generation is not a runtime storage view")?
+            .to_owned(),
         generation: number(value, "generation")?,
         system: text(value, "system")?,
         root: text(value, "root_source")?,
@@ -97,7 +100,7 @@ pub(super) fn image(topology: Value, physical: &Path, logical: &Path) -> Result<
                 .with_context(|| format!("read prepared descriptor for {name}"))?;
         ensure!(
             descriptor["schema"] == "airlock.closure-store.prepared.v1"
-                && descriptor["domain"] == name.as_str()
+                && descriptor["domain"] == runtime_namespace(name.as_str())
                 && descriptor["pool_root"].as_str() == logical.to_str(),
             "prepared descriptor binding mismatch: {name}"
         );
@@ -105,7 +108,7 @@ pub(super) fn image(topology: Value, physical: &Path, logical: &Path) -> Result<
         let loaded = generations::load(
             physical,
             logical,
-            name.as_str(),
+            &runtime_namespace(name.as_str()),
             generation.to_string().parse()?,
         )?;
         for field in ["system", "root_source", "kernel_name", "closure_hash"] {
@@ -116,7 +119,7 @@ pub(super) fn image(topology: Value, physical: &Path, logical: &Path) -> Result<
         }
         let manifest = super::records::manifest_path(
             physical,
-            name.as_str(),
+            &runtime_namespace(name.as_str()),
             generation.to_string().parse()?,
         )?;
         let key = manifest

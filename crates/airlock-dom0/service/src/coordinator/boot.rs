@@ -146,7 +146,8 @@ impl Coordinator {
                                 )?;
                                 ensure!(
                                     descriptor["schema"] == "airlock.closure-store.prepared.v1"
-                                        && descriptor["domain"] == name.as_str(),
+                                        && descriptor["domain"]
+                                            == crate::store::runtime_namespace(name.as_str()),
                                     "invalid legacy image descriptor: {name}"
                                 );
                                 let generation: GenerationId =

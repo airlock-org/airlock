@@ -39,7 +39,7 @@ fn properties(py: Python<'_>, request: &Value) -> Result<Value> {
         .getattr("object")?
         .call_method1("__new__", (module.getattr("ClosureVolume")?,))?;
     let mut fields = json!({
-        "domain_name":"usr-home", "generation":"3", "name":"store-data", "vid":"test-volume",
+        "domain_name":"usr-home-runtime-store", "generation":"3", "name":"store-data", "vid":"test-volume",
         "path":null, "view_kind":"erofs-blob-map", "blob_map_path":request["map"],
         "blob_logical_size":4096, "manifest_path":null, "_size":4096,
     });

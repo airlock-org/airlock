@@ -52,7 +52,7 @@ impl Seed {
                 format!("{common}\n{system}\n", common = store.system),
             )?;
             specs.push(
-                json!({"name": format!("variant-{index}"), "domain": "sys-gui", "system": system,
+                json!({"name": format!("variant-{index}"), "domain": "sys-gui-runtime-store", "system": system,
                 "root_source": root_source, "kernel_name": "test-kernel", "closure_source": closure,
                 "physical_store_root": store.physical}),
             );
@@ -299,7 +299,7 @@ fn prepared_image_rejects_corruption_at_the_correct_boundary() -> Result<()> {
             _ => {
                 let path = seed
                     .installed
-                    .join("domains/sys-gui/generations/1/manifest.json");
+                    .join("domains/sys-gui-runtime-store/generations/1/manifest.json");
                 let mut manifest: Value = serde_json::from_slice(&fs::read(&path)?)?;
                 manifest["transaction"] = json!("different-build-transaction");
                 fs::write(path, serde_json::to_vec(&manifest)?)?;
@@ -533,7 +533,7 @@ fn external_tool_packaged_runtime_uses_upstream_qubes_offline_api() -> Result<()
         )?
         .checked()?;
         let mut spec = seed.specs[0].clone();
-        spec["domain"] = json!(role);
+        spec["domain"] = json!(format!("{role}-runtime-store"));
         spec["root_source"] = json!(image);
         let mut selected = vec![spec.clone()];
         if role == "sys-ctrl" {
@@ -629,7 +629,9 @@ fn external_tool_packaged_runtime_uses_upstream_qubes_offline_api() -> Result<()
             32 * 1024 * 1024
         );
         assert_eq!(
-            fs::read_link(output.join(format!("pool-selections/domains/{role}/current")))?,
+            fs::read_link(output.join(format!(
+                "pool-selections/domains/{role}-runtime-store/current"
+            )))?,
             Path::new("generations/1")
         );
         let again = common::run(

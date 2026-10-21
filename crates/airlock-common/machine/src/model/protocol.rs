@@ -5,6 +5,7 @@ use super::{GenerationId, ReleasePath, StoreArtifact, StoreFile, StorePath};
 use airlock_nix_core::{
     identity::{
         BaselineFingerprint, GitRevision, GuestName, LockHash, ReviewFingerprint, ReviewId,
+        StoreNamespace,
     },
     review::Scope,
 };
@@ -262,8 +263,8 @@ pub struct GenerationInfo {
     pub _schema: GenerationSchema,
     /// Whether the storage helper successfully inspected this generation.
     pub status: CheckStatus,
-    /// Guest VM to which this stored generation or observation belongs.
-    pub domain: GuestName,
+    /// Runtime storage namespace, named after the consuming VM with a `-runtime-store` suffix.
+    pub domain: StoreNamespace,
     /// Nonzero storage generation number identifying the admitted guest system.
     pub generation: GenerationId,
     /// NixOS system closure selected for the guest to boot.

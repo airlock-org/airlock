@@ -414,6 +414,7 @@ fn reuse(root: &Path, probe: &Value, domain: &str, approved_by: &str) -> Result<
     ensure!(probe["domain"] == domain, "artifact target mismatch");
     artifact::validate_store_path(&text(probe, "system")?)?;
     artifact::validate_provenance(&text(probe, "source_revision")?, &text(probe, "lock_hash")?)?;
+    let namespace = super::runtime_namespace(domain);
     let mut paths = records::manifests(root)?;
     paths.sort_by_key(|p| {
         p.parent()
@@ -425,7 +426,7 @@ fn reuse(root: &Path, probe: &Value, domain: &str, approved_by: &str) -> Result<
     for path in paths.into_iter().rev() {
         let manifest: Value = read(&path)?;
         if !records::committed(root, &manifest)?
-            || manifest["domain"] != domain
+            || manifest["domain"] != namespace
             || manifest["system"] != probe["system"]
             || manifest["store"]["source"] != probe["closure_source"]
             || manifest["root"]["source"] != probe["root_source"]
@@ -455,7 +456,7 @@ fn reuse(root: &Path, probe: &Value, domain: &str, approved_by: &str) -> Result<
             "domain": domain,
             "generation": manifest["generation"],
             "previous_generation": manifest["previous_generation"],
-            "current_generation": records::current(root,domain)?,
+            "current_generation": records::current(root,&namespace)?,
             "activated": false,
             "retained": true,
             "manifest": path,
@@ -549,12 +550,13 @@ fn admit(
             return Ok(receipt);
         }
     }
-    let generation = records::next(root, domain)?;
-    let previous = records::current(root, domain)?;
+    let namespace = super::runtime_namespace(domain);
+    let generation = records::next(root, &namespace)?;
+    let previous = records::current(root, &namespace)?;
     let system = text(manifest, "system")?;
     let tx = transaction(&format!("artifact:{domain}:{generation}:{system}"))?;
     let tx_path = root.join("transactions").join(format!("{tx}.json"));
-    let path = records::manifest_path(root, domain, generation)?;
+    let path = records::manifest_path(root, &namespace, generation)?;
     let directory = path.parent().context("missing generation directory")?;
     mkdir_all(
         directory
@@ -564,7 +566,7 @@ fn admit(
     mkdir(directory)?;
     write(
         &tx_path,
-        &json!({"schema":"airlock.closure-store.transaction.v1","id":tx,"domain":domain,"generation":generation,"status":"preparing","kind":"transferred-artifact","created_at":now()}),
+        &json!({"schema":"airlock.closure-store.transaction.v1","id":tx,"domain":namespace,"generation":generation,"status":"preparing","kind":"transferred-artifact","created_at":now()}),
         0o644,
     )?;
     let publish = (|| -> Result<Value> {
@@ -631,7 +633,7 @@ fn admit(
         let mut generation_manifest = json!({
             "schema": GENERATION_SCHEMA,
             "status": "prepared",
-            "domain": domain,
+            "domain": namespace,
             "generation": generation,
             "previous_generation": previous,
             "created_at": now(),
@@ -649,7 +651,7 @@ fn admit(
         write(&path, &generation_manifest, 0o644)?;
         write(
             &tx_path,
-            &json!({"schema":"airlock.closure-store.transaction.v1","id":tx,"domain":domain,"generation":generation,"status":"committed","activated":false,"committed_at":now(),"manifest":path}),
+            &json!({"schema":"airlock.closure-store.transaction.v1","id":tx,"domain":namespace,"generation":generation,"status":"committed","activated":false,"committed_at":now(),"manifest":path}),
             0o644,
         )?;
         generation_manifest["status"] = json!("committed");
@@ -696,7 +698,7 @@ fn admit(
         if read::<Value>(&tx_path)?["status"] != "committed" {
             write(
                 &tx_path,
-                &json!({"schema":"airlock.closure-store.transaction.v1","id":tx,"domain":domain,"generation":generation,"status":"aborted","aborted_at":now()}),
+                &json!({"schema":"airlock.closure-store.transaction.v1","id":tx,"domain":namespace,"generation":generation,"status":"aborted","aborted_at":now()}),
                 0o644,
             )?;
             remove(directory)?;

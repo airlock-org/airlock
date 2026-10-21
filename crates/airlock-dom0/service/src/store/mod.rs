@@ -63,6 +63,8 @@ mod records;
 
 mod views;
 
+pub(crate) use airlock_deployment_core::attachment::runtime_namespace;
+
 pub(crate) use cli::{Command, execute};
 
 use crate::{
@@ -174,7 +176,7 @@ impl<'a> Store<'a> {
         generation: GenerationId,
     ) -> Result<Option<Value>> {
         let path = Path::new("/var/lib/airlock/closure-store/domains")
-            .join(domain.as_str())
+            .join(runtime_namespace(domain.as_str()))
             .join("generations")
             .join(generation.to_string())
             .join("manifest.json");
@@ -215,7 +217,7 @@ impl<'a> Store<'a> {
         self.pool(&[
             "describe-generation",
             "--domain",
-            domain.as_str(),
+            &runtime_namespace(domain.as_str()),
             "--generation",
             &generation.to_string(),
         ])
@@ -231,7 +233,7 @@ impl<'a> Store<'a> {
         self.pool(&[
             "find-generation",
             "--domain",
-            domain.as_str(),
+            &runtime_namespace(domain.as_str()),
             "--system",
             backend.system.source.as_str(),
             "--closure-source",
@@ -261,7 +263,7 @@ impl<'a> Store<'a> {
                 "--pool-root",
                 "/var/lib/airlock/closure-store",
                 "--domain",
-                domain.as_str(),
+                &runtime_namespace(domain.as_str()),
                 "--generation",
                 &generation.to_string(),
                 "--retain",
@@ -283,7 +285,7 @@ impl<'a> Store<'a> {
             &[
                 "retire-generation",
                 "--domain",
-                domain.as_str(),
+                &runtime_namespace(domain.as_str()),
                 "--generation",
                 &generation.to_string(),
             ],

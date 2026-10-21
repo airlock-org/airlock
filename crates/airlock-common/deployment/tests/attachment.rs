@@ -11,10 +11,10 @@ use airlock_deployment_core::{
 /// One namespace-bound immutable generation with distinct metadata and external data.
 fn generation() -> Generation {
     Generation {
-        domain: "usr-home".into(),
+        domain: "usr-home-runtime-store".into(),
         number: 7,
         closure_hash: "a".repeat(64),
-        manifest: "/pool/domains/usr-home/generations/7/manifest.json".into(),
+        manifest: "/pool/domains/usr-home-runtime-store/generations/7/manifest.json".into(),
         metadata: "/pool/views/metadata.img".into(),
         metadata_size: 4096,
         data: "/pool/views/map.json".into(),
@@ -71,7 +71,7 @@ fn projection_retains_exact_identity_and_distinct_read_only_roles() {
     assert_eq!(projected[0].size, 4096);
     assert_eq!(projected[1].size, 8192);
     for definition in &projected {
-        assert_eq!(definition.domain, "usr-home");
+        assert_eq!(definition.domain, "usr-home-runtime-store");
         assert_eq!(definition.generation, 7);
         assert!(!definition.writable && definition.persistent && !definition.snap_on_start);
     }
@@ -81,6 +81,18 @@ fn projection_retains_exact_identity_and_distinct_read_only_roles() {
 #[test]
 fn projection_rejects_another_namespace_or_invalid_generation() {
     assert!(StorePair::new("other-vm", "pool".into(), generation()).is_none());
+    // A VM name or build-store namespace cannot stand in for its runtime view.
+    for namespace in ["usr-home", "usr-home-build-store"] {
+        let mut invalid = generation();
+        invalid.domain = namespace.into();
+        assert!(StorePair::new("usr-home", "pool".into(), invalid).is_none());
+        let mut invalid = definitions();
+        for definition in &mut invalid {
+            definition.domain = namespace.into();
+        }
+        assert!(plan(invalid, "Halted").is_none());
+    }
+
     let mut invalid = generation();
     invalid.number = 0;
     assert!(StorePair::new("usr-home", "pool".into(), invalid).is_none());

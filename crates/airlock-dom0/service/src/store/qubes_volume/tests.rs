@@ -14,8 +14,9 @@ fn normalization_preserves_immutable_metadata_without_transient_devices() {
     let result = normalize(Some(&domain), config.clone(), false).unwrap();
     assert_eq!(
         result["config"]["vid"],
-        "domains/usr-home/generations/3/store-data"
+        "domains/usr-home-runtime-store/generations/3/store-data"
     );
+    assert_eq!(result["fields"]["domain_name"], "usr-home-runtime-store");
     assert_eq!(result["config"]["save_on_stop"], true);
     assert!(result["fields"]["view_path"].is_null());
     assert!(result["persisted"].get("view_path").is_none());

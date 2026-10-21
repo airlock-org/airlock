@@ -12,7 +12,7 @@ use super::{
     domain_cli::{Ensure, Target},
     fs::*,
     generations::{self, Admission},
-    pool_cli, prepared, records,
+    pool_cli, prepared, records, runtime_namespace,
 };
 use airlock_nix_core::identity::GuestName;
 use anyhow::{Context, Result, anyhow, ensure};
@@ -101,7 +101,7 @@ fn load(target: &Target, generation: u64) -> Result<Value> {
     generations::load(
         &target.pool_root,
         &target.pool_root,
-        target.domain.as_str(),
+        &runtime_namespace(target.domain.as_str()),
         generation,
     )
 }
@@ -196,7 +196,7 @@ fn admit(args: &Ensure) -> Result<Value> {
         return generations::load(
             &target.pool_root,
             &target.pool_root,
-            target.domain.as_str(),
+            &runtime_namespace(target.domain.as_str()),
             generation.as_u64().context("invalid prepared generation")?,
         );
     }
@@ -214,7 +214,7 @@ fn admit(args: &Ensure) -> Result<Value> {
     );
     generations::admit(&Admission {
         pool: &target.pool_root,
-        domain: target.domain.as_str(),
+        domain: &runtime_namespace(target.domain.as_str()),
         system: &args.system,
         source: &source,
         source_identity,
@@ -414,7 +414,7 @@ fn install_shared(
 
         generations::switch(
             &target.pool_root,
-            target.domain.as_str(),
+            &runtime_namespace(target.domain.as_str()),
             number(admission, "generation")?,
             false,
         )?;

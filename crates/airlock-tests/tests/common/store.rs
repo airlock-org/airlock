@@ -114,7 +114,7 @@ impl Store {
             .arg(&self.pool)
             .args([
                 "--domain",
-                "usr-home",
+                "usr-home-runtime-store",
                 "--system",
                 &self.system,
                 "--closure-source",
