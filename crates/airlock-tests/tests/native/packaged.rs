@@ -621,7 +621,13 @@ fn package_runtime_preparer_builds_from_filtered_workspace() -> Result<()> {
         None,
     )?
     .checked()?;
-    assert!(String::from_utf8(help)?.contains("Prepare initial VM state"));
+    let help = String::from_utf8(help)?;
+    for argument in ["<TOPOLOGY>", "<POOL>", "<OUTPUT>"] {
+        assert!(
+            help.contains(argument),
+            "missing runtime argument {argument}"
+        );
+    }
     Ok(())
 }
 
