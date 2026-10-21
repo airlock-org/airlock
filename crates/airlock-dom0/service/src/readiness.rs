@@ -173,7 +173,7 @@ fn supervise(action: &str, domain: &str, detail: &str) -> Result<()> {
 }
 
 /// Match the existing guest probe; each forwarding unit must independently be active.
-const PROVIDER_HEALTH: &str = r#"root:for unit in qubes-antispoof qubes-iptables qubes-firewall qubes-network; do systemctl is-active --quiet "$unit.service" || { echo "Network provider unhealthy: $unit.service" >&2; exit 1; }; done; if test -e /run/qubes-service/network-manager; then systemctl is-active --quiet NetworkManager.service; fi"#;
+pub(crate) const PROVIDER_HEALTH: &str = r#"root:for unit in qubes-antispoof qubes-iptables qubes-firewall qubes-network; do systemctl is-active --quiet "$unit.service" || { echo "Network provider unhealthy: $unit.service" >&2; exit 1; }; done; if test -e /run/qubes-service/network-manager; then systemctl is-active --quiet NetworkManager.service; fi"#;
 
 /// Start and poll after the supervisor has recorded the expected generation.
 fn wait(

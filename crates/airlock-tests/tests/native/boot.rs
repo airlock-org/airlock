@@ -18,7 +18,25 @@ impl Boot {
         for name in ["xl", "qvm-ls", "systemctl", "free", "journalctl"] {
             peers.rules(name, json!([{"echo_args":true}]))?;
         }
+        peers.rules("qvm-check", json!([{}]))?;
+        peers.rules("qvm-ls", json!([{"stdout":"7\n"}]))?;
+        peers.rules("qrexec-client", json!([
+            {"args":["-d","sys-gui","user:readlink -f /run/current-system"], "stdout":crate::coordinator::fixture::store("sys-gui-system", 1)},
+            {"prefix":["-d","sys-gui"], "stdout":""}
+        ]))?;
         fs::write(peers.path("boot-id"), id)?;
+        fs::write(
+            peers.path("policy.json"),
+            serde_json::to_vec(&json!({
+                "schema":"airlock.boot-readiness.v1", "desktop":true, "input_target":"sys-gui"
+            }))?,
+        )?;
+        fs::write(
+            peers.path("topology.json"),
+            serde_json::to_vec(&json!({
+                "schema":"airlock.qubes-topology.v1", "domains":{"sys-gui":crate::coordinator::fixture::declaration("sys-gui", 1)}
+            }))?,
+        )?;
         Ok(Self { peers })
     }
 
@@ -28,15 +46,20 @@ impl Boot {
             .peers
             .command(common::binary("AIRLOCK_DOM0_BIN", "airlock-dom0-service"))?;
         command
+            .arg("--state")
+            .arg(self.peers.path("machine"))
             .arg("boot-supervisor")
             .args(args)
-            .env("PATH", self.peers.path("bin"));
+            .env("PATH", self.peers.path("bin"))
+            .env("AIRLOCK_BOOT_SETUP", crate::coordinator::fixture::SETUP);
         for (key, path) in [
             ("AIRLOCK_BOOT_ID_FILE", "boot-id"),
             ("AIRLOCK_BOOT_STATE_ROOT", "state"),
             ("AIRLOCK_BOOT_LOG_ROOT", "logs"),
             ("AIRLOCK_BOOT_RUN_ROOT", "run"),
             ("AIRLOCK_BOOT_DIAGNOSTIC_ROOT", "root"),
+            ("AIRLOCK_BOOT_READINESS_POLICY", "policy.json"),
+            ("AIRLOCK_BOOT_TOPOLOGY", "topology.json"),
         ] {
             command.env(key, self.peers.path(path));
         }
@@ -453,5 +476,143 @@ fn optional_packaged_startup_helper_has_complete_runtime_dependencies() -> Resul
             .unwrap()
             .contains("qrexec-ready")
     );
+    Ok(())
+}
+
+/// Final publication repeats observations rather than trusting earlier unit success or boot receipts.
+#[test]
+#[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]
+fn namespace_boot_acceptance_requires_fresh_complete_evidence() -> Result<()> {
+    use crate::coordinator::fixture::{declaration, store};
+
+    for failure in [
+        "",
+        "generation",
+        "desktop",
+        "input",
+        "worker",
+        "restart",
+        "missing-policy",
+        "unknown-policy",
+        "missing-input-policy",
+        "invalid-autostart",
+        "invalid-worker-role",
+        "failed-attempt",
+        "failure-during-probe",
+        "shutdown",
+    ] {
+        let mut boot = Boot::new("acceptance")?;
+        let mut worker = declaration("sys-ctrl", 1);
+        worker["features"]["airlock-role"] = if failure == "invalid-worker-role" {
+            json!(true)
+        } else {
+            json!("sys-ctrl")
+        };
+        if failure == "invalid-autostart" {
+            worker["prefs"]["autostart"] = json!("true");
+        }
+        fs::write(
+            boot.peers.path("topology.json"),
+            serde_json::to_vec(&json!({
+                "schema":"airlock.qubes-topology.v1", "domains":{"sys-gui":declaration("sys-gui", 1), "sys-ctrl":worker}
+            }))?,
+        )?;
+        boot.peers.rules("qrexec-client", json!([
+            {"args":["-d","sys-gui","user:readlink -f /run/current-system"], "stdout":store("sys-gui-system", if failure == "generation" {2} else {1})},
+            {"args":["-d","sys-ctrl","user:readlink -f /run/current-system"], "stdout":store("sys-ctrl-system", 1)},
+            {"contains":"root:/run/current-system/sw/bin/airlock-vm-service boot-health desktop", "exit":if failure == "desktop" {1} else {0}},
+            {"contains":"DEFAULT:QUBESRPC airlock.InputReceiverReady dom0", "exit":if failure == "input" {1} else {0}},
+            {"contains":"root:/run/current-system/sw/bin/airlock-vm-service boot-health build-store --domain sys-ctrl", "exit":if failure == "worker" {1} else {0}, "write":{"worker-observed":""}}
+        ]))?;
+        // sys-ctrl sorts before sys-gui: change its instance after the GUI capability probe,
+        // so its earlier successful generation/worker observations are stale at final acceptance.
+        if failure == "restart" {
+            boot.peers.rules("qrexec-client", json!([
+                {"args":["-d","sys-gui","user:readlink -f /run/current-system"], "stdout":store("sys-gui-system", 1)},
+                {"args":["-d","sys-ctrl","user:readlink -f /run/current-system"], "stdout":store("sys-ctrl-system", 1)},
+                {"contains":"root:/run/current-system/sw/bin/airlock-vm-service boot-health desktop", "write":{"gui-observed":""}},
+                {"prefix":["-d"]}
+            ]))?;
+            boot.peers.rules("qvm-ls", json!([
+                {"args":["--raw-data","--fields","XID","sys-ctrl"], "exists":"gui-observed", "stdout":"8\n"},
+                {"stdout":"7\n"}
+            ]))?;
+        }
+        boot.run(&["prepare"])?;
+        if failure == "failure-during-probe" {
+            let mut failed = boot.record("acceptance")?;
+            failed["status"] = json!("failed");
+            boot.peers.rules("qrexec-client", json!([
+                {"args":["-d","sys-gui","user:readlink -f /run/current-system"], "stdout":store("sys-gui-system", 1)},
+                {"args":["-d","sys-ctrl","user:readlink -f /run/current-system"], "stdout":store("sys-ctrl-system", 1)},
+                {"contains":"root:/run/current-system/sw/bin/airlock-vm-service boot-health build-store --domain sys-ctrl", "write":{"state/acceptance/state.json":serde_json::to_string(&failed)?}},
+                {"prefix":["-d"]}
+            ]))?;
+        }
+        match failure {
+            "missing-policy" => fs::remove_file(boot.peers.path("policy.json"))?,
+            "unknown-policy" => fs::write(
+                boot.peers.path("policy.json"),
+                br#"{"schema":"unknown","desktop":false,"input_target":null}"#,
+            )?,
+            "missing-input-policy" => fs::write(
+                boot.peers.path("policy.json"),
+                br#"{"schema":"airlock.boot-readiness.v1","desktop":true}"#,
+            )?,
+            "failed-attempt" => {
+                boot.run(&["fail", "gui", "failed"])?;
+            }
+            "shutdown" => {
+                boot.run(&["shutdown-requested"])?;
+            }
+            _ => {}
+        }
+        let output = common::run(&mut boot.command(&["complete"])?, None)?;
+        assert_eq!(
+            output.status.success(),
+            failure.is_empty(),
+            "{failure}: {stderr}; {stdout}",
+            stderr = String::from_utf8_lossy(&output.stderr),
+            stdout = String::from_utf8_lossy(&output.stdout)
+        );
+        assert_eq!(
+            boot.peers.path("state/in-progress.json").exists(),
+            !failure.is_empty(),
+            "{failure}"
+        );
+        if failure.is_empty() {
+            assert_eq!(boot.record("acceptance")?["status"], "complete");
+            assert!(!boot.peers.calls()?.iter().any(|call| matches!(
+                call["command"].as_str(),
+                Some("qvm-start" | "qvm-shutdown")
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Explicit headless policy permits an empty required guest set without granting desktop readiness.
+#[test]
+#[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]
+fn namespace_boot_headless_acceptance_has_no_desktop_exemption_flag() -> Result<()> {
+    let boot = Boot::new("headless")?;
+    fs::write(
+        boot.peers.path("policy.json"),
+        br#"{"schema":"airlock.boot-readiness.v1","desktop":false,"input_target":null}"#,
+    )?;
+    fs::write(
+        boot.peers.path("topology.json"),
+        br#"{"schema":"airlock.qubes-topology.v1","domains":{}}"#,
+    )?;
+    boot.run(&["prepare"])?;
+    assert!(
+        !common::run(&mut boot.command(&["desktop-ready"])?, None)?
+            .status
+            .success()
+    );
+    assert!(boot.peers.path("state/in-progress.json").exists());
+    boot.run(&["complete"])?;
+    assert_eq!(boot.record("headless")?["desktop_ready"], false);
+    assert!(!boot.peers.path("state/in-progress.json").exists());
     Ok(())
 }

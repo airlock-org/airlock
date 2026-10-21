@@ -249,6 +249,20 @@
 //! resizing, boot-option construction and other backend settings do not acquire a complete
 //! boot orchestration theorem from these selected-generation requests. The admitted legacy
 //! batch executor retains its documented separate policy.
+//! `boot::acceptance` verifies capability projection and complete same-instance boot acceptance.
+//! Generation and service evidence have opaque constructors; missing capabilities, substituted
+//! requirements, host boots, VM instances and publication scopes are rejected. Both supervisor
+//! readiness publication paths consume an `AcceptedBoot` produced from fresh probes against
+//! selected boot inputs; prior systemd success and persisted readiness are not accepted as evidence.
+//! The installed policy distinguishes usable desktop startup from full autostart/service readiness.
+//! Topology-to-requirement-set projection, probe dispatch, policy decoding, lock orchestration and
+//! marker publication remain ordinary Rust. Probes must truthfully report the requested guest;
+//! host-boot/Xen IDs must identify an incarnation without reuse during collection. Observations
+//! are sequential and external administrators are not excluded by the machine lock: this proves
+//! compatibility of collected evidence, not an atomic global snapshot or continuing health.
+//! Input evidence covers receiver readiness and active forwarding discovery, not physical delivery
+//! of every keyboard/mouse event. Explicit recovery acknowledgement remains a distinct console policy.
+//!
 //! Boot quarantine, retention/reference discovery and other maintenance policies have separate
 //! authority and incomplete proof coverage. Below those policy boundaries, truthful observations,
 //! durable acknowledgments, process resolution and faithful filesystem/Qubes execution remain

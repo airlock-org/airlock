@@ -570,6 +570,35 @@ impl Coordinator {
         Ok(report)
     }
 
+    /// Observe the original selected boot inputs and keep machine mutation excluded until publication.
+    /// The callback consumes opaque evidence while both machine and supervisor locks are held.
+    pub(crate) fn accept_boot<T>(
+        &self,
+        boot: &str,
+        scope: airlock_deployment_core::boot::acceptance::Scope,
+        policy: &crate::boot::acceptance::Policy,
+        publish: impl FnOnce(airlock_deployment_core::boot::acceptance::AcceptedBoot) -> Result<T>,
+    ) -> Result<T> {
+        let _guard = MachineLock::acquire(
+            &self.state,
+            "Boot acceptance",
+            "Observe required guests before publishing startup success",
+            MachineOperation::Boot,
+        )?;
+        let setup = if let Some(path) = std::env::var_os("AIRLOCK_BOOT_SETUP") {
+            PathBuf::from(path)
+        } else {
+            fs::canonicalize("/run/current-system/sw/bin/airlock-setup-config")?
+        };
+        let setup = setup.to_str().context("setup path is not UTF-8")?.parse()?;
+        let topology =
+            configured_path("AIRLOCK_BOOT_TOPOLOGY", "/etc/airlock/qubes-topology.json")?;
+        let selected = self.boot_selection(setup, &topology)?;
+        let accepted =
+            crate::boot::acceptance::observe(selected.inputs.topology(), policy, boot, scope)?;
+        publish(accepted)
+    }
+
     /// Start only declared autostart guests and dependencies, then verify their running generations.
     pub fn boot_start(&self, topology: &Path, required: &[GuestName]) -> Result<Value> {
         let mut guard = MachineLock::acquire(

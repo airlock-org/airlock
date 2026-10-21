@@ -314,7 +314,7 @@ fn run(args: Args) -> Result<Value> {
             readiness::desktop(request)?;
             Value::Null
         }
-        Action::BootSupervisor(request) => boot::execute(request)?,
+        Action::BootSupervisor(request) => boot::execute(request, &c)?,
         Action::Rpc(request) => {
             rpc::execute(&c.state, request)?;
             Value::Null

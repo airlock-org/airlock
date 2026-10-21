@@ -1,11 +1,14 @@
 //! Persist boot progress before hardware startup and preserve evidence after failure.
 //! The runtime recovery gate disables risky startup for one boot; acknowledging its console permits the next attempt.
 
+pub(crate) mod acceptance;
+
 mod diagnostics;
 
 mod model;
 
-use crate::{process::Runner, state};
+use crate::{coordinator::Coordinator, process::Runner, state};
+use airlock_deployment_core::boot::acceptance::Scope;
 use airlock_nix_core::state::{OperationKind, OperationLock, OperationOwner, StateStore};
 use anyhow::{Context, Result, ensure};
 use clap::{Args, Subcommand};
@@ -355,25 +358,41 @@ impl Supervisor {
         Ok(recovered)
     }
 
-    fn desktop_ready(&self) -> Result<()> {
-        let _lock = self.lock()?;
-        let mut value = self.current()?;
-        value.desktop_ready = true;
-        self.write(
-            value,
-            "services",
-            Status::Working,
-            "desktop ready; starting background services",
-        )?;
-        self.clear_marker()
+    /// Observe while holding the machine lock, then serialize publication against failure handlers.
+    /// Supervisor locking follows machine locking, matching setup's stage-reporting order.
+    fn accept(&self, coordinator: &Coordinator, scope: Scope, detail: &str) -> Result<()> {
+        let policy = acceptance::Policy::read()?;
+        coordinator.accept_boot(&self.id.to_string(), scope, &policy, |accepted| {
+            let _lock = self.lock()?;
+            let mut value = self
+                .read(&self.id)?
+                .context("boot attempt has not been prepared")?;
+            ensure!(
+                !matches!(
+                    value.status,
+                    Status::Failed | Status::Interrupted | Status::RecoveryRequired
+                ) && value.shutdown_requested_at.is_none()
+                    && !self.runtime.join("recovery-required.json").exists(),
+                "failed, shutting down or recovery-gated boot cannot be accepted"
+            );
+            ensure!(
+                accepted.permits(&self.id.to_string(), scope),
+                "boot acceptance identity differs"
+            );
+            value.desktop_ready = accepted.desktop();
+            let (stage, status) = if scope == Scope::Desktop {
+                ("services", Status::Working)
+            } else {
+                ("ready", Status::Complete)
+            };
+            self.write(value, stage, status, detail)?;
+            self.clear_marker()
+        })
     }
 
-    fn finish(&self, stage: &str, status: Status, detail: &str, clear: bool) -> Result<()> {
+    fn finish(&self, stage: &str, status: Status, detail: &str) -> Result<()> {
         let _lock = self.lock()?;
         self.write(self.current()?, stage, status, detail)?;
-        if clear {
-            self.clear_marker()?;
-        }
         Ok(())
     }
 
@@ -468,7 +487,7 @@ impl Supervisor {
 }
 
 /// Record one boot observation or return a read-only desktop status.
-pub(crate) fn execute(request: Request) -> Result<Value> {
+pub(crate) fn execute(request: Request, coordinator: &Coordinator) -> Result<Value> {
     let s = Supervisor::load()?;
     match request.action {
         Action::Prepare => {
@@ -491,18 +510,21 @@ pub(crate) fn execute(request: Request) -> Result<Value> {
         }
         Action::Stage { name, detail } => s.stage(&name, &detail, false)?,
         Action::Fail { name, detail } => s.stage(&name, &detail, true)?,
-        Action::DesktopReady => s.desktop_ready()?,
+        Action::DesktopReady => s.accept(
+            coordinator,
+            Scope::Desktop,
+            "desktop ready; starting background services",
+        )?,
         Action::Degraded => {
             s.finish(
                 "services",
                 Status::Degraded,
                 "background services could not start",
-                false,
             )?;
             s.snapshot(&s.id, "background-services-failed", None)?;
         }
         Action::Complete { detail } => {
-            s.finish("ready", Status::Complete, &detail, true)?;
+            s.accept(coordinator, Scope::Complete, &detail)?;
             s.snapshot(&s.id, "ready", None)?;
         }
         Action::ShutdownRequested => s.shutdown_requested()?,

@@ -341,6 +341,19 @@ fn configuration(context: &ModuleContext, service: NixValue) -> NixValue {
         nix_record! {
             "environment": nix_record! {
                 "systemPackages": NixValue::list([service.clone()]),
+                "etc": nix_record! {
+                    "airlock/boot-readiness.json": nix_record! {
+                        "text": NixValue::builtin("toJSON").call(nix_record! {
+                            "schema": "airlock.boot-readiness.v1",
+                            "desktop": desktop.clone(),
+                            "input_target": NixValue::if_else(
+                                context.config.clone().select("airlock.inputProxy.sender.enable"),
+                                context.config.clone().select("airlock.inputProxy.sender.target"),
+                                NixValue::null(),
+                            ),
+                        }),
+                    },
+                },
             },
             "systemd": nix_record! {
                 "services": NixValue::record(services),

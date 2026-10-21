@@ -60,6 +60,15 @@ pub(super) fn startup_contract(inputs: NixValue) -> NixValue {
                 )
             });
             NixValue::record([
+                (
+                    "readiness",
+                    NixValue::builtin("fromJSON").call(host.clone().select_segments([
+                        "environment",
+                        "etc",
+                        "airlock/boot-readiness.json",
+                        "text",
+                    ])),
+                ),
                 ("units", NixValue::record(units)),
                 (
                     "domains",

@@ -4,6 +4,8 @@
 //! complete input sets. These checks bind their supplied observations; they do not
 //! turn a boot receipt into deployment approval or prove external I/O faithful.
 
+pub mod acceptance;
+
 mod selection;
 
 pub use selection::{Argument, BootField, RootRequest, SelectedGeneration, SetupRequest};

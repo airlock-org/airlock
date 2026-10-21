@@ -29,6 +29,12 @@ fn usb_startup_gates_are_acyclic_and_preserve_health_budgets() -> Result<()> {
         "usb_lab/startup_contract",
         json!({"root":nix.prepared}),
     )?;
+    assert_eq!(
+        report["readiness"],
+        json!({
+            "schema":"airlock.boot-readiness.v1", "desktop":true, "input_target":"sys-gui"
+        })
+    );
     let units = report["units"].as_object().unwrap();
     let mut edges: BTreeMap<&str, BTreeSet<&str>> = units
         .keys()

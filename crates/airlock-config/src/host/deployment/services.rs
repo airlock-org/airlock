@@ -149,14 +149,15 @@ pub(super) fn configuration(
                                     engine = engine.clone(),
                                     require = NixValue::if_else(guarded.clone(), " --require-running sys-gui", ""),
                                 ),
-                                "ExecStartPost": NixValue::list([
-                                    command("boot-supervisor complete 'all declared autostart VMs are qrexec-ready'")
-                                        .into(),
-                                    nix_text!(
+                                "ExecStartPost": NixValue::concat_lists([
+                                    optional(
+                                        context.config.clone().select("airlock.bootSupervisor.enable"),
+                                        NixValue::list([command("boot-supervisor complete 'required guests and services passed fresh readiness checks'").into()]),
+                                    ),
+                                    NixValue::list([nix_text!(
                                         "{systemd}/bin/journalctl --sync",
                                         systemd = context.pkgs.clone().select("systemd"),
-                                    )
-                                    .into(),
+                                    ).into()]),
                                 ]),
                             },
                         },
