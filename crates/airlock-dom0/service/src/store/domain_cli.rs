@@ -64,7 +64,7 @@ pub(super) struct Ensure {
     pub(super) source: String,
     // Only immutable shared closure views are supported.
     #[arg(long, default_value = "shared-closure", value_parser = ["shared-closure"])]
-    mode: String,
+    pub(super) mode: String,
     /// Exact NixOS system whose root/kernel must match any reusable generation.
     #[arg(long)]
     pub(super) system: String,

@@ -368,6 +368,141 @@ fn namespace_image_handoff_and_first_boot() -> Result<()> {
                 ))
     );
 
+    // The setup process must independently authenticate the exact transported record.
+    let selection_path = Path::new("/var/lib/airlock/startup/gui-topology.selection.json");
+    let selection_bytes = fs::read(selection_path)?;
+    let selected_record: Value = serde_json::from_slice(&selection_bytes)?;
+    let digest = |value: &Value| -> Result<String> {
+        use sha2::{Digest, Sha256};
+        Ok(format!(
+            "{hash:x}",
+            hash = Sha256::digest(serde_json::to_vec(value)?)
+        ))
+    };
+    let original_digest = digest(&selected_record)?;
+    let setup_selected = |hash: &str| -> Result<Command> {
+        let environment = boot()?;
+        let mut command = Command::new(&store.service);
+        for (key, value) in environment.get_envs() {
+            if let Some(value) = value {
+                command.env(key, value);
+            } else {
+                command.env_remove(key);
+            }
+        }
+        command
+            .args([
+                "setup-config",
+                "run",
+                "--script",
+                SETUP,
+                "--apply",
+                "--topology",
+                "/var/lib/airlock/startup/gui-topology.json",
+                "--boot-selection",
+            ])
+            .arg(selection_path)
+            .args(["--boot-selection-hash", hash]);
+        Ok(command)
+    };
+    // Exercise the actual selected-root import path with a stale recorded artifact feature.
+    let mut repair = setup_selected(&original_digest)?;
+    let mut replies = setup.peers.read("replies.json")?;
+    replies["commands"]["qvm-features"]
+        .as_array_mut()
+        .unwrap()
+        .insert(
+            0,
+            json!({"args":["sys-gui","airlock-root-artifact"], "stdout":"stale-artifact\n"}),
+        );
+    let repair_replies = setup.peers.path("repair-replies.json");
+    fs::write(&repair_replies, serde_json::to_vec(&replies)?)?;
+    repair.env("AIRLOCK_TEST_REPLIES", repair_replies);
+    checked(&mut repair)?;
+    let imported = setup
+        .peers
+        .calls()?
+        .into_iter()
+        .filter(|call| call["command"] == "qvm-volume" && call["args"][0] == "import")
+        .collect::<Vec<_>>();
+    assert_eq!(imported.len(), 1);
+    assert_eq!(imported[0]["args"][1], "sys-gui:root");
+    let source = Path::new(imported[0]["args"][2].as_str().unwrap());
+    assert!(source.starts_with(pool.join("root-artifacts")));
+    assert_eq!(fs::read(source)?, before[0]);
+
+    // Fixed invocation digest detects even a syntactically valid downgrade to manual admission.
+    for (pointer, value) in [
+        ("/domains/sys-gui", Value::Null),
+        ("/domains/sys-gui/generation", json!(999)),
+        ("/domains/sys-gui/kernel", json!("wrong-kernel")),
+        ("/domains", json!({})),
+    ] {
+        let mut changed = selected_record.clone();
+        *changed.pointer_mut(pointer).unwrap() = value;
+        fs::write(selection_path, serde_json::to_vec(&changed)?)?;
+        let calls = setup.peers.calls()?.len();
+        assert!(
+            !common::run(&mut setup_selected(&original_digest)?, None)?
+                .status
+                .success(),
+            "{pointer}"
+        );
+        assert_eq!(setup.peers.calls()?.len(), calls);
+        // A matching transport hash still cannot make wrong retained identities valid.
+        if !changed["domains"]["sys-gui"].is_null() || pointer == "/domains" {
+            assert!(
+                !common::run(&mut setup_selected(&digest(&changed)?)?, None)?
+                    .status
+                    .success()
+            );
+            assert_eq!(setup.peers.calls()?.len(), calls);
+        }
+    }
+    fs::remove_file(selection_path)?;
+    let calls = setup.peers.calls()?.len();
+    assert!(
+        !common::run(&mut setup_selected(&original_digest)?, None)?
+            .status
+            .success()
+    );
+    assert_eq!(setup.peers.calls()?.len(), calls);
+    fs::write(selection_path, &selection_bytes)?;
+
+    // The storage process rejects a substituted selection before touching Qubes or admitting anything.
+    let bridge_calls = setup.peers.path("bridge-calls.jsonl");
+    let unchanged_bridge = fs::read(&bridge_calls)?;
+    for (generation, kernel) in [("999", "test"), ("1", "wrong-kernel")] {
+        let environment = boot()?;
+        let mut command = Command::new(&store.service);
+        for (key, value) in environment.get_envs() {
+            if let Some(value) = value {
+                command.env(key, value);
+            } else {
+                command.env_remove(key);
+            }
+        }
+        command.args([
+            "storage",
+            "domain",
+            "ensure-store",
+            "sys-gui",
+            &format!("{DESCRIPTORS}/sys-gui"),
+            &format!("{DESCRIPTORS}/sys-gui"),
+            "--system",
+            &store.system,
+            "--root",
+            root_source,
+            "--kernel",
+            kernel,
+            "--generation",
+            generation,
+            "--require-retained",
+        ]);
+        assert!(!common::run(&mut command, None)?.status.success());
+        assert_eq!(fs::read(&bridge_calls)?, unchanged_bridge);
+    }
+
     // Every selection disagreement must fail before even the inert Qubes adapters run.
     let prepared = Path::new("/var/lib/airlock/prepared-runtime.json");
     let original = fs::read(prepared)?;

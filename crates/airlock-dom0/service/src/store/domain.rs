@@ -148,7 +148,28 @@ fn boot_matches(admission: &Value, args: &Ensure) -> bool {
         && admission["kernel_name"] == args.kernel
 }
 
-fn staged(args: &Ensure) -> Result<Option<Value>> {
+/// A retained request keeps its authenticated receipt and original target until dispatch.
+struct Retained<'a> {
+    // Exact target whose committed records were validated.
+    target: &'a Target,
+    // Private receipt cannot be replaced by an independently supplied generation.
+    receipt: Value,
+    // Verus-checked complete boot identity.
+    selected: airlock_deployment_core::boot::SelectedGeneration,
+}
+
+impl Retained<'_> {
+    fn install(&self, observed: &Snapshot, source: &str) -> Result<Value> {
+        let actual = super::handoff::observed(&self.receipt, &self.receipt, "source")?;
+        ensure!(
+            self.selected.setup(&actual).is_some(),
+            "retained receipt changed before attachment"
+        );
+        install_shared(self.target, &self.receipt, observed, source)
+    }
+}
+
+fn staged(args: &Ensure) -> Result<Option<Retained<'_>>> {
     let supplied = match std::env::var_os("AIRLOCK_STAGED_GENERATIONS") {
         Some(path) => {
             let mapping: Value = read(Path::new(&path))?;
@@ -174,18 +195,35 @@ fn staged(args: &Ensure) -> Result<Option<Value>> {
     };
     ensure!(generation > 0, "invalid requested generation");
     let admission = load(&args.target, generation)?;
+    let wanted = airlock_deployment_core::boot::Selection {
+        domain: args.target.domain.to_string(),
+        generation,
+        system: args.system.clone(),
+        root: args.root.clone(),
+        source: args
+            .artifact
+            .to_str()
+            .context("non-UTF-8 store source")?
+            .into(),
+        kernel: args.kernel.clone(),
+        mode: args.mode.clone(),
+        device: args.target.device.clone(),
+        blob_device: args.target.blob_device.clone(),
+        mountpoint: args.target.mountpoint.clone(),
+        backend: args.view_backend.clone(),
+    };
+    let observed = super::handoff::observed(&admission, &admission, "source")?;
+    let selected = airlock_deployment_core::boot::SelectedGeneration::check(wanted, &observed)
+        .context("staged generation identity mismatch")?;
     ensure!(
-        boot_matches(&admission, args)
-            && admission["source"].as_str() == args.artifact.to_str()
-            && admission["approval_source"] == args.source
-            && admission["view_backend"] == args.view_backend
-            && admission["device"] == args.target.device
-            && admission["blob_device"] == args.target.blob_device
-            && admission["mountpoint"] == args.target.mountpoint,
-        "staged generation identity mismatch for {}",
-        args.target.domain
+        admission["approval_source"] == args.source,
+        "staged generation approval source mismatch"
     );
-    Ok(Some(admission))
+    Ok(Some(Retained {
+        target: &args.target,
+        receipt: admission,
+        selected,
+    }))
 }
 
 fn admit(args: &Ensure) -> Result<Value> {
@@ -237,6 +275,8 @@ fn admit(args: &Ensure) -> Result<Value> {
 /// Reuse the exact current boot identity or attach an approved successor to a stopped VM.
 pub(super) fn ensure(args: &Ensure) -> Result<Value> {
     let target = &args.target;
+    // An explicit retained selection must validate before any Qubes observation or fallback decision.
+    let staged = staged(args)?;
     let vm = snapshot(&target.domain)?;
     vm.verify_isolation()?;
     vm.verify_pool(target)?;
@@ -270,13 +310,11 @@ pub(super) fn ensure(args: &Ensure) -> Result<Value> {
     } else {
         None
     };
-    // Authenticate staged data before the idempotent path, even for a running VM.
-    let staged = staged(args)?;
     let reusable = current.as_ref().filter(|admission| {
         boot_matches(admission, args)
             && staged
                 .as_ref()
-                .is_none_or(|requested| requested["generation"] == admission["generation"])
+                .is_none_or(|requested| requested.receipt["generation"] == admission["generation"])
     });
     let unchanged = if let Some(admission) = reusable {
         vm.matches(&shared_configs(target, admission, None)?)
@@ -293,6 +331,9 @@ pub(super) fn ensure(args: &Ensure) -> Result<Value> {
             ],
         )?;
         let admission = reusable.context("missing reusable generation")?;
+        let admission = staged
+            .as_ref()
+            .map_or(admission, |retained| &retained.receipt);
         receipt(target, admission, &args.source, Attachment::default())
     } else {
         ensure!(
@@ -300,11 +341,17 @@ pub(super) fn ensure(args: &Ensure) -> Result<Value> {
             "shared store source changed but domain is running: {}",
             target.domain
         );
-        let admission = match staged.or_else(|| reusable.cloned()) {
-            Some(admission) => admission,
-            None => admit(args)?,
-        };
-        install_shared(target, &admission, &vm, &args.source)?
+        match staged {
+            Some(retained) => retained.install(&vm, &args.source)?,
+            None => {
+                // Only the separately selected manual policy can reach admission.
+                let admission = match reusable {
+                    Some(admission) => admission.clone(),
+                    None => admit(args)?,
+                };
+                install_shared(target, &admission, &vm, &args.source)?
+            }
+        }
     };
 
     if ["usr-assistant", "sys-ctrl"].contains(&target.domain.as_str()) {

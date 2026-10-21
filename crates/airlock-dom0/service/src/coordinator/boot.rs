@@ -375,6 +375,32 @@ impl Coordinator {
         Ok(raw)
     }
 
+    /// Bind the process invocation to the published topology and checked selection together.
+    /// A helper without the checked-setup protocol must refuse these arguments;
+    /// silently retrying without the selection would change the admission policy.
+    fn boot_setup_arguments(
+        &self,
+        selected: &BootSelection,
+        raw: &Value,
+        topology: &Path,
+    ) -> Result<Vec<OsString>> {
+        if let Some(handoff) = &selected.handoff {
+            let record = topology.with_extension("selection.json");
+            let digest = crate::setup_config::selection::BootSetup::save(handoff, raw, &record)?;
+            return Ok(handoff
+                .setup_arguments(
+                    topology.to_str().context("topology path")?,
+                    record.to_str().context("setup selection path")?,
+                    digest.as_str(),
+                )
+                .into_iter()
+                .map(OsString::from)
+                .collect());
+        }
+        // Explicit legacy/manual boot with no staged selection retains its existing admission policy.
+        Ok(vec!["--topology".into(), topology.as_os_str().to_owned()])
+    }
+
     /// Configure the selected boot generation under one machine lock, optionally in GUI/background scopes.
     pub fn boot_setup(
         &self,
@@ -392,21 +418,11 @@ impl Coordinator {
         self.ensure_no_pruning()?;
         let selected = self.boot_selection(setup, Path::new("/etc/airlock/qubes-topology.json"))?;
         let mut env = Vec::new();
-        if let Some(handoff) = &selected.handoff {
-            let mapping: BTreeMap<_, _> = handoff
-                .selections()
-                .iter()
-                .map(|selection| (selection.domain.as_str(), selection.generation))
-                .collect();
-            let path = runtime()?.join("checked-generations.json");
-            state::save(&path, &mapping)?;
-            env.push(("AIRLOCK_STAGED_GENERATIONS".into(), path.into_os_string()));
-        }
         if !gui && !background {
             let mut args = args;
             let path = runtime()?.join("topology.json");
             public_save(&path, selected.inputs.raw())?;
-            args.extend(["--topology".into(), path.into_os_string()]);
+            args.extend(self.boot_setup_arguments(&selected, selected.inputs.raw(), &path)?);
             self.runner.run(
                 selected.setup.as_str(),
                 &args,
@@ -461,7 +477,10 @@ impl Coordinator {
             } else {
                 "background-topology.json"
             });
-            public_save(&path, &self.scoped_topology(&selected, &names)?)?;
+            let scoped = self.scoped_topology(&selected, &names)?;
+            public_save(&path, &scoped)?;
+            let mut arguments = vec![OsString::from("--apply")];
+            arguments.extend(self.boot_setup_arguments(&selected, &scoped, &path)?);
             env.push(("AIRLOCK_SETUP_CONFIG_PERSIST_STATE".into(), "0".into()));
             if !gui {
                 env.push(("AIRLOCK_SETUP_CONFIG_STATUS_DEVICE".into(), "".into()));
@@ -472,7 +491,7 @@ impl Coordinator {
             }
             self.runner.run(
                 selected.setup.as_str(),
-                &["--apply".into(), "--topology".into(), path.into_os_string()],
+                &arguments,
                 Duration::from_secs(1800),
                 &env,
             )?;

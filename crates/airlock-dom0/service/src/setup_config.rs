@@ -11,6 +11,8 @@ mod run;
 
 mod runtime;
 
+pub(crate) mod selection;
+
 mod status;
 
 pub(crate) mod xml;

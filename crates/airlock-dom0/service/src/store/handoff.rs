@@ -4,7 +4,7 @@
 
 use super::{fs::*, generations, prepared, runtime_namespace};
 use crate::model::{Backend, GenerationId, Topology};
-use airlock_deployment_core::boot::{Handoff, Selection};
+use airlock_deployment_core::boot::{Handoff, SelectedGeneration, Selection};
 use airlock_machine_core::boot::BootInputs;
 use airlock_nix_core::identity::GuestName;
 use anyhow::{Context, Result, ensure};
@@ -157,4 +157,25 @@ pub(super) fn image(topology: Value, physical: &Path, logical: &Path) -> Result<
         "incomplete checked image handoff"
     );
     Ok(json!({"schema":"airlock.boot-handoff.v1", "status":"passed", "generations":mapping}))
+}
+
+/// Revalidate a transported selection against committed records, never admitting new content.
+pub(crate) fn authenticate(selected: SelectedGeneration) -> Result<SelectedGeneration> {
+    let wanted = selected.selection();
+    let root = std::env::var_os("AIRLOCK_CLOSURE_STORE_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| "/var/lib/airlock/closure-store".into());
+    let _lock = PoolLock::acquire(&root.join("admission.lock"))?;
+    let receipt = generations::load(
+        &root,
+        &root,
+        &runtime_namespace(&wanted.domain),
+        wanted.generation,
+    )?;
+    let actual = observed(&receipt, &receipt, "source")?;
+    ensure!(
+        selected.setup(&actual).is_some(),
+        "committed generation differs from checked setup selection"
+    );
+    Ok(selected)
 }

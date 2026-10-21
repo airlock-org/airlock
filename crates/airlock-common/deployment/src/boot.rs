@@ -4,6 +4,10 @@
 //! complete input sets. These checks bind their supplied observations; they do not
 //! turn a boot receipt into deployment approval or prove external I/O faithful.
 
+mod selection;
+
+pub use selection::{Argument, BootField, RootRequest, SelectedGeneration, SetupRequest};
+
 use vstd::prelude::*;
 
 verus! {
@@ -90,6 +94,18 @@ impl Handoff {
             i += 1;
         }
         Some(Self { selections: expected })
+    }
+
+    /// Keep the checked-selection record mandatory in the setup process invocation.
+    /// File contents and their binding to these paths are authenticated by the adapters.
+    pub fn setup_arguments(&self, topology: &str, record: &str, digest: &str) -> (out: Vec<String>)
+        ensures out.len() == 6 && out[0]@ == "--topology"@ && out[1]@ == topology@
+            && out[2]@ == "--boot-selection"@ && out[3]@ == record@
+            && out[4]@ == "--boot-selection-hash"@ && out[5]@ == digest@,
+    {
+        vec!["--topology".to_string(), topology.to_string(),
+            "--boot-selection".to_string(), record.to_string(),
+            "--boot-selection-hash".to_string(), digest.to_string()]
     }
 
     /// Borrow only selections that survived the complete comparison.

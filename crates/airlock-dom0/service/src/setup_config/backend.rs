@@ -219,7 +219,16 @@ fn private(
 
 /// Reconcile the native backend without changing a running VM's recorded boot identity prematurely.
 pub(super) fn reconcile(session: &mut Session, domain: &str) -> Result<()> {
-    reconcile_with(session, domain, None)
+    reconcile_with(session, domain, None, None)
+}
+
+/// Execute a selected backend after rechecking its topology, including explicit backend-only invocations.
+pub(super) fn reconcile_selected(
+    session: &mut Session,
+    domain: &str,
+    selected: &airlock_deployment_core::boot::SelectedGeneration,
+) -> Result<()> {
+    reconcile_with(session, domain, None, Some(selected))
 }
 
 /// Share reconciliation observations while deployment mutation consumes opaque requests.
@@ -227,9 +236,14 @@ fn reconcile_with(
     session: &mut Session,
     domain: &str,
     authority: Option<&verified::Backend<'_>>,
+    selected: Option<&airlock_deployment_core::boot::SelectedGeneration>,
 ) -> Result<()> {
     let definition = session.topology["domains"][domain].clone();
     if definition["backend"]["type"] != "nix-closure" {
+        ensure!(
+            selected.is_none(),
+            "selected boot backend is missing or unsupported"
+        );
         return Ok(());
     }
     ensure!(
@@ -237,9 +251,29 @@ fn reconcile_with(
         "nix-closure backend requires StandaloneVM class for {domain}"
     );
     let backend = &definition["backend"];
-    let system = source(backend, "system")?;
-    let root = source(backend, "root")?;
-    let store = source(backend, "store")?;
+    let checked = selected
+        .map(|selected| -> Result<_> {
+            let backend: crate::model::Backend = serde_json::from_value(backend.clone())?;
+            let generation = selected.selection().generation.to_string().parse()?;
+            let wanted = crate::store::handoff::expected(&domain.parse()?, &backend, generation)?;
+            selected
+                .setup(&wanted)
+                .context("backend differs from checked boot selection")
+        })
+        .transpose()?;
+    let chosen = checked.as_ref().map(|request| request.selection());
+    let system = match chosen {
+        Some(s) => s.system.as_str(),
+        None => source(backend, "system")?,
+    };
+    let root = match chosen {
+        Some(s) => s.root.as_str(),
+        None => source(backend, "root")?,
+    };
+    let store = match chosen {
+        Some(s) => s.source.as_str(),
+        None => source(backend, "store")?,
+    };
     let store_config = &backend["store"];
     let mode = field(store_config, "mode", "shared-closure")?;
     let view = field(store_config, "view_backend", "erofs-objectmap")?;
@@ -265,16 +299,6 @@ fn reconcile_with(
         declared_kernel
     };
     let kernel_source = field(&backend["kernel"], "source", "")?;
-    if !kernel_source.is_empty() {
-        if let Some(authority) = authority {
-            let request = authority
-                .kernel()
-                .context("kernel absent from checked backend")?;
-            install_kernel(session, request)?;
-        } else {
-            kernel(session, domain, kernel_name, kernel_source)?;
-        }
-    }
 
     let staged: Value = match &session.staged {
         Some(path) if path.is_file() => crate::state::read(path)?,
@@ -287,6 +311,30 @@ fn reconcile_with(
             Value::String(value) => value.clone(),
             _ => value.to_string(),
         });
+    let generation = match chosen {
+        Some(s) => {
+            if let Some(ambient) = &generation {
+                ensure!(
+                    ambient.parse::<u64>()? == s.generation,
+                    "ambient generation conflicts with checked setup"
+                );
+            }
+            Some(s.generation.to_string())
+        }
+        None => generation,
+    };
+    let kernel_name = chosen.map_or(kernel_name, |s| s.kernel.as_str());
+    if !kernel_source.is_empty() {
+        if let Some(authority) = authority {
+            let request = authority
+                .kernel()
+                .context("kernel absent from checked backend")?;
+            install_kernel(session, request)?;
+        } else {
+            kernel(session, domain, kernel_name, kernel_source)?;
+        }
+    }
+
     if let Some(authority) = authority {
         let native = authority
             .definition()
@@ -343,6 +391,9 @@ fn reconcile_with(
     let mut resolved = None;
     if generation.is_some() || !Path::new(root).exists() {
         let namespace = crate::store::runtime_namespace(domain);
+        let selected_args = checked
+            .as_ref()
+            .map(|request| super::selection::arguments(request.root_arguments()));
         let mut args = vec![
             "storage",
             "pool",
@@ -355,11 +406,21 @@ fn reconcile_with(
         if let Some(generation) = &generation {
             args.extend(["--generation", generation]);
         }
-        let record: Value = serde_json::from_str(&session.service(&args)?)?;
+        let record: Value = serde_json::from_str(&if let Some(args) = selected_args {
+            session.service(&args.iter().map(String::as_str).collect::<Vec<_>>())?
+        } else {
+            session.service(&args)?
+        })?;
         ensure!(
             record["domain"] == namespace,
             "resolved root namespace mismatch"
         );
+        if checked.is_some() {
+            ensure!(
+                record["root_source"] == root,
+                "resolved root differs from checked boot selection"
+            );
+        }
         root_image = PathBuf::from(
             record["image"]
                 .as_str()
@@ -414,6 +475,18 @@ fn reconcile_with(
                     .root(&artifact, &observed)
                     .context("root import differs from checked source or halted target")?,
             )?;
+        } else if let Some(request) = &checked {
+            let artifact = verified::RootArtifact {
+                name: domain.into(),
+                source: root.into(),
+                image: root_image.to_str().context("root image path")?.into(),
+                hash: root_hash.clone(),
+            };
+            let observed = power(session, domain)?;
+            let request = request
+                .root(&artifact, &observed)
+                .context("root import differs from selected generation or halted VM")?;
+            import_selected_root(session, request)?;
         } else {
             session.change(
                 "qvm-volume",
@@ -445,7 +518,10 @@ fn reconcile_with(
     if store_deferred {
         session.defer(domain, "domain-store", "source", store)?;
     } else if session.apply {
-        store_result = serde_json::from_str(&if authority.is_some() {
+        store_result = serde_json::from_str(&if let Some(request) = &checked {
+            let args = super::selection::arguments(request.store_arguments());
+            session.service(&args.iter().map(String::as_str).collect::<Vec<_>>())?
+        } else if authority.is_some() {
             install_store(
                 session,
                 store_request
@@ -478,6 +554,20 @@ fn reconcile_with(
                 view,
             ])?
         })?;
+        if let Some(request) = &checked {
+            let observed = crate::store::handoff::observed(&store_result, &store_result, "source")?;
+            ensure!(
+                selected
+                    .context("missing selected generation")?
+                    .setup(&observed)
+                    .is_some(),
+                "storage outcome differs from checked setup selection"
+            );
+            ensure!(
+                request.selection().generation == observed.generation,
+                "storage selected another generation"
+            );
+        }
         if authority.is_some() {
             let evidence = store_evidence(&store_result)?;
             store_request
@@ -560,6 +650,7 @@ fn reconcile_with(
                 authority,
                 accepted.as_ref(),
                 &root_evidence,
+                checked.as_ref(),
                 ("qvm-prefs", domain, "kernel", kernel_name),
             )?;
             let mut options = field(&definition["prefs"], "kernelopts", "")?.to_owned();
@@ -580,6 +671,7 @@ fn reconcile_with(
                 authority,
                 accepted.as_ref(),
                 &root_evidence,
+                checked.as_ref(),
                 ("qvm-prefs", domain, "kernelopts", &options),
             )?;
         }
@@ -588,6 +680,7 @@ fn reconcile_with(
             authority,
             accepted.as_ref(),
             &root_evidence,
+            checked.as_ref(),
             ("qvm-features", domain, "airlock-backend", "nix-closure"),
         )?;
         if !deferred {
@@ -609,6 +702,7 @@ fn reconcile_with(
                     authority,
                     accepted.as_ref(),
                     &root_evidence,
+                    checked.as_ref(),
                     ("qvm-features", domain, key, value),
                 )?;
             }
@@ -635,6 +729,7 @@ fn reconcile_with(
                             authority,
                             accepted.as_ref(),
                             &root_evidence,
+                            checked.as_ref(),
                             ("qvm-features", domain, key, &value),
                         )?;
                     }
@@ -778,9 +873,23 @@ fn setting(
     authority: Option<&verified::Backend<'_>>,
     outcome: Option<&verified::StoreOutcome<'_>>,
     root: &verified::RootArtifact,
+    selected: Option<&airlock_deployment_core::boot::SetupRequest<'_>>,
     proposed: (&str, &str, &str, &str),
 ) -> Result<()> {
     let (program, domain, key, value) = proposed;
+    if let Some(selected) = selected {
+        use airlock_deployment_core::boot::BootField;
+        let field = match (program, key) {
+            ("qvm-prefs", "kernel") => Some(BootField::Kernel),
+            ("qvm-features", "airlock-system-source") => Some(BootField::System),
+            ("qvm-features", "airlock-root-source") => Some(BootField::Root),
+            ("qvm-features", "airlock-store-source") => Some(BootField::Store),
+            _ => None,
+        };
+        if let Some(field) = field {
+            return selected_setting(session, selected, field);
+        }
+    }
     let Some(authority) = authority else {
         return session.setting(program, domain, key, value);
     };
@@ -872,6 +981,29 @@ fn import_root(session: &mut Session, request: verified::RootRequest<'_>) -> Res
     )
 }
 
+/// Consume the checked root request without accepting an independent VM or image path.
+fn import_selected_root(
+    session: &mut Session,
+    request: airlock_deployment_core::boot::RootRequest<'_>,
+) -> Result<()> {
+    let args = request.arguments();
+    session.change(
+        "qvm-volume",
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
+    )
+}
+
+/// Keep the fixed property/feature key and value selected by the verified request.
+fn selected_setting(
+    session: &mut Session,
+    request: &airlock_deployment_core::boot::SetupRequest<'_>,
+    field: airlock_deployment_core::boot::BootField,
+) -> Result<()> {
+    let program = request.setting_program(field);
+    let args = request.setting_arguments(field);
+    session.setting(program, &args[0], &args[1], &args[2])
+}
+
 /// Decimal rendering cannot substitute a different capacity or volume selector.
 fn resize(session: &mut Session, request: verified::ResizeRequest<'_>) -> Result<()> {
     session.change(
@@ -890,6 +1022,31 @@ fn install_store(session: &mut Session, request: &verified::StoreRequest<'_>) ->
         request.program(),
         &args.iter().map(String::as_str).collect::<Vec<_>>(),
     )
+}
+
+/// Reconcile a selected boot generation in-process and retain a run-specific helper receipt.
+pub(crate) fn apply_boot(
+    selected: &airlock_deployment_core::boot::SelectedGeneration,
+    definition: &airlock_deployment_core::configuration::Definition,
+    log: &Path,
+    apply: bool,
+) -> Result<Option<Value>> {
+    let helper = definition
+        .helper
+        .as_ref()
+        .context("missing setup topology")?;
+    let directory = super::report::helper_directory(log, &definition.name, "--backend-only")?;
+    let mut session = Session::at(
+        Path::new(&helper.topology),
+        apply,
+        "single",
+        "backend-only",
+        directory,
+    )?;
+    let result = reconcile_with(&mut session, &definition.name, None, Some(selected));
+    session.finish(&result)?;
+    result?;
+    Ok(Some(session.result))
 }
 
 /// Run native deployment backend reconciliation inside the coordinator, with typed effect gates.
@@ -925,7 +1082,7 @@ pub(crate) fn apply_deployment(
             .join("staged.json"),
     );
     session.result["run_id"] = serde_json::json!(record.id);
-    let result = reconcile_with(&mut session, &definition.name, Some(&backend));
+    let result = reconcile_with(&mut session, &definition.name, Some(&backend), None);
     session.finish(&result)?;
     result?;
     Ok(Some(session.result))

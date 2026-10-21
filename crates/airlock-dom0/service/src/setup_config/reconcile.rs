@@ -155,6 +155,39 @@ pub(crate) fn apply(
     apply: bool,
     only: Option<&str>,
 ) -> Result<()> {
+    apply_inner(runner, definitions, deployment, apply, only, None)
+}
+
+/// A checked boot backend is consumed directly, without invoking an optional-selection helper.
+pub(crate) fn apply_boot(
+    runner: &Runner,
+    definitions: &[Definition],
+    apply: bool,
+    domain: &str,
+    selected: &airlock_deployment_core::boot::SelectedGeneration,
+) -> Result<()> {
+    ensure!(
+        selected.selection().domain == domain,
+        "checked setup names another VM"
+    );
+    apply_inner(
+        runner,
+        definitions,
+        None,
+        apply,
+        Some(domain),
+        Some(selected),
+    )
+}
+
+fn apply_inner(
+    runner: &Runner,
+    definitions: &[Definition],
+    deployment: Deployment<'_>,
+    apply: bool,
+    only: Option<&str>,
+    selected: Option<&airlock_deployment_core::boot::SelectedGeneration>,
+) -> Result<()> {
     let log = if deployment.is_some() {
         runner.configuration_log_directory()?
     } else {
@@ -211,6 +244,8 @@ pub(crate) fn apply(
         }
         let backend = if let Some((authority, record)) = deployment {
             super::backend::apply_deployment(authority, record, index, definition, &log)?
+        } else if let Some(selected) = selected {
+            super::backend::apply_boot(selected, definition, &log, apply)?
         } else {
             helper(
                 runner,
@@ -552,8 +587,8 @@ fn manual(runner: &Runner, program: &str, args: &[String], apply: bool) -> Resul
                 "AIRLOCK_LOG_DIR".into(),
                 super::report::helper_directory(&root, domain, mode)?.into_os_string(),
             ));
-            // Runner clears ambient selections. Boot's checked generation map must
-            // survive this nested backend handoff instead of falling back to admission.
+            // Preserve legacy/manual staging for compatibility helpers. Checked boot
+            // selections use the in-process typed backend path instead of this environment.
             // This remains a manual/boot path, not deployment authorization.
             if mode == "--backend-only"
                 && let Some(staged) = std::env::var_os("AIRLOCK_STAGED_GENERATIONS")

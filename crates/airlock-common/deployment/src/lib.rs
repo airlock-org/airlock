@@ -179,7 +179,7 @@
 //! | Trash purge | Separate explicit maintenance confirmation and lock, not a call from `activate`. Verified intent selection checks canonical confirmation, original UUID/volumes/generation/system/manifest, retired tag and named halted state. The remove adapter consumes the publication-gated request; cleanup preserves the same VM/generation/trash root. Expiry/waiver, retained references and alias discovery remain ordinary runtime checks. This independent authority cannot be derived from a deployment request. |
 //! | Generation/host pruning and scheduled maintenance | Separate maintenance policies and locks, not calls from `activate`. Completion only writes a maintenance request; the maintenance service applies retention and active-root protections before deletion. Those selection and filesystem algorithms remain unverified. |
 //! | Admission, candidate preparation, baseline capture | Separate pre-execution protocols write protected artifacts, provenance, roots and baseline snapshots. They use their existing review/admission/boot policies; possession of a deployment request does not grant admission or arbitrary filesystem authority. |
-//! | Boot setup/start, local development and administrative repair | Deliberate distinct policies. `boot.rs` invokes setup outside deployment; reviewed deployment proofs do not apply. Raw lifecycle commands are rejected by the deployment runner. Raw non-lifecycle mutations, the native setup executable, older admitted compatibility helpers and storage subcommands remain trusted escape boundaries. |
+//! | Boot setup/start, local development and administrative repair | Deliberate distinct policies. Checked boot carries opaque generation selections and verified retained/root/identity requests through native setup; reviewed deployment approval proofs do not apply. Raw lifecycle commands are rejected by the deployment runner. Raw non-lifecycle mutations, the native setup executable, older admitted compatibility helpers and storage subcommands remain trusted escape boundaries. |
 //! ## Trusted boundaries
 //!
 //! - The adapter must decode and classify every security field faithfully, including
@@ -234,10 +234,21 @@
 //!   I/O, exclusive scheduling, and terminating/reconcilable helpers. Revocation or
 //!   damaged authority intentionally blocks execution.
 //!
-//! The largest unverified policy boundary is the storage service's interpretation of admitted
-//! generations into concrete volume definitions and offline Qubes snapshots. Next are global
-//! setup's policy/kernel/template/default reconciliation and the admitted legacy batch executor.
-//! Their outer request identities are checked, but their internal effect selection is not proved.
+//! Storage attachment and checked boot setup retain their own verified generation identities.
+//! `boot::SelectedGeneration` compares every boot field against committed-record evidence;
+//! its requests select the exact retained-only storage command, generation-specific root lookup,
+//! halted root import and fixed kernel/system/root/store identity settings. Checked boot uses
+//! an explicit topology-bound, digested handoff and an in-process native backend, rather than
+//! optional staging environment variables. The storage receiver compares the decoded request
+//! with freshly loaded committed records before Qubes observations or admission selection.
+//! Partial legacy staging remains an explicit manual policy for unselected VMs.
+//!
+//! JSON/record projections, SHA-256 identity, generation authentication, path and decimal
+//! rendering, filesystem publication, process invocation and truthful external observations
+//! remain adapter assumptions. Global policy/kernel/template/default reconciliation, private
+//! resizing, boot-option construction and other backend settings do not acquire a complete
+//! boot orchestration theorem from these selected-generation requests. The admitted legacy
+//! batch executor retains its documented separate policy.
 //! Boot quarantine, retention/reference discovery and other maintenance policies have separate
 //! authority and incomplete proof coverage. Below those policy boundaries, truthful observations,
 //! durable acknowledgments, process resolution and faithful filesystem/Qubes execution remain

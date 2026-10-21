@@ -27,6 +27,12 @@ pub(crate) struct Request {
     /// Decoded topology belonging to the selected machine generation.
     #[arg(long, default_value = "/etc/airlock/qubes-topology.json")]
     topology: PathBuf,
+    /// Checked retained-generation selections for this exact topology; no environment fallback.
+    #[arg(long, requires = "boot_selection_hash")]
+    boot_selection: Option<PathBuf>,
+    /// Digest from the invoking coordinator; modified records cannot downgrade to manual admission.
+    #[arg(long, requires = "boot_selection")]
+    boot_selection_hash: Option<airlock_nix_core::identity::LockHash>,
     /// Configure autostart VMs and their local NetVM dependencies.
     #[arg(long, conflicts_with = "deferred")]
     boot_critical: bool,
@@ -316,6 +322,29 @@ pub(super) fn execute(request: Request) -> Result<()> {
         _ => anyhow::bail!("unsupported AIRLOCK_SETUP_CONFIG_PERSIST_STATE value"),
     };
     let mut session = Session::new(&request.topology, request.apply, scope, phase)?;
+    let boot = request
+        .boot_selection
+        .as_ref()
+        .map(|path| {
+            super::selection::BootSetup::read(
+                path,
+                request
+                    .boot_selection_hash
+                    .as_ref()
+                    .context("checked selection digest is missing")?,
+                &session.topology,
+            )
+        })
+        .transpose();
+    let boot = match boot {
+        Ok(boot) => boot,
+        Err(error) => {
+            // A rejected handoff must not leave an earlier successful setup receipt looking current.
+            let failure = Err(error);
+            session.finish(&failure)?;
+            return failure;
+        }
+    };
     let mut status =
         super::status::Display::new(scope, session.directory.join("setup-config.commands.log"));
     let result = (|| {
@@ -364,7 +393,17 @@ pub(super) fn execute(request: Request) -> Result<()> {
                 session.topology["domains"].get(domain.as_str()).is_some(),
                 "requested VM is not declared: {domain}"
             );
-            return backend::reconcile(&mut session, domain.as_str());
+            return match boot
+                .as_ref()
+                .map(|boot| boot.get(domain.as_str()))
+                .transpose()?
+                .flatten()
+            {
+                Some(selected) => {
+                    backend::reconcile_selected(&mut session, domain.as_str(), selected)
+                }
+                None => backend::reconcile(&mut session, domain.as_str()),
+            };
         }
         if let Some(domain) = &request.devices_only {
             return devices::reconcile(&mut session, domain.as_str());
@@ -392,16 +431,37 @@ pub(super) fn execute(request: Request) -> Result<()> {
                     ),
                     "Checking the VM and applying its configuration.",
                 );
-                session.service(&[
-                    "setup-config",
-                    "configure-domain",
-                    "--topology",
-                    request.topology.to_str().context("topology path")?,
-                    "--script",
-                    request.script.to_str().context("setup script path")?,
-                    domain,
-                    if request.apply { "--apply" } else { "--plan" },
-                ])?;
+                if let Some(selected) = boot
+                    .as_ref()
+                    .map(|boot| boot.get(domain))
+                    .transpose()?
+                    .flatten()
+                {
+                    // Checked boot backends stay in Rust; helper selection cannot be lost in an environment hop.
+                    let definitions = super::reconcile::definitions(
+                        &session.topology,
+                        request.script.to_str().context("setup script path")?,
+                        &request.topology,
+                    )?;
+                    super::reconcile::apply_boot(
+                        &crate::process::Runner::default(),
+                        &definitions,
+                        request.apply,
+                        domain,
+                        selected,
+                    )?;
+                } else {
+                    session.service(&[
+                        "setup-config",
+                        "configure-domain",
+                        "--topology",
+                        request.topology.to_str().context("topology path")?,
+                        "--script",
+                        request.script.to_str().context("setup script path")?,
+                        domain,
+                        if request.apply { "--apply" } else { "--plan" },
+                    ])?;
+                }
             }
         }
         status.show(

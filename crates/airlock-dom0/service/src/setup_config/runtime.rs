@@ -21,7 +21,7 @@ pub(super) struct Session {
     pub directory: PathBuf,
     /// Mutable compatibility receipt; not an authorization or transaction record.
     pub result: Value,
-    /// Staged generation mapping retained for every storage subprocess.
+    /// Legacy/manual or deployment generation map; checked boot carries its selection explicitly.
     pub staged: Option<PathBuf>,
     /// Append-only command diagnostics, separate from protocol output.
     log: File,
