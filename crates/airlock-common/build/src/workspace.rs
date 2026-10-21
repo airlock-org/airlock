@@ -96,6 +96,7 @@ impl Workspace {
         if matches!(
             package,
             "airlock-dom0-service"
+                | "airlock-image"
                 | "airlock-config"
                 | "airlock-dev"
                 | "airlock-machine-core"

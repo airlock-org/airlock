@@ -592,6 +592,39 @@ fn copy_workspace(source: &Path, target: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Compile the runtime preparer from its filtered source and exercise the installed command boundary.
+#[test]
+#[ignore = "explicit runtime-preparation package build with archived Nix sources"]
+fn package_runtime_preparer_builds_from_filtered_workspace() -> Result<()> {
+    let packages = Packages::new("runtime-preparer")?;
+    let reference = format!(
+        "path:{source}#packages.x86_64-linux.airlock-prepare-runtime",
+        source = packages.source.display(),
+    );
+    let reply: Value = serde_json::from_slice(&packages.nix(
+        "build",
+        &[
+            "build",
+            &reference,
+            "--no-link",
+            "--json",
+            "--print-build-logs",
+        ],
+    )?)?;
+    let output = reply[0]["outputs"]["out"]
+        .as_str()
+        .context("runtime preparer output")?;
+    let help = common::run(
+        packages
+            .runtime(&format!("{output}/bin/airlock-prepare-runtime"))
+            .arg("--help"),
+        None,
+    )?
+    .checked()?;
+    assert!(String::from_utf8(help)?.contains("Prepare initial VM state"));
+    Ok(())
+}
+
 /// Standalone application evaluation ignores an unavailable machine gitlink and a deliberately unusable parent flake.
 #[test]
 #[ignore = "explicit standalone application package evaluation with archived Nix sources"]
