@@ -31,6 +31,32 @@ impl Node {
             .context("missing Qubes XML attribute")
     }
 
+    /// Resolve Qubes' fixed dom0 identity without inventing names for guest records.
+    fn domain_name(&self) -> Result<&str> {
+        let name = self
+            .child("properties")?
+            .children
+            .iter()
+            .find(|property| property.attrs.get("name").is_some_and(|key| key == "name"))
+            .map(|property| property.text.as_str());
+
+        // Upstream AdminVM defaults to dom0 and does not serialize that fixed name.
+        // A conflicting explicit property must not become an alias for a guest.
+        if self
+            .attrs
+            .get("class")
+            .is_some_and(|class| class == "AdminVM")
+        {
+            ensure!(
+                name.is_none_or(|name| name == "dom0"),
+                "AdminVM must be named dom0"
+            );
+            return Ok("dom0");
+        }
+
+        name.context("missing VM name")
+    }
+
     fn value(&self) -> Value {
         let mut children: Vec<_> = self.children.iter().map(Node::value).collect();
         children.sort_by_cached_key(Value::to_string);
@@ -160,6 +186,18 @@ fn metadata(path: &Path) -> Result<Value> {
     ]))
 }
 
+/// Index all saved domains while retaining duplicate checks across explicit and implicit names.
+fn domains(root: &Node) -> Result<BTreeMap<&str, &Node>> {
+    let mut domains = BTreeMap::new();
+    for domain in &root.child("domains")?.children {
+        ensure!(
+            domains.insert(domain.domain_name()?, domain).is_none(),
+            "duplicate VM name"
+        );
+    }
+    Ok(domains)
+}
+
 impl Coordinator {
     pub(super) fn boot_snapshot(
         &self,
@@ -176,20 +214,7 @@ impl Coordinator {
             .iter()
             .map(|p| Ok((p.attr("name")?.to_owned(), p.attrs.clone())))
             .collect::<Result<_>>()?;
-        let mut domains = BTreeMap::new();
-        for d in &root.child("domains")?.children {
-            let name = &d
-                .child("properties")?
-                .children
-                .iter()
-                .find(|p| p.attrs.get("name").is_some_and(|s| s == "name"))
-                .context("missing VM name")?
-                .text;
-            ensure!(
-                domains.insert(name.as_str(), d).is_none(),
-                "duplicate VM name"
-            );
-        }
+        let domains = domains(&root)?;
         let managed: BTreeSet<_> = names.iter().map(GuestName::as_str).collect();
         let mut owners = BTreeMap::new();
         for (name, d) in &domains {
@@ -349,5 +374,81 @@ impl Coordinator {
             );
         }
         Ok((shared, snapshots))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Parse domain fragments through the same bounded XML reader used at boot.
+    fn configuration(domains: &str) -> Result<Node> {
+        let file = tempfile::NamedTempFile::new()?;
+        fs::write(
+            file.path(),
+            format!("<qubes><domains>{domains}</domains></qubes>"),
+        )?;
+        xml(file.path())
+    }
+
+    /// Both upstream's default representation and an explicit fixed name identify dom0.
+    #[test]
+    fn adminvm_default_name_coexists_with_explicit_guest_names() -> Result<()> {
+        let root = configuration(
+            r#"
+            <domain id="domain-0" class="AdminVM">
+                <properties><property name="label">black</property></properties>
+            </domain>
+            <domain class="StandaloneVM">
+                <properties><property name="name">sys-gui</property></properties>
+            </domain>
+        "#,
+        )?;
+        let indexed = domains(&root)?;
+        assert_eq!(
+            indexed.keys().copied().collect::<Vec<_>>(),
+            ["dom0", "sys-gui"]
+        );
+        assert_eq!(indexed["dom0"].attr("class")?, "AdminVM");
+
+        let explicit = configuration(
+            r#"
+            <domain class="AdminVM">
+                <properties><property name="name">dom0</property></properties>
+            </domain>
+        "#,
+        )?;
+        assert!(domains(&explicit)?.contains_key("dom0"));
+        Ok(())
+    }
+
+    /// Defaulting dom0 cannot excuse an unnamed guest, an alias or duplicate domain records.
+    #[test]
+    fn invalid_guest_and_adminvm_identities_remain_rejected() -> Result<()> {
+        for (input, expected) in [
+            (
+                r#"<domain class="StandaloneVM"><properties/></domain>"#,
+                "missing VM name",
+            ),
+            (
+                r#"<domain class="AdminVM"><properties><property name="name">sys-gui</property></properties></domain>"#,
+                "AdminVM must be named dom0",
+            ),
+            (
+                r#"<domain class="AdminVM"><properties/></domain><domain class="AdminVM"><properties/></domain>"#,
+                "duplicate VM name",
+            ),
+            (
+                r#"<domain class="AdminVM"><properties/></domain><domain><properties><property name="name">dom0</property></properties></domain>"#,
+                "duplicate VM name",
+            ),
+        ] {
+            let root = configuration(input)?;
+            let error = domains(&root)
+                .err()
+                .context("invalid identities were accepted")?;
+            assert!(error.to_string().contains(expected), "{error}");
+        }
+        Ok(())
     }
 }

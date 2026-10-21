@@ -298,6 +298,25 @@ fn xml(snapshots: &[Value]) -> std::io::Result<Vec<u8>> {
             writer
                 .create_element("domains")
                 .write_inner_content(|writer| {
+                    // Upstream saves dom0's fixed name implicitly, outside the guest snapshots.
+                    writer
+                        .create_element("domain")
+                        .with_attribute(("id", "domain-0"))
+                        .with_attribute(("class", "AdminVM"))
+                        .write_inner_content(|writer| {
+                            writer
+                                .create_element("properties")
+                                .write_inner_content(|writer| {
+                                    writer
+                                        .create_element("property")
+                                        .with_attribute(("name", "label"))
+                                        .write_text_content(quick_xml::events::BytesText::new(
+                                            "black",
+                                        ))?;
+                                    Ok(())
+                                })?;
+                            Ok(())
+                        })?;
                     for snapshot in snapshots {
                         writer
                             .create_element("domain")

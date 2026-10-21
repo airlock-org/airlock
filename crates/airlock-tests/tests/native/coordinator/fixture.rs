@@ -466,7 +466,8 @@ impl Machine {
             r#"<qubes><labels/><pools>
 <pool name="file" driver="file" dir_path="/var/lib/airlock"/>
 <pool name="closure" driver="airlock-closure" root_dir="/var/lib/airlock/pool"/>
-</pools><properties/><domains>"#,
+</pools><properties/><domains>
+<domain id="domain-0" class="AdminVM"><properties><property name="label">black</property></properties></domain>"#,
         );
         for name in ["usr-home", "sys-gui"] {
             xml.push_str(&format!(
