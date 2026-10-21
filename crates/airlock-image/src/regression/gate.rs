@@ -180,6 +180,16 @@ impl Gate {
     /// Capture failures as well as successful receipts from the actual command.
     fn invoke(&self, image: bool, extra: &[&str]) -> Result<(bool, Value)> {
         let result = run(&mut self.command_extra(image, extra), None)?;
+        if self.path("input-roots.json").exists() {
+            let roots: Vec<(PathBuf, String)> =
+                serde_json::from_slice(&fs::read(self.path("input-roots.json"))?)?;
+            for (link, _) in roots {
+                ensure!(
+                    !link.parent().context("builder root directory")?.exists(),
+                    "builder roots survived command exit"
+                );
+            }
+        }
         let report = self.report().with_context(|| {
             format!(
                 "gate output: {errors}",
@@ -210,6 +220,23 @@ fn cached_acceptance_is_bound_to_exact_prepared_inputs() -> Result<()> {
     assert_eq!(first["cache"], "miss");
     assert_eq!(gate.calls("trials")?, ["etc-marker", "service-setting"]);
     assert!(gate.path("image").is_symlink());
+    let roots: Vec<(PathBuf, String)> =
+        serde_json::from_slice(&fs::read(gate.path("input-roots.json"))?)?;
+    let closure = gate
+        .path("store")
+        .join(gate.closure.trim_start_matches('/'));
+    let mut expected = fs::read_to_string(closure.join("store-paths"))?
+        .lines()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    expected.insert(0, gate.closure.clone());
+    assert_eq!(
+        roots
+            .into_iter()
+            .map(|(_, target)| target)
+            .collect::<Vec<_>>(),
+        expected
+    );
     let build: Value = serde_json::from_str(&gate.calls("builds")?[0])?;
     assert!(build["seed"].as_str().unwrap().ends_with("/seed.tar.gz"));
     assert!(build["inputs"].as_str().unwrap().ends_with("/inputs.json"));
@@ -261,6 +288,25 @@ fn forced_failure_revokes_old_receipt() -> Result<()> {
         Ok(false)
     }
     assert!(diagnostic(&gate.path("logs"))?);
+    Ok(())
+}
+
+/// A partially failed root registration releases its links before returning and never starts trials.
+#[test]
+fn failed_input_rooting_releases_roots_before_trials() -> Result<()> {
+    let gate = Gate::new()?;
+    fs::write(gate.path("fail-roots"), "")?;
+    let (success, report) = gate.invoke(true, &[])?;
+    assert!(!success);
+    assert!(
+        report["error"]
+            .as_str()
+            .unwrap()
+            .contains("input rooting failed")
+    );
+    assert!(gate.calls("trials")?.is_empty());
+    assert!(gate.calls("builds")?.is_empty());
+    assert!(!gate.path("image").is_symlink());
     Ok(())
 }
 

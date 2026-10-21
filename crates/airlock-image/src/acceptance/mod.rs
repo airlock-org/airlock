@@ -103,6 +103,8 @@ pub(crate) struct TrialResult {
 }
 
 struct Inputs {
+    // Keep the closure metadata and every builder input rooted until checks and publication finish.
+    _roots: tempfile::TempDir,
     // Committed machine revision, checked again before publishing evidence.
     revision: String,
     // Digest of the machine lock file used by both trials and the image.
@@ -327,11 +329,19 @@ fn inputs(args: &Args) -> Result<Inputs> {
     for path in &paths {
         let _: StorePath = path.parse()?;
     }
+
+    let roots = tempfile::Builder::new()
+        .prefix("airlock-builder-roots-")
+        .tempdir_in(&args.temporary_root)?;
     output(
         Command::new("nix-store")
             .arg("--store")
             .arg(&args.source_store_root)
+            .arg("--add-root")
+            .arg(roots.path().join("input"))
+            .arg("--indirect")
             .arg("--realise")
+            .arg(&args.closure)
             .args(&paths),
     )?;
     for path in &paths {
@@ -354,6 +364,7 @@ fn inputs(args: &Args) -> Result<Inputs> {
 
     let registration = String::from_utf8(read(&closure.join("registration"), 32 * 1024 * 1024)?)?;
     Ok(Inputs {
+        _roots: roots,
         revision,
         lock_hash,
         paths,

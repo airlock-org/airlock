@@ -6,9 +6,23 @@ use std::{
     fs::{self, OpenOptions},
     io::{Read, Write},
     os::unix::fs::symlink,
-    path::Path,
+    path::{Path, PathBuf},
     time::Duration,
 };
+
+/// Require every recorded builder root to remain live during trials, assembly and final publication.
+fn input_roots_live(root: &Path) -> Result<()> {
+    let roots: Vec<(PathBuf, String)> =
+        serde_json::from_slice(&fs::read(root.join("input-roots.json"))?)?;
+    ensure!(!roots.is_empty(), "builder inputs have no roots");
+    for (link, target) in roots {
+        ensure!(
+            fs::read_link(link)? == Path::new(&target),
+            "builder root changed"
+        );
+    }
+    Ok(())
+}
 
 /// Execute only the offline tool calls selected by an owned temporary fixture.
 pub(crate) fn execute(root: &Path, name: &str, args: &[String]) -> Result<()> {
@@ -28,19 +42,55 @@ pub(crate) fn execute(root: &Path, name: &str, args: &[String]) -> Result<()> {
                     "realisation required"
                 );
                 let target = Path::new(args.get(index + 1).context("root path")?);
-                if target.is_symlink() {
-                    fs::remove_file(target)?;
+                let builder_inputs =
+                    target
+                        .parent()
+                        .and_then(Path::file_name)
+                        .is_some_and(|name| {
+                            name.as_encoded_bytes()
+                                .starts_with(b"airlock-builder-roots-")
+                        });
+                if !builder_inputs {
+                    input_roots_live(root)?;
                 }
-                symlink(args.last().context("root destination")?, target)?;
-            } else if args.iter().any(|arg| arg == "--realise") && root.join("mutate").exists() {
-                let target = fs::read_to_string(root.join("mutate"))?;
-                OpenOptions::new()
-                    .append(true)
-                    .open(target)?
-                    .write_all(b" ")?;
+                let realise = args.iter().position(|arg| arg == "--realise").unwrap();
+                let mut roots = Vec::new();
+                for (index, destination) in args[realise + 1..].iter().enumerate() {
+                    let link = if index == 0 {
+                        target.to_owned()
+                    } else {
+                        PathBuf::from(format!(
+                            "{base}-{number}",
+                            base = target.display(),
+                            number = index + 1
+                        ))
+                    };
+                    if link.is_symlink() {
+                        fs::remove_file(&link)?;
+                    }
+                    symlink(destination, &link)?;
+                    roots.push((link, destination.clone()));
+                }
+                if builder_inputs {
+                    fs::write(root.join("input-roots.json"), serde_json::to_vec(&roots)?)?;
+                    ensure!(!root.join("fail-roots").exists(), "input rooting failed");
+                    if root.join("mutate").exists() {
+                        let target = fs::read_to_string(root.join("mutate"))?;
+                        OpenOptions::new()
+                            .append(true)
+                            .open(target)?
+                            .write_all(b" ")?;
+                    }
+                }
+            } else {
+                ensure!(
+                    !args.iter().any(|arg| arg == "--realise"),
+                    "unrooted realisation"
+                );
             }
         }
         "bwrap" => {
+            input_roots_live(root)?;
             for required in ["--unshare-net", "--offline", "--clearenv"] {
                 ensure!(args.iter().any(|arg| arg == required), "missing {required}");
             }
@@ -89,6 +139,7 @@ pub(crate) fn execute(root: &Path, name: &str, args: &[String]) -> Result<()> {
             }
         }
         "image-builder" => {
+            input_roots_live(root)?;
             let seed = std::env::var("AIRLOCK_MACHINE_SEED_ARCHIVE")?;
             let inputs = std::env::var("AIRLOCK_MACHINE_OFFLINE_INPUTS")?;
             writeln!(
