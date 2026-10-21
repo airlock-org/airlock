@@ -150,13 +150,19 @@ fn main() -> Result<()> {
     match mode.as_str() {
         "build-cpu-child" => println!("{}", serde_json::to_string(&build_cpus()?)?),
         "airlock-dom0-service" => {
-            let request: serde_json::Value = serde_json::from_reader(std::io::stdin())?;
+            let request: serde_json::Value = if args.iter().any(|arg| arg == "verify-handoff") {
+                json!({})
+            } else {
+                serde_json::from_reader(std::io::stdin())?
+            };
             let mut calls = fs::OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(std::env::var_os("AIRLOCK_TEST_IMAGE_CALLS").context("image calls")?)?;
             writeln!(calls, "{}", json!({"args":args[1..],"request":request}))?;
-            let response = if args.iter().any(|arg| arg == "inspect-prepared") {
+            let response = if args.iter().any(|arg| arg == "verify-handoff") {
+                json!({"schema":"airlock.boot-handoff.v1", "status":"passed", "generations":{"usr-home":7}})
+            } else if args.iter().any(|arg| arg == "inspect-prepared") {
                 json!({
                     "view_size": 4096,
                     "root_image": std::env::var("AIRLOCK_TEST_IMAGE_ROOT")?,

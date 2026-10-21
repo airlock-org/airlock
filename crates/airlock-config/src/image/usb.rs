@@ -112,10 +112,11 @@ fn prepared_configuration(
         })
         .call(nix_text!(
             r#"
-            {native}/bin/airlock-dom0-service storage image verify-topology {topology}
+            {native}/bin/airlock-dom0-service storage image verify-handoff {topology} {prepared}/pool
             cp {topology} "$out"
         "#,
             native = native,
+            prepared = prepared.clone(),
             topology = store::json(
                 &context.pkgs,
                 "airlock-usb-topology.json",

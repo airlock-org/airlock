@@ -279,3 +279,5 @@ pub mod storage;
 pub mod attachment;
 
 pub mod purge;
+
+pub mod boot;

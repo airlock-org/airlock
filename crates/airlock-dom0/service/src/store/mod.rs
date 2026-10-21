@@ -45,6 +45,8 @@ mod prepared;
 
 mod image_cli;
 
+pub(crate) mod handoff;
+
 mod fs;
 
 mod generations;

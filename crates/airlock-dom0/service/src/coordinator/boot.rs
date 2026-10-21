@@ -2,6 +2,7 @@
 //! Boot still checks saved storage identities and each started guest's readiness.
 
 use super::*;
+use airlock_deployment_core::boot::{DomainState, Handoff, Reuse};
 use airlock_machine_core::boot::BootInputs;
 use airlock_nix_core::identity::LockHash;
 use serde::{Deserialize, Serialize};
@@ -24,12 +25,10 @@ struct BootReceipt {
 struct BootSelection {
     // Setup program from the selected release or current image.
     setup: StoreFile,
-    // Complete intended VM inventory, even during scoped GUI setup.
-    topology: Topology,
-    // Original JSON preserving omitted and explicitly reset settings.
-    raw: Value,
-    // Exact admitted generation map supplied to setup, when present.
-    staged: Option<PathBuf>,
+    // Complete checked declaration, preserving omitted and explicitly reset settings.
+    inputs: BootInputs,
+    // Exact staged selections checked against committed generations; not deployment approval.
+    handoff: Option<Handoff>,
     // Cache identity for this complete boot selection.
     identity: LockHash,
 }
@@ -62,7 +61,9 @@ impl Coordinator {
                 "interrupted deployment; resume or rollback in recovery"
             );
         }
-        let (setup, raw, staged) = if let Some(selected) = self.selection()? {
+        let selected = self.selection()?;
+        let image_boot = selected.is_none();
+        let (setup, raw, staged) = if let Some(selected) = selected {
             ensure!(
                 selected.profile == state::profile()?,
                 "selected deployment belongs to another boot profile"
@@ -101,19 +102,90 @@ impl Coordinator {
         let inputs = BootInputs::new(raw)?;
         let raw = inputs.raw().clone();
         let topology = inputs.topology().clone();
-        let generations = staged
+        let mut generations = staged
             .as_ref()
-            .map(|p| state::read::<Value>(p))
-            .transpose()?
-            .unwrap_or(json!({}));
+            .map(|path| state::read::<BTreeMap<GuestName, GenerationId>>(path))
+            .transpose()?;
+        if image_boot {
+            let receipt_path = configured_path(
+                "AIRLOCK_PREPARED_RUNTIME",
+                "/var/lib/airlock/prepared-runtime.json",
+            )?;
+            let receipt = state::optional::<Value>(&receipt_path)?;
+            ensure!(
+                receipt.is_some() || !Path::new("/etc/airlock/usb-dev").exists(),
+                "prepared USB runtime receipt is missing; use recovery"
+            );
+            if let Some(receipt) = receipt {
+                ensure!(
+                    matches!(
+                        receipt["schema"].as_str(),
+                        Some("airlock.prepared-runtime.v1" | "airlock.prepared-runtime.v2")
+                    ),
+                    "unsupported prepared runtime receipt"
+                );
+                // The image receipt is a selection hint, never a successful-validation token.
+                // Initial images need not have a host-machine binding yet. All selected
+                // generations are independently inspected and compared below.
+                let prepared: BTreeMap<GuestName, GenerationId> =
+                    if receipt["schema"] == "airlock.prepared-runtime.v2" {
+                        serde_json::from_value(receipt["boot_handoff"]["generations"].clone())?
+                    } else {
+                        topology
+                            .domains
+                            .iter()
+                            .map(|(name, domain)| {
+                                let descriptor: Value = state::read(
+                                    &Path::new(domain.backend.store.source.as_str())
+                                        .join("prepared.json"),
+                                )?;
+                                ensure!(
+                                    descriptor["schema"] == "airlock.closure-store.prepared.v1"
+                                        && descriptor["domain"] == name.as_str(),
+                                    "invalid legacy image descriptor: {name}"
+                                );
+                                let generation: GenerationId =
+                                    serde_json::from_value(descriptor["generation"].clone())?;
+                                Ok((name.clone(), generation))
+                            })
+                            .collect::<Result<_>>()?
+                    };
+                if let Some(mapping) = &generations {
+                    ensure!(
+                        prepared == *mapping,
+                        "prepared runtime and boot generation map disagree"
+                    );
+                } else {
+                    generations = Some(prepared);
+                }
+                let mapping = generations
+                    .as_ref()
+                    .context("prepared image boot generation map is missing")?;
+                ensure!(
+                    mapping.len() == topology.domains.len()
+                        && topology
+                            .domains
+                            .keys()
+                            .all(|name| mapping.contains_key(name)),
+                    "prepared image boot generation map is incomplete or contains extra VMs"
+                );
+            }
+        }
+        let handoff = generations
+            .as_ref()
+            .map(|mapping| {
+                crate::store::handoff::selected(&topology, mapping, |name, generation| {
+                    self.store().describe(name, generation)
+                })
+            })
+            .transpose()?;
         let identity =
             state::digest(&json!({"topology":raw,"setup":setup,"generations":generations}))?
                 .parse()?;
         Ok(BootSelection {
             setup,
-            topology,
-            raw,
-            staged,
+            inputs,
+            handoff,
             identity,
         })
     }
@@ -141,19 +213,42 @@ impl Coordinator {
             .collect();
         if known.len() != names.len() || receipt.identity != selection.identity {
             if !known.is_empty() {
-                self.boot_snapshot(&selection.topology, &known)?;
+                self.boot_snapshot(selection.inputs.topology(), &known)?;
             }
             return Ok(false);
         }
-        let (shared, snapshots) = self.boot_snapshot(&selection.topology, names)?;
-        Ok(shared == receipt.shared
-            && snapshots
-                .iter()
-                .all(|(n, v)| receipt.domains.get(n) == Some(v)))
+        let (shared, snapshots) = self.boot_snapshot(selection.inputs.topology(), names)?;
+        let fresh = snapshots
+            .iter()
+            .map(|(name, fingerprint)| DomainState {
+                domain: name.to_string(),
+                fingerprint: fingerprint.to_string(),
+            })
+            .collect::<Vec<_>>();
+        let saved = snapshots
+            .keys()
+            .map(|name| DomainState {
+                domain: name.to_string(),
+                fingerprint: receipt
+                    .domains
+                    .get(name)
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
+            })
+            .collect::<Vec<_>>();
+        Ok(Reuse::check(
+            selection.identity.to_string(),
+            receipt.identity.as_str(),
+            shared.as_str(),
+            receipt.shared.as_str(),
+            &fresh,
+            &saved,
+        )
+        .is_some())
     }
 
     fn boot_record(&self, selection: &BootSelection, names: &[GuestName]) -> Result<()> {
-        let (shared, mut domains) = self.boot_snapshot(&selection.topology, names)?;
+        let (shared, mut domains) = self.boot_snapshot(selection.inputs.topology(), names)?;
         if let Some(previous) = self.boot_receipt()?
             && previous.identity == selection.identity
             && previous.shared == shared
@@ -215,7 +310,7 @@ impl Coordinator {
     }
 
     fn scoped_topology(&self, selection: &BootSelection, names: &[GuestName]) -> Result<Value> {
-        let mut raw = selection.raw.clone();
+        let mut raw = selection.inputs.raw().clone();
         raw["domains"]
             .as_object_mut()
             .context("invalid topology domains")?
@@ -234,7 +329,12 @@ impl Coordinator {
                 ]
                 .contains(&key.as_str())
                     || value.as_str().is_none_or(|v| {
-                        !selection.topology.domains.keys().any(|n| n.as_str() == v)
+                        !selection
+                            .inputs
+                            .topology()
+                            .domains
+                            .keys()
+                            .any(|n| n.as_str() == v)
                             || names.iter().any(|n| n.as_str() == v)
                     })
             });
@@ -242,7 +342,7 @@ impl Coordinator {
         let mut kernels = BTreeSet::new();
         let mut templates = BTreeSet::new();
         for name in names {
-            let d = &selection.topology.domains[name];
+            let d = &selection.inputs.topology().domains[name];
             kernels.insert(d.backend.kernel.name.clone());
             if let Some(k) = d.prefs.get("kernel").and_then(Value::as_str) {
                 kernels.insert(k.into());
@@ -252,7 +352,8 @@ impl Coordinator {
             }
         }
         if let Some(k) = selection
-            .topology
+            .inputs
+            .topology()
             .prefs
             .get("default_kernel")
             .and_then(Value::as_str)
@@ -285,16 +386,21 @@ impl Coordinator {
         self.ensure_no_pruning()?;
         let selected = self.boot_selection(setup, Path::new("/etc/airlock/qubes-topology.json"))?;
         let mut env = Vec::new();
-        if let Some(path) = &selected.staged {
-            env.push(("AIRLOCK_STAGED_GENERATIONS".into(), path.as_os_str().into()));
+        if let Some(handoff) = &selected.handoff {
+            let mapping: BTreeMap<_, _> = handoff
+                .selections()
+                .iter()
+                .map(|selection| (selection.domain.as_str(), selection.generation))
+                .collect();
+            let path = runtime()?.join("checked-generations.json");
+            state::save(&path, &mapping)?;
+            env.push(("AIRLOCK_STAGED_GENERATIONS".into(), path.into_os_string()));
         }
         if !gui && !background {
             let mut args = args;
-            if self.selection()?.is_some() {
-                let path = runtime()?.join("topology.json");
-                public_save(&path, &selected.raw)?;
-                args.extend(["--topology".into(), path.into_os_string()]);
-            }
+            let path = runtime()?.join("topology.json");
+            public_save(&path, selected.inputs.raw())?;
+            args.extend(["--topology".into(), path.into_os_string()]);
             self.runner.run(
                 selected.setup.as_str(),
                 &args,
@@ -308,11 +414,11 @@ impl Coordinator {
             "scoped boot setup accepts only --apply and one scope"
         );
         let started = Instant::now();
-        let gui_names = self.gui_domains(&selected.topology)?;
+        let gui_names = self.gui_domains(selected.inputs.topology())?;
         let names = if gui {
             gui_names.clone()
         } else {
-            planning::ordered(&selected.topology)?
+            planning::ordered(selected.inputs.topology())?
                 .into_iter()
                 .filter(|n| !gui_names.contains(n))
                 .collect()
@@ -321,7 +427,7 @@ impl Coordinator {
         let log = configured_path("AIRLOCK_LOG_DIR", "/var/log/airlock")?;
         let reused = self.boot_cached(&selected, &names)?;
         if gui {
-            public_save(&runtime.join("topology.json"), &selected.raw)?;
+            public_save(&runtime.join("topology.json"), selected.inputs.raw())?;
             for unit in [
                 "qubes-db-dom0.service",
                 "qubesd.service",
@@ -394,13 +500,17 @@ impl Coordinator {
             self.boot_record(
                 &selected,
                 &selected
-                    .topology
+                    .inputs
+                    .topology()
                     .domains
                     .keys()
                     .cloned()
                     .collect::<Vec<_>>(),
             )?;
-            public_save(&system()?.join("current-topology.json"), &selected.raw)?;
+            public_save(
+                &system()?.join("current-topology.json"),
+                selected.inputs.raw(),
+            )?;
         }
         let report = json!({"schema":"airlock.boot-configuration-result.v1","status":"passed","scope":if gui { "gui" } else { "background" },"reused":reused,"domains":names,"elapsed_seconds":started.elapsed().as_secs_f64()});
         public_save(&log.join("boot-configuration.json"), &report)?;
@@ -448,17 +558,17 @@ impl Coordinator {
             .context("invalid setup path")?
             .parse()?;
         let selected = self.boot_selection(setup, topology)?;
-        self.enforce_trash(&selected.topology)?;
+        self.enforce_trash(selected.inputs.topology())?;
         let running = self.running()?;
         ensure!(
             required
                 .iter()
-                .all(|n| selected.topology.domains.contains_key(n) && running.contains(n)),
+                .all(|n| selected.inputs.topology().domains.contains_key(n) && running.contains(n)),
             "guarded VMs are not declared and running"
         );
         let starts = planning::plan(
-            &selected.topology,
-            &selected.topology,
+            selected.inputs.topology(),
+            selected.inputs.topology(),
             &BTreeSet::new(),
             &[],
             false,
@@ -479,7 +589,13 @@ impl Coordinator {
             {
                 started.push(name);
             }
-            self.wait_guest(name, &selected.topology.domains[name].backend.system.source)?;
+            self.wait_guest(
+                name,
+                &selected.inputs.topology().domains[name]
+                    .backend
+                    .system
+                    .source,
+            )?;
         }
         let baseline = self.baseline()?;
         let observed =

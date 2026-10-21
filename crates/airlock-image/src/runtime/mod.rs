@@ -46,11 +46,37 @@ pub(crate) fn main() -> Result<()> {
         "runtime output must not already exist"
     );
 
+    let handoff: serde_json::Value = serde_json::from_str(&crate::support::output(
+        Command::new("airlock-dom0-service")
+            .args(["storage", "image", "verify-handoff"])
+            .arg(&args.topology)
+            .arg(&args.pool),
+    )?)?;
+    ensure!(
+        handoff["schema"] == "airlock.boot-handoff.v1" && handoff["status"] == "passed",
+        "invalid prepared boot handoff"
+    );
+
     let plans = topology
         .domains
         .iter()
         .map(|(name, domain)| plan(name, domain, &args.pool))
         .collect::<Result<Vec<_>>>()?;
+
+    for plan in &plans {
+        ensure!(
+            handoff["generations"][&plan.name]
+                .as_u64()
+                .map(|generation| generation.to_string())
+                .as_deref()
+                == plan
+                    .features
+                    .get("airlock-store-generation")
+                    .map(String::as_str),
+            "image plan differs from checked boot generation: {name}",
+            name = plan.name
+        );
+    }
 
     fs::create_dir_all(
         args.output
@@ -126,6 +152,6 @@ pub(crate) fn main() -> Result<()> {
 
     atomic_json(
         &args.output.join("receipt.json"),
-        &json!({"schema":"airlock.prepared-runtime.v1","domains":topology.domains.keys().collect::<Vec<_>>(),"hardware_assignments":"deferred-to-boot"}),
+        &json!({"schema":"airlock.prepared-runtime.v2","domains":topology.domains.keys().collect::<Vec<_>>(),"boot_handoff":handoff,"hardware_assignments":"deferred-to-boot"}),
     )
 }

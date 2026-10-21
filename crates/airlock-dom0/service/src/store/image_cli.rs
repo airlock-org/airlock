@@ -36,6 +36,15 @@ enum Operation {
         // Descriptors binding the selected seed files.
         descriptors: PathBuf,
     },
+    VerifyHandoff {
+        // Exact generated topology consumed by first boot.
+        topology: PathBuf,
+        // Physical prepared pool; committed records retain runtime paths.
+        pool: PathBuf,
+        // Runtime pool identity embedded in descriptors and manifests.
+        #[arg(long, default_value = "/var/lib/airlock/closure-store")]
+        runtime_root: PathBuf,
+    },
     VerifyTopology {
         // Generated boot configuration decoded with the runtime's typed model.
         topology: PathBuf,
@@ -117,6 +126,15 @@ pub(super) fn run(command: Request) -> Result<Value> {
         Operation::VerifyOutputs { root, descriptors } => {
             prepared::verify_outputs(&root, &descriptors)
         }
+        Operation::VerifyHandoff {
+            topology,
+            pool,
+            runtime_root,
+        } => super::handoff::image(
+            crate::state::configuration(&topology)?,
+            &pool,
+            &runtime_root,
+        ),
         Operation::VerifyTopology { topology } => {
             let inputs = airlock_machine_core::boot::BootInputs::new(crate::state::configuration(
                 &topology,
