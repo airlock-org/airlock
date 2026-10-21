@@ -2,9 +2,10 @@
 
 use crate::{environment::Environment, support};
 use airlock_nix_core::runtime::process;
+use airlock_nix_core::store_path::StorePath;
 use anyhow::{Context, Result, ensure};
 use clap::ValueEnum;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -146,9 +147,8 @@ fn logical(path: &Path, store: &Path) -> Option<PathBuf> {
     let Component::Normal(name) = relative.components().next()? else {
         return None;
     };
-    store
-        .join(name)
-        .exists()
+    fs::symlink_metadata(store.join(name))
+        .is_ok()
         .then(|| PathBuf::from("/nix/store").join(name))
 }
 
@@ -178,13 +178,38 @@ struct Image {
     backing: Option<String>,
 }
 
+/// A referenced store object that was already absent before collection began.
+#[derive(Serialize)]
+struct MissingBacking {
+    /// VM disk or retained backup whose chain cannot reach its base.
+    image: PathBuf,
+    /// Header's backing path, including any symlink alias used to reach the absent object.
+    backing: PathBuf,
+    /// Logical Nix object whose directory is absent from the selected physical store.
+    missing_store_object: PathBuf,
+}
+
+/// Distinguish an absent store object from an unreadable or damaged existing image.
+enum ImageLocation {
+    /// A resolved path that can be inspected without host/private-store namespace ambiguity.
+    File {
+        /// Physical file or directory reached after resolving image symlinks.
+        path: PathBuf,
+    },
+    /// An entire valid store object is already missing; this is not an inspection error.
+    AbsentObject {
+        /// Logical identity retained in the diagnostic even though no object remains to root.
+        object: PathBuf,
+    },
+}
+
 /// Resolve image symlinks in the selected store, retaining both aliases and their targets.
 fn image_file(
     path: &Path,
     store: &Path,
     paths: &mut Vec<PathBuf>,
     links: &mut usize,
-) -> Result<PathBuf> {
+) -> Result<ImageLocation> {
     paths.push(path.to_owned());
     let mapped = match path.strip_prefix("/nix/store") {
         Ok(relative) => store.join(relative),
@@ -200,34 +225,69 @@ fn image_file(
             }
             Component::Normal(name) => {
                 output.push(name);
-                if fs::symlink_metadata(&output)?.file_type().is_symlink() {
+                let metadata = match fs::symlink_metadata(&output) {
+                    Ok(metadata) => metadata,
+                    Err(error)
+                        if error.kind() == std::io::ErrorKind::NotFound
+                            && output.parent() == Some(store) =>
+                    {
+                        let object = Path::new("/nix/store").join(name);
+                        let _: StorePath = object
+                            .to_str()
+                            .context("non-UTF-8 backing store object")?
+                            .parse()?;
+                        return Ok(ImageLocation::AbsentObject { object });
+                    }
+                    Err(error) => return Err(error.into()),
+                };
+                if metadata.file_type().is_symlink() {
                     *links += 1;
                     ensure!(*links <= 40, "too many symlinks in backing image path");
                     paths.push(output.clone());
                     let target = fs::read_link(&output)?;
                     output.pop();
-                    output = image_file(&output.join(target), store, paths, links)?;
+                    match image_file(&output.join(target), store, paths, links)? {
+                        ImageLocation::File { path } => output = path,
+                        absent @ ImageLocation::AbsentObject { .. } => return Ok(absent),
+                    }
                 }
             }
             _ => anyhow::bail!("unsupported backing image path"),
         }
     }
     paths.push(output.clone());
-    Ok(output)
+    Ok(ImageLocation::File { path: output })
 }
 
 /// Inspect each layer without asking host QEMU to open private-store backing paths itself.
-fn backing_paths(qemu: &std::ffi::OsStr, image: &Path, store: &Path) -> Result<Vec<PathBuf>> {
+fn backing_paths(
+    qemu: &std::ffi::OsStr,
+    image: &Path,
+    store: &Path,
+    missing: &mut Vec<MissingBacking>,
+) -> Result<Vec<PathBuf>> {
     let mut named = image.to_owned();
     let mut paths = Vec::new();
     let mut seen = BTreeSet::new();
-    for _ in 0..64 {
-        let physical = image_file(&named, store, &mut paths, &mut 0).with_context(|| {
+    for layer in 0..64 {
+        let location = image_file(&named, store, &mut paths, &mut 0).with_context(|| {
             format!(
                 "cannot resolve backing image {image}",
                 image = named.display()
             )
         })?;
+        let physical = match location {
+            ImageLocation::File { path } => path,
+            ImageLocation::AbsentObject { object } => {
+                ensure!(layer > 0, "VM image disappeared before backing inspection");
+                missing.push(MissingBacking {
+                    image: image.to_owned(),
+                    backing: named,
+                    missing_store_object: object,
+                });
+                return Ok(paths);
+            }
+        };
         ensure!(physical.is_file(), "backing image is not a regular file");
         ensure!(seen.insert(physical.clone()), "cyclic QEMU backing chain");
         let information = support::text(
@@ -270,6 +330,7 @@ fn roots(
     links: &Path,
     logs: &Path,
     store: &Path,
+    missing: &mut Vec<MissingBacking>,
 ) -> Result<BTreeMap<PathBuf, (String, String)>> {
     let mut roots = BTreeMap::new();
     let mut add = |name: String, path: &Path, reason: String| {
@@ -307,8 +368,8 @@ fn roots(
         {
             continue;
         }
-        // Missing or failed backing-chain evidence must not discard the roots of a present disk.
-        for path in backing_paths(&qemu, &entry.path(), store)
+        // Retain reachable layers even when a later store object was already removed.
+        for path in backing_paths(&qemu, &entry.path(), store, missing)
             .context("cannot inspect qcow2 backing roots")?
         {
             add(
@@ -351,6 +412,37 @@ fn roots(
         }
     }
     Ok(roots)
+}
+
+/// Incomplete chains may add protection, but cannot revoke any previously known existing root.
+fn retain_previous(
+    directory: &Path,
+    store: &Path,
+    roots: &mut BTreeMap<PathBuf, (String, String)>,
+) -> Result<()> {
+    for entry in entries(directory)? {
+        if !entry.file_type()?.is_symlink() {
+            continue;
+        }
+        let target = fs::read_link(entry.path())?;
+        let _: StorePath = target
+            .to_str()
+            .context("non-UTF-8 previous GC root")?
+            .parse()
+            .context("invalid previous GC root")?;
+        if let Some(path) = logical(&target, store) {
+            roots.entry(path.clone()).or_insert_with(|| {
+                (
+                    format!(
+                        "retained-{object}",
+                        object = path.file_name().unwrap().to_string_lossy()
+                    ),
+                    "previous-root:incomplete-backing-chain".into(),
+                )
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Publish distinct roots before deleting stale links, so filename collisions cannot drop retention.
@@ -463,7 +555,18 @@ pub(crate) fn execute(root: &Path, mode: Mode) -> Result<()> {
         .open(data.join("gc.lock"))?;
     rustix::fs::flock(&lock, rustix::fs::FlockOperation::NonBlockingLockExclusive)
         .context("another Airlock GC operation is running")?;
-    let roots = roots(root, &vm, &links, &logs, &store)?;
+    let mut missing = Vec::new();
+    let mut roots = roots(root, &vm, &links, &logs, &store, &mut missing)?;
+    if !missing.is_empty() {
+        retain_previous(&managed, &store, &mut roots)?;
+        for gap in &missing {
+            eprintln!(
+                "Warning: {image} references absent backing object {object}; retaining previous managed roots and collecting only unrelated outputs.",
+                image = gap.image.display(),
+                object = gap.missing_store_object.display()
+            );
+        }
+    }
     publish(&managed, &roots)?;
     let before = size(&nix)?;
     let program = std::env::var_os("AIRLOCK_NIX_STORE_BIN").unwrap_or_else(|| "nix-store".into());
@@ -509,7 +612,7 @@ pub(crate) fn execute(root: &Path, mode: Mode) -> Result<()> {
     let result = logs.join("airlock-store-gc.json");
     support::record(
         &result,
-        &json!({"schema":"airlock.store-gc.v1","mode":match mode {Mode::Auto=>"auto",Mode::DryRun=>"dry-run",Mode::Run=>"run",Mode::Roots=>"roots"},"data_root":data,"nix_root":nix,"store_dir":store,"gcroots_dir":managed,"root_manifest":managed.join("manifest.tsv"),"root_count":roots.len(),"auto_threshold_gib":threshold,"threshold_bytes":threshold_bytes,"store_bytes_before":before,"store_bytes_after":size(&nix)?,"dead_count":dead,"gc_ran":collected,"dead_log":dead_log,"dead_stderr_log":dead_errors,"gc_log":gc_log,"result_json":result}),
+        &json!({"schema":"airlock.store-gc.v1","mode":match mode {Mode::Auto=>"auto",Mode::DryRun=>"dry-run",Mode::Run=>"run",Mode::Roots=>"roots"},"data_root":data,"nix_root":nix,"store_dir":store,"gcroots_dir":managed,"root_manifest":managed.join("manifest.tsv"),"root_count":roots.len(),"missing_backing_images":missing,"auto_threshold_gib":threshold,"threshold_bytes":threshold_bytes,"store_bytes_before":before,"store_bytes_after":size(&nix)?,"dead_count":dead,"gc_ran":collected,"dead_log":dead_log,"dead_stderr_log":dead_errors,"gc_log":gc_log,"result_json":result}),
     )?;
     println!(
         "Airlock data root: {data}\nAirlock Nix root:  {nix}\nRooted paths:     {count}\nDead path count:  {dead}\nResult JSON:      {result}",

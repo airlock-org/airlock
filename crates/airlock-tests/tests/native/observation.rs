@@ -180,6 +180,7 @@ fn guarded_gc_retains_structured_roots_and_preserves_store_selection() -> Result
     assert_eq!(dry["schema"], "airlock.store-gc.v1");
     assert_eq!(dry["nix_root"], json!(nix_root));
     assert_eq!(dry["root_count"], 6);
+    assert_eq!(dry["missing_backing_images"], json!([]));
     assert_eq!(dry["dead_count"], 1);
     assert_eq!(dry["gc_ran"], false);
     for mode in ["run", "auto"] {
@@ -219,11 +220,66 @@ fn guarded_gc_retains_structured_roots_and_preserves_store_selection() -> Result
     );
     assert_eq!(peers.calls()?.len(), calls.len());
 
+    // An already absent store object cannot be collected again. Retain the known roots,
+    // including the backup's former base, while allowing unrelated outputs to be collected.
+    let missing_object = "/nix/store/77777777777777777777777777777777-missing-base";
+    let missing_backing = format!("{missing_object}/base.qcow2");
+    let mut incomplete = qemu.clone();
+    incomplete[2]["stdout"] = json!(serde_json::to_string(&json!({
+        "filename": backup, "backing-filename": missing_backing,
+    }))?);
+    peers.rules("qemu-img", incomplete)?;
+    for mode in ["dry-run", "run"] {
+        let output = common::run(&mut command(&peers, mode)?, None)?;
+        assert!(String::from_utf8_lossy(&output.stderr).contains("absent backing object"));
+        output.checked()?;
+        let report = read()?;
+        assert_eq!(report["gc_ran"], mode == "run");
+        assert_eq!(report["root_count"], 6);
+        assert_eq!(
+            report["missing_backing_images"],
+            json!([{
+                "image": backup, "backing": missing_backing, "missing_store_object": missing_object,
+            }])
+        );
+    }
+    let retained = fs::read_to_string(nix_root.join("nix/var/nix/gcroots/airlock/manifest.tsv"))?;
+    assert!(retained.contains(names[4]));
+    assert!(retained.contains("previous-root:incomplete-backing-chain"));
+
+    // A dangling private-store alias must retain its own object and previously known target.
+    peers.rules("qemu-img", qemu.clone())?;
+    let alias = store.join(names[1]).join("base.qcow2");
+    fs::remove_file(&alias)?;
+    fs::remove_dir(store.join(names[1]))?;
+    symlink(missing_object, store.join(names[1]))?;
+    common::run(&mut command(&peers, "run")?, None)?.checked()?;
+    let report = read()?;
+    assert_eq!(report["missing_backing_images"][0]["image"], json!(overlay));
+    assert_eq!(report["root_count"], 6);
+    fs::remove_file(store.join(names[1]))?;
+    fs::create_dir(store.join(names[1]))?;
+    symlink(
+        format!("/nix/store/{base}/base.qcow2", base = names[5]),
+        &alias,
+    )?;
+
+    let manifest = fs::read_to_string(nix_root.join("nix/var/nix/gcroots/airlock/manifest.tsv"))?;
+    for name in names {
+        assert!(manifest.contains(name));
+    }
+    let store_calls = peers
+        .calls()?
+        .iter()
+        .filter(|call| call["command"] == "nix-store")
+        .count();
+
     // Failed chain or receipt inspection preserves the last known roots and never proceeds to GC.
     for failure in [
         "invalid metadata",
         "cycle",
-        "missing backing",
+        "missing file in existing object",
+        "missing external backing",
         "invalid receipt",
     ] {
         match failure {
@@ -231,11 +287,14 @@ fn guarded_gc_retains_structured_roots_and_preserves_store_selection() -> Result
                 "qemu-img",
                 json!([{"prefix": ["info"], "stdout": "{\"filename\":null}"}]),
             )?,
-            "cycle" | "missing backing" => {
-                let backing = if failure == "cycle" {
-                    overlay.clone()
-                } else {
-                    PathBuf::from("/nix/store/missing/base.qcow2")
+            "cycle" | "missing file in existing object" | "missing external backing" => {
+                let backing = match failure {
+                    "cycle" => overlay.clone(),
+                    "missing file in existing object" => PathBuf::from(format!(
+                        "/nix/store/{object}/absent.qcow2",
+                        object = names[4]
+                    )),
+                    _ => vm.join("absent.qcow2"),
                 };
                 peers.rules("qemu-img", json!([{"prefix": ["info"],
                     "stdout": serde_json::to_string(&json!({"filename": overlay, "backing-filename": backing}))?}]))?;
@@ -260,7 +319,7 @@ fn guarded_gc_retains_structured_roots_and_preserves_store_selection() -> Result
                 .iter()
                 .filter(|call| call["command"] == "nix-store")
                 .count(),
-            4
+            store_calls
         );
     }
     Ok(())
