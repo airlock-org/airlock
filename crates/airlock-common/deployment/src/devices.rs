@@ -1,5 +1,47 @@
 //! Select exact declared PCI assignments and constrained automatic network assignments.
 //! Topology decoding and truthful hardware observations remain adapters, never permission flags.
+//!
+//! ## PCI assignment configuration
+//!
+//! The [device boundary](crate::devices) retains the complete, ordered configuration
+//! namespace and each VM's exact assignment declarations before publication. Selection
+//! checks the executing operation/attempt/authority/plan binding and the named physical
+//! hardware snapshot. Declared backend, port, explicit device restriction, matching mode,
+//! attachment mode and complete options cannot be substituted at dispatch. Physical PCI
+//! requests require dom0; unknown backends and identities fail closed.
+//!
+//! Automatic discovery follows the effective root-provider rules: no explicit assignments,
+//! `provides_network`, the conventional provider or literal opt-in feature, and no NetVM.
+//! Only observed network-class functions outside both exclusion sets are selectable.
+//! Assignment and attachment ownership is checked across all relevant frontends. Device-ID
+//! wildcards check every matching physical port and refuse incomplete identities. These
+//! rules do not grant VM scope: the retained configuration target must independently belong
+//! to the original approval.
+//!
+//! An opaque selection allows checking whether an assignment already matches, including
+//! all options. It is not accepted by the privileged adapter. Mutation requires consuming
+//! that selection after a named halted-state and complete ownership check. Qubes PCI only
+//! supports required assignments; unsupported new modes are refused before replacement.
+//! An option/mode replacement may unassign only the exact same frontend and virtual device
+//! selected by the approved new request. Interrupted replacement is reconciled from fresh
+//! structured observations; matching completed assignments are skipped even on running VMs.
+//! No exactly-once or atomic replacement guarantee is claimed.
+//!
+//! The direct [local API adapter](../../../airlock-dom0/service/src/qubes/pci.rs) receives the
+//! opaque request and serializes its retained identity, mode and options. Topology decoding,
+//! legacy option normalization, truthful complete snapshots and faithful Qubes execution
+//! remain trusted. All selections for one VM are checked before its first mutation. The
+//! machine lock does not exclude independent administrators or hotplug. A declaration
+//! without a device ID authorises resolution of the current hardware at its declared port;
+//! automatic discovery likewise authorises a rule rather than a fixed hardware inventory.
+//! Retries reapply those original rules to fresh observations. They do not promise that
+//! hotplug preserves the first attempt's physical device. An explicit device ID restricts
+//! resolution on every attempt. Ordinary deployment rejects changed device declarations
+//! on an existing VM; those require migration. This boundary reconciles approved declarations
+//! and configures new VMs. It does not infer removal of a different virtual resource from
+//! an absent declaration. USB/block configuration
+//! is not implemented by this PCI boundary. Boot/manual setup and older full-batch admitted
+//! helpers retain explicit compatibility policies outside these fine-grained guarantees.
 
 use crate::{
     effects::{self, Targets},

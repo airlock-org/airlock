@@ -1,5 +1,35 @@
 //! Bound network-device handoff to the checked endpoints and a complete observed snapshot.
 //! Qubes supplies assignments and attachments separately; neither is inferred from display text.
+//!
+//! ## Network PCI handoff
+//!
+//! The [PCI boundary](crate::pci) retains the specific checked source and destination
+//! fields, rather than accepting a pair from the caller at dispatch. Only the existing
+//! assistant/network-provider transfer is supported. Snapshot validation checks every
+//! physical network function and both persistent assignments and live attachments,
+//! including undeclared frontends. Foreign or conflicting owners, broad port wildcards,
+//! missing network functions and unsupported endpoints yield no executable handoff.
+//! The complete snapshot is checked before the first mutation, so a later conflict
+//! cannot follow an earlier unassignment.
+//!
+//! Selection is proved exact: a request exists precisely for a persistent source-owned
+//! row matching a current dom0 network function. Network class is specified numerically;
+//! matching preserves backend, port and hardware identity. Future device-specific rules
+//! which do not match current hardware, other PCI classes and current attachments never
+//! become unassignment requests. Recovery may accept an already unassigned no-op; it
+//! cannot relax ownership, change endpoints or bypass the operation/attempt/authority/
+//! complete-plan binding and executing publication gate.
+//!
+//! The [Qubes adapter](../../../airlock-dom0/service/src/qubes/pci.rs) queries all registered
+//! frontends, validates identity consistency and encodes the selected virtual assignment
+//! for the upstream [device API](https://github.com/QubesOS/qubes-core-admin-client/blob/v4.3.30/qubesadmin/devices.py).
+//! It preserves wildcard device identity rather than resolving it to the current device.
+//! Wire decoding, sysfs/Qubes completeness, transport encoding and faithful external
+//! execution remain trusted and tested Rust. The snapshot is not atomic with external
+//! administrators or hotplug. Unassignment changes persistent policy, not proof of physical
+//! detachment; quiescence and subsequent device reconciliation retain their existing
+//! coordinator rules. Raw deployment `qvm-device`/`qvm-pci` mutations are blocked by the
+//! process adapter; boot/manual setup keeps its separate policy. The separate assignment boundary below checks native deployment configuration; boot/manual setup keeps its compatibility path.
 
 use crate::{
     effects::{self, Targets},

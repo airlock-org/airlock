@@ -1,5 +1,65 @@
 //! Validated authority is an owned value required to create a publication gate.
 //! Decoded journal identities are evidence, never executable authority by themselves.
+//!
+//! ## Production execution paths
+//!
+//! The production [planner adapter](../../machine/src/planning.rs) uses
+//! `airlock-machine-planning` to interpret topology, derive deployment seeds and order
+//! VM effects. That crate has no dependency on deployment approval or publication.
+//! This crate depends on its public contracts to compose planning with authorization.
+//!
+//! [`name_targets`](../../machine-planning/src/graph.rs) verifies the exact string contents copied from computed vertex
+//! indices. [`approved_schedule`](crate::planning) composes that mapping and exact selection with the
+//! existing checked scope: every selected operation needs original approval.
+//! The coordinator checks the complete proposed effect set before creating owned
+//! lifecycle authority; graph reachability cannot grant execution permission.
+//! Recovery and rollback use the same seed selector and kernel with reconstructed
+//! inputs and then reauthorize. Recovery adds saved startup targets to its running
+//! input and filters stops against a fresh live snapshot; those reconstruction and
+//! filtering steps remain unverified coordinator code. Existing operation, attempt
+//! and plan bindings prevent substitution
+//! within an executing attempt. Recovery endpoint selection and its handoff to the
+//! owned operation are verified; observation reconstruction and external progress
+//! remain outside the proof. Different attempts may replan within the original scope.
+//!
+//! | Path | Enforcement and proof boundary |
+//! | --- | --- |
+//! | `relationships.rs` → `machine-planning/src/topology.rs`: reference interpretation and canonical indexing | Verified effective defaults/overrides, reference grammar, exact internal edge relation, canonical universe, unique identities, name/mask correspondence and named planner calls. JSON/typed-field decoding and conversion to/from ordinary `GuestName` collections remain tested adapters. External relationships remain visible to admission. |
+//! | `machine-planning/src/graph.rs`: closure and lifecycle operation lists | Verified least forward/reverse closures, exact startup effects, affected/running shutdown selection, dependency/reverse ordering and cycle rejection. Startup uses candidate edges; impact uses baseline edges with eligible soft GUI edges removed. Change/removal/autostart roots, baseline GUI eligibility and their named graph handoffs are verified in `machine-planning/src/deployment.rs`. The adapter still chooses baseline/candidate inputs and decodes configuration and observations. |
+//! | `machine-planning/src/deployment.rs`: seed selection and GUI preservation | Verified exact change/removal/startup roots, configuration identity coverage, GUI opt-in/provider/hard-edge conditions, exact reconnect selection, cached impact closure and input-order-independent root sets. Production deployment planning rejects unsupported power states; inventory parsing/completeness and canonical configuration encoding remain tested adapters. |
+//! | Complete plan effect projection and authorization | Verified exact VM-impact union, unknown-field rejection, required/unknown reboot permission, full scope and identity check, exact lifecycle-list derivation and retained plan binding through fresh execution/recovery. Wire decoding/classification, staging/retirement/copy/PCI selection and complete-plan serialization remain adapter obligations; no whole-plan correctness/determinism theorem. |
+//! | `recovery.rs`: durable evidence → `RecoveryDecision` → `AuthorizedOperation` | Verified evidence compatibility, exact direction/endpoint selection, unchanged retained intent and V2 authority, stable operation identity, fresh checked scopes and new publication. JSON/record authentication, snapshot projection, runtime reconstruction and actual effect completion remain adapter obligations. |
+//! | Pre-retirement/configuration power check | Verified disjointness decision for required targets and fresh active observations. Hazard-set extraction, inventory completeness and absence of changes after observation remain trusted. |
+//! | `activation.rs`: explicit starts after configuration, including resume and rollback | Verified target selection and identity/scope checks; opaque request passed to `Runner::start_deployment`. The narrow process adapter remains trusted. |
+//! | `activation.rs`: explicit shutdowns, including resume and rollback | Verified target, GUI mode, expected-client scope, observed-client bounds, identity and gate checks; verified argv passed to `Runner::shutdown_deployment`. |
+//! | Forced GUI shutdown | Only a checked GUI-preservation entry supplies force. Verified power-state classification and complete row checking require all active GUI clients to fit the approved expected set. Missing probes, uncertain states and hard/undeclared active dependents block execution. Inventory decoding, truthful Qubes observations and baseline reference extraction remain trusted. |
+//! | Direct kill | Deployment issues no separate kill request. Raw `qvm-kill` is rejected; Qubes' shutdown helper can kill the same checked target on timeout. |
+//! | Generic `Runner::run`, `capture`, `text`, `stream` during deployment | Reject direct `qvm-start`, `qvm-shutdown`, `qvm-kill` and `qvm-create`, including absolute paths. This tested adapter guard prevents accidental raw-call bypass; it does not confine arbitrary helpers, aliases or shell commands. |
+//! | VM creation and declared properties/features/services | Verified `ConfigurationPlan` namespace, retained definitions, durable context, exact target/key/value/tool and argv; typed requests reach thin Qubes adapters. JSON decoding, reconciliation orchestration, observations and external CLI semantics are trusted. |
+//! | `activation.rs`: host roots/controller, boot preparation and selection | Verified `HostPlan`/`HostRequest` preserve exact admitted host/transport/controller, prepared-view policy and fixed native/Nix argv under the executing gate. Local retention paths, controller symlink publication and external filesystem/storage/boot effects remain trusted. Selection/status files are transaction metadata. |
+//! | Retained setup sections | Checked helper modes/paths and complete configuration namespace; global setup, backend-derived properties, storage and device dispatch remain trusted adapters. |
+//! | `migration.rs`: private copies | Verified original ordered endpoints, preflight configuration/resource bindings, monotonic receipt progress, stopped/capacity checks, durable context and exact clone request names. Completed and uncertain receipts never request an overwrite. Qubes and copy-publication acknowledgments remain trusted. |
+//! | Reversible retirement/restoration | Verified checked namespaces/configuration, canonical trash identity, named UUID/storage/power observations, retire-only selected generation/system/manifest checks, no purge states and fixed tag/autostart/retention argv. Baseline pin requests are target/attempt-bound. Observation decoding, storage identity hashing, persistence and faithful execution remain trusted. |
+//! | PCI handoff and explicit purge | Handoff retains runtime scope/ownership checks; purge has independent maintenance authority and runtime reference/UUID/volume/expiry safeguards. Neither has fine-grained verified request dispatch. |
+//! | `admission.rs` and storage adapters: artifact admission and generation publication | Existing storage contracts and checks, outside this effect proof. |
+//! | `boot.rs::boot_start`, trash enforcement, development startup | Separate boot/maintenance/development policy; no deployment-review theorem. |
+//! | Qubes Manager Admin API | Existing `sys-gui` policy separately permits `admin.vm.Shutdown` and `admin.vm.Kill`. Those user administration requests do not pass through deployment authority or its machine lock. |
+//! | RPC prepared apply and CLI recovery | Route into the coordinator activation path. Routing and prepared-record interpretation are tested code, not Verus proofs. |
+//!
+//! Qubes can start dependencies implicitly. The planner expands declared startup
+//! dependencies; regression coverage checks that such expansion still needs approval.
+//! References outside the declared topology, live dependency drift and Qubes/Xen's
+//! actual effects are outside the explicit-request theorem. No claim covers all
+//! privileged operations in dom0 or all effects of starting a VM.
+//!
+//! The pinned [Qubes client v4.3.30 shutdown helper](https://github.com/QubesOS/qubes-core-admin-client/blob/v4.3.30/qubesadmin/tools/qvm_shutdown.py)
+//! uses `--force` to bypass dependent-VM protection. With the existing
+//! `--wait --timeout 120` arguments it can kill the same explicit target after timeout.
+//! The [Qubes GUI handler v4.3.44](https://github.com/QubesOS/qubes-core-admin/blob/v4.3.44/qubes/ext/gui.py)
+//! normally prevents stopping a provider with running GUI clients; force bypasses
+//! that protection without explicitly shutting those clients down. Airlock checks
+//! their expected GUI interruption and subsequently verifies preserved boot IDs and
+//! GUI reconnection. Verus does not prove client survival or faithful Xen/Qubes effects.
 
 use crate::{
     effects::{

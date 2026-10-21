@@ -1,5 +1,41 @@
 //! Authorise retirement/restoration against checked configuration and named storage observations.
 //! Permanent purge has independent maintenance authority and is not a deployment action.
+//!
+//! ## Reversible retirement and restoration
+//!
+//! The [retirement boundary](crate::retirement) retains separate checked namespaces and
+//! operation kinds. Retirement requires the complete baseline configuration, registered
+//! UUID, complete volume set and currently selected generation/system/pool manifest to
+//! agree. Restoration checks class/template/private-state compatibility and the original
+//! private-volume identity while permitting an approved new root. Both require explicitly
+//! halted named observations. Purging, purged and already restored records yield no request.
+//! The trash identity must be the recorded transaction plus the same checked VM name.
+//!
+//! A baseline pin request retains the exact rollback release before disruption and uses
+//! the protected proposal’s canonical transaction/VM root identity across retries. After the trash journal records retirement,
+//! the process adapter consumes fixed autostart, tag and retention arguments. Restoration
+//! emits only tag removal; neither family can construct a remove/purge command. Metadata
+//! publication and removal of the validated trash retention root remain filesystem adapters.
+//! The adapter retains the first proposal under the stable operation ID and reuses it
+//! after a crash, refusing a replacement registration or volume set. Proposal lookup,
+//! first-writer persistence, VM/volume observations and cryptographic encoding of
+//! configuration/storage identities remain trusted; the machine lock does not exclude independent Qubes administrators.
+//! Purge remains a separate, explicitly confirmed maintenance protocol, never a consequence
+//! of possessing these deployment requests. The [purge boundary](crate::purge) captures the
+//! canonical confirmed trash record and requires the original UUID, complete volume identity,
+//! generation, system, manifest, retired tag and named halted observation before producing a
+//! remove intent. Durable `Purging` publication turns that intent into the sole request accepted
+//! by the maintenance remove adapter. Successful removal permits cleanup of the same generation
+//! and canonical trash root. An absent VM permits cleanup only when the protected record already
+//! says `Purging`; it cannot produce a remove request. The deployment runner refuses this
+//! maintenance adapter.
+//!
+//! Retention expiry/waiver, release and policy reference discovery, storage alias checks,
+//! protected-record authentication and actual publication remain runtime/I/O boundaries. Their
+//! existing checks precede removal; Verus proves the request identity, observed resource checks,
+//! halted condition and publication-token handoff. It does not prove those reference algorithms,
+//! wall-clock correctness, faithful deletion, cleanup durability or atomicity with independent
+//! Qubes administrators. A crash after removal is reconciled from registration observations.
 
 use crate::{
     effects::{self, Targets},

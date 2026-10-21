@@ -1,5 +1,27 @@
 //! Authorise an exact private-volume replacement and refuse uncertain destructive replay.
 //! Filesystem acknowledgments and Qubes observations are adapter inputs, not proof of disk contents.
+//!
+//! ## Private-volume replacement
+//!
+//! The [copy boundary](crate::copy) keeps the original pair order and resource definitions
+//! under the complete plan binding. Names, registration UUIDs, pool/volume identities and
+//! the destination configuration must agree across preflight, the protected receipt and
+//! current named observations. A clone requires explicitly halted endpoints and enough
+//! capacity. The request owns neither an arbitrary VM name nor a new approval flag.
+//!
+//! `CopyIntent` is not accepted by the Qubes adapter. The coordinator first pins its
+//! validated destination and durably saves `Copying`, then consumes the intent into a
+//! clone request. This publication acknowledgment relies on truthful filesystem success.
+//! A `Copying` receipt after an error or restart represents uncertainty; it blocks automatic
+//! copying and needs explicit reconciliation. A complete receipt never requests a clone,
+//! including when the destination has since been used. Recovery preflight also executes
+//! verified comparison against the prior authorised journal’s copy definition, preserving
+//! source identity, destination configuration, any pinned target and monotonic progress.
+//! An incomplete copy missing that original intent is refused. Journal selection and
+//! faithful decoding remain adapter duties. This is a safety guarantee, not
+//! exactly-once execution or guaranteed automatic recovery. Qubes must preserve the observed
+//! registrations and disks through its name-based clone calls; independent administrators
+//! can race the machine lock. Neither disk contents nor that external atomicity are proved.
 
 use crate::{
     effects::{self, Targets},

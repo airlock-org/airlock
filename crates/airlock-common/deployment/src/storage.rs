@@ -1,5 +1,49 @@
 //! Select native VM storage requests from the checked configuration and executing durable intent.
 //! Filesystem resolution and the storage service remain explicit external adapters.
+//!
+//! ## Native VM storage requests
+//!
+//! The [storage boundary](crate::storage) retains each native backend in the exact checked
+//! configuration order before intent publication. Selecting a backend requires the complete
+//! executing operation context. Root import requests require a named halted observation and
+//! a resolution naming that VM and its original root source. The import argv fixes the root
+//! volume and resolved image. Private-volume growth requires the same named halted evidence,
+//! an original declared capacity, and an observed capacity below it. Missing or unknown power
+//! and capacity observations fail closed. Kernel requests retain the original effective kernel
+//! name and source. Store requests retain the native executable, VM, system, root, closure,
+//! descriptor and supported immutable layout; dispatch accepts no independent overrides.
+//! A store request retains the selected generation explicitly, rejecting a different or
+//! missing selection when the original release names one. The storage adapter passes that
+//! number to the native service; decimal rendering is trusted. The service rejects a
+//! conflicting staged ledger and does not reuse a different generation merely because its
+//! boot sources match. The verified argv also requires retained/prepared data: the service
+//! refuses fresh package admission during deployment reconciliation, including repair of
+//! an unchanged VM whose runtime storage has drifted. Boot/manual admission retains its
+//! separate policy.
+//!
+//! Native deployment calls the shared Rust backend reconciliation directly. Boot/manual setup
+//! retains its separate compatibility policy. Immutable root import may repeat after a lost
+//! reply; private growth reconciles current capacity. These are reconciliation guarantees,
+//! not exactly-once execution. Qubes administrators can still change registration or state
+//! between observation and dispatch.
+//!
+//! Derived kernel and boot settings have fixed typed keys and original backend values.
+//! Mutation requires fresh named halted evidence; already matching values need no mutation.
+//! Generation-dependent features and daemon restoration require a storage outcome matching
+//! the VM, system, root, closure, kernel and the request's selected generation. A receipt
+//! cannot select arbitrary feature keys or a different system service. Root-artifact features
+//! must attest the original VM/root source. Boot-option interpolation, scalar decoding and
+//! truthfulness of generation metadata remain trusted; the verified boundary confines the
+//! retained values and rejects unclassified setting requests.
+//!
+//! Source decoding, physical Nix-path translation and source-to-root-image authentication
+//! remain trusted. Staged generation selection and the storage service's admission, pool
+//! locking, volume isolation, offline snapshot updates, restart journal and attachment checks
+//! remain ordinary Rust. In particular, the store request theorem confines its source and boot
+//! parameters; it does not prove the inner storage algorithm or that a running VM experiences
+//! no implicit effect. The independent observation-to-dispatch race remains outside the
+//! theorem. Legacy full-batch
+//! helpers and global setup retain their separately documented trusted boundaries.
 
 use crate::{
     effects::{self, Targets},

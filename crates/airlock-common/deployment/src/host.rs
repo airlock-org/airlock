@@ -1,5 +1,28 @@
 //! Fix host and controller execution parameters before durable publication.
 //! The admitted release decoder supplies artifacts; requests cannot substitute them afterward.
+//!
+//! ## Host preparation and selection
+//!
+//! The [host boundary](crate::host) retains the admitted candidate artifacts and native
+//! storage adapter before durable publication. The approved complete plan supplies its
+//! binding; the release adapter is trusted to decode those artifacts faithfully. Host
+//! scope comes from the approved source and reboot permission, rather than a fabricated
+//! `dom0` VM entry. This does not prove Rusix evaluation, build provenance or admission.
+//!
+//! Each request checks the original operation, authority, attempt and complete plan against
+//! the executing durable gate. Host and transport pinning, controller pin/link publication,
+//! profile selection and boot/storage operations have distinct fixed actions. Exhaustive
+//! matches require new actions to be classified. Prepared host views allow validation;
+//! transport-supplied views allow publication. CLI arguments and the retained executable
+//! are selected by verified Rust, not reconstructed from current environment or raw journal
+//! fields at dispatch. The recovery path retains the existing running-controller policy.
+//!
+//! The Nix/storage process adapter executes those parameters; the controller filesystem
+//! adapter consumes the immutable selected target. Retention directories, atomic symlink
+//! publication, store effects and bootloader/firmware behavior remain trusted. Protect/seal/
+//! checkpoint commands intentionally observe existing host state inside the storage adapter;
+//! the proof covers their requests, not the truth or atomicity of those observations.
+//! Recovery reissues only requests admitted under its newly checked, original authority.
 
 use crate::operation::{DurableOperation, ExecutionContext, PlanBinding};
 use vstd::prelude::*;

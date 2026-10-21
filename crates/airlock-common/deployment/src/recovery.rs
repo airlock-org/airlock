@@ -1,6 +1,75 @@
 //! Reconcile durable intent with selected intent without inferring completed effects.
 //! The adapter authenticates records and observes Qubes; neither a phase nor a
 //! selection authorizes skipping reconciliation of an uncertain external outcome.
+//!
+//! ## Recovery evidence and decisions
+//!
+//! The [reconciler](crate::recovery) separates intended state from completion evidence.
+//! These records answer different questions:
+//!
+//! | Fact | Authoritative evidence |
+//! | --- | --- |
+//! | Current attempt, immutable release pair, plan and operation | `latest.json`; a retained history copy may lag in progress but must agree on immutable intent. |
+//! | Original source approval and permitted effect scope | Protected review and candidate binding, rechecked before every new execution attempt. A started-status projection alone grants nothing. |
+//! | Intended machine/boot selection | `selection.json` and its referenced journal. Selection is published before VM shutdown/configuration and does not attest that either completed. |
+//! | Actual selected and running generations | Fresh Qubes, pool and guest observations plus host inspection; desired selection is not a substitute. |
+//! | Private-copy completion | Identity-bound copy receipt, checked by the migration adapter; not inferred from the deployment phase. |
+//!
+//! `RecoveryDecision::reconcile` executes in production. Its success is proved
+//! equivalent to `compatible`, which permits a current selection only when its
+//! transaction, release pair, fingerprints, plan and operation agree. A lagging
+//! selection must name one of the two fingerprint-bound endpoints and have a
+//! matching journal: either another attempt of the same operation with the same
+//! authority and pair, or a completed earlier deployment of that endpoint. Missing
+//! selection is accepted only for an interrupted pair containing the image baseline.
+//! Other missing records, undecodable native identities, collapsed release/predecessor
+//! pairs and unsupported legacy journals yield no recovery decision. A collapsed
+//! pair cannot identify the possibly applied candidate, so it needs operator repair.
+//! For reviewed V2 authority the original approved candidate and fingerprint must
+//! also be an endpoint; recovery cannot substitute an unrelated pair.
+//! A verified outcome requires selection of
+//! the current attempt; `Complete` cannot roll back, while `RebootRequired` can.
+//!
+//! Every incomplete phase selects reconciliation, regardless of how far its external
+//! effects may have progressed. Resume uses the recorded release and predecessor;
+//! rollback exchanges them. Selection never supplies the planning baseline. This
+//! preserves knowledge of the attempted candidate when selection is absent or lags.
+//! `releases` proves this mapping; changing the rollback baseline or dropping a
+//! fingerprint comparison violates its executable contracts.
+//!
+//! The [coordinator adapter](../../../airlock-dom0/service/src/coordinator/recovery.rs)
+//! loads and checks those files, replans from fresh stable power observations and
+//! rechecks the complete proposed effects against the original approval. It must
+//! consume the accepted decision through `authorize` to create the new
+//! `AuthorizedOperation`. That method rejects a substituted prior journal, loaded
+//! release, baseline or V2 authority, preserves the stable operation identity and
+//! carries the freshly checked scopes and new plan binding into publication. V1
+//! adopts its attempt ID after checking the protected approval; it cannot compare an
+//! original decision digest that its format did not retain. A prior plan cannot be silently replaced in the evidence;
+//! the new plan may differ, but must be independently reauthorized. Verification-only
+//! decisions cannot create deployment authority. Neither action restores volatile
+//! publication acknowledgments from the previous attempt.
+//!
+//! `history_preserves` proves by induction that finite endpoint exchanges retain
+//! the original pair, operation and recorded authority. This composes with the
+//! executable endpoint and operation contracts; it is **not** a model of filesystem
+//! crash consistency or every coordinator instruction.
+//!
+//! Before retirement and again before configuration, the coordinator obtains a
+//! fresh stable power snapshot. Verified `quiescent` accepts exactly when no required
+//! VM is active. The tested adapter supplies changed, affected, retired and explicit
+//! stop targets, including VMs halted when the plan was constructed. Thus an observed
+//! restart after shutdown blocks configuration. The check cannot prevent a later
+//! independent restart: Qubes observation and mutation are not atomic.
+//!
+//! Replaying reconciles uncertain external outcomes rather than assuming a failed
+//! call had no effects. Host/storage/setup helper replay safety, generation
+//! verification, copy receipts and rollback's private-data preservation remain
+//! adapter obligations. No exactly-once or eventual-recovery theorem is claimed.
+//! Invalid authority, unsupported rollback migrations and ambiguous evidence can
+//! require operator intervention. The same separation of durable intent, checked
+//! reconciliation and fresh publication can serve retirement, artifact admission
+//! and generation publication; each needs its own external reconciliation contract.
 
 use crate::{
     effects::{Shutdowns, Targets},

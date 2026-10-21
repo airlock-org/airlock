@@ -1,6 +1,46 @@
 //! Select concrete Qubes configuration requests from an immutable, checked machine plan.
 //! Decoding configuration and observing Qubes remain adapters; target and argument
 //! selection, scope confinement and the executing-context gate run this verified Rust.
+//!
+//! ## VM configuration requests
+//!
+//! The planner records `configure` explicitly because setup reconciles every desired VM,
+//! including declarations unchanged since the baseline. The complete approval projection
+//! includes these names. Missing legacy fields decode to an empty list; a nonempty desired
+//! configuration cannot acquire configuration authority from that empty list.
+//!
+//! `AuthorizedPlan::configuration` constructs an opaque `ConfigurationPlan` before
+//! publication. Its verified constructor accepts exactly the checked VM namespace,
+//! rejecting missing, extra and duplicate definitions and substituted helper paths.
+//! The authenticated release adapter decodes classes, labels, templates and declared
+//! settings. The plan retains those values immutably with the complete plan binding.
+//! Every create, property, feature and service request checks the actual executing
+//! `DurableOperation`, both publication acknowledgments and the journal's current attempt,
+//! operation, authority and plan binding. Requests borrow that gate through dispatch.
+//! Their dispatch methods accept no independent mutating VM name or key/value.
+//!
+//! The executable Verus contracts prove exact Qubes argv, not just target membership.
+//! Setting requests also require a power observation naming the retained VM and an
+//! explicitly halted classification before a mutation. An already-current value can be
+//! left alone while running. Matching NetVM/GuiVM values still require an explicit
+//! Qubes override. Observation truth/completeness, XML interpretation, decoding, iteration
+//! and absence of a concurrent administrative restart remain adapter obligations.
+//!
+//! The setup protocol separates global preparation, Rust VM reconciliation and completion.
+//! Boot/manual setup uses the same Rust reconciliation with its existing local policy;
+//! it cannot reuse a deployment runner to dispatch raw changes. Older admitted setup
+//! programs use an explicit legacy batch request after their recognized unsupported-option
+//! response; unknown versions and uncertain protocol outcomes are refused. Fixed per-VM
+//! backend/device requests bind the target, program and topology; they do **not** verify the native helper's storage,
+//! derived boot metadata or device behaviour. Global policy, template import, label and
+//! kernel preparation are likewise still trusted batch adapters. Template import can
+//! create/start VMs outside the ordinary domain namespace. These are not covered by
+//! the common VM configuration request theorem.
+//!
+//! Setup reports aggregate preparation, per-VM helper and Rust change receipts, preserving
+//! restart/unsupported evidence. Run identity, missing/failed child evidence and repeated
+//! finalization are checked by ordinary Rust tests. These informational reports are
+//! separate from the protected durable journal and grant no authority.
 
 use crate::{
     effects::{self, Targets},
