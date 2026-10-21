@@ -555,7 +555,7 @@ fn reconcile_with(
             ])?
         })?;
         if let Some(request) = &checked {
-            let observed = crate::store::handoff::observed(&store_result, &store_result, "source")?;
+            let observed = crate::store::handoff::installed(&store_result)?;
             ensure!(
                 selected
                     .context("missing selected generation")?

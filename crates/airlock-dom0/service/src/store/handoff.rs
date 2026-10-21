@@ -37,11 +37,28 @@ pub(crate) fn expected(
 
 /// Decode a loaded or described committed generation using its actual identity fields.
 pub(crate) fn observed(value: &Value, store: &Value, source: &str) -> Result<Selection> {
+    let domain = text(value, "domain")?
+        .strip_suffix("-runtime-store")
+        .context("boot generation is not a runtime storage view")?
+        .to_owned();
+    fields(domain, value, store, source)
+}
+
+/// Storage execution receipts identify the consuming guest, unlike committed generation records.
+/// Preserve that identity rather than applying storage-namespace decoding to a VM name.
+pub(crate) fn installed(value: &Value) -> Result<Selection> {
+    ensure!(
+        value["schema"] == "airlock.nix-domain-storage.v1",
+        "invalid storage execution receipt"
+    );
+    let domain: GuestName = text(value, "domain")?.parse()?;
+    fields(domain.to_string(), value, value, "source")
+}
+
+/// Retain all remaining identity and layout fields without choosing a namespace interpretation.
+fn fields(domain: String, value: &Value, store: &Value, source: &str) -> Result<Selection> {
     Ok(Selection {
-        domain: text(value, "domain")?
-            .strip_suffix("-runtime-store")
-            .context("boot generation is not a runtime storage view")?
-            .to_owned(),
+        domain,
         generation: number(value, "generation")?,
         system: text(value, "system")?,
         root: text(value, "root_source")?,
@@ -178,4 +195,24 @@ pub(crate) fn authenticate(selected: SelectedGeneration) -> Result<SelectedGener
         "committed generation differs from checked setup selection"
     );
     Ok(selected)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Each wire format retains its own identity meaning; neither decoder silently accepts the other.
+    #[test]
+    fn storage_execution_and_committed_names_have_distinct_decoders() -> Result<()> {
+        let mut receipt = json!({"schema":"airlock.nix-domain-storage.v1", "domain":"sys-gui",
+            "generation":1, "system":"system", "root_source":"root", "source":"source", "kernel_name":"kernel",
+            "mode":"shared-closure", "device":"metadata", "blob_device":"data", "mountpoint":"/nix/store", "view_backend":"erofs-objectmap"});
+        assert_eq!(installed(&receipt)?.domain, "sys-gui");
+        assert!(observed(&receipt, &receipt, "source").is_err());
+        receipt["schema"] = json!("airlock.closure-store.generation.v1");
+        receipt["domain"] = json!("sys-gui-runtime-store");
+        assert_eq!(observed(&receipt, &receipt, "source")?.domain, "sys-gui");
+        assert!(installed(&receipt).is_err());
+        Ok(())
+    }
 }
