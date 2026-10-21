@@ -34,13 +34,11 @@ impl Slot {
             || name@ == "builder-store"@ || name@ == "builder-data"@),
             out.is_some() ==> slot_name(out.unwrap()) == name@,
     {
-        match name {
-            "store" => Some(Self::Store),
-            "store-data" => Some(Self::StoreData),
-            "builder-store" => Some(Self::BuilderStore),
-            "builder-data" => Some(Self::BuilderData),
-            _ => None,
-        }
+        if name == "store" { Some(Self::Store) }
+        else if name == "store-data" { Some(Self::StoreData) }
+        else if name == "builder-store" { Some(Self::BuilderStore) }
+        else if name == "builder-data" { Some(Self::BuilderData) }
+        else { None }
     }
 
     /// Supply the exact Qubes volume key without an independently supplied name.
@@ -267,16 +265,15 @@ fn valid_pair(target: &str, defs: &[Definition]) -> (yes: bool)
     if a.pool.is_empty() || a.generation == 0 || a.domain != b.domain || a.pool != b.pool
         || a.generation != b.generation || a.closure_hash != b.closure_hash || a.manifest != b.manifest
         || a.closure_hash.is_empty() || a.manifest.is_empty() { return false; }
-    let mut i = 0;
-    while i < defs.len()
-        invariant 0 <= i <= defs.len(),
-            forall|j: int| 0 <= j < i ==> !defs[j].writable && defs[j].persistent
-                && !defs[j].snap_on_start && #[trigger] defs[j].size > 0 && defs[j].path@.len() > 0,
-        decreases defs.len() - i,
-    {
-        let d = &defs[i];
-        if d.writable || !d.persistent || d.snap_on_start || d.size == 0 || d.path.is_empty() { return false; }
-        i += 1;
+    // Instantiate both members of the quantified specification before rejecting a bad pair.
+    assert(pair(target@, defs@) ==> defs[0].size > 0 && defs[1].size > 0);
+    if a.writable || !a.persistent || a.snap_on_start || a.size == 0 || a.path.is_empty()
+        || b.writable || !b.persistent || b.snap_on_start || b.size == 0 || b.path.is_empty() {
+        return false;
+    }
+    assert forall|j: int| 0 <= j < defs.len() implies !defs[j].writable && defs[j].persistent
+        && !defs[j].snap_on_start && #[trigger] defs[j].size > 0 && defs[j].path@.len() > 0 by {
+        assert(j == 0 || j == 1);
     }
     match (&a.slot, &b.slot) {
         (Slot::Store, Slot::StoreData) => a.domain.as_str() == target,
@@ -288,6 +285,14 @@ fn valid_pair(target: &str, defs: &[Definition]) -> (yes: bool)
         },
         _ => false,
     }
+}
+
+/// Root and private observations captured together before attachment.
+pub struct WritablePair {
+    /// Writable system-state backing that must survive installation.
+    pub root: WritableVolume,
+    /// User-data backing that must survive installation.
+    pub private: WritableVolume,
 }
 
 /// Opaque mutation request retaining the writable state that must survive attachment.
@@ -311,11 +316,14 @@ impl View for AttachmentPlan {
 impl AttachmentPlan {
     /// Require isolated writable backing, an explicitly halted standalone VM and a complete immutable pair.
     pub fn new(target: String, klass: &str, power: PowerState, running: bool,
-        root: WritableVolume, private: WritableVolume, references: &[Backing], definitions: Vec<Definition>) -> (out: Option<Self>)
+        writable: WritablePair, references: &[Backing], definitions: Vec<Definition>) -> (out: Option<Self>)
         ensures out.is_some() ==> klass@ == "StandaloneVM"@ && power@ is Halted && !running
-            && isolated(root, private, references@) && pair(target@, definitions@),
-            out.is_some() ==> out.unwrap()@ == (target@, root, private, definitions@),
+            && isolated(writable.root, writable.private, references@) && pair(target@, definitions@),
+            out.is_some() ==> out.unwrap()@ == (target@, writable.root, writable.private, definitions@),
     {
+        let root = writable.root;
+        let private = writable.private;
+
         if klass != "StandaloneVM" || !power.is_halted() || running
             || !isolation(&root, &private, references) || !valid_pair(target.as_str(), &definitions) { return None; }
         Some(Self { target, root, private, definitions })

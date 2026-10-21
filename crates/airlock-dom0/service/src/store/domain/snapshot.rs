@@ -110,12 +110,27 @@ impl Snapshot {
     }
 
     /// Retain all aliases, including sibling volumes and other VMs' source volumes.
-    pub(super) fn writable(&self) -> Result<(attachment::WritableVolume, attachment::WritableVolume, Vec<attachment::Backing>)> {
-        let root = super::attachment::writable(self.volume("root").context("missing writable root volume")?)?;
-        let private = super::attachment::writable(self.volume("private").context("missing writable private volume")?)?;
+    pub(super) fn writable(
+        &self,
+    ) -> Result<(
+        attachment::WritableVolume,
+        attachment::WritableVolume,
+        Vec<attachment::Backing>,
+    )> {
+        let root = super::attachment::writable(
+            self.volume("root")
+                .context("missing writable root volume")?,
+        )?;
+        let private = super::attachment::writable(
+            self.volume("private")
+                .context("missing writable private volume")?,
+        )?;
         let mut references = Vec::new();
         let mut retain = |identity: &VolumeIdentity| {
-            references.push(attachment::Backing { pool: identity.pool.clone(), vid: identity.vid.clone() });
+            references.push(attachment::Backing {
+                pool: identity.pool.clone(),
+                vid: identity.vid.clone(),
+            });
         };
         for volume in &self.volumes {
             if volume.name != "root" && volume.name != "private" {
@@ -137,8 +152,10 @@ impl Snapshot {
     pub(super) fn verify_isolation(&self) -> Result<()> {
         self.validate(&self.domain)?;
         let (root, private, references) = self.writable()?;
-        ensure!(attachment::isolation(&root, &private, &references),
-            "writable root/private storage must be independent, persistent and unshared");
+        ensure!(
+            attachment::isolation(&root, &private, &references),
+            "writable root/private storage must be independent, persistent and unshared"
+        );
         Ok(())
     }
 

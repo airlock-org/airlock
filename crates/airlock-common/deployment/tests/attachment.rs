@@ -1,7 +1,10 @@
 //! Exercise the production storage projection and writable-state preservation boundary.
 
 use airlock_deployment_core::{
-    attachment::{AttachmentPlan, Backing, Definition, Generation, Slot, StorePair, WritableVolume, isolation},
+    attachment::{
+        AttachmentPlan, Backing, Definition, Generation, Slot, StorePair, WritablePair,
+        WritableVolume, isolation,
+    },
     inventory::PowerState,
 };
 
@@ -29,7 +32,10 @@ fn definitions() -> Vec<Definition> {
 /// Independent writable backing, with a complete observation bound into its record.
 fn writable(name: &str) -> WritableVolume {
     WritableVolume {
-        backing: Backing { pool: "default".into(), vid: format!("usr-home/{name}") },
+        backing: Backing {
+            pool: "default".into(),
+            vid: format!("usr-home/{name}"),
+        },
         writable: true,
         persistent: true,
         snap_on_start: false,
@@ -41,8 +47,16 @@ fn writable(name: &str) -> WritableVolume {
 /// Try installation through the same constructor used by the native storage guard.
 fn plan(definitions: Vec<Definition>, state: &str) -> Option<AttachmentPlan> {
     AttachmentPlan::new(
-        "usr-home".into(), "StandaloneVM", PowerState::classify(state), false,
-        writable("root"), writable("private"), &[], definitions,
+        "usr-home".into(),
+        "StandaloneVM",
+        PowerState::classify(state),
+        false,
+        WritablePair {
+            root: writable("root"),
+            private: writable("private"),
+        },
+        &[],
+        definitions,
     )
 }
 
@@ -103,10 +117,21 @@ fn halted_evidence_is_required_even_when_running_flag_is_false() {
     for state in ["Running", "Paused", "Crashed", "Transient", "unknown", ""] {
         assert!(plan(definitions(), state).is_none());
     }
-    assert!(AttachmentPlan::new(
-        "usr-home".into(), "StandaloneVM", PowerState::classify("Halted"), true,
-        writable("root"), writable("private"), &[], definitions(),
-    ).is_none());
+    assert!(
+        AttachmentPlan::new(
+            "usr-home".into(),
+            "StandaloneVM",
+            PowerState::classify("Halted"),
+            true,
+            WritablePair {
+                root: writable("root"),
+                private: writable("private")
+            },
+            &[],
+            definitions(),
+        )
+        .is_none()
+    );
 }
 
 #[test]
@@ -114,9 +139,19 @@ fn aliases_and_derived_private_state_cannot_become_installation_evidence() {
     let root = writable("root");
     let private = writable("private");
     assert!(!isolation(&root, &root, &[]));
-    assert!(!isolation(&root, &private, &[Backing { pool: "default".into(), vid: "usr-home/private".into() }]));
+    assert!(!isolation(
+        &root,
+        &private,
+        &[Backing {
+            pool: "default".into(),
+            vid: "usr-home/private".into()
+        }]
+    ));
     let mut derived = writable("private");
-    derived.source = Some(Backing { pool: "default".into(), vid: "other-vm/private".into() });
+    derived.source = Some(Backing {
+        pool: "default".into(),
+        vid: "other-vm/private".into(),
+    });
     assert!(!isolation(&root, &derived, &[]));
 }
 
@@ -144,16 +179,35 @@ fn builder_pair_requires_its_own_namespace_and_supported_consumer() {
             definition.domain = format!("{target}-builder");
         }
         let request = AttachmentPlan::new(
-            target.into(), "StandaloneVM", PowerState::classify("Halted"), false,
-            writable("root"), writable("private"), &[], pair,
+            target.into(),
+            "StandaloneVM",
+            PowerState::classify("Halted"),
+            false,
+            WritablePair {
+                root: writable("root"),
+                private: writable("private"),
+            },
+            &[],
+            pair,
         );
         assert_eq!(request.is_some(), target != "usr-home");
     }
     let mut wrong_namespace = definitions();
     wrong_namespace[0].slot = Slot::BuilderStore;
     wrong_namespace[1].slot = Slot::BuilderData;
-    assert!(AttachmentPlan::new(
-        "sys-ctrl".into(), "StandaloneVM", PowerState::classify("Halted"), false,
-        writable("root"), writable("private"), &[], wrong_namespace,
-    ).is_none());
+    assert!(
+        AttachmentPlan::new(
+            "sys-ctrl".into(),
+            "StandaloneVM",
+            PowerState::classify("Halted"),
+            false,
+            WritablePair {
+                root: writable("root"),
+                private: writable("private")
+            },
+            &[],
+            wrong_namespace,
+        )
+        .is_none()
+    );
 }

@@ -130,7 +130,10 @@ pub fn on_app(
         "pool": request["pool"], "volumes": request["volumes"],
         "snapshot": before, "expected": request["expected"],
     }))?;
-    ensure!(checked["domain"].as_str() == Some(name), "checked attachment names another VM");
+    ensure!(
+        checked["domain"].as_str() == Some(name),
+        "checked attachment names another VM"
+    );
 
     // Dispatch the guard's closed, checked definition set rather than the incoming JSON.
     let pool = &checked["pool"];

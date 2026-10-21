@@ -4,7 +4,7 @@
 
 use super::{Snapshot, Target, generations, snapshot::Volume};
 use airlock_deployment_core::attachment::{
-    self, AttachmentPlan, Definition, Generation, Slot, StorePair,
+    self, AttachmentPlan, Definition, Generation, Slot, StorePair, WritablePair,
 };
 use airlock_nix_core::identity::GuestName;
 use anyhow::{Context, Result, ensure};
@@ -44,13 +44,19 @@ pub(super) fn project(
 ) -> Result<Vec<Value>> {
     use super::super::fs::{number, text};
 
-    ensure!(receipt["view_backend"] == "erofs-objectmap", "unsupported store view backend");
+    ensure!(
+        receipt["view_backend"] == "erofs-objectmap",
+        "unsupported store view backend"
+    );
     for (key, expected) in [
         ("device", &target.device),
         ("blob_device", &target.blob_device),
         ("mountpoint", &target.mountpoint),
     ] {
-        ensure!(receipt[key].as_str() == Some(expected.as_str()), "store generation {key} binding mismatch");
+        ensure!(
+            receipt[key].as_str() == Some(expected.as_str()),
+            "store generation {key} binding mismatch"
+        );
     }
     let metadata = text(receipt, "metadata_image")?;
     let metadata_size = match metadata_size {
@@ -153,18 +159,33 @@ impl WireDefinition {
     fn decode(value: &Value) -> Result<Definition> {
         let wire: Self = serde_json::from_value(value.clone())?;
         let generation: NonZeroU64 = wire.generation.parse()?;
-        ensure!(generation.to_string() == wire.generation, "noncanonical storage generation");
-        ensure!(wire.source.is_none() && wire.revisions_to_keep == 0, "unsupported storage derivation or revisions");
-        let slot = Slot::parse(&wire.name).context("attachment cannot replace writable or unknown volume slots")?;
+        ensure!(
+            generation.to_string() == wire.generation,
+            "noncanonical storage generation"
+        );
+        ensure!(
+            wire.source.is_none() && wire.revisions_to_keep == 0,
+            "unsupported storage derivation or revisions"
+        );
+        let slot = Slot::parse(&wire.name)
+            .context("attachment cannot replace writable or unknown volume slots")?;
         let path = match slot {
             Slot::Store | Slot::BuilderStore => {
-                ensure!(wire.view_kind == "metadata-image" && wire.blob_map_path.is_none()
-                    && wire.blob_logical_size.is_none(), "invalid metadata volume definition");
+                ensure!(
+                    wire.view_kind == "metadata-image"
+                        && wire.blob_map_path.is_none()
+                        && wire.blob_logical_size.is_none(),
+                    "invalid metadata volume definition"
+                );
                 wire.view_path.context("missing metadata image")?
             }
             Slot::StoreData | Slot::BuilderData => {
-                ensure!(wire.view_kind == "erofs-blob-map" && wire.view_path.is_none()
-                    && wire.blob_logical_size == Some(wire.size), "invalid data volume definition");
+                ensure!(
+                    wire.view_kind == "erofs-blob-map"
+                        && wire.view_path.is_none()
+                        && wire.blob_logical_size == Some(wire.size),
+                    "invalid data volume definition"
+                );
                 wire.blob_map_path.context("missing external-data map")?
             }
         };
@@ -183,7 +204,10 @@ impl WireDefinition {
             persistent: wire.save_on_stop,
             snap_on_start: wire.snap_on_start,
         };
-        ensure!(wire.vid == vid(&definition), "storage backing identity differs from its generation");
+        ensure!(
+            wire.vid == vid(&definition),
+            "storage backing identity differs from its generation"
+        );
         Ok(definition)
     }
 }
@@ -207,24 +231,41 @@ impl<'a> Installation<'a> {
     ) -> Result<Self> {
         before.validate(domain)?;
         let name = pool["name"].as_str().context("missing attachment pool")?;
-        let root = pool["root_dir"].as_str().context("missing attachment pool root")?;
+        let root = pool["root_dir"]
+            .as_str()
+            .context("missing attachment pool root")?;
         super::super::qubes_inspect::absolute(Path::new(root))?;
-        ensure!(pool["driver"] == "airlock-closure" && pool["revisions_to_keep"] == 0,
-            "unsupported attachment pool");
-        ensure!(pool.as_object().is_some_and(|fields| fields.len() == 4), "unsupported attachment pool fields");
+        ensure!(
+            pool["driver"] == "airlock-closure" && pool["revisions_to_keep"] == 0,
+            "unsupported attachment pool"
+        );
+        ensure!(
+            pool.as_object().is_some_and(|fields| fields.len() == 4),
+            "unsupported attachment pool fields"
+        );
         if let Some(existing) = before.pools.get(name) {
-            ensure!(existing["driver"] == "airlock-closure" && existing["root_dir"] == root,
-                "existing Qubes pool differs from the requested driver or root");
+            ensure!(
+                existing["driver"] == "airlock-closure" && existing["root_dir"] == root,
+                "existing Qubes pool differs from the requested driver or root"
+            );
         }
 
-        let definitions = configs.iter().map(WireDefinition::decode).collect::<Result<Vec<_>>>()?;
+        let definitions = configs
+            .iter()
+            .map(WireDefinition::decode)
+            .collect::<Result<Vec<_>>>()?;
         let (root, private, references) = before.writable()?;
         for definition in &definitions {
-            ensure!(definition.pool == name, "attachment volume names another pool");
+            ensure!(
+                definition.pool == name,
+                "attachment volume names another pool"
+            );
             let id = vid(definition);
             for writable in [&root, &private] {
-                ensure!(definition.pool != writable.backing.pool || id != writable.backing.vid,
-                    "immutable volume aliases writable backing");
+                ensure!(
+                    definition.pool != writable.backing.pool || id != writable.backing.vid,
+                    "immutable volume aliases writable backing"
+                );
             }
         }
         let plan = AttachmentPlan::new(
@@ -232,8 +273,7 @@ impl<'a> Installation<'a> {
             &before.klass,
             before.power(),
             before.running,
-            root,
-            private,
+            WritablePair { root, private },
             &references,
             definitions,
         ).context("attachment requires an isolated, halted standalone VM and one immutable generation pair")?;
@@ -256,11 +296,25 @@ impl<'a> Installation<'a> {
     pub(super) fn check_after(&self, after: &Snapshot) -> Result<()> {
         after.validate(&self.before.domain)?;
         let (root, private, references) = after.writable()?;
-        ensure!(!after.running && after.power().is_halted(), "VM is not halted after storage installation");
-        ensure!(self.plan.preserves(&root, &private) && attachment::isolation(&root, &private, &references),
-            "storage installation changed or shared writable root/private state");
-        let configs = self.plan.definitions().iter().map(encode).collect::<Vec<_>>();
-        ensure!(after.matches(&configs), "installed Qubes volumes differ from requested configuration");
+        ensure!(
+            !after.running && after.power().is_halted(),
+            "VM is not halted after storage installation"
+        );
+        ensure!(
+            self.plan.preserves(&root, &private)
+                && attachment::isolation(&root, &private, &references),
+            "storage installation changed or shared writable root/private state"
+        );
+        let configs = self
+            .plan
+            .definitions()
+            .iter()
+            .map(encode)
+            .collect::<Vec<_>>();
+        ensure!(
+            after.matches(&configs),
+            "installed Qubes volumes differ from requested configuration"
+        );
         let expected = frontends(self.plan.definitions());
         after.frontends(&[], &expected)?;
         Ok(())
@@ -269,25 +323,34 @@ impl<'a> Installation<'a> {
 
 /// Fixed Xen slots for immutable views; writable disks keep their upstream assignments.
 fn frontends(definitions: &[Definition]) -> Vec<(&str, &str)> {
-    definitions.iter().map(|definition| {
-        let frontend = match definition.slot {
-            Slot::Store => "xvde",
-            Slot::StoreData => "xvdf",
-            Slot::BuilderStore => "xvdg",
-            Slot::BuilderData => "xvdh",
-        };
-        (definition.slot.name(), frontend)
-    }).collect()
+    definitions
+        .iter()
+        .map(|definition| {
+            let frontend = match definition.slot {
+                Slot::Store => "xvde",
+                Slot::StoreData => "xvdf",
+                Slot::BuilderStore => "xvdg",
+                Slot::BuilderData => "xvdh",
+            };
+            (definition.slot.name(), frontend)
+        })
+        .collect()
 }
 
 /// Observe one complete writable-volume definition without discarding driver-specific fields.
 pub(super) fn writable(volume: &Volume) -> Result<attachment::WritableVolume> {
     Ok(attachment::WritableVolume {
-        backing: attachment::Backing { pool: volume.identity.pool.clone(), vid: volume.identity.vid.clone() },
+        backing: attachment::Backing {
+            pool: volume.identity.pool.clone(),
+            vid: volume.identity.vid.clone(),
+        },
         writable: volume.rw,
         persistent: volume.save_on_stop,
         snap_on_start: volume.snap_on_start,
-        source: volume.source.as_ref().map(|source| attachment::Backing { pool: source.pool.clone(), vid: source.vid.clone() }),
+        source: volume.source.as_ref().map(|source| attachment::Backing {
+            pool: source.pool.clone(),
+            vid: source.vid.clone(),
+        }),
         record: serde_json::to_string(volume)?,
     })
 }

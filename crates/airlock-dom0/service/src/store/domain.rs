@@ -352,7 +352,10 @@ pub(super) fn authorize_install(
     observed: &Value,
     expected: &Value,
 ) -> Result<Value> {
-    ensure!(observed == expected, "Qubes storage changed since it was inspected");
+    ensure!(
+        observed == expected,
+        "Qubes storage changed since it was inspected"
+    );
     let snapshot: Snapshot = serde_json::from_value(observed.clone())?;
     Ok(attachment::Installation::new(domain, &snapshot, pool, volumes)?.wire())
 }
@@ -391,7 +394,8 @@ fn install_shared(
     let pool_created = !inspected.pools.contains_key(&target.pool_name);
     let ((), restarted, was_active) = with_qubesd_stopped(&integration_root(), || {
         let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
-        let retained = attachment::CommittedGeneration::load(target, number(admission, "generation")?)?;
+        let retained =
+            attachment::CommittedGeneration::load(target, number(admission, "generation")?)?;
         ensure!(
             retained.definitions(target)? == configs,
             "generation changed before attachment"

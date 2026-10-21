@@ -166,6 +166,7 @@ fn vm(
             object.setattr("volume_config", configs)?;
         }
         "is_running" => return Ok(false.into_pyobject(py)?.to_owned().into_any().unbind()),
+        "get_power_state" => return Ok("Halted".into_pyobject(py)?.into_any().unbind()),
         "property_get_def" => {
             let key = argument(args, 1)?.extract::<String>()?;
             if key == "kernel" {
@@ -394,7 +395,12 @@ pub(super) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
         root,
         "VM",
         vm,
-        &["__init__", "is_running", "property_get_def"],
+        &[
+            "__init__",
+            "is_running",
+            "get_power_state",
+            "property_get_def",
+        ],
         &[],
         &[],
     )?;

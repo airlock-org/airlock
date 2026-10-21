@@ -161,7 +161,10 @@ pub(super) fn observe(py: Python<'_>) -> Result<Value> {
     let app = open(py, store, false)?;
     let rejected_private = storage::on_app(&app, &request, &guard, &runner).is_err();
     app.call_method0("close")?;
-    ensure!(rejected_private && saved == fs::read(store)?, "immutable attachment changed private storage");
+    ensure!(
+        rejected_private && saved == fs::read(store)?,
+        "immutable attachment changed private storage"
+    );
     ensure!(
         !contended(store)?,
         "Qubes did not release its database lock"
@@ -170,13 +173,7 @@ pub(super) fn observe(py: Python<'_>) -> Result<Value> {
     let mut stale = request;
     stale["expected"]["running"] = json!(true);
     let app = open(py, store, false)?;
-    let rejected = storage::on_app(
-        &app,
-        &stale,
-        &guard,
-        &runner,
-    )
-    .is_err();
+    let rejected = storage::on_app(&app, &stale, &guard, &runner).is_err();
     app.call_method0("close")?;
     ensure!(
         rejected && saved == fs::read(store)?,

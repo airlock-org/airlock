@@ -126,13 +126,15 @@ fn qubes_properties_use_native_storage_checks() -> Result<()> {
 fn qubes_installation_guard_uses_native_fresh_state() -> Result<()> {
     use airlock_tests::attachment::volume;
 
-    let snapshot = json!({
-        "klass":"StandaloneVM", "running":false, "power_state":"Halted", "domain":"usr-home",
-        "features":{}, "pools":{}, "references":[],
-        "volumes":["root", "private"].map(|name| volume(&json!({
+    let writable = ["root", "private"].map(|name| {
+        volume(&json!({
             "name":name, "pool":"default", "vid":format!("usr-home/{name}"),
             "rw":true, "save_on_stop":true, "snap_on_start":false, "size":4096
-        }))),
+        }))
+    });
+    let snapshot = json!({
+        "klass":"StandaloneVM", "running":false, "power_state":"Halted", "domain":"usr-home",
+        "features":{}, "pools":{}, "references":[], "volumes":writable,
     });
     let volumes = ["store", "store-data"].map(|name| {
         let mut definition = json!({
@@ -159,7 +161,18 @@ fn qubes_installation_guard_uses_native_fresh_state() -> Result<()> {
     let checked = airlock_dom0_service::storage_request(request.clone())?;
     assert_eq!(checked["volumes"], request["volumes"]);
     assert_eq!(checked["domain"], request["domain"]);
-    for damage in ["private", "unknown", "generation", "readonly", "extra-field", "target", "stale", "paused", "missing-power", "aliased"] {
+    for damage in [
+        "private",
+        "unknown",
+        "generation",
+        "readonly",
+        "extra-field",
+        "target",
+        "stale",
+        "paused",
+        "missing-power",
+        "aliased",
+    ] {
         let mut invalid = request.clone();
         match damage {
             "private" => invalid["volumes"][0]["name"] = json!("private"),
@@ -174,7 +187,10 @@ fn qubes_installation_guard_uses_native_fresh_state() -> Result<()> {
                 invalid["expected"] = invalid["snapshot"].clone();
             }
             "missing-power" => {
-                invalid["snapshot"].as_object_mut().unwrap().remove("power_state");
+                invalid["snapshot"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("power_state");
                 invalid["expected"] = invalid["snapshot"].clone();
             }
             _ => {
@@ -184,11 +200,17 @@ fn qubes_installation_guard_uses_native_fresh_state() -> Result<()> {
                 invalid["expected"] = invalid["snapshot"].clone();
             }
         }
-        assert!(airlock_dom0_service::storage_request(invalid).is_err(), "{damage}");
+        assert!(
+            airlock_dom0_service::storage_request(invalid).is_err(),
+            "{damage}"
+        );
     }
 
     let mut after = snapshot.clone();
-    after["volumes"].as_array_mut().unwrap().extend(volumes.iter().map(volume));
+    after["volumes"]
+        .as_array_mut()
+        .unwrap()
+        .extend(volumes.iter().map(volume));
     let verification = json!({
         "operation":"verify-installed", "domain":"usr-home", "pool":request["pool"],
         "volumes":volumes, "before":snapshot, "after":after,

@@ -450,7 +450,10 @@ fn attachment_lock_excludes_operations_across_pool_roots() -> Result<()> {
 /// A successful external mutation cannot advance selection if writable state changed or its reply was lost.
 #[test]
 fn attachment_checks_preservation_before_selection_and_reconciles_lost_reply() -> Result<()> {
-    for fault in ["AIRLOCK_TEST_STORAGE_DAMAGE_PRIVATE", "AIRLOCK_TEST_STORAGE_LOSE_REPLY"] {
+    for fault in [
+        "AIRLOCK_TEST_STORAGE_DAMAGE_PRIVATE",
+        "AIRLOCK_TEST_STORAGE_LOSE_REPLY",
+    ] {
         let attachment = Attachment::new()?;
         let current = attachment.store.pool.join("domains/usr-home/current");
         let selected = fs::read_link(&current)?;
@@ -463,11 +466,17 @@ fn attachment_checks_preservation_before_selection_and_reconciles_lost_reply() -
             // A retry observes the already installed pair; it must retain the original private backing.
             common::json(&mut attachment.command(&[])?, None)?;
             common::json(&mut attachment.command(&[])?, None)?;
-            let after: Value = serde_json::from_slice(&fs::read(attachment.peers.path("qubes.json"))?)?;
+            let after: Value =
+                serde_json::from_slice(&fs::read(attachment.peers.path("qubes.json"))?)?;
             for name in ["root", "private"] {
                 let find = |snapshot: &Value| {
-                    snapshot["volumes"].as_array().unwrap().iter()
-                        .find(|volume| volume["name"] == name).unwrap().clone()
+                    snapshot["volumes"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|volume| volume["name"] == name)
+                        .unwrap()
+                        .clone()
                 };
                 assert_eq!(find(&after), find(&attachment.snapshot));
             }
@@ -483,7 +492,11 @@ fn attachment_requires_explicit_halted_power_evidence() -> Result<()> {
         let mut attachment = Attachment::new()?;
         attachment.snapshot["power_state"] = power;
         attachment.save()?;
-        assert!(!common::run(&mut attachment.command(&[])?, None)?.status.success());
+        assert!(
+            !common::run(&mut attachment.command(&[])?, None)?
+                .status
+                .success()
+        );
         assert!(attachment.installs()?.is_empty());
     }
     Ok(())

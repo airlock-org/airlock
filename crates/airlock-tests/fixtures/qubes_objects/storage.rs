@@ -186,9 +186,13 @@ fn vm(
                             "snap_on_start":false, "save_on_stop":true, "source":null,
                             "revisions_to_keep":1,
                         }),
-                    )?.cast_into::<PyDict>()?;
+                    )?
+                    .cast_into::<PyDict>()?;
                     config.set_item("pool", app.call_method1("get_pool", ("default",))?)?;
-                    let volume = py.import("qubes.storage")?.getattr("Volume")?.call((), Some(&config))?;
+                    let volume = py
+                        .import("qubes.storage")?
+                        .getattr("Volume")?
+                        .call((), Some(&config))?;
                     object.getattr("volumes")?.set_item(name, &volume)?;
                     configs.set_item(name, volume.getattr("config")?)?;
                 }
@@ -205,7 +209,10 @@ fn vm(
         }
         "get_power_state" => {
             let state = std::env::var("AIRLOCK_FAKE_QUBES_POWER_STATE").unwrap_or_else(|_| {
-                if matches!(std::env::var("AIRLOCK_FAKE_QUBES_RUNNING").as_deref(), Ok("1" | "true" | "yes")) {
+                if matches!(
+                    std::env::var("AIRLOCK_FAKE_QUBES_RUNNING").as_deref(),
+                    Ok("1" | "true" | "yes")
+                ) {
                     "Running".into()
                 } else {
                     "Halted".into()
@@ -410,7 +417,14 @@ pub(super) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     root.add("storage", storage_module)?;
 
-    let vm = class(root, "VM", vm, &["__init__", "is_running", "get_power_state"], &[], &[])?;
+    let vm = class(
+        root,
+        "VM",
+        vm,
+        &["__init__", "is_running", "get_power_state"],
+        &[],
+        &[],
+    )?;
     vm.setattr("klass", "StandaloneVM")?;
 
     class(

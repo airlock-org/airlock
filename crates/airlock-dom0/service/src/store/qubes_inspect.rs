@@ -256,14 +256,28 @@ pub(super) fn execute(request: Value) -> Result<Value> {
             has_source,
         } => super::qubes_volume::normalize(domain.as_ref(), config, has_source),
         Request::VolumeLifecycle { request } => super::qubes_volume::execute(request),
-        Request::AuthorizeInstall { domain, pool, volumes, snapshot, expected } => {
-            super::domain::authorize_install(&domain, &pool, &volumes, &snapshot, &expected)
-        }
-        Request::VerifyInstalled { domain, pool, volumes, before, after } => {
+        Request::AuthorizeInstall {
+            domain,
+            pool,
+            volumes,
+            snapshot,
+            expected,
+        } => super::domain::authorize_install(&domain, &pool, &volumes, &snapshot, &expected),
+        Request::VerifyInstalled {
+            domain,
+            pool,
+            volumes,
+            before,
+            after,
+        } => {
             super::domain::verify_installed(&domain, &pool, &volumes, &before, &after)?;
             Ok(json!({}))
         }
-        Request::RequireStopped { klass, running, power_state } => {
+        Request::RequireStopped {
+            klass,
+            running,
+            power_state,
+        } => {
             require_stopped(&klass, running, &power_state)?;
             Ok(json!({}))
         }
@@ -318,7 +332,8 @@ pub(super) fn execute(request: Value) -> Result<Value> {
 /// Reject storage mutation unless Qubes reports an independent, stopped VM.
 fn require_stopped(klass: &str, running: bool, power_state: &str) -> Result<()> {
     ensure!(
-        klass == "StandaloneVM" && !running
+        klass == "StandaloneVM"
+            && !running
             && airlock_deployment_core::inventory::PowerState::classify(power_state).is_halted(),
         "storage installation requires a stopped StandaloneVM"
     );
