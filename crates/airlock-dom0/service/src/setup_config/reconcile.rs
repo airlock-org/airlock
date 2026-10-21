@@ -552,6 +552,14 @@ fn manual(runner: &Runner, program: &str, args: &[String], apply: bool) -> Resul
                 "AIRLOCK_LOG_DIR".into(),
                 super::report::helper_directory(&root, domain, mode)?.into_os_string(),
             ));
+            // Runner clears ambient selections. Boot's checked generation map must
+            // survive this nested backend handoff instead of falling back to admission.
+            // This remains a manual/boot path, not deployment authorization.
+            if mode == "--backend-only"
+                && let Some(staged) = std::env::var_os("AIRLOCK_STAGED_GENERATIONS")
+            {
+                env.push(("AIRLOCK_STAGED_GENERATIONS".into(), staged));
+            }
         }
         let output = runner.run(
             program,

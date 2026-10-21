@@ -76,6 +76,8 @@ fn child() -> Result<()> {
     }
     command
         .env_remove("AIRLOCK_TEST_MACHINE_ROOT")
+        .env_remove("AIRLOCK_NIX_ROOT")
+        .env("AIRLOCK_USE_HOST_NIX_STORE", "1")
         .env("AIRLOCK_IMAGE_HANDOFF_CHILD", "1")
         .env("PATH", std::env::var_os("PATH").context("test tool path")?);
     checked(&mut command)?;
@@ -123,7 +125,7 @@ fn relocate(value: &mut Value, before: &str, after: &str) {
     }
 }
 
-/// A generated topology, committed pool, offline Qubes objects and actual setup are exercised together.
+/// One topology, committed pool, offline Qubes objects and actual setup are exercised together.
 #[test]
 #[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]
 fn namespace_image_handoff_and_first_boot() -> Result<()> {
@@ -223,7 +225,7 @@ fn namespace_image_handoff_and_first_boot() -> Result<()> {
         );
     checked(&mut image).context("assemble offline image")?;
 
-    // The installed topology is the same generated document used above, not a separate fixture.
+    // The installed topology is the same declaration used above, not a separate fixture.
     copy(&store.pool, pool)?;
     copy(&runtime.join("pool-selections"), pool)?;
     copy(&runtime.join("qubes"), Path::new("/var/lib/qubes"))?;
@@ -303,6 +305,9 @@ fn namespace_image_handoff_and_first_boot() -> Result<()> {
             .env("AIRLOCK_QUBES_STORAGE_STATE", setup.peers.path("storage"));
         Ok(command)
     };
+    // Retained generations must suffice even when admission inputs are unavailable.
+    // Dropping the checked map at any nested setup helper now makes this scenario fail.
+    fs::remove_file(Path::new(DESCRIPTORS).join("sys-gui/store-paths"))?;
     let receipt = Path::new("/var/lib/airlock/machine/boot-configuration.json");
     // Fail after actual setup succeeds, while the coordinator waits to observe XML before recording completion.
     let fifo = setup.peers.path("held.xml");
