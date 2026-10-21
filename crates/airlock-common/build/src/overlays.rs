@@ -8,6 +8,15 @@ use rusix::{
     nix_record, nix_text,
 };
 
+/// Replace only upstream's scheduler selection, preserving its dom0 weight policy.
+const QUBES_SCHEDULER: &str = r#"
+scheduler=$(xl info | awk '$1 == "xen_scheduler" { print $3 }')
+case "$scheduler" in
+    credit|credit2) xl "sched-$scheduler" -d 0 -w 2000 ;;
+    *) echo "Qubes startup: cannot set dom0 weight for Xen scheduler '$scheduler'" >&2 ;;
+esac
+"#;
+
 /// Select the complete pinned Codex distribution on supported hosts.
 pub fn codex() -> NixValue {
     NixValue::function(|final_pkgs| {
@@ -19,6 +28,50 @@ pub fn codex() -> NixValue {
                     previous.select("codex"),
                 ),
             }
+        })
+    })
+}
+
+/// Keep upstream dom0 startup compatible with Xen's scheduler and resolve its Qubes client commands.
+pub fn qubes_startup() -> NixValue {
+    NixValue::function(|_| {
+        NixValue::function(|previous| {
+            let extension = NixValue::function(|python| {
+                NixValue::function(|packages| {
+                    nix_record! {
+                        "qubes-core-admin": packages.select("qubes-core-admin").override_attrs(
+                            NixValue::function(|old| nix_record! {
+                                // patsh resolves upstream's bare qvm-features command at build time.
+                                "nativeBuildInputs": NixValue::concat_lists([
+                                    old.clone().attr_or("nativeBuildInputs", NixValue::list([])),
+                                    NixValue::list([python.clone().select("qubes-core-admin-client")]),
+                                ]),
+                                "postPatch": NixValue::concat_text([
+                                    old.attr_or("postPatch", ""),
+                                    nix_text!(r#"
+                                    substituteInPlace linux/aux-tools/startup-misc.sh \
+                                      --replace-fail 'xl sched-credit -d 0 -w 2000' {scheduler}
+                                    bash -n linux/aux-tools/startup-misc.sh
+                                "#, scheduler = previous.clone().select("lib.escapeShellArg").call(QUBES_SCHEDULER)).into(),
+                                ]),
+                            }),
+                        ),
+                    }
+                })
+            });
+            let unchanged = NixValue::function(|_| NixValue::function(|_| nix_record! {}));
+            let python = previous
+                .clone()
+                .select("python3.override")
+                .call(NixValue::function(|arguments| {
+                    nix_record! {
+                        "packageOverrides": previous.clone().select("lib.composeExtensions")
+                            .call(arguments.attr_or("packageOverrides", unchanged))
+                            .call(extension),
+                    }
+                }));
+
+            nix_record! { "python3": python }
         })
     })
 }
@@ -202,4 +255,55 @@ pub fn image_tools(machine: &NixPath) -> NixValue {
                 .merge_attrs(without_template_tools(&previous))
         })
     })
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::QUBES_SCHEDULER;
+    use std::process::{Command, Output};
+
+    /// Execute the upstream integration fragment with an inert xl command, never a real hypervisor.
+    fn observe(scheduler: &str, exit: &str) -> std::io::Result<Output> {
+        let fixture = r#"
+            xl() {
+                if [ "$1" = info ]; then
+                    printf 'xen_scheduler : %s\n' "$AIRLOCK_TEST_SCHEDULER"
+                else
+                    printf '%s\n' "$@"
+                    return "$AIRLOCK_TEST_XL_EXIT"
+                fi
+            }
+        "#;
+        Command::new("bash")
+            .args([
+                "-c",
+                &format!(
+                    r#"
+                {fixture}
+                {QUBES_SCHEDULER}
+            "#
+                ),
+            ])
+            .env("AIRLOCK_TEST_SCHEDULER", scheduler)
+            .env("AIRLOCK_TEST_XL_EXIT", exit)
+            .output()
+    }
+
+    /// Set the existing dom0 weight through the active scheduler and retain a real xl failure.
+    #[test]
+    fn dom0_weight_uses_the_active_xen_scheduler() -> std::io::Result<()> {
+        for scheduler in ["credit", "credit2"] {
+            let output = observe(scheduler, "0")?;
+            assert!(output.status.success());
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout),
+                format!("sched-{scheduler}\n-d\n0\n-w\n2000\n")
+            );
+        }
+        let unsupported = observe("null", "0")?;
+        assert!(unsupported.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&unsupported.stderr).contains("cannot set dom0 weight"));
+        assert_eq!(observe("credit2", "7")?.status.code(), Some(7));
+        Ok(())
+    }
 }

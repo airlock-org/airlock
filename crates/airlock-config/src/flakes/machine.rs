@@ -184,6 +184,7 @@ impl Build {
                         self.output("overlays.airlockApps"),
                         self.output("overlays.airlockQubesGuiWindowState"),
                         self.output("overlays.airlockImageBuildTools"),
+                        self.output("overlays.airlockQubesStartup"),
                     ])),
                 },
             })
@@ -233,6 +234,7 @@ pub(super) fn outputs() -> NixValue {
                 "template": crate::vm_build::constructors().as_expression(),
                 "windowState": overlays::gui_window_state(&source),
                 "imageTools": overlays::image_tools(&source),
+                "qubesStartup": overlays::qubes_startup(),
                 "identity": super::source_identity(&inputs.clone().select("self")),
             };
             let result = constructors.bind(|constructors| {
@@ -255,6 +257,7 @@ pub(super) fn outputs() -> NixValue {
                                 overlays::codex(),
                                 overlays::memory_accounting(&source),
                                 constructors.clone().select("imageTools"),
+                                constructors.clone().select("qubesStartup"),
                             ]),
                             "config": nix_record! {
                                 "allowUnfreePredicate": super::allow_unfree(&lib),
@@ -385,6 +388,7 @@ pub(super) fn outputs() -> NixValue {
                                 "airlockApps": exported_overlay(&build, apps_overlay),
                                 "airlockImageBuildTools": exported_overlay(&build, constructors.clone().select("imageTools")),
                                 "airlockQubesGuiWindowState": exported_overlay(&build, constructors.clone().select("windowState")),
+                                "airlockQubesStartup": exported_overlay(&build, constructors.clone().select("qubesStartup")),
                             },
                             "nixosModules": nix_record! {
                                 "dom0": build.dom0(),
