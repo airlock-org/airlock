@@ -8,7 +8,7 @@
   Generated Nix remains the build interface to upstream NixOS and Qubes.
   Keep it outside Git in prepared source artifacts; commit Rust and locks. Keep
   existing Qubes runtime state such as `qubes.xml` where its architecture requires it.
-- For physical lab development, read `lifecycle/misc/tools/README.md` first. Change
+- For physical lab development, read `docs/development-operations.md` first. Change
   and commit this repo, then use `make machine-plan` / `make machine-apply`
   with `DEPLOY_TARGET=...`; verify the resulting whole-machine generation.
   Never leave successful fixes only in a live VM, `/run`, or an ad-hoc overlay.

@@ -18,7 +18,7 @@ make machine-verify DEPLOY_TARGET=user@TARGET
 
 Stop for older undeployed work, incomplete or failed deployments, a required
 reboot, or an unknown baseline. Resolve that state before preparing another
-change. Follow the full baseline and submission rules in the root `AGENTS.md`.
+change. Follow the full baseline and submission rules in the root [AGENTS.md](../AGENTS.md).
 
 After making and committing the intended changes and updating the parent pin:
 

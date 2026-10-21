@@ -11,7 +11,7 @@ fn staged_boot_flow_reuses_image_and_checks_generation() -> Result<()> {
     for damage in ["", "missing-source", "not-pending", "wrong-running"] {
         let temporary = tempfile::tempdir()?;
         let root = temporary.path();
-        let scripts = root.join("lifecycle/misc/tools/scripts");
+        let scripts = root.join("peers");
         fs::create_dir_all(&scripts)?;
         common::peer_link(&scripts, "run-nested-gui-smoke.sh")?;
         fs::create_dir(root.join("bin"))?;

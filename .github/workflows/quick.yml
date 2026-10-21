@@ -76,7 +76,7 @@ jobs:
           make --silent prepare > .airlock-logs/prepared-source
       - name: Exercise real patched EROFS indexes
         run: |
-          ./lifecycle/misc/tools/scripts/airlock-nix.sh shell "$(cat .airlock-logs/prepared-source)/airlock-machine#airlock-erofs-utils" --command bash -euc '
+          ./crates/airlock-dev/scripts/airlock-dev.sh nix -- shell "$(cat .airlock-logs/prepared-source)/airlock-machine#airlock-erofs-utils" --command bash -euc '
             export AIRLOCK_EROFS_MKFS="$(command -v mkfs.erofs)"
             crates/target/debug/airlock-test-runner .airlock-logs/native-integration-build.jsonl --ignored packaged_erofs_ --nocapture
           '

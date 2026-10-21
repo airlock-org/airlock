@@ -305,7 +305,7 @@ fn workstation_nix_requires_guarded_store_selection() -> Result<()> {
     let fixture = Repository::new()?;
     let data = fixture.path("external data");
     for script in [
-        common::root().join("lifecycle/misc/tools/scripts/lib/airlock-env.sh"),
+        common::root().join("crates/airlock-dev/scripts/lib/airlock-env.sh"),
         common::root().join("airlock-machine/scripts/dev/lib/airlock-env.sh"),
     ] {
         let mut command = Command::new("bash");

@@ -8,7 +8,8 @@ integrations. Repository rules and Rust documentation standards are in
 
 - `crates/`: applications, services, and shared Rust code.
 - `airlock-machine/`: pinned machine configuration and runtime integration.
-- `lifecycle/`: image assembly and external development tools.
+- `tools/`: repository hooks and Rust style checks.
+- `docs/`: essential development and image operating instructions.
 - `../website`: landing page and product documentation, with its own build.
 
 Initialize the component before building or running the parent tests:
@@ -38,8 +39,8 @@ make machine-build
 ```
 
 Nix checks are opt-in. Use only the guarded Airlock GC targets; never collect
-the computer's `/nix/store`. [Image operations](lifecycle/image/tools/README.md)
-cover provisioning and boot recovery. [Development operations](lifecycle/misc/tools/README.md)
+the computer's `/nix/store`. [Image operations](docs/image-operations.md)
+cover provisioning and boot recovery. [Development operations](docs/development-operations.md)
 cover deployment and nested-VM checks.
 
 Rust checks and source documentation follow

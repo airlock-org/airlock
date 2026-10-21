@@ -38,6 +38,6 @@ start sys-gui with a display GPU still owned by dom0 or delete Qubes state to
 force a boot. Inspect the declared hardware configuration and Qubes assignments
 from recovery before changing ownership.
 
-For an active display stall, the machine component keeps the bounded
-[display recovery procedure](../../../crates/airlock-sys-gui/service/src/gpu/README.md)
+For an active display stall, the GUI service keeps the bounded
+[display recovery procedure](../crates/airlock-sys-gui/service/src/gpu/README.md)
 beside its tool.
