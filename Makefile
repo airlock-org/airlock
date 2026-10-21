@@ -64,9 +64,6 @@ VM_PREBUILD_ATTRS := \
 	packages.x86_64-linux.airlock-qubes-vm-kernel \
 	$(VM_GUI_CONFIG_IMAGE_ATTR)
 
-PYTHON_FILES := $(shell git ls-files '*.py' ':(exclude)crates/vendor/**') \
-  $(addprefix airlock-machine/,$(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR git -C airlock-machine ls-files '*.py' ':(exclude)vendor/**'))
-
 TEST_LOG_DIR = $${AIRLOCK_LOG_DIR:-.airlock-logs}
 TEST_JOBS ?= 4
 TEST_VM_JOBS ?= 2
@@ -103,7 +100,7 @@ VM_SLOW_SELECTED_PARALLEL_TARGETS = $(foreach test,$(VM_SLOW_SELECTED_PARALLEL_F
 VM_SLOW_SELECTED_SERIAL_TARGETS = $(foreach test,$(VM_SLOW_SELECTED_SERIAL_FLOW_IDS),system_vm::vm_flow_$(subst -,_,$(test)))
 VM_SLOW_SERIAL_TARGETS = $(foreach test,$(VM_SLOW_SERIAL_FLOW_IDS),system_vm::vm_flow_$(subst -,_,$(test)))
 
-.PHONY: ensure-generated-dirs build test-quick test-nix test-warm test-slow py-sync py-check py-lint py-complexity py-complexity-check install-git-hooks vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-config-network-debug-image vm-gui-config-network-debug-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-result-links clean-logs clean-cache
+.PHONY: ensure-generated-dirs build test-quick test-nix test-warm test-slow vm-prebuild-shared vm-parallel-prebuild-image vm-parallel-prebuild-baseline vm-image vm-image-dry-run vm-run vm-ssh vm-gui-image vm-gui-image-dry-run vm-gui-run vm-gui-config-image vm-gui-config-image-dry-run vm-gui-config-run vm-gui-config-network-debug-image vm-gui-config-network-debug-run vm-gui-check vm-gui-smoke vm-warm-start vm-warm-sync vm-warm-apply vm-warm-test-config vm-config-setup vm-config-flow vm-config-warm-flow vm-config-boot-flow vm-config-boot-activate-flow vm-nix-closure-flow vm-nix-closure-warm-flow disk-usage gc-auto gc-roots gc-dry-run gc clean clean-generated clean-vm clean-vm-disks clean-result-links clean-logs clean-cache
 
 ensure-generated-dirs:
 ifneq ($(strip $(AIRLOCK_DATA_ROOT)),)
@@ -367,31 +364,6 @@ else
 	AIRLOCK_RUN_VM_TESTS=1 AIRLOCK_VM_PARALLEL_LANES="$(TEST_VM_JOBS)" AIRLOCK_VM_PARALLEL_SSH_BASE_PORT="$(VM_PARALLEL_SSH_BASE_PORT)" AIRLOCK_VM_PARALLEL_IMAGE_ATTR="$(VM_PARALLEL_IMAGE_ATTR)" AIRLOCK_VM_PARALLEL_IMAGE_LINK="$(VM_PARALLEL_IMAGE_LINK)" AIRLOCK_VM_PARALLEL_BASELINE_DISK="$(VM_PARALLEL_BASELINE_DISK)" AIRLOCK_VM_PARALLEL_BASELINE_OVMF_VARS="$(VM_PARALLEL_BASELINE_OVMF_VARS)" "$(NATIVE_TEST_RUNNER)" "$(NATIVE_TEST_RECEIPT)" --target integration --ignored --exact $(VM_SLOW_DEFAULT_PARALLEL_TARGETS) --test-threads=$(TEST_VM_JOBS) --nocapture
 	AIRLOCK_RUN_VM_TESTS=1 AIRLOCK_VM_DIR="$(VM_SLOW_SERIAL_VM_DIR)" AIRLOCK_VM_SSH_PORT="$(VM_SLOW_SERIAL_SSH_PORT)" AIRLOCK_SKIP_GC_AUTO=1 "$(NATIVE_TEST_RUNNER)" "$(NATIVE_TEST_RECEIPT)" --target integration --ignored --exact $(VM_SLOW_SERIAL_TARGETS) --nocapture
 endif
-
-py-sync:
-	uv sync --only-dev
-
-ifneq ($(strip $(PYTHON_FILES)),)
-py-lint:
-	uv run ruff check $(PYTHON_FILES)
-
-py-check:
-	uv run ruff check $(PYTHON_FILES)
-	uv run python -m py_compile $(PYTHON_FILES)
-
-py-complexity:
-	uv run radon cc -s -a $(PYTHON_FILES)
-	uv run radon mi -s $(PYTHON_FILES)
-
-py-complexity-check:
-	uv run xenon --max-absolute E --max-modules C --max-average A $(PYTHON_FILES)
-else
-py-lint py-check py-complexity py-complexity-check:
-	@echo "No first-party Python sources to check."
-endif
-
-install-git-hooks:
-	install -m 0755 tools/git-hooks/pre-commit .git/hooks/pre-commit
 
 vm-prebuild-shared: ensure-generated-dirs gc-auto
 	$(AIRLOCK_NIX) build $(foreach attr,$(VM_PREBUILD_ATTRS),.#$(attr)) --no-link --print-build-logs --show-trace

@@ -8,7 +8,7 @@ integrations. Repository rules and Rust documentation standards are in
 
 - `crates/`: applications, services, and shared Rust code.
 - `airlock-machine/`: pinned machine configuration and runtime integration.
-- `tools/`: repository hooks and Rust style checks.
+- `tools/`: Rust style checks.
 - `docs/`: essential development and image operating instructions.
 - `../website`: landing page and product documentation, with its own build.
 
@@ -16,7 +16,6 @@ Initialize the component before building or running the parent tests:
 
 ```sh
 git submodule update --init airlock-machine
-uv sync --locked
 make native-integration-build
 make test-quick
 ```

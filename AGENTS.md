@@ -147,10 +147,9 @@ Future nested instructions must link here rather than duplicate these standards.
 
 ### Automated checks and commands
 
-Run from the repository root with stable Cargo/rustfmt/Clippy and the explicitly
-prepared Python environment (`uv sync --locked`). The GTK welcome window also
-needs GTK4/libadwaita development files and pkg-config. The dom0 service
-also needs libudev development files. On NixOS, enter the
+Run from the repository root with stable Cargo/rustfmt/Clippy. The GTK welcome
+window also needs GTK4/libadwaita development files and pkg-config. The dom0
+service also needs libudev development files. On NixOS, enter the
 explicitly prepared environment with `nix develop "$(make --silent prepare)/crates#desktop"` before running
 workspace Cargo checks; `nix develop "$(make --silent prepare)/crates#desktop" -c make rust-check` runs the
 full Rust check workflow directly. Quick test execution never provisions these tools:
