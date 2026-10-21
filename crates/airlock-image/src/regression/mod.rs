@@ -221,7 +221,7 @@ fn offline_source_references_encode_store_names_and_reject_traversal() -> Result
     for directory in ["apps", "crates", "vendor/nixos-qubes"] {
         assert_eq!(
             acceptance::input_reference(&format!("{root}/{directory}"))?,
-            format!("path:{root}?dir={directory}")
+            format!("path:{root}/{directory}")
         );
     }
     for suffix in ["/../escape", "/a/./b", "/a//b", "/a\nb"] {
@@ -231,7 +231,7 @@ fn offline_source_references_encode_store_names_and_reject_traversal() -> Result
     assert_eq!(
         acceptance::input_reference(&format!("{root}/apps"))?,
         format!(
-            "path:{root}?dir=apps",
+            "path:{root}/apps",
             root = root.replace('?', "%3F").replace('=', "%3D")
         )
     );

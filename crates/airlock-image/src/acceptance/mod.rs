@@ -150,26 +150,20 @@ pub(crate) fn store_root(path: &str) -> Result<String> {
     Ok(root)
 }
 
+/// Select the actual source directory for both flake and raw-source inputs.
+/// A `dir` query changes flake lookup but leaves a raw input's source at the repository root.
 pub(crate) fn input_reference(path: &str) -> Result<String> {
-    let root = store_root(path)?;
-    let directory = path[root.len()..].trim_start_matches('/');
-    let encode = |text: &str| {
-        let mut encoded = String::new();
-        for byte in text.bytes() {
-            if byte.is_ascii_alphanumeric() || b"/-._~".contains(&byte) {
-                encoded.push(char::from(byte));
-            } else {
-                encoded.push_str(&format!("%{byte:02X}"));
-            }
+    store_root(path)?;
+    let mut encoded = String::new();
+    for byte in path.bytes() {
+        if byte.is_ascii_alphanumeric() || b"/-._~".contains(&byte) {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
         }
-        encoded
-    };
-    let root = encode(&root);
-    Ok(if directory.is_empty() {
-        format!("path:{root}")
-    } else {
-        format!("path:{root}?dir={}", encode(directory))
-    })
+    }
+
+    Ok(format!("path:{encoded}"))
 }
 
 pub(crate) fn store_file(root: &Path, logical: &str) -> Result<PathBuf> {
