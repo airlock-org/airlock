@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use std::{
     fs,
     os::unix::{fs::symlink, process::CommandExt},
+    path::PathBuf,
     process::{Command, Stdio},
 };
 
@@ -90,8 +91,9 @@ fn guarded_gc_retains_structured_roots_and_preserves_store_selection() -> Result
         fs::create_dir(store.join(name))?;
     }
     fs::write(store.join(names[5]).join("base.qcow2"), "backing bytes")?;
+    fs::write(store.join(names[4]).join("base.qcow2"), "backup base")?;
     symlink(
-        store.join(names[5]).join("base.qcow2"),
+        format!("/nix/store/{base}/base.qcow2", base = names[5]),
         store.join(names[1]).join("base.qcow2"),
     )?;
     symlink(
@@ -119,17 +121,16 @@ fn guarded_gc_retains_structured_roots_and_preserves_store_selection() -> Result
         {"args": ["--gc"], "env": {"NIX_CONFIG": config}, "stdout": "freed 0 bytes\n"}
     ]))?;
     let qemu = json!([
-        {"args": ["info", "--output=json", "--backing-chain", overlay],
-         "stdout": serde_json::to_string(&json!([
-             {"filename": overlay, "backing-filename": "../nix-root/nix/store/base.qcow2",
-              "full-backing-filename": store.join(names[1]).join("base.qcow2")},
-             {"filename": store.join(names[1]).join("base.qcow2")}
-         ]))?},
-        {"args": ["info", "--output=json", "--backing-chain", backup],
-         "stdout": serde_json::to_string(&json!([
-             {"filename": backup, "backing-filename": format!("../nix-root/nix/store/{base}/base.qcow2", base = names[4])},
-             {"filename": store.join(names[4]).join("base.qcow2")}
-         ]))?}
+        {"args": ["info", "--output=json", overlay],
+         "stdout": serde_json::to_string(&json!({"filename": overlay,
+             "backing-filename": format!("/nix/store/{base}/base.qcow2", base = names[1])}))?},
+        {"args": ["info", "--output=json", store.join(names[5]).join("base.qcow2")],
+         "stdout": serde_json::to_string(&json!({"filename": store.join(names[5]).join("base.qcow2")}))?},
+        {"args": ["info", "--output=json", backup],
+         "stdout": serde_json::to_string(&json!({"filename": backup,
+             "backing-filename": format!("../nix-root/nix/store/{base}/base.qcow2", base = names[4])}))?},
+        {"args": ["info", "--output=json", store.join(names[4]).join("base.qcow2")],
+         "stdout": serde_json::to_string(&json!({"filename": store.join(names[4]).join("base.qcow2")}))?}
     ]);
     peers.rules("qemu-img", qemu.clone())?;
     let command = |peers: &Peers, mode: &str| -> Result<Command> {
@@ -219,15 +220,30 @@ fn guarded_gc_retains_structured_roots_and_preserves_store_selection() -> Result
     assert_eq!(peers.calls()?.len(), calls.len());
 
     // Failed chain or receipt inspection preserves the last known roots and never proceeds to GC.
-    for invalid_chain in [true, false] {
-        if invalid_chain {
-            peers.rules(
+    for failure in [
+        "invalid metadata",
+        "cycle",
+        "missing backing",
+        "invalid receipt",
+    ] {
+        match failure {
+            "invalid metadata" => peers.rules(
                 "qemu-img",
-                json!([{"prefix": ["info"], "stdout": "[{\"filename\":null}]"}]),
-            )?;
-        } else {
-            peers.rules("qemu-img", qemu.clone())?;
-            fs::write(logs.join("config-apply.json"), "{incomplete")?;
+                json!([{"prefix": ["info"], "stdout": "{\"filename\":null}"}]),
+            )?,
+            "cycle" | "missing backing" => {
+                let backing = if failure == "cycle" {
+                    overlay.clone()
+                } else {
+                    PathBuf::from("/nix/store/missing/base.qcow2")
+                };
+                peers.rules("qemu-img", json!([{"prefix": ["info"],
+                    "stdout": serde_json::to_string(&json!({"filename": overlay, "backing-filename": backing}))?}]))?;
+            }
+            _ => {
+                peers.rules("qemu-img", qemu.clone())?;
+                fs::write(logs.join("config-apply.json"), "{incomplete")?;
+            }
         }
         assert!(
             !common::run(&mut command(&peers, "run")?, None)?

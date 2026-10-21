@@ -173,42 +173,94 @@ struct Image {
     /// Resolved backing location when QEMU supplies one.
     #[serde(rename = "full-backing-filename")]
     full_backing: Option<String>,
-    /// Backing location relative to this layer when no resolved location is supplied.
+    /// Header's backing location, relative to the named layer when not absolute.
     #[serde(rename = "backing-filename")]
     backing: Option<String>,
 }
 
-/// Decode the complete chain before changing roots; human-readable annotations are not path identities.
-fn backing_paths(information: &str, directory: &Path) -> Result<Vec<PathBuf>> {
-    let images: Vec<Image> =
-        serde_json::from_str(information).context("invalid QEMU backing-chain evidence")?;
-    ensure!(!images.is_empty(), "QEMU reported an empty backing chain");
-    let mut directory = directory.to_owned();
+/// Resolve image symlinks in the selected store, retaining both aliases and their targets.
+fn image_file(
+    path: &Path,
+    store: &Path,
+    paths: &mut Vec<PathBuf>,
+    links: &mut usize,
+) -> Result<PathBuf> {
+    paths.push(path.to_owned());
+    let mapped = match path.strip_prefix("/nix/store") {
+        Ok(relative) => store.join(relative),
+        Err(_) => path.to_owned(),
+    };
+    paths.push(mapped.clone());
+    let mut output = PathBuf::from("/");
+    for component in mapped.components() {
+        match component {
+            Component::RootDir | Component::CurDir => {}
+            Component::ParentDir => {
+                output.pop();
+            }
+            Component::Normal(name) => {
+                output.push(name);
+                if fs::symlink_metadata(&output)?.file_type().is_symlink() {
+                    *links += 1;
+                    ensure!(*links <= 40, "too many symlinks in backing image path");
+                    paths.push(output.clone());
+                    let target = fs::read_link(&output)?;
+                    output.pop();
+                    output = image_file(&output.join(target), store, paths, links)?;
+                }
+            }
+            _ => anyhow::bail!("unsupported backing image path"),
+        }
+    }
+    paths.push(output.clone());
+    Ok(output)
+}
+
+/// Inspect each layer without asking host QEMU to open private-store backing paths itself.
+fn backing_paths(qemu: &std::ffi::OsStr, image: &Path, store: &Path) -> Result<Vec<PathBuf>> {
+    let mut named = image.to_owned();
     let mut paths = Vec::new();
-    for image in images {
+    let mut seen = BTreeSet::new();
+    for _ in 0..64 {
+        let physical = image_file(&named, store, &mut paths, &mut 0).with_context(|| {
+            format!(
+                "cannot resolve backing image {image}",
+                image = named.display()
+            )
+        })?;
+        ensure!(physical.is_file(), "backing image is not a regular file");
+        ensure!(seen.insert(physical.clone()), "cyclic QEMU backing chain");
+        let information = support::text(
+            Command::new(qemu)
+                .args(["info", "--output=json"])
+                .arg(&physical),
+        )
+        .with_context(|| {
+            format!(
+                "cannot inspect backing image {image}",
+                image = named.display()
+            )
+        })?;
+        let image: Image =
+            serde_json::from_str(&information).context("invalid QEMU backing-chain evidence")?;
         ensure!(
             !image.filename.is_empty(),
             "QEMU reported an empty image filename"
         );
-        let filename = directory.join(image.filename);
-        directory = filename
+        let Some(backing) = image.backing.or(image.full_backing) else {
+            return Ok(paths);
+        };
+        ensure!(
+            !backing.is_empty(),
+            "QEMU reported an empty backing filename"
+        );
+        // Relative headers use the named layer's directory, even when it is a symlink.
+        named = named
             .parent()
             .context("image has no parent directory")?
-            .to_owned();
-        // Retain the object named by the image header as well as any symlink target it needs.
-        paths.push(canonical(&filename)?);
-        paths.push(filename);
-        if let Some(backing) = image.full_backing.or(image.backing) {
-            ensure!(
-                !backing.is_empty(),
-                "QEMU reported an empty backing filename"
-            );
-            let backing = directory.join(backing);
-            paths.push(canonical(&backing)?);
-            paths.push(backing);
-        }
+            .join(backing);
     }
-    Ok(paths)
+    anyhow::bail!("QEMU backing chain exceeds 64 layers")
 }
 
 /// Collect all current root evidence before replacing the previous managed root set.
@@ -256,13 +308,9 @@ fn roots(
             continue;
         }
         // Missing or failed backing-chain evidence must not discard the roots of a present disk.
-        let information = support::text(
-            Command::new(&qemu)
-                .args(["info", "--output=json", "--backing-chain"])
-                .arg(entry.path()),
-        )
-        .context("cannot inspect qcow2 backing roots")?;
-        for path in backing_paths(&information, vm)? {
+        for path in backing_paths(&qemu, &entry.path(), store)
+            .context("cannot inspect qcow2 backing roots")?
+        {
             add(
                 format!(
                     "qcow-backing-{name}-{backing}",
