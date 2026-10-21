@@ -99,7 +99,9 @@ impl Disk {
     }
 
     pub(crate) fn partition(&self, by_id: &Path) -> Result<PathBuf> {
-        let partition = fs::canonicalize(format!("{}-part2", by_id.display()))?;
+        let link = format!("{}-part2", by_id.display());
+        let partition = fs::canonicalize(&link)
+            .with_context(|| format!("resolve USB root partition {link}"))?;
         self.validate_partition(&partition)?;
         Ok(partition)
     }
@@ -174,7 +176,8 @@ pub(crate) fn checked(device: &Path) -> Result<Disk> {
 
 pub(crate) fn inspect(device: &Path, unused: bool) -> Result<Disk> {
     by_id(device)?;
-    let target = fs::canonicalize(device)?;
+    let target = fs::canonicalize(device)
+        .with_context(|| format!("resolve USB device {}", device.display()))?;
     ensure!(
         fs::metadata(&target)?.file_type().is_block_device(),
         "Target is not a block device."

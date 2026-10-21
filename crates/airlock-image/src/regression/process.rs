@@ -187,6 +187,70 @@ test "$line" = ', +'
     Ok(())
 }
 
+/// Partition-table writes settle before identity checks; mutation, settlement and identity failures stop the operation.
+#[test]
+fn partition_changes_settle_before_identity_checks_and_stop_on_failure() -> Result<()> {
+    if let Some(root) = std::env::var_os("AIRLOCK_IMAGE_TABLE_CHILD") {
+        let root = Path::new(&root);
+        return usb::growth::change_table(
+            Command::new("sfdisk").args(["--relocate", "gpt-bak-std", "/dev/test-usb"]),
+            None,
+            || {
+                assert_eq!(fs::read(root.join("partition-link"))?, b"recreated");
+                fs::write(root.join("identity-checked"), b"")?;
+                ensure!(
+                    std::env::var("AIRLOCK_IMAGE_TABLE_IDENTITY").as_deref() == Ok("same"),
+                    "USB identity changed"
+                );
+                Ok(())
+            },
+        );
+    }
+
+    for (mutation, settle, identity) in [
+        (0, 0, "same"),
+        (1, 0, "same"),
+        (0, 1, "same"),
+        (0, 0, "changed"),
+    ] {
+        let mut peers = Peers::new()?;
+        peers.rules(
+            "sfdisk",
+            json!([{
+                "args":["--relocate", "gpt-bak-std", "/dev/test-usb"], "exit":mutation,
+            }]),
+        )?;
+        peers.rules(
+            "udevadm",
+            json!([{
+                "args":["settle"], "exit":settle, "write":{"partition-link":"recreated"},
+            }]),
+        )?;
+        let base = child("partition_changes_settle_before_identity_checks_and_stop_on_failure")?;
+        let mut command = peers.command(base.get_program())?;
+        command
+            .args(base.get_args())
+            .env("AIRLOCK_IMAGE_TABLE_CHILD", peers.path(""))
+            .env("AIRLOCK_IMAGE_TABLE_IDENTITY", identity);
+        let result = process::run(&mut command, None)?;
+        assert_eq!(
+            result.status.success(),
+            mutation == 0 && settle == 0 && identity == "same"
+        );
+        assert_eq!(
+            peers.path("identity-checked").exists(),
+            mutation == 0 && settle == 0
+        );
+        let calls = peers.calls()?;
+        assert_eq!(calls.len(), if mutation == 0 { 2 } else { 1 });
+        assert_eq!(calls[0]["command"], "sfdisk");
+        if mutation == 0 {
+            assert_eq!(calls[1]["command"], "udevadm");
+        }
+    }
+    Ok(())
+}
+
 /// Kernel partition size is checked after udev settles, and stale geometry stops before any filesystem resize.
 #[test]
 fn kernel_size_requires_settled_matching_geometry() -> Result<()> {

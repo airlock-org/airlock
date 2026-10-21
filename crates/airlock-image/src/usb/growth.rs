@@ -229,6 +229,18 @@ fn blkid(partition: &Path, field: &str) -> Result<String> {
     )
 }
 
+/// Wait for partition-change events before verifying the disk and its recreated device links.
+pub(crate) fn change_table(
+    command: &mut Command,
+    input: Option<Vec<u8>>,
+    recheck: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    reported(command, input, &[0])?;
+    run(Command::new("udevadm").arg("settle")).context("wait for USB partition-table events")?;
+
+    recheck().context("verify USB identity after partition-table change")
+}
+
 pub(crate) fn backup_location(backup_base: &Path, info: &device::Disk) -> Result<()> {
     let mut existing = backup_base.to_owned();
     while !existing.exists() {
@@ -322,15 +334,14 @@ pub(crate) fn expand(device: &Path, selected: &device::Disk, backup_base: &Path)
     check_ext4(&partition)?;
     recheck()?;
     if !fills_disk(&before, info.size) {
-        reported(
+        change_table(
             Command::new("sfdisk")
                 .args(["--lock=yes", "--relocate", "gpt-bak-std"])
                 .arg(target),
             None,
-            &[0],
+            recheck,
         )?;
-        recheck()?;
-        reported(
+        change_table(
             Command::new("sfdisk")
                 .args([
                     "--lock=yes",
@@ -341,7 +352,7 @@ pub(crate) fn expand(device: &Path, selected: &device::Disk, backup_base: &Path)
                 ])
                 .arg(target),
             Some(b", +\n".to_vec()),
-            &[0],
+            recheck,
         )?;
     }
 
