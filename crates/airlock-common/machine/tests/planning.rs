@@ -1,7 +1,7 @@
 //! Check Qubes reference projection and deployment effects through the production planner.
 
 use airlock_machine_core::{
-    model::{Topology, VmReference},
+    model::{GenerationApproval, GenerationInfo, Topology, VmReference},
     planning,
     relationships::{Relationships, VmRelationships},
 };
@@ -40,6 +40,40 @@ fn topology(names: &[&str]) -> Topology {
     let domains: BTreeMap<_, _> = names.iter().map(|name| (*name, domain.clone())).collect();
     serde_json::from_value(json!({"schema": "airlock.qubes-topology.v1", "domains": domains}))
         .unwrap()
+}
+
+/// Prepared descriptors keep the same identity through topology, generation and approval records.
+#[test]
+fn prepared_descriptor_children_decode_across_runtime_records() {
+    let baseline = serde_json::to_value(topology(&["sys-gui"])).unwrap();
+    let root = "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-descriptors";
+    for source in [root.to_owned(), format!("{root}/sys-gui")] {
+        let mut raw = baseline.clone();
+        raw["domains"]["sys-gui"]["backend"]["store"]["source"] = json!(source);
+        let topology: Topology = serde_json::from_value(raw.clone()).unwrap();
+        topology.validate().unwrap();
+        let backend = &topology.domains[&"sys-gui".parse().unwrap()].backend;
+        let info: GenerationInfo = serde_json::from_value(json!({
+            "schema":"airlock.closure-store.generation-info.v1", "status":"passed",
+            "domain":"sys-gui", "generation":1, "system":backend.system.source,
+            "root_source":backend.root.source, "kernel_name":backend.kernel.name,
+            "closure_source":source, "store":{
+                "mode":"shared-closure", "mountpoint":backend.store.mountpoint,
+                "device":backend.store.device, "blob_device":backend.store.blob_device,
+                "view_backend":backend.store.view_backend,
+            },
+            "verification":{"status":"passed"},
+            "approval":{"transport":"qrexec", "approved_by":"usr-assistant", "source":source},
+        }))
+        .unwrap();
+        let approval: GenerationApproval = serde_json::from_value(info.approval).unwrap();
+        assert_eq!(info.closure_source, backend.store.source);
+        assert_eq!(approval.source, backend.store.source);
+
+        // Whole system identities still cannot name a child within a store object.
+        raw["domains"]["sys-gui"]["backend"]["system"]["source"] = json!(format!("{root}/system"));
+        assert!(serde_json::from_value::<Topology>(raw).is_err());
+    }
 }
 
 #[test]

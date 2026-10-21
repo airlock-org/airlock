@@ -12,6 +12,7 @@ use std::{
     fs::{self, File},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 /// Own two prepared system variants sharing one immutable package and a private installed pool.
@@ -119,6 +120,47 @@ impl Seed {
             None,
         )
     }
+}
+
+/// The build-time command decodes the complete boot topology before any Qubes work is attempted.
+#[test]
+fn prepared_topology_uses_runtime_validation() -> Result<()> {
+    let temporary = tempfile::tempdir()?;
+    let path = temporary.path().join("topology.json");
+    let object = "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-prepared";
+    let mut topology = json!({
+        "schema":"airlock.qubes-topology.v1", "domains":{"sys-gui":{
+            "class":"StandaloneVM", "backend":{
+                "type":"nix-closure", "system":{"source":object},
+                "root":{"source":format!("{object}/root.img")}, "kernel":{"name":"test"},
+                "store":{"source":format!("{object}/sys-gui"), "mode":"shared-closure",
+                    "mountpoint":"/nix/store", "device":"/dev/xvde",
+                    "blobDevice":"/dev/xvdf", "viewBackend":"erofs-objectmap"},
+            },
+        }},
+    });
+    let check = |topology: &Value| -> Result<airlock_vm_service::support::Output> {
+        fs::write(&path, serde_json::to_vec(topology)?)?;
+        common::run(
+            Command::new(common::binary("AIRLOCK_DOM0_BIN", "airlock-dom0-service"))
+                .args(["storage", "image", "verify-topology"])
+                .arg(&path),
+            None,
+        )
+    };
+    let result: Value = serde_json::from_slice(&check(&topology)?.checked()?)?;
+    assert_eq!(result["domains"], 1);
+
+    topology["domains"]["sys-gui"]["backend"]["store"]["source"] =
+        json!(format!("{object}/../sys-gui"));
+    assert!(!check(&topology)?.status.success());
+    topology["domains"]["sys-gui"]["backend"]["store"]["source"] = json!(object);
+    topology["schema"] = json!("airlock.qubes-topology.v999");
+    assert!(!check(&topology)?.status.success());
+    topology["schema"] = json!("airlock.qubes-topology.v1");
+    topology["domains"]["sys-gui"]["backend"]["kernel"]["name"] = json!("../invalid");
+    assert!(!check(&topology)?.status.success());
+    Ok(())
 }
 
 /// Rebuilding deterministic outputs can reuse either cache half despite changed source timestamps.

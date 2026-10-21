@@ -1,7 +1,7 @@
 //! Records exchanged with existing approval and closure-storage helpers.
 //! Decoding checks shape and identity; protected state and Qubes policy supply trust.
 
-use super::{GenerationId, ReleasePath, StoreFile, StorePath};
+use super::{GenerationId, ReleasePath, StoreArtifact, StoreFile, StorePath};
 use airlock_nix_core::{
     identity::{
         BaselineFingerprint, GitRevision, GuestName, LockHash, ReviewFingerprint, ReviewId,
@@ -272,8 +272,8 @@ pub struct GenerationInfo {
     pub root_source: StoreFile,
     /// Qubes kernel directory name used when starting the guest.
     pub kernel_name: String,
-    /// Closure store object against which the declared backend is checked.
-    pub closure_source: StorePath,
+    /// Closure descriptor artifact against which the declared backend is checked.
+    pub closure_source: StoreArtifact,
     /// Guest-facing storage view reported for the admitted generation.
     pub store: GenerationStore,
     /// Storage-integrity result returned by the generation helper.
@@ -324,8 +324,8 @@ pub struct GenerationApproval {
     /// Recognized submitting VM recorded by storage admission.
     #[serde(rename = "approved_by")]
     pub _approved_by: AdmissionSender,
-    /// Nix store source admitted by the existing Qubes transport.
-    pub source: StorePath,
+    /// Closure descriptor artifact admitted by the existing Qubes transport.
+    pub source: StoreArtifact,
 }
 
 /// Build source identities required when validating newly staged guest output.

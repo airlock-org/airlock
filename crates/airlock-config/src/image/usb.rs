@@ -58,7 +58,7 @@ pub(crate) fn module(workspace: &Workspace) -> NixValue {
 
                 context.lib.clone().select("mkMerge").call(NixValue::list([
                     definitions,
-                    prepared_configuration(&context, prepared),
+                    prepared_configuration(&context, workspace, prepared),
                 ]))
             })
         });
@@ -91,7 +91,14 @@ pub(crate) fn module(workspace: &Workspace) -> NixValue {
 }
 
 /// Detach topology's VM path references while retaining every artifact actually consumed by dom0.
-fn prepared_configuration(context: &ModuleContext, prepared: NixValue) -> NixValue {
+fn prepared_configuration(
+    context: &ModuleContext,
+    workspace: &Workspace,
+    prepared: NixValue,
+) -> NixValue {
+    let native = Application::Dom0
+        .build(&context.pkgs, workspace)
+        .as_expression();
     let topology = context
         .pkgs
         .clone()
@@ -105,8 +112,10 @@ fn prepared_configuration(context: &ModuleContext, prepared: NixValue) -> NixVal
         })
         .call(nix_text!(
             r#"
+            {native}/bin/airlock-dom0-service storage image verify-topology {topology}
             cp {topology} "$out"
         "#,
+            native = native,
             topology = store::json(
                 &context.pkgs,
                 "airlock-usb-topology.json",

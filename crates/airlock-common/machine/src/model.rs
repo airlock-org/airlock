@@ -20,7 +20,7 @@ pub use identity::*;
 pub use journal::*;
 pub use protocol::*;
 
-pub use airlock_nix_core::store_path::{StoreFile, StorePath};
+pub use airlock_nix_core::store_path::{StoreArtifact, StoreFile, StorePath};
 
 /// Wire format accepted by runtime topology admission and native machine authoring.
 pub const TOPOLOGY_SCHEMA: &str = "airlock.qubes-topology.v1";
@@ -83,8 +83,8 @@ pub struct Kernel {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Store {
-    /// Nix store closure made available to the guest.
-    pub source: StorePath,
+    /// Closure descriptor output or prepared per-guest directory in the Nix store.
+    pub source: StoreArtifact,
     /// Sharing protocol expected by the guest storage view.
     pub mode: StoreMode,
     /// Guest mount location exposing the shared Nix closure.

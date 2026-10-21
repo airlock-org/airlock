@@ -36,6 +36,10 @@ enum Operation {
         // Descriptors binding the selected seed files.
         descriptors: PathBuf,
     },
+    VerifyTopology {
+        // Generated boot configuration decoded with the runtime's typed model.
+        topology: PathBuf,
+    },
     PrepareHost {
         // Prepared guest seed copied into the unified host image.
         seed: PathBuf,
@@ -112,6 +116,11 @@ pub(super) fn run(command: Request) -> Result<Value> {
         }),
         Operation::VerifyOutputs { root, descriptors } => {
             prepared::verify_outputs(&root, &descriptors)
+        }
+        Operation::VerifyTopology { topology } => {
+            let topology: crate::model::Topology = crate::state::configuration(&topology)?;
+            topology.validate()?;
+            Ok(json!({"status":"passed","domains":topology.domains.len()}))
         }
         Operation::PrepareHost {
             seed,
