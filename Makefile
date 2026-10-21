@@ -264,8 +264,11 @@ USB_DEV_PROVISION = sudo "$(IMAGE_TOOLS_DIR)/airlock-usb" provision-latest --res
 
 .PHONY: usb-dom0-console-image usb-dom0-console-write
 
+# The Rust wrapper must run before prerequisites, including native tool compilation.
+ifeq ($(AIRLOCK_IMAGE_BUILD_LIMITED),1)
 usb-dom0-console-image: ensure-generated-dirs
 	$(AIRLOCK_NIX) build .#airlock-usb-dom0-console-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dom0-console-image" --print-build-logs
+endif
 
 usb-dom0-console-write: image-tools-build
 	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial" >&2; exit 2)
@@ -281,6 +284,7 @@ usb-dev-prepare-inputs: ensure-generated-dirs
 	crates/airlock-dev/scripts/airlock-dev.sh source offline-inputs --repository airlock-machine --output "$$offline_inputs" < "$$archive_json"
 
 # Force both offline trials and publish a fresh passing receipt.
+ifeq ($(AIRLOCK_IMAGE_BUILD_LIMITED),1)
 usb-builder-offline-check: image-tools-build usb-dev-prepare-inputs
 	@set -eu; \
 	seed_archive="$(or $(AIRLOCK_TMPDIR),$(CURDIR)/.airlock)/airlock-machine-seed.tar.gz"; \
@@ -309,6 +313,10 @@ usb-dev-image: image-tools-build usb-dev-prepare-inputs
 	  --cache-dir "$(or $(AIRLOCK_DATA_ROOT),$(CURDIR)/.airlock)/cache/offline-builder-gate" \
 	  --temporary-root "$(or $(AIRLOCK_TMPDIR),$(TMPDIR),$(CURDIR)/.airlock)" \
 	  --image-command $(AIRLOCK_NIX) build --impure .#airlock-usb-dev-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --print-build-logs
+else
+usb-dom0-console-image usb-builder-offline-check usb-dev-image:
+	@$(AIRLOCK_DEV) build-budget -- $(MAKE) --no-print-directory AIRLOCK_IMAGE_BUILD_LIMITED=1 $@
+endif
 
 usb-dev-write: image-tools-build
 	@test -n "$(USB_SERIAL)" || (echo "Set USB_SERIAL to the exact USB serial, e.g. make usb-dev-write USB_SERIAL=YOUR_USB_SERIAL" >&2; exit 2)

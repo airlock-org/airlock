@@ -15,6 +15,252 @@ fn report(command: &mut Command) -> Result<Value> {
     Ok(serde_json::from_slice(&run(command, None)?.checked()?)?)
 }
 
+/// A bounded Make invocation covers prerequisites, nested wrappers, threads and subprocesses.
+#[test]
+fn image_build_budget_reserves_a_physical_core_through_make_and_children() -> Result<()> {
+    let fixture = tempfile::tempdir()?;
+    let dev = binary("AIRLOCK_DEV_BIN", "airlock-dev");
+    let peer = binary("AIRLOCK_TEST_PEER_BIN", "airlock-test-peer");
+    let quote = |path: &std::path::Path| airlock_tests::process::quote(path.to_str().unwrap());
+    let makefile = fixture.path().join("Makefile");
+    fs::write(
+        &makefile,
+        format!(
+            r#".PHONY: all prerequisite
+all: prerequisite
+	@{peer} observe-build-cpus all
+prerequisite:
+	@{dev} --repository-root {root} build-budget -- {peer} observe-build-cpus prerequisite
+"#,
+            peer = quote(&peer),
+            dev = quote(&dev),
+            root = quote(fixture.path()),
+        ),
+    )?;
+    let inherited = rustix::thread::sched_getaffinity(None)?;
+    let config = "store = /private-store\nbuild-dir = /scratch\n";
+    let output = run(
+        Command::new(&dev)
+            .arg("--repository-root")
+            .arg(fixture.path())
+            .args(["build-budget", "--", "make", "--no-print-directory", "-f"])
+            .arg(&makefile)
+            .env("NIX_CONFIG", config)
+            .env("CARGO_BUILD_JOBS", "999"),
+        None,
+    )?
+    .checked()?;
+    let observations = std::str::from_utf8(&output)?
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    assert_eq!(observations.len(), 2);
+    assert_eq!(observations[0]["stage"], "prerequisite");
+    assert_eq!(observations[1]["stage"], "all");
+    let budget: Value = serde_json::from_slice(&fs::read(
+        fixture.path().join(".airlock-logs/build-cpu-budget.json"),
+    )?)?;
+    let cpus = budget["build_cpus"].as_array().context("build CPUs")?;
+    let reserved = budget["reserved_core_cpus"]
+        .as_array()
+        .context("reserved CPUs")?;
+    assert!(!cpus.is_empty() && !reserved.is_empty());
+    for cpu in cpus {
+        assert!(inherited.is_set(cpu.as_u64().unwrap() as usize));
+        assert!(!reserved.contains(cpu));
+    }
+    for observation in observations {
+        for key in ["cpus", "thread_cpus", "child_cpus"] {
+            assert_eq!(observation[key], budget["build_cpus"]);
+        }
+        assert_eq!(observation["cargo_jobs"], cpus.len().to_string());
+        let actual = observation["nix_config"].as_str().unwrap();
+        assert!(actual.starts_with(config));
+        assert!(actual.ends_with(&format!(
+            "max-jobs = 1\ncores = {jobs}\n",
+            jobs = cpus.len()
+        )));
+    }
+    assert_eq!(rustix::thread::sched_getaffinity(None)?, inherited);
+
+    // GNU Make executes recursive recipe lines under --dry-run. The outer wrapper
+    // therefore runs, while every actual image-build prerequisite remains inert.
+    let budget_path = fixture.path().join(".airlock-logs/build-cpu-budget.json");
+    for goal in [
+        "usb-dev-image",
+        "usb-dom0-console-image",
+        "usb-builder-offline-check",
+    ] {
+        fs::remove_file(&budget_path)?;
+        run(
+            Command::new("make")
+                .current_dir(common::root())
+                .args([
+                    "--no-print-directory",
+                    "--dry-run",
+                    goal,
+                    "AIRLOCK_IMAGE_BUILD_LIMITED=0",
+                ])
+                .arg(format!(
+                    "AIRLOCK_DEV={dev} --repository-root {root}",
+                    dev = quote(&dev),
+                    root = quote(fixture.path())
+                ))
+                .env_remove("AIRLOCK_IMAGE_BUILD_LIMITED"),
+            None,
+        )?
+        .checked()?;
+        let budget: Value = serde_json::from_slice(&fs::read(&budget_path)?)?;
+        assert_eq!(budget["build_cpus"], json!(cpus));
+    }
+
+    let output = run(
+        Command::new(dev)
+            .arg("--repository-root")
+            .arg(fixture.path())
+            .args(["build-budget", "--"])
+            .arg(peer)
+            .env("CARGO_BUILD_JOBS", "1")
+            .env("AIRLOCK_TEST_PEER_MODE", "journalctl")
+            .env("AIRLOCK_TEST_EXIT_CODE", "23"),
+        None,
+    )?;
+    assert_eq!(output.status.code(), Some(23));
+    Ok(())
+}
+
+/// The initial compiler and linker run on one already allowed CPU before the Rust wrapper exists.
+#[test]
+fn image_build_bootstrap_limits_compilation_before_native_policy_is_available() -> Result<()> {
+    let fixture = tempfile::tempdir()?;
+    let tools = fixture.path().join("tools");
+    fs::create_dir(&tools)?;
+    airlock_tests::process::peer_link(&tools, "cargo")?;
+    let mut paths = vec![tools];
+    paths.extend(std::env::split_paths(
+        &std::env::var_os("PATH").context("PATH")?,
+    ));
+    let record = fixture.path().join("bootstrap.json");
+    let result = run(
+        Command::new(common::tool("bash")?)
+            .arg(common::root().join("crates/airlock-dev/scripts/airlock-dev.sh"))
+            .args(["build-budget", "--", "true"])
+            .env("PATH", std::env::join_paths(paths)?)
+            .env("AIRLOCK_TEST_CPU_BOOTSTRAP_RECORD", &record),
+        None,
+    )?;
+    assert_eq!(result.status.code(), Some(37));
+    let record: Value = serde_json::from_slice(&fs::read(record)?)?;
+    let cpus = record["cpus"].as_array().context("bootstrap CPUs")?;
+    assert_eq!(cpus.len(), 1);
+    assert!(rustix::thread::sched_getaffinity(None)?.is_set(cpus[0].as_u64().unwrap() as usize));
+    let args = record["args"].as_array().context("bootstrap arguments")?;
+    assert!(
+        args.windows(2)
+            .any(|pair| pair == [json!("--jobs"), json!("1")])
+    );
+    Ok(())
+}
+
+/// Explicitly exercise the real local Nix sandbox using only a pre-existing private-store shell.
+#[test]
+#[ignore = "explicit tiny Nix build; requires AIRLOCK_NIX_ROOT and AIRLOCK_CPU_PROBE_BASH"]
+fn image_build_budget_is_inherited_by_nix_builders() -> Result<()> {
+    let store = std::path::PathBuf::from(std::env::var("AIRLOCK_NIX_ROOT")?);
+    anyhow::ensure!(
+        store.is_absolute() && store != std::path::Path::new("/"),
+        "private store root required"
+    );
+    let bash: airlock_nix_core::store_path::StorePath =
+        std::env::var("AIRLOCK_CPU_PROBE_BASH")?.parse()?;
+    anyhow::ensure!(
+        store
+            .join(bash.as_str().trim_start_matches('/'))
+            .join("bin/bash")
+            .is_file(),
+        "explicitly prepare the probe shell"
+    );
+    let fixture = tempfile::tempdir()?;
+    let expression = fixture.path().join("probe.nix");
+    let script = r#"
+        {
+          while IFS= read -r line; do
+            case "$line" in Cpus_allowed_list:*) printf '%s\n' "$line";; esac
+          done < /proc/self/status
+          printf 'NIX_BUILD_CORES=%s\n' "$NIX_BUILD_CORES"
+        } > "$out"
+    "#;
+    fs::write(
+        &expression,
+        format!(
+            r#"
+        builtins.derivation {{
+          name = "airlock-cpu-budget-probe-{identity}";
+          system = builtins.currentSystem;
+          builder = (builtins.storePath "{bash}") + "/bin/bash";
+          args = [ "-c" {script} ];
+          preferLocalBuild = true;
+          allowSubstitutes = false;
+        }}
+    "#,
+            identity = fixture
+                .path()
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .trim_start_matches('.'),
+            bash = bash.as_str(),
+            script = serde_json::to_string(script)?,
+        ),
+    )?;
+    let result = run(
+        Command::new(binary("AIRLOCK_DEV_BIN", "airlock-dev"))
+            .arg("--repository-root")
+            .arg(fixture.path())
+            .args(["build-budget", "--"])
+            .arg(common::tool("nix")?)
+            .args(["--extra-experimental-features", "nix-command", "--store"])
+            .arg(&store)
+            .args([
+                "build",
+                "--impure",
+                "--no-link",
+                "--print-out-paths",
+                "--file",
+            ])
+            .arg(expression),
+        None,
+    )?
+    .checked()?;
+    let output: airlock_nix_core::store_path::StorePath =
+        std::str::from_utf8(&result)?.trim().parse()?;
+    let observed = fs::read_to_string(store.join(output.as_str().trim_start_matches('/')))?;
+    let budget: Value = serde_json::from_slice(&fs::read(
+        fixture.path().join(".airlock-logs/build-cpu-budget.json"),
+    )?)?;
+    let cpus = budget["build_cpus"].as_array().unwrap();
+    let list = observed
+        .lines()
+        .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+        .context("builder affinity")?;
+    let mut actual = Vec::new();
+    for item in list.trim().split(',') {
+        let (start, end) = item.split_once('-').unwrap_or((item, item));
+        actual.extend(start.parse::<usize>()?..=end.parse::<usize>()?);
+    }
+    assert_eq!(json!(actual), budget["build_cpus"]);
+    assert!(
+        observed
+            .lines()
+            .any(|line| line == format!("NIX_BUILD_CORES={count}", count = cpus.len()))
+    );
+    println!(
+        "{}",
+        json!({"budget":budget,"builder_observation":observed,"output":output.as_str()})
+    );
+    Ok(())
+}
+
 /// Plan and apply import committed source; every normal operation then uses the reviewed machine command namespace.
 #[test]
 fn reviewed_deployment_uses_machine_namespace() -> Result<()> {

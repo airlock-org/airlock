@@ -44,12 +44,53 @@ fn hold() {
     std::thread::sleep(Duration::from_secs(30));
 }
 
+/// Inspect real inherited CPU affinity independently of the build wrapper's recorded selection.
+fn build_cpus() -> Result<Vec<usize>> {
+    let affinity = rustix::thread::sched_getaffinity(None)?;
+    Ok((0..rustix::thread::CpuSet::MAX_CPU)
+        .filter(|cpu| affinity.is_set(*cpu))
+        .collect())
+}
+
+/// Observe affinity in a command, its new thread and a separately executed child process.
+fn observe_build_cpus(args: &[String]) -> Result<()> {
+    let thread = std::thread::spawn(build_cpus)
+        .join()
+        .map_err(|_| anyhow::anyhow!("CPU observer thread panicked"))??;
+    let child = Command::new(std::env::current_exe()?)
+        .env("AIRLOCK_TEST_PEER_MODE", "build-cpu-child")
+        .output()?;
+    ensure!(child.status.success(), "CPU observer child failed");
+    let child: Vec<usize> = serde_json::from_slice(&child.stdout)?;
+    println!(
+        "{}",
+        json!({
+            "stage": args.last(),
+            "cpus": build_cpus()?,
+            "thread_cpus": thread,
+            "child_cpus": child,
+            "cargo_jobs": std::env::var("CARGO_BUILD_JOBS")?,
+            "nix_config": std::env::var("NIX_CONFIG")?,
+        })
+    );
+    Ok(())
+}
+
 /// Act only on fixture paths and protocol data explicitly supplied by the Rust test.
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
     let name = Path::new(&args[0])
         .file_name()
         .context("peer executable name")?;
+    if name == "cargo"
+        && let Some(record) = std::env::var_os("AIRLOCK_TEST_CPU_BOOTSTRAP_RECORD")
+    {
+        fs::write(
+            record,
+            serde_json::to_vec(&json!({"cpus":build_cpus()?,"args":args[1..]}))?,
+        )?;
+        std::process::exit(37);
+    }
     if name == "mkfs.erofs" {
         return Ok(fs::write(&args[args.len() - 2], b"index fixture")?);
     }
@@ -107,6 +148,7 @@ fn main() -> Result<()> {
     let mode = std::env::var("AIRLOCK_TEST_PEER_MODE")
         .unwrap_or_else(|_| name.to_string_lossy().into_owned());
     match mode.as_str() {
+        "build-cpu-child" => println!("{}", serde_json::to_string(&build_cpus()?)?),
         "airlock-dom0-service" => {
             let request: serde_json::Value = serde_json::from_reader(std::io::stdin())?;
             let mut calls = fs::OpenOptions::new()
@@ -247,6 +289,7 @@ fn main() -> Result<()> {
         }
         "boot-cache-maintenance" => maintenance::execute(&args[1..])?,
         "airlock-test-peer" => match args.get(1).map(String::as_str) {
+            Some("observe-build-cpus") => observe_build_cpus(&args[2..])?,
             Some("host-capabilities") => println!("{}", airlock_tests::system::capabilities()),
             Some("systemd-order-setup") => {
                 ensure!(

@@ -22,6 +22,13 @@ provisioning; do not improvise partition changes or resume a partial write.
 `make usb-builder-offline-check` explicitly repeats the pinned offline-builder
 trials. Image assembly runs its own input and storage checks.
 
+Image builds reserve one physical CPU core, including its online SMT siblings,
+for workstation responsiveness. The limit covers preparation, compilers and
+image-assembly children, respects inherited CPU restrictions, and keeps release
+optimizations unchanged. The selected CPU identities are recorded in
+`.airlock-logs/build-cpu-budget.json`. If no core can be reserved while leaving
+CPUs for the build, the build stops with an explanation.
+
 The provisioner's partition backups are recovery metadata for the newly written
 image, not backups of the USB's previous data. Keep them outside the checkout.
 They are written below the configured log directory or `/var/log/airlock`.

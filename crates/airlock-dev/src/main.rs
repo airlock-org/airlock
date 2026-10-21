@@ -21,6 +21,8 @@ mod gc;
 
 mod cleanup;
 
+mod build_budget;
+
 mod nested;
 
 use anyhow::Result;
@@ -40,6 +42,12 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Action {
+    /// Run a workstation build with one physical core excluded from its CPU affinity.
+    BuildBudget {
+        /// Build command and literal arguments, inherited by all its child processes.
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        arguments: Vec<OsString>,
+    },
     /// Manage explicitly requested disposable nested VMs on this workstation.
     Nested {
         /// Live test operation; never runs as part of installation.
@@ -107,6 +115,7 @@ enum Action {
 fn execute(args: Args) -> Result<u8> {
     let root = repository::root(args.repository_root.as_deref())?;
     match args.command {
+        Action::BuildBudget { arguments } => build_budget::run(&root, &arguments),
         Action::Nested { command } => nested::execute(&root, command),
         Action::WithEnvironment { arguments } => {
             environment::Environment::load()?.run(&root, &arguments)
