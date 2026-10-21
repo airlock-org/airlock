@@ -198,8 +198,13 @@ fn guarded_gc_retains_structured_roots_and_preserves_store_selection() -> Result
     };
     assert_eq!(args(json!(["--gc", "--print-dead"])), 2);
     assert_eq!(args(json!(["--gc"])), 2);
+
+    // TMPDIR may itself be inside the allowed Airlock data root during image builds.
+    let nonstandard = tempfile::tempdir_in("/tmp")?;
     let mut refused = command(&peers, "dry-run")?;
-    refused.env("AIRLOCK_GC_ALLOW_NONSTANDARD_DATA_ROOT", "0");
+    refused
+        .env("AIRLOCK_DATA_ROOT", nonstandard.path())
+        .env("AIRLOCK_GC_ALLOW_NONSTANDARD_DATA_ROOT", "0");
     let output = common::run(&mut refused, None)?;
     assert!(!output.status.success());
     let errors = format!(

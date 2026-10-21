@@ -406,17 +406,25 @@ fn capture_open_requires_the_matching_receipt_and_session() -> Result<()> {
             .unwrap()
             .contains(&format!("file://{path}"))
     );
-    capture.run(
-        false,
-        &[
-            "capture-open",
-            "video",
-            "--config",
-            config.to_str().unwrap(),
-        ],
+    let mismatch = common::run(
+        capture
+            .command(
+                false,
+                &[
+                    "capture-open",
+                    "video",
+                    "--config",
+                    config.to_str().unwrap(),
+                ],
+            )
+            .env("QREXEC_REMOTE_DOMAIN", "capture-display"),
         Some(request),
-        false,
     )?;
+    assert!(!mismatch.status.success());
+    assert!(
+        String::from_utf8_lossy(&mismatch.stderr)
+            .contains("capture receipt identity or kind mismatch")
+    );
 
     let capture = Capture::new()?;
     let source = capture.directory("image", false).join("Capture.png");
