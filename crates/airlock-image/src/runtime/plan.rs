@@ -6,6 +6,7 @@ use super::{
     model::{Domain, custom_color, feature, kernelopts},
 };
 use crate::support::{input_json, output};
+use airlock_machine_core::model::VmReference;
 use anyhow::{Context, Result};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -40,10 +41,10 @@ pub(super) struct VmPlan {
     pub(super) private_size: Option<u64>,
     // Native storage configurations registered through the upstream driver.
     pub(super) volumes: Vec<Value>,
-    // Runtime network provider, assigned after every VM exists.
-    pub(super) netvm: Option<String>,
-    // Runtime GUI provider, assigned after every provider flag exists.
-    pub(super) guivm: Value,
+    // Runtime provider declaration; omission inherits Qubes defaults after temporary isolation.
+    pub(super) netvm: VmReference,
+    // Explicit GUI override after providers exist; None retains the upstream default.
+    pub(super) guivm: Option<Value>,
     // Prepared source used when verifying the reloaded Qubes snapshot.
     pub(super) source: String,
 }
@@ -210,7 +211,7 @@ pub(super) fn plan(name: &str, domain: &Domain, pool: &Path) -> Result<VmPlan> {
         private_size: backend.state.persistent_size.filter(|v| *v > 0),
         volumes,
         netvm: domain.netvm.clone(),
-        guivm: domain.prefs.get("guivm").cloned().unwrap_or(Value::Null),
+        guivm: domain.prefs.get("guivm").cloned(),
         source: backend.store.source.clone(),
     })
 }

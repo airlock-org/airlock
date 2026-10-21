@@ -419,7 +419,8 @@ fn save(object: &Bound<'_, PyAny>) -> PyResult<()> {
             .collect::<PyResult<Vec<_>>>()?;
         domains.push(
             json!({"name":field(&vm, "name")?, "uuid":vm.getattr("uuid")?.str()?.to_str()?,
-            "features":field(&vm, "features")?, "kernelopts":field(&vm, "kernelopts")?, "volumes":volumes}),
+            "features":field(&vm, "features")?, "kernelopts":field(&vm, "kernelopts")?, "volumes":volumes,
+            "netvm_inherited":!vm.hasattr("netvm")?, "guivm_inherited":!vm.hasattr("guivm")?}),
         );
     }
     write("AIRLOCK_TEST_IMAGE_PLAN", &json!({"domains":domains}))

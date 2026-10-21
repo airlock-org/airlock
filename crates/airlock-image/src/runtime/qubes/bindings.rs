@@ -202,6 +202,12 @@ impl<'py> Session<'py> {
         properties(&self.vm(name)?, values).with_context(|| format!("set properties for {name}"))
     }
 
+    /// Restore Qubes inheritance after temporarily clearing the network during disk creation.
+    pub(super) fn inherit_netvm(&self, name: &str) -> Result<()> {
+        self.vm(name)?.delattr("netvm")?;
+        Ok(())
+    }
+
     /// Set machine-wide preferences through upstream descriptors.
     pub(super) fn app_properties(&self, values: &BTreeMap<String, Value>) -> Result<()> {
         properties(self.app()?, values)

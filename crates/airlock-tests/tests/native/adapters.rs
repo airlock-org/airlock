@@ -226,9 +226,11 @@ fn qubes_installation_guard_uses_native_fresh_state() -> Result<()> {
 /// Offline image setup preserves Qubes identities and rejects adapter or snapshot failures.
 #[test]
 fn image_plan_and_reloaded_snapshot_are_checked() -> Result<()> {
-    for damage in [
-        "", "snapshot", "adapter", "existing", "volume", "property", "save", "reload",
+    for scenario in [
+        "", "inherit", "snapshot", "adapter", "existing", "volume", "property", "save", "reload",
     ] {
+        let inherited = scenario == "inherit";
+        let damage = if inherited { "" } else { scenario };
         let temporary = tempfile::tempdir()?;
         let directory = temporary.path();
         let tools = directory.join("tools");
@@ -248,7 +250,7 @@ fn image_plan_and_reloaded_snapshot_are_checked() -> Result<()> {
         fs::write(kernel.join("vmlinuz"), b"kernel")?;
         let root_image = directory.join("root.img");
         fs::write(&root_image, b"fixture")?;
-        let topology = json!({
+        let mut topology = json!({
             "schema":"airlock.qubes-topology.v1",
             "kernels": {
                 "test-kernel": {
@@ -305,6 +307,16 @@ fn image_plan_and_reloaded_snapshot_are_checked() -> Result<()> {
                 }
             }
         });
+        if inherited {
+            topology["domains"]["usr-home"]
+                .as_object_mut()
+                .unwrap()
+                .remove("netvm");
+            topology["domains"]["usr-home"]["prefs"]
+                .as_object_mut()
+                .unwrap()
+                .remove("guivm");
+        }
         let config = directory.join("topology.json");
         fs::write(&config, serde_json::to_vec(&topology)?)?;
         let output = directory.join("output");
@@ -417,8 +429,12 @@ fn image_plan_and_reloaded_snapshot_are_checked() -> Result<()> {
         assert_eq!(domain["features"]["qrexec"], "1");
         assert_eq!(domain["features"]["service.example"], "");
         assert_eq!(domain["features"]["airlock-store-generation"], "7");
-        assert_eq!(domain["features"]["fixture-root-ready"], "1");
-        assert_eq!(domain["features"]["fixture-private-ready"], "33554432");
+        assert_eq!(domain["netvm_inherited"], inherited);
+        assert_eq!(domain["guivm_inherited"], inherited);
+        if !inherited {
+            assert_eq!(domain["features"]["fixture-root-ready"], "1");
+            assert_eq!(domain["features"]["fixture-private-ready"], "33554432");
+        }
         assert_eq!(domain["features"]["fixture-class"], "StandaloneVM");
         assert!(domain.get("devices").is_none());
         assert_eq!(

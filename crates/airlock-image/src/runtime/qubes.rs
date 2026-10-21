@@ -199,17 +199,22 @@ fn assemble_objects(
         }
     }
 
+    // Resolve defaults only after all providers and their volumes exist. Omission
+    // must retain inheritance, while explicit null must remain a disabled provider.
+    session.app_properties(prefs)?;
     for vm in plans {
-        session.vm_properties(
-            &vm.name,
-            &BTreeMap::from([
-                ("netvm".into(), json!(vm.netvm)),
-                ("guivm".into(), vm.guivm.clone()),
-            ]),
-        )?;
+        let mut providers = BTreeMap::new();
+        if vm.netvm.is_inherited() {
+            session.inherit_netvm(&vm.name)?;
+        } else {
+            providers.insert("netvm".into(), json!(vm.netvm));
+        }
+        if let Some(guivm) = &vm.guivm {
+            providers.insert("guivm".into(), guivm.clone());
+        }
+        session.vm_properties(&vm.name, &providers)?;
     }
 
-    session.app_properties(prefs)?;
     session.save()?;
 
     let snapshots = session.inspect(plans)?;

@@ -136,3 +136,27 @@ fn custom_labels_have_one_consistent_color() {
     value["domains"]["usr-other"]["features"]["airlock-label-color"] = json!("0xffffff");
     assert!(checked(value).is_err());
 }
+
+/// Missing providers inherit; explicit null is retained as an intentional reset.
+#[test]
+fn provider_declarations_preserve_inheritance() {
+    let explicit: Topology = serde_json::from_value(topology()).unwrap();
+    assert_eq!(explicit.domains["usr-home"].netvm, VmReference::Disabled);
+    assert_eq!(
+        explicit.domains["usr-home"].prefs.get("guivm"),
+        Some(&Value::Null)
+    );
+
+    let mut raw = topology();
+    raw["domains"]["usr-home"]
+        .as_object_mut()
+        .unwrap()
+        .remove("netvm");
+    raw["domains"]["usr-home"]["prefs"]
+        .as_object_mut()
+        .unwrap()
+        .remove("guivm");
+    let inherited: Topology = serde_json::from_value(raw).unwrap();
+    assert!(inherited.domains["usr-home"].netvm.is_inherited());
+    assert!(!inherited.domains["usr-home"].prefs.contains_key("guivm"));
+}

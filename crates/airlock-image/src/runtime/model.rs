@@ -1,6 +1,7 @@
 //! Qubes gives each VM a label, a kernel bundle and storage volumes. Validate
 //! those declarations before its offline API writes the initial machine state.
 
+use airlock_machine_core::model::VmReference;
 use airlock_nix_core::identity::GuestName;
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
@@ -33,7 +34,7 @@ pub(crate) struct Domain {
     pub(super) label: String,
     // Network provider assigned only after all VMs have been created.
     #[serde(default)]
-    pub(super) netvm: Option<String>,
+    pub(super) netvm: VmReference,
     // Upstream VM preferences, with kernel and providers handled separately.
     #[serde(default)]
     pub(super) prefs: BTreeMap<String, Value>,
@@ -209,7 +210,7 @@ pub(crate) fn validate(topology: &Topology) -> Result<()> {
             "missing kernel bundle for {name}"
         );
 
-        if let Some(netvm) = &domain.netvm {
+        if let Some(netvm) = domain.netvm.as_deref() {
             ensure!(
                 topology.domains.contains_key(netvm),
                 "missing network provider {netvm}"
