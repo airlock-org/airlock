@@ -149,11 +149,11 @@ pub(super) fn prepare(
     let mut manifest: Value = read(&path)?;
     let domain = text(&manifest, "domain")?;
     ensure!(
-        ["usr-assistant-builder", "sys-ctrl-builder"].contains(&domain.as_str()),
+        ["usr-assistant-build-store", "sys-ctrl-build-store"].contains(&domain.as_str()),
         "invalid builder domain"
     );
     let role = domain
-        .strip_suffix("-builder")
+        .strip_suffix("-build-store")
         .context("invalid builder role")?;
     let registration_bytes = fs::read(registration_source)?;
     let registration_text = std::str::from_utf8(&registration_bytes)?;
@@ -203,7 +203,7 @@ pub(super) fn prepare(
         }
     }
     let mut identity = json!({
-        "schema": format!("airlock.{role}-builder.v1"),
+        "schema": format!("airlock.{role}-build-store.v1"),
         "domain": domain,
         "generation": manifest["generation"],
         "closure_hash": manifest["store"]["closure_hash"],
@@ -302,9 +302,9 @@ pub(super) fn volume_configs(root: &Path, logical: &Path, pool: &str, role: &str
         return Ok(json!({}));
     }
     let descriptor: Value = read(&descriptor_path)?;
-    let domain = format!("{role}-builder");
+    let domain = format!("{role}-build-store");
     ensure!(
-        descriptor["schema"] == format!("airlock.{role}-builder.v1")
+        descriptor["schema"] == format!("airlock.{role}-build-store.v1")
             && descriptor["domain"] == domain,
         "invalid builder descriptor"
     );
@@ -355,9 +355,9 @@ pub(super) fn configs_for_generation(
         generation > 0
             && descriptor["schema"]
                 == format!(
-                    "airlock.{}-builder.v1",
-                    domain
-                        .strip_suffix("-builder")
+                    "airlock.{role}-build-store.v1",
+                    role = domain
+                        .strip_suffix("-build-store")
                         .context("invalid builder namespace")?
                 )
             && descriptor["domain"] == domain
@@ -421,7 +421,7 @@ fn predecessors_to_release(
         ["sys-ctrl", "usr-assistant"].contains(&role),
         "invalid builder role"
     );
-    let domain = format!("{role}-builder");
+    let domain = format!("{role}-build-store");
     let current = number(descriptor, "generation")?;
     let mut seen = BTreeSet::new();
     let mut pending = Vec::new();
@@ -476,7 +476,7 @@ pub(super) fn release_predecessors(root: &Path, role: &str, descriptor: &Value) 
         write(&path, &manifest, 0o644)?;
         records::running(
             root,
-            &format!("{role}-builder"),
+            &format!("{role}-build-store"),
             generation,
             "builder-persistent",
             false,

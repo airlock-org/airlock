@@ -546,7 +546,7 @@ fn external_tool_packaged_runtime_uses_upstream_qubes_offline_api() -> Result<()
             let mut builder = spec.clone();
             for (key, value) in [
                 ("name", json!("builder")),
-                ("domain", json!("sys-ctrl-builder")),
+                ("domain", json!("sys-ctrl-build-store")),
                 ("root_source", json!("")),
                 ("kernel_name", json!("")),
                 ("builder", json!(true)),

@@ -253,7 +253,7 @@ pub open spec fn pair(target: Seq<char>, defs: Seq<Definition>) -> bool {
         && ((defs[0].slot is Store && defs[1].slot is StoreData && defs[0].domain@ == target)
             || (defs[0].slot is BuilderStore && defs[1].slot is BuilderData
                 && (target == "usr-assistant"@ || target == "sys-ctrl"@)
-                && defs[0].domain@ == target + "-builder"@))
+                && defs[0].domain@ == target + "-build-store"@))
 }
 
 fn valid_pair(target: &str, defs: &[Definition]) -> (yes: bool)
@@ -280,7 +280,7 @@ fn valid_pair(target: &str, defs: &[Definition]) -> (yes: bool)
         (Slot::BuilderStore, Slot::BuilderData) => {
             if target != "usr-assistant" && target != "sys-ctrl" { return false; }
             let mut namespace = target.to_string();
-            namespace.push_str("-builder");
+            namespace.push_str("-build-store");
             a.domain == namespace
         },
         _ => false,

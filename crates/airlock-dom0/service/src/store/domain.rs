@@ -551,7 +551,7 @@ fn check_builder(
         "unapproved persistent builder base transition"
     );
     let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
-    let domain = format!("{}-builder", target.domain);
+    let domain = format!("{domain}-build-store", domain = target.domain);
     let manifest = records::generation(&target.pool_root, &domain, generation)?;
     ensure!(
         descriptor["predecessors"]

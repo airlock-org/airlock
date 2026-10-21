@@ -52,7 +52,7 @@ pub(super) fn save(root: &Path, storage: &Path, machine: &Path, record: &Value) 
                 .file_name()
                 .and_then(|s| s.to_str())
                 .context("invalid domain directory")?;
-            if name == "dom0" || name.ends_with("-builder") {
+            if name == "dom0" || name.ends_with("-build-store") {
                 continue;
             }
             if let Some(generation) = records::current(root, name)? {

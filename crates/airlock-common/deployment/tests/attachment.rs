@@ -176,7 +176,7 @@ fn builder_pair_requires_its_own_namespace_and_supported_consumer() {
         pair[0].slot = Slot::BuilderStore;
         pair[1].slot = Slot::BuilderData;
         for definition in &mut pair {
-            definition.domain = format!("{target}-builder");
+            definition.domain = format!("{target}-build-store");
         }
         let request = AttachmentPlan::new(
             target.into(),

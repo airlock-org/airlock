@@ -117,7 +117,7 @@ pub(crate) fn prepared(
     let manifest = pkgs
         .clone()
         .select("runCommand")
-        .call("usr-assistant-builder-closure")
+        .call("usr-assistant-build-store-closure")
         .call(nix_record! {})
         .call(nix_text!(
             r#"
@@ -134,7 +134,7 @@ pub(crate) fn prepared(
         .call(NixValue::list(["usr-assistant".into(), "sys-ctrl".into()]));
     let builder_specs = NixValue::builtin("map")
         .call(NixValue::function(|role| {
-            let name: NixValue = nix_text!("{role}-builder", role = role.clone()).into();
+            let name: NixValue = nix_text!("{role}-build-store", role = role.clone()).into();
             let entry = NixValue::builtin("getAttr")
                 .call(role)
                 .call(entries.clone());

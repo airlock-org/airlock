@@ -211,7 +211,7 @@ pub(super) fn prepare_pool(
             );
             let domain = text(&manifest, "domain")?;
             let role = domain
-                .strip_suffix("-builder")
+                .strip_suffix("-build-store")
                 .context("invalid builder domain")?;
             files.insert(format!("builders/{role}.json"));
             files.insert(format!(

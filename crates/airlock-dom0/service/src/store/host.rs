@@ -287,7 +287,7 @@ pub(super) fn refresh_builder(
     let previous: Value = read(&root.join("builders").join(format!("{source}.json")))?;
     let old_path = records::manifest_path(
         root,
-        &format!("{source}-builder"),
+        &format!("{source}-build-store"),
         number(&previous, "generation")?,
     )?;
     let directory = old_path.parent().context("missing old builder directory")?;
@@ -302,7 +302,7 @@ pub(super) fn refresh_builder(
 
     let result = admit(
         root,
-        &format!("{role}-builder"),
+        &format!("{role}-build-store"),
         &text(&old, "system")?,
         &registration,
         incremental,

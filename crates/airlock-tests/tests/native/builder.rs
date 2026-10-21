@@ -20,7 +20,7 @@ struct Builder {
 impl Builder {
     /// Write a selected base identity into the immutable source view consumed by the real builder command.
     fn identity(&self, generation: u64, fields: Value) -> Result<Value> {
-        let mut identity = json!({"schema": "airlock.usr-assistant-builder.v1", "domain": "usr-assistant-builder",
+        let mut identity = json!({"schema": "airlock.usr-assistant-build-store.v1", "domain": "usr-assistant-build-store",
             "generation": generation, "closure_hash": format!("{generation:064x}"),
             "registration_sha256": format!("{hash:x}", hash = Sha256::digest(b"registration"))});
         identity
@@ -226,7 +226,7 @@ fn namespace_builder_lifecycle() -> Result<()> {
             fs::create_dir(root.join("state"))?;
             let previous = builder.identity(
                 1,
-                json!({"domain": "sys-ctrl-builder", "schema": "airlock.sys-ctrl-builder.v1"}),
+                json!({"domain": "sys-ctrl-build-store", "schema": "airlock.sys-ctrl-build-store.v1"}),
             )?;
             builder.identity(1, json!({}))?;
             fs::write(root.join("state/base.json"), serde_json::to_vec(&previous)?)?;
@@ -240,7 +240,7 @@ fn namespace_builder_lifecycle() -> Result<()> {
             assert!(!failure.status.success());
             assert!(String::from_utf8_lossy(&failure.stderr).contains("archive already exists"));
             assert_eq!(
-                fs::read_to_string(root.join("state-sys-ctrl-builder/upper/saved-output"))?,
+                fs::read_to_string(root.join("state-sys-ctrl-build-store/upper/saved-output"))?,
                 "keep"
             );
         }

@@ -258,7 +258,7 @@ fn identity(metadata: &Path, role: Role) -> Result<(Identity, Vec<u8>)> {
     identity.validate()?;
     let registration = bytes(&metadata.join("registration"), 64 * 1024 * 1024)?;
     ensure!(
-        identity.domain() == format!("{}-builder", role.name())
+        identity.domain() == format!("{role}-build-store", role = role.name())
             && identity.registration_hash() == hash(&registration),
         "invalid pinned builder metadata"
     );

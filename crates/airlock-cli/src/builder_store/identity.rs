@@ -70,10 +70,10 @@ pub(super) struct Identity {
 impl Identity {
     /// Reject incompatible role schemas and ambiguous predecessor histories.
     pub(super) fn validate(&self) -> Result<()> {
-        let role = self.domain.as_str().strip_suffix("-builder");
+        let role = self.domain.as_str().strip_suffix("-build-store");
         ensure!(
             role.is_some_and(
-                |role| !role.is_empty() && self.schema == format!("airlock.{role}-builder.v1")
+                |role| !role.is_empty() && self.schema == format!("airlock.{role}-build-store.v1")
             ),
             "invalid pinned builder identity"
         );
