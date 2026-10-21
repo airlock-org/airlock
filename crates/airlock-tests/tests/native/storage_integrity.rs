@@ -11,6 +11,7 @@ use std::{
     os::unix::fs::{MetadataExt, PermissionsExt, symlink},
     path::{Path, PathBuf},
     process::Command,
+    time::Duration,
 };
 
 /// Read metadata only after the production command has completed its durable publication.
@@ -132,12 +133,14 @@ fn artifact_manifest_rejection_preserves_existing_generations() -> Result<()> {
             members.insert("manifest.json".into(), serde_json::to_vec(&manifest)?);
             Ok(())
         })?;
-        assert!(
-            !common::run(&mut store.receiver(), Some(payload))?
-                .status
-                .success(),
-            "accepted {damage}"
-        );
+        // A rejected manifest can close stdin before the remaining archive is sent.
+        // This runner retains the failing exit status and diagnostics in that case.
+        let rejected = airlock_nix_core::runtime::process::run(
+            &mut store.receiver(),
+            Some(payload),
+            Some(Duration::from_secs(30)),
+        )?;
+        assert!(!rejected.status.success(), "accepted {damage}");
         assert_eq!(manifests(&store.pool.join("domains"))?, before);
         assert_eq!(
             store.run(&[
