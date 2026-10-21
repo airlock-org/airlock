@@ -718,6 +718,15 @@ fn usb_lab_network_and_development_access_body(captures: Bindings) -> NixValue {
                 ])),
             ),
             (
+                "capturePolicy",
+                NixValue::builtin("readFile").call(NixValue::concat_text([
+                    host.clone()
+                        .select_segments(["environment", "etc", "qubes/policy.d", "source"])
+                        .to_text(),
+                    "/45-airlock-screen-capture.policy".into(),
+                ])),
+            ),
+            (
                 "retiredPolicy",
                 NixValue::builtin("readFile").call(NixValue::concat_text([
                     retired_policy.clone().to_text(),

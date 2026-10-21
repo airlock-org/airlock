@@ -280,6 +280,16 @@ fn normal(
             assistant = assistant,
         ));
 
+    // Upstream owns policy.d as one joined directory; individual entries belong in its packages.
+    let capture_policy = inputs
+        .pkgs
+        .clone()
+        .select("writeTextDir")
+        .call("etc/qubes/policy.d/45-airlock-screen-capture.policy")
+        .call(crate::components::screen_capture::policy(
+            machine.capture_connections(),
+        ));
+
     nix_record! {
         "airlock": nix_record! {
             "devDom0Terminal": nix_record! {
@@ -317,7 +327,7 @@ fn normal(
         },
         "virtualisation": nix_record! {
             "qubes": nix_record! {
-                "packages": NixValue::list([policy]),
+                "packages": NixValue::list([policy, capture_policy]),
             },
         },
         "environment": nix_record! {
@@ -335,11 +345,6 @@ fn normal(
                 },
                 "airlock/boot-role": nix_record! {
                     "text": "normal\n",
-                },
-                "qubes/policy.d/45-airlock-screen-capture.policy": nix_record! {
-                    "text": crate::components::screen_capture::policy(
-                        machine.capture_connections(),
-                    ),
                 },
             },
         },

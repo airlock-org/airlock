@@ -159,6 +159,12 @@ fn package_usb_lab_keeps_network_dependencies_and_development_authority_explicit
         "airlock.DevDom0Shell + usr-assistant dom0 allow",
     );
     assert!(!text(&report["policy"]).contains("airlock.DevDom0Shell + sys-gui dom0 allow"));
+    for service in ["airlock.CaptureImport", "airlock.CaptureOpen"] {
+        includes(
+            &report["capturePolicy"],
+            &format!("{service} * @anyvm @anyvm deny"),
+        );
+    }
     includes(
         &report["tailscalePolicy"],
         "airlock.DevTailscaleUp + sys-gui usr-assistant allow user=root",
