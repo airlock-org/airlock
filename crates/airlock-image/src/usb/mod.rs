@@ -333,24 +333,16 @@ fn write_image(
         Ok(destination.sync_all()?)
     })?;
     info.same_disk(&device::checked(&args.device)?)?;
-    println!("Refreshing USB partition table…");
-    // Pass the already pinned device descriptor instead of reopening its name.
-    run(Command::new("blockdev").arg("--rereadpt").arg(format!(
-        "/proc/{}/fd/{}",
-        std::process::id(),
-        std::os::fd::AsRawFd::as_raw_fd(&destination)
-    )))?;
 
     if args.verify {
         destination.seek(SeekFrom::Start(0))?;
-        let mut target = destination;
         let mut hash = Sha256::new();
         let mut remaining = size;
         let mut bytes = vec![0; 8 * 1024 * 1024];
         let mut progress = progress::Progress::new("Verifying image", size);
         while remaining > 0 {
             let count = remaining.min(bytes.len() as u64) as usize;
-            let read = target.read(&mut bytes[..count])?;
+            let read = destination.read(&mut bytes[..count])?;
             ensure!(read != 0, "Unexpected end of USB during verification.");
             hash.update(&bytes[..read]);
             remaining -= read as u64;
@@ -360,6 +352,20 @@ fn write_image(
             format!("{:x}", hash.finalize()) == expected,
             "USB read-back verification failed."
         );
+    }
+
+    let pinned = device::release_writer(destination)?;
+    info.same_disk(&device::checked(&args.device)?)?;
+    println!("Refreshing USB partition table…");
+    run(Command::new("blockdev").arg("--rereadpt").arg(format!(
+        "/proc/{process}/fd/{descriptor}",
+        process = std::process::id(),
+        descriptor = std::os::fd::AsRawFd::as_raw_fd(&pinned),
+    )))
+    .context("Image written and flushed, but partition refresh failed; expansion and personalization have not run.")?;
+    info.same_disk(&device::checked(&args.device)?)?;
+
+    if args.verify {
         println!("Image fully written ({written} bytes), flushed and verified.");
     } else {
         println!(

@@ -4,7 +4,7 @@ use crate::{support, usb};
 use airlock_tests::{dialogue::Dialogue, peers::Peers, process};
 use anyhow::{Result, ensure};
 use serde_json::json;
-use std::{fs, path::Path, process::Command, time::Duration};
+use std::{fs, os::fd::AsRawFd, path::Path, process::Command, time::Duration};
 
 /// Select this exact Cargo unit test without changing the multithreaded parent test process's environment.
 fn child(name: &str) -> Result<Command> {
@@ -15,6 +15,54 @@ fn child(name: &str) -> Result<Command> {
         "--nocapture",
     ]);
     Ok(command)
+}
+
+/// Partition refresh releases the writing descriptor while preserving the original inode across path replacement.
+#[test]
+fn partition_refresh_releases_writer_and_keeps_only_a_path_pin() -> Result<()> {
+    if let Some(reference) = std::env::var_os("AIRLOCK_IMAGE_REFRESH_OBSERVE") {
+        assert_eq!(fs::read(reference)?, b"written image");
+        return Ok(());
+    }
+
+    if std::env::var_os("AIRLOCK_IMAGE_REFRESH_CHILD").is_none() {
+        // Isolate descriptor-number assertions from parallel tests opening files.
+        process::run(
+            child("partition_refresh_releases_writer_and_keeps_only_a_path_pin")?
+                .env("AIRLOCK_IMAGE_REFRESH_CHILD", "1"),
+            None,
+        )?
+        .checked()?;
+        return Ok(());
+    }
+
+    let temporary = tempfile::tempdir()?;
+    let path = temporary.path().join("written-device");
+    fs::write(&path, b"written image")?;
+    let writer = fs::OpenOptions::new().read(true).write(true).open(&path)?;
+    let descriptor = writer.as_raw_fd();
+    let original = format!("/proc/self/fd/{descriptor}");
+    let pinned = usb::device::release_writer(writer)?;
+    assert!(!Path::new(&original).exists());
+    assert!(rustix::fs::fcntl_getfl(&pinned)?.contains(rustix::fs::OFlags::PATH));
+
+    fs::rename(&path, temporary.path().join("original-device"))?;
+    fs::write(&path, b"different device")?;
+    let descriptor = pinned.as_raw_fd();
+    let reference = format!(
+        "/proc/{process}/fd/{descriptor}",
+        process = std::process::id()
+    );
+    process::run(
+        child("partition_refresh_releases_writer_and_keeps_only_a_path_pin")?
+            .env("AIRLOCK_IMAGE_REFRESH_OBSERVE", &reference),
+        None,
+    )?
+    .checked()?;
+
+    drop(pinned);
+    assert!(!Path::new(&reference).exists());
+    Ok(())
 }
 
 /// Flush progress stays visible during a blocked operation and never prints completion after a failed flush.

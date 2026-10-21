@@ -5,7 +5,8 @@ use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use std::{
     collections::BTreeMap,
-    fs,
+    fs::{self, File},
+    os::fd::AsRawFd,
     os::unix::fs::{FileTypeExt, MetadataExt},
     path::{Path, PathBuf},
     process::Command,
@@ -264,6 +265,22 @@ pub(crate) fn unmount(device: &Path, selected: &Disk) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Keep the written device pinned without retaining the writer's exclusive block-device claim.
+pub(crate) fn release_writer(destination: File) -> Result<File> {
+    let descriptor = destination.as_raw_fd();
+    let pinned = rustix::fs::open(
+        format!("/proc/self/fd/{descriptor}"),
+        rustix::fs::OFlags::PATH | rustix::fs::OFlags::CLOEXEC,
+        rustix::fs::Mode::empty(),
+    )?;
+
+    // Opening this proc link with O_PATH pins the same inode without opening the
+    // block device. blockdev reopens it normally and must be able to acquire its
+    // own partition-scan claim, which the original O_EXCL writer would prevent.
+    drop(destination);
+    Ok(File::from(pinned))
 }
 
 pub(crate) fn check_mount(root: &Path, selected: Option<&Disk>) -> Result<Disk> {
