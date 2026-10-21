@@ -17,6 +17,107 @@ const IDENTITY: &str = "738a6af9-8e51-590d-afe4-790b26fbca79";
 
 const TOKEN: &str = "728a6af9-8e51-590d-afe4-790b26fbca79";
 
+/// A running display manager must expose a local active graphical login, not just a service process.
+#[test]
+fn boot_health_requires_an_active_graphical_login() -> Result<()> {
+    for (state, observation, accepted) in [
+        (
+            "greeter",
+            "Class=greeter\nType=wayland\nState=active\nActive=yes\nRemote=no\nSeat=seat0\n",
+            true,
+        ),
+        (
+            "user",
+            "Class=user\nType=x11\nState=active\nActive=yes\nRemote=no\nSeat=seat0\n",
+            true,
+        ),
+        (
+            "console",
+            "Class=user\nType=tty\nState=active\nActive=yes\nRemote=no\nSeat=seat0\n",
+            false,
+        ),
+        (
+            "remote",
+            "Class=user\nType=x11\nState=active\nActive=yes\nRemote=yes\nSeat=\n",
+            false,
+        ),
+        (
+            "inactive",
+            "Class=greeter\nType=wayland\nState=online\nActive=no\nRemote=no\nSeat=seat0\n",
+            false,
+        ),
+        ("no-session", "", false),
+        ("failed-manager", "", false),
+    ] {
+        let mut peers = Peers::new()?;
+        peers.rules("systemctl", json!([{"args":["is-active","--quiet","display-manager.service"], "exit":if state == "failed-manager" {1} else {0}}]))?;
+        peers.rules("loginctl", json!([
+            {"args":["list-sessions","--no-legend","--no-pager"], "stdout":if state == "no-session" {""} else {"c1 42 gdm seat0 tty1\n"}},
+            {"prefix":["show-session","c1"], "stdout":observation}
+        ]))?;
+        let output = common::run(
+            peers
+                .command(common::binary(
+                    "AIRLOCK_VM_SERVICE_BIN",
+                    "airlock-vm-service",
+                ))?
+                .args(["boot-health", "desktop"]),
+            None,
+        )?;
+        assert_eq!(
+            output.status.success(),
+            accepted,
+            "{state}: {error}",
+            error = String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            !peers
+                .calls()?
+                .iter()
+                .any(|call| call["args"].as_array().unwrap().contains(&json!("start")))
+        );
+    }
+    Ok(())
+}
+
+/// The host waits for graphical health and refuses stale replies from a replaced GUI instance.
+#[test]
+fn boot_desktop_wait_checks_health_generation_and_xen_instance() -> Result<()> {
+    use crate::coordinator::fixture::{declaration, store};
+
+    for state in ["ready", "failed-display", "wrong-generation", "restarted"] {
+        let mut peers = Peers::new()?;
+        let topology = json!({"schema":"airlock.qubes-topology.v1", "domains":{"sys-gui":declaration("sys-gui", 1)}});
+        fs::write(peers.path("topology.json"), serde_json::to_vec(&topology)?)?;
+        peers.rules("qvm-check", json!([{}]))?;
+        peers.rules(
+            "qvm-ls",
+            json!([
+                {"missing":"seen-xid", "write":{"seen-xid":""}, "stdout":"7\n"},
+                {"stdout":if state == "restarted" {"8\n"} else {"7\n"}}
+            ]),
+        )?;
+        peers.rules("qrexec-client", json!([
+            {"args":["-d","sys-gui","user:readlink -f /run/current-system"], "stdout":store("sys-gui-system", if state == "wrong-generation" {2} else {1})},
+            {"args":["-d","sys-gui","root:/run/current-system/sw/bin/airlock-vm-service boot-health desktop"], "exit":if state == "failed-display" {1} else {0}}
+        ]))?;
+        let output = common::run(
+            peers
+                .command(common::binary("AIRLOCK_DOM0_BIN", "airlock-dom0-service"))?
+                .args(["wait-desktop-ready", "--timeout", "1", "--topology"])
+                .arg(peers.path("topology.json")),
+            None,
+        )?;
+        assert_eq!(
+            output.status.success(),
+            state == "ready",
+            "{state}: {error}",
+            error = String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
+}
+
 /// Notifications offer one action and retry only through the existing boot RPC.
 #[test]
 fn boot_notifications_retry_or_dismiss_once() -> Result<()> {

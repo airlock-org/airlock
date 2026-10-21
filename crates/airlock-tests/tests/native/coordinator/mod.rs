@@ -748,14 +748,25 @@ fn namespace_maintenance_follows_verification_and_detects_wrong_runtime() -> Res
 #[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]
 fn namespace_boot_start_verifies_declared_autostart() -> Result<()> {
     let mut machine = Machine::new()?;
+    let path = machine.physical(&machine.baseline).join("topology.json");
+    let mut topology = read(&path)?;
+    topology["domains"]["usr-home"]["features"]["airlock-role"] = json!("usr-assistant");
+    save(&path, &topology)?;
     save(
         machine.path("etc/qubes-topology.json"),
         &read(machine.physical(&machine.baseline).join("topology.json"))?,
     )?;
     machine.data["running"] = json!([]);
+    machine.data["health_failures"] = json!(1);
     machine.persist()?;
     let result = machine.run(&["boot-start"], None, true)?;
     assert_eq!(result["started"], json!(["usr-home"]));
+    assert!(
+        read(machine.path("data.json"))?["health_probes"]
+            .as_u64()
+            .unwrap()
+            >= 3
+    );
     assert_eq!(
         result["observed"]["usr-home"]["running"],
         store("usr-home-system", 1)

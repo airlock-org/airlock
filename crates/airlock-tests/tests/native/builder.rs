@@ -11,6 +11,61 @@ use std::{
     process::Command,
 };
 
+/// Worker readiness rejects an inactive service, missing mounts and another role's receipt.
+#[test]
+fn boot_health_requires_the_workers_active_store_and_both_mounts() -> Result<()> {
+    for state in [
+        "ready",
+        "inactive",
+        "missing-mount",
+        "wrong-role",
+        "missing-receipt",
+    ] {
+        let mut peers = crate::common::peers::Peers::new()?;
+        let root = peers.path("merged");
+        let runtime = peers.path("runtime");
+        fs::create_dir(&runtime)?;
+        if state != "missing-receipt" {
+            fs::write(
+                runtime.join("ready.json"),
+                serde_json::to_vec(&json!({"uri":"local-overlay://?root=fixture", "identity":{
+                    "schema":"airlock.sys-ctrl-build-store.v1", "domain":if state == "wrong-role" {"usr-assistant-build-store"} else {"sys-ctrl-build-store"}
+                }}))?,
+            )?;
+        }
+        peers.rules("systemctl", json!([{"args":["is-active","--quiet","airlock-sys-ctrl-build-store.service"], "exit":if state == "inactive" {1} else {0}}]))?;
+        peers.rules("mountpoint", json!([
+            {"args":["-q", root.join("nix/store")], "exit":if state == "missing-mount" {1} else {0}},
+            {"args":["-q", runtime.join("lower/nix/store")]}
+        ]))?;
+        let output = common::run(
+            peers
+                .command(common::binary(
+                    "AIRLOCK_VM_SERVICE_BIN",
+                    "airlock-vm-service",
+                ))?
+                .args([
+                    "boot-health",
+                    "build-store",
+                    "--domain",
+                    "sys-ctrl",
+                    "--root",
+                ])
+                .arg(root)
+                .arg("--runtime")
+                .arg(runtime),
+            None,
+        )?;
+        assert_eq!(
+            output.status.success(),
+            state == "ready",
+            "{state}: {error}",
+            error = String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
+}
+
 /// Child-side builder state lives entirely under a root-owned scratch hierarchy in a private mount namespace.
 struct Builder {
     // Private root supplied by the namespace parent, never a real VM's state directory.

@@ -10,7 +10,7 @@ use std::{
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::Command,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 /// Installed store adapter parameters, separate from caller-provided Nix arguments.
@@ -35,24 +35,29 @@ pub(crate) struct Request {
 
 /// Require the existing mount identity evidence before reading the admitted store URI.
 fn pinned(root: &Path) -> Result<String> {
-    for directory in [
-        root.join("nix/store"),
-        PathBuf::from("/run/airlock-builder/lower/nix/store"),
-    ] {
+    pinned_at(
+        root,
+        Path::new("/run/airlock-builder"),
+        Duration::from_secs(60),
+    )
+}
+
+/// Observe the same mounted layers and readiness URI used by implicit worker Nix commands.
+pub(crate) fn pinned_at(root: &Path, runtime: &Path, timeout: Duration) -> Result<String> {
+    let deadline = Instant::now() + timeout;
+    for directory in [root.join("nix/store"), runtime.join("lower/nix/store")] {
         let output = process::run(
             Command::new("mountpoint").arg("-q").arg(&directory),
             None,
-            Some(Duration::from_secs(30)),
+            Some(deadline.saturating_duration_since(Instant::now())),
         )?;
         ensure!(
             output.status.success(),
             "pool-backed build store is not ready; inspect its build-store service"
         );
     }
-    let ready: Value = airlock_nix_core::state::read_json(
-        Path::new("/run/airlock-builder/ready.json"),
-        1024 * 1024,
-    )?;
+    let ready: Value =
+        airlock_nix_core::state::read_json(&runtime.join("ready.json"), 1024 * 1024)?;
     Ok(ready["uri"]
         .as_str()
         .filter(|value| !value.is_empty())

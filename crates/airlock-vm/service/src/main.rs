@@ -9,6 +9,8 @@ mod diagnostics;
 
 mod input;
 
+mod boot_health;
+
 mod configuration;
 
 mod runtime;
@@ -34,6 +36,8 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Action {
+    /// Observe boot-critical graphical or worker services without starting them.
+    BootHealth(boot_health::Request),
     /// Collect best-effort evidence after a local VM service failure.
     Diagnostics(diagnostics::Request),
     /// Run native graphical-session and development-terminal adapters.
@@ -106,6 +110,7 @@ fn authorize_capture(path: Option<&std::path::Path>) -> Result<()> {
 
 fn run(args: Args) -> Result<()> {
     match args.command {
+        Action::BootHealth(request) => boot_health::execute(request)?,
         Action::Diagnostics(request) => diagnostics::execute(request),
         Action::Desktop(request) => desktop::execute(request)?,
         Action::InputReceiverReady(request) => input::ready(request)?,

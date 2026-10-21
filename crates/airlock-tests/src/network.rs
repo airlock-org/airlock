@@ -52,6 +52,10 @@ pub(crate) fn execute(root: &Path, name: &str, args: &[String]) -> Result<()> {
             if command.starts_with("user:") {
                 println!("/nix/store/expected");
             } else {
+                if command.contains("boot-health build-store --domain sys-ctrl") {
+                    ensure!(config["healthy"] != false, "build store is not ready");
+                    return Ok(());
+                }
                 let script = command
                     .strip_prefix("root:")
                     .context("provider probe user")?;

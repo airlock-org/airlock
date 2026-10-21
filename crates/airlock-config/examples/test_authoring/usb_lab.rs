@@ -2,6 +2,74 @@
 
 use super::*;
 
+/// Inspect startup ordering and deadlines without realizing service packages or reading their scripts.
+pub(super) fn startup_contract(inputs: NixValue) -> NixValue {
+    NixValue::builtin("getFlake")
+        .call(inputs.select("root"))
+        .select_segments([
+            "nixosConfigurations",
+            "usb-dev",
+            "config",
+            "specialisation",
+            "usb-lab",
+            "configuration",
+        ])
+        .bind(|host| {
+            let services = host.clone().select_segments(["systemd", "services"]);
+            let units = [
+                "airlock-setup-config",
+                "airlock-input-boot-guard",
+                "airlock-start-gui-gpu",
+                "airlock-gui-input-events",
+                "airlock-gui-input-connect",
+                "airlock-gui-input-boot-ready",
+                "airlock-desktop-ready",
+                "airlock-setup-config-deferred",
+                "airlock-start-network-providers",
+                "airlock-machine-autostart",
+            ]
+            .into_iter()
+            .map(|name| {
+                let unit = services.clone().select(name);
+                let config = unit.clone().select("serviceConfig");
+                (
+                    format!("{name}.service"),
+                    NixValue::record([
+                        ("after", unit.clone().select("after")),
+                        ("before", unit.clone().select("before")),
+                        ("requires", unit.clone().select("requires")),
+                        (
+                            "failure",
+                            unit.select("unitConfig")
+                                .attr_or("OnFailure", NixValue::list([])),
+                        ),
+                        ("start", config.clone().select("ExecStart")),
+                        (
+                            "pre",
+                            config.clone().attr_or("ExecStartPre", NixValue::list([])),
+                        ),
+                        (
+                            "post",
+                            config.clone().attr_or("ExecStartPost", NixValue::list([])),
+                        ),
+                        (
+                            "timeout",
+                            config.attr_or("TimeoutStartSec", NixValue::null()),
+                        ),
+                    ]),
+                )
+            });
+            NixValue::record([
+                ("units", NixValue::record(units)),
+                (
+                    "domains",
+                    NixValue::builtin("attrNames")
+                        .call(host.select_segments(["airlock", "qubes", "domains"])),
+                ),
+            ])
+        })
+}
+
 /// Inspect evaluated configuration for test usb image embeds machine source separately from
 /// parent boot label.
 pub(super) fn source_metadata(inputs: NixValue) -> NixValue {

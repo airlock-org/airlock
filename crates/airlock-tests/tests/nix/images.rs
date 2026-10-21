@@ -17,6 +17,106 @@ fn includes(value: &Value, expected: &str) {
     );
 }
 
+/// The real unit graph keeps transient input jobs outside boot prerequisites and gates completion on health.
+#[test]
+#[ignore = "requires explicitly prepared offline Nix sources"]
+fn usb_startup_gates_are_acyclic_and_preserve_health_budgets() -> Result<()> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let nix = context()?;
+    let report = inspect(
+        &nix,
+        "usb_lab/startup_contract",
+        json!({"root":nix.prepared}),
+    )?;
+    let units = report["units"].as_object().unwrap();
+    let mut edges: BTreeMap<&str, BTreeSet<&str>> = units
+        .keys()
+        .map(|name| (name.as_str(), BTreeSet::new()))
+        .collect();
+    for (name, unit) in units {
+        for dependency in unit["after"].as_array().unwrap() {
+            let dependency = dependency.as_str().unwrap();
+            if units.contains_key(dependency) {
+                edges.get_mut(name.as_str()).unwrap().insert(dependency);
+            }
+        }
+        for successor in unit["before"].as_array().unwrap() {
+            let successor = successor.as_str().unwrap();
+            if let Some(dependencies) = edges.get_mut(successor) {
+                dependencies.insert(name);
+            }
+        }
+    }
+    while !edges.is_empty() {
+        let ready: BTreeSet<_> = edges
+            .iter()
+            .filter(|(_, dependencies)| dependencies.is_empty())
+            .map(|(name, _)| *name)
+            .collect();
+        ensure!(!ready.is_empty(), "startup ordering cycle: {edges:?}");
+        edges.retain(|name, _| !ready.contains(name));
+        for dependencies in edges.values_mut() {
+            dependencies.retain(|name| !ready.contains(name));
+        }
+    }
+
+    let mut pending = vec!["airlock-machine-autostart.service"];
+    let mut required = BTreeSet::new();
+    while let Some(name) = pending.pop() {
+        if required.insert(name)
+            && let Some(unit) = units.get(name)
+        {
+            pending.extend(
+                unit["requires"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|name| name.as_str().unwrap()),
+            );
+        }
+    }
+    assert!(required.contains("airlock-gui-input-boot-ready.service"));
+    assert!(required.contains("airlock-desktop-ready.service"));
+    assert!(!required.contains("airlock-gui-input-connect.service"));
+    includes(
+        &units["airlock-gui-input-boot-ready.service"]["start"],
+        "input boot-ready --target sys-gui",
+    );
+    includes(
+        &units["airlock-desktop-ready.service"]["start"],
+        "wait-desktop-ready",
+    );
+    includes(
+        &units["airlock-desktop-ready.service"]["post"],
+        "boot-supervisor desktop-ready",
+    );
+    includes(
+        &units["airlock-desktop-ready.service"]["failure"],
+        "airlock-boot-failure@%n.service",
+    );
+    assert!(
+        !units["airlock-setup-config-deferred.service"]["pre"]
+            .to_string()
+            .contains("desktop-ready")
+    );
+
+    let guest_budget = units["airlock-start-gui-gpu.service"]["timeout"]
+        .as_u64()
+        .unwrap();
+    assert!(guest_budget >= 240 + 180 + 120);
+    for name in [
+        "airlock-start-network-providers.service",
+        "airlock-machine-autostart.service",
+    ] {
+        assert!(
+            units[name]["timeout"].as_u64().unwrap()
+                >= report["domains"].as_array().unwrap().len() as u64 * (240 + 180)
+        );
+    }
+    Ok(())
+}
+
 /// Image validation runs before assembly, recovery logging survives failure and the runtime closure does not retain its pool payload twice.
 #[test]
 #[ignore = "requires explicitly prepared offline Nix sources"]
@@ -110,7 +210,7 @@ fn package_usb_lab_keeps_network_dependencies_and_development_authority_explicit
     assert_eq!(supervisor["tty1"], false);
     assert_eq!(supervisor["autoTty1"], false);
     assert_eq!(supervisor["failureConsole"]["TTYPath"], "/dev/tty1");
-    for (service, timeout) in [("network", 300), ("gui", 300), ("autostart", 1800)] {
+    for (service, timeout) in [("network", 4080), ("gui", 780), ("autostart", 4080)] {
         assert_eq!(
             supervisor[service]["serviceConfig"]["TimeoutStartSec"],
             timeout

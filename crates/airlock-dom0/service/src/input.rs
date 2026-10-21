@@ -33,6 +33,15 @@ pub(crate) struct Request {
 
 #[derive(Subcommand)]
 enum Action {
+    /// Wait for lifecycle-managed forwarding without making its transient job a boot prerequisite.
+    BootReady {
+        // Already-running GUI VM whose connection must complete on the same instance.
+        #[arg(long)]
+        target: GuestName,
+        // Total retry budget, including cancelled connection jobs.
+        #[arg(long, default_value_t = 180, value_parser = clap::value_parser!(u64).range(1..=180))]
+        timeout: u64,
+    },
     /// Enable forwarding only after the same running GUI instance answers readiness.
     Connect {
         // Already-running GUI VM; readiness must never autostart it.
@@ -98,6 +107,7 @@ fn runtime_lock(name: &str, target: &GuestName) -> Result<OperationLock> {
 
 pub(crate) fn execute(request: Request) -> Result<()> {
     match request.action {
+        Action::BootReady { target, timeout } => connect::boot_ready(&target, timeout),
         Action::Connect { target } => connect::connect(&target),
         Action::Discover {
             target,

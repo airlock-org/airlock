@@ -1,6 +1,7 @@
 //! Supervise boot stages without allowing a failed hardware check to become a successful boot.
 
 use airlock_build::{Workspace, script::substitute, tools::Tool};
+use airlock_machine_core::boot::{BOOT_UNIT_OVERHEAD_SECONDS, GUEST_HELPER_SECONDS};
 use rusix::{
     interop::{
         NixExpression, NixPath,
@@ -68,6 +69,12 @@ fn configuration(context: &ModuleContext, service: NixValue) -> NixValue {
             operation = operation,
         )
     };
+    let desktop_check: NixValue = nix_text!(
+        "{service}/bin/airlock-dom0-service wait-desktop-ready --topology {topology}",
+        service = service.clone(),
+        topology = "/var/lib/airlock/system/current-topology.json",
+    )
+    .into();
     let desktop = context
         .config
         .clone()
@@ -87,7 +94,7 @@ fn configuration(context: &ModuleContext, service: NixValue) -> NixValue {
     let failure = strings(&["airlock-boot-failure@%n.service"]);
     let background = strings(&["airlock-boot-background-failure.service"]);
     let preparation = strings(&["airlock-boot-attempt-prepare.service"]);
-    let guarded = |on_failure: NixValue, timeout: i64| {
+    let guarded = |on_failure: NixValue, timeout: NixValue| {
         nix_record! {
             "unitConfig": nix_record! {
                 "OnFailure": on_failure,
@@ -98,6 +105,18 @@ fn configuration(context: &ModuleContext, service: NixValue) -> NixValue {
             },
         }
     };
+    // Sequential provider and autostart loops need a budget for every declared VM.
+    // Counting all domains also covers inherited providers and avoids a second role projection.
+    let domains = NixValue::builtin("length").call(
+        NixValue::builtin("attrNames").call(context.config.clone().select("airlock.qubes.domains")),
+    );
+    let sequential_budget = NixValue::builtin("add")
+        .call(BOOT_UNIT_OVERHEAD_SECONDS as i64)
+        .call(
+            NixValue::builtin("mul")
+                .call(domains)
+                .call(GUEST_HELPER_SECONDS as i64),
+        );
     let mut services = vec![
         (
             "airlock-boot-shutdown-record",
@@ -221,7 +240,19 @@ fn configuration(context: &ModuleContext, service: NixValue) -> NixValue {
                     "serviceConfig": nix_record! {
                         "ExecCondition": NixValue::list([gate.clone()]),
                         "TimeoutStartSec": 1800_i64,
-                        "ExecStartPre": NixValue::list([command("desktop-ready").into()]),
+                    },
+                },
+            ),
+        ),
+        (
+            "airlock-desktop-ready",
+            when(
+                split.clone(),
+                nix_record! {
+                    "unitConfig": nix_record! { "OnFailure": failure.clone() },
+                    "serviceConfig": nix_record! {
+                        "ExecCondition": NixValue::list([gate.clone()]),
+                        "ExecStartPost": command("desktop-ready"),
                     },
                 },
             ),
@@ -230,10 +261,16 @@ fn configuration(context: &ModuleContext, service: NixValue) -> NixValue {
             "airlock-start-network-providers",
             guarded(
                 NixValue::if_else(split.clone(), background.clone(), failure.clone()),
-                300,
+                sequential_budget.clone(),
             ),
         ),
-        ("airlock-start-gui-gpu", guarded(failure.clone(), 300)),
+        (
+            "airlock-start-gui-gpu",
+            guarded(
+                failure.clone(),
+                ((GUEST_HELPER_SECONDS + BOOT_UNIT_OVERHEAD_SECONDS) as i64).into(),
+            ),
+        ),
         (
             "airlock-input-boot-guard",
             when(
@@ -254,7 +291,7 @@ fn configuration(context: &ModuleContext, service: NixValue) -> NixValue {
             ),
         ),
         (
-            "airlock-gui-input-connect",
+            "airlock-gui-input-boot-ready",
             when(
                 split.clone().and(
                     context
@@ -281,11 +318,11 @@ fn configuration(context: &ModuleContext, service: NixValue) -> NixValue {
                 "serviceConfig": nix_record! {
                     "ExecStartPre": NixValue::if_else(
                         desktop.clone().and(split.equals(false)),
-                        NixValue::list([command("desktop-ready").into()]),
+                        NixValue::list([desktop_check, command("desktop-ready").into()]),
                         NixValue::list([]),
                     ),
                     "ExecCondition": NixValue::list([gate]),
-                    "TimeoutStartSec": 1800_i64,
+                    "TimeoutStartSec": sequential_budget,
                 },
             },
         ),

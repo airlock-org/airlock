@@ -93,6 +93,8 @@ enum Action {
     StartQubeReady(readiness::Ready),
     /// Start the declared autostart network providers in local NetVM order.
     StartNetworkProviders,
+    /// Wait for an active graphical login on the selected GUI generation.
+    WaitDesktopReady(readiness::Desktop),
     /// Record boot readiness, recover interrupted attempts and collect diagnostics.
     BootSupervisor(boot::Request),
     /// Handle restricted dom0 requests received over existing Qubes RPC channels.
@@ -306,6 +308,10 @@ fn run(args: Args) -> Result<Value> {
         }
         Action::StartNetworkProviders => {
             readiness::start_providers()?;
+            Value::Null
+        }
+        Action::WaitDesktopReady(request) => {
+            readiness::desktop(request)?;
             Value::Null
         }
         Action::BootSupervisor(request) => boot::execute(request)?,

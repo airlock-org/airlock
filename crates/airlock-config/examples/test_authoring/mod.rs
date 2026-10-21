@@ -86,6 +86,7 @@ pub(super) fn fixture(
             }
             "usb_dev/independent_display_startup" => usb_dev::independent_display_startup(inputs),
             "usb_lab/source_metadata" => usb_lab::source_metadata(inputs),
+            "usb_lab/startup_contract" => usb_lab::startup_contract(inputs),
             "usb_lab/network_and_development_access" => {
                 usb_lab::network_and_development_access(inputs)
             }

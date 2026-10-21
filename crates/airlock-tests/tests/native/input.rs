@@ -256,6 +256,50 @@ fn input_connection_requires_the_same_ready_instance() -> Result<()> {
     Ok(())
 }
 
+/// The boot gate retries a cancelled lifecycle job but rejects an unavailable or replaced GUI instance.
+#[test]
+fn boot_input_readiness_survives_connection_job_cancellation() -> Result<()> {
+    for state in ["ready", "unavailable", "restarted"] {
+        let mut peers = Peers::new()?;
+        peers.rules("qvm-check", json!([{}]))?;
+        peers.rules(
+            "qvm-ls",
+            json!([
+                {"missing":"seen-xid", "write":{"seen-xid":""}, "stdout":"7\n"},
+                {"stdout":if state == "restarted" {"8\n"} else {"7\n"}}
+            ]),
+        )?;
+        peers.rules("systemctl", json!([
+            {"args":["start","airlock-gui-input-connect.service"], "missing":"cancelled", "write":{"cancelled":""}, "exit":1},
+            {"args":["start","airlock-gui-input-connect.service"], "exit":if state == "unavailable" {1} else {0}},
+            {"args":["is-active","--quiet","airlock-gui-input-discovery.service"]}
+        ]))?;
+        let mut command =
+            peers.command(common::binary("AIRLOCK_DOM0_BIN", "airlock-dom0-service"))?;
+        command
+            .args([
+                "input",
+                "boot-ready",
+                "--target",
+                "sys-gui",
+                "--timeout",
+                "1",
+            ])
+            .env("AIRLOCK_INPUT_QVM_CHECK", peers.path("bin/qvm-check"))
+            .env("AIRLOCK_INPUT_QVM_LS", peers.path("bin/qvm-ls"))
+            .env("AIRLOCK_INPUT_SYSTEMCTL", peers.path("bin/systemctl"));
+        let output = common::run(&mut command, None)?;
+        assert_eq!(
+            output.status.success(),
+            state == "ready",
+            "{state}: {error}",
+            error = String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(peers.calls()?.iter().filter(|call| call["args"] == json!(["start","airlock-gui-input-connect.service"])).count() >= 2);
+    }
+    Ok(())
+}
+
 /// Only an argument-free dom0 request can acknowledge a writable character device and executable handlers.
 #[test]
 fn input_receiver_readiness_enforces_caller_device_and_handler_guards() -> Result<()> {

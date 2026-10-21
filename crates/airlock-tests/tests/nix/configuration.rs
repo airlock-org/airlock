@@ -223,7 +223,7 @@ fn package_physical_graphics_and_input_dependencies_preserve_boot_guards() -> Re
         json!("on-failure")
     );
     assert_eq!(report["inputConnect"]["Type"], json!("oneshot"));
-    assert_eq!(report["inputConnect"]["TimeoutStartSec"], json!(75));
+    assert_eq!(report["inputConnect"]["TimeoutStartSec"], json!(180));
     assert!(contains(
         &report["inputConnect"]["requires"],
         &json!("airlock-input-boot-guard.service")

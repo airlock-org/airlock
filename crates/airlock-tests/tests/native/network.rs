@@ -133,3 +133,39 @@ fn provider_readiness_checks_each_required_service() -> Result<()> {
     }
     Ok(())
 }
+
+/// A worker answering qrexec on the right system is still unready until its build store passes.
+#[test]
+fn worker_readiness_checks_the_build_store_before_success() -> Result<()> {
+    for healthy in [false, true] {
+        let fixture = fixture(json!({"healthy":healthy}))?;
+        let root = fixture.path();
+        let topology = root.join("topology.json");
+        fs::write(
+            &topology,
+            serde_json::to_vec(&json!({"domains":{"sys-ctrl":{
+                "features":{"airlock-role":"sys-ctrl"}, "backend":{"system":{"source":"/nix/store/expected"}}
+            }}}))?,
+        )?;
+        let output = common::run(
+            command(&fixture, "start-qube-ready")?
+                .arg("sys-ctrl")
+                .arg(topology)
+                .env("AIRLOCK_BOOT_SERVICE", root.join("bin/supervisor"))
+                .env("AIRLOCK_QUBE_READY_TIMEOUT", "1")
+                .env("AIRLOCK_BOOT_ATTEMPT_LOG_DIR", root.join("logs")),
+            None,
+        )?;
+        assert_eq!(
+            output.status.success(),
+            healthy,
+            "{errors}",
+            errors = String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            fs::read_to_string(root.join("logs/start-sys-ctrl.log"))?
+                .contains("boot-health build-store --domain sys-ctrl")
+        );
+    }
+    Ok(())
+}

@@ -125,7 +125,11 @@ impl Coordinator {
         Ok(())
     }
 
-    pub(super) fn wait_guest(&self, name: &GuestName, expected: &StorePath) -> Result<StorePath> {
+    pub(super) fn wait_guest(&self, name: &GuestName, domain: &Domain) -> Result<StorePath> {
+        let expected = &domain.backend.system.source;
+        let worker = crate::readiness::worker_probe(
+            domain.features.get("airlock-role").and_then(Value::as_str),
+        );
         let deadline = Instant::now() + Duration::from_secs(180);
         let mut error = "guest is not running".to_owned();
         while Instant::now() < deadline {
@@ -164,7 +168,22 @@ impl Coordinator {
                                 &actual == expected,
                                 "{name}: running generation differs from selected release: {actual}"
                             );
-                            return Ok(actual);
+                            if let Some(command) = &worker {
+                                if let Err(failure) = self.runner.run(
+                                    "qrexec-client",
+                                    &["-d".into(), name.as_str().into(), command.into()],
+                                    deadline
+                                        .saturating_duration_since(Instant::now())
+                                        .min(Duration::from_secs(15)),
+                                    &[],
+                                ) {
+                                    error = failure.to_string();
+                                } else {
+                                    return Ok(actual);
+                                }
+                            } else {
+                                return Ok(actual);
+                            }
                         }
                         Err(e) => error = e.to_string(),
                     }
@@ -213,7 +232,7 @@ impl Coordinator {
             self.validate_generation(r, name, generation, true)?;
 
             let actual = if required.contains(name) {
-                Some(self.wait_guest(name, &selected)?)
+                Some(self.wait_guest(name, d)?)
             } else {
                 None
             };

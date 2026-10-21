@@ -2,6 +2,7 @@
 //! These local boot commands retain their own policy, separate from reviewed deployment execution.
 
 use crate::process::{Captured, Runner};
+use airlock_machine_core::boot::{GUEST_READY_SECONDS, GUEST_START_SECONDS};
 use airlock_nix_core::identity::GuestName;
 use anyhow::{Context, Result, bail, ensure};
 use clap::Args;
@@ -23,6 +24,94 @@ pub(crate) struct Ready {
     domain: GuestName,
     /// Desired topology; the environment override applies when omitted.
     topology: Option<PathBuf>,
+}
+
+/// Observe a graphical login on the declared GUI generation before publishing desktop readiness.
+#[derive(Args)]
+pub(crate) struct Desktop {
+    /// Full selected topology published by setup before GPU handoff.
+    #[arg(long, default_value = "/run/airlock/startup/topology.json")]
+    topology: PathBuf,
+    /// Complete polling budget; shorter values support bounded local diagnostics.
+    #[arg(long, default_value_t = 180, value_parser = clap::value_parser!(u64).range(1..=180))]
+    timeout: u64,
+}
+
+/// Select only installed worker roles; topology values never become arbitrary remote commands.
+pub(crate) fn worker_probe(role: Option<&str>) -> Option<String> {
+    match role {
+        Some(role @ ("sys-ctrl" | "usr-assistant")) => Some(format!(
+            "root:/run/current-system/sw/bin/airlock-vm-service boot-health build-store --domain {role}"
+        )),
+        _ => None,
+    }
+}
+
+/// Require a running GUI, its exact generation and a local graphical login on the same Xen instance.
+pub(crate) fn desktop(request: Desktop) -> Result<()> {
+    let raw = crate::state::configuration(&request.topology)?;
+    let inputs = airlock_machine_core::boot::BootInputs::new(raw)?;
+    let gui = inputs
+        .topology()
+        .domains
+        .get(&"sys-gui".parse()?)
+        .context("desktop topology has no sys-gui")?;
+    let expected = gui.backend.system.source.as_str();
+    let deadline = Instant::now() + Duration::from_secs(request.timeout);
+    let runner = Runner::default();
+    let mut error = "graphical login is not ready".to_owned();
+    let mut instance = None;
+    while Instant::now() < deadline {
+        let result = (|| -> Result<()> {
+            let run = |program: &str, args: &[&str]| {
+                runner.run(
+                    program,
+                    &args.iter().map(OsString::from).collect::<Vec<_>>(),
+                    deadline
+                        .saturating_duration_since(Instant::now())
+                        .min(Duration::from_secs(15)),
+                    &[],
+                )
+            };
+            run("qvm-check", &["--running", "sys-gui"])?;
+            let before = run("qvm-ls", &["--raw-data", "--fields", "XID", "sys-gui"])?;
+            ensure!(
+                !before.is_empty() && before.bytes().all(|byte| byte.is_ascii_digit()),
+                "invalid GUI Xen identity"
+            );
+            let initial = instance.get_or_insert_with(|| before.clone());
+            ensure!(*initial == before, "GUI restarted during desktop readiness");
+            ensure!(
+                run(
+                    "qrexec-client",
+                    &["-d", "sys-gui", "user:readlink -f /run/current-system"]
+                )? == expected,
+                "GUI running generation differs from topology"
+            );
+            run(
+                "qrexec-client",
+                &[
+                    "-d",
+                    "sys-gui",
+                    "root:/run/current-system/sw/bin/airlock-vm-service boot-health desktop",
+                ],
+            )?;
+            ensure!(
+                run("qvm-ls", &["--raw-data", "--fields", "XID", "sys-gui"])? == before,
+                "GUI restarted during graphical readiness"
+            );
+            run("qvm-check", &["--running", "sys-gui"])?;
+            Ok(())
+        })();
+        match result {
+            Ok(()) => return Ok(()),
+            Err(failure) => error = failure.to_string(),
+        }
+        thread::sleep(
+            Duration::from_millis(250).min(deadline.saturating_duration_since(Instant::now())),
+        );
+    }
+    bail!("desktop did not become ready: {error}")
 }
 
 /// Read a path override without requiring its bytes to be UTF-8.
@@ -91,7 +180,7 @@ fn wait(
     log: &mut File,
     domain: &str,
     expected: &str,
-    provider: bool,
+    health: Option<&str>,
     start: Duration,
     ready: Duration,
 ) -> Result<()> {
@@ -139,12 +228,12 @@ fn wait(
                 actual == expected,
                 "{domain} reported {actual}; expected {expected}"
             );
-            let healthy = if provider {
+            let healthy = if let Some(command) = health {
                 let output = capture(
                     log,
                     "AIRLOCK_QREXEC_CLIENT",
                     "qrexec-client",
-                    &["-d", domain, PROVIDER_HEALTH],
+                    &["-d", domain, command],
                     Duration::from_secs(15),
                 )?;
                 !output.limited && output.status.success()
@@ -169,17 +258,14 @@ fn wait(
                     &format!("{domain} is qrexec-ready on {expected}"),
                 );
             }
-            writeln!(
-                log,
-                "Network provider firewall or forwarding services are not ready."
-            )?;
+            writeln!(log, "Guest network or build-store services are not ready.")?;
         }
         thread::sleep(
             Duration::from_secs(3).min(deadline.saturating_duration_since(Instant::now())),
         );
     }
     bail!(
-        "{domain} did not become qrexec-ready with required network services within {seconds}s",
+        "{domain} did not become qrexec-ready with required guest services within {seconds}s",
         seconds = ready.as_secs()
     )
 }
@@ -202,8 +288,10 @@ pub(crate) fn start(request: Ready) -> Result<()> {
         .filter(|source| !source.is_empty())
         .context("missing expected system generation")?;
     let provider = definition["prefs"]["provides_network"] == true;
-    let start = seconds("AIRLOCK_QUBE_START_TIMEOUT", 240)?;
-    let ready = seconds("AIRLOCK_QUBE_READY_TIMEOUT", 180)?;
+    let health = worker_probe(definition["features"]["airlock-role"].as_str())
+        .or_else(|| provider.then(|| PROVIDER_HEALTH.to_owned()));
+    let start = seconds("AIRLOCK_QUBE_START_TIMEOUT", GUEST_START_SECONDS)?;
+    let ready = seconds("AIRLOCK_QUBE_READY_TIMEOUT", GUEST_READY_SECONDS)?;
     let boot_id = fs::read_to_string(path(
         "AIRLOCK_BOOT_ID_FILE",
         "/proc/sys/kernel/random/boot_id",
@@ -228,7 +316,7 @@ pub(crate) fn start(request: Ready) -> Result<()> {
             log,
             "domain={domain} expected={expected} start_timeout={start:?} ready_timeout={ready:?}"
         )?;
-        wait(&mut log, domain, expected, provider, start, ready)
+        wait(&mut log, domain, expected, health.as_deref(), start, ready)
     })();
     if let Err(error) = &result {
         writeln!(log, "{error:#}")?;
@@ -298,8 +386,8 @@ pub(crate) fn start_providers() -> Result<()> {
             "AIRLOCK_START_QUBE_READY",
             "airlock-start-qube-ready",
             &[name, topology.to_str().context("non-UTF-8 topology path")?],
-            seconds("AIRLOCK_QUBE_START_TIMEOUT", 240)?
-                + seconds("AIRLOCK_QUBE_READY_TIMEOUT", 180)?
+            seconds("AIRLOCK_QUBE_START_TIMEOUT", GUEST_START_SECONDS)?
+                + seconds("AIRLOCK_QUBE_READY_TIMEOUT", GUEST_READY_SECONDS)?
                 + Duration::from_secs(240),
         );
         match output {

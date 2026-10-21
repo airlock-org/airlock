@@ -3,8 +3,54 @@
 use super::tool;
 use crate::process::Runner;
 use airlock_nix_core::identity::GuestName;
-use anyhow::{Result, ensure};
-use std::{ffi::OsString, time::Duration};
+use anyhow::{Result, bail, ensure};
+use std::{
+    ffi::OsString,
+    thread,
+    time::{Duration, Instant},
+};
+
+/// Retry the independently managed connection job; observer cleanup may cancel that job at boot.
+pub(super) fn boot_ready(target: &GuestName, timeout: u64) -> Result<()> {
+    let runner = Runner::default();
+    let before = instance(&runner, target)?;
+    let deadline = Instant::now() + Duration::from_secs(timeout);
+    let mut error = "input forwarding is not ready".to_owned();
+    while Instant::now() < deadline {
+        let result = (|| -> Result<()> {
+            runner.run(
+                tool("AIRLOCK_INPUT_SYSTEMCTL", "systemctl"),
+                &["start".into(), "airlock-gui-input-connect.service".into()],
+                deadline.saturating_duration_since(Instant::now()),
+                &[],
+            )?;
+            run(
+                &runner,
+                "AIRLOCK_INPUT_SYSTEMCTL",
+                "systemctl",
+                &[
+                    "is-active",
+                    "--quiet",
+                    "airlock-gui-input-discovery.service",
+                ],
+                10,
+            )?;
+            ensure!(
+                instance(&runner, target)? == before,
+                "{target} restarted during boot input readiness"
+            );
+            Ok(())
+        })();
+        match result {
+            Ok(()) => return Ok(()),
+            Err(failure) => error = failure.to_string(),
+        }
+        thread::sleep(
+            Duration::from_millis(100).min(deadline.saturating_duration_since(Instant::now())),
+        );
+    }
+    bail!("{target}: boot input readiness timed out: {error}")
+}
 
 /// Invoke a fixed input helper with bounded output and owned process cleanup.
 fn run(

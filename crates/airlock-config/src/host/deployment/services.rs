@@ -37,11 +37,17 @@ pub(super) fn configuration(
         .select("airlock.inputProxy.sender.enable");
     let input_dependency = optional(
         input.clone(),
-        strings(&["airlock-gui-input-connect.service"]),
+        strings(&["airlock-gui-input-boot-ready.service"]),
     );
     let prerequisites = NixValue::concat_lists([
         strings(&["airlock-setup-config.service"]),
-        optional(guarded.clone(), strings(&["airlock-start-gui-gpu.service"])),
+        optional(
+            guarded.clone(),
+            strings(&[
+                "airlock-start-gui-gpu.service",
+                "airlock-desktop-ready.service",
+            ]),
+        ),
         optional(
             networking.clone(),
             strings(&["airlock-start-network-providers.service"]),
@@ -174,6 +180,46 @@ pub(super) fn configuration(
                 when(
                     guarded,
                     nix_record! {
+                        "airlock-desktop-ready": nix_record! {
+                            "description": "Verify the GUI generation and active graphical login",
+                            "requires": NixValue::concat_lists([
+                                strings(&["airlock-start-gui-gpu.service"]),
+                                input_dependency.clone(),
+                            ]),
+                            "after": NixValue::concat_lists([
+                                strings(&["airlock-start-gui-gpu.service"]),
+                                input_dependency.clone(),
+                            ]),
+                            "serviceConfig": nix_record! {
+                                "Type": "oneshot",
+                                "RemainAfterExit": true,
+                                "TimeoutStartSec": 240_i64,
+                                "ExecStart": nix_text!(
+                                    "{engine}/bin/airlock-dom0-service wait-desktop-ready",
+                                    engine = engine.clone(),
+                                ),
+                            },
+                        },
+                        // The event observer may stop/restart the connection job. Only this
+                        // independent bounded waiter is a prerequisite for deferred setup.
+                        "airlock-gui-input-boot-ready": when(
+                            input.clone(),
+                            nix_record! {
+                                "description": "Wait for physical input on the booted GUI instance",
+                                "requires": strings(&["airlock-start-gui-gpu.service"]),
+                                "after": strings(&["airlock-start-gui-gpu.service"]),
+                                "serviceConfig": nix_record! {
+                                    "Type": "oneshot",
+                                    "RemainAfterExit": true,
+                                    "TimeoutStartSec": 240_i64,
+                                    "ExecStart": nix_text!(
+                                        "{engine}/bin/airlock-dom0-service input boot-ready --target {target}",
+                                        engine = engine.clone(),
+                                        target = context.config.clone().select("airlock.inputProxy.sender.target"),
+                                    ),
+                                },
+                            },
+                        ),
                         "airlock-gui-input-connect": when(
                             input,
                             nix_record! {
@@ -181,10 +227,7 @@ pub(super) fn configuration(
                             },
                         ),
                         "airlock-setup-config-deferred": nix_record! {
-                            "requires": NixValue::concat_lists([
-                                strings(&["airlock-start-gui-gpu.service"]),
-                                input_dependency.clone(),
-                            ]),
+                            "requires": strings(&["airlock-desktop-ready.service"]),
                             "wants": force(strings(&[
                                 "libvirtd.service",
                                 "qubes-db-dom0.service",
@@ -195,6 +238,7 @@ pub(super) fn configuration(
                                 strings(&[
                                     "airlock-setup-config.service",
                                     "airlock-start-gui-gpu.service",
+                                    "airlock-desktop-ready.service",
                                     "qubesd.service",
                                     "qubes-db-dom0.service",
                                     "qubes-qrexec-policy-daemon.service",

@@ -497,7 +497,7 @@ impl Coordinator {
                             name.as_str().into(),
                             runtime.join("topology.json").into_os_string(),
                         ],
-                        Duration::from_secs(300),
+                        Duration::from_secs(airlock_machine_core::boot::GUEST_HELPER_SECONDS),
                         &[],
                     )?;
                 }
@@ -595,13 +595,7 @@ impl Coordinator {
             {
                 started.push(name);
             }
-            self.wait_guest(
-                name,
-                &selected.inputs.topology().domains[name]
-                    .backend
-                    .system
-                    .source,
-            )?;
+            self.wait_guest(name, &selected.inputs.topology().domains[name])?;
         }
         let baseline = self.baseline()?;
         let observed =

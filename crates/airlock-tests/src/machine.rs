@@ -304,6 +304,17 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
         }
         "qrexec-client" => {
             let name = option(arguments, "-d")?;
+            if arguments
+                .last()
+                .is_some_and(|command| command.contains("boot-health build-store"))
+            {
+                data["health_probes"] = json!(data["health_probes"].as_u64().unwrap_or(0) + 1);
+                let failures = data["health_failures"].as_u64().unwrap_or(0);
+                data["health_failures"] = json!(failures.saturating_sub(1));
+                fs::write(&path, serde_json::to_vec(&data)?)?;
+                ensure!(failures == 0, "worker build store not ready");
+                return Ok(());
+            }
             let generation = &data["selected"][name];
             println!(
                 "{system}",
