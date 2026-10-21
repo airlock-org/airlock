@@ -195,7 +195,8 @@ fn external_tool_qubes_plugins_preserve_upstream_events_and_storage_lock() -> Re
         Some(b"{}".to_vec()),
     )?;
     assert_eq!(transaction["guards_under_lock"], 2);
-    assert_eq!(transaction["private_size"], 1048576);
+    assert_eq!(transaction["private_unchanged"], true);
+    assert_eq!(transaction["private_effect_rejected"], true);
     assert_eq!(transaction["stale_rejected"], true);
     assert_eq!(transaction["lock_released"], true);
     Ok(())

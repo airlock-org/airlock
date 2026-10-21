@@ -56,16 +56,36 @@ enum Request {
         request: super::qubes_volume::Request,
     },
     AuthorizeInstall {
+        // Explicit consuming VM; must agree with the fresh locked snapshot.
+        domain: airlock_nix_core::identity::GuestName,
+        // Exact immutable pool definition requested by the coordinator.
+        pool: Value,
+        // Complete proposed pair, reclassified before any Qubes mutation.
+        volumes: Vec<Value>,
         // Fresh objects read while the adapter holds Qubes' database lock.
         snapshot: Value,
         // Exact state previously inspected by the Rust storage coordinator.
         expected: Value,
+    },
+    VerifyInstalled {
+        // Same consuming VM checked before installation.
+        domain: airlock_nix_core::identity::GuestName,
+        // Same checked immutable pool definition.
+        pool: Value,
+        // Same complete pair checked before installation.
+        volumes: Vec<Value>,
+        // Original writable identities and definitions retained before mutation.
+        before: Value,
+        // Fresh snapshot inspected before database publication.
+        after: Value,
     },
     RequireStopped {
         // Upstream VM class checked again before its database is saved.
         klass: String,
         // Current libvirt state observed within the upstream object lifetime.
         running: bool,
+        // Explicit state distinguishes halted from paused, crashed and unknown.
+        power_state: String,
     },
     PoolStats {
         // Pool namespace whose allocated blocks are being counted without following links.
@@ -236,23 +256,15 @@ pub(super) fn execute(request: Value) -> Result<Value> {
             has_source,
         } => super::qubes_volume::normalize(domain.as_ref(), config, has_source),
         Request::VolumeLifecycle { request } => super::qubes_volume::execute(request),
-        Request::AuthorizeInstall { snapshot, expected } => {
-            ensure!(
-                snapshot == expected,
-                "Qubes storage changed since it was inspected"
-            );
-            require_stopped(
-                snapshot["klass"]
-                    .as_str()
-                    .context("missing Qubes VM class")?,
-                snapshot["running"]
-                    .as_bool()
-                    .context("missing Qubes VM state")?,
-            )?;
+        Request::AuthorizeInstall { domain, pool, volumes, snapshot, expected } => {
+            super::domain::authorize_install(&domain, &pool, &volumes, &snapshot, &expected)
+        }
+        Request::VerifyInstalled { domain, pool, volumes, before, after } => {
+            super::domain::verify_installed(&domain, &pool, &volumes, &before, &after)?;
             Ok(json!({}))
         }
-        Request::RequireStopped { klass, running } => {
-            require_stopped(&klass, running)?;
+        Request::RequireStopped { klass, running, power_state } => {
+            require_stopped(&klass, running, &power_state)?;
             Ok(json!({}))
         }
         Request::PoolStats {
@@ -304,9 +316,10 @@ pub(super) fn execute(request: Value) -> Result<Value> {
 }
 
 /// Reject storage mutation unless Qubes reports an independent, stopped VM.
-fn require_stopped(klass: &str, running: bool) -> Result<()> {
+fn require_stopped(klass: &str, running: bool, power_state: &str) -> Result<()> {
     ensure!(
-        klass == "StandaloneVM" && !running,
+        klass == "StandaloneVM" && !running
+            && airlock_deployment_core::inventory::PowerState::classify(power_state).is_halted(),
         "storage installation requires a stopped StandaloneVM"
     );
     Ok(())

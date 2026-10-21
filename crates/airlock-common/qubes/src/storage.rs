@@ -25,6 +25,9 @@ pub fn complete(value: Bound<'_, PyAny>, runner: &Bound<'_, PyAny>) -> Result<()
 
 /// Read or install exact native volume definitions through upstream Qubes objects.
 /// The caller supplies native guards; no lock is released between comparison and save.
+/// This database lock does not fence independent hypervisor activity. Production
+/// installation also stops qubesd; direct administrative VM starts remain external
+/// interference, detected by the power checks when observable.
 /// Run this in a short-lived worker because Qubes extension singletons are process-global.
 pub fn execute(request: &Value, guard: impl Fn(Value) -> Result<Value>) -> Result<Value> {
     ensure!(
@@ -122,11 +125,15 @@ pub fn on_app(
     if !install {
         return Ok(before);
     }
-    guard(
-        json!({"operation": "authorize-install", "snapshot": before, "expected": request["expected"]}),
-    )?;
+    let checked = guard(json!({
+        "operation": "authorize-install", "domain": request["domain"],
+        "pool": request["pool"], "volumes": request["volumes"],
+        "snapshot": before, "expected": request["expected"],
+    }))?;
+    ensure!(checked["domain"].as_str() == Some(name), "checked attachment names another VM");
 
-    let pool = &request["pool"];
+    // Dispatch the guard's closed, checked definition set rather than the incoming JSON.
+    let pool = &checked["pool"];
     let pools = app.getattr("pools")?;
     if !pools.contains(pool["name"].as_str().context("missing pool name")?)? {
         let options = values::python(py, pool)?
@@ -134,7 +141,7 @@ pub fn on_app(
             .map_err(PyErr::from)?;
         complete(app.call_method("add_pool", (), Some(&options))?, runner)?;
     }
-    for config in request["volumes"]
+    for config in checked["volumes"]
         .as_array()
         .context("missing Qubes volumes")?
     {
@@ -148,9 +155,9 @@ pub fn on_app(
     }
 
     guard(json!({
-        "operation": "require-stopped",
-        "klass": vm.getattr("klass")?.extract::<String>()?,
-        "running": vm.call_method0("is_running")?.is_truthy()?,
+        "operation": "verify-installed", "domain": checked["domain"],
+        "pool": checked["pool"], "volumes": checked["volumes"],
+        "before": before, "after": snapshot::read(app, &vm)?,
     }))?;
     app.call_method("save", (), Some(&locked))?;
     snapshot::read(app, &vm)

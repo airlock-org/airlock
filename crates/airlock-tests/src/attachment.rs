@@ -58,7 +58,20 @@ pub fn execute(root: &Path) -> Result<()> {
                 volumes.push(volume(config));
             }
         }
+        if std::env::var("AIRLOCK_TEST_STORAGE_DAMAGE_PRIVATE").as_deref() == Ok("1") {
+            let private = state["volumes"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|volume| volume["name"] == "private")
+                .unwrap();
+            private["vid"] = json!("unexpected/private");
+        }
         fs::write(path, serde_json::to_vec(&state)?)?;
+        ensure!(
+            std::env::var("AIRLOCK_TEST_STORAGE_LOSE_REPLY").as_deref() != Ok("1"),
+            "injected lost reply after attachment"
+        );
     }
     println!("{state}");
     Ok(())

@@ -106,6 +106,7 @@ pub fn read(app: &Bound<'_, PyAny>, vm: &Bound<'_, PyAny>) -> Result<Value> {
         "domain": name,
         "klass": klass,
         "running": vm.call_method0("is_running")?.is_truthy()?,
+        "power_state": vm.call_method0("get_power_state")?.extract::<String>()?,
         "features": plain(&features)?,
         "volumes": volumes(vm)?,
         "pools": pools,

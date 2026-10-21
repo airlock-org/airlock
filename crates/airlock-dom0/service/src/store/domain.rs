@@ -2,6 +2,8 @@
 //! A running VM keeps its existing boot identity; additive builder handoffs wait
 //! until it stops, and qubesd is restored even when an offline update fails.
 
+mod attachment;
+
 mod snapshot;
 
 use self::snapshot::Snapshot;
@@ -110,53 +112,7 @@ pub(super) fn shared_configs(
     admission: &Value,
     metadata_size: Option<u64>,
 ) -> Result<Vec<Value>> {
-    ensure!(
-        admission["view_backend"] == "erofs-objectmap",
-        "unsupported store view backend"
-    );
-    for (key, expected) in [
-        ("device", &target.device),
-        ("blob_device", &target.blob_device),
-        ("mountpoint", &target.mountpoint),
-    ] {
-        ensure!(
-            admission[key].as_str() == Some(expected.as_str()),
-            "store generation {key} binding mismatch"
-        );
-    }
-    let generation = number(admission, "generation")?.to_string();
-    ensure!(
-        number(admission, "generation")? > 0,
-        "invalid store generation"
-    );
-    let metadata = text(admission, "metadata_image")?;
-    let metadata_size = match metadata_size {
-        Some(size) => size,
-        None => fs::metadata(&metadata)?.len(),
-    };
-    ensure!(metadata_size > 0, "empty metadata image");
-    let mut configs = Vec::new();
-    for name in ["store", "store-data"] {
-        let mut config = json!({
-            "name":name,"pool":target.pool_name,
-            "vid":format!("domains/{}/generations/{generation}/{name}", target.domain),
-            "rw":false,"snap_on_start":false,"save_on_stop":true,"source":null,
-            "revisions_to_keep":0,"domain_name":target.domain,"generation":generation,
-            "closure_hash":admission["closure_hash"],"manifest_path":admission["manifest"],
-        });
-        if name == "store" {
-            config["size"] = json!(metadata_size);
-            config["view_kind"] = json!("metadata-image");
-            config["view_path"] = json!(metadata);
-        } else {
-            config["size"] = json!(number(admission, "blob_logical_size")?);
-            config["view_kind"] = json!("erofs-blob-map");
-            config["blob_map_path"] = admission["blob_map"].clone();
-            config["blob_logical_size"] = config["size"].clone();
-        }
-        configs.push(config);
-    }
-    Ok(configs)
+    attachment::project(target, admission, metadata_size)
 }
 
 fn check_features(target: &Target, vm: &Snapshot) -> Result<Option<Value>> {
@@ -282,6 +238,7 @@ fn admit(args: &Ensure) -> Result<Value> {
 pub(super) fn ensure(args: &Ensure) -> Result<Value> {
     let target = &args.target;
     let vm = snapshot(&target.domain)?;
+    vm.verify_isolation()?;
     vm.verify_pool(target)?;
     let mut projected = vec![json!({"name":"store"}), json!({"name":"store-data"})];
     let mut frontends = vec![
@@ -375,23 +332,42 @@ pub(super) fn switch(target: &Target, generation: u64) -> Result<Value> {
 
 fn install(target: &Target, before: &Snapshot, configs: &[Value]) -> Result<Snapshot> {
     before.verify_pool(target)?;
-    let result = bridge(&json!({
-        "operation":"install","domain":target.domain,"expected":before,
-        "pool":{"name":target.pool_name,"driver":"airlock-closure","root_dir":target.pool_root,"revisions_to_keep":0},
-        "volumes":configs,
-    }))?;
-    ensure!(
-        !result.running && result.matches(configs),
-        "installed Qubes volumes differ from requested configuration"
-    );
+    let pool = json!({"name":target.pool_name,"driver":"airlock-closure","root_dir":target.pool_root,"revisions_to_keep":0});
+    let request = attachment::Installation::new(&target.domain, before, &pool, configs)?;
+    let result = bridge(&request.wire())?;
+    request.check_after(&result)?;
+
     // Reload after save: the in-memory objects alone do not establish persistence.
     let persisted = snapshot(&target.domain)?;
     persisted.verify_pool(target)?;
-    ensure!(
-        !persisted.running && persisted.matches(configs),
-        "Qubes volume configuration was not persisted"
-    );
+    request.check_after(&persisted)?;
     Ok(persisted)
+}
+
+/// Repeat semantic checks while Qubes holds its database lock and return only checked fields.
+pub(super) fn authorize_install(
+    domain: &GuestName,
+    pool: &Value,
+    volumes: &[Value],
+    observed: &Value,
+    expected: &Value,
+) -> Result<Value> {
+    ensure!(observed == expected, "Qubes storage changed since it was inspected");
+    let snapshot: Snapshot = serde_json::from_value(observed.clone())?;
+    Ok(attachment::Installation::new(domain, &snapshot, pool, volumes)?.wire())
+}
+
+/// Refuse database publication if the adapter changed either writable volume or its isolation.
+pub(super) fn verify_installed(
+    domain: &GuestName,
+    pool: &Value,
+    volumes: &[Value],
+    before: &Value,
+    after: &Value,
+) -> Result<()> {
+    let before: Snapshot = serde_json::from_value(before.clone())?;
+    let after: Snapshot = serde_json::from_value(after.clone())?;
+    attachment::Installation::new(domain, &before, pool, volumes)?.check_after(&after)
 }
 
 fn install_shared(
@@ -415,14 +391,9 @@ fn install_shared(
     let pool_created = !inspected.pools.contains_key(&target.pool_name);
     let ((), restarted, was_active) = with_qubesd_stopped(&integration_root(), || {
         let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
-        let retained = generations::load(
-            &target.pool_root,
-            &target.pool_root,
-            target.domain.as_str(),
-            number(admission, "generation")?,
-        )?;
+        let retained = attachment::CommittedGeneration::load(target, number(admission, "generation")?)?;
         ensure!(
-            shared_configs(target, &retained, None)? == configs,
+            retained.definitions(target)? == configs,
             "generation changed before attachment"
         );
         let before = snapshot(&target.domain)?;

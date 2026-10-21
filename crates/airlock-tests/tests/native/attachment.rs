@@ -92,7 +92,7 @@ impl Attachment {
             .collect();
         volumes.extend(configs.as_array().unwrap().iter().map(volume));
         let snapshot = json!({
-            "domain": "usr-home", "klass": "StandaloneVM", "running": false,
+            "domain": "usr-home", "klass": "StandaloneVM", "running": false, "power_state": "Halted",
             "features": {"airlock-store-source": "/approved", "airlock-store-mode": "shared-closure",
                 "airlock-store-view-backend": "erofs-objectmap", "airlock-store-generation": original["generation"].to_string()},
             "volumes": volumes, "references": [],
@@ -316,14 +316,7 @@ fn attachment_rejects_invalid_state_before_qubes_mutation() -> Result<()> {
             }
         }
         attachment.save()?;
-        let mut command = if damage == "shared-private" {
-            let mut command = attachment.peers.command(&attachment.store.service)?;
-            attachment.environment(&mut command);
-            command.args(["storage", "domain", "verify-native-volumes", "usr-home"]);
-            command
-        } else {
-            attachment.command(&[])?
-        };
+        let mut command = attachment.command(&[])?;
         assert!(!common::run(&mut command, None)?.status.success());
         assert!(attachment.installs()?.is_empty());
     }
@@ -449,6 +442,48 @@ fn attachment_lock_excludes_operations_across_pool_roots() -> Result<()> {
         )?;
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stdout).contains("operation-attachment.lock"));
+        assert!(attachment.installs()?.is_empty());
+    }
+    Ok(())
+}
+
+/// A successful external mutation cannot advance selection if writable state changed or its reply was lost.
+#[test]
+fn attachment_checks_preservation_before_selection_and_reconciles_lost_reply() -> Result<()> {
+    for fault in ["AIRLOCK_TEST_STORAGE_DAMAGE_PRIVATE", "AIRLOCK_TEST_STORAGE_LOSE_REPLY"] {
+        let attachment = Attachment::new()?;
+        let current = attachment.store.pool.join("domains/usr-home/current");
+        let selected = fs::read_link(&current)?;
+        let result = common::run(attachment.command(&[])?.env(fault, "1"), None)?;
+        assert!(!result.status.success());
+        assert_eq!(attachment.installs()?.len(), 1);
+        assert_eq!(fs::read_link(&current)?, selected);
+
+        if fault == "AIRLOCK_TEST_STORAGE_LOSE_REPLY" {
+            // A retry observes the already installed pair; it must retain the original private backing.
+            common::json(&mut attachment.command(&[])?, None)?;
+            common::json(&mut attachment.command(&[])?, None)?;
+            let after: Value = serde_json::from_slice(&fs::read(attachment.peers.path("qubes.json"))?)?;
+            for name in ["root", "private"] {
+                let find = |snapshot: &Value| {
+                    snapshot["volumes"].as_array().unwrap().iter()
+                        .find(|volume| volume["name"] == name).unwrap().clone()
+                };
+                assert_eq!(find(&after), find(&attachment.snapshot));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// False is_running evidence alone does not allow replacing volumes on paused or unobserved VMs.
+#[test]
+fn attachment_requires_explicit_halted_power_evidence() -> Result<()> {
+    for power in [json!("Paused"), json!("unknown"), Value::Null] {
+        let mut attachment = Attachment::new()?;
+        attachment.snapshot["power_state"] = power;
+        attachment.save()?;
+        assert!(!common::run(&mut attachment.command(&[])?, None)?.status.success());
         assert!(attachment.installs()?.is_empty());
     }
     Ok(())

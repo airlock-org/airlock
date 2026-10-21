@@ -498,6 +498,7 @@ pub(super) fn load(root: &Path, logical: &Path, domain: &str, generation: u64) -
     let physical = root.join(Path::new(&metadata).strip_prefix(logical)?);
     let mut value = store.clone();
     for (key, field) in json!({
+        "domain": domain,
         "generation": generation,
         "previous_generation": manifest["previous_generation"],
         "closure_hash": store["closure_hash"],

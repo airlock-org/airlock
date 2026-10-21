@@ -124,53 +124,80 @@ fn qubes_properties_use_native_storage_checks() -> Result<()> {
 /// Installation authorization compares a fresh locked snapshot and accepts stopped standalones only.
 #[test]
 fn qubes_installation_guard_uses_native_fresh_state() -> Result<()> {
-    let snapshot = json!({"klass":"StandaloneVM","running":false,"domain":"usr-home"});
-    let call = |action, arguments: Value| -> Result<Value> {
-        let mut request = arguments;
-        request["operation"] = json!(action);
-        Ok(match airlock_dom0_service::storage_request(request) {
-            Ok(value) => json!({"ok":value}),
-            Err(error) => json!({"error":format!("{error:#}")}),
-        })
-    };
-    assert_eq!(
-        call(
-            "authorize-install",
-            json!({"snapshot":snapshot,"expected":snapshot})
-        )?["ok"],
-        json!({})
-    );
-    let mut changed = snapshot.clone();
-    changed["running"] = json!(true);
-    assert!(
-        call(
-            "authorize-install",
-            json!({"snapshot":changed,"expected":snapshot})
-        )?["error"]
-            .as_str()
-            .unwrap()
-            .contains("changed")
-    );
-    let mut template = snapshot;
-    template["klass"] = json!("AppVM");
-    assert!(
-        call(
-            "authorize-install",
-            json!({"snapshot":template,"expected":template})
-        )?["error"]
-            .as_str()
-            .unwrap()
-            .contains("stopped StandaloneVM")
-    );
-    assert!(
-        call(
-            "require-stopped",
-            json!({"klass":"StandaloneVM","running":true})
-        )?["error"]
-            .as_str()
-            .unwrap()
-            .contains("stopped StandaloneVM")
-    );
+    use airlock_tests::attachment::volume;
+
+    let snapshot = json!({
+        "klass":"StandaloneVM", "running":false, "power_state":"Halted", "domain":"usr-home",
+        "features":{}, "pools":{}, "references":[],
+        "volumes":["root", "private"].map(|name| volume(&json!({
+            "name":name, "pool":"default", "vid":format!("usr-home/{name}"),
+            "rw":true, "save_on_stop":true, "snap_on_start":false, "size":4096
+        }))),
+    });
+    let volumes = ["store", "store-data"].map(|name| {
+        let mut definition = json!({
+            "name":name, "pool":"airlock-closure", "vid":format!("domains/usr-home/generations/1/{name}"),
+            "domain_name":"usr-home", "generation":"1", "closure_hash":"a".repeat(64),
+            "manifest_path":"/pool/manifest.json", "rw":false, "snap_on_start":false,
+            "save_on_stop":true, "source":null, "revisions_to_keep":0, "size":4096,
+        });
+        if name == "store" {
+            definition["view_kind"] = json!("metadata-image");
+            definition["view_path"] = json!("/pool/metadata.img");
+        } else {
+            definition["view_kind"] = json!("erofs-blob-map");
+            definition["blob_map_path"] = json!("/pool/map.json");
+            definition["blob_logical_size"] = json!(4096);
+        }
+        definition
+    });
+    let request = json!({
+        "operation":"authorize-install", "domain":"usr-home", "snapshot":snapshot, "expected":snapshot,
+        "pool":{"name":"airlock-closure", "driver":"airlock-closure", "root_dir":"/pool", "revisions_to_keep":0},
+        "volumes":volumes,
+    });
+    let checked = airlock_dom0_service::storage_request(request.clone())?;
+    assert_eq!(checked["volumes"], request["volumes"]);
+    assert_eq!(checked["domain"], request["domain"]);
+    for damage in ["private", "unknown", "generation", "readonly", "extra-field", "target", "stale", "paused", "missing-power", "aliased"] {
+        let mut invalid = request.clone();
+        match damage {
+            "private" => invalid["volumes"][0]["name"] = json!("private"),
+            "unknown" => invalid["volumes"][0]["name"] = json!("new-effect"),
+            "generation" => invalid["volumes"][1]["generation"] = json!("2"),
+            "readonly" => invalid["volumes"][0]["rw"] = json!(true),
+            "extra-field" => invalid["volumes"][0]["unclassified"] = json!(true),
+            "target" => invalid["domain"] = json!("other-vm"),
+            "stale" => invalid["snapshot"]["running"] = json!(true),
+            "paused" => {
+                invalid["snapshot"]["power_state"] = json!("Paused");
+                invalid["expected"] = invalid["snapshot"].clone();
+            }
+            "missing-power" => {
+                invalid["snapshot"].as_object_mut().unwrap().remove("power_state");
+                invalid["expected"] = invalid["snapshot"].clone();
+            }
+            _ => {
+                invalid["snapshot"]["references"] = json!([{
+                    "domain":"other-vm", "pool":"default", "vid":"usr-home/private", "source":null
+                }]);
+                invalid["expected"] = invalid["snapshot"].clone();
+            }
+        }
+        assert!(airlock_dom0_service::storage_request(invalid).is_err(), "{damage}");
+    }
+
+    let mut after = snapshot.clone();
+    after["volumes"].as_array_mut().unwrap().extend(volumes.iter().map(volume));
+    let verification = json!({
+        "operation":"verify-installed", "domain":"usr-home", "pool":request["pool"],
+        "volumes":volumes, "before":snapshot, "after":after,
+    });
+    airlock_dom0_service::storage_request(verification.clone())?;
+    let mut replaced = verification;
+    replaced["after"]["volumes"][1]["vid"] = json!("replacement-private");
+    assert!(airlock_dom0_service::storage_request(replaced).is_err());
+
     Ok(())
 }
 

@@ -276,4 +276,6 @@ pub mod devices;
 
 pub mod storage;
 
+pub mod attachment;
+
 pub mod purge;

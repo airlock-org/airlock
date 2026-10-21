@@ -3,6 +3,7 @@
 //! prevent one VM's private state from becoming another VM's backing storage.
 
 use super::super::domain_cli::Target;
+use airlock_deployment_core::{attachment, inventory::PowerState};
 use airlock_nix_core::identity::GuestName;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -13,9 +14,9 @@ use std::{collections::BTreeMap, path::PathBuf};
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub(super) struct VolumeIdentity {
     // Qubes pool namespace containing this backing object.
-    pool: String,
+    pub(super) pool: String,
     // Driver-defined backing-object identity, unique within its pool.
-    vid: String,
+    pub(super) vid: String,
 }
 
 /// Both persisted definition and live driver properties of one ordered boot volume.
@@ -25,15 +26,15 @@ pub(super) struct Volume {
     pub(super) name: String,
     // Stable backing identity used for writable-volume isolation.
     #[serde(flatten)]
-    identity: VolumeIdentity,
+    pub(super) identity: VolumeIdentity,
     // Whether the guest may mutate this backing object.
-    rw: bool,
+    pub(super) rw: bool,
     // Whether Qubes derives a fresh snapshot at VM start.
-    snap_on_start: bool,
+    pub(super) snap_on_start: bool,
     // Whether Qubes preserves changes and backing identity after stop.
-    save_on_stop: bool,
+    pub(super) save_on_stop: bool,
     // Optional backing volume from which this volume derives its contents.
-    source: Option<VolumeIdentity>,
+    pub(super) source: Option<VolumeIdentity>,
     // Immutable Airlock generation, absent on conventional Qubes volumes.
     generation: Option<String>,
     // Closure digest binding an Airlock volume to its committed manifest.
@@ -65,9 +66,12 @@ pub(super) struct Snapshot {
     /// VM whose exact state was inspected through Qubes.
     pub(super) domain: GuestName,
     // Upstream VM class; immutable system views require StandaloneVM.
-    klass: String,
+    pub(super) klass: String,
     /// Runtime state observed through libvirt rather than inferred from XML.
     pub(super) running: bool,
+    // Missing legacy power evidence is readable but cannot authorize installation.
+    #[serde(default)]
+    power_state: Option<String>,
     /// Persisted feature bindings used by setup to identify the attached generation.
     pub(super) features: BTreeMap<String, String>,
     /// Current boot-volume order, including standard and additional volumes.
@@ -101,38 +105,40 @@ impl Snapshot {
         self.volumes.iter().find(|v| v.name == name)
     }
 
-    pub(super) fn verify_isolation(&self) -> Result<()> {
-        let mut owned = Vec::new();
-        for name in ["root", "private"] {
-            let volume = self
-                .volume(name)
-                .with_context(|| format!("missing writable {name} volume"))?;
-            ensure!(
-                volume.rw
-                    && volume.save_on_stop
-                    && !volume.snap_on_start
-                    && volume.source.is_none(),
-                "{}:{name} must be an independent persistent writable volume",
-                self.domain
-            );
-            ensure!(
-                !owned.contains(&&volume.identity),
-                "root and private volumes share storage"
-            );
-            owned.push(&volume.identity);
+    pub(super) fn power(&self) -> PowerState {
+        PowerState::classify(self.power_state.as_deref().unwrap_or(""))
+    }
+
+    /// Retain all aliases, including sibling volumes and other VMs' source volumes.
+    pub(super) fn writable(&self) -> Result<(attachment::WritableVolume, attachment::WritableVolume, Vec<attachment::Backing>)> {
+        let root = super::attachment::writable(self.volume("root").context("missing writable root volume")?)?;
+        let private = super::attachment::writable(self.volume("private").context("missing writable private volume")?)?;
+        let mut references = Vec::new();
+        let mut retain = |identity: &VolumeIdentity| {
+            references.push(attachment::Backing { pool: identity.pool.clone(), vid: identity.vid.clone() });
+        };
+        for volume in &self.volumes {
+            if volume.name != "root" && volume.name != "private" {
+                retain(&volume.identity);
+                if let Some(source) = &volume.source {
+                    retain(source);
+                }
+            }
         }
         for reference in &self.references {
-            ensure!(
-                !owned.contains(&&reference.identity)
-                    && !reference
-                        .source
-                        .as_ref()
-                        .is_some_and(|source| owned.contains(&source)),
-                "{}: writable storage is referenced by {}",
-                self.domain,
-                reference.domain
-            );
+            retain(&reference.identity);
+            if let Some(source) = &reference.source {
+                retain(source);
+            }
         }
+        Ok((root, private, references))
+    }
+
+    pub(super) fn verify_isolation(&self) -> Result<()> {
+        self.validate(&self.domain)?;
+        let (root, private, references) = self.writable()?;
+        ensure!(attachment::isolation(&root, &private, &references),
+            "writable root/private storage must be independent, persistent and unshared");
         Ok(())
     }
 

@@ -80,7 +80,7 @@ fn resolved(snapshot: &Value) -> Result<Vec<Value>> {
         .collect()
 }
 
-/// Exercise the shared transaction against upstream descriptors, locking, disk creation and save.
+/// Exercise production rejection under the real database lock and preserve writable state on reload.
 pub(super) fn observe(py: Python<'_>) -> Result<Value> {
     let directory = tempfile::tempdir()?;
     let root = directory.path().to_str().context("offline database root")?;
@@ -147,7 +147,7 @@ pub(super) fn observe(py: Python<'_>) -> Result<Value> {
         .clone();
     volume["size"] = json!(1048576);
     let request = json!({"operation":"install", "domain":"usr-home", "expected":before,
-        "pool":{"name":"varlibqubes"}, "volumes":[volume]});
+        "pool":{"name":"airlock-closure", "driver":"airlock-closure", "root_dir":root, "revisions_to_keep":0}, "volumes":[volume]});
     let guards = Cell::new(0);
     let guard = |request: Value| -> Result<Value> {
         ensure!(
@@ -157,23 +157,23 @@ pub(super) fn observe(py: Python<'_>) -> Result<Value> {
         guards.set(guards.get() + 1);
         airlock_dom0_service::storage_request(request)
     };
+    let saved = fs::read(store)?;
     let app = open(py, store, false)?;
-    let result = storage::on_app(&app, &request, &guard, &runner);
+    let rejected_private = storage::on_app(&app, &request, &guard, &runner).is_err();
     app.call_method0("close")?;
-    let result = result?;
+    ensure!(rejected_private && saved == fs::read(store)?, "immutable attachment changed private storage");
     ensure!(
         !contended(store)?,
         "Qubes did not release its database lock"
     );
 
-    let saved = fs::read(store)?;
     let mut stale = request;
     stale["expected"]["running"] = json!(true);
     let app = open(py, store, false)?;
     let rejected = storage::on_app(
         &app,
         &stale,
-        &airlock_dom0_service::storage_request,
+        &guard,
         &runner,
     )
     .is_err();
@@ -187,18 +187,12 @@ pub(super) fn observe(py: Python<'_>) -> Result<Value> {
     let persisted = snapshot::read(&app, &vm)?;
     app.call_method0("close")?;
     runner.call_method0("close")?;
-    let private = persisted["volumes"]
-        .as_array()
-        .context("persisted volumes")?
-        .iter()
-        .find(|volume| volume["name"] == "private")
-        .context("persisted private volume")?;
     ensure!(
-        resolved(&result)? == resolved(&persisted)?,
+        resolved(&before)? == resolved(&persisted)?,
         "Qubes resolved volume properties changed on reload"
     );
     Ok(
-        json!({"guards_under_lock":guards.get(), "private_size":private["size"],
+        json!({"guards_under_lock":guards.get(), "private_unchanged":true, "private_effect_rejected":rejected_private,
         "stale_rejected":rejected, "lock_released":true}),
     )
 }

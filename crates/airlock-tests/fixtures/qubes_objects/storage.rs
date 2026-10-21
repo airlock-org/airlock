@@ -150,7 +150,7 @@ fn storage(
     Ok(args.py().None())
 }
 
-/// Populate a stopped or running standalone with a minimal root disk or persisted native volumes.
+/// Populate a stopped or running standalone with independent root and private disks or persisted native volumes.
 fn vm(
     name: &str,
     args: &Bound<'_, PyTuple>,
@@ -177,23 +177,21 @@ fn vm(
             object.setattr("storage", &storage)?;
 
             if data.is_none() {
-                let config = values::python(
-                    py,
-                    &json!({
-                        "name":"root", "vid":"root", "size":1024, "rw":true,
-                        "snap_on_start":false, "save_on_stop":true, "source":null,
-                        "revisions_to_keep":1,
-                    }),
-                )?
-                .cast_into::<PyDict>()?;
-                config.set_item("pool", app.call_method1("get_pool", ("default",))?)?;
-                let root = py
-                    .import("qubes.storage")?
-                    .getattr("Volume")?
-                    .call((), Some(&config))?;
-                object.getattr("volumes")?.set_item("root", &root)?;
                 let configs = PyDict::new(py);
-                configs.set_item("root", root.getattr("config")?)?;
+                for name in ["root", "private"] {
+                    let config = values::python(
+                        py,
+                        &json!({
+                            "name":name, "vid":name, "size":1024, "rw":true,
+                            "snap_on_start":false, "save_on_stop":true, "source":null,
+                            "revisions_to_keep":1,
+                        }),
+                    )?.cast_into::<PyDict>()?;
+                    config.set_item("pool", app.call_method1("get_pool", ("default",))?)?;
+                    let volume = py.import("qubes.storage")?.getattr("Volume")?.call((), Some(&config))?;
+                    object.getattr("volumes")?.set_item(name, &volume)?;
+                    configs.set_item(name, volume.getattr("config")?)?;
+                }
                 object.setattr("volume_config", configs)?;
             } else {
                 let configs =
@@ -204,6 +202,16 @@ fn vm(
                         .call_method1("init_volume", (name, config.cast::<PyDict>()?.copy()?))?;
                 }
             }
+        }
+        "get_power_state" => {
+            let state = std::env::var("AIRLOCK_FAKE_QUBES_POWER_STATE").unwrap_or_else(|_| {
+                if matches!(std::env::var("AIRLOCK_FAKE_QUBES_RUNNING").as_deref(), Ok("1" | "true" | "yes")) {
+                    "Running".into()
+                } else {
+                    "Halted".into()
+                }
+            });
+            return Ok(state.into_pyobject(py)?.into_any().unbind());
         }
         "is_running" => {
             let running = matches!(
@@ -402,7 +410,7 @@ pub(super) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     root.add("storage", storage_module)?;
 
-    let vm = class(root, "VM", vm, &["__init__", "is_running"], &[], &[])?;
+    let vm = class(root, "VM", vm, &["__init__", "is_running", "get_power_state"], &[], &[])?;
     vm.setattr("klass", "StandaloneVM")?;
 
     class(
