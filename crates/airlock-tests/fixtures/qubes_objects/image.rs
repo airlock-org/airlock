@@ -31,6 +31,9 @@ fn pool(
     let config = kwargs
         .expect("image pools use named configuration")
         .copy()?;
+    if config.contains("root_dir")? {
+        config.set_item("driver", "airlock-closure")?;
+    }
     object.setattr("name", config.get_item("name")?)?;
     object.setattr("config", config)?;
     Ok(args.py().None())
@@ -55,16 +58,25 @@ fn volume(
                 .getattr("dir_path")?
                 .extract::<PathBuf>()?
                 .join(format!("{name}.img"));
-            object.setattr("path", path.to_string_lossy().as_ref())?;
+            let observed_path = options
+                .get_item("view_path")?
+                .map(|value| value.extract::<String>())
+                .transpose()?
+                .unwrap_or_else(|| path.to_string_lossy().into_owned());
+            object.setattr("path", observed_path)?;
             object.setattr("config", &config)?;
             let pool = keyword(py, Some(options), "pool", json!("varlibqubes"))?;
             object.setattr("pool", vm.getattr("app")?.getattr("pools")?.get_item(pool)?)?;
             object.setattr(
                 "vid",
-                format!(
-                    "{vm_name}/{name}",
-                    vm_name = vm.getattr("name")?.extract::<String>()?
-                ),
+                options
+                    .get_item("vid")?
+                    .map(|value| value.extract::<String>())
+                    .transpose()?
+                    .unwrap_or(format!(
+                        "appvms/{vm_name}/{name}",
+                        vm_name = vm.getattr("name")?.extract::<String>()?
+                    )),
             )?;
             for (key, default) in [
                 ("rw", json!(true)),
@@ -73,6 +85,11 @@ fn volume(
                 ("size", json!(4096)),
             ] {
                 object.setattr(key, keyword(py, Some(options), key, default)?)?;
+            }
+            for field in ["generation", "closure_hash", "blob_map_path"] {
+                if let Some(value) = options.get_item(field)? {
+                    object.setattr(field, value)?;
+                }
             }
             object.setattr("source", py.None())?;
         }
@@ -178,11 +195,17 @@ fn vm(
                 let features = object.getattr("features")?;
                 features.set_item(
                     "fixture-root-ready",
-                    fs::read(directory.join("root.img"))? == b"fixture",
+                    if fs::read(directory.join("root.img"))? == b"fixture" {
+                        "1"
+                    } else {
+                        ""
+                    },
                 )?;
                 features.set_item(
                     "fixture-private-ready",
-                    fs::metadata(directory.join("private.img"))?.len(),
+                    fs::metadata(directory.join("private.img"))?
+                        .len()
+                        .to_string(),
                 )?;
             }
         }
@@ -245,34 +268,145 @@ fn initialize(object: &Bound<'_, PyAny>, store: &Bound<'_, PyAny>) -> PyResult<(
     fields(object, &json!({"closed":false, "saved":false}))
 }
 
+/// Serialize the supplied object observations for boot-cache tests, not an implementation of qubesd.
+fn xml(snapshots: &[Value]) -> std::io::Result<Vec<u8>> {
+    let mut writer = quick_xml::Writer::new(Vec::new());
+    writer
+        .create_element("qubes")
+        .write_inner_content(|writer| {
+            writer.create_element("labels").write_empty()?;
+            writer.create_element("properties").write_empty()?;
+            writer
+                .create_element("pools")
+                .write_inner_content(|writer| {
+                    if let Some(snapshot) = snapshots.first() {
+                        for (name, config) in snapshot["pools"].as_object().unwrap() {
+                            let mut attrs = attributes(config);
+                            attrs.insert("name".into(), name.clone());
+                            writer
+                                .create_element("pool")
+                                .with_attributes(
+                                    attrs
+                                        .iter()
+                                        .map(|(key, value)| (key.as_str(), value.as_str())),
+                                )
+                                .write_empty()?;
+                        }
+                    }
+                    Ok(())
+                })?;
+            writer
+                .create_element("domains")
+                .write_inner_content(|writer| {
+                    for snapshot in snapshots {
+                        writer
+                            .create_element("domain")
+                            .write_inner_content(|writer| {
+                                writer.create_element("properties").write_inner_content(
+                                    |writer| {
+                                        writer
+                                            .create_element("property")
+                                            .with_attribute(("name", "name"))
+                                            .write_text_content(
+                                                quick_xml::events::BytesText::new(
+                                                    snapshot["domain"].as_str().unwrap(),
+                                                ),
+                                            )?;
+                                        Ok(())
+                                    },
+                                )?;
+                                writer.create_element("features").write_inner_content(
+                                    |writer| {
+                                        for (key, value) in
+                                            snapshot["features"].as_object().unwrap()
+                                        {
+                                            writer
+                                                .create_element("feature")
+                                                .with_attribute(("name", key.as_str()))
+                                                .write_text_content(
+                                                    quick_xml::events::BytesText::new(&scalar(
+                                                        value,
+                                                    )),
+                                                )?;
+                                        }
+                                        Ok(())
+                                    },
+                                )?;
+                                writer.create_element("tags").write_empty()?;
+                                writer.create_element("volume-config").write_inner_content(
+                                    |writer| {
+                                        for volume in snapshot["volumes"].as_array().unwrap() {
+                                            let mut attrs = attributes(&volume["config"]);
+                                            for field in ["name", "pool", "vid", "size"] {
+                                                attrs.insert(
+                                                    field.into(),
+                                                    volume[field]
+                                                        .as_str()
+                                                        .map(str::to_owned)
+                                                        .unwrap_or_else(|| {
+                                                            volume[field].to_string()
+                                                        }),
+                                                );
+                                            }
+                                            writer
+                                                .create_element("volume")
+                                                .with_attributes(attrs.iter().map(
+                                                    |(key, value)| (key.as_str(), value.as_str()),
+                                                ))
+                                                .write_empty()?;
+                                        }
+                                        Ok(())
+                                    },
+                                )?;
+                                Ok(())
+                            })?;
+                    }
+                    Ok(())
+                })?;
+            Ok(())
+        })?;
+    Ok(writer.into_inner())
+}
+
+/// Encode both strings and scalar feature values as Qubes XML text.
+fn scalar(value: &Value) -> String {
+    value
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| value.to_string())
+}
+
+/// Preserve scalar upstream configuration fields in the disposable XML observation.
+fn attributes(config: &Value) -> std::collections::BTreeMap<String, String> {
+    config
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter(|(_, value)| !value.is_null())
+        .map(|(key, value)| (key.clone(), scalar(value)))
+        .collect()
+}
+
 /// Write a minimal relocatable Qubes XML database and a separate object observation for assertions.
 fn save(object: &Bound<'_, PyAny>) -> PyResult<()> {
     damage("save")?;
 
     object.setattr("saved", true)?;
     let root = object.getattr("root")?.extract::<PathBuf>()?;
-    let mut writer = quick_xml::Writer::new(Vec::new());
-    let text = root.to_string_lossy();
-    let kernel = root.join("vm-kernels").to_string_lossy().into_owned();
-    writer
-        .create_element("qubes")
-        .write_inner_content(|writer| {
-            writer
-                .create_element("pools")
-                .write_inner_content(|writer| {
-                    writer
-                        .create_element("pool")
-                        .with_attributes([("name", "varlibqubes"), ("dir_path", text.as_ref())])
-                        .write_empty()?;
-                    writer
-                        .create_element("pool")
-                        .with_attributes([("name", "linux-kernel"), ("dir_path", kernel.as_str())])
-                        .write_empty()?;
-                    Ok(())
-                })?;
-            Ok(())
-        })?;
-    fs::write(root.join("qubes.xml"), writer.into_inner())?;
+    let mut snapshots = Vec::new();
+    for vm in object.getattr("domains")?.try_iter()? {
+        snapshots.push(
+            airlock_qubes::snapshot::read(object, &vm?)
+                .map_err(|error| PyValueError::new_err(format!("snapshot fixture: {error:#}")))?,
+        );
+    }
+    if std::env::var_os("AIRLOCK_TEST_IMAGE_OBSERVED").is_some() {
+        write("AIRLOCK_TEST_IMAGE_OBSERVED", &json!(snapshots))?;
+    }
+    fs::write(
+        root.join("qubes.xml"),
+        xml(&snapshots).map_err(|error| PyValueError::new_err(error.to_string()))?,
+    )?;
 
     let mut domains = Vec::new();
     for vm in object.getattr("domains")?.try_iter()? {
@@ -285,7 +419,7 @@ fn save(object: &Bound<'_, PyAny>) -> PyResult<()> {
             .collect::<PyResult<Vec<_>>>()?;
         domains.push(
             json!({"name":field(&vm, "name")?, "uuid":vm.getattr("uuid")?.str()?.to_str()?,
-            "features":field(&vm, "features")?, "volumes":volumes}),
+            "features":field(&vm, "features")?, "kernelopts":field(&vm, "kernelopts")?, "volumes":volumes}),
         );
     }
     write("AIRLOCK_TEST_IMAGE_PLAN", &json!({"domains":domains}))

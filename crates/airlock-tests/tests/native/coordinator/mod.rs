@@ -1,6 +1,6 @@
 //! Whole-machine transactions bind human review, pool identities and durable recovery state.
 
-mod fixture;
+pub(super) mod fixture;
 
 use crate::common;
 use anyhow::{Context, Result, ensure};

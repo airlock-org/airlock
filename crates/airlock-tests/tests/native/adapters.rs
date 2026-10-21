@@ -417,8 +417,8 @@ fn image_plan_and_reloaded_snapshot_are_checked() -> Result<()> {
         assert_eq!(domain["features"]["qrexec"], "1");
         assert_eq!(domain["features"]["service.example"], "");
         assert_eq!(domain["features"]["airlock-store-generation"], "7");
-        assert_eq!(domain["features"]["fixture-root-ready"], true);
-        assert_eq!(domain["features"]["fixture-private-ready"], 33554432);
+        assert_eq!(domain["features"]["fixture-root-ready"], "1");
+        assert_eq!(domain["features"]["fixture-private-ready"], "33554432");
         assert_eq!(domain["features"]["fixture-class"], "StandaloneVM");
         assert!(domain.get("devices").is_none());
         assert_eq!(

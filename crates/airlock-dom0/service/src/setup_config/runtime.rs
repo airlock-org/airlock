@@ -148,7 +148,8 @@ impl Session {
         self.log.write_all(&output.stderr)?;
         ensure!(
             !output.limited && output.status.success(),
-            "{program} failed or exceeded its limits: {stderr}",
+            "{program} failed or exceeded its limits: {stdout}{stderr}",
+            stdout = String::from_utf8_lossy(&output.stdout),
             stderr = String::from_utf8_lossy(&output.stderr)
         );
         Ok(String::from_utf8(output.stdout)?

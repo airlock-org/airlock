@@ -129,6 +129,11 @@ impl Coordinator {
                 // generations are independently inspected and compared below.
                 let prepared: BTreeMap<GuestName, GenerationId> =
                     if receipt["schema"] == "airlock.prepared-runtime.v2" {
+                        ensure!(
+                            receipt["boot_handoff"]["schema"] == "airlock.boot-handoff.v1"
+                                && receipt["boot_handoff"]["status"] == "passed",
+                            "invalid prepared boot handoff record"
+                        );
                         serde_json::from_value(receipt["boot_handoff"]["generations"].clone())?
                     } else {
                         topology

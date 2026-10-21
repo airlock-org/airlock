@@ -28,8 +28,9 @@ pub(crate) fn output(command: &mut Command) -> Result<String> {
     let result = captured(command, None)?;
     ensure!(
         result.status.success(),
-        "{command:?}: {}",
-        String::from_utf8_lossy(&result.stderr)
+        "{command:?}: {stdout}{stderr}",
+        stdout = String::from_utf8_lossy(&result.stdout),
+        stderr = String::from_utf8_lossy(&result.stderr)
     );
     if !result.stderr.is_empty() {
         std::io::stdout().write_all(&result.stderr)?;
@@ -137,8 +138,9 @@ pub(crate) fn input_json(
     let result = captured(command, Some(serde_json::to_vec(value)?))?;
     ensure!(
         result.status.success(),
-        "{command:?}: {}",
-        String::from_utf8_lossy(&result.stderr)
+        "{command:?}: {stdout}{stderr}",
+        stdout = String::from_utf8_lossy(&result.stdout),
+        stderr = String::from_utf8_lossy(&result.stderr)
     );
     Ok(serde_json::from_slice(&result.stdout)?)
 }

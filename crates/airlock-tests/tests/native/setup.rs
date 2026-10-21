@@ -1,5 +1,8 @@
 //! Exercise the production setup command with native property reads and inert Qubes command peers.
 
+#[path = "setup/image_handoff.rs"]
+mod image_handoff;
+
 use crate::common::{self, peers::Peers};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
