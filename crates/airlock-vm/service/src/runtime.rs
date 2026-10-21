@@ -86,6 +86,9 @@ enum Action {
         /// Immutable upstream agent package containing its own initialization routines.
         #[arg(long)]
         agent: PathBuf,
+        /// Absolute Bash executable selected by the package configuration, independent of PATH.
+        #[arg(long)]
+        bash: PathBuf,
         /// Configured unprivileged home owner.
         #[arg(long)]
         user: String,
@@ -151,6 +154,25 @@ fn bind(source: &Path, destination: &Path) -> Result<()> {
             .arg(destination))?;
     }
     Ok(())
+}
+
+/// Call the upstream home function with fixed shell text and paths passed only as arguments.
+fn home_initializer(bash: &Path, functions: &Path, home: &Path) -> Result<Command> {
+    ensure!(
+        bash.is_absolute(),
+        "private storage Bash path must be absolute"
+    );
+    let mut command = Command::new(bash);
+    command
+        .args([
+            "-eu",
+            "-c",
+            r#". "$1"; initialize_home "$2" ifneeded"#,
+            "airlock-upstream-home",
+        ])
+        .arg(functions)
+        .arg(home);
+    Ok(command)
 }
 
 /// Refuse missing/unknown manifest names and paths outside the explicitly selected private store.
@@ -526,7 +548,13 @@ pub(crate) fn execute(request: Request) -> Result<()> {
                 .exec()
                 .into());
         }
-        Action::PrivateStorage { agent, user } => {
+        Action::PrivateStorage { agent, bash, user } => {
+            let mut home = home_initializer(
+                &bash,
+                &agent.join("lib/qubes/init/functions"),
+                Path::new("/rw/home"),
+            )?;
+
             for directory in ["/rw", "/home", "/usr/local", "/var/lib/qubes"] {
                 fs::create_dir_all(directory)?;
             }
@@ -548,15 +576,7 @@ pub(crate) fn execute(request: Request) -> Result<()> {
                 ]))?;
             }
             run(&mut Command::new(agent.join("lib/qubes/init/setup-rw.sh")))?;
-            // initialize_home is an upstream shell function, kept behind a fixed argv-only adapter.
-            run(Command::new("bash")
-                .args([
-                    "-eu",
-                    "-c",
-                    ". \"$1\"; initialize_home /rw/home ifneeded",
-                    "airlock-upstream-home",
-                ])
-                .arg(agent.join("lib/qubes/init/functions")))?;
+            run(&mut home)?;
             if !mounted(Path::new("/home")) {
                 bind(Path::new("/rw/home"), Path::new("/home"))?;
                 run(Command::new("mount").args(["-o", "remount,bind,nosuid,nodev", "/home"]))?;
@@ -652,6 +672,39 @@ pub(crate) fn execute(request: Request) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An explicit Bash works without PATH, preserves literal paths and propagates upstream failure.
+    #[test]
+    fn private_home_uses_declared_bash_without_path() -> Result<()> {
+        let bash = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+            .map(|directory| directory.join("bash"))
+            .find(|path| path.is_file())
+            .context("prepare Bash before running the home initialization regression")?;
+        let bash = fs::canonicalize(bash)?;
+        let directory = tempfile::tempdir()?;
+        let functions = directory.path().join("functions ' literal");
+        let home = directory.path().join("home $(false) ' literal");
+        fs::write(
+            &functions,
+            r#"
+initialize_home() {
+    printf '%s\n' "$1" "$2" > "$1"
+}
+"#,
+        )?;
+        let mut command = home_initializer(&bash, &functions, &home)?;
+        run(command.env_clear().env("PATH", directory.path()))?;
+        assert_eq!(
+            fs::read_to_string(&home)?,
+            format!("{home}\nifneeded\n", home = home.display())
+        );
+
+        fs::write(&functions, "initialize_home() { return 23; }\n")?;
+        let mut command = home_initializer(&bash, &functions, &home)?;
+        assert!(run(command.env_clear().env("PATH", directory.path())).is_err());
+        assert!(home_initializer(Path::new("bash"), &functions, &home).is_err());
+        Ok(())
+    }
 
     /// Missing, extra and path-escaping objects cannot produce a passing guest isolation result.
     #[test]

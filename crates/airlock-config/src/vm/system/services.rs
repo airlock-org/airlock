@@ -63,7 +63,20 @@ pub(super) fn configuration(system: &System<'_>, nix: &NixValue, programs: &NixV
                 "qubes-qrexec-agent.service",
             ]),
             "path": system.qubes_path(),
-            "script": airlock_build::native::hook(&system.context.pkgs, "airlock-private-storage-init", crate::commands::contract(&system.context.pkgs, "private-storage-init", [("agent", agent.clone()), ("user", system.setting("user")), ("service", system.native())])),
+            "script": airlock_build::native::hook(
+                &system.context.pkgs,
+                "airlock-private-storage-init",
+                crate::commands::contract(
+                    &system.context.pkgs,
+                    "private-storage-init",
+                    [
+                        ("agent", agent.clone()),
+                        ("bash", system.package("bash")),
+                        ("user", system.setting("user")),
+                        ("service", system.native()),
+                    ],
+                ),
+            ),
             "serviceConfig": oneshot(),
             "unitConfig": nix_record! {
                 "OnFailure": strings(&["airlock-qubes-rw-init-diagnostics.service"]),

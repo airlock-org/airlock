@@ -235,6 +235,8 @@ pub(crate) fn contract<const N: usize>(
                 "private-storage",
                 "--agent",
                 "@agent@",
+                "--bash",
+                "@bash@/bin/bash",
                 "--user",
                 "@user@",
             ],
