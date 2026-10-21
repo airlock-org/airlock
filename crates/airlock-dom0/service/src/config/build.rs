@@ -338,8 +338,8 @@ impl Resolver<'_> {
 /// Resolve template, native VM and host descriptors while preserving their independent contracts.
 pub(super) fn execute(request: Request) -> Result<()> {
     let mut operation = Operation::new("config-resolve")?;
-    let mut topology: Value = crate::state::read(&request.topology)?;
-    let mut system: Value = crate::state::read(&request.system)?;
+    let mut topology: Value = crate::state::configuration(&request.topology)?;
+    let mut system: Value = crate::state::configuration(&request.system)?;
     io::save(
         &operation.file("config-apply-topology-validated.json"),
         &topology,

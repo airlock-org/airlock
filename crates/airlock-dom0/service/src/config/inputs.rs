@@ -59,7 +59,7 @@ pub(super) fn execute() -> Result<()> {
     let result: Result<()> = (|| {
         let temporary = tempfile::tempdir()?;
         let manifest = if manifest_path.is_file() {
-            Some(crate::state::read::<Value>(&manifest_path)?)
+            Some(crate::state::configuration::<Value>(&manifest_path)?)
         } else {
             None
         };

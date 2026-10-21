@@ -46,6 +46,52 @@ pub fn read<T: DeserializeOwned>(path: &Path) -> Result<T> {
     read_json(path, LIMIT).with_context(|| format!("read {}", path.display()))
 }
 
+/// Decode configuration selected by the caller, resolving NixOS's generation symlinks.
+///
+/// This does not establish source trust or deployment authority. Use `read` for
+/// mutable records, where a final-component symlink must remain an error.
+pub(crate) fn configuration<T: DeserializeOwned>(path: &Path) -> Result<T> {
+    let resolved = fs::canonicalize(path)
+        .with_context(|| format!("resolve configuration {}", path.display()))?;
+    read_json(&resolved, LIMIT).with_context(|| format!("read configuration {}", path.display()))
+}
+
+#[cfg(test)]
+mod configuration_tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    /// NixOS-style generation links are configuration inputs, never mutable record aliases.
+    #[test]
+    fn generation_links_preserve_json_validation_and_record_symlink_rejection() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = temporary.path();
+        fs::create_dir(root.join("generation"))?;
+        fs::create_dir(root.join("etc"))?;
+        let data = root.join("generation/topology.json");
+        fs::write(&data, br#"{"schema":"airlock.qubes-topology.v1"}"#)?;
+        symlink("../generation", root.join("etc/static"))?;
+        let configured = root.join("etc/topology.json");
+        symlink("static/topology.json", &configured)?;
+
+        let decoded: Value = configuration(&configured)?;
+        assert_eq!(decoded["schema"], "airlock.qubes-topology.v1");
+        assert!(read::<Value>(&configured).is_err());
+        assert!(optional::<Value>(&configured).is_err());
+
+        let duplicate = br#"{"schema":"one","schema":"two"}"#;
+        fs::write(&data, duplicate)?;
+        assert!(configuration::<Value>(&configured).is_err());
+        assert_eq!(fs::read(&data)?, duplicate);
+
+        fs::remove_file(&data)?;
+        assert!(configuration::<Value>(&configured).is_err());
+        fs::create_dir(&data)?;
+        assert!(configuration::<Value>(&configured).is_err());
+        Ok(())
+    }
+}
+
 /// Return `None` only for a missing path; propagate invalid or unreadable records.
 pub fn optional<T: DeserializeOwned>(path: &Path) -> Result<Option<T>> {
     match fs::symlink_metadata(path) {

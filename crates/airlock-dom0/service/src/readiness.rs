@@ -192,7 +192,7 @@ pub(crate) fn start(request: Ready) -> Result<()> {
             "/var/lib/airlock/system/current-topology.json",
         )
     });
-    let raw: Value = crate::state::read(&topology)?;
+    let raw: Value = crate::state::configuration(&topology)?;
     let domain = request.domain.as_str();
     let definition = raw["domains"]
         .get(domain)
@@ -288,7 +288,7 @@ pub(crate) fn start_providers() -> Result<()> {
     fs::create_dir_all(&directory)?;
     let command_log = directory.join("start-network-providers.commands.log");
     let mut log = File::create(&command_log)?;
-    let raw: Value = crate::state::read(&topology)?;
+    let raw: Value = crate::state::configuration(&topology)?;
     let providers = providers(&raw)?;
     let mut started = Vec::new();
     let mut failed = Vec::new();

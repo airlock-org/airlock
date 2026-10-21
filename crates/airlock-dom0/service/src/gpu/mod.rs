@@ -321,8 +321,8 @@ pub(crate) fn execute(request: Request) -> Result<()> {
             phase,
         } => {
             let result = (|| -> Result<Value> {
-                let selection: assignment::Selection = crate::state::read(&config)?;
-                let topology: Value = crate::state::read(&topology)?;
+                let selection: assignment::Selection = crate::state::configuration(&config)?;
+                let topology: Value = crate::state::configuration(&topology)?;
                 let port = selection
                     .port
                     .as_deref()

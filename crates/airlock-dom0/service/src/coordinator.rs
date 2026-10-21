@@ -166,7 +166,7 @@ impl Coordinator {
     }
 
     fn initialize_baseline(&self) -> Result<()> {
-        let source: Value = state::read(Path::new(
+        let source: Value = state::configuration(Path::new(
             "/run/current-system/etc/airlock/machine-source.json",
         ))?;
         ensure!(

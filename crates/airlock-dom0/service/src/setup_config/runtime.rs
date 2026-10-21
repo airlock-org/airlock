@@ -110,7 +110,7 @@ impl Session {
             result[count] = json!(0);
         }
         Ok(Self {
-            topology: crate::state::read(topology).unwrap_or(Value::Null),
+            topology: crate::state::configuration(topology).unwrap_or(Value::Null),
             apply,
             directory,
             staged: std::env::var_os("AIRLOCK_STAGED_GENERATIONS").map(PathBuf::from),

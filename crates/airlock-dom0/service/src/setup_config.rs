@@ -110,7 +110,7 @@ pub(crate) fn execute(request: Request) -> Result<()> {
             target,
             apply,
         } => {
-            let raw: serde_json::Value = crate::state::read(&topology)?;
+            let raw: serde_json::Value = crate::state::configuration(&topology)?;
             let changed = policy::reconcile(&raw, &rendered, &target, apply)?;
             println!("{changed}");
         }
@@ -123,7 +123,7 @@ pub(crate) fn execute(request: Request) -> Result<()> {
             plan,
         } => {
             ensure!(apply || plan, "setup requires --apply or --plan");
-            let raw: serde_json::Value = crate::state::read(&topology)?;
+            let raw: serde_json::Value = crate::state::configuration(&topology)?;
             let definitions = reconcile::definitions(
                 &raw,
                 script.to_str().context("invalid setup path")?,

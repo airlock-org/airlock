@@ -28,7 +28,7 @@ pub(crate) fn snapshot() -> Result<Value> {
     let topology_hash = state::digest(&topology)?;
 
     Ok(
-        json!({"host":fs::canonicalize("/run/current-system")?,"profile":fs::read_to_string("/etc/airlock/machine-profile")?.trim(),"devMode":Path::new("/etc/airlock/dev-mode").exists(),"boot":state::read::<Value>(Path::new("/etc/airlock/boot-source.json"))?,"manifest":manifest,"topology":topology,"topologyHash":topology_hash}),
+        json!({"host":fs::canonicalize("/run/current-system")?,"profile":fs::read_to_string("/etc/airlock/machine-profile")?.trim(),"devMode":Path::new("/etc/airlock/dev-mode").exists(),"boot":state::configuration::<Value>(Path::new("/etc/airlock/boot-source.json"))?,"manifest":manifest,"topology":topology,"topologyHash":topology_hash}),
     )
 }
 

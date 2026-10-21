@@ -157,7 +157,7 @@ fn problem(
 
 /// Check declared and external identities, then check external providers' forwarding capability.
 pub(super) fn validate(topology_path: &Path, output: &Path) -> Result<()> {
-    let topology: Value = crate::state::read(topology_path)?;
+    let topology: Value = crate::state::configuration(topology_path)?;
     let references = collect(&topology)?;
     if references.is_empty() {
         return report(

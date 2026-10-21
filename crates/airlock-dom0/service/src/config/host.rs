@@ -103,7 +103,7 @@ fn services(operation: &mut Operation, system: &Value) -> Result<Value> {
 /// Replace prior host evidence before setup or activation so an interrupted attempt cannot inherit success.
 pub(super) fn pending(system_path: &Path, started: bool) -> Result<()> {
     let operation = Operation::new("config-system")?;
-    let system: Value = crate::state::read(system_path)?;
+    let system: Value = crate::state::configuration(system_path)?;
     io::save(
         &operation.file("config-apply-system-plan.json"),
         &system["plan"],
@@ -137,7 +137,7 @@ pub(super) fn pending(system_path: &Path, started: bool) -> Result<()> {
 pub(super) fn execute(system_path: &Path) -> Result<()> {
     pending(system_path, true)?;
     let mut operation = Operation::new("config-system")?;
-    let system: Value = crate::state::read(system_path)?;
+    let system: Value = crate::state::configuration(system_path)?;
     let plan = &system["plan"];
     let state = io::path("AIRLOCK_SYSTEM_STATE_DIR", "/var/lib/airlock/system");
     let etc = io::path("AIRLOCK_SYSTEM_ETC_DIR", "/etc/airlock");

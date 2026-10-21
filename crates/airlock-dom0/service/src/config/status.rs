@@ -61,13 +61,13 @@ pub(super) fn observe() -> Result<Value> {
         "AIRLOCK_CONFIG_STATUS_CURRENT_TOPOLOGY_JSON",
         state.join("current-topology.json"),
     );
-    let boot = read(&boot_path);
+    let boot = crate::state::configuration(&boot_path).unwrap_or(Value::Null);
     let current = read(&current_path);
     let (topology_path, topology_source, topology) = if let Some(override_path) =
         std::env::var_os("AIRLOCK_CONFIG_STATUS_TOPOLOGY_JSON").filter(|value| !value.is_empty())
     {
         let path = PathBuf::from(override_path);
-        let value = read(&path);
+        let value = crate::state::configuration(&path).unwrap_or(Value::Null);
         (path, "override", value)
     } else if !current.is_null() {
         (current_path.clone(), "current", current.clone())

@@ -3,7 +3,11 @@
 use crate::common::{self, peers::Peers};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
-use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+use std::{
+    fs,
+    os::unix::fs::{PermissionsExt, symlink},
+    process::Command,
+};
 
 /// A topology, observed Qubes state and private policy/log paths for one setup scenario.
 struct Setup {
@@ -295,7 +299,7 @@ fn preference_order_and_restart_receipts_are_preserved() -> Result<()> {
     Ok(())
 }
 
-/// Identical observed state, explicit routing and policy produce no mutations on repeat setup.
+/// Generation-linked configuration is readable and identical observed state produces no mutations on repeat setup.
 #[test]
 fn reconciled_topology_is_idempotent() -> Result<()> {
     let mut desired = topology();
@@ -309,6 +313,13 @@ fn reconciled_topology_is_idempotent() -> Result<()> {
         json!({"usr-home":{"prefs":{"label":"green","netvm":null,"autostart":false,"memory":1024},
         "features":{"airlock-role":"usr-home"},"services":{"network-manager":false}}}),
         json!({}),
+    )?;
+    fs::create_dir(setup.peers.path("generation"))?;
+    fs::create_dir(setup.peers.path("etc"))?;
+    symlink("../generation", setup.peers.path("etc/static"))?;
+    symlink(
+        "etc/static/topology.json",
+        setup.peers.path("topology.json"),
     )?;
     fs::write(
         setup.peers.path("qubes.xml"),

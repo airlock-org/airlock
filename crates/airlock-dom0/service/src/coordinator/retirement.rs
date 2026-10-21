@@ -474,7 +474,7 @@ impl Coordinator {
             .chain(self.running_hosts()?)
         {
             let topology: Topology =
-                state::read(&Path::new(&host).join("etc/airlock/qubes-topology.json"))?;
+                state::configuration(&Path::new(&host).join("etc/airlock/qubes-topology.json"))?;
             ensure!(
                 !planning::references_domain(&topology, name)?,
                 "retained host profile still references VM {name}"

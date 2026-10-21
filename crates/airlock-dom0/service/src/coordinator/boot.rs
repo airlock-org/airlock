@@ -91,7 +91,11 @@ impl Coordinator {
             };
             (release.manifest.setup, release.raw_topology, staged)
         } else {
-            (setup, state::read(topology)?, self.store().image_staged()?)
+            (
+                setup,
+                state::configuration(topology)?,
+                self.store().image_staged()?,
+            )
         };
         let topology: Topology = serde_json::from_value(raw.clone())?;
         topology.validate()?;

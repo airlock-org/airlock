@@ -592,7 +592,12 @@ fn configuration_status_reports_applied_state_and_consumes_boot_intent() -> Resu
     ]);
     config.topology["domains"] = json!({"sys-config-vault": {"class": "StandaloneVM", "template": null, "backend": {"type": "nix-closure"}}, "work": {"class": "AppVM", "template": "template"}});
     config.topology["qrexec_policy"]["rules"] = json!([{"service": "airlock.PolicyProbe", "argument": "*", "source": "dom0", "target": "sys-config-vault", "action": "allow"}]);
-    config.write("etc/qubes-topology.json", &config.topology)?;
+    config.write("generation/qubes-topology.json", &config.topology)?;
+    symlink("../generation", config.path("etc/static"))?;
+    symlink(
+        "static/qubes-topology.json",
+        config.path("etc/qubes-topology.json"),
+    )?;
     let mut applied = config.topology.clone();
     applied["domains"]["from-current"] = json!({"class": "AppVM", "template": "template"});
     config.write("state/current-topology.json", &applied)?;
