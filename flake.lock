@@ -3,17 +3,17 @@
     "airlock-apps": {
       "locked": {
         "dir": "crates",
-        "lastModified": 1792680047,
-        "narHash": "sha256-XXlTKr8HE6NV0+k0EqxybkcWfVp/2VLGx2D4P4bJsyo=",
+        "lastModified": 1792683010,
+        "narHash": "sha256-FIAJJXH5CGjFvhFZ1bPZhnbfJ/aS9DeUoXNQ5xal7q0=",
         "ref": "refs/heads/main",
-        "rev": "df6794655fb0dbc0b4d732b48809a019373eae38",
+        "rev": "b4b6550096cd4691802e3a10700631a647c09b6e",
         "submodules": false,
         "type": "git",
         "url": "https://github.com/airlock-org/airlock.git"
       },
       "original": {
         "dir": "crates",
-        "rev": "df6794655fb0dbc0b4d732b48809a019373eae38",
+        "rev": "b4b6550096cd4691802e3a10700631a647c09b6e",
         "type": "git",
         "url": "https://github.com/airlock-org/airlock.git",
         "ref": "main"
