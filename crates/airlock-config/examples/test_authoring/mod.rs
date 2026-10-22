@@ -90,6 +90,7 @@ pub(super) fn fixture(
             "usb_lab/source_metadata" => usb_lab::source_metadata(inputs),
             "usb_lab/startup_contract" => usb_lab::startup_contract(inputs),
             "native_etc/installation" => native_etc::installation(inputs),
+            "native_etc/host_rpcs" => native_etc::host_rpcs(inputs),
             "usb_lab/network_and_development_access" => {
                 usb_lab::network_and_development_access(inputs)
             }

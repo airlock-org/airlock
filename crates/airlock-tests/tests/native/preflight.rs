@@ -65,6 +65,9 @@ impl BootView {
             "/nix/store/11111111111111111111111111111111-tools/bin/fixed-command",
             etc.join("qubes-rpc/airlock.Test"),
         )?;
+        for suffix in ["uid", "gid"] {
+            fs::write(etc.join(format!("qubes-rpc/airlock.Test.{suffix}")), "0\n")?;
+        }
         fs::write(
             peers.path("paths"),
             format!(

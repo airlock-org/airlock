@@ -291,7 +291,11 @@ impl Inspector<'_> {
                 let line = line.trim().strip_prefix("exec ").unwrap_or(line.trim());
                 if let Some(program) = line.split_whitespace().next() {
                     let program = program.trim_matches(['\'', '"']);
-                    if program.starts_with("/nix/store/") && !program.contains('$') {
+                    if program.starts_with("/nix/store/")
+                        && !program
+                            .chars()
+                            .any(|ch| matches!(ch, '$' | '*' | '?' | '['))
+                    {
                         self.executable(Path::new(program), inherited)?;
                     }
                 }
@@ -473,7 +477,11 @@ impl Inspector<'_> {
         } else if metadata.is_file()
             && entrypoint
             && (relative.starts_with("qubes-rpc") || metadata.permissions().mode() & 0o111 != 0)
-            && path.extension().is_none_or(|extension| extension != "mode")
+            && path.extension().is_none_or(|extension| {
+                !["mode", "uid", "gid"]
+                    .iter()
+                    .any(|suffix| extension == *suffix)
+            })
         {
             let bytes = fs::read(&physical)?;
             if !bytes.starts_with(b"#!") && !bytes.starts_with(b"\x7fELF") {

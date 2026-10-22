@@ -76,6 +76,54 @@ fn package_native_etc_preserves_launcher_contracts() -> Result<()> {
     Ok(())
 }
 
+/// The real upstream RPC join retains executable clients and relocated notification symlinks.
+#[test]
+#[ignore = "explicit host RPC package builds and exact-closure preflight"]
+fn package_host_rpc_join_has_resolvable_commands() -> Result<()> {
+    let packages = Packages::new("host-rpc-preflight")?;
+    let output = packages.fixture(
+        "build",
+        "native_etc/host_rpcs",
+        json!({"root":packages.source}),
+    )?;
+    let system = fs::read_link(output.join("system"))?;
+    let closure = fs::read_link(output.join("closure"))?;
+    let paths = packages
+        .physical(closure.to_str().context("closure path")?)?
+        .join("store-paths");
+    let physical = std::env::var_os("AIRLOCK_NIX_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/run/media/user/data/airlock/nix-root"));
+    let store = if std::env::var("AIRLOCK_USE_HOST_NIX_STORE").as_deref() == Ok("1") {
+        PathBuf::from("/nix/store")
+    } else {
+        physical.join("nix/store")
+    };
+    let logs = packages.logs.join("preflight");
+    system::run(
+        Command::new(common::binary(
+            "AIRLOCK_PREPARE_BOOT_BIN",
+            "airlock-prepare-boot",
+        ))
+        .arg("preflight")
+        .arg("--system")
+        .arg(system)
+        .arg("--paths")
+        .arg(paths)
+        .arg("--store-root")
+        .arg(store)
+        .arg("--launcher")
+        .arg(common::binary("AIRLOCK_EXEC_BIN", "airlock-exec"))
+        .arg("--readelf")
+        .arg(common::tool("readelf")?)
+        .arg("--report")
+        .arg(packages.logs.join("preflight.json")),
+        &logs,
+        Duration::from_secs(120),
+    )?;
+    Ok(())
+}
+
 /// Invoke only the upstream Python interface fragment; all queries, temporary data and assertions stay in Rust.
 fn upstream(request: Value) -> Result<Value> {
     common::json(

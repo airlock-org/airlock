@@ -52,7 +52,15 @@ pub fn qubes_startup() -> NixValue {
                                     substituteInPlace linux/aux-tools/startup-misc.sh \
                                       --replace-fail 'xl sched-credit -d 0 -w 2000' {scheduler}
                                     bash -n linux/aux-tools/startup-misc.sh
-                                "#, scheduler = previous.clone().select("lib.escapeShellArg").call(QUBES_SCHEDULER)).into(),
+                                    # These administrative RPCs call the daemon's own query client,
+                                    # not the separately packaged QubesDB client.
+                                    substituteInPlace qubes-rpc/qubes.FeaturesRequest \
+                                      qubes-rpc/qubes.NotifyTools qubes-rpc/qubes.NotifyUpdates \
+                                      --replace-fail {wrong_query} "$out/bin/qubesd-query"
+                                "#,
+                                    scheduler = previous.clone().select("lib.escapeShellArg").call(QUBES_SCHEDULER),
+                                    wrong_query = nix_text!("{client}/bin/qubesd-query", client = previous.clone().select("qubes-core-qubesdb")),
+                                    ).into(),
                                 ]),
                             }),
                         ),
@@ -71,7 +79,24 @@ pub fn qubes_startup() -> NixValue {
                     }
                 }));
 
-            nix_record! { "python3": python }
+            let notifications =
+                previous
+                    .select("qubes-notification-proxy")
+                    .override_attrs(NixValue::function(|old| {
+                        nix_record! {
+                            "postFixup": NixValue::concat_text([
+                                old.attr_or("postFixup", ""),
+                                nix_text!(r#"
+                            # The Qubes RPC join transplants leaf symlinks. Keep this absolute:
+                            # a package-relative ../../bin link escapes the joined RPC directory.
+                            ln -sfn "$out/bin/qubes-notification-proxy-server" \
+                              "$out/etc/qubes-rpc/qubes.Notifications"
+                        "#).into(),
+                            ]),
+                        }
+                    }));
+
+            nix_record! { "python3": python, "qubes-notification-proxy": notifications }
         })
     })
 }

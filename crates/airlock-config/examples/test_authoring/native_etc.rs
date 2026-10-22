@@ -151,3 +151,50 @@ pub(super) fn installation(inputs: NixValue) -> NixValue {
             })
         })
 }
+
+/// Build the host's actual upstream RPC join with a tiny immutable root for command preflight.
+pub(super) fn host_rpcs(inputs: NixValue) -> NixValue {
+    NixValue::builtin("getFlake")
+        .call(inputs.select("root"))
+        .bind(|flake| {
+            let host = flake
+                .select("nixosConfigurations.usb-dev.config.specialisation.usb-lab.configuration");
+            let pkgs = host.clone().select("nixpkgs.pkgs");
+            let join = pkgs
+                .clone()
+                .select("lib.removeSuffix")
+                .call("/*")
+                .call(host.select_segments(["environment", "etc", "qubes-rpc", "source"]));
+            let init = pkgs
+                .clone()
+                .select("writeShellScript")
+                .call("rpc-preflight-init")
+                .call("exit 0\n");
+            let system = pkgs
+                .clone()
+                .select("runCommand")
+                .call("airlock-host-rpc-preflight")
+                .call(nix_record! {})
+                .call(nix_text!(
+                    r#"
+                mkdir -p "$out/etc"
+                ln -s {init} "$out/activate"
+                ln -s {init} "$out/init"
+                ln -s {join} "$out/etc/qubes-rpc"
+            "#,
+                    init = init,
+                    join = join
+                ));
+            system.bind(|system| {
+                let closure = pkgs.clone().select("closureInfo").call(nix_record! {
+                    "rootPaths": NixValue::list([system.clone()]),
+                });
+                pkgs.select("linkFarm")
+                    .call("airlock-host-rpc-preflight-test")
+                    .call(NixValue::list([
+                        nix_record! { "name": "system", "path": system },
+                        nix_record! { "name": "closure", "path": closure },
+                    ]))
+            })
+        })
+}
