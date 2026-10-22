@@ -89,6 +89,13 @@ pub(super) fn fixture(build: &Build) -> NixValue {
                     "boot": nix_record! { "kernelModules": modules },
                     "networking": nix_record! {
                         "useDHCP": false,
+                        // QEMU disables wireless at VM override priority 10.
+                        // This fixture deliberately exercises the production
+                        // WPA sandbox even though it has no wireless hardware.
+                        "wireless": nix_record! {
+                            "enable": pkgs.clone().select("lib.mkOverride").call(0_i64)
+                                .call(driver.clone().select("networking.wireless.enable")),
+                        },
                         "networkmanager": nix_record! {
                             "enable": driver.select("networking.networkmanager.enable"),
                         },
