@@ -80,7 +80,7 @@ pub enum NixKind {
 /// Functions provided by the Nix language itself that this backend can emit.
 /// For example, `builtins.div` performs integer division. These are distinct
 /// from utility functions in nixpkgs’ separately supplied `lib` attribute set.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Builtin {
     /// Signed integer division via `builtins.div`.
     Div,
@@ -99,7 +99,7 @@ pub enum Builtin {
 /// Two-operand Nix operators represented by this backend.
 /// They operate when Nix evaluates the generated source, not when Rust builds
 /// the expression tree.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
     /// Native value equality (`==`).
     Equal,

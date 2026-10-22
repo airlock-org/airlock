@@ -1,4 +1,9 @@
-# Rusix
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rndhouse/rusix/master/docs/assets/rusix-wordmark-dark.svg">
+    <img alt="Rusix" src="https://raw.githubusercontent.com/rndhouse/rusix/master/docs/assets/rusix-wordmark-light.svg" height="64">
+  </picture>
+</p>
 
 Rusix is a Rust library for defining packages and NixOS configuration in ordinary
 Rust, as an alternative to the Nix language. It compiles these definitions into Nix
@@ -19,30 +24,39 @@ Add Rusix to `Cargo.toml`:
 rusix = "0.1"
 ```
 
-```rust
-use rusix::{IntoConfig, compile};
+A shared Rust model can express the SSH access choices used by your application
+and generate settings for NixOS's existing OpenSSH service. This excerpt omits
+`ssh_module`, your adapter from the policy to a `NixosModule`.
 
-#[derive(IntoConfig)]
-struct Service {
-    /// Whether the service should run.
-    enable: bool,
-    /// Port on which the service listens.
-    port: u16,
+```rust
+use rusix::nixos::compile_module;
+
+/// Callers choose disabled or key-based access; enabling SSH requires a port.
+enum SshAccess {
+    Disabled,
+    KeysOnly {
+        /// Port on which SSH accepts connections.
+        port: u16,
+    },
 }
 
 fn main() {
-    let generated = compile(Service { enable: true, port: 8080 })
-        .expect("valid configuration");
-    println!("{}", generated.source);
+    let module = ssh_module(SshAccess::KeysOnly { port: 2222 });
+    let artifact = compile_module(&module).expect("valid SSH configuration");
+    println!("{}", artifact.module.source);
 }
 ```
 
-In this example, the compiler turns `Service` into a Nix attribute set with
-`enable` and `port` fields.
+`SshAccess` has no dependency on Rusix: the same type can drive a configuration
+UI, deployment planning, and NixOS generation. The adapter translates each choice
+into settings, including disabling password and keyboard-interactive login for
+`KeysOnly`. You can test that translation with Cargo.
 
-Use `rusix` to write package and configuration definitions in your own Rust crates.
-Definitions can be shared through libraries and tested with Cargo. Tests can
-evaluate the generated Nix and check its results.
+The generated module can be imported alongside modules written in Nix. It uses
+the existing OpenSSH option declarations and implementation; your configuration
+supplies users and authorized keys. NixOS validates and merges all contributions,
+which can affect the final settings. Compilation itself does not run Nix or
+change the system.
 
 Rusix can identify both Rust definitions in a NixOS merge conflict. An excerpt
 from the `merge-two` fixture:

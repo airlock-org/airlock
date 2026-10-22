@@ -1,4 +1,4 @@
-//! Compilation must change only artifact metadata, never generated Nix.
+//! Backend correlation metadata must not change optimized Nix or its source maps.
 #[allow(dead_code, unused_imports)] // This audit uses only a subset of the shared package models.
 #[path = "../../../../examples/composed-packages/composition.rs"]
 pub mod composition;
@@ -73,7 +73,7 @@ fn backend_metadata_has_zero_generated_cost() {
                 origin_comments: comments,
                 ..Default::default()
             };
-            let before = render_with_options(&lower(&config), options);
+            let before = render_with_options(&sharing::optimize(lower(&config)), options);
             let after = compile_with_options(&config, options).unwrap();
             assert_eq!(before.source, after.source, "{name}/{comments}");
             assert_eq!(
@@ -127,5 +127,8 @@ fn compact_lexical_lists_cannot_expand_metadata_without_bound() {
     assert!(!field.complete);
     assert!(!field.children.is_empty());
     assert!(field.children.len() < 65_536);
-    assert_eq!(generated.source, render(&lower(&config)).source);
+    assert_eq!(
+        generated.source,
+        render(&sharing::optimize(lower(&config))).source
+    );
 }

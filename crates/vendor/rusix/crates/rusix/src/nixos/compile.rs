@@ -156,7 +156,7 @@ pub fn compile_module_with_options(
     options: RenderOptions,
 ) -> Result<NixosArtifact, Box<Diagnostic>> {
     let (ast, mut artifact) = lower_module(module)?;
-    artifact.module = render_with_options(&ast, options);
+    artifact.module = render_with_options(&crate::compiler::sharing::optimize(ast), options);
     Ok(artifact)
 }
 

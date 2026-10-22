@@ -9,7 +9,7 @@ use std::panic::Location;
 ///
 /// IDs are deterministic for the same file, line, column and purpose, but can
 /// change after edits. Reusing an expression can produce several uses of one ID.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Origin {
     /// Marker linking generated error traces and text ranges to this Rust operation.
     /// Spelled `rn-` followed by 16 lowercase hexadecimal digits, embedded

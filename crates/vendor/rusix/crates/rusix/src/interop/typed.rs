@@ -25,6 +25,8 @@ pub trait NixExpression: NixRepresentation + Clone + IntoRusixValue {
     /// Rust runs `build` once, immediately, with a symbolic parameter. Nix supplies
     /// the value later and evaluates it only if the callback's expression needs it.
     /// Reusing the parameter avoids repeating the original expression in Nix.
+    /// Use this to guarantee sharing across different authored fields or closures;
+    /// automatic compiler sharing is limited to identical diagnostic paths within one scope.
     ///
     /// ```
     /// use rusix::{Expr, interop::NixExpression};

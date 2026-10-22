@@ -62,6 +62,8 @@ pub(crate) mod provenance;
 
 pub(crate) mod render;
 
+pub(crate) mod sharing;
+
 #[cfg(all(test, feature = "evaluation"))]
 mod backend_audit;
 
@@ -92,6 +94,8 @@ use std::{cell::Cell, rc::Rc};
 /// needed to map generated error locations back to Rust. It does not run Nix.
 /// References to final NixOS options or the system’s supplied package set require
 /// [`crate::nixos::compile_module`] and are rejected by this standalone compiler.
+/// Repeated substantial expressions with identical attribution share lazy local
+/// bindings. Sharing stays within lexical scopes and preserves authored error paths.
 #[track_caller]
 pub fn compile(config: impl IntoConfig) -> Result<Generated, Box<Diagnostic>> {
     compile_with_options(config, RenderOptions::default())
@@ -125,7 +129,7 @@ pub fn compile_with_options(
     let config = config.into_config();
     validate_standalone(&config)?;
 
-    let mut generated = render_with_options(&lower(&config), options);
+    let mut generated = render_with_options(&sharing::optimize(lower(&config)), options);
     generated.backend_metadata = provenance::collect(&config);
     Ok(generated)
 }
@@ -149,7 +153,9 @@ pub fn compile_value(value: impl crate::ConfigValue) -> Result<Generated, Box<Di
     let config = Config::new().set_dynamic("value", value);
     validate_standalone(&config)?;
 
-    let mut generated = render(&lower_value(&config.assignments[0].value));
+    let mut generated = render(&sharing::optimize(lower_value(
+        &config.assignments[0].value,
+    )));
     generated.backend_metadata = provenance::collect(&config);
     Ok(generated)
 }
