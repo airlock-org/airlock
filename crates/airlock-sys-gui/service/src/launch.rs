@@ -58,10 +58,20 @@ fn report(request: &Request, log: Vec<u8>, detail: &str) {
         Some(Input::bytes(log)),
         Duration::from_secs(5),
     );
+    // %c supplies the localized desktop name, which already has a trusted VM prefix.
+    let prefix = format!("{target}: ", target = request.target);
+    let label = request
+        .label
+        .strip_prefix(&prefix)
+        .unwrap_or(&request.label);
     let _ = support::run(
         Command::new(support::tool("AIRLOCK_NOTIFY_SEND", "notify-send")).args([
             "--app-name=Airlock",
-            &format!("Could not start {label}", label = request.label),
+            "--",
+            &format!(
+                "Launch not confirmed: {label} in {target}",
+                target = request.target
+            ),
             detail,
         ]),
         None,
@@ -126,6 +136,27 @@ fn ready(request: &Request, log: &mut Vec<u8>) -> bool {
     }
 }
 
+/// Own the upstream application-lifetime channel until it exits, without imposing a startup deadline.
+/// Qubes' StartApp intentionally remains connected while the application runs; readiness is bounded separately.
+fn application(request: &Request, service: &str) -> Result<Output> {
+    let output = airlock_nix_core::runtime::process::run(
+        Command::new(support::tool("AIRLOCK_QVM_RUN", "qvm-run")).args([
+            "--auto",
+            "--gui",
+            "--service",
+            request.target.as_str(),
+            service,
+        ]),
+        None,
+        None,
+    )?;
+    Ok(Output {
+        status: output.status,
+        stdout: output.stdout,
+        stderr: output.stderr,
+    })
+}
+
 /// Return the original submission status, cancelling a reserved workspace on every submission failure.
 pub(crate) fn execute(request: Request) -> Result<u8> {
     let mut log = Vec::new();
@@ -172,24 +203,28 @@ pub(crate) fn execute(request: Request) -> Result<u8> {
 
     // Submission is deliberately outside the readiness retry loop. Even a timeout
     // can mean the remote application started, so never resubmit an ambiguous result.
-    let code = match support::run(
-        Command::new(support::tool("AIRLOCK_QVM_RUN", "qvm-run")).args([
-            "--auto",
-            "--gui",
-            "--service",
-            request.target.as_str(),
-            service,
-        ]),
-        None,
-        Duration::from_secs(90),
-    ) {
+    let (code, detail) = match application(&request, service) {
         Ok(output) => {
             record(&mut log, &output);
-            status(&output)
+            let code = status(&output);
+            let detail: String = String::from_utf8_lossy(&output.stderr)
+                .chars()
+                .filter(|character| !character.is_control())
+                .take(512)
+                .collect();
+            let detail = if detail.is_empty() {
+                format!("The application request ended with exit status {code}.")
+            } else {
+                detail
+            };
+            (code, detail)
         }
         Err(error) => {
             append(&mut log, format!("{error:#}\n").as_bytes());
-            1
+            let detail = format!(
+                "The launch could not be confirmed: {error:#}. The application may already be open."
+            );
+            (1, detail)
         }
     };
     if code != 0 {
@@ -199,14 +234,7 @@ pub(crate) fn execute(request: Request) -> Result<u8> {
             append(&mut log, format!("{error:#}\n").as_bytes());
         }
 
-        report(
-            &request,
-            log,
-            &format!(
-                "{target} rejected the application request.",
-                target = request.target
-            ),
-        );
+        report(&request, log, &detail);
     }
 
     Ok(code)

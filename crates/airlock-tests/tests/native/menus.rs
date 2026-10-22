@@ -627,7 +627,7 @@ bad;command.desktop:Name=Bad
         "Name[fr]=usr-home: Éditeur",
         "OnlyShowIn=GNOME;",
         "StartupWMClass=usr-home:example",
-        "Exec=airlock-launch-qube-app Application usr-home qubes.StartApp+example",
+        "Exec=airlock-launch-qube-app %c usr-home qubes.StartApp+example",
     ] {
         assert!(desktop.contains(expected), "{desktop}");
     }

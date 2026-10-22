@@ -183,7 +183,7 @@ Type=Application
 Terminal=false
 X-Qubes-VmName={name}
 X-Qubes-AppName={id}
-Exec=airlock-launch-qube-app Application {name} qubes.StartApp+{id}
+Exec=airlock-launch-qube-app %c {name} qubes.StartApp+{id}
 "
     );
     for (key, value) in fields {

@@ -318,7 +318,7 @@ fn launcher_retries_readiness_but_submits_the_application_once() -> Result<()> {
                 "--workspace",
                 "--readiness-timeout",
                 "3",
-                "Editor",
+                "usr-home: Editor",
                 "usr-home",
                 "airlock.StartApp+editor",
             ])
@@ -387,7 +387,68 @@ fn launcher_retries_readiness_but_submits_the_application_once() -> Result<()> {
             calls.iter().any(|call| call["command"] == "notify-send"),
             matches!(failure, "timeout" | "workspace" | "application")
         );
+        if let Some(notice) = calls.iter().find(|call| call["command"] == "notify-send") {
+            let arguments = notice["args"].as_array().unwrap();
+            let title = arguments[2].as_str().unwrap();
+            assert_eq!(title, "Launch not confirmed: Editor in usr-home");
+            if failure == "application" {
+                assert!(arguments[3].as_str().unwrap().contains("exit status 42"));
+            }
+        }
     }
+    Ok(())
+}
+
+/// Upstream StartApp can remain connected while an already opened application runs beyond ninety seconds.
+#[test]
+#[ignore = "waits 91 seconds to cover a healthy upstream application-lifetime channel"]
+fn application_lifetime_does_not_trigger_a_false_launch_failure() -> Result<()> {
+    let mut peers = Peers::new()?;
+    peers.rules("desktop-qrexec", json!([{"stdout":"0\u{0}1"}]))?;
+    peers.rules(
+        "qvm-run",
+        json!([
+            {"contains":"airlock.AppSessionReady"},
+            {"contains":"qubes.StartApp+org.gnome.Console", "delay_ms":91000}
+        ]),
+    )?;
+    for name in ["systemd-cat", "notify-send"] {
+        peers.rules(name, json!([{}]))?;
+    }
+    let mut command = peers.command(common::binary(
+        "AIRLOCK_SYS_GUI_BIN",
+        "airlock-sys-gui-service",
+    ))?;
+    command
+        .args([
+            "launch",
+            "usr-assistant: Console",
+            "usr-assistant",
+            "qubes.StartApp+org.gnome.Console",
+        ])
+        .env("AIRLOCK_QREXEC_CLIENT_VM", peers.path("bin/desktop-qrexec"))
+        .env("AIRLOCK_QVM_RUN", peers.path("bin/qvm-run"))
+        .env("AIRLOCK_SYSTEMD_CAT", peers.path("bin/systemd-cat"))
+        .env("AIRLOCK_NOTIFY_SEND", peers.path("bin/notify-send"));
+    let started = std::time::Instant::now();
+    let mut child =
+        airlock_tests::system::Job::spawn(&mut command, &peers.path("application-lifetime"))?;
+    assert!(child.wait(Duration::from_secs(120))?.success());
+    assert!(started.elapsed() >= Duration::from_secs(91));
+
+    let calls = peers.calls()?;
+    assert_eq!(
+        calls
+            .iter()
+            .filter(|call| call["command"] == "qvm-run"
+                && call["args"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("qubes.StartApp+org.gnome.Console")))
+            .count(),
+        1
+    );
+    assert!(!calls.iter().any(|call| call["command"] == "notify-send"));
     Ok(())
 }
 

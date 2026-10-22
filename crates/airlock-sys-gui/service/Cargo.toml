@@ -16,6 +16,7 @@ required-features = ["runtime"]
 default = ["runtime"]
 # Runtime I/O and X11 dependencies stay out of configuration compilation.
 runtime = [
+    "airlock-nix-core/runtime",
     "dep:anyhow", "dep:rustix", "dep:sha2", "dep:tempfile",
     "dep:airlock-vm-service", "dep:uuid", "dep:x11rb", "dep:png",
 ]
