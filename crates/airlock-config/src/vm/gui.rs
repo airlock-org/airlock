@@ -272,7 +272,7 @@ impl Gui<'_> {
             ),
             self.optional(
                 self.setting("usrAssistantTailscaleShortcut.enable"),
-                self.enrollment(),
+                self.enrollment(&service),
             ),
         ]);
         let qubes_gui = self.optional(hybrid.clone(), strings(&["qubes-gui-agent.service"]));
@@ -495,16 +495,13 @@ impl Gui<'_> {
     }
 
     /// Keep development-only Tailnet enrollment in its existing explicit terminal shortcut.
-    fn enrollment(&self) -> NixValue {
+    fn enrollment(&self, service: &NixValue) -> NixValue {
         let enrollment = self.script(
             "airlock-start-usr-assistant-tailscale",
             crate::commands::contract(
                 &self.context.pkgs,
                 "usr-assistant-tailscale-enrollment",
-                [(
-                    "admin",
-                    self.package("python3.pkgs.qubes-core-admin-client"),
-                )],
+                [("service", service.clone())],
             ),
             false,
         );

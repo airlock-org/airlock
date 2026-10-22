@@ -502,7 +502,10 @@ pub(crate) fn execute(request: Request, coordinator: &Coordinator) -> Result<Val
         Action::DesktopStatus => {
             let state = s.read(&s.id)?;
             return Ok(
-                json!({"status":state.as_ref().map_or(Status::Working, |v| v.status),"desktop_ready":state.is_some_and(|v| v.desktop_ready)}),
+                json!({"status":state.as_ref().map_or(Status::Working, |v| v.status),
+                    "desktop_ready":state.as_ref().is_some_and(|v| v.desktop_ready),
+                    "stage":state.as_ref().map_or("starting", |v| v.stage.as_str()),
+                    "detail":state.as_ref().map_or("", |v| v.detail.as_str())}),
             );
         }
         Action::Snapshot { label } => {

@@ -1,6 +1,6 @@
 //! Enrollment failures and provider probes remain bounded and require the firewall to be healthy.
 
-use crate::common;
+use crate::common::{self, peers::Peers};
 use anyhow::Result;
 use serde_json::{Value, json};
 use std::{fs, process::Command};
@@ -88,6 +88,81 @@ fn development_enrollment_reports_each_network_failure() -> Result<()> {
         assert!(diagnostics.contains(message), "{failure}: {diagnostics}");
         assert_eq!(output.status.success(), failure.is_empty());
         assert_eq!(fixture.path().join("enrolled").exists(), failure.is_empty());
+    }
+    Ok(())
+}
+
+/// Startup interruptions are retried before dispatch; an uncertain enrollment submission is never replayed.
+#[test]
+fn desktop_enrollment_waits_for_startup_and_explains_refusal() -> Result<()> {
+    for outcome in [0, 126] {
+        let mut peers = Peers::new()?;
+        peers.rules("qvm-run", json!([
+            {"contains":"airlock.BootStatus","exists":"status-seen","stdout":"{\"status\":\"complete\",\"desktop_ready\":true}"},
+            {"contains":"airlock.BootStatus","exists":"transport-seen","stdout":"{\"status\":\"working\",\"desktop_ready\":true,\"detail\":\"Preparing usr-home\"}","write":{"status-seen":""}},
+            {"contains":"airlock.BootStatus","exit":126,"stderr":"Request refused","write":{"transport-seen":""}},
+            {"contains":"airlock.DevTailscaleUp","exit":outcome,"stdout":if outcome == 0 {"Login URL: https://login.example.test/fixture\n"} else {""},"stderr":if outcome == 126 {"Request refused"} else {""}}
+        ]))?;
+        let output = common::run(
+            peers
+                .command(common::binary(
+                    "AIRLOCK_SYS_GUI_BIN",
+                    "airlock-sys-gui-service",
+                ))?
+                .args(["tailscale-enrollment", "--startup-timeout", "10"])
+                .env("AIRLOCK_QVM_RUN", peers.path("bin/qvm-run")),
+            None,
+        )?;
+        assert_eq!(output.status.code(), Some(outcome));
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stdout.contains("Preparing usr-home"));
+        assert_eq!(stdout.contains("Login URL:"), outcome == 0);
+        if outcome == 126 {
+            assert!(stderr.contains("policy restriction or an interrupted control service"));
+        }
+        assert_eq!(
+            peers
+                .calls()?
+                .iter()
+                .filter(|call| call["args"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("airlock.DevTailscaleUp")))
+                .count(),
+            1
+        );
+    }
+    Ok(())
+}
+
+/// A timed-out or degraded boot must not trigger a guest start or enrollment request.
+#[test]
+fn desktop_enrollment_requires_successful_startup() -> Result<()> {
+    for state in ["working", "degraded"] {
+        let mut peers = Peers::new()?;
+        peers.rules(
+            "qvm-run",
+            json!([{"contains":"airlock.BootStatus","stdout":json!({"status":state,"desktop_ready":true,"detail":"Preparing usr-home"}).to_string()}]),
+        )?;
+        let output = common::run(
+            peers
+                .command(common::binary(
+                    "AIRLOCK_SYS_GUI_BIN",
+                    "airlock-sys-gui-service",
+                ))?
+                .args(["tailscale-enrollment", "--startup-timeout", "1"])
+                .env("AIRLOCK_QVM_RUN", peers.path("bin/qvm-run")),
+            None,
+        )?;
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("enrollment was not requested"));
+        assert!(peers.calls()?.iter().all(|call| {
+            !call["args"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("airlock.DevTailscaleUp"))
+        }));
     }
     Ok(())
 }

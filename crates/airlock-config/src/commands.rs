@@ -248,14 +248,8 @@ pub(crate) fn contract<const N: usize>(
             false,
         ),
         "usr-assistant-tailscale-enrollment" => (
-            "@admin@/bin/qvm-run",
-            &[
-                "--pass-io",
-                "--no-gui",
-                "--service",
-                "usr-assistant",
-                "airlock.DevTailscaleUp",
-            ],
+            "@service@/bin/airlock-sys-gui-service",
+            &["tailscale-enrollment"],
             false,
         ),
         "usr-assistant-tailscale-launcher" => (

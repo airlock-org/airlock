@@ -221,7 +221,7 @@ fn namespace_boot_distinguishes_degradation_shutdown_and_interruption() -> Resul
         assert!(!boot.peers.path("state/in-progress.json").exists());
         assert_eq!(
             boot.run(&["desktop-status"])?,
-            json!({"status":"degraded","desktop_ready":true})
+            json!({"status":"degraded","desktop_ready":true,"stage":"services","detail":"background services could not start"})
         );
         if shutdown {
             boot.run(&["shutdown-requested"])?;

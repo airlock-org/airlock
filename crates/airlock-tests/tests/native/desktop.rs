@@ -131,10 +131,19 @@ fn boot_notifications_retry_or_dismiss_once() -> Result<()> {
         let mut peers = Peers::new()?;
         peers.rules("boot-rpc",json!([
             {"contains":"airlock.BootStatus","exists":"status-seen","stdout":"{\"status\":\"complete\",\"desktop_ready\":true}"},
+            {"contains":"airlock.BootStatus","missing":"transport-seen","exit":126,"stderr":"Request refused","write":{"transport-seen":""}},
+            {"contains":"airlock.BootStatus","missing":"progress-seen","stdout":"{\"status\":\"working\",\"desktop_ready\":true,\"stage\":\"configure\",\"detail\":\"Preparing application VMs\"}","write":{"progress-seen":""}},
             {"contains":"airlock.BootStatus","stdout":"{\"status\":\"degraded\",\"desktop_ready\":true}","write":{"status-seen":""}},
             {"contains":"airlock.BootRetry"}
         ]))?;
-        peers.rules("notify-send", json!([{"stdout":format!("{action}\n")}]))?;
+        peers.rules(
+            "notify-send",
+            json!([
+                {"contains":"--print-id","missing":"notification-seen","exit":1,"stderr":"notification service is starting","write":{"notification-seen":""}},
+                {"contains":"--print-id","stdout":"42\n"},
+                {"stdout":format!("{action}\n")}
+            ]),
+        )?;
         let mut command = peers.command(common::binary(
             "AIRLOCK_SYS_GUI_BIN",
             "airlock-sys-gui-service",
@@ -145,6 +154,18 @@ fn boot_notifications_retry_or_dismiss_once() -> Result<()> {
             .env("AIRLOCK_NOTIFY_SEND", peers.path("bin/notify-send"));
         peers.run(&mut command)?;
         let calls = peers.calls()?;
+        assert!(calls.iter().any(|call| {
+            call["args"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("Preparing application VMs"))
+        }));
+        assert!(calls.iter().any(|call| {
+            call["args"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("--replace-id=42"))
+        }));
         assert_eq!(
             calls
                 .iter()
