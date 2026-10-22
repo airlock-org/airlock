@@ -1,8 +1,11 @@
 //! Assemble immutable local release candidates from independently checked pool receipts.
 //! A receipt identifies admitted storage; it does not authorize activation.
 
+mod receipt;
+
 use super::*;
-use airlock_nix_core::identity::{GitRevision, LockHash};
+use crate::store::AdmissionReceipt;
+use receipt::CheckedAdmission;
 
 impl Coordinator {
     pub(super) fn local_candidate(&self, path: &Path) -> Result<PathBuf> {
@@ -37,11 +40,11 @@ impl Coordinator {
         Ok(())
     }
 
-    pub(super) fn generation_value(
+    pub(super) fn generation_info(
         &self,
         name: &GuestName,
         generation: GenerationId,
-    ) -> Result<Value> {
+    ) -> Result<GenerationInfo> {
         let info = self.store().describe(name, generation)?;
         ensure!(
             info.domain.as_str() == crate::store::runtime_namespace(name.as_str())
@@ -49,51 +52,12 @@ impl Coordinator {
                 && info.status == CheckStatus::Passed,
             "generation identity differs"
         );
-        Ok(serde_json::to_value(info)?)
+        Ok(info)
     }
 
-    fn receipt_identity(
-        &self,
-        receipt: &Value,
-    ) -> Result<(GuestName, GenerationId, GitRevision, LockHash, Value)> {
-        ensure!(
-            receipt["schema"] == "airlock.closure-store.admission.v1"
-                && receipt["status"] == "passed"
-                && receipt["transport"] == "qrexec"
-                && receipt["activated"] == false
-                && receipt["retained"] == true,
-            "receipt is not a retained inactive qrexec admission"
-        );
-        let name: GuestName = serde_json::from_value(receipt["domain"].clone())?;
-        let generation: GenerationId = serde_json::from_value(receipt["generation"].clone())?;
-        let revision: GitRevision = serde_json::from_value(receipt["source_revision"].clone())?;
-        let lock_hash: LockHash = serde_json::from_value(receipt["lock_hash"].clone())?;
-        let actual = self.generation_value(&name, generation)?;
-        // The receipt addresses the VM; generation_value binds its runtime namespace.
-        for key in [
-            "generation",
-            "manifest",
-            "system",
-            "root_source",
-            "root_artifact",
-            "kernel_name",
-        ] {
-            ensure!(
-                !actual[key].is_null() && actual[key] == receipt[key],
-                "admission receipt identity mismatch: {key}"
-            );
-        }
-        ensure!(
-            actual["store"]["closure_hash"].is_string()
-                && actual["store"]["closure_hash"] == receipt["closure_hash"],
-            "admission receipt closure mismatch"
-        );
-        ensure!(
-            actual["provenance"]["source_revision"] == receipt["source_revision"]
-                && actual["provenance"]["lock_hash"] == receipt["lock_hash"],
-            "receipt provenance differs from pool generation"
-        );
-        Ok((name, generation, revision, lock_hash, actual))
+    fn receipt_identity(&self, receipt: AdmissionReceipt) -> Result<CheckedAdmission> {
+        let info = self.generation_info(&receipt.domain, receipt.generation)?;
+        CheckedAdmission::check(receipt, info)
     }
 
     fn publish_candidate(
@@ -158,13 +122,11 @@ impl Coordinator {
             r.manifest.guest_transport == Some(GuestTransport::DirectPoolV1),
             "release does not use direct pool admission"
         );
-        let receipts = receipts
-            .as_object()
-            .context("invalid admission receipt map")?;
+        let receipts: BTreeMap<GuestName, AdmissionReceipt> =
+            serde_json::from_value(receipts).context("invalid admission receipt map")?;
         let roots: BTreeMap<GuestName, Value> = state::read(&r.path.join("root-artifacts.json"))?;
         ensure!(
-            receipts.keys().map(String::as_str).collect::<BTreeSet<_>>()
-                == r.topology.domains.keys().map(GuestName::as_str).collect()
+            receipts.keys().eq(r.topology.domains.keys())
                 && roots.keys().collect::<BTreeSet<_>>() == r.topology.domains.keys().collect(),
             "admission receipts or root catalog differ from guests"
         );
@@ -172,23 +134,28 @@ impl Coordinator {
         manifest["guestRootArtifacts"] = serde_json::to_value(roots)?;
         manifest["guestProvenance"] = json!({});
         manifest["stagedGenerations"] = json!({});
+        let mut checked_receipts = BTreeMap::new();
         for (key, receipt) in receipts {
-            let (name, generation, revision, lock_hash, info) = self.receipt_identity(receipt)?;
+            let checked = self.receipt_identity(receipt)?;
+            let receipt = checked.receipt();
+            let name = &receipt.domain;
+            let generation = receipt.generation;
+            let revision = &receipt.source_revision;
+            let lock_hash = &receipt.lock_hash;
+            ensure!(&key == name, "admission domain differs from release");
             ensure!(
-                key == name.as_str(),
-                "admission domain differs from release"
-            );
-            ensure!(
-                (revision == r.manifest.revision && lock_hash == r.manifest.lock_hash)
-                    || receipt["generation_reused"] == true,
+                (revision == &r.manifest.revision && lock_hash == &r.manifest.lock_hash)
+                    || receipt.generation_reused == Some(true),
                 "admission provenance differs from release"
             );
             ensure!(
-                info["approval"]["approved_by"] == "sys-ctrl",
+                checked.controller(),
                 "whole-machine admission requires sys-ctrl"
             );
-            manifest["guestProvenance"][key] = json!({"revision":revision,"lockHash":lock_hash});
-            manifest["stagedGenerations"][key] = json!(generation);
+            manifest["guestProvenance"][key.as_str()] =
+                json!({"revision":revision,"lockHash":lock_hash});
+            manifest["stagedGenerations"][key.as_str()] = json!(generation);
+            checked_receipts.insert(key, checked.into_receipt());
         }
         let mut prepared = Release::load(&r.path)?;
         prepared.manifest = serde_json::from_value(manifest.clone())?;
@@ -208,7 +175,7 @@ impl Coordinator {
         let path = self.publish_candidate(
             &manifest,
             &r.raw_topology,
-            BTreeMap::from([("receipts.json", json!(receipts))]),
+            BTreeMap::from([("receipts.json", json!(checked_receipts))]),
         )?;
         Ok(json!({"candidate":path,"timings":timings}))
     }
@@ -222,10 +189,15 @@ impl Coordinator {
             MachineOperation::Candidate,
         )?;
         self.ensure_no_pruning()?;
-        let (name, generation, revision, lock_hash, info) = self.receipt_identity(&receipt)?;
+        let checked = self.receipt_identity(serde_json::from_value(receipt)?)?;
+        let receipt = checked.receipt();
+        let info = checked.info();
+        let name = &receipt.domain;
+        let generation = receipt.generation;
+        let revision = &receipt.source_revision;
+        let lock_hash = &receipt.lock_hash;
         ensure!(
-            info["selected"] == false
-                && receipt.get("current_generation") != Some(&json!(generation)),
+            !info.selected && receipt.current_generation != Some(generation),
             "receipt generation is already active"
         );
         let baseline = self.baseline()?;
@@ -233,22 +205,18 @@ impl Coordinator {
         let before = baseline
             .topology
             .domains
-            .get(&name)
+            .get(name)
             .context("receipt target is not declared")?;
         ensure!(
-            json!(before.backend.system.source) != info["system"]
-                || json!(before.backend.root.source) != info["root_source"],
+            before.backend.system.source != info.system
+                || before.backend.root.source != info.root_source,
             "admitted guest system is already selected"
         );
         let mut topology = baseline.raw_topology.clone();
         let domain = &mut topology["domains"][name.as_str()];
-        for (part, key) in [
-            ("system", "system"),
-            ("root", "root_source"),
-            ("store", "closure_source"),
-        ] {
-            domain["backend"][part]["source"] = info[key].clone();
-        }
+        domain["backend"]["system"]["source"] = json!(info.system);
+        domain["backend"]["root"]["source"] = json!(info.root_source);
+        domain["backend"]["store"]["source"] = json!(info.closure_source);
         if let Some(opts) = domain["prefs"]["kernelopts"].as_str() {
             let mut tokens: Vec<_> = opts.split_whitespace().map(str::to_owned).collect();
             let matches: Vec<_> = tokens
@@ -261,10 +229,7 @@ impl Coordinator {
             );
             for token in &mut tokens {
                 if token.starts_with("airlock.system=") {
-                    *token = format!(
-                        "airlock.system={}",
-                        info["system"].as_str().context("invalid guest system")?
-                    );
+                    *token = format!("airlock.system={system}", system = info.system);
                 }
             }
             domain["prefs"]["kernelopts"] = json!(tokens.join(" "));
@@ -290,20 +255,21 @@ impl Coordinator {
             }
         }
         manifest["stagedGenerations"][name.as_str()] = json!(generation);
-        manifest["guestRootArtifacts"][name.as_str()] = info["root_artifact"].clone();
+        manifest["guestRootArtifacts"][name.as_str()] =
+            serde_json::to_value(&receipt.root_artifact)?;
         manifest["guestProvenance"][name.as_str()] =
             json!({"revision":revision,"lockHash":lock_hash});
         manifest["guestAdmission"] =
-            json!({"domain":name,"generation":generation,"manifest":info["manifest"]});
+            json!({"domain":name,"generation":generation,"manifest":info.manifest});
         let mut prepared = Release::load(&baseline.path)?;
         prepared.manifest = serde_json::from_value(manifest.clone())?;
         prepared.topology = serde_json::from_value(topology.clone())?;
         prepared.manifest.validate(&prepared.topology)?;
-        self.validate_generation(&prepared, &name, generation, false)?;
+        self.validate_generation(&prepared, name, generation, false)?;
         self.publish_candidate(
             &manifest,
             &topology,
-            BTreeMap::from([("receipt.json", receipt)]),
+            BTreeMap::from([("receipt.json", serde_json::to_value(receipt)?)]),
         )
     }
 

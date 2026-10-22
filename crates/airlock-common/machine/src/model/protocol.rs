@@ -289,8 +289,7 @@ pub struct GenerationInfo {
     pub store: GenerationStore,
     /// Storage-integrity result returned by the generation helper.
     pub verification: VerificationReport,
-    /// Whether this generation is currently selected for guest startup.
-    #[serde(default)]
+    /// Whether this generation is currently selected; omission cannot mean inactive.
     pub selected: bool,
     /// Optional storage artifact metadata supplied for the guest root.
     #[serde(default)]
@@ -311,7 +310,7 @@ pub struct GenerationInfo {
 }
 
 /// Transport marker required before treating new storage admission as qrexec-bound.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum AdmissionTransport {
     #[serde(rename = "qrexec")]
     /// Use the existing Qubes RPC transport for admission.

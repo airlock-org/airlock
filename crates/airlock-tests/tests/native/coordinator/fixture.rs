@@ -422,7 +422,7 @@ impl Machine {
     pub fn receipt(&self) -> Value {
         let info = &self.data["generations"]["usr-home:2"];
         let mut receipt = json!({"schema": "airlock.closure-store.admission.v1", "status": "passed",
-            "transport": "qrexec", "activated": false, "retained": true, "source_revision": "e".repeat(40),
+            "transport": "qrexec", "activated": false, "retained": true, "current_generation":1, "source_revision": "e".repeat(40),
             "lock_hash": lock_hash(), "closure_hash": info["store"]["closure_hash"]});
         for key in [
             "domain",

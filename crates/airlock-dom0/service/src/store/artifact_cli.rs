@@ -42,7 +42,7 @@ struct Receiver {
 }
 
 pub(super) fn run(command: Request) -> Result<()> {
-    let result = (|| -> Result<Value> {
+    let result = (|| -> Result<super::AdmissionReceipt> {
         let (receiver, incremental, identity) = match command.operation {
             Operation::Receive(receiver) => (receiver, false, None),
             Operation::ReceiveIncremental {
@@ -56,7 +56,7 @@ pub(super) fn run(command: Request) -> Result<()> {
                     .transpose()?,
             ),
         };
-        artifacts::receive(
+        let value = artifacts::receive(
             &mut std::io::stdin().lock(),
             &mut std::io::stdout().lock(),
             &receiver.pool_root,
@@ -64,7 +64,12 @@ pub(super) fn run(command: Request) -> Result<()> {
             &receiver.approved_by,
             incremental,
             identity.as_ref(),
-        )
+        )?;
+        let receipt: super::AdmissionReceipt = serde_json::from_value(value)?;
+        if let Some(root) = &receipt.root_artifact {
+            root.validate()?;
+        }
+        Ok(receipt)
     })();
     match result {
         Ok(value) => {

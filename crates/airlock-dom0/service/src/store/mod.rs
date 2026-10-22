@@ -10,7 +10,7 @@ mod cli;
 
 mod response;
 
-pub(crate) use response::ResolvedRoot;
+pub(crate) use response::{AdmissionReceipt, ResolvedRoot};
 
 mod domain;
 

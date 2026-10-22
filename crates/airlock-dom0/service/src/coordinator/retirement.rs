@@ -218,9 +218,9 @@ impl Coordinator {
             .runner
             .text("qvm-features", &[name.as_str(), "airlock-store-generation"])?
             .parse()?;
-        let info = self.generation_value(name, generation)?;
+        let info = self.generation_info(name, generation)?;
         ensure!(
-            info["system"] == json!(domain.backend.system.source),
+            info.system == domain.backend.system.source,
             "retirement pool generation differs from release"
         );
         let retention_days = retention_days(release)?;
@@ -239,8 +239,9 @@ impl Coordinator {
             storage: TrashStorage {
                 disposition: "registered-stopped".into(),
                 private: domain.backend.state["persistent"].clone(),
-                pool_manifest: info["manifest"]
-                    .as_str()
+                pool_manifest: info
+                    .manifest
+                    .to_str()
                     .context("missing pool manifest")?
                     .into(),
                 volumes: qubes::volumes(name)?,
@@ -374,15 +375,12 @@ impl Coordinator {
                     .runner
                     .text("qvm-features", &[name.as_str(), "airlock-store-generation"])?
                     .parse()?;
-                let info = self.generation_value(name, generation)?;
+                let info = self.generation_info(name, generation)?;
                 (
                     generation.to_string(),
-                    info["system"]
-                        .as_str()
-                        .context("missing generation system")?
-                        .into(),
-                    info["manifest"]
-                        .as_str()
+                    info.system.to_string(),
+                    info.manifest
+                        .to_str()
                         .context("missing generation manifest")?
                         .into(),
                 )
@@ -516,10 +514,10 @@ impl Coordinator {
                     == record.pool_generation.to_string(),
                 "pool generation differs from trash"
             );
-            let info = self.generation_value(name, record.pool_generation)?;
+            let info = self.generation_info(name, record.pool_generation)?;
             ensure!(
-                info["manifest"] == record.storage.pool_manifest
-                    && info["system"] == json!(record.domain_config.backend.system.source),
+                info.manifest == Path::new(&record.storage.pool_manifest)
+                    && info.system == record.domain_config.backend.system.source,
                 "pool identity differs from trash"
             );
             let observed = self.retirement_observation(&record, verified::Kind::Retire)?;
