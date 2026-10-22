@@ -96,6 +96,8 @@ use std::{cell::Cell, rc::Rc};
 /// [`crate::nixos::compile_module`] and are rejected by this standalone compiler.
 /// Repeated substantial expressions with identical attribution share lazy local
 /// bindings. Shared bindings preserve lexical dependencies and authored error paths.
+/// Immediate lambda calls expose lazy bindings and literal arguments, allowing
+/// equivalent work in separate scopes to share one enclosing binding.
 #[track_caller]
 pub fn compile(config: impl IntoConfig) -> Result<Generated, Box<Diagnostic>> {
     compile_with_options(config, RenderOptions::default())

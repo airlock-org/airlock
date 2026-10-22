@@ -11,6 +11,36 @@ use std::collections::{HashMap, HashSet};
 
 mod lifting;
 
+mod normalize;
+
+mod scopes;
+
+/// Lexical names read by rendered syntax without explicit variable nodes in the AST.
+const IMPLICIT_NAMES: &[&str] = &[
+    "builtins",
+    "__lessThan",
+    "__sub",
+    "true",
+    "false",
+    "null",
+    "__curPos",
+];
+
+/// Describe prelude lookups performed by Nix's parser or by a native operation.
+fn implicit_operation(expr: &NixExpr) -> Option<&'static str> {
+    match &expr.kind {
+        NixKind::Call(..) => Some("builtins"),
+        NixKind::Bool(true) => Some("true"),
+        NixKind::Bool(false) => Some("false"),
+        NixKind::Null => Some("null"),
+        // Nix parses comparisons and unary minus as calls to lexical helpers.
+        NixKind::Binary(BinaryOp::GreaterEqual | BinaryOp::LessEqual, ..) => Some("__lessThan"),
+        NixKind::Int(value) if *value < 0 => Some("__sub"),
+        NixKind::Float(value) if value.is_sign_negative() => Some("__sub"),
+        _ => None,
+    }
+}
+
 /// Scalar syntax and binding boundaries, with descendants represented separately.
 #[derive(PartialEq, Eq, Hash)]
 enum Shape<'a> {
@@ -182,9 +212,15 @@ impl Names {
 pub(crate) fn optimize(mut ast: NixExpr) -> NixExpr {
     let mut names = Names::default();
     names.collect(&ast);
-    // Lifting introduces let boundaries. Preserve existing local sharing first,
-    // or those boundaries can hide duplicated work from the region optimizer.
-    scope(&mut ast, &mut names);
+    // This intrinsic observes the generated text itself. Moving even unrelated
+    // syntax could change its line or column, so retain the complete tree.
+    if names.used.contains("__curPos") {
+        return ast;
+    }
+    normalize::normalize(&mut ast, &mut names);
+    // Lifting introduces let boundaries. Preserve repeated-expression sharing
+    // first, before moving individual invariants into their enclosing scopes.
+    scopes::share(&mut ast, &mut names);
     lifting::lift(&mut ast, &mut names);
     ast
 }
@@ -199,78 +235,6 @@ fn boundary(expr: &NixExpr) -> bool {
             | NixKind::OpenArgumentFunction(..)
             | NixKind::Let(..)
     )
-}
-
-/// Optimize nested binding regions without moving computations across a binder.
-fn nested_scopes(expr: &mut NixExpr, names: &mut Names) {
-    let is_boundary = boundary(expr);
-    for child in children_mut(expr) {
-        if is_boundary {
-            scope(child, names);
-        } else {
-            nested_scopes(child, names);
-        }
-    }
-}
-
-/// Count actual references after shared parents are collapsed, excluding wasted bindings.
-fn effective_counts(
-    expr: &NixExpr,
-    identities: &HashMap<*const NixExpr, usize>,
-    candidates: &[bool],
-    counts: &mut [usize],
-) {
-    let identity = identities[&(expr as *const NixExpr)];
-    counts[identity] += 1;
-    if boundary(expr) || candidates[identity] && counts[identity] > 1 {
-        return;
-    }
-    for child in children(expr) {
-        effective_counts(child, identities, candidates, counts);
-    }
-}
-
-/// Rewrite one region in place, keeping node addresses stable until each node is consumed.
-fn scope(expr: &mut NixExpr, names: &mut Names) {
-    nested_scopes(expr, names);
-    let mut region = Region::default();
-    region.index(expr, &mut Vec::new());
-    let mut candidates: Vec<_> = region
-        .occurrences
-        .iter()
-        .map(|entry| entry.count > 1 && entry.weight >= 8)
-        .collect();
-    let identities = region.identities;
-    let ancestry: HashMap<_, Vec<_>> = region
-        .keys
-        .into_iter()
-        .filter(|(_, identity)| candidates[*identity])
-        .map(|(key, identity)| (identity, key.enclosing.into_iter().cloned().collect()))
-        .collect();
-    let mut counts = vec![0; candidates.len()];
-    effective_counts(expr, &identities, &candidates, &mut counts);
-    for (candidate, count) in candidates.iter_mut().zip(counts) {
-        *candidate &= count > 1;
-    }
-    if !candidates.iter().any(|candidate| *candidate) {
-        return;
-    }
-
-    let mut definitions = Vec::new();
-    rewrite(
-        expr,
-        &identities,
-        &candidates,
-        &ancestry,
-        &mut HashMap::new(),
-        &mut definitions,
-        names,
-    );
-    let mut body = std::mem::replace(expr, NixExpr::plain(NixKind::Null));
-    for (name, value) in definitions.into_iter().rev() {
-        body = NixExpr::plain(NixKind::Let(name, Box::new(value), Box::new(body)));
-    }
-    *expr = body;
 }
 
 /// Replace repeated trees with attributed references and retain each definition exactly once.
