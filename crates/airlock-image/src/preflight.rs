@@ -288,16 +288,36 @@ impl Inspector<'_> {
             let script = std::str::from_utf8(&bytes)?;
             self.text(script, inherited)?;
             for line in script.lines().skip(1) {
-                let line = line.trim().strip_prefix("exec ").unwrap_or(line.trim());
-                if let Some(program) = line.split_whitespace().next() {
-                    let program = program.trim_matches(['\'', '"']);
-                    if program.starts_with("/nix/store/")
-                        && !program
-                            .chars()
-                            .any(|ch| matches!(ch, '$' | '*' | '?' | '['))
-                    {
-                        self.executable(Path::new(program), inherited)?;
+                // Nix makeWrapper uses exec -a "$0" PROGRAM. Tokenization handles
+                // quoted names without evaluating shell expansions or running code.
+                let mut words = shlex::Shlex::new(line.trim());
+                let Some(mut program) = words.next() else {
+                    continue;
+                };
+                if program == "exec" {
+                    while let Some(word) = words.next() {
+                        match word.as_str() {
+                            "-a" => {
+                                words.next();
+                            }
+                            "-c" | "-l" => {}
+                            "--" => {
+                                program = words.next().unwrap_or_default();
+                                break;
+                            }
+                            _ => {
+                                program = word;
+                                break;
+                            }
+                        }
                     }
+                }
+                if program.starts_with("/nix/store/")
+                    && !program
+                        .chars()
+                        .any(|ch| matches!(ch, '$' | '*' | '?' | '['))
+                {
+                    self.executable(Path::new(&program), inherited)?;
                 }
             }
             return Ok(());

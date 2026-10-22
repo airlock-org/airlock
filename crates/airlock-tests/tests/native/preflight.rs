@@ -117,6 +117,7 @@ fn boot_preflight_checks_installed_contracts_and_exact_store_membership() -> Res
         "missing-resource",
         "cross-view",
         "interpreter",
+        "wrapped-interpreter",
     ] {
         let fixture = BootView::new()?;
         let tools = fixture
@@ -149,6 +150,25 @@ fn boot_preflight_checks_installed_contracts_and_exact_store_membership() -> Res
                     .join("33333333333333333333333333333333-other/bin");
                 fs::create_dir_all(&other)?;
                 fs::write(other.join("sh"), b"\x7fELFnot admitted")?;
+            }
+            "wrapped-interpreter" => {
+                let script = tools.join("wrapped-script");
+                fs::write(
+                    &script,
+                    "#!/nix/store/11111111111111111111111111111111-tools/bin/absent\n",
+                )?;
+                fs::set_permissions(&script, fs::Permissions::from_mode(0o555))?;
+                let activate = fixture
+                    .store
+                    .join(fixture.system.trim_start_matches("/nix/store/"))
+                    .join("activate");
+                fs::set_permissions(&activate, fs::Permissions::from_mode(0o755))?;
+                fs::write(
+                    activate,
+                    r#"#!/nix/store/11111111111111111111111111111111-tools/bin/sh
+exec -a "a name with spaces" /nix/store/11111111111111111111111111111111-tools/bin/wrapped-script
+"#,
+                )?;
             }
             "interpreter" => {
                 let activate = fixture

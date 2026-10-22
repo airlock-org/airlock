@@ -91,13 +91,11 @@ fn package_host_rpc_join_has_resolvable_commands() -> Result<()> {
     let paths = packages
         .physical(closure.to_str().context("closure path")?)?
         .join("store-paths");
-    let physical = std::env::var_os("AIRLOCK_NIX_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/run/media/user/data/airlock/nix-root"));
     let store = if std::env::var("AIRLOCK_USE_HOST_NIX_STORE").as_deref() == Ok("1") {
         PathBuf::from("/nix/store")
     } else {
-        physical.join("nix/store")
+        PathBuf::from(std::env::var_os("AIRLOCK_NIX_ROOT").context("guarded Airlock store root")?)
+            .join("nix/store")
     };
     let logs = packages.logs.join("preflight");
     system::run(

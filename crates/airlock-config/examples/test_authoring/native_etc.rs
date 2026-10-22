@@ -178,13 +178,17 @@ pub(super) fn host_rpcs(inputs: NixValue) -> NixValue {
                 .call(nix_record! {})
                 .call(nix_text!(
                     r#"
-                mkdir -p "$out/etc"
+                mkdir -p "$out/etc" "$out/sw/bin"
+                ln -s {shell}/bin/sh "$out/sw/bin/sh"
+                ln -s {coreutils}/bin/env "$out/sw/bin/env"
                 ln -s {init} "$out/activate"
                 ln -s {init} "$out/init"
                 ln -s {join} "$out/etc/qubes-rpc"
             "#,
                     init = init,
-                    join = join
+                    join = join,
+                    shell = pkgs.clone().select("bash"),
+                    coreutils = pkgs.clone().select("coreutils"),
                 ));
             system.bind(|system| {
                 let closure = pkgs.clone().select("closureInfo").call(nix_record! {

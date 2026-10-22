@@ -82,17 +82,12 @@ pub fn qubes_startup() -> NixValue {
             let notifications =
                 previous
                     .select("qubes-notification-proxy")
-                    .override_attrs(NixValue::function(|old| {
+                    .override_attrs(NixValue::function(|_| {
                         nix_record! {
-                            "postFixup": NixValue::concat_text([
-                                old.attr_or("postFixup", ""),
-                                nix_text!(r#"
-                            # The Qubes RPC join transplants leaf symlinks. Keep this absolute:
-                            # a package-relative ../../bin link escapes the joined RPC directory.
-                            ln -sfn "$out/bin/qubes-notification-proxy-server" \
-                              "$out/etc/qubes-rpc/qubes.Notifications"
-                        "#).into(),
-                            ]),
+                            // Upstream's lndir join transplants leaf symlinks. The stdenv
+                            // deduplication hook would turn this RPC's absolute package
+                            // link into ../../bin, which escapes the joined directory.
+                            "dontRewriteSymlinks": true,
                         }
                     }));
 
