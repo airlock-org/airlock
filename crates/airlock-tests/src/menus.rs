@@ -55,21 +55,26 @@ pub fn execute(configuration: &Path, program: &str, arguments: &[String]) -> Res
     let rows = data["domains"].as_array().context("VM observations")?;
     let row = rows.iter().find(|row| row["name"] == *name);
     let payload = match service {
-        "admin.vm.List" => rows
-            .iter()
-            .map(|row| {
-                format!(
-                    "{name} class={class} state={state}\n",
-                    name = row["name"].as_str().unwrap(),
-                    class = row["class"].as_str().unwrap(),
-                    state = if row["running"] == true {
-                        "Running"
-                    } else {
-                        "Halted"
-                    }
-                )
-            })
-            .collect::<String>(),
+        "admin.vm.List" => {
+            let guests = rows
+                .iter()
+                .map(|row| {
+                    format!(
+                        "{name} class={class} state={state}\n",
+                        name = row["name"].as_str().unwrap(),
+                        class = row["class"].as_str().unwrap(),
+                        state = if row["running"] == true {
+                            "Running"
+                        } else {
+                            "Halted"
+                        }
+                    )
+                })
+                .collect::<String>();
+            // Real global inventories always include the host, even when no
+            // application VMs exist. It must never become a guest API target.
+            format!("dom0 class=AdminVM state=Running\n{guests}")
+        }
         "admin.vm.property.Get" => {
             let row = row.context("unknown VM")?;
             let (kind, value) = match argument {

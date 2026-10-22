@@ -228,6 +228,11 @@ fn list() -> Result<BTreeMap<GuestName, String>> {
             !class.is_empty() && class.bytes().all(|byte| byte.is_ascii_alphanumeric()),
             "invalid Qubes VM class"
         );
+        // The global listing includes the AdminVM. GuestName intentionally
+        // excludes dom0, so discard that row before decoding guest identities.
+        if name == "dom0" {
+            continue;
+        }
         ensure!(
             result.insert(name.parse()?, class.to_owned()).is_none(),
             "duplicate VM name in inventory"
