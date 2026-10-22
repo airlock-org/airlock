@@ -36,7 +36,7 @@ pub fn codex() -> NixValue {
 pub fn qubes_startup() -> NixValue {
     NixValue::function(|_| {
         NixValue::function(|previous| {
-            let extension = NixValue::function(|python| {
+            let extension = NixValue::function(|python_packages| {
                 NixValue::function(|packages| {
                     let usb = packages.clone().select("qubes-app-linux-usb-proxy");
                     let exporter =
@@ -52,7 +52,7 @@ pub fn qubes_startup() -> NixValue {
                                         nix_text!(r#"
                                             substituteInPlace src/usb-reset \
                                       --replace-fail /usr/bin/python3 {python}
-                                "#, python = python.clone().select("interpreter")).into(),
+                                "#, python = previous.clone().select("python3.interpreter")).into(),
                                     ]),
                                 }
                             }));
@@ -70,7 +70,7 @@ pub fn qubes_startup() -> NixValue {
                                 // patsh resolves upstream's bare qvm-features command at build time.
                                 "nativeBuildInputs": NixValue::concat_lists([
                                     old.clone().attr_or("nativeBuildInputs", NixValue::list([])),
-                                    NixValue::list([python.clone().select("qubes-core-admin-client")]),
+                                    NixValue::list([python_packages.clone().select("qubes-core-admin-client")]),
                                 ]),
                                 "postPatch": NixValue::concat_text([
                                     old.attr_or("postPatch", ""),
