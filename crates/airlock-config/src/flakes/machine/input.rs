@@ -76,10 +76,12 @@ pub(super) fn fixture(build: &Build) -> NixValue {
                             probe = probe,
                             systemd = pkgs.clone().select("systemd"),
                         ),
-                        "ExecStopPost": nix_text!(
-                            "{systemd}/bin/systemctl --no-block poweroff",
-                            systemd = pkgs.clone().select("systemd"),
-                        ),
+                        // This fixture owns disposable disks. Drain console output, then
+                        // power off directly instead of waiting on the live store mount.
+                        "ExecStopPost": NixValue::list([
+                            nix_text!("{coreutils}/bin/sleep 1",coreutils=pkgs.clone().select("coreutils")).into(),
+                            nix_text!("{systemd}/bin/systemctl --force --force poweroff",systemd=pkgs.clone().select("systemd")).into(),
+                        ]),
                         "TimeoutStartSec": 60_i64,
                         "StandardOutput": "journal+console",
                         "StandardError": "journal+console",

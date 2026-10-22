@@ -247,9 +247,32 @@ pub(crate) fn run(udevadm: &Path) -> Result<()> {
                 ]
                 .iter()
                 .any(|key| values.get(key) == Some(&"1"));
-            let seat = values
-                .get("TAGS")
-                .is_some_and(|tags| tags.split(':').any(|tag| tag == "seat"));
+            // systemd tags inputN as a seat device; eventN carries the input
+            // classification and may only have a power-switch tag itself.
+            let parent = Path::new("/sys/class/input")
+                .join(node.file_name().context("evdev name")?)
+                .join("device");
+            let parent_output = support::run(
+                Command::new(udevadm)
+                    .args(["info", "--query=property", "--path"])
+                    .arg(parent),
+                None,
+                Duration::from_secs(5),
+            )?;
+            let parent_properties = String::from_utf8(parent_output.stdout)?;
+            let parent_values: std::collections::BTreeMap<_, _> = parent_properties
+                .lines()
+                .filter_map(|line| line.split_once('='))
+                .collect();
+            let seat = parent_output.status.success()
+                && parent_values
+                    .get("TAGS")
+                    .is_some_and(|tags| tags.split(':').any(|tag| tag == "seat"))
+                && parent_values
+                    .get("ID_SEAT")
+                    .is_none_or(|seat| *seat == "seat0");
+            properties.push_str("\nInput parent:\n");
+            properties.push_str(&parent_properties);
             Ok(output.status.success() && keyboard && pointer && seat)
         })
         .with_context(|| {
