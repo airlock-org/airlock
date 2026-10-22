@@ -10,6 +10,33 @@ use rusix::{
     nix_record, nix_text,
 };
 
+/// Stage an upstream NixOS raw disk inside its output directory before the assembly VM starts.
+/// Publication then renames the file within that directory instead of moving it from build scratch.
+/// Evaluation fails if the upstream staging assignment, earlier output-directory creation or raw
+/// publication hook changes. Call only for raw images produced by NixOS's `make-disk-image.nix`.
+pub fn raw_disk_in_output(lib: &NixValue, image: NixValue) -> NixValue {
+    lib.clone().select("overrideDerivation").call(image).call(NixValue::function(|old| {
+        let preparation = old.clone().select("preVM");
+        let staging = "diskImage=nixos.raw";
+        let parts = lib.clone().select("splitString").call(staging).call(preparation.clone());
+        let valid = NixValue::builtin("length").call(parts.clone()).equals(2_i64)
+            .and(lib.clone().select("hasInfix").call("mkdir $out")
+                .call(NixValue::builtin("head").call(parts)))
+            .and(lib.clone().select("hasInfix").call("mv $diskImage $out/")
+                .call(old.select("postVM")));
+        let definitions = nix_record! {
+            "preVM": NixValue::builtin("replaceStrings")
+                .call(NixValue::list([staging.into()]))
+                .call(NixValue::list([r#"diskImage="$out/nixos.raw""#.into()]))
+                .call(preparation),
+        };
+
+        NixValue::if_else(valid, definitions, NixValue::builtin("throw").call(
+            "Upstream raw disk assembly no longer exposes the expected output-directory, staging and publication hooks."
+        ))
+    }))
+}
+
 /// Target packages and application sources used to construct a VM's boot artifacts.
 pub struct Images<'a> {
     /// Package set for the target architecture, including statically linked early-boot tools.

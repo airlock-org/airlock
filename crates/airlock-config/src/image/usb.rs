@@ -236,6 +236,7 @@ fn disk(
             }]),
         },
     ));
+    let image = airlock_build::vm::raw_disk_in_output(&context.lib, image);
 
     context
         .lib

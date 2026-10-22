@@ -17,6 +17,175 @@ fn includes(value: &Value, expected: &str) {
     );
 }
 
+/// Real upstream publication renames an output-staged sparse file and rejects changed staging hooks.
+#[test]
+#[ignore = "requires explicitly prepared offline Nix sources; evaluates hooks without building an image"]
+fn raw_image_publication_preserves_inode_and_sparse_allocation() -> Result<()> {
+    use std::{
+        fs::File,
+        io::{Read, Seek, SeekFrom, Write},
+        os::unix::fs::MetadataExt,
+    };
+
+    let temporary = tempfile::tempdir()?;
+    let report = raw_disk_hooks(temporary.path(), false)?.value()?;
+    // Run only the staging assignment from preVM; actual partitioning, installation
+    // and the assembly VM are outside this host-side publication regression.
+    let assignment = text(&report["preVM"])
+        .lines()
+        .find(|line| line.trim_start().starts_with("diskImage="))
+        .context("upstream preparation has no disk image assignment")?;
+    let work = temporary.path().join("scratch");
+    let output = temporary.path().join("output");
+    fs::create_dir(&work)?;
+    fs::create_dir(&output)?;
+    let assignment = format!(
+        r#"
+        {assignment}
+        printf '%s' "$diskImage"
+    "#
+    );
+    let staged = PathBuf::from(String::from_utf8(
+        common::run(
+            Command::new("bash")
+                .args(["-e", "-c", &assignment])
+                .env("out", &output)
+                .current_dir(&work),
+            None,
+        )?
+        .checked()?,
+    )?);
+    assert_eq!(staged.parent(), Some(output.as_path()));
+
+    let mut image = File::create_new(&staged)?;
+    image.set_len(16 * 1024 * 1024)?;
+    image.write_all(b"image header")?;
+    image.seek(SeekFrom::End(-10))?;
+    image.write_all(b"image tail")?;
+    image.sync_all()?;
+    let before = image.metadata()?;
+    drop(image);
+    assert!(before.blocks() * 512 < before.len() / 2);
+
+    common::run(
+        Command::new("bash")
+            .args(["-e", "-c", text(&report["postVM"])])
+            .env("out", &output)
+            .env("diskImage", &staged)
+            .current_dir(&work),
+        None,
+    )?
+    .checked()?;
+    let published = output.join("airlock-staging-fixture.img");
+    let after = fs::metadata(&published)?;
+    assert_eq!(
+        (after.dev(), after.ino(), after.len(), after.blocks()),
+        (before.dev(), before.ino(), before.len(), before.blocks())
+    );
+    assert!(!staged.exists());
+    assert_eq!(fs::read_dir(&work)?.count(), 0);
+    assert!(output.join("nix-support/hydra-build-products").is_file());
+    let mut image = File::open(published)?;
+    let mut header = [0; 12];
+    image.read_exact(&mut header)?;
+    assert_eq!(&header, b"image header");
+    image.seek(SeekFrom::End(-10))?;
+    let mut tail = [0; 10];
+    image.read_exact(&mut tail)?;
+    assert_eq!(&tail, b"image tail");
+
+    let changed = raw_disk_hooks(temporary.path(), true)?;
+    assert!(!changed.success);
+    assert!(
+        changed
+            .stderr
+            .contains("Upstream raw disk assembly no longer exposes")
+    );
+    Ok(())
+}
+
+/// Inspect upstream's host hooks without generating unrelated machine exports or realizing closures.
+fn raw_disk_hooks(root: &Path, changed: bool) -> Result<Reply> {
+    let sources: Value = serde_json::from_slice(&fs::read(
+        std::env::var_os("AIRLOCK_RUSIX_SOURCES").context("prepared upstream sources")?,
+    )?)?;
+    let store =
+        PathBuf::from(std::env::var_os("AIRLOCK_NIX_ROOT").context("guarded Airlock store")?);
+    ensure!(
+        store.is_absolute() && store != Path::new("/"),
+        "select the guarded Airlock store"
+    );
+    let logs = PathBuf::from(
+        std::env::var_os("AIRLOCK_RUSIX_LOG_DIR").context("explicit test log directory")?,
+    );
+    fs::create_dir_all(&logs)?;
+    let driver = root.join(format!("raw-hooks-{changed}.nix"));
+    let source = common::run(
+        Command::new(common::binary(
+            "AIRLOCK_TEST_FIXTURES_BIN",
+            "examples/test_fixtures",
+        ))
+        .arg("prepared_store/raw_disk_hooks")
+        .arg(serde_json::to_string(
+            &json!({"nixpkgs":sources["nixpkgsSource"], "changedUpstream":changed}),
+        )?),
+        None,
+    )?
+    .checked()?;
+    fs::write(&driver, source)?;
+
+    let mut command = Command::new("nix");
+    command
+        .arg("--store")
+        .arg(store)
+        .args([
+            "--extra-experimental-features",
+            "nix-command flakes",
+            "--option",
+            "substituters",
+            "",
+            "--option",
+            "builders",
+            "",
+            "--option",
+            "build-users-group",
+            "",
+            "--option",
+            "allow-import-from-derivation",
+            "false",
+            "--offline",
+            "eval",
+            "--impure",
+            "--json",
+            "--eval-store",
+        ])
+        .arg(root.join("evaluation-store"))
+        .arg("--file")
+        .arg(driver)
+        .env_remove("NIX_REMOTE")
+        .env_remove("NIX_STORE_DIR")
+        .env("NIX_CONFIG", "")
+        .env("NIX_PATH", "")
+        .env("NIX_CONF_DIR", root.join("config"))
+        .env("NIX_USER_CONF_FILES", root.join("config/nix.conf"))
+        .env("XDG_CACHE_HOME", root.join("cache"))
+        .env("XDG_STATE_HOME", root.join("state"))
+        .env("XDG_DATA_HOME", root.join("data"));
+    let output = support::run(&mut command, None, Duration::from_secs(60))?;
+    let reply = Reply {
+        success: output.status.success(),
+        stdout: String::from_utf8(output.stdout)?,
+        stderr: String::from_utf8(output.stderr)?,
+        diagnostics: logs.join(format!("raw-hooks-{changed}.stderr")),
+    };
+    fs::write(&reply.diagnostics, &reply.stderr)?;
+    fs::write(
+        logs.join(format!("raw-hooks-{changed}.json")),
+        &reply.stdout,
+    )?;
+    Ok(reply)
+}
+
 /// Changing one package rebuilds only its fragment and affected index; another closure reuses both outputs.
 #[test]
 #[ignore = "explicit tiny Nix builds: prepares the store-cache executable, fragments and real EROFS indexes"]

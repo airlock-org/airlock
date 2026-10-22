@@ -2,6 +2,54 @@
 
 use super::*;
 
+/// Evaluate real upstream host-side disk hooks without building a system, disk or assembly VM.
+pub(super) fn raw_disk_hooks(inputs: NixValue) -> NixValue {
+    let source = inputs.clone().select("nixpkgs");
+    let pkgs = NixValue::builtin("import")
+        .call(source.clone())
+        .call(rusix::nix_record! {
+            "system": "x86_64-linux",
+        });
+    pkgs.bind(|pkgs| {
+        let image = NixValue::builtin("import")
+            .call(add(source, "/nixos/lib/make-disk-image.nix".into()))
+            .call(rusix::nix_record! {
+                "pkgs": pkgs.clone(),
+                "lib": pkgs.clone().select("lib"),
+                "config": rusix::nix_record! {
+                    "system": rusix::nix_record! {
+                        "build": rusix::nix_record! {
+                            "toplevel": pkgs.clone().select("writeText").call("unbuilt-system").call(""),
+                            "nixos-install": pkgs.clone().select("coreutils"),
+                        },
+                    },
+                },
+                "baseName": "airlock-staging-fixture",
+                "format": "raw",
+                "partitionTableType": "efi",
+                "diskSize": 64_i64,
+                "installBootLoader": false,
+                "copyChannel": false,
+            });
+        let image = NixValue::if_else(
+            inputs.select("changedUpstream"),
+            image.clone().override_attrs(NixValue::function(|_| rusix::nix_record! {
+                "preVM": r#"
+                    mkdir $out
+                    diskImage=changed.raw
+                "#,
+            })),
+            image,
+        );
+        let image = airlock_build::vm::raw_disk_in_output(&pkgs.select("lib"), image);
+
+        rusix::nix_record! {
+            "preVM": image.clone().select("preVM"),
+            "postVM": image.select("postVM"),
+        }
+    })
+}
+
 /// Exercise real cache derivations with two tiny package closures instead of an image or VM build.
 pub(super) fn cache(inputs: NixValue) -> NixValue {
     let pkgs = NixValue::builtin("import").call(inputs.clone().select("nixpkgs")).call(rusix::nix_record! {
