@@ -3,7 +3,7 @@
 use crate::common::{self, peers::Peers};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
-use std::{collections::BTreeSet, fs, process::Command};
+use std::{collections::BTreeSet, fs, os::unix::fs::symlink, process::Command};
 
 /// A fresh, complete observation keeps unrelated supervisor failure scenarios focused on their own boundary.
 const INPUT_REPLY: &str = r#"{"schema":"airlock.input-receiver.v1","devices":[{"name":"dom0: Keyboard","keyboard":true,"pointer":false}]}"#;
@@ -33,11 +33,20 @@ impl Boot {
             br#"[{"name":"Keyboard","keyboard":true,"pointer":false}]"#,
         )?;
         fs::write(peers.path("boot-id"), id)?;
+        fs::create_dir_all(peers.path("generation/airlock"))?;
+        fs::create_dir(peers.path("etc"))?;
         fs::write(
-            peers.path("policy.json"),
+            peers.path("generation/airlock/boot-readiness.json"),
             serde_json::to_vec(&json!({
                 "schema":"airlock.boot-readiness.v1", "desktop":true, "input_target":"sys-gui"
             }))?,
+        )?;
+        // Installed NixOS configuration passes through /etc/static into the
+        // immutable generation. All acceptance scenarios exercise that boundary.
+        symlink("../generation", peers.path("etc/static"))?;
+        symlink(
+            "etc/static/airlock/boot-readiness.json",
+            peers.path("policy.json"),
         )?;
         fs::write(
             peers.path("topology.json"),

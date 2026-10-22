@@ -43,7 +43,9 @@ impl Policy {
         let path = std::env::var_os("AIRLOCK_BOOT_READINESS_POLICY")
             .map(PathBuf::from)
             .unwrap_or_else(|| "/etc/airlock/boot-readiness.json".into());
-        let value: Self = crate::state::read(&path)?;
+        // This is immutable NixOS configuration, whose /etc entry is a
+        // generation symlink, rather than a mutable supervisor record.
+        let value: Self = crate::state::configuration(&path)?;
         let Schema::V1 = value.schema;
         Ok(value)
     }
