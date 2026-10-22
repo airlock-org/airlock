@@ -95,6 +95,59 @@ impl Boot {
     }
 }
 
+/// Reading panel progress preserves per-VM checkpoints and never performs another readiness probe.
+#[test]
+#[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]
+fn namespace_boot_guest_progress_is_read_only_and_retains_completed_guests() -> Result<()> {
+    let boot = Boot::new("panel-boot")?;
+    let mut home = crate::coordinator::fixture::declaration("usr-home", 1);
+    home["prefs"]["guivm"] = json!("sys-gui");
+    fs::write(
+        boot.peers.path("topology.json"),
+        serde_json::to_vec(&json!({
+            "schema":"airlock.qubes-topology.v1", "domains":{
+                "sys-gui":crate::coordinator::fixture::declaration("sys-gui",1),
+                "usr-home":home,
+                "sys-net":crate::coordinator::fixture::declaration("sys-net",1)
+            }
+        }))?,
+    )?;
+    boot.run(&["prepare"])?;
+    boot.run(&["desktop-ready"])?;
+    boot.run(&["guest", "usr-home", "starting", "Starting usr-home"])?;
+    boot.run(&["guest", "usr-home", "ready", "usr-home is ready"])?;
+    boot.run(&["guest", "sys-net", "starting", "Starting sys-net"])?;
+    let before = fs::read(boot.peers.path("state/panel-boot/state.json"))?;
+    let calls = boot.peers.calls()?;
+    let status = boot.run(&["desktop-status"])?;
+    let guests = status["guests"].as_array().unwrap();
+    assert_eq!(status["status"], "working");
+    assert_eq!(
+        guests
+            .iter()
+            .find(|guest| guest["name"] == "usr-home")
+            .unwrap(),
+        &json!({"name":"usr-home","phase":"ready","applications":true})
+    );
+    assert_eq!(
+        guests
+            .iter()
+            .find(|guest| guest["name"] == "sys-net")
+            .unwrap()["phase"],
+        "starting"
+    );
+    assert_eq!(
+        fs::read(boot.peers.path("state/panel-boot/state.json"))?,
+        before
+    );
+    assert_eq!(
+        boot.peers.calls()?,
+        calls,
+        "status must not start guests or re-run probes"
+    );
+    Ok(())
+}
+
 /// Recover interrupted boots before a new attempt, retaining diagnostic copies and requiring acknowledgement.
 #[test]
 #[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]
@@ -221,7 +274,7 @@ fn namespace_boot_distinguishes_degradation_shutdown_and_interruption() -> Resul
         assert!(!boot.peers.path("state/in-progress.json").exists());
         assert_eq!(
             boot.run(&["desktop-status"])?,
-            json!({"status":"degraded","desktop_ready":true,"stage":"services","detail":"background services could not start"})
+            json!({"boot_id":"desktop-boot", "guests":[{"name":"sys-gui","phase":"ready","applications":false}], "status":"degraded","desktop_ready":true,"stage":"services","detail":"background services could not start"})
         );
         if shutdown {
             boot.run(&["shutdown-requested"])?;
@@ -434,7 +487,7 @@ fn vm_startup_requires_qrexec_on_the_exact_declared_generation() -> Result<()> {
         assert_eq!(
             calls
                 .iter()
-                .any(|call| call["command"] == "supervisor" && call["args"][1] == "fail"),
+                .any(|call| call["command"] == "supervisor" && call["args"][3] == "failed"),
             !correct
         );
     }

@@ -18,6 +18,7 @@ fn javascript(kind: &str, scenario: &str, arguments: Value, shell: bool) -> Resu
         "workspace" => "vm-workspaces-extension",
         "search" => "vm-search-extension",
         "focus" => "focused-vm-extension",
+        "startup" => "startup-progress-extension",
         _ => anyhow::bail!("unknown extension {kind}"),
     };
     for (name, source) in [
@@ -40,6 +41,7 @@ import {parseInventory} from './inventory.mjs';
         }
         "search" => "import {describeResult,groupResults,parseInventory} from './model.mjs';\n",
         "focus" => "import {FocusState,WindowIdentityCache,LOCAL,UNKNOWN} from './state.mjs';\n",
+        "startup" => "import {elapsedText,parseSnapshot} from './model.mjs';\n",
         _ => unreachable!(),
     };
     let mocks = match kind {
@@ -50,6 +52,9 @@ import {parseInventory} from './inventory.mjs';
             "const {Clutter,Gio,GLib,GObject,Pango,Shell,St,Main,Search,Extension,InjectionManager}=globalThis.shellMocks;\n"
         }
         "focus" => "const {Gio,GLib,Meta,Main,Extension}=globalThis.shellMocks;\n",
+        "startup" => {
+            "const {Clutter,Gio,GLib,Pango,St,Animation,Main,PanelMenu,PopupMenu,Extension}=globalThis.shellMocks;\n"
+        }
         _ => unreachable!(),
     };
     let source = fs::read_to_string(gnome.join(extension).join("extension.js"))?;
@@ -63,7 +68,10 @@ import {parseInventory} from './inventory.mjs';
         format!("{imports}{mocks}{source}"),
     )?;
     let mut program = String::from("import assert from 'node:assert/strict';\n");
-    if kind != "focus" {
+    if kind == "startup" {
+        program.push_str(imports);
+    }
+    if !matches!(kind, "focus" | "startup") {
         program.push_str(imports);
         program.push_str(&format!(
             "const HOME={home},AGENT={agent};\n",
@@ -85,18 +93,20 @@ const snapshot=()=>({[HOME]:{uuid:HOME,name:'usr-home',label:'0x3465a4',running:
         program.push_str(match kind {
             "workspace" => include_str!("../../fixtures/gnome/workspace_shell.mjs"),
             "search" => include_str!("../../fixtures/gnome/search_shell.mjs"),
+            "startup" => include_str!("../../fixtures/gnome/startup_shell.mjs"),
             _ => unreachable!(),
         });
-        program.push_str(if kind == "workspace" {
-            "\nconst {default:Controller}=await import('./extension.mjs');\n"
-        } else {
-            "\nconst {VMSearchResults,default:VMSearchExtension}=await import('./extension.mjs');\n"
+        program.push_str(match kind {
+            "workspace" => "\nconst {default:Controller}=await import('./extension.mjs');\n",
+            "startup" => "\nconst {default:StartupProgressExtension}=await import('./extension.mjs');\n",
+            _ => "\nconst {VMSearchResults,default:VMSearchExtension}=await import('./extension.mjs');\n",
         });
     }
     program.push_str(match kind {
         "workspace" => include_str!("../../fixtures/gnome/workspace_scenarios.mjs"),
         "search" => include_str!("../../fixtures/gnome/search_scenarios.mjs"),
         "focus" => include_str!("../../fixtures/gnome/focus_scenarios.mjs"),
+        "startup" => include_str!("../../fixtures/gnome/startup_scenarios.mjs"),
         _ => unreachable!(),
     });
     let output = common::run(
@@ -112,6 +122,23 @@ const snapshot=()=>({[HOME]:{uuid:HOME,name:'usr-home',label:'0x3465a4',running:
         "{kind}/{scenario}: {error}",
         error = String::from_utf8_lossy(&output.stderr)
     );
+    Ok(())
+}
+
+/// The real panel controller survives delayed menus, unavailable transport and GNOME extension teardown.
+#[test]
+#[ignore = "requires explicitly prepared Node.js"]
+fn javascript_startup_panel_tracks_publication_and_cleans_up() -> Result<()> {
+    for (scenario, shell) in [
+        ("snapshot_validation", false),
+        ("wait_for_application_publication", true),
+        ("lost_status_retains_guests", true),
+        ("failures_remain_visible", true),
+        ("disable_rejects_stale_callbacks", true),
+        ("already_complete_stops_polling", true),
+    ] {
+        javascript("startup", scenario, json!({}), shell)?;
+    }
     Ok(())
 }
 

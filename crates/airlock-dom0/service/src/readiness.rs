@@ -164,8 +164,9 @@ fn supervise(action: &str, domain: &str, detail: &str) -> Result<()> {
         path("AIRLOCK_BOOT_SERVICE", "airlock-dom0-service"),
         &[
             "boot-supervisor".into(),
+            "guest".into(),
+            domain.into(),
             action.into(),
-            format!("qube:{domain}").into(),
             detail.into(),
         ],
         Duration::from_secs(60),
@@ -255,7 +256,7 @@ fn wait(
                     "{domain} stopped during readiness checks"
                 );
                 return supervise(
-                    "stage",
+                    "ready",
                     domain,
                     &format!("{domain} is qrexec-ready on {expected}"),
                 );
@@ -310,7 +311,7 @@ pub(crate) fn start(request: Ready) -> Result<()> {
         .open(directory.join(format!("start-{domain}.log")))?;
     let result = (|| {
         supervise(
-            "stage",
+            "starting",
             domain,
             &format!("starting {domain}; expecting {expected}"),
         )?;
@@ -322,7 +323,7 @@ pub(crate) fn start(request: Ready) -> Result<()> {
     })();
     if let Err(error) = &result {
         writeln!(log, "{error:#}")?;
-        let _ = supervise("fail", domain, &format!("{error:#}"));
+        let _ = supervise("failed", domain, &format!("{error:#}"));
     }
     result
 }

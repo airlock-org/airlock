@@ -1,10 +1,12 @@
 //! Boot attempts distinguish hardware startup failure from an already usable desktop.
 //! Persisted statuses are observations; only an explicit recovery acknowledgement clears the next-boot gate.
 
+use airlock_nix_core::identity::GuestName;
 use airlock_nix_core::state::ResourceKey;
 use anyhow::{Result, ensure};
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
-use std::{fmt, str::FromStr};
+use std::{collections::BTreeMap, fmt, str::FromStr};
 
 /// A boot identity that can safely select one attempt directory and journal boot.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,6 +58,21 @@ pub(super) enum Status {
     Degraded,
 }
 
+/// Observed startup checkpoint for one guest, independent of desktop menu publication.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum GuestState {
+    /// Startup has not yet reached this guest.
+    #[default]
+    Waiting,
+    /// Qubes is starting the guest or its required services.
+    Starting,
+    /// The running generation and required services passed readiness checks.
+    Ready,
+    /// The latest attempt to start or verify this guest failed.
+    Failed,
+}
+
 /// Durable observations used to diagnose the attempt and gate unsafe automatic retries.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) struct Attempt {
@@ -76,6 +93,9 @@ pub(super) struct Attempt {
     /// A usable desktop makes later background-service failures noncritical.
     #[serde(default)]
     pub desktop_ready: bool,
+    /// Per-guest checkpoints retained while subsequent guests start.
+    #[serde(default)]
+    pub guests: BTreeMap<GuestName, GuestState>,
     /// A deliberate shutdown distinguishes cancelled startup from power loss.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shutdown_requested_at: Option<String>,

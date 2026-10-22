@@ -114,6 +114,33 @@ fn selected(description: &Description, id: &str) -> bool {
     })
 }
 
+/// Require a matching cached VM identity and every selected launcher, including an intentionally empty catalog.
+pub(super) fn available(description: &Description) -> Result<bool> {
+    let path = super::cached_directory(&qubes::cache_root()?, &description.name)?;
+    let Some(bytes) = read(&path.join("vm.json"))? else {
+        return Ok(false);
+    };
+    let cached: Description = serde_json::from_slice(&bytes)?;
+    if cached.name != description.name
+        || cached.uuid != description.uuid
+        || cached.menu_items != description.menu_items
+    {
+        return Ok(false);
+    }
+    if read(&path.join("catalog.json"))?.is_none() {
+        return Ok(false);
+    }
+    let menus = cached_catalog(&path)?;
+    let applications = qubes::data_home()?.join("applications");
+    let prefix = prefix(description.uuid);
+    for id in menus.keys().filter(|id| selected(description, id)) {
+        if read(&applications.join(format!("{prefix}{id}.desktop")))?.is_none() {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// Read saved icon identities and require each filename to remain inside this UUID's icon directory.
 fn cached_icons(path: &Path, uuid: Uuid) -> Result<IconCache> {
     let values: IconCache = match read(&path.join("icons.json"))? {

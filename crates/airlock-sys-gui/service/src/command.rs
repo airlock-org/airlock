@@ -40,6 +40,8 @@ pub enum DesktopCommand {
     },
     /// Watch dom0 startup status and offer a retry notification when degraded.
     BootNotification,
+    /// Report boot checkpoints and local application publication without starting VMs.
+    StartupStatus,
 }
 
 /// Operations accepted by the capture sender, shared by runtime parsing and authoring.
@@ -97,6 +99,7 @@ impl DesktopCommand {
                 xid.into(),
             ],
             Self::BootNotification => vec!["boot-notification".into()],
+            Self::StartupStatus => vec!["startup-status".into()],
             Self::GuiStyle { boot } => {
                 let mut args = vec!["gui-style".into()];
                 if *boot {

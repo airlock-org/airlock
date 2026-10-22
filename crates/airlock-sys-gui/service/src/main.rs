@@ -93,6 +93,7 @@ fn run(args: Args) -> Result<ExitCode> {
         }
         Action::Desktop(DesktopCommand::GuiStyle { boot }) => style::execute(boot),
         Action::Desktop(DesktopCommand::BootNotification) => notifications::execute(),
+        Action::Desktop(DesktopCommand::StartupStatus) => startup::panel_status(),
         Action::ReadinessService { name } => {
             let supported = qubes::readiness(&name, std::time::Duration::from_secs(15))?;
             let service = if supported {
@@ -159,6 +160,7 @@ mod tests {
                 xid: "0x1234".into(),
             },
             DesktopCommand::BootNotification,
+            DesktopCommand::StartupStatus,
             DesktopCommand::GuiStyle { boot: true },
             DesktopCommand::GuiStyle { boot: false },
         ]

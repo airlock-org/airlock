@@ -86,10 +86,64 @@ struct Description {
 /// Completed publication fingerprint; failures must not advance this receipt.
 #[derive(Serialize, Deserialize)]
 struct Receipt {
+    // GUI kernel boot during which the catalog was successfully refreshed.
+    #[serde(default)]
+    boot_id: String,
     // Catalog and trusted metadata fingerprint used to skip unchanged icon fetches.
     digest: String,
     // Unix time at the last successful publication.
     updated: f64,
+}
+
+/// Read-only publication evidence used by the startup panel.
+pub(crate) struct Publication {
+    /// All selected launchers have been published for the current VM identity.
+    pub(crate) available: bool,
+    /// Latest failed refresh, retained only while applications remain unavailable.
+    pub(crate) error: Option<String>,
+}
+
+/// Last failed refresh for a trusted inventory identity; successful publication supersedes it.
+#[derive(Serialize, Deserialize)]
+struct Failure {
+    // GUI boot during which this failed refresh was observed.
+    #[serde(default)]
+    boot_id: String,
+    // Name observed in the inventory before this refresh was scheduled.
+    name: GuestName,
+    // Persistent identity, preventing a reused name from inheriting old failures.
+    uuid: Uuid,
+    // Bounded plain text shown in the startup dropdown.
+    detail: String,
+}
+
+/// Inspect existing inventory, receipts and launchers without creating directories or querying Qubes.
+pub(crate) fn publication(name: &GuestName) -> Result<Publication> {
+    let state = root()?;
+    let inventory: BTreeMap<Uuid, Description> =
+        support::read(&state.join("inventory.json"))?.unwrap_or_default();
+    let Some(vm) = inventory.values().find(|vm| vm.name == *name) else {
+        return Ok(Publication {
+            available: false,
+            error: None,
+        });
+    };
+    let receipt: Option<Receipt> =
+        support::read(&state.join(format!("{uuid}.json", uuid = vm.uuid)))?;
+    let current_boot = boot_id()?;
+    let available =
+        receipt.is_some_and(|receipt| receipt.boot_id == current_boot) && store::available(vm)?;
+    let failure: Option<Failure> =
+        support::read(&state.join(format!("{uuid}.error.json", uuid = vm.uuid)))?;
+    let error = failure
+        .filter(|failure| {
+            !available
+                && failure.boot_id == current_boot
+                && failure.name == *name
+                && failure.uuid == vm.uuid
+        })
+        .map(|failure| failure.detail);
+    Ok(Publication { available, error })
 }
 
 /// Locate the user-owned coordinator state and operation locks.
@@ -103,6 +157,15 @@ fn now() -> f64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs_f64()
+}
+
+/// Bind menu publication to this GUI boot so retained catalogs do not conceal first-refresh work.
+fn boot_id() -> Result<String> {
+    let path = std::env::var_os("AIRLOCK_GUI_BOOT_ID_FILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| "/proc/sys/kernel/random/boot_id".into());
+    let value = fs::read_to_string(path)?;
+    Ok(value.trim().parse::<Uuid>()?.to_string())
 }
 
 /// Locate one VM's upstream catalog while refusing redirected cache directories.
@@ -261,12 +324,29 @@ fn reconcile() -> Result<()> {
     for batch in running.chunks(4) {
         std::thread::scope(|scope| {
             for vm in batch {
+                let state = &state;
                 scope.spawn(move || {
                     // Keep helper cleanup in this process. Killing an outer worker
                     // would orphan an adapter that owns its own process group.
                     let result = sync(vm.name.clone(), Some(vm.uuid), false, false);
                     if let Err(error) = result {
                         eprintln!("menu refresh for {name}: {error:#}", name = vm.name);
+                        let failure = Failure {
+                            boot_id: boot_id().unwrap_or_default(),
+                            name: vm.name.clone(),
+                            uuid: vm.uuid,
+                            detail: format!("Application list unavailable; retrying: {error:#}")
+                                .chars()
+                                .filter(|c| !c.is_control())
+                                .take(512)
+                                .collect(),
+                        };
+                        if let Err(error) = support::save(
+                            &state.join(format!("{uuid}.error.json", uuid = vm.uuid)),
+                            &failure,
+                        ) {
+                            eprintln!("recording application-menu failure: {error:#}");
+                        }
                     }
                 });
             }
@@ -328,11 +408,15 @@ fn sync(name: GuestName, expected: Option<Uuid>, incoming: bool, force: bool) ->
     let receipt_path = state.join(format!("{uuid}.json", uuid = before.uuid));
     let receipt: Option<Receipt> = support::read(&receipt_path)?;
     let timestamp = now();
+    let current_boot = boot_id()?;
     let cache = cached_directory(&inventory.basedir, &name)?.join("catalog.json");
     if !force
         && cache.is_file()
         && receipt.is_some_and(|r| {
-            r.digest == digest && r.updated <= timestamp && timestamp - r.updated < 300.0
+            r.boot_id == current_boot
+                && r.digest == digest
+                && r.updated <= timestamp
+                && timestamp - r.updated < 300.0
         })
     {
         return Ok(());
@@ -342,6 +426,7 @@ fn sync(name: GuestName, expected: Option<Uuid>, incoming: bool, force: bool) ->
     support::save(
         &receipt_path,
         &Receipt {
+            boot_id: current_boot,
             digest,
             updated: timestamp,
         },

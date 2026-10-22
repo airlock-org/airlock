@@ -2,6 +2,7 @@
 //! Extension order is shared by installation and GNOME's enabled-extension setting.
 
 use super::{MachineFiles, ModuleContext};
+use airlock_sys_gui_service::command::DesktopCommand;
 use rusix::{
     interop::{
         NixPath, Package,
@@ -18,18 +19,49 @@ pub(super) struct Extension {
     pub package: NixValue,
 }
 
-/// Builds the four extensions in their activation order using the final GUI package set.
-pub(super) fn packages(inputs: &ModuleContext, service: &super::Deployment) -> [Extension; 4] {
+/// Builds the extensions in their activation order using the final GUI package set.
+pub(super) fn packages(inputs: &ModuleContext, service: &super::Deployment) -> [Extension; 5] {
     let identity_reader = service.window_identity_reader(Package::from_expression(
         inputs.pkgs.clone().select("qubes-gui-daemon"),
     ));
 
     [
         host_poweroff(inputs),
+        startup_progress(inputs, service),
         focused_vm(inputs, &identity_reader),
         vm_search(inputs),
         vm_workspaces(inputs, &identity_reader),
     ]
+}
+
+/// Install a persistent startup indicator backed by the existing read-only boot-status transport.
+fn startup_progress(inputs: &ModuleContext, service: &super::Deployment) -> Extension {
+    let reader = inputs
+        .pkgs
+        .clone()
+        .select("writeShellScript")
+        .call("airlock-startup-panel-status")
+        .call(nix_text!(
+            r#"
+                exec {command}
+            "#,
+            command = service.shell_command(&DesktopCommand::StartupStatus),
+        ));
+
+    extension(
+        inputs,
+        "startup-progress",
+        nix_text!(
+            r#"
+                cp extension.js model.js metadata.json stylesheet.css "$extension_dir/"
+                substituteInPlace "$extension_dir/extension.js" \
+                  --replace-fail '@statusReader@' '{reader}'
+            "#,
+            reader = reader.clone(),
+        )
+        .into(),
+        nix_record! { "statusReader": reader },
+    )
 }
 
 /// Installs the host power-off action through Qubes' existing dom0 RPC service.

@@ -330,6 +330,78 @@ impl Menus {
     fn read(&self, name: &str) -> Result<Value> {
         Ok(serde_json::from_slice(&fs::read(self.state(name))?)?)
     }
+
+    /// Observe only the fixture's publication state behind a fixed read-only host reply.
+    fn startup(&self) -> Result<Value> {
+        let mut peers = crate::common::peers::Peers::new()?;
+        peers.rules(
+            "boot-rpc",
+            json!([{"contains":"airlock.BootStatus", "stdout":json!({
+            "boot_id":"host-boot", "status":"complete", "desktop_ready":true,
+            "guests":[{"name":"usr-home","phase":"ready","applications":true}]
+        }).to_string()}]),
+        )?;
+        let mut command = peers.command(common::binary(
+            "AIRLOCK_SYS_GUI_BIN",
+            "airlock-sys-gui-service",
+        ))?;
+        command
+            .arg("startup-status")
+            .env("AIRLOCK_QVM_RUN", peers.path("bin/boot-rpc"))
+            .env("XDG_STATE_HOME", self.temporary.path().join("state"))
+            .env("XDG_DATA_HOME", self.temporary.path().join("data"));
+        peers.json(&mut command)
+    }
+}
+
+/// A running guest is not application-ready until this boot has a matching publication and every launcher exists.
+#[test]
+fn startup_panel_waits_for_current_menu_publication() -> Result<()> {
+    let mut menus = Menus::new()?;
+    let before = menus.startup()?;
+    assert_eq!(before["complete"], false);
+    assert_eq!(before["guests"][0]["phase"], "loading");
+    assert!(
+        !menus.state("inventory.json").exists(),
+        "observation must not create menu state"
+    );
+
+    menus.data["fail"] = json!("fetch");
+    menus.run(&["reconcile"], true)?;
+    let failed = menus.startup()?;
+    assert_eq!(failed["attention"], true);
+    assert_eq!(failed["guests"][0]["phase"], "failed");
+    menus.data.as_object_mut().unwrap().remove("fail");
+
+    menus.run(&["reconcile"], true)?;
+    assert_eq!(menus.startup()?["complete"], true);
+    let receipt_path = menus.state(&format!("{HOME}.json"));
+    let mut receipt = menus.read(&format!("{HOME}.json"))?;
+    let current = receipt["boot_id"].clone();
+    receipt["boot_id"] = json!(WORK);
+    fs::write(&receipt_path, serde_json::to_vec(&receipt)?)?;
+    assert_eq!(
+        menus.startup()?["complete"],
+        false,
+        "a previous boot's cache is not fresh publication"
+    );
+    receipt["boot_id"] = current;
+    fs::write(&receipt_path, serde_json::to_vec(&receipt)?)?;
+    let launcher = menus.temporary.path().join(format!(
+        "data/applications/org.qubes-os.vm.{HOME}.example.desktop"
+    ));
+    fs::remove_file(&launcher)?;
+    assert_eq!(
+        menus.startup()?["complete"],
+        false,
+        "missing launchers cannot count as available"
+    );
+
+    // A valid empty catalog is complete, rather than an endless spinner for a service-only VM.
+    menus.data["menus"] = json!({});
+    menus.run(&["reconcile"], true)?;
+    assert_eq!(menus.startup()?["complete"], true);
+    Ok(())
 }
 
 /// Stopped VMs stay searchable; renames preserve stable identities and remove only obsolete caches.

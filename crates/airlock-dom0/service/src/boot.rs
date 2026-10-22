@@ -9,9 +9,12 @@ mod model;
 
 use crate::{coordinator::Coordinator, process::Runner, state};
 use airlock_deployment_core::boot::acceptance::Scope;
+use airlock_machine_core::boot::BootInputs;
+use airlock_nix_core::identity::GuestName;
 use airlock_nix_core::state::{OperationKind, OperationLock, OperationOwner, StateStore};
 use anyhow::{Context, Result, ensure};
 use clap::{Args, Subcommand};
+pub(crate) use model::GuestState;
 use model::{Attempt, AttemptId, Current, Status};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -58,6 +61,16 @@ enum Action {
         name: String,
         // Optional explanation shown in persistent diagnostics.
         #[arg(default_value = "")]
+        detail: String,
+    },
+    /// Record one guest's checkpoint without granting a guest new control authority.
+    Guest {
+        // Guest selected by the trusted boot coordinator.
+        name: GuestName,
+        // Readiness observation, never inferred from process existence alone.
+        #[arg(value_enum)]
+        phase: GuestState,
+        // Human-readable explanation of the observed checkpoint.
         detail: String,
     },
     /// Record a critical startup failure and capture its diagnostics.
@@ -240,6 +253,7 @@ impl Supervisor {
             status: Status::Working,
             detail: String::new(),
             desktop_ready: false,
+            guests: Default::default(),
             shutdown_requested_at: None,
             recovered_by: None,
             previous_boot_id: None,
@@ -484,6 +498,81 @@ impl Supervisor {
         }
         Ok(())
     }
+
+    fn guest(&self, name: GuestName, phase: GuestState, detail: &str) -> Result<()> {
+        {
+            let _lock = self.lock()?;
+            let mut value = self.current()?;
+            value.guests.insert(name.clone(), phase);
+            let status = if phase == GuestState::Failed && !value.desktop_ready {
+                Status::Failed
+            } else {
+                value.status
+            };
+            let value = self.write(value, &format!("qube:{name}"), status, detail)?;
+            self.update_marker(&value)?;
+        }
+
+        if phase == GuestState::Failed {
+            self.snapshot(&self.id, &format!("failure-qube:{name}"), None)?;
+        }
+
+        Ok(())
+    }
+
+    fn desktop_guests(&self, current: Option<&Attempt>) -> Result<Vec<Value>> {
+        let path = std::env::var_os("AIRLOCK_BOOT_TOPOLOGY")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| "/run/airlock/startup/topology.json".into());
+        if !path.try_exists()? {
+            return Ok(Vec::new());
+        }
+        let inputs = BootInputs::new(state::configuration(&path)?)?;
+        let topology = inputs.topology();
+        let names =
+            crate::planning::plan(topology, topology, &Default::default(), &[], false)?.start;
+
+        Ok(names
+            .into_iter()
+            .map(|name| {
+                let domain = &topology.domains[&name];
+                let gui = domain
+                    .prefs
+                    .get("guivm")
+                    .or_else(|| topology.prefs.get("default_guivm"));
+                let applications = name.as_str() != "sys-gui"
+                    && gui.and_then(Value::as_str) == Some("sys-gui")
+                    && domain.features.get("internal") != Some(&Value::Bool(true));
+
+                let phase = if current.is_some_and(|value| {
+                    value.status == Status::Complete
+                        || (name.as_str() == "sys-gui" && value.desktop_ready)
+                }) {
+                    GuestState::Ready
+                } else {
+                    current
+                        .and_then(|value| value.guests.get(&name))
+                        .copied()
+                        .unwrap_or_default()
+                };
+                json!({"name":name,"phase":phase,"applications":applications})
+            })
+            .collect())
+    }
+}
+
+/// Publish progress only for an active supervised boot, preserving standalone coordinator use.
+pub(crate) fn guest_checkpoint(name: &GuestName, phase: GuestState, detail: &str) -> Result<()> {
+    let supervisor = Supervisor::load()?;
+    if !supervisor.runtime.join("current.json").try_exists()? {
+        return Ok(());
+    }
+    let current: Current = state::read(&supervisor.runtime.join("current.json"))?;
+    ensure!(
+        current.boot_id == supervisor.id,
+        "startup progress belongs to another boot"
+    );
+    supervisor.guest(name.clone(), phase, detail)
 }
 
 /// Record one boot observation or return a read-only desktop status.
@@ -501,8 +590,9 @@ pub(crate) fn execute(request: Request, coordinator: &Coordinator) -> Result<Val
         }
         Action::DesktopStatus => {
             let state = s.read(&s.id)?;
+            let guests = s.desktop_guests(state.as_ref())?;
             return Ok(
-                json!({"status":state.as_ref().map_or(Status::Working, |v| v.status),
+                json!({"boot_id":s.id,"guests":guests,"status":state.as_ref().map_or(Status::Working, |v| v.status),
                     "desktop_ready":state.as_ref().is_some_and(|v| v.desktop_ready),
                     "stage":state.as_ref().map_or("starting", |v| v.stage.as_str()),
                     "detail":state.as_ref().map_or("", |v| v.detail.as_str())}),
@@ -512,6 +602,11 @@ pub(crate) fn execute(request: Request, coordinator: &Coordinator) -> Result<Val
             s.snapshot(&s.id, &label, None)?;
         }
         Action::Stage { name, detail } => s.stage(&name, &detail, false)?,
+        Action::Guest {
+            name,
+            phase,
+            detail,
+        } => s.guest(name, phase, &detail)?,
         Action::Fail { name, detail } => s.stage(&name, &detail, true)?,
         Action::DesktopReady => s.accept(
             coordinator,

@@ -664,6 +664,11 @@ impl Coordinator {
         .start;
         let mut started = Vec::new();
         for name in &starts {
+            crate::boot::guest_checkpoint(
+                name,
+                crate::boot::GuestState::Starting,
+                &format!("Starting {name}"),
+            )?;
             if !self.running()?.contains(name)
                 && self
                     .runner
@@ -677,7 +682,19 @@ impl Coordinator {
             {
                 started.push(name);
             }
-            self.wait_guest(name, &selected.inputs.topology().domains[name])?;
+            if let Err(error) = self.wait_guest(name, &selected.inputs.topology().domains[name]) {
+                crate::boot::guest_checkpoint(
+                    name,
+                    crate::boot::GuestState::Failed,
+                    &format!("{name} could not become ready: {error:#}"),
+                )?;
+                return Err(error);
+            }
+            crate::boot::guest_checkpoint(
+                name,
+                crate::boot::GuestState::Ready,
+                &format!("{name} is ready"),
+            )?;
         }
         let baseline = self.baseline()?;
         let observed =
