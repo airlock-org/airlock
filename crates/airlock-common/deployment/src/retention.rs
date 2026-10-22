@@ -5,6 +5,9 @@
 /// Interpret complete release, journal and pool source groups.
 pub mod inventory;
 
+/// Exact immutable-resource tracing for retained generations and physical pins.
+pub mod tracing;
+
 use vstd::prelude::*;
 
 verus! {

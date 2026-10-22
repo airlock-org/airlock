@@ -883,3 +883,313 @@ fn cleanup_refuses_bind_mounts() -> Result<()> {
     );
     Ok(())
 }
+
+/// Invalid retained references must stop GC before unrelated generations or objects disappear.
+#[test]
+fn gc_refuses_incomplete_manifest_references_before_any_deletion() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let store = Store::new()?;
+    let extra = format!("{hash}-dependency", hash = "b".repeat(32));
+    fs::write(store.physical.join(&extra), b"dependency")?;
+    writeln!(
+        fs::OpenOptions::new()
+            .append(true)
+            .open(store.closure.join("store-paths"))?,
+        "/nix/store/{extra}"
+    )?;
+    store.admit(true)?;
+    store.admit(false)?;
+    store.run(&[
+        "pool",
+        "set-retention",
+        "--pool-root",
+        store.pool_text(),
+        "--domain",
+        "usr-home-runtime-store",
+        "--generation",
+        "2",
+        "--retain",
+        "false",
+    ])?;
+    let first = store
+        .pool
+        .join("domains/usr-home-runtime-store/generations/1/manifest.json");
+    let second = store
+        .pool
+        .join("domains/usr-home-runtime-store/generations/2/manifest.json");
+    let original = read(&first)?;
+    let original_second = fs::read(&second)?;
+    let map = std::path::PathBuf::from(original["store"]["canonical_blob_map"].as_str().unwrap());
+    let original_map = fs::read(&map)?;
+    let map_permissions = fs::metadata(&map)?.permissions();
+    fs::set_permissions(&map, fs::Permissions::from_mode(0o644))?;
+    let object = store.system.rsplit('/').next().unwrap();
+    let metadata = store.pool.join(format!("objects/metadata/{object}.json"));
+    let original_metadata = fs::read(&metadata)?;
+    let root = store
+        .pool
+        .join("root-artifacts")
+        .join(original["root"]["artifact"]["sha256"].as_str().unwrap());
+
+    for defect in [
+        "missing-paths",
+        "wrong-paths-type",
+        "empty-paths",
+        "shortened-closure",
+        "wrong-view",
+        "missing-root",
+        "missing-artifact",
+        "invalid-root",
+        "missing-map-extent",
+    ] {
+        let mut damaged = original.clone();
+        match defect {
+            "missing-paths" => {
+                damaged["store"].as_object_mut().unwrap().remove("paths");
+            }
+            "wrong-paths-type" => damaged["store"]["paths"] = json!(false),
+            "empty-paths" => damaged["store"]["paths"] = json!([]),
+            "shortened-closure" => {
+                damaged["store"]["paths"] = json!([store.system]);
+                damaged["store"]["object_count"] = json!(1);
+            }
+            "wrong-view" => {
+                damaged["store"]["canonical_blob_map"] = json!(
+                    store
+                        .pool
+                        .join("views/by-closure/wrong/store.blob-map.json")
+                )
+            }
+            "missing-root" => {
+                damaged.as_object_mut().unwrap().remove("root");
+            }
+            "missing-artifact" => {
+                damaged["root"].as_object_mut().unwrap().remove("artifact");
+            }
+            "invalid-root" => damaged["root"]["artifact"] = json!({"sha256":"invalid"}),
+            "missing-map-extent" => {
+                let mut value: Value = serde_json::from_slice(&original_map)?;
+                value["extents"].as_array_mut().unwrap().remove(0);
+                fs::write(&map, serde_json::to_vec(&value)?)?;
+            }
+            _ => unreachable!(),
+        }
+        fs::write(&first, serde_json::to_vec(&damaged)?)?;
+        for _ in 0..2 {
+            let output = common::run(
+                &mut store.command(&[
+                    "pool",
+                    "gc",
+                    "--pool-root",
+                    store.pool_text(),
+                    "--keep-generations",
+                    "0",
+                ]),
+                None,
+            )?;
+            assert!(!output.status.success(), "GC accepted {defect}");
+            assert_eq!(
+                fs::read(&second)?,
+                original_second,
+                "GC deleted unrelated generation after {defect}"
+            );
+            assert_eq!(fs::read(&metadata)?, original_metadata);
+            assert!(root.join("root.img").is_file());
+        }
+        fs::write(&map, &original_map)?;
+    }
+    fs::write(&first, serde_json::to_vec(&original)?)?;
+    fs::set_permissions(&map, map_permissions)?;
+    store.run(&[
+        "pool",
+        "gc",
+        "--pool-root",
+        store.pool_text(),
+        "--keep-generations",
+        "0",
+    ])?;
+    assert!(!second.exists());
+    assert_eq!(fs::read(&metadata)?, original_metadata);
+    assert!(root.join("root.img").is_file());
+    Ok(())
+}
+
+/// Corrupted active physical pins refuse cleanup; their original segment remains intact.
+#[test]
+fn gc_refuses_invalid_physical_pins_before_any_deletion() -> Result<()> {
+    let store = Store::new()?;
+    store.admit(true)?;
+    store.run(&[
+        "pool",
+        "mark-running",
+        "--pool-root",
+        store.pool_text(),
+        "--domain",
+        "usr-home-runtime-store",
+        "--generation",
+        "1",
+        "--volume",
+        "store-data",
+    ])?;
+    let path = store
+        .pool
+        .join("running/usr-home-runtime-store/1/store-data.json");
+    let original = read(&path)?;
+    let segment = original["physical_references"][0]["segment_id"]
+        .as_str()
+        .unwrap();
+    let blob = store.pool.join(format!("objects/segments/{segment}.blob"));
+    let original_bytes = fs::read(&blob)?;
+    for defect in [
+        "missing-length",
+        "zero-length",
+        "overflow",
+        "truncated-segment",
+        "empty-pins",
+        "invalid-segment",
+    ] {
+        let mut damaged = original.clone();
+        match defect {
+            "missing-length" => {
+                damaged["physical_references"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("length");
+            }
+            "zero-length" => damaged["physical_references"][0]["length"] = json!(0),
+            "overflow" => damaged["physical_references"][0]["offset"] = json!(u64::MAX),
+            "truncated-segment" => {
+                damaged["physical_references"][0]["length"] = json!(original_bytes.len() as u64 + 1)
+            }
+            "empty-pins" => damaged["physical_references"] = json!([]),
+            "invalid-segment" => {
+                damaged["physical_references"][0]["segment_id"] = json!("../outside")
+            }
+            _ => unreachable!(),
+        }
+        fs::write(&path, serde_json::to_vec(&damaged)?)?;
+        let output = common::run(
+            &mut store.command(&[
+                "pool",
+                "gc",
+                "--pool-root",
+                store.pool_text(),
+                "--keep-generations",
+                "0",
+            ]),
+            None,
+        )?;
+        assert!(!output.status.success(), "GC accepted {defect}");
+        assert_eq!(fs::read(&blob)?, original_bytes);
+    }
+    fs::write(&path, serde_json::to_vec(&original)?)?;
+    store.run(&[
+        "pool",
+        "gc",
+        "--pool-root",
+        store.pool_text(),
+        "--keep-generations",
+        "0",
+    ])?;
+    assert_eq!(fs::read(&blob)?, original_bytes);
+    Ok(())
+}
+
+/// Interrupted admissions keep their objects without a generation manifest; malformed owners refuse GC.
+#[test]
+fn gc_traces_pending_admission_objects_without_silently_omitting_bad_records() -> Result<()> {
+    let store = Store::new()?;
+    store.admit(true)?;
+    let extra = format!("{hash}-pending", hash = "b".repeat(32));
+    fs::write(store.physical.join(&extra), b"pending data")?;
+    writeln!(
+        fs::OpenOptions::new()
+            .append(true)
+            .open(store.closure.join("store-paths"))?,
+        "/nix/store/{extra}"
+    )?;
+    let output = common::run(
+        store
+            .admission()
+            .env("AIRLOCK_CLOSURE_STORE_FAILPOINT", "object-after-metadata"),
+        None,
+    )?;
+    assert!(!output.status.success());
+    let metadata = store
+        .pool
+        .join(format!("objects/blob-metadata/{extra}.json"));
+    let original = read(&metadata)?;
+    for field in ["entry", "transaction", "schema"] {
+        let mut damaged = original.clone();
+        damaged.as_object_mut().unwrap().remove(field);
+        fs::write(&metadata, serde_json::to_vec(&damaged)?)?;
+        let output = common::run(
+            &mut store.command(&[
+                "pool",
+                "gc",
+                "--pool-root",
+                store.pool_text(),
+                "--keep-generations",
+                "0",
+            ]),
+            None,
+        )?;
+        assert!(
+            !output.status.success(),
+            "GC ignored a pending object without {field}"
+        );
+        assert!(metadata.is_file());
+    }
+    fs::write(&metadata, serde_json::to_vec(&original)?)?;
+    for _ in 0..2 {
+        let output = common::run(
+            &mut store.command(&[
+                "pool",
+                "gc",
+                "--pool-root",
+                store.pool_text(),
+                "--keep-generations",
+                "0",
+            ]),
+            None,
+        )?;
+        assert!(
+            output.status.success(),
+            "pending-object GC failed: {reply}",
+            reply = String::from_utf8_lossy(&output.stdout)
+        );
+        assert_eq!(read(&metadata)?, original);
+    }
+    // The first admission can publish the shared terminator before any manifest
+    // exists. No selected view is needed to keep that unfinished object's bytes.
+    let initial = Store::new()?;
+    let output = common::run(
+        initial.admission().env(
+            "AIRLOCK_CLOSURE_STORE_FAILPOINT",
+            "generation-before-manifest",
+        ),
+        None,
+    )?;
+    assert!(!output.status.success());
+    let terminator = initial.pool.join("objects/blob-metadata/.tar-eof.json");
+    let original_terminator = fs::read(&terminator)?;
+    let output = common::run(
+        &mut initial.command(&[
+            "pool",
+            "gc",
+            "--pool-root",
+            initial.pool_text(),
+            "--keep-generations",
+            "0",
+        ]),
+        None,
+    )?;
+    assert!(
+        output.status.success(),
+        "initial-admission GC failed: {reply}",
+        reply = String::from_utf8_lossy(&output.stdout)
+    );
+    assert_eq!(fs::read(&terminator)?, original_terminator);
+    Ok(())
+}

@@ -72,6 +72,8 @@ mod maintenance;
 
 mod protection;
 
+mod tracing;
+
 mod mounts;
 
 mod root;

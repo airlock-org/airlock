@@ -309,6 +309,15 @@
 //! supplied exact pins must exist. Stale running references lacking logical records retain their separate
 //! physical-pin handling; they never invent a committed record. Source references conservatively protect
 //! every matching generation.
+//! Resource tracing preserves exactly every supplied manifest's objects, shared tar terminator,
+//! canonical view and optional root, plus every pending object and pinned physical segment.
+//! A single verified constructor accounts for the complete supplied logical source collection;
+//! repeated extensions preserve earlier requirements. Invalid names or physical-range arithmetic
+//! refuse tracing. Ordinary Rust decodes mandatory manifest fields, checks view/list correspondence
+//! and physical bounds, and validates surviving root references before GC starts deleting.
+//! Filesystem discovery, source-to-core projection, indexed lookup construction, record integrity
+//! and the final deletion loops remain outside these proofs. Root contents and faithful filesystem
+//! execution are not established by tracing references.
 //! Pin-release classification is rechecked under the same storage lock, so a newer manual retention
 //! update is not overwritten. Repeated collection rebuilds protections and requests; it does not replay
 //! cached deletion authority. Independent raw filesystem writers, durable publication, physical-byte

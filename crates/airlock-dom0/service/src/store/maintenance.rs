@@ -1,10 +1,11 @@
 //! Storage reclamation traces logical generations and physical pins before deleting bytes.
 //! Relocation publishes verified replacement extents before refreshing unpinned views.
 
-use super::{fs::*, records, root, segments, views};
+use super::{fs::*, records, segments, tracing, views};
 use airlock_deployment_core::retention::{
     Candidate, Generation, Protection, ReclaimRequest,
     inventory::{self as protection_inventory, PoolSources, ProtectionInventory, StoredGeneration},
+    tracing::{Resource, Sources, Trace},
 };
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
@@ -17,6 +18,10 @@ use std::{
 
 /// Objects and generations protected by selection, retention, running guests or unfinished work.
 struct Liveness {
+    // Complete decoded sources; one verified constructor accounts for every source.
+    sources: Sources,
+    // Verified union of retained manifest references and unfinished object admissions.
+    trace: Trace,
     // Nix basenames with at least one retained logical reference.
     objects: BTreeSet<String>,
     // Canonical view directories retained by protected generation manifests.
@@ -33,26 +38,40 @@ struct Liveness {
     stale_running: Vec<PathBuf>,
 }
 
-fn add_manifest(live: &mut Liveness, manifest: &Value) -> Result<()> {
-    if let Some(paths) = manifest["store"]["paths"].as_array() {
-        for path in paths {
-            live.objects
-                .insert(entry(path.as_str().context("invalid live path")?)?.to_owned());
+/// Extend the checked trace before rebuilding its filesystem lookup indexes.
+fn add_manifest(root: &Path, live: &mut Liveness, manifest: &Value) -> Result<()> {
+    let source = tracing::manifest(root, manifest)?;
+    live.sources.manifests.push(source);
+    Ok(())
+}
+
+/// Sets accelerate lookup; their source is exclusively the immutable verified trace.
+fn index_trace(live: &mut Liveness) -> Result<()> {
+    live.trace =
+        Trace::from_sources(&live.sources).context("invalid retained resource references")?;
+    live.objects.clear();
+    live.views.clear();
+    for reference in live.trace.references() {
+        match reference {
+            Resource::Object(name) => {
+                live.objects.insert(name.clone());
+            }
+            Resource::View(path) => {
+                live.views.insert(PathBuf::from(path));
+            }
+            Resource::Root(_) | Resource::Segment(_) => {}
         }
-    }
-    if let Some(path) = manifest["store"]["canonical_blob_map"].as_str() {
-        live.views.insert(
-            Path::new(path)
-                .parent()
-                .context("missing view parent")?
-                .to_path_buf(),
-        );
     }
     Ok(())
 }
 
 fn liveness(root: &Path, keep: usize) -> Result<(Liveness, ProtectionInventory)> {
     let mut live = Liveness {
+        sources: Sources {
+            manifests: Vec::new(),
+            pending_objects: Vec::new(),
+        },
+        trace: Trace::new(),
         objects: BTreeSet::new(),
         views: BTreeSet::new(),
         generations: BTreeSet::new(),
@@ -78,6 +97,10 @@ fn liveness(root: &Path, keep: usize) -> Result<(Liveness, ProtectionInventory)>
         let domain = text(&value, "domain")?;
         component(&domain)?;
         let generation = number(&value, "generation")?;
+        ensure!(
+            path == records::manifest_path(root, &domain, generation)?,
+            "generation record path identity mismatch"
+        );
         if records::committed(root, &value)? {
             by_domain
                 .entry(domain.clone())
@@ -104,7 +127,7 @@ fn liveness(root: &Path, keep: usize) -> Result<(Liveness, ProtectionInventory)>
                 .join(format!("{}.json", component(id)?));
             if tx_path.try_exists()? && read::<Value>(&tx_path)?["status"] != "aborted" {
                 live.transactions.insert(id.to_owned());
-                add_manifest(&mut live, &value)?;
+                add_manifest(root, &mut live, &value)?;
                 live.incomplete.push(json!({"domain":domain,"generation":generation,"transaction":id,"manifest":path}));
             }
         }
@@ -172,7 +195,7 @@ fn liveness(root: &Path, keep: usize) -> Result<(Liveness, ProtectionInventory)>
             .get(&key)
             .context("current or running generation missing")?;
         let value = value.clone();
-        add_manifest(&mut live, &value)?;
+        add_manifest(root, &mut live, &value)?;
     }
 
     for path in children(&root.join("objects/blob-metadata"))? {
@@ -180,25 +203,23 @@ fn liveness(root: &Path, keep: usize) -> Result<(Liveness, ProtectionInventory)>
             continue;
         }
         let value: Value = read(&path)?;
-        if value["transaction"]
-            .as_str()
-            .is_some_and(|id| live.transactions.contains(id))
-            && let Some(name) = value["entry"].as_str()
-        {
-            live.objects.insert(component(name)?.to_owned());
+        if live.transactions.contains(&text(&value, "transaction")?) {
+            let name = tracing::pending_object(&value)?;
+            component(&name)?;
+            ensure!(
+                path.file_stem().and_then(|s| s.to_str()) == Some(name.as_str()),
+                "pending object path identity mismatch"
+            );
+            live.sources.pending_objects.push(name);
         }
     }
+    index_trace(&mut live)?;
     Ok((live, protected))
 }
 
 fn locations(root: &Path, live: &Liveness) -> Result<BTreeMap<String, (Value, segments::Extent)>> {
     let mut output = BTreeMap::new();
-    for name in live
-        .objects
-        .iter()
-        .map(String::as_str)
-        .chain((!live.views.is_empty()).then_some(".tar-eof"))
-    {
+    for name in live.objects.iter().map(String::as_str) {
         let value: Value = read(&segments::object_metadata(root, name)?)?;
         let extent = segments::extent(root, &value, true)?;
         output.insert(name.to_owned(), (value, extent));
@@ -207,6 +228,8 @@ fn locations(root: &Path, live: &Liveness) -> Result<BTreeMap<String, (Value, se
 }
 
 struct PhysicalReferences {
+    // Exact segment identities from verified tracing of every resolved physical range.
+    protected_segments: BTreeSet<String>,
     // Physical extents protected by retained views and live or preparing consumers.
     by_segment: BTreeMap<String, Vec<Value>>,
     // Stale kernel mappings reported for recovery without releasing live pins.
@@ -234,10 +257,11 @@ fn physical_refs(
         }
     }
     for (_, record) in records::running_refs(root)? {
-        for value in record["physical_references"]
+        let pins = record["physical_references"]
             .as_array()
-            .context("running reference lacks physical pins")?
-        {
+            .context("running reference lacks physical pins")?;
+        ensure!(!pins.is_empty(), "running reference has no physical pins");
+        for value in pins {
             references
                 .entry(text(value, "segment_id")?)
                 .or_default()
@@ -259,17 +283,44 @@ fn physical_refs(
             stale.push(path);
             continue;
         }
-        for reference in value["physical_references"]
+        let pins = value["physical_references"]
             .as_array()
-            .context("runtime reference lacks physical pins")?
-        {
+            .context("runtime reference lacks physical pins")?;
+        ensure!(!pins.is_empty(), "runtime reference has no physical pins");
+        for reference in pins {
             references
                 .entry(text(reference, "segment_id")?)
                 .or_default()
                 .push(reference.clone());
         }
     }
+    let mut trace = Trace::new();
+    for values in references.values() {
+        let extents = tracing::extents(values)?;
+        ensure!(
+            trace.include_extents(&extents),
+            "invalid physical reference range"
+        );
+        for extent in &extents {
+            segments::segment_id(&extent.segment)?;
+            let path = segments::blob(root, &extent.segment)?;
+            pool_path(root, &path)?;
+            ensure!(
+                extent.offset + extent.length <= fs::metadata(&path)?.len(),
+                "physical pin exceeds segment"
+            );
+        }
+    }
+    let protected_segments = trace
+        .references()
+        .iter()
+        .map(|r| match r {
+            Resource::Segment(id) => Ok(id.clone()),
+            _ => anyhow::bail!("unexpected physical resource category"),
+        })
+        .collect::<Result<_>>()?;
     Ok(PhysicalReferences {
+        protected_segments,
         by_segment: references,
         stale_runtime: stale,
     })
@@ -315,7 +366,11 @@ fn inventory(
     Ok(output)
 }
 
-fn delete_segments(root: &Path, inventory: &[Value]) -> Result<Value> {
+fn delete_segments(
+    root: &Path,
+    inventory: &[Value],
+    protected: &BTreeSet<String>,
+) -> Result<Value> {
     let current = root.join("objects/current-segment");
     let current = if current.try_exists()? {
         fs::read_to_string(current)?.trim().to_owned()
@@ -333,6 +388,7 @@ fn delete_segments(root: &Path, inventory: &[Value]) -> Result<Value> {
         if value["sealed"] == true
             && id != current
             && number(value, "physical_reference_count")? == 0
+            && !protected.contains(&id)
         {
             failpoint("gc-before-segment-delete")?;
             remove(&segments::blob(root, &id)?)?;
@@ -384,6 +440,7 @@ pub(super) fn gc(root: &Path, keep: usize, references: Vec<Protection>) -> Resul
     let protected = pool_inventory
         .with_references(references)
         .context("invalid collection protections")?;
+    let previously_traced = live.generations.clone();
     let mut requests = Vec::new();
     for ((domain, number), (_, manifest)) in &live.manifests {
         let candidate = Candidate {
@@ -400,20 +457,52 @@ pub(super) fn gc(root: &Path, keep: usize, references: Vec<Protection>) -> Resul
         }
     }
     // Explicit machine references retain objects and views as well as generation records.
-    for key in live.generations.clone() {
+    for key in live
+        .generations
+        .difference(&previously_traced)
+        .cloned()
+        .collect::<Vec<_>>()
+    {
         let manifest = live
             .manifests
             .get(&key)
             .context("protected generation missing")?
             .1
             .clone();
-        add_manifest(&mut live, &manifest)?;
+        add_manifest(root, &mut live, &manifest)?;
     }
+    // Decode every surviving root before any deletion, including inactive manifests
+    // retained for recovery. Invalid roots must not be discovered after object removal.
+    index_trace(&mut live)?;
+    let retiring: BTreeSet<_> = requests
+        .iter()
+        .map(|r| (r.domain().to_owned(), r.generation()))
+        .collect();
+    for path in records::manifests(root)? {
+        let value: Value = read(&path)?;
+        let digest = tracing::root_digest(&value)?;
+        let key = (text(&value, "domain")?, number(&value, "generation")?);
+        if !retiring.contains(&key)
+            && let Some(digest) = digest
+        {
+            ensure!(live.trace.include_root(digest), "invalid root reference");
+        }
+    }
+    let roots: BTreeSet<_> = live
+        .trace
+        .references()
+        .iter()
+        .filter_map(|r| match r {
+            Resource::Root(digest) => Some(digest.clone()),
+            _ => None,
+        })
+        .collect();
     // Resolve every retained pin before the first deletion, so damaged metadata fails closed.
     let locations = locations(root, &live)?;
     let PhysicalReferences {
         by_segment: references,
         stale_runtime: stale,
+        protected_segments,
     } = physical_refs(root, &live, &locations)?;
     let inventory = inventory(root, &locations, &references)?;
     let mut removed_generations = Vec::new();
@@ -439,7 +528,7 @@ pub(super) fn gc(root: &Path, keep: usize, references: Vec<Protection>) -> Resul
                 .and_then(|s| s.to_str())
                 .context("invalid metadata name")?;
             if name == ".tar-eof" {
-                if live.views.is_empty() {
+                if !live.objects.contains(name) {
                     remove(&path)?;
                     removed_special.push(name.to_owned());
                 }
@@ -463,16 +552,6 @@ pub(super) fn gc(root: &Path, keep: usize, references: Vec<Protection>) -> Resul
             remove(&directory)?;
         }
     }
-    let mut roots = BTreeSet::new();
-    for path in records::manifests(root)? {
-        let value: Value = read(&path)?;
-        if !value["root"]["artifact"].is_null() {
-            let descriptor: root::Descriptor =
-                serde_json::from_value(value["root"]["artifact"].clone())?;
-            descriptor.validate()?;
-            roots.insert(descriptor.sha256);
-        }
-    }
     let mut removed_roots = Vec::new();
     for path in children(&root.join("root-artifacts"))? {
         let name = path
@@ -485,7 +564,7 @@ pub(super) fn gc(root: &Path, keep: usize, references: Vec<Protection>) -> Resul
             remove(&path)?;
         }
     }
-    let mut result = delete_segments(root, &inventory)?;
+    let mut result = delete_segments(root, &inventory, &protected_segments)?;
     for (key,value) in json!({
         "schema": "airlock.closure-store.gc.v1",
         "status": "passed",
@@ -831,9 +910,14 @@ pub(super) fn compact(
     let live_locations = locations(root, &live)?;
     let PhysicalReferences {
         by_segment: references,
+        protected_segments,
         ..
     } = physical_refs(root, &live, &live_locations)?;
-    let retirement = delete_segments(root, &inventory(root, &live_locations, &references)?)?;
+    let retirement = delete_segments(
+        root,
+        &inventory(root, &live_locations, &references)?,
+        &protected_segments,
+    )?;
     failpoint("compact-after-retirement")?;
     let dead: u64 = candidates
         .iter()
@@ -1031,7 +1115,7 @@ pub(super) fn recover(root: &Path) -> Result<Value> {
             continue;
         }
         let value: Value = read(&path)?;
-        let name = text(&value, "entry")?;
+        let name = tracing::pending_object(&value)?;
         if reconcile_object(root, &name, &value)? {
             reconciled.push(name);
         }
@@ -1058,6 +1142,7 @@ pub(super) fn status(root: &Path) -> Result<Value> {
     let PhysicalReferences {
         by_segment: references,
         stale_runtime: stale,
+        ..
     } = physical_refs(root, &live, &locations)?;
     let inventory = inventory(root, &locations, &references)?;
 

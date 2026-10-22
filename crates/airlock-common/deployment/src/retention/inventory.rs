@@ -114,7 +114,7 @@ pub open spec fn any(ps: Seq<Protection>, c: Candidate) -> bool {
     exists_in(ps, |p: Protection| protects(p, c))
 }
 
-proof fn advance<A>(s: Seq<A>, n: int, p: spec_fn(A) -> bool)
+pub(super) proof fn advance<A>(s: Seq<A>, n: int, p: spec_fn(A) -> bool)
     requires 0 <= n < s.len(),
     ensures exists_in(s.take(n + 1), p) == (exists_in(s.take(n), p) || p(s[n])),
 {
