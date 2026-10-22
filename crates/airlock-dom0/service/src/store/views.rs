@@ -1,7 +1,8 @@
 //! EROFS indexes describe a logical tar stream backed by immutable pool extents.
 //! Device-mapper exposes that stream without copying package bytes into each VM.
 
-use super::{fs::*, records, segments};
+use super::{fs::*, records, runtime, segments};
+use airlock_deployment_core::retention::runtime::{Context as ReleaseContext, Phase, Presence};
 use airlock_nix_core::artifact::cache::layout_hash;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,6 @@ use std::{
     io::{Read, Seek, SeekFrom, Write},
     os::unix::fs::{PermissionsExt, symlink},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
 
 /// One contiguous part of the logical tar stream, bound to admitted object bytes.
@@ -205,18 +205,17 @@ pub(super) fn dm_name(domain: &str, generation: u64, closure: &str) -> String {
     )
 }
 
-pub(super) fn dm_exists(name: &str) -> Result<bool> {
-    Ok(Command::new(tool("dmsetup", "AIRLOCK_DMSETUP"))
-        .args(["info", name])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()?
-        .success())
+fn dm_presence(name: &str) -> Result<Presence> {
+    let presence = runtime::observe(name).presence();
+    ensure!(
+        presence != Presence::Unknown,
+        "unknown mapper presence: {name}"
+    );
+    Ok(presence)
 }
 
 pub(super) fn detach(name: &str, deferred: bool) -> Result<bool> {
-    if !dm_exists(name)? {
+    if dm_presence(name)? == Presence::Absent {
         return Ok(false);
     }
     let mut args = vec!["remove"];
@@ -297,7 +296,7 @@ pub(super) fn attach_map(root: &Path, name: &str, map: &Value) -> Result<Value> 
     );
 
     let dmsetup = tool("dmsetup", "AIRLOCK_DMSETUP");
-    if !dm_exists(name)? {
+    if dm_presence(name)? == Presence::Absent {
         atomic(
             &root.join("runtime").join(format!("{name}.table")),
             table.as_bytes(),
@@ -318,14 +317,14 @@ pub(super) fn attach_map(root: &Path, name: &str, map: &Value) -> Result<Value> 
     }))
 }
 
-pub(super) fn runtime_reference(
+fn runtime_reference(
     root: &Path,
     name: &str,
     domain: &str,
     generation: u64,
     path: &str,
     map: &Value,
-    status: &str,
+    status: Phase,
 ) -> Result<()> {
     write(
         &root
@@ -333,7 +332,7 @@ pub(super) fn runtime_reference(
             .join(format!("{}.json", component(name)?)),
         &json!({
             "schema": "airlock.closure-store.runtime-view-ref.v1",
-            "status": status,
+            "status": status.status(),
             "domain": domain,
             "generation": generation,
             "dm_name": name,
@@ -366,9 +365,17 @@ pub(super) fn attach(root: &Path, domain: &str, generation: u64, attaching: bool
     });
     if attaching {
         verify(root, store)?;
-        runtime_reference(root, &name, domain, generation, &path, &map, "preparing")?;
+        runtime_reference(
+            root,
+            &name,
+            domain,
+            generation,
+            &path,
+            &map,
+            Phase::Preparing,
+        )?;
         let view = attach_map(root, &name, &map)?;
-        runtime_reference(root, &name, domain, generation, &path, &map, "active")?;
+        runtime_reference(root, &name, domain, generation, &path, &map, Phase::Active)?;
         for key in ["segments", "loops", "backing_paths"] {
             result[key] = view[key].clone();
         }
@@ -377,12 +384,29 @@ pub(super) fn attach(root: &Path, domain: &str, generation: u64, attaching: bool
         result["view_backend"] = json!("erofs-objectmap");
     } else {
         let removed = detach(&name, true)?;
-        let still_present = dm_exists(&name)?;
-        let reference_removed = !still_present && reference.try_exists()?;
-        if still_present {
-            runtime_reference(root, &name, domain, generation, &path, &map, "retiring")?;
+        let observation = runtime::observe(&name);
+        ensure!(
+            observation.presence() != Presence::Unknown,
+            "unknown mapper removal outcome: {name}"
+        );
+        let request = observation.release(
+            root.to_str().context("non-UTF-8 pool path")?.to_owned(),
+            Phase::Retiring,
+            ReleaseContext::Reconciliation,
+        );
+        let reference_removed = request.is_some() && reference.try_exists()?;
+        if let Some(request) = request {
+            runtime::release(request)?;
         } else {
-            remove(&reference)?;
+            runtime_reference(
+                root,
+                &name,
+                domain,
+                generation,
+                &path,
+                &map,
+                Phase::Retiring,
+            )?;
         }
         result["removed"] = json!(removed);
         result["runtime_ref_removed"] = json!(reference_removed);
@@ -430,7 +454,7 @@ impl<'a> IndexMapping<'a> {
             0,
             map_path.to_str().context("invalid index map path")?,
             map,
-            "preparing",
+            Phase::Preparing,
         )?;
         Ok(Self {
             root,
@@ -442,12 +466,17 @@ impl<'a> IndexMapping<'a> {
     fn release(&mut self) -> Result<()> {
         if self.active {
             detach(self.name, false)?;
-            remove(
-                &self
-                    .root
-                    .join("runtime")
-                    .join(format!("{}.json", self.name)),
-            )?;
+            let request = runtime::observe(self.name)
+                .release(
+                    self.root
+                        .to_str()
+                        .context("non-UTF-8 pool path")?
+                        .to_owned(),
+                    Phase::Retiring,
+                    ReleaseContext::Reconciliation,
+                )
+                .context("mapper disappearance is not confirmed")?;
+            runtime::release(request)?;
             remove(
                 &self
                     .root

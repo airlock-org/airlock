@@ -106,6 +106,25 @@ fn main() -> Result<()> {
 
         return Ok(fs::write(&args[args.len() - 2], b"index fixture")?);
     }
+    if name == "dmsetup"
+        && let Some(fixture) = std::env::var_os("AIRLOCK_TEST_MAPPER_REPORT")
+    {
+        ensure!(
+            args.get(1).is_some_and(|arg| arg == "info"),
+            "unexpected mapper mutation: {args:?}"
+        );
+        let report: serde_json::Value = serde_json::from_slice(&fs::read(fixture)?)?;
+        std::io::stdout().write_all(report["stdout"].as_str().unwrap_or("").as_bytes())?;
+        std::io::stderr().write_all(report["stderr"].as_str().unwrap_or("").as_bytes())?;
+        if report["signal"].as_bool() == Some(true) {
+            // A child killed mid-query must not turn partially captured output into absence.
+            rustix::process::kill_process(
+                rustix::process::getpid(),
+                rustix::process::Signal::TERM,
+            )?;
+        }
+        std::process::exit(report["exit"].as_i64().unwrap_or(0) as i32);
+    }
     if name == "terminal-relay" {
         let root =
             std::env::var_os("AIRLOCK_TEST_TERMINAL_ROOT").context("terminal fixture root")?;

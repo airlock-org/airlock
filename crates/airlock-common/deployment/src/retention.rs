@@ -11,6 +11,9 @@ pub mod tracing;
 /// Exact physical segment deletion requests derived from complete resource traces.
 pub mod segments;
 
+/// Conservative mapping observations and exact runtime-pin release permissions.
+pub mod runtime;
+
 use vstd::prelude::*;
 
 verus! {

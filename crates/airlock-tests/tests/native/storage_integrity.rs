@@ -480,6 +480,188 @@ fn compact(store: &Store) -> Command {
     ])
 }
 
+/// A runtime-only physical pin survives failed kernel queries even after its generation is collected.
+#[test]
+fn runtime_pins_survive_uncertain_observations_and_release_only_after_confirmed_absence()
+-> Result<()> {
+    let store = Store::new()?;
+    // Seal every fragment so the runtime pin is the only remaining deletion barrier.
+    let admitted = common::json(
+        store
+            .admission()
+            .args(["--segment-target-bytes", "512", "--activate", "false"]),
+        None,
+    )?;
+    let map = read(admitted["canonical_blob_map"].as_str().unwrap())?;
+    let pins: Vec<_> = map["extents"].as_array().unwrap().iter().map(|extent| json!({
+        "segment_id": extent["segment_id"], "offset": extent["segment_offset"], "length": extent["length"],
+    })).collect();
+    let name = "airlock-runtime-test";
+    let reference = store.pool.join("runtime").join(format!("{name}.json"));
+    fs::write(
+        &reference,
+        serde_json::to_vec(&json!({
+            "schema":"airlock.closure-store.runtime-view-ref.v1", "status":"active",
+            "dm_name":name, "physical_references":pins,
+        }))?,
+    )?;
+    let original_record = fs::read(&reference)?;
+    let physical = snapshot(&store.pool.join("objects/segments"))?;
+    let peer = common::peer_link(store.temporary.path(), "dmsetup")?;
+    let report = store.temporary.path().join("mapper-report.json");
+    let invoke = |action: &str| -> Result<Value> {
+        let mut command = store.command(&["pool", action, "--pool-root", store.pool_text()]);
+        if action == "gc" {
+            command.args(["--keep-generations", "0"]);
+        }
+        common::json(
+            command
+                .env("AIRLOCK_DMSETUP", &peer)
+                .env("AIRLOCK_TEST_MAPPER_REPORT", &report),
+            None,
+        )
+    };
+
+    for observation in [
+        json!({"exit":1}),
+        json!({"exit":1,"stdout":"unrelated|253|0\n"}),
+        json!({"signal":true}),
+        json!({"stdout":"unrelated|253|0\n","stderr":"query incomplete"}),
+        json!({"stdout":"malformed\n"}),
+        json!({"stdout":"unrelated|253|0"}),
+        json!({"stdout":"unrelated|253|0\nunrelated|253|1\n"}),
+        json!({"stdout":format!("{name}|253|0\n")}),
+    ] {
+        fs::write(&report, serde_json::to_vec(&observation)?)?;
+        for _ in 0..2 {
+            assert!(
+                invoke("recover")?["removed_runtime_refs"]
+                    .as_array()
+                    .unwrap()
+                    .is_empty()
+            );
+            assert!(
+                invoke("gc")?["removed_segments"]
+                    .as_array()
+                    .unwrap()
+                    .is_empty()
+            );
+            assert!(!Path::new(admitted["manifest"].as_str().unwrap()).exists());
+            assert_eq!(fs::read(&reference)?, original_record);
+            assert_eq!(snapshot(&store.pool.join("objects/segments"))?, physical);
+        }
+    }
+    // Ordinary process creation failure also retains the same physical protection.
+    for action in ["recover", "gc"] {
+        let mut command = store.command(&["pool", action, "--pool-root", store.pool_text()]);
+        if action == "gc" {
+            command.args(["--keep-generations", "0"]);
+        }
+        common::json(
+            command.env(
+                "AIRLOCK_DMSETUP",
+                store.temporary.path().join("missing-dmsetup"),
+            ),
+            None,
+        )?;
+        assert_eq!(fs::read(&reference)?, original_record);
+        assert_eq!(snapshot(&store.pool.join("objects/segments"))?, physical);
+    }
+
+    // A successful inventory containing only another name proves this exact mapping absent.
+    fs::write(
+        &report,
+        br#"{"stdout":"airlock-runtime-test-other|253|0\n"}"#,
+    )?;
+    assert_eq!(
+        invoke("recover")?["removed_runtime_refs"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(!reference.exists());
+    assert!(
+        invoke("recover")?["removed_runtime_refs"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        !invoke("gc")?["removed_segments"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        invoke("gc")?["removed_segments"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    Ok(())
+}
+
+/// An interrupted prepare is retained by collection, then explicitly reconciled under attach exclusion.
+#[test]
+fn preparing_and_invalid_runtime_records_do_not_silently_lose_protection() -> Result<()> {
+    let store = Store::new()?;
+    let admitted = store.admit(false)?;
+    let map = read(admitted["canonical_blob_map"].as_str().unwrap())?;
+    let extent = &map["extents"][0];
+    let record = json!({
+        "schema":"airlock.closure-store.runtime-view-ref.v1", "status":"preparing", "dm_name":"airlock-preparing",
+        "physical_references":[{"segment_id":extent["segment_id"], "offset":extent["segment_offset"], "length":extent["length"]}],
+    });
+    let path = store.pool.join("runtime/airlock-preparing.json");
+    fs::write(&path, serde_json::to_vec(&record)?)?;
+    let peer = common::peer_link(store.temporary.path(), "dmsetup")?;
+    let report = store.temporary.path().join("mapper-report.json");
+    fs::write(&report, br#"{"stdout":"No devices found\n"}"#)?;
+    let invoke = |action: &str| {
+        let mut command = store.command(&["pool", action, "--pool-root", store.pool_text()]);
+        if action == "gc" {
+            command.args(["--keep-generations", "0"]);
+        }
+        command
+            .env("AIRLOCK_DMSETUP", &peer)
+            .env("AIRLOCK_TEST_MAPPER_REPORT", &report);
+        command
+    };
+    assert!(
+        common::json(&mut invoke("gc"), None)?["removed_segments"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(path.is_file());
+    for (field, invalid) in [
+        ("schema", "unknown"),
+        ("status", "unknown"),
+        ("dm_name", "airlock-other"),
+        ("dm_name", "airlock-escaped name"),
+    ] {
+        let mut broken = record.clone();
+        broken[field] = json!(invalid);
+        fs::write(&path, serde_json::to_vec(&broken)?)?;
+        let before = snapshot(&store.pool)?;
+        for action in ["recover", "gc"] {
+            assert!(!common::run(&mut invoke(action), None)?.status.success());
+            assert_eq!(snapshot(&store.pool)?, before);
+        }
+    }
+    fs::write(&path, serde_json::to_vec(&record)?)?;
+    assert_eq!(
+        common::json(&mut invoke("recover"), None)?["removed_runtime_refs"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(!path.exists());
+    Ok(())
+}
+
 /// Planning is read-only, and running disk maps retain old bytes until their owner explicitly releases them.
 #[test]
 fn compaction_preserves_running_segments_until_pin_release() -> Result<()> {

@@ -323,6 +323,14 @@
 //! A sealed, unreferenced metadata-only remainder can finish its interrupted unlink. A remaining blob
 //! without metadata, or any referenced missing bytes, refuses cleanup. Repeated cleanup rebuilds requests
 //! from fresh observations.
+//! Runtime mapping observations distinguish present, absent and unknown. The verified classifier
+//! accounts for every name in a supplied complete inventory; failed or malformed evidence cannot
+//! produce absence. Runtime-pin release requires exact-name absence and a known lifecycle, with
+//! preparing pins retained during collection. A consumed permission preserves its original pool
+//! and mapping through release. Ordinary Rust checks report completeness, persisted identity and
+//! schema, and obtains the kernel inventory. Successful truthful enumeration and admission-lock
+//! exclusion of Airlock attach operations remain assumptions; independent kernel/administrator
+//! changes between observation and execution are not excluded by these proofs.
 //! Filesystem discovery, source-to-core projection, record integrity, object/view/root lookup indexes
 //! and their deletion decisions remain ordinary Rust. Segment record decoding, the adapter's faithful
 //! use of requests, lock discipline, truthful observations and actual unlink/fsync remain trusted.

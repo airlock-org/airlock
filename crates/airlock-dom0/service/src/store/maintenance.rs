@@ -1,10 +1,11 @@
 //! Storage reclamation traces logical generations and physical pins before deleting bytes.
 //! Relocation publishes verified replacement extents before refreshing unpinned views.
 
-use super::{fs::*, records, segment_retirement, segments, tracing, views};
+use super::{fs::*, records, runtime, segment_retirement, segments, tracing, views};
 use airlock_deployment_core::retention::{
     Candidate, Generation, Protection, ReclaimRequest,
     inventory::{self as protection_inventory, PoolSources, ProtectionInventory, StoredGeneration},
+    runtime::Context as ReleaseContext,
     segments::SegmentIndex,
     tracing::{Resource, Sources, Trace},
 };
@@ -273,22 +274,19 @@ fn physical_refs(
         if path.extension().is_none_or(|s| s != "json") {
             continue;
         }
-        let value: Value = read(&path)?;
-        ensure!(
-            value["schema"] == "airlock.closure-store.runtime-view-ref.v1",
-            "invalid runtime reference"
-        );
-        let name = text(&value, "dm_name")?;
-        let present = views::dm_exists(&name).unwrap_or(true);
-        if !present && value["status"] != "preparing" {
+        let reference = runtime::load(root, &path)?;
+        if runtime::observe(&reference.name)
+            .release(
+                root.to_str().context("non-UTF-8 pool path")?.to_owned(),
+                reference.phase,
+                ReleaseContext::Collection,
+            )
+            .is_some()
+        {
             stale.push(path);
             continue;
         }
-        let pins = value["physical_references"]
-            .as_array()
-            .context("runtime reference lacks physical pins")?;
-        ensure!(!pins.is_empty(), "runtime reference has no physical pins");
-        for reference in pins {
+        for reference in &reference.pins {
             references
                 .entry(text(reference, "segment_id")?)
                 .or_default()
@@ -1019,9 +1017,13 @@ pub(super) fn recover(root: &Path) -> Result<Value> {
         if path.extension().is_none_or(|s| s != "json") {
             continue;
         }
-        let value: Value = read(&path)?;
-        if !views::dm_exists(&text(&value, "dm_name")?).unwrap_or(true) {
-            remove(&path)?;
+        let reference = runtime::load(root, &path)?;
+        if let Some(request) = runtime::observe(&reference.name).release(
+            root.to_str().context("non-UTF-8 pool path")?.to_owned(),
+            reference.phase,
+            ReleaseContext::Reconciliation,
+        ) {
+            runtime::release(request)?;
             removed_runtime.push(path);
         }
     }
