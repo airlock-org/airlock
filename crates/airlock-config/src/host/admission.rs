@@ -131,7 +131,7 @@ fn configuration(context: &ModuleContext, cfg: &NixValue, store: NixValue) -> Ni
             format!("qubes-rpc/{rpc}"),
             nix_record! {
                 "source": handler,
-                "mode": "0555",
+                "mode": "symlink",
             },
         ));
         commands.push(nix_record! {

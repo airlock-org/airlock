@@ -589,14 +589,14 @@ fn files(
                     driver.clone(),
                     nix_record! {
                         "source": hook,
-                        "mode": "0555",
+                        "mode": "symlink",
                     },
                 ),
                 "NetworkManager/dispatcher.d/30-qubes-external-ip": when(
                     driver,
                     nix_record! {
                         "source": external,
-                        "mode": "0555",
+                        "mode": "symlink",
                     },
                 ),
                 "systemd/network/80-qubes-vif.link": nix_record! {
@@ -616,7 +616,7 @@ fn files(
                     provider.clone(),
                     nix_record! {
                         "source": proxy,
-                        "mode": "0555",
+                        "mode": "symlink",
                     },
                 ),
                 "qubes/rpc-config/qubes.UpdatesProxy": when(

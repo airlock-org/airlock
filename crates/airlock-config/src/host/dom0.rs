@@ -464,7 +464,7 @@ impl Host<'_> {
                 "etc": nix_record! {
                     "qubes-rpc/airlock.Dom0Poweroff": nix_record! {
                         "source": poweroff,
-                        "mode": "0555",
+                        "mode": "symlink",
                     },
                 },
             },

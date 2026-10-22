@@ -174,7 +174,7 @@ fn host(context: &ModuleContext, cfg: &NixValue) -> NixValue {
             "etc": nix_record! {
                 "qubes-rpc/airlock.DevDom0Shell": nix_record! {
                     "source": handler,
-                    "mode": "0555",
+                    "mode": "symlink",
                 },
             },
         },

@@ -33,8 +33,10 @@ fn native_launcher_preserves_contract_and_rejects_unauthorized_invocations() -> 
             "argument_count": 1
         }))?,
     )?;
-    let alias = peers.path("bin/alias");
+    let alias = peers.path("etc/qubes-rpc/airlock.Test");
+    fs::create_dir_all(alias.parent().unwrap())?;
     symlink(&launcher, &alias)?;
+    assert!(!alias.with_file_name("airlock.Test.json").exists());
     for (caller, service, arguments) in [
         ("", "", vec!["--caller-option"]),
         ("sys-gui", "", vec!["--caller-option"]),

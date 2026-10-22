@@ -582,7 +582,7 @@ impl Gui<'_> {
                 "qubes-rpc/qubes.SyncAppMenus",
                 nix_record! {
                     "source": receive,
-                    "mode": "0555",
+                    "mode": "symlink",
                 },
             ),
             (

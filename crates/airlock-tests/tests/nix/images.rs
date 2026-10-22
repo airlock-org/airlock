@@ -306,7 +306,7 @@ fn package_usb_lab_keeps_network_dependencies_and_development_authority_explicit
             ),
         );
     }
-    assert_eq!(report["poolAdmissionMode"], "0555");
+    assert_eq!(report["poolAdmissionMode"], "symlink");
     assert_eq!(
         report["dev"]["configNixStoreRoot"],
         "/rw/airlock-builder/merged"

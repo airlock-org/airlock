@@ -7,6 +7,75 @@ fn text(value: &Value) -> &str {
     value.as_str().expect("interface text")
 }
 
+/// Native /etc entry points keep their package identity and adjacent JSON in NixOS's real artifacts.
+#[test]
+#[ignore = "explicit small NixOS /etc artifact builds with prepared sources"]
+fn package_native_etc_preserves_launcher_contracts() -> Result<()> {
+    let packages = Packages::new("native-etc")?;
+    let fixture = tempfile::tempdir()?;
+    let bin = fixture.path().join("bin");
+    fs::create_dir(&bin)?;
+    fs::copy(
+        common::binary("AIRLOCK_EXEC_BIN", "airlock-exec"),
+        bin.join("airlock-test-operation"),
+    )?;
+    fs::write(
+        bin.join("airlock-test-operation.json"),
+        serde_json::to_vec(&json!({"program":"/unused", "inherit_args":false}))?,
+    )?;
+
+    let output = packages.fixture(
+        "installation",
+        "native_etc/installation",
+        json!({"root":packages.source, "fixture":fixture.path()}),
+    )?;
+    let resolve = |name: &str| -> Result<PathBuf> {
+        packages.physical(
+            fs::read_link(output.join(name))?
+                .to_str()
+                .context("store path")?,
+        )
+    };
+    let etc = resolve("etc")?.join("etc");
+    let basedir = resolve("basedir")?;
+    let installed_fixture = resolve("fixture")?;
+    let entries: Vec<Value> = serde_json::from_slice(&fs::read(resolve("entries.json")?)?)?;
+    ensure!(!entries.is_empty(), "native entry inventory is empty");
+    let mut scopes = BTreeSet::new();
+
+    for entry in entries {
+        let scope = text(&entry["scope"]);
+        scopes.insert(scope.to_owned());
+        let relative = format!("{scope}/{target}", target = text(&entry["target"]));
+        let alias = etc.join(&relative);
+        let target = fs::read_link(&alias)
+            .with_context(|| format!("native /etc entry is not a symlink: {relative}"))?;
+        assert_eq!(
+            packages.physical(target.to_str().context("launcher path")?)?,
+            installed_fixture.join("bin/airlock-test-operation")
+        );
+        assert_eq!(text(&entry["mode"]), "symlink", "{relative}");
+        assert!(
+            !etc.join(format!("{relative}.mode")).exists(),
+            "{relative} requests a copy"
+        );
+        assert!(
+            !basedir.join(&relative).exists(),
+            "{relative} was copied into the overlay data layer"
+        );
+    }
+
+    assert!(scopes.contains("dom0"));
+    assert!(scopes.contains("airlock-domain-sys-gui"));
+    assert!(scopes.contains("airlock-domain-sys-net"));
+    assert!(
+        installed_fixture
+            .join("bin/airlock-test-operation.json")
+            .is_file()
+    );
+    Ok(())
+}
+
 /// Invoke only the upstream Python interface fragment; all queries, temporary data and assertions stay in Rust.
 fn upstream(request: Value) -> Result<Value> {
     common::json(

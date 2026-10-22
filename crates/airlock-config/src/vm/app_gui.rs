@@ -170,14 +170,14 @@ fn rpc_files(context: &ModuleContext) -> NixValue {
         },
         "qubes-rpc/airlock.OpenUrl": nix_record! {
             "source": open_url,
-            "mode": "0555",
+            "mode": "symlink",
         },
         "qubes/rpc-config/airlock.OpenUrl": nix_record! {
             "text": user_config.clone(),
         },
         "qubes-rpc/airlock.AppSessionReady": nix_record! {
             "source": ready,
-            "mode": "0555",
+            "mode": "symlink",
         },
         "qubes/rpc-config/airlock.AppSessionReady": nix_record! {
             "text": user_config,

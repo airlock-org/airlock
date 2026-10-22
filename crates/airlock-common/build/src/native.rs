@@ -12,6 +12,8 @@ use rusix::{
 
 /// Install a native command and its immutable arguments/environment contract.
 /// The `airlockCommand` passthru exposes that contract for read-only inspection.
+/// Link the executable into `/etc` rather than copying it: the launcher locates
+/// its JSON beside its resolved executable, so both must stay in this package.
 pub fn package(pkgs: &NixValue, workspace: &Workspace, name: &str, contract: NixValue) -> Package {
     let launcher = Application::Launcher.build(pkgs, workspace);
     let configuration = pkgs

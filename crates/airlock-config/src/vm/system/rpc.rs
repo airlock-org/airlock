@@ -188,7 +188,7 @@ pub(super) fn configuration(system: &System<'_>, programs: &NixValue) -> NixValu
     })
 }
 
-/// Pair an executable with optional caller-user restrictions under the same capability condition.
+/// Link an executable and its package-local resources without changing caller-user restrictions.
 fn add_rpc(
     files: &mut Vec<(String, NixValue)>,
     system: &System<'_>,
@@ -205,7 +205,7 @@ fn add_rpc(
         format!("qubes-rpc/{name}"),
         enabled(nix_record! {
             "source": executable,
-            "mode": "0555",
+            "mode": "symlink",
         }),
     ));
     if let Some(user) = user {

@@ -157,7 +157,7 @@ fn receiver(context: &ModuleContext, proxy: NixValue, workspace: &Workspace) -> 
             "qubes-rpc/airlock.InputDevice".into(),
             nix_record! {
                 "source": device,
-                "mode": "0555",
+                "mode": "symlink",
             },
         ),
         (
@@ -170,7 +170,7 @@ fn receiver(context: &ModuleContext, proxy: NixValue, workspace: &Workspace) -> 
             "qubes-rpc/airlock.InputReceiverReady".into(),
             nix_record! {
                 "source": ready,
-                "mode": "0555",
+                "mode": "symlink",
             },
         ),
         (

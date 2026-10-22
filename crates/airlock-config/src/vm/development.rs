@@ -122,7 +122,7 @@ pub(super) fn module(source: &NixPath) -> NixValue {
                     },
                     "qubes-rpc/airlock.DevTailscaleUp": nix_record! {
                         "source": tailscale_up,
-                        "mode": "0555",
+                        "mode": "symlink",
                     },
                     "qubes/rpc-config/airlock.DevTailscaleUp": nix_record! {
                         "text": "force-user='root'\n",

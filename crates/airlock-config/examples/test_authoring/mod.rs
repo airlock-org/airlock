@@ -52,6 +52,8 @@ mod system_schema;
 
 mod guest_roles;
 
+mod native_etc;
+
 /// Select a fixture by its stable scenario name and supply JSON-derived caller values.
 pub(super) fn fixture(
     name: &str,
@@ -87,6 +89,7 @@ pub(super) fn fixture(
             "usb_dev/independent_display_startup" => usb_dev::independent_display_startup(inputs),
             "usb_lab/source_metadata" => usb_lab::source_metadata(inputs),
             "usb_lab/startup_contract" => usb_lab::startup_contract(inputs),
+            "native_etc/installation" => native_etc::installation(inputs),
             "usb_lab/network_and_development_access" => {
                 usb_lab::network_and_development_access(inputs)
             }
