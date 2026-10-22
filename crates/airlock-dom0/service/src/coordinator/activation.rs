@@ -412,9 +412,9 @@ impl Coordinator {
         let Activation {
             release: r,
             baseline,
-            snapshots,
             copies,
             recovery,
+            ..
         } = activation;
         let directory = self.state.join("transactions").join(record.id.as_str());
         self.runner.record_to(directory.join("commands"))?;
@@ -498,11 +498,15 @@ impl Coordinator {
         if record.plan.pci_handoff.is_some() {
             self.pci_handoff(durable, record, recovery)?;
         }
+        use crate::setup_config::report::{CompletedSetup, ExpectedSetup};
         use airlock_deployment_core::configuration::SetupPhase;
-        if self
+        let expected = ExpectedSetup::new(record.id.clone(), &r.raw_topology)?;
+        let result_path = directory.join("setup/setup-config.json");
+        let protocol = self
             .runner
-            .configuration_protocol(durable.configuration_batch(record, SetupPhase::Protocol)?)?
-        {
+            .configuration_protocol(durable.configuration_batch(record, SetupPhase::Protocol)?)?;
+        crate::setup_config::report::clear_result(&result_path)?;
+        if protocol.native() {
             self.runner
                 .configuration_batch(durable.configuration_batch(record, SetupPhase::Prepare)?)?;
             crate::setup_config::reconcile::apply(
@@ -521,16 +525,33 @@ impl Coordinator {
                 .configuration_batch(durable.configuration_batch(record, SetupPhase::Legacy)?)?;
         }
 
-        let setup: Value = state::read(&directory.join("setup/setup-config.json"))?;
-        ensure!(
-            setup
-                .get("unsupported_domains_count")
-                .is_none_or(|v| v == &json!(0))
-                && setup
-                    .get("restart_required")
-                    .is_some_and(|v| v == &json!(false) || v == &json!([])),
-            "setup left unsupported or deferred work"
-        );
+        let completed = if protocol.bound() {
+            expected.complete(&result_path)?
+        } else {
+            CompletedSetup::legacy(&result_path)?
+        };
+        self.finish_activation(activation, record, lock, durable, &completed)
+    }
+
+    /// All post-configuration progress consumes a checked setup result for this attempt and topology.
+    fn finish_activation(
+        &self,
+        activation: Activation<'_>,
+        record: &mut Record,
+        lock: &mut MachineLock,
+        durable: &super::approval::DurableAuthorization,
+        completed: &crate::setup_config::report::CompletedSetup,
+    ) -> Result<()> {
+        let Activation {
+            release: r,
+            snapshots,
+            copies,
+            ..
+        } = activation;
+        let expected =
+            crate::setup_config::report::ExpectedSetup::new(record.id.clone(), &r.raw_topology)?;
+        completed.require(&expected)?;
+        use airlock_deployment_core::host::Action as HostAction;
 
         if !copies.is_empty() {
             self.publish_phase(record, Phase::CopyingPrivate, lock)?;

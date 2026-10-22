@@ -263,6 +263,16 @@
 //! Input evidence covers receiver readiness and active forwarding discovery, not physical delivery
 //! of every keyboard/mouse event. Explicit recovery acknowledgement remains a distinct console policy.
 //!
+//! Native setup reports carry a typed run, effective-topology fingerprint, scope and phase.
+//! `setup::Evidence` verifies that merging reports preserves failures, applied mode, unsupported
+//! counts and pending work; its completion token binds the exact requested run/configuration/scope.
+//! Deployment post-configuration progress consumes that token through its completion adapter.
+//! Helper enumeration, phase/scope projection, JSON decoding, truthful results and fingerprint
+//! computation remain ordinary Rust. Event-driven pending work is accumulated through the same
+//! verified boundary. Receipt finalization and log publication are not crash-durability theorems.
+//! Negotiated setup v2 and shell-era helpers keep an explicit compatibility path: mandatory
+//! success, unsupported count and pending-work checks, without claiming native identity binding.
+//!
 //! Boot quarantine, retention/reference discovery and other maintenance policies have separate
 //! authority and incomplete proof coverage. Below those policy boundaries, truthful observations,
 //! durable acknowledgments, process resolution and faithful filesystem/Qubes execution remain
@@ -306,3 +316,6 @@ pub mod attachment;
 pub mod purge;
 
 pub mod boot;
+
+/// Setup report aggregation and bound completion decisions.
+pub mod setup;

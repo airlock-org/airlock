@@ -1,5 +1,11 @@
 //! Combine setup adapter receipts without treating logs as execution authority.
 
+mod wire;
+
+pub(crate) use wire::{Counts, Mode, Phase, Schema, Scope, SetupReport};
+
+use crate::model::CheckStatus;
+use airlock_deployment_core::setup as verified;
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::{
@@ -7,6 +13,157 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
+
+/// Expected setup identity, constructed from coordinator-owned invocation and configuration inputs.
+pub(crate) struct ExpectedSetup {
+    // Invocation propagated to setup and its helpers.
+    run: crate::model::TransactionId,
+    // Content identity of the effective topology rather than its filename.
+    topology: airlock_nix_core::identity::LockHash,
+    // Scope requested by the invoking coordinator.
+    scope: Scope,
+}
+
+/// Completion is native evidence or an explicitly selected admitted legacy compatibility result.
+pub(crate) struct CompletedSetup {
+    // Legacy records cannot claim the native run/configuration-binding guarantee.
+    outcome: Completion,
+}
+
+/// The legacy branch is never selected by malformed native report contents.
+enum Completion {
+    /// Verus-checked outcome from a native typed report.
+    Native(verified::CompletedSetup),
+    /// Old admitted helper, checked under its separate compatibility contract.
+    Legacy,
+}
+
+impl ExpectedSetup {
+    /// Bind the current attempt to the complete effective setup input.
+    pub(crate) fn new(run: crate::model::TransactionId, topology: &Value) -> Result<Self> {
+        Ok(Self {
+            run,
+            topology: fingerprint(topology)?,
+            scope: Scope::All,
+        })
+    }
+
+    /// Allocate a fresh boot invocation independently of process ID reuse and wall-clock changes.
+    pub(crate) fn fresh(topology: &Value) -> Result<Self> {
+        use std::io::Read;
+        let mut bytes = [0u8; 16];
+        fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
+        Self::new(u128::from_ne_bytes(bytes).to_string().try_into()?, topology)
+    }
+
+    /// Retain the requested legacy boot partition without confusing it with the whole topology.
+    pub(crate) fn scoped(mut self, scope: Scope) -> Self {
+        self.scope = scope;
+        self
+    }
+
+    /// Environment value propagated to the invoked native setup program.
+    pub(crate) fn run(&self) -> &str {
+        self.run.as_str()
+    }
+
+    /// Decode once and require same-run, same-configuration, applied final completion.
+    pub(crate) fn complete(&self, path: &Path) -> Result<CompletedSetup> {
+        let report: SetupReport = crate::state::read(path)?;
+        ensure!(
+            report.scope == self.scope && report.rust_reconciled.as_ref() == Some(&report.run_id),
+            "setup did not finalize the complete requested configuration"
+        );
+        let pending = report.evidence().pending;
+        let evidence = verified::CompletedSetup::check(
+            self.run.as_str(),
+            self.topology.as_str(),
+            self.scope.as_str(),
+            report.evidence(),
+        )
+        .with_context(|| format!("setup left failed, unsupported, deferred or mismatched work: run={run} expected={expected} topology={topology} expected_topology={expected_topology} scope={scope:?} status={status:?} mode={mode:?} phase={phase:?} pending={pending} unsupported={unsupported} deferred={deferred:?}",
+            run = report.run_id.as_str(), expected = self.run.as_str(), topology = report.topology_hash,
+            expected_topology = self.topology, scope = report.scope, status = report.status, mode = report.mode,
+            phase = report.phase, unsupported = report.counts.unsupported_domains_count,
+            deferred = report.restart_actions.iter().map(|a| (&a["type"], &a["field"])).collect::<Vec<_>>()))?;
+        Ok(CompletedSetup {
+            outcome: Completion::Native(evidence),
+        })
+    }
+}
+
+impl CompletedSetup {
+    /// Prevent downstream progress from substituting another attempt or effective configuration.
+    pub(crate) fn require(&self, expected: &ExpectedSetup) -> Result<()> {
+        match &self.outcome {
+            Completion::Native(evidence) => ensure!(
+                evidence.matches(
+                    expected.run.as_str(),
+                    expected.topology.as_str(),
+                    expected.scope.as_str()
+                ),
+                "setup completion belongs to another attempt or configuration"
+            ),
+            Completion::Legacy => {}
+        }
+        Ok(())
+    }
+
+    /// Validate old admitted helpers without fabricating native run or configuration evidence.
+    pub(crate) fn legacy(path: &Path) -> Result<Self> {
+        #[derive(serde::Deserialize)]
+        struct Legacy {
+            // Closed legacy result envelope.
+            schema: wire::Schema,
+            // Explicit success is required even if the process exited successfully.
+            status: CheckStatus,
+            // Missing or malformed unsupported counts are never zero.
+            unsupported_domains_count: u64,
+            // Legacy helpers used a boolean or an array of pending work.
+            restart_required: LegacyPending,
+        }
+
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum LegacyPending {
+            // Old boolean completion flag.
+            Flag(bool),
+            // Old list representation; only an empty list permits completion.
+            Actions(Vec<Value>),
+        }
+
+        let report: Legacy = crate::state::read(path)?;
+        let _schema = report.schema;
+        ensure!(
+            report.status == CheckStatus::Passed
+                && report.unsupported_domains_count == 0
+                && match report.restart_required {
+                    LegacyPending::Flag(flag) => !flag,
+                    LegacyPending::Actions(actions) => actions.is_empty(),
+                },
+            "legacy setup left failed, unsupported or deferred work"
+        );
+        Ok(Self {
+            outcome: Completion::Legacy,
+        })
+    }
+}
+
+/// Revoke earlier completion before invoking a helper that must publish a fresh result.
+pub(crate) fn clear_result(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Hash the complete decoded setup configuration using deterministic JSON serialization.
+/// This new protocol is independent of legacy Python-compatible approval fingerprints.
+pub(crate) fn fingerprint(topology: &Value) -> Result<airlock_nix_core::identity::LockHash> {
+    use sha2::{Digest, Sha256};
+    Ok(format!("{:x}", Sha256::digest(serde_json::to_vec(topology)?)).parse()?)
+}
 
 /// Append one informational Rust reconciliation event to the current setup log.
 pub(super) fn append(directory: &Path, file: &str, event: &Value) -> Result<()> {
@@ -35,20 +192,18 @@ fn lines(path: &Path) -> Result<Vec<Value>> {
 /// Finalization is idempotent; it never changes VM or storage state.
 pub(super) fn finalize(path: &Path) -> Result<()> {
     let directory = path.parent().context("setup result directory")?;
-    let mut root: Value = crate::state::read(path)?;
-    let run = root["run_id"]
-        .as_str()
-        .context("missing setup run identity")?
-        .to_owned();
-    if root["rust_reconciled"] == run {
+    let mut root: SetupReport = crate::state::read(path)?;
+    let run = root.run_id.clone();
+    if root.rust_reconciled.as_ref() == Some(&run) {
         return Ok(());
     }
-    let mut reports = vec![root.clone()];
-    if root["phase"] == "finish-only" {
-        let prepared: Value = crate::state::read(&directory.join("setup-prepare.json"))?;
+    let mut evidence = root.evidence();
+    let mut reports = Vec::new();
+    if root.phase == Phase::FinishOnly {
+        let prepared: SetupReport = crate::state::read(&directory.join("setup-prepare.json"))?;
         ensure!(
-            prepared["run_id"] == run,
-            "setup preparation belongs to another run"
+            prepared.phase == Phase::PrepareOnly && prepared.scope == root.scope,
+            "setup preparation has the wrong phase or scope"
         );
         reports.push(prepared);
     }
@@ -62,62 +217,58 @@ pub(super) fn finalize(path: &Path) -> Result<()> {
         ensure!(seen.insert(name.to_owned()), "duplicate helper receipt");
         let receipt = directory.join(name).join("setup-config.json");
         ensure!(
-            root["status"] != "passed" || receipt.try_exists()?,
+            root.status != CheckStatus::Passed || receipt.try_exists()?,
             "missing helper receipt"
         );
         if receipt.try_exists()? {
-            let child: Value = crate::state::read(&receipt)?;
+            let child: SetupReport = crate::state::read(&receipt)?;
             ensure!(
-                child["run_id"] == run,
-                "helper receipt belongs to another run"
-            );
-            ensure!(
-                root["status"] != "passed" || child["status"] == "passed",
-                "helper did not complete successfully"
+                matches!(child.phase, Phase::BackendOnly | Phase::DevicesOnly),
+                "helper has the wrong setup phase"
             );
             reports.push(child);
         }
     }
-    let counts = [
-        "templates_changed",
-        "kernels_changed",
-        "domains_changed",
-        "prefs_changed",
-        "features_changed",
-        "services_changed",
-        "devices_changed",
-        "qrexec_policy_changed",
-        "root_images_changed",
-        "store_volumes_changed",
-        "state_volumes_changed",
-        "store_views_changed",
-        "qubesd_restarts",
-        "unsupported_domains_count",
-    ];
-    for name in counts {
-        let total = reports
-            .iter()
-            .try_fold(0u64, |sum, report| -> Result<u64> {
-                sum.checked_add(report[name].as_u64().unwrap_or(0))
-                    .context("setup count overflow")
-            })?;
-        root[name] = json!(total);
+    for child in reports {
+        evidence = evidence
+            .merge(&child.evidence())
+            .context("setup evidence belongs to another run or configuration, or overflows")?;
+        root.counts.add(&child.counts)?;
+        root.live_actions.extend(child.live_actions);
+        root.restart_actions.extend(child.restart_actions);
+        root.unsupported_domains.extend(child.unsupported_domains);
     }
-    for name in ["live_actions", "restart_actions", "unsupported_domains"] {
-        root[name] = Value::Array(
-            reports
-                .iter()
-                .flat_map(|report| report[name].as_array().into_iter().flatten().cloned())
-                .collect(),
-        );
-    }
-    root["restart_required"] = json!(reports.iter().any(|r| r["restart_required"] == true));
+    // These security fields come from the verified merge, not from diagnostic JSON counters.
+    ensure!(
+        root.status != CheckStatus::Passed || evidence.passed,
+        "helper did not complete successfully"
+    );
+    root.status = if evidence.passed {
+        CheckStatus::Passed
+    } else {
+        CheckStatus::Failed
+    };
+    root.mode = if evidence.applied {
+        Mode::Apply
+    } else {
+        Mode::Plan
+    };
+    root.restart_required = evidence.pending;
+    root.counts.unsupported_domains_count = evidence.unsupported;
     for mut action in lines(&directory.join("rust-vm-actions.jsonl"))? {
         let restart = action
             .as_object_mut()
             .context("invalid reconciliation event")?
             .remove("restart")
             .unwrap_or(Value::Bool(false));
+        let restart = restart.as_bool().context("invalid restart evidence")?;
+        let action_name = action["action"]
+            .as_str()
+            .context("missing reconciliation action")?;
+        ensure!(
+            matches!(action_name, "create" | "set" | "defer" | "restart"),
+            "unknown reconciliation action"
+        );
         let count = match action["type"].as_str() {
             Some("domain") => "domains_changed",
             Some("domain-pref") => "prefs_changed",
@@ -126,28 +277,22 @@ pub(super) fn finalize(path: &Path) -> Result<()> {
             Some("domain-device") => "devices_changed",
             _ => anyhow::bail!("unknown reconciliation event"),
         };
-        if action["action"] != "defer" {
-            root[count] = json!(
-                root[count]
-                    .as_u64()
-                    .unwrap_or(0)
-                    .checked_add(1)
-                    .context("setup count overflow")?
-            );
+        if action_name != "defer" {
+            let counter = root.counts.counter(count)?;
+            *counter = counter.checked_add(1).context("setup count overflow")?;
         }
-        root["live_actions"]
-            .as_array_mut()
-            .unwrap()
-            .push(action.clone());
-        if restart == true {
+        let pending = restart || matches!(action_name, "defer" | "restart");
+        root.live_actions.push(action.clone());
+        evidence = evidence.with_pending(pending);
+        if pending {
             action["action"] = json!("restart");
-            root["restart_actions"].as_array_mut().unwrap().push(action);
-            root["restart_required"] = json!(true);
+            root.restart_actions.push(action);
         }
     }
-    root["rust_reconciled"] = json!(run);
+    root.restart_required = evidence.pending;
+    root.rust_reconciled = Some(run);
     save(path, &root)?;
-    if root["phase"] == "prepare-only" {
+    if root.phase == Phase::PrepareOnly {
         save(&directory.join("setup-prepare.json"), &root)?;
     }
     Ok(())
@@ -180,7 +325,7 @@ pub(crate) fn helper_directory(root: &Path, domain: &str, mode: &str) -> Result<
 
 /// Replace an informational receipt atomically, independently of the trusted journal writer.
 /// Logs are not authority and need not reside beneath the protected state directory.
-pub(crate) fn save(path: &Path, value: &Value) -> Result<()> {
+pub(crate) fn save(path: &Path, value: &impl serde::Serialize) -> Result<()> {
     let mut output = tempfile::NamedTempFile::new_in(path.parent().context("receipt directory")?)?;
     serde_json::to_writer_pretty(&mut output, value)?;
     writeln!(output)?;
@@ -194,9 +339,14 @@ mod tests {
 
     /// A minimal receipt keeps each merge boundary and run identity explicit.
     fn receipt(phase: &str) -> Value {
-        json!({"run_id":"123", "phase":phase, "status":"passed", "prefs_changed":1,
-            "live_actions":[{"type":"global-pref","action":"set"}], "restart_actions":[],
-            "unsupported_domains":[], "restart_required":false})
+        let mut value = serde_json::to_value(Counts::default()).unwrap();
+        for (key, field) in json!({"schema":"airlock.setup-config.v1", "mode":"apply", "scope":"all",
+            "topology_hash":"a".repeat(64), "run_id":"123", "phase":phase, "status":"passed", "prefs_changed":1,
+            "reason":"fixture completed", "live_actions":[{"type":"global-pref","action":"set"}], "restart_actions":[],
+            "unsupported_domains":[], "restart_required":false}).as_object().unwrap() {
+            value[key] = field.clone();
+        }
+        value
     }
 
     /// Preparation, one child and Rust changes are counted once across repeated finalization.
@@ -230,7 +380,9 @@ mod tests {
         assert_eq!(result["features_changed"], 1);
         assert_eq!(result["live_actions"].as_array().unwrap().len(), 5);
         assert_eq!(result["restart_required"], true);
-        assert_eq!(result["restart_actions"], child["restart_actions"]);
+        assert_eq!(result["restart_actions"][0], child["restart_actions"][0]);
+        assert_eq!(result["restart_actions"][1]["type"], "domain-pref");
+        assert_eq!(result["restart_actions"].as_array().unwrap().len(), 2);
         let before = fs::read(&path)?;
         finalize(&path)?;
         assert_eq!(fs::read(&path)?, before);
@@ -245,7 +397,7 @@ mod tests {
         let path = root.join("setup-config.json");
         fs::create_dir(root.join("child"))?;
         append(root, "rust-setup-helpers.jsonl", &json!("child"))?;
-        for invalid in 0..4 {
+        for invalid in 0..5 {
             save(&path, &receipt("all"))?;
             let mut child = receipt("backend-only");
             match invalid {
@@ -258,12 +410,114 @@ mod tests {
                     child["status"] = json!("failed");
                     save(&root.join("child/setup-config.json"), &child)?;
                 }
+                3 => {
+                    child["topology_hash"] = json!("b".repeat(64));
+                    save(&root.join("child/setup-config.json"), &child)?;
+                }
                 _ => {
                     save(&root.join("child/setup-config.json"), &child)?;
                     append(root, "rust-setup-helpers.jsonl", &json!("child"))?;
                 }
             }
             assert!(finalize(&path).is_err());
+        }
+        Ok(())
+    }
+
+    /// Completion rejects malformed, stale, predictive, failed and contradictory success evidence.
+    #[test]
+    fn completion_requires_final_applied_matching_and_unblocked_results() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("setup-config.json");
+        let topology = json!({"schema":"test", "domains":{}});
+        let expected = ExpectedSetup::new("123".to_string().try_into()?, &topology)?;
+        let mut valid = receipt("all");
+        valid["topology_hash"] = json!(fingerprint(&topology)?);
+        save(&path, &valid)?;
+        finalize(&path)?;
+        let valid: Value = crate::state::read(&path)?;
+        let complete = expected.complete(&path)?;
+        complete.require(&expected)?;
+        // A daemon restart already performed is distinct from a VM restart still required.
+        let mut restarted = valid.clone();
+        restarted["live_actions"] =
+            json!([{"type":"systemd", "action":"restart", "service":"qubesd.service"}]);
+        save(&path, &restarted)?;
+        expected.complete(&path)?;
+        assert!(
+            complete
+                .require(&ExpectedSetup::new(
+                    "124".to_string().try_into()?,
+                    &topology
+                )?)
+                .is_err()
+        );
+
+        for (field, value) in [
+            ("run_id", json!("124")),
+            ("topology_hash", json!("b".repeat(64))),
+            ("status", json!("failed")),
+            ("mode", json!("plan")),
+            ("phase", json!("prepare-only")),
+            ("scope", json!("single")),
+            ("unsupported_domains_count", json!(1)),
+            ("unsupported_domains", json!(["app"])),
+            ("restart_required", json!(true)),
+            ("restart_actions", json!([{"action":"restart"}])),
+            ("live_actions", json!([{"action":"defer"}])),
+        ] {
+            let mut invalid = valid.clone();
+            invalid[field] = value;
+            save(&path, &invalid)?;
+            assert!(expected.complete(&path).is_err(), "accepted {field}");
+        }
+        for field in [
+            "restart_required",
+            "unsupported_domains_count",
+            "topology_hash",
+            "run_id",
+        ] {
+            let mut invalid = valid.clone();
+            invalid.as_object_mut().unwrap().remove(field);
+            save(&path, &invalid)?;
+            assert!(
+                expected.complete(&path).is_err(),
+                "accepted missing {field}"
+            );
+        }
+        let mut invalid = valid.clone();
+        invalid["unsupported_domains_count"] = json!("0");
+        save(&path, &invalid)?;
+        assert!(expected.complete(&path).is_err());
+        Ok(())
+    }
+
+    /// Legacy support is explicit and still refuses missing, malformed or unsuccessful outcomes.
+    #[test]
+    fn legacy_completion_never_defaults_missing_evidence() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("setup-config.json");
+        let valid = json!({"schema":"airlock.setup-config.v1", "status":"passed",
+            "unsupported_domains_count":0, "restart_required":false});
+        save(&path, &valid)?;
+        CompletedSetup::legacy(&path)?;
+        for pending in [json!([]), json!(false)] {
+            let mut value = valid.clone();
+            value["restart_required"] = pending;
+            save(&path, &value)?;
+            CompletedSetup::legacy(&path)?;
+        }
+        for field in ["status", "unsupported_domains_count", "restart_required"] {
+            let mut invalid = valid.clone();
+            invalid.as_object_mut().unwrap().remove(field);
+            save(&path, &invalid)?;
+            assert!(CompletedSetup::legacy(&path).is_err());
+        }
+        for pending in [json!(["app"]), json!(true), json!("false")] {
+            let mut invalid = valid.clone();
+            invalid["restart_required"] = pending;
+            save(&path, &invalid)?;
+            assert!(CompletedSetup::legacy(&path).is_err());
         }
         Ok(())
     }

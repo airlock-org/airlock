@@ -1015,7 +1015,7 @@ pub(crate) fn apply_boot(
     definition: &airlock_deployment_core::configuration::Definition,
     log: &Path,
     apply: bool,
-) -> Result<Option<Value>> {
+) -> Result<Option<super::report::SetupReport>> {
     let helper = definition
         .helper
         .as_ref()
@@ -1041,7 +1041,7 @@ pub(crate) fn apply_deployment(
     index: usize,
     definition: &airlock_deployment_core::configuration::Definition,
     log: &Path,
-) -> Result<Option<Value>> {
+) -> Result<Option<super::report::SetupReport>> {
     let Some(backend) = authority.storage(record, index)? else {
         return Ok(None);
     };
@@ -1066,7 +1066,7 @@ pub(crate) fn apply_deployment(
             .context("missing transaction directory")?
             .join("staged.json"),
     );
-    session.result["run_id"] = serde_json::json!(record.id);
+    session.result.run_id = record.id.clone();
     let result = reconcile_with(&mut session, &definition.name, Some(&backend), None);
     session.finish(&result)?;
     result?;

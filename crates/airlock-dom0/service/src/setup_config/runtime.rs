@@ -1,5 +1,7 @@
 //! Shared setup session: command evidence, predicted changes and compatibility receipts.
 
+use super::report::{Counts, Mode, Schema, SetupReport};
+use crate::model::CheckStatus;
 use crate::process::Runner;
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
@@ -20,7 +22,7 @@ pub(super) struct Session {
     /// Child/helper receipts and command evidence belonging to this invocation.
     pub directory: PathBuf,
     /// Mutable compatibility receipt; not an authorization or transaction record.
-    pub result: Value,
+    pub result: SetupReport,
     /// Legacy/manual or deployment generation map; checked boot carries its selection explicitly.
     pub staged: Option<PathBuf>,
     /// Append-only command diagnostics, separate from protocol output.
@@ -89,29 +91,27 @@ impl Session {
                 .is_some_and(|name| name == policy_name.as_str()),
             "invalid managed policy filename"
         );
-        let mut result = json!({"schema":"airlock.setup-config.v1", "status":"failed", "mode":if apply {"apply"} else {"plan"}, "scope":scope, "phase":phase,
-            "run_id":std::env::var("AIRLOCK_SETUP_RUN_ID").unwrap_or_else(|_| std::process::id().to_string()), "reason":"setup interrupted", "topology":topology,
-            "live_actions":[], "restart_actions":[], "unsupported_domains":[], "restart_required":false,
-            "live_actions_log":directory.join("setup-config-live-actions.jsonl"), "restart_actions_log":directory.join("setup-config-restart-actions.jsonl"), "unsupported_domains_log":directory.join("setup-config-unsupported-domains.jsonl"),
-            "qrexec_policy_file":policy_dir.join(&policy_name), "qrexec_policy_rendered":directory.join(format!("{policy_name}.rendered")), "command_log":command_log});
-        for count in [
-            "templates_changed",
-            "kernels_changed",
-            "domains_changed",
-            "prefs_changed",
-            "features_changed",
-            "services_changed",
-            "devices_changed",
-            "qrexec_policy_changed",
-            "root_images_changed",
-            "store_volumes_changed",
-            "state_volumes_changed",
-            "store_views_changed",
-            "qubesd_restarts",
-            "unsupported_domains_count",
-        ] {
-            result[count] = json!(0);
-        }
+        let result = SetupReport {
+            schema: Schema::V1,
+            status: CheckStatus::Failed,
+            mode: if apply { Mode::Apply } else { Mode::Plan },
+            scope: serde_json::from_value(json!(scope))?,
+            phase: serde_json::from_value(json!(phase))?,
+            run_id: std::env::var("AIRLOCK_SETUP_RUN_ID")
+                .unwrap_or_else(|_| std::process::id().to_string())
+                .try_into()?,
+            topology_hash: super::report::fingerprint(&decoded)?,
+            counts: Counts::default(),
+            live_actions: Vec::new(),
+            restart_actions: Vec::new(),
+            unsupported_domains: Vec::new(),
+            restart_required: false,
+            rust_reconciled: None,
+            reason: "setup interrupted".into(),
+            diagnostics: serde_json::from_value(json!({"topology":topology,
+                "live_actions_log":directory.join("setup-config-live-actions.jsonl"), "restart_actions_log":directory.join("setup-config-restart-actions.jsonl"), "unsupported_domains_log":directory.join("setup-config-unsupported-domains.jsonl"),
+                "qrexec_policy_file":policy_dir.join(&policy_name), "qrexec_policy_rendered":directory.join(format!("{policy_name}.rendered")), "command_log":command_log}))?,
+        };
         Ok(Self {
             topology: decoded,
             apply,
@@ -127,10 +127,7 @@ impl Session {
         writeln!(self.log, "+ {program} {args:?}")?;
         let mut environment = vec![(
             "AIRLOCK_SETUP_RUN_ID".into(),
-            self.result["run_id"]
-                .as_str()
-                .context("setup run ID")?
-                .into(),
+            self.result.run_id.as_str().into(),
         )];
         if let Some(staged) = &self.staged {
             environment.push((
@@ -175,13 +172,8 @@ impl Session {
 
     /// Increment an informational compatibility count with checked arithmetic.
     pub fn count(&mut self, name: &str) -> Result<()> {
-        self.result[name] = json!(
-            self.result[name]
-                .as_u64()
-                .context("unknown setup count")?
-                .checked_add(1)
-                .context("setup count overflow")?
-        );
+        let counter = self.result.counts.counter(name)?;
+        *counter = counter.checked_add(1).context("setup count overflow")?;
         Ok(())
     }
 
@@ -200,10 +192,7 @@ impl Session {
                 event[key] = json!(value);
             }
         }
-        self.result["live_actions"]
-            .as_array_mut()
-            .unwrap()
-            .push(event.clone());
+        self.result.live_actions.push(event.clone());
         super::report::append(&self.directory, "setup-config-live-actions.jsonl", &event)?;
         Ok(event)
     }
@@ -237,11 +226,8 @@ impl Session {
     pub fn defer(&mut self, domain: &str, kind: &str, field: &str, value: &str) -> Result<()> {
         let state = self.state(domain).unwrap_or_default();
         let event = json!({"type":kind,"action":"restart","domain":domain,"field":field,"value":value,"state":state,"reason":"domain is running; stop it and re-run setup-config for this storage change to take effect"});
-        self.result["restart_actions"]
-            .as_array_mut()
-            .unwrap()
-            .push(event.clone());
-        self.result["restart_required"] = json!(true);
+        self.result.restart_actions.push(event.clone());
+        self.result.restart_required = true;
         super::report::append(
             &self.directory,
             "setup-config-restart-actions.jsonl",
@@ -274,11 +260,8 @@ impl Session {
         if self.apply && self.state(domain).is_ok_and(|state| state == "Running") {
             event["action"] = json!("restart");
             event["state"] = json!("Running");
-            self.result["restart_actions"]
-                .as_array_mut()
-                .unwrap()
-                .push(event.clone());
-            self.result["restart_required"] = json!(true);
+            self.result.restart_actions.push(event.clone());
+            self.result.restart_required = true;
             super::report::append(
                 &self.directory,
                 "setup-config-restart-actions.jsonl",
@@ -290,11 +273,15 @@ impl Session {
 
     /// Write the compatible result on success or failure and merge child receipts once.
     pub fn finish(&mut self, result: &Result<()>) -> Result<()> {
-        self.result["status"] = json!(if result.is_ok() { "passed" } else { "failed" });
-        self.result["reason"] = json!(match result {
+        self.result.status = if result.is_ok() {
+            CheckStatus::Passed
+        } else {
+            CheckStatus::Failed
+        };
+        self.result.reason = match result {
             Ok(()) => "Qubes config setup completed".into(),
             Err(error) => format!("{error:#}"),
-        });
+        };
         let file = self.directory.join("setup-config.json");
         super::report::save(&file, &self.result)?;
         super::report::finalize(&file)?;

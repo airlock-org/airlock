@@ -16,6 +16,29 @@ const OUTPUT_LIMIT: u64 = 4 * 1024 * 1024;
 
 const CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Negotiated setup capabilities; old admitted helpers keep an explicit weaker report contract.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SetupProtocol {
+    /// Typed reports bound to run, configuration and finalization.
+    Bound,
+    /// Earlier Rust helper supporting split phases without bound reports.
+    UnboundNative,
+    /// Admitted shell-era batch helper with its recognized usage response.
+    Legacy,
+}
+
+impl SetupProtocol {
+    /// Native configuration uses narrow prepare, per-VM and finish stages.
+    pub(crate) fn native(self) -> bool {
+        self != Self::Legacy
+    }
+
+    /// Only the negotiated new protocol can produce typed completion evidence.
+    pub(crate) fn bound(self) -> bool {
+        self == Self::Bound
+    }
+}
+
 /// A duplex helper has already owned the response stream and exited unsuccessfully.
 /// Its protocol error must not be followed by a second coordinator JSON reply.
 #[derive(Debug)]
@@ -393,7 +416,7 @@ impl Runner {
     pub(crate) fn configuration_protocol(
         &self,
         request: airlock_deployment_core::configuration::BatchRequest<'_>,
-    ) -> Result<bool> {
+    ) -> Result<SetupProtocol> {
         let args = request
             .arguments()
             .into_iter()
@@ -408,18 +431,29 @@ impl Runner {
         Self::configuration_version(&captured)
     }
 
+    /// Negotiate an admitted boot helper using the same fail-closed protocol rules as deployment.
+    pub(crate) fn boot_setup_protocol(&self, program: &str) -> Result<SetupProtocol> {
+        let captured = self.capture_inner(
+            OsStr::new(program),
+            &["--protocol".into()],
+            Duration::from_secs(30),
+            &[],
+        )?;
+        Self::configuration_version(&captured)
+    }
+
     /// Unknown versions and failed/limited queries cannot downgrade to legacy execution.
-    fn configuration_version(captured: &Captured) -> Result<bool> {
+    fn configuration_version(captured: &Captured) -> Result<SetupProtocol> {
         ensure!(
             !captured.limited,
             "setup protocol query exceeded its limits"
         );
         if captured.status.success() {
-            ensure!(
-                captured.stdout == b"airlock.setup.v2\n",
-                "unsupported setup protocol response"
-            );
-            Ok(true)
+            match captured.stdout.as_slice() {
+                b"airlock.setup.v3\n" => Ok(SetupProtocol::Bound),
+                b"airlock.setup.v2\n" => Ok(SetupProtocol::UnboundNative),
+                _ => anyhow::bail!("unsupported setup protocol response"),
+            }
         } else {
             ensure!(
                 captured.status.code() == Some(1)
@@ -427,7 +461,7 @@ impl Runner {
                     && captured.stderr.starts_with(b"Usage: airlock-setup-config "),
                 "setup protocol query failed without a recognized legacy response"
             );
-            Ok(false)
+            Ok(SetupProtocol::Legacy)
         }
     }
 
@@ -784,8 +818,16 @@ mod tests {
             status: ExitStatus::from_raw(0),
             limited: false,
         };
-        assert!(Runner::configuration_version(&output).unwrap());
-        for unexpected in [b"".as_slice(), b"airlock.setup.v3\n".as_slice()] {
+        assert_eq!(
+            Runner::configuration_version(&output).unwrap(),
+            SetupProtocol::UnboundNative
+        );
+        output.stdout = b"airlock.setup.v3\n".to_vec();
+        assert_eq!(
+            Runner::configuration_version(&output).unwrap(),
+            SetupProtocol::Bound
+        );
+        for unexpected in [b"".as_slice(), b"airlock.setup.v4\n".as_slice()] {
             output.stdout = unexpected.to_vec();
             assert!(Runner::configuration_version(&output).is_err());
         }
@@ -793,7 +835,10 @@ mod tests {
         output.status = ExitStatus::from_raw(1 << 8);
         assert!(Runner::configuration_version(&output).is_err());
         output.stderr = b"Usage: airlock-setup-config (--plan|--apply)\n".to_vec();
-        assert!(!Runner::configuration_version(&output).unwrap());
+        assert_eq!(
+            Runner::configuration_version(&output).unwrap(),
+            SetupProtocol::Legacy
+        );
         output.limited = true;
         assert!(Runner::configuration_version(&output).is_err());
         output.limited = false;

@@ -423,13 +423,40 @@ impl Coordinator {
             let path = runtime()?.join("topology.json");
             public_save(&path, selected.inputs.raw())?;
             args.extend(self.boot_setup_arguments(&selected, selected.inputs.raw(), &path)?);
+            use crate::setup_config::report::{self, CompletedSetup, ExpectedSetup, Scope};
+            let scope = if args.iter().any(|a| a == "--boot-critical") {
+                Scope::BootCritical
+            } else if args.iter().any(|a| a == "--deferred") {
+                Scope::Deferred
+            } else {
+                Scope::All
+            };
+            let expected = ExpectedSetup::fresh(selected.inputs.raw())?.scoped(scope);
+            env.push(("AIRLOCK_SETUP_RUN_ID".into(), expected.run().into()));
+            let result_path =
+                configured_path("AIRLOCK_LOG_DIR", "/var/log/airlock")?.join("setup-config.json");
+            let protocol = self.runner.boot_setup_protocol(selected.setup.as_str())?;
+            report::clear_result(&result_path)?;
             self.runner.run(
                 selected.setup.as_str(),
                 &args,
                 Duration::from_secs(1800),
                 &env,
             )?;
-            return Ok(json!({"status":"passed"}));
+            // Prediction and explicit partial helpers do not publish a completion or cache entry.
+            if args.iter().any(|a| a == "--apply")
+                && !args.iter().any(|a| {
+                    a == "--prepare-only" || a == "--backend-only" || a == "--devices-only"
+                })
+            {
+                let complete = if protocol.bound() {
+                    expected.complete(&result_path)?
+                } else {
+                    CompletedSetup::legacy(&result_path)?
+                };
+                complete.require(&expected)?;
+            }
+            return state::read(&result_path);
         }
         ensure!(
             gui != background && args == [OsString::from("--apply")],
@@ -489,21 +516,24 @@ impl Coordinator {
                     runtime.join("topology.json").into_os_string(),
                 ));
             }
+            let protocol = self.runner.boot_setup_protocol(selected.setup.as_str())?;
+            let expected = crate::setup_config::report::ExpectedSetup::fresh(&scoped)?;
+            env.push(("AIRLOCK_SETUP_RUN_ID".into(), expected.run().into()));
+            let result_path = log.join("setup-config.json");
+            crate::setup_config::report::clear_result(&result_path)?;
             self.runner.run(
                 selected.setup.as_str(),
                 &arguments,
                 Duration::from_secs(1800),
                 &env,
             )?;
-            result = state::read(&log.join("setup-config.json"))?;
-            ensure!(
-                result["schema"] == "airlock.setup-config.v1"
-                    && result["status"] == "passed"
-                    && (result["restart_required"] == false
-                        || result["restart_required"] == json!([]))
-                    && result["unsupported_domains_count"] == 0,
-                "startup configuration left failed or deferred work"
-            );
+            let complete = if protocol.bound() {
+                expected.complete(&result_path)?
+            } else {
+                crate::setup_config::report::CompletedSetup::legacy(&result_path)?
+            };
+            complete.require(&expected)?;
+            result = state::read(&result_path)?;
             self.boot_record(&selected, &names)?;
         }
         if gui {

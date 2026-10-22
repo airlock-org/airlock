@@ -188,8 +188,16 @@ fn preflight(session: &Session) -> Result<()> {
 /// Prepare the reusable global resources and labels used by the selected VM scope.
 fn prepare(session: &mut Session, domains: &[String]) -> Result<()> {
     preflight(session)?;
-    let rendered = PathBuf::from(session.result["qrexec_policy_rendered"].as_str().unwrap());
-    let target = PathBuf::from(session.result["qrexec_policy_file"].as_str().unwrap());
+    let rendered = PathBuf::from(
+        session.result.diagnostics["qrexec_policy_rendered"]
+            .as_str()
+            .unwrap(),
+    );
+    let target = PathBuf::from(
+        session.result.diagnostics["qrexec_policy_file"]
+            .as_str()
+            .unwrap(),
+    );
     if policy::reconcile(&session.topology, &rendered, &target, session.apply)? {
         session.count("qrexec_policy_changed")?;
         session.action(
@@ -288,7 +296,7 @@ pub(super) fn execute(request: Request) -> Result<()> {
                 && request.devices_only.is_none(),
             "protocol query cannot execute setup"
         );
-        println!("airlock.setup.v2");
+        println!("airlock.setup.v3");
         return Ok(());
     }
     ensure!(
@@ -492,7 +500,7 @@ pub(super) fn execute(request: Request) -> Result<()> {
             )?;
         }
         status.complete();
-        println!("{result}", result = session.result);
+        println!("{result}", result = serde_json::to_value(&session.result)?);
     }
     result
 }

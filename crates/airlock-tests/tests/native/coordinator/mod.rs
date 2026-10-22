@@ -1251,6 +1251,18 @@ fn namespace_native_backend_reconciles_lost_root_and_store_replies() -> Result<(
     assert!(machine.data["features"]["usr-home"]["airlock-system-source"].is_null());
     machine.data["wrong_store_receipt"] = json!(false);
     machine.data["store_restart_required"] = json!(true);
+    for overrides in [
+        json!({"run_id":"999"}),
+        json!({"unsupported_domains_count":1}),
+        json!({"restart_required":null}),
+    ] {
+        machine.data["setup_report_override"] = overrides;
+        machine.persist()?;
+        assert!(machine.run(&["resume"], None, false)?["error"].is_string());
+        assert!(!machine.calls()?.iter().any(|call| call[0] == "qvm-start"));
+        machine.reload()?;
+    }
+    machine.data["setup_report_override"] = json!({});
     machine.persist()?;
     assert_eq!(machine.run(&["resume"], None, true)?["phase"], "complete");
     machine.reload()?;

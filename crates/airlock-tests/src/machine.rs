@@ -3,6 +3,7 @@
 use airlock_vm_service::support;
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     io::Write,
@@ -53,7 +54,7 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
     writeln!(calls, "{call}")?;
     if program == "airlock-setup-config" && arguments == ["--protocol"] {
         if data["native_setup"] == true {
-            println!("airlock.setup.v2");
+            println!("airlock.setup.v3");
             return Ok(());
         }
         // Match the admitted legacy script's unsupported-option response without
@@ -353,12 +354,70 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| root.join("log"));
             fs::create_dir_all(&output)?;
+            let mut report = json!({"schema":"airlock.setup-config.v1", "status":"passed",
+                "restart_required":false, "unsupported_domains_count":0});
+            if data["native_setup"] == true {
+                let topology: Value =
+                    serde_json::from_slice(&fs::read(option(arguments, "--topology")?)?)?;
+                let phase = if arguments.iter().any(|a| a == "--prepare-only") {
+                    "prepare-only"
+                } else {
+                    "finish-only"
+                };
+                let run = std::env::var("AIRLOCK_SETUP_RUN_ID")?;
+                if phase == "prepare-only" {
+                    fs::write(output.join("rust-vm-actions.jsonl"), "")?;
+                    fs::write(output.join("rust-setup-helpers.jsonl"), "")?;
+                }
+                for (key, value) in json!({"mode":"apply", "scope":"all", "phase":phase,
+                    "run_id":run, "topology_hash":format!("{:x}", Sha256::digest(serde_json::to_vec(&topology)?)),
+                    "reason":"fixture completed", "live_actions":[], "restart_actions":[], "unsupported_domains":[]}).as_object().unwrap() {
+                    report[key] = value.clone();
+                }
+                for counter in [
+                    "templates_changed",
+                    "kernels_changed",
+                    "domains_changed",
+                    "prefs_changed",
+                    "features_changed",
+                    "services_changed",
+                    "devices_changed",
+                    "qrexec_policy_changed",
+                    "root_images_changed",
+                    "store_volumes_changed",
+                    "state_volumes_changed",
+                    "store_views_changed",
+                    "qubesd_restarts",
+                ] {
+                    report[counter] = json!(0);
+                }
+            }
             fs::write(
                 output.join("setup-config.json"),
-                serde_json::to_vec(&json!({
-                    "schema": "airlock.setup-config.v1", "status": "passed", "restart_required": false, "unsupported_domains_count": 0
-                }))?,
+                serde_json::to_vec(&report)?,
             )?;
+            if data["native_setup"] == true {
+                let result = Command::new(
+                    std::env::var_os("AIRLOCK_FIXTURE_DOM0_BINARY")
+                        .context("native dom0 binary")?,
+                )
+                .args(["setup-config", "finalize", "--result"])
+                .arg(output.join("setup-config.json"))
+                .output()?;
+                ensure!(
+                    result.status.success(),
+                    "native report finalization: {error}",
+                    error = String::from_utf8_lossy(&result.stderr)
+                );
+                if let Some(overrides) = data["setup_report_override"].as_object() {
+                    let path = output.join("setup-config.json");
+                    let mut report: Value = serde_json::from_slice(&fs::read(&path)?)?;
+                    for (key, value) in overrides {
+                        report[key] = value.clone();
+                    }
+                    fs::write(path, serde_json::to_vec(&report)?)?;
+                }
+            }
         }
         "machine-lock-race" => {
             let binary =

@@ -258,13 +258,11 @@ fn apply_inner(
             )?
         };
         let deferred = backend.as_ref().is_some_and(|report| {
-            report["restart_actions"].as_array().is_some_and(|actions| {
-                actions.iter().any(|action| {
-                    matches!(
-                        action["type"].as_str(),
-                        Some("domain-root" | "domain-store" | "domain-system")
-                    )
-                })
+            report.restart_actions.iter().any(|action| {
+                matches!(
+                    action["type"].as_str(),
+                    Some("domain-root" | "domain-store" | "domain-system")
+                )
             })
         });
         ensure!(
@@ -392,7 +390,7 @@ fn helper(
     apply: bool,
     kind: Adapter,
     log: &Path,
-) -> Result<Option<Value>> {
+) -> Result<Option<super::report::SetupReport>> {
     let mode = match kind {
         Adapter::Backend => "--backend-only",
         Adapter::Devices => "--devices-only",
