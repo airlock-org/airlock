@@ -80,3 +80,42 @@ fn required_selection<'de, D: serde::Deserializer<'de>>(
 fn reuse_claim<'de, D: serde::Deserializer<'de>>(decoder: D) -> Result<Option<bool>, D::Error> {
     bool::deserialize(decoder).map(Some)
 }
+
+/// The retained-generation lookup has its own wire protocol and outcomes.
+#[derive(Serialize, Deserialize)]
+pub(crate) struct GenerationMatch {
+    /// Known lookup protocol, distinct from committed generation or install receipts.
+    pub schema: GenerationMatchSchema,
+    /// Runtime namespace whose retained records were searched.
+    pub domain: airlock_nix_core::identity::StoreNamespace,
+    /// Missing cannot silently select a fallback admission path.
+    #[serde(flatten)]
+    pub outcome: GenerationMatchOutcome,
+}
+
+/// Closed lookup response protocol.
+#[derive(Serialize, Deserialize)]
+pub(crate) enum GenerationMatchSchema {
+    /// Lookup performed by the existing pool API.
+    #[serde(rename = "airlock.closure-store.generation-match.v1")]
+    V1,
+}
+
+/// Lookup is evidence for inspection, never permission to execute an effect.
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "status")]
+pub(crate) enum GenerationMatchOutcome {
+    /// Committed records contain an eligible candidate generation.
+    #[serde(rename = "found")]
+    Found {
+        /// Positive generation whose full identity still needs independent inspection.
+        generation: crate::model::GenerationId,
+        /// Independently addressed committed manifest returned by the pool.
+        manifest: PathBuf,
+        /// Immutable closure hash retained in that manifest.
+        closure_hash: airlock_nix_core::identity::LockHash,
+    },
+    /// No retained generation matches; deployments refuse new implicit admission.
+    #[serde(rename = "missing")]
+    Missing,
+}

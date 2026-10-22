@@ -1302,13 +1302,25 @@ fn namespace_native_backend_reconciles_lost_root_and_store_replies() -> Result<(
         assert!(!machine.calls()?.iter().any(|call| call[0] == "qvm-start"));
         machine.reload()?;
     }
+    // A replaced compatibility map cannot override the in-memory native selection on recovery.
+    machine.data["staged_after_prepare"] = json!({"usr-home":999,"unexpected-vm":42});
     machine.data["setup_report_override"] = json!({});
     machine.persist()?;
     assert_eq!(machine.run(&["resume"], None, true)?["phase"], "complete");
     machine.reload()?;
     assert_eq!(machine.data["resize_count"], 1);
+    assert_eq!(machine.data["selected"]["usr-home"], 2);
     let completed = read(machine.path("machine/latest.json"))?;
     assert!(interrupted["operation"].is_object());
     assert_eq!(interrupted["operation"], completed["operation"]);
+    assert_eq!(
+        read(
+            machine
+                .path("machine/transactions")
+                .join(completed["id"].as_str().unwrap())
+                .join("staged.json")
+        )?["usr-home"],
+        999
+    );
     Ok(())
 }

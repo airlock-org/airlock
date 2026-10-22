@@ -32,6 +32,8 @@ pub struct Coordinator {
 
 mod activation;
 
+mod staging;
+
 mod host;
 
 mod admission;

@@ -165,10 +165,43 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
             "verify-native-volumes" => println!("{}", json!({"native_volume_isolation":"passed"})),
             "ensure-store" => {
                 let name = &arguments[1];
-                let staged: Value = serde_json::from_slice(&fs::read(
-                    std::env::var_os("AIRLOCK_STAGED_GENERATIONS").context("staged mapping")?,
-                )?)?;
-                let generation = staged[name].clone();
+                let supplied = std::env::var_os("AIRLOCK_STAGED_GENERATIONS")
+                    .map(|path| -> Result<Option<u64>> {
+                        let staged: Value = serde_json::from_slice(&fs::read(path)?)?;
+                        staged
+                            .get(name)
+                            .map(|value| {
+                                value
+                                    .as_u64()
+                                    .or_else(|| value.as_str()?.parse().ok())
+                                    .context("invalid fixture generation")
+                            })
+                            .transpose()
+                    })
+                    .transpose()?
+                    .flatten();
+                let explicit = arguments
+                    .iter()
+                    .position(|arg| arg == "--generation")
+                    .map(|index| {
+                        arguments
+                            .get(index + 1)
+                            .context("generation value")?
+                            .parse::<u64>()
+                            .context("invalid requested generation")
+                    })
+                    .transpose()?;
+                if let (Some(expected), Some(supplied)) = (explicit, supplied) {
+                    ensure!(
+                        expected == supplied,
+                        "staged generation differs from request"
+                    );
+                }
+                let generation = json!(
+                    explicit
+                        .or(supplied)
+                        .context("missing fixture generation")?
+                );
                 ensure!(!generation.is_null(), "missing staged fixture generation");
                 let mut receipt = data["generations"][format!("{name}:{generation}")].clone();
                 receipt["schema"] = json!("airlock.nix-domain-storage.v1");
@@ -376,6 +409,16 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
                 };
                 let run = std::env::var("AIRLOCK_SETUP_RUN_ID")?;
                 if phase == "prepare-only" {
+                    if let Some(mapping) = data["staged_after_prepare"].as_object() {
+                        // Simulate a changed compatibility file after checked staging was captured.
+                        fs::write(
+                            output
+                                .parent()
+                                .context("transaction directory")?
+                                .join("staged.json"),
+                            serde_json::to_vec(mapping)?,
+                        )?;
+                    }
                     fs::write(output.join("rust-vm-actions.jsonl"), "")?;
                     fs::write(output.join("rust-setup-helpers.jsonl"), "")?;
                 }

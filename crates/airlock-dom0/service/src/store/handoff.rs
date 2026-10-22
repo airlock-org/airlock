@@ -74,7 +74,7 @@ fn fields(domain: &GuestName, identity: &StorageIdentity) -> Selection {
 }
 
 /// Inspection has its own typed schema and nested layout, distinct from a loaded generation.
-fn described(value: &GenerationInfo) -> Result<Selection> {
+pub(crate) fn described(value: &GenerationInfo) -> Result<Selection> {
     ensure!(
         value.status == CheckStatus::Passed,
         "boot generation inspection failed"

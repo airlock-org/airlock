@@ -14,7 +14,9 @@ mod host_receipt;
 
 pub(crate) use host_receipt::HostReceipt;
 
-pub(crate) use response::{AdmissionReceipt, ResolvedRoot};
+pub(crate) use response::{
+    AdmissionReceipt, GenerationMatch, GenerationMatchOutcome, GenerationMatchSchema, ResolvedRoot,
+};
 
 mod domain;
 
@@ -246,8 +248,8 @@ impl<'a> Store<'a> {
         domain: &GuestName,
         backend: &Backend,
         approved_by: &str,
-    ) -> Result<Value> {
-        self.pool(&[
+    ) -> Result<GenerationMatch> {
+        Ok(serde_json::from_value(self.pool(&[
             "find-generation",
             "--domain",
             &runtime_namespace(domain.as_str()),
@@ -263,7 +265,7 @@ impl<'a> Store<'a> {
             &backend.store.view_backend,
             "--approved-by",
             approved_by,
-        ])
+        ])?)?)
     }
 
     /// Change explicit retention for one generation; this does not run GC.

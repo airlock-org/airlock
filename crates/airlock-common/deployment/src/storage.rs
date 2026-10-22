@@ -36,14 +36,28 @@
 //! truthfulness of generation metadata remain trusted; the verified boundary confines the
 //! retained values and rejects unclassified setting requests.
 //!
+//! [`staging`] derives generation obligations from the original checked stage/configure fields.
+//! A complete `StagedGenerations` preserves pinned generations and complete boot identities;
+//! required dependency work cannot become an omitted-map fallback. Only unpinned native VMs
+//! without planned staging retain the explicit existing/prepared compatibility policy.
+//! Native deployment consumes the opaque staging result in memory. Backend selection rechecks
+//! attempt, stable operation, authority, plan and the executing durable gate. The final typed
+//! argv retains the exact selected number and retained-only flag; adapters only render decimals.
+//! `staged.json` is a derived compatibility projection and grants no native execution authority.
+//! Each newly authorised recovery attempt resolves/revalidates its original requirements again;
+//! an old token cannot migrate to it. Originally unpinned generations can be selected anew
+//! under that fresh authorization, rather than acquiring an across-attempt numeric pin.
+//!
 //! Source decoding, physical Nix-path translation and source-to-root-image authentication
-//! remain trusted. Staged generation selection and the storage service's admission, pool
-//! locking, volume isolation, offline snapshot updates, restart journal and attachment checks
-//! remain ordinary Rust. In particular, the store request theorem confines its source and boot
+//! remain trusted. The storage service's admission, pool locking, offline snapshot updates,
+//! restart journal and faithful Qubes/filesystem execution remain adapter duties. Its separate
+//! verified attachment kernel retains its existing guarantees. In particular, the store request theorem confines its source and boot
 //! parameters; it does not prove the inner storage algorithm or that a running VM experiences
 //! no implicit effect. The independent observation-to-dispatch race remains outside the
 //! theorem. Legacy full-batch
 //! helpers and global setup retain their separately documented trusted boundaries.
+
+pub mod staging;
 
 use crate::{
     effects::{self, Targets},
@@ -107,9 +121,10 @@ pub struct RootArtifact {
 }
 
 /// Every retained backend definition has the corresponding checked configuration identity.
-pub open spec fn valid(s: (effects::Scope, Seq<Definition>, Seq<char>)) -> bool {
+pub open spec fn valid(s: (effects::Scope, Seq<Definition>, Seq<char>, effects::Scope)) -> bool {
     effects::valid(s.0) && s.1.len() == s.0.targets.len()
-        && forall|i: int| 0 <= i < s.1.len() ==> #[trigger] s.1[i].name@ == s.0.targets[i]@
+        && (forall|i: int| 0 <= i < s.1.len() ==> #[trigger] s.1[i].name@ == s.0.targets[i]@)
+        && (forall|i: int| 0 <= i < s.3.targets.len() ==> effects::planned(s.0, #[trigger] s.3.targets[i]@))
 }
 
 /// Immutable backend authority, available only through the complete checked deployment plan.
@@ -120,18 +135,20 @@ pub struct StoragePlan {
     definitions: Vec<Definition>,
     // Complete candidate, baseline, revision and plan binding.
     binding: PlanBinding,
+    // Original checked VM namespace requiring generation staging.
+    stage: Targets,
 }
 
 impl View for StoragePlan {
-    type V = (effects::Scope, Seq<Definition>, Seq<char>);
+    type V = (effects::Scope, Seq<Definition>, Seq<char>, effects::Scope);
 
-    closed spec fn view(&self) -> Self::V { (self.targets@, self.definitions@, self.binding@) }
+    closed spec fn view(&self) -> Self::V { (self.targets@, self.definitions@, self.binding@, self.stage@) }
 }
 
 impl StoragePlan {
     /// Bind backend definitions to the complete ordered configuration namespace.
-    pub(crate) fn new(targets: Targets, definitions: Vec<Definition>, binding: PlanBinding) -> (out: Option<Self>)
-        ensures out.is_some() ==> out.unwrap()@ == (targets@, definitions@, binding@),
+    pub(crate) fn new(targets: Targets, definitions: Vec<Definition>, binding: PlanBinding, stage: Targets) -> (out: Option<Self>)
+        ensures out.is_some() ==> out.unwrap()@ == (targets@, definitions@, binding@, stage@),
             out.is_some() && effects::valid(targets@) ==> valid(out.unwrap()@),
     {
         let names = targets.names();
@@ -146,7 +163,20 @@ impl StoragePlan {
             assert(definitions[i as int].name@ == names[i as int]@);
             i += 1;
         }
-        Some(Self { targets, definitions, binding })
+
+        let staged_names = stage.names();
+        let mut k = 0;
+        while k < staged_names.len()
+            invariant 0 <= k <= staged_names.len(),
+                forall|j: int| 0 <= j < k ==> effects::planned(targets@, #[trigger] staged_names[j]@),
+                definitions.len() == names.len(),
+                forall|j: int| 0 <= j < definitions.len() ==> #[trigger] definitions[j].name@ == names[j]@,
+            decreases staged_names.len() - k,
+        {
+            if !targets.contains(staged_names[k].as_str()) { return None; }
+            k += 1;
+        }
+        Some(Self { targets, definitions, binding, stage })
     }
 
     /// Observe retained definitions without permitting effects.
@@ -169,6 +199,13 @@ impl StoragePlan {
 }
 
 /// A retained backend is not itself an upstream command or independently supplied parameter set.
+/// Store dispatch additionally requires the complete staging result.
+///
+/// ```compile_fail,E0624
+/// use airlock_deployment_core::storage::Backend;
+/// /// A raw backend cannot choose its own generation or omit required staging.
+/// fn bypass(backend: &Backend<'_>) { let _ = backend.store(Some(7)); }
+/// ```
 pub struct Backend<'a> {
     // Complete immutable backend selected from the checked namespace.
     definition: &'a Definition,
@@ -227,7 +264,7 @@ impl<'a> Backend<'a> {
 
     /// Delegate store installation using only retained source, layout and boot parameters.
     /// The storage adapter separately authenticates admission and serializes offline attachment.
-    pub fn store<'b>(&'b self, generation: Option<u64>) -> (out: Option<StoreRequest<'b>>)
+    fn store<'b>(&'b self, generation: Option<u64>) -> (out: Option<StoreRequest<'b>>)
         ensures out.is_some() ==> self@.native.is_some() && out.unwrap()@ == (self@, generation),
             out.is_some() ==> match self@.native.unwrap().generation { Some(g) => generation == Some(g), None => true },
             out.is_some() ==> match generation { Some(g) => g > 0, None => true },
@@ -365,6 +402,52 @@ impl<'a> StoreRequest<'a> {
             "--kernel".to_string(), n.kernel.as_str().to_string(), "--device".to_string(), "/dev/xvde".to_string(),
             "--blob-device".to_string(), "/dev/xvdf".to_string(), "--mountpoint".to_string(), "/nix/store".to_string(),
             "--view-backend".to_string(), "erofs-objectmap".to_string(), "--require-retained".to_string()]
+    }
+}
+
+/// Literal argument equality at the final executable storage boundary.
+pub open spec fn argument_text(arg: crate::boot::Argument, value: Seq<char>) -> bool {
+    arg is Text && arg->Text_0@ == value
+}
+
+/// Independent fixed storage prefix: all approved fields and the retained-only policy.
+pub open spec fn store_prefix(d: Definition, generation: Option<u64>) -> Seq<Seq<char>> {
+    let n = d.native.unwrap();
+    seq!["storage"@, "domain"@, "ensure-store"@, d.name@,
+        if generation.is_some() { n.source@ } else { n.artifact@ }, n.source@,
+        "--mode"@, "shared-closure"@, "--system"@, n.system@, "--root"@, n.root@,
+        "--kernel"@, n.kernel@, "--device"@, "/dev/xvde"@, "--blob-device"@, "/dev/xvdf"@,
+        "--mountpoint"@, "/nix/store"@, "--view-backend"@, "erofs-objectmap"@, "--require-retained"@]
+}
+
+impl<'a> StoreRequest<'a> {
+    /// Include the exact selected generation in the privileged invocation; only decimal rendering remains external.
+    pub fn dispatch_arguments(&self) -> (out: Vec<crate::boot::Argument>)
+        ensures self@.0.native.is_some() ==> {
+            &&& out.len() == (if self@.1.is_some() { 25usize } else { 23usize })
+            &&& forall|i: int| 0 <= i < 23 ==> argument_text(#[trigger] out[i], store_prefix(self@.0, self@.1)[i])
+            &&& self@.1.is_some() ==> argument_text(out[23], "--generation"@)
+                && out[24] is Generation && out[24]->Generation_0 == self@.1.unwrap()
+        },
+    {
+        let base = self.arguments();
+        let mut args = Vec::new();
+        let mut i = 0;
+        while i < base.len()
+            invariant 0 <= i <= base.len(), args.len() == i,
+                forall|j: int| 0 <= j < i ==> argument_text(#[trigger] args[j], base[j]@),
+            decreases base.len() - i,
+        {
+            args.push(crate::boot::Argument::Text(base[i].clone()));
+            i += 1;
+        }
+
+        if let Some(generation) = self.generation {
+            args.push(crate::boot::Argument::Text("--generation".to_string()));
+            args.push(crate::boot::Argument::Generation(generation));
+        }
+
+        args
     }
 }
 

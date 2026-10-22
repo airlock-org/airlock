@@ -260,7 +260,7 @@ pub(super) fn run(command: Request) -> Result<Value> {
                 mountpoint: &args.store_mountpoint,
             })
         }
-        Operation::FindGeneration(id) => generations::find(
+        Operation::FindGeneration(id) => Ok(serde_json::to_value(generations::find(
             &root,
             &id.domain,
             &id.system,
@@ -268,7 +268,7 @@ pub(super) fn run(command: Request) -> Result<Value> {
             &id.root_source,
             &id.kernel_name,
             &id.approved_by,
-        ),
+        )?)?),
         Operation::LoadGeneration(g) => Ok(serde_json::to_value(generations::load(
             &root,
             &root,

@@ -135,12 +135,39 @@ pub(super) struct AuthorizedDeployment {
 }
 
 impl DurableAuthorization {
-    /// Select native storage only under the original checked configuration and executing intent.
-    pub(crate) fn storage<'a>(
+    /// Immutable storage coordinates drive both staging and backend dispatch.
+    pub(crate) fn storage_definitions(&self) -> &[airlock_deployment_core::storage::Definition] {
+        self.storage.definitions()
+    }
+
+    /// Derive generation obligations from the original checked plan.
+    pub(super) fn staging_requirement(
+        &self,
+        index: usize,
+    ) -> Result<airlock_deployment_core::storage::staging::Requirement> {
+        self.storage
+            .requirement(index)
+            .context("missing staging coordinate")
+    }
+
+    /// Reject an incomplete or substituted set under the current executing durable intent.
+    pub(super) fn check_staged(
+        &self,
+        record: &Record,
+        entries: Vec<airlock_deployment_core::storage::staging::Resolution>,
+    ) -> Result<airlock_deployment_core::storage::staging::StagedGenerations> {
+        self.storage
+            .check_staged(&self.operation, &effect_context(record)?, entries)
+            .context("staging differs from original storage plan or execution context")
+    }
+
+    /// Backend setup consumes the accepted in-memory staging result, never a raw map.
+    pub(crate) fn staged_storage<'a>(
         &'a self,
         record: &Record,
         index: usize,
-    ) -> Result<Option<airlock_deployment_core::storage::Backend<'a>>> {
+        staged: &'a airlock_deployment_core::storage::staging::StagedGenerations,
+    ) -> Result<Option<airlock_deployment_core::storage::staging::StagedBackend<'a>>> {
         let definition = self
             .storage
             .definitions()
@@ -150,9 +177,9 @@ impl DurableAuthorization {
             return Ok(None);
         }
         self.storage
-            .select(&self.operation, &effect_context(record)?, index)
+            .select_staged(&self.operation, &effect_context(record)?, staged, index)
             .map(Some)
-            .context("native storage authority differs from executing plan")
+            .context("staged backend differs from executing deployment")
     }
 
     /// Observe exact retained device definitions without granting mutation permission.

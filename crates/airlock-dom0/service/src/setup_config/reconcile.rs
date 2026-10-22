@@ -144,6 +144,7 @@ pub(crate) fn definitions(topology: &Value, program: &str, path: &Path) -> Resul
 type Deployment<'a> = Option<(
     &'a crate::coordinator::approval::DurableAuthorization,
     &'a Record,
+    &'a airlock_deployment_core::storage::staging::StagedGenerations,
 )>;
 
 /// Normal observation/iteration shared by deployment and boot/manual callers.
@@ -196,7 +197,7 @@ fn apply_inner(
             .unwrap_or_else(|| "/var/log/airlock".into())
     };
     let run: crate::model::TransactionId = deployment
-        .map(|(_, record)| record.id.clone())
+        .map(|(_, record, _)| record.id.clone())
         .map_or_else(
             || {
                 std::env::var("AIRLOCK_SETUP_RUN_ID")
@@ -219,7 +220,7 @@ fn apply_inner(
             &["--raw-data", "--fields", "NAME", "--no-spinner"],
         )?;
         let exists = registered.lines().any(|name| name == definition.name);
-        if let Some((authority, record)) = deployment {
+        if let Some((authority, record, _)) = deployment {
             if let Some(request) = authority.configuration_create(record, index, exists)? {
                 runner.create_deployment(request)?;
                 event(
@@ -257,8 +258,8 @@ fn apply_inner(
         if only.is_some_and(|name| definition.name != name) {
             continue;
         }
-        let backend = if let Some((authority, record)) = deployment {
-            super::backend::apply_deployment(authority, record, index, definition, &log)?
+        let backend = if let Some((authority, record, staged)) = deployment {
+            super::backend::apply_deployment(authority, record, staged, index, definition, &log)?
         } else if let Some(selected) = selected {
             super::backend::apply_boot(selected, definition, &log, apply)?
         } else {
@@ -328,7 +329,7 @@ fn apply_inner(
                 )?;
             }
         }
-        if let Some((authority, record)) = deployment {
+        if let Some((authority, record, _)) = deployment {
             ensure!(
                 authority
                     .device_definitions()
@@ -549,7 +550,7 @@ fn reconcile_setting(
     let property = matches!(selection.kind, Kind::Property)
         && matches!(setting.name.as_str(), "netvm" | "guivm");
     let explicit = !property || (apply && explicit_property(&definition.name, &setting.name)?);
-    if let Some((authority, record)) = deployment {
+    if let Some((authority, record, _)) = deployment {
         let raw = runner.text(
             "qvm-ls",
             &["--raw-data", "--fields", "NAME,STATE", "--no-spinner"],

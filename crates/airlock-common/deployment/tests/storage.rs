@@ -31,6 +31,34 @@ fn definition() -> Definition {
     }
 }
 
+/// One independently checked committed identity; tests supply an inert storage observation.
+fn selection(generation: u64) -> airlock_deployment_core::boot::Selection {
+    airlock_deployment_core::boot::Selection {
+        domain: "vm".into(),
+        generation,
+        system: "/system".into(),
+        root: "/root-source".into(),
+        source: "/closure-source".into(),
+        kernel: "kernel".into(),
+        mode: "shared-closure".into(),
+        device: "/dev/xvde".into(),
+        blob_device: "/dev/xvdf".into(),
+        mountpoint: "/nix/store".into(),
+        backend: "erofs-objectmap".into(),
+    }
+}
+
+/// Preserve the full original sources in a genuine checked staging token.
+fn resolutions(generation: u64) -> Vec<staging::Resolution> {
+    vec![staging::Resolution::Retained(Box::new(
+        airlock_deployment_core::boot::SelectedGeneration::check(
+            selection(generation),
+            &selection(generation),
+        )
+        .unwrap(),
+    ))]
+}
+
 /// Named evidence is not an independently asserted stopped flag.
 fn power(name: &str, state: &str) -> Power {
     Power {
@@ -72,9 +100,21 @@ fn exact_sources_kernel_and_storage_arguments_are_retained() {
     assert_eq!(request.size(), 512);
     assert!(backend.resize(&power("vm", "Halted"), 512).is_none());
     assert!(backend.resize(&power("vm", "Halted"), 1024).is_none());
-    assert!(backend.store(None).is_none());
-    assert!(backend.store(Some(8)).is_none());
-    let store = backend.store(Some(7)).unwrap();
+    assert!(
+        plan.check_staged(&durable, &context(), vec![staging::Resolution::Existing])
+            .is_none()
+    );
+    assert!(
+        plan.check_staged(&durable, &context(), resolutions(8))
+            .is_none()
+    );
+    let staged = plan
+        .check_staged(&durable, &context(), resolutions(7))
+        .unwrap();
+    let selected = plan
+        .select_staged(&durable, &context(), &staged, 0)
+        .unwrap();
+    let store = selected.store().unwrap();
     assert_eq!(store.generation(), Some(7));
     assert_eq!(store.program(), "/native/service");
     assert_eq!(
@@ -198,7 +238,13 @@ fn boot_settings_and_daemon_restore_use_original_fields_and_validated_outcomes()
         ["vm", "airlock-system-source", "/system"]
     );
     let e = evidence();
-    let store = backend.store(Some(7)).unwrap();
+    let staged = plan
+        .check_staged(&durable, &context(), resolutions(7))
+        .unwrap();
+    let selected = plan
+        .select_staged(&durable, &context(), &staged, 0)
+        .unwrap();
+    let store = selected.store().unwrap();
     let outcome = store.outcome(&e).unwrap();
     assert_eq!(
         outcome

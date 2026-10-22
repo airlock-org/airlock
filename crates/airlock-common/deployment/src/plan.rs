@@ -20,6 +20,8 @@ pub ghost struct CheckedPlan {
     pub shutdowns: effects::ShutdownScope,
     /// Explicit configuration reconciliation targets under the original review.
     pub configuration: effects::Scope,
+    /// Original VM namespace requiring generation staging.
+    pub stage: effects::Scope,
     /// Original retirement namespace.
     pub retire: effects::Scope,
     /// Original restoration namespace.
@@ -45,6 +47,8 @@ pub struct AuthorizedPlan {
     shutdowns: Shutdowns,
     // Configuration targets admitted by the complete projected plan.
     configuration: Targets,
+    // Exact original staging namespace, including dependency-generated work.
+    stage: Targets,
     // Retirement targets captured from the classified plan.
     retire: Targets,
     // Restoration targets captured from the classified plan.
@@ -65,7 +69,7 @@ impl View for AuthorizedPlan {
     type V = CheckedPlan;
 
     closed spec fn view(&self) -> CheckedPlan {
-        CheckedPlan { starts: self.starts@, shutdowns: self.shutdowns@, configuration: self.configuration@, retire: self.retire@, restore: self.restore@, copy_sources: self.copy_sources@, copy_targets: self.copy_targets@, pci_sources: self.pci_sources@, pci_targets: self.pci_targets@, binding: self.binding@ }
+        CheckedPlan { starts: self.starts@, shutdowns: self.shutdowns@, configuration: self.configuration@, stage: self.stage@, retire: self.retire@, restore: self.restore@, copy_sources: self.copy_sources@, copy_targets: self.copy_targets@, pci_sources: self.pci_sources@, pci_targets: self.pci_targets@, binding: self.binding@ }
     }
 }
 
@@ -121,6 +125,9 @@ impl AuthorizedPlan {
                 ==> effects::named(r.allowed@, name),
             result.is_ok() ==> (airlock_machine_planning::effects::may_reboot(plan) ==> r.allow_reboot),
             result.is_ok() ==> result.unwrap()@.binding == binding@,
+            result.is_ok() ==> result.unwrap()@.stage.targets.len() == plan.stage.len(),
+            result.is_ok() ==> forall|i: int| 0 <= i < plan.stage.len() ==>
+                #[trigger] result.unwrap()@.stage.targets[i]@ == plan.stage[i]@,
             result.is_ok() ==> effects::valid(result.unwrap()@.configuration),
             result.is_ok() ==> result.unwrap()@.configuration.targets.len() == plan.configure.len(),
             result.is_ok() ==> forall|i: int| 0 <= i < plan.configure.len() ==>
@@ -153,6 +160,7 @@ impl AuthorizedPlan {
         let copy_targets = Targets::reviewed(r, b, &candidate, targets(plan.copy_targets.as_slice()))?;
         let pci_sources = Targets::reviewed(r, b, &candidate, targets(plan.pci_sources.as_slice()))?;
         let pci_targets = Targets::reviewed(r, b, &candidate, targets(plan.pci_targets.as_slice()))?;
+        let stage = Targets::reviewed(r, b, &candidate, targets(plan.stage.as_slice()))?;
         let configuration = Targets::reviewed(r, b, &candidate, targets(plan.configure.as_slice()))?;
         let starts = Targets::reviewed(r, b, &candidate, targets(plan.start.as_slice()))?;
         let shutdowns = Shutdowns::reviewed(r, b, &candidate, targets(plan.stop.as_slice()), gui)?;
@@ -167,7 +175,7 @@ impl AuthorizedPlan {
             }
         }
 
-        Ok(Self { starts, shutdowns, configuration, retire, restore, copy_sources, copy_targets, pci_sources, pci_targets, binding })
+        Ok(Self { starts, shutdowns, configuration, stage, retire, restore, copy_sources, copy_targets, pci_sources, pci_targets, binding })
     }
 
     /// Preserve explicit policy exceptions while still refusing unclassified effects.
@@ -189,6 +197,9 @@ impl AuthorizedPlan {
             result.is_some() ==> forall|i: int| 0 <= i < plan.copy_targets.len() ==> #[trigger] result.unwrap()@.copy_targets.targets[i]@ == plan.copy_targets[i]@,
             result.is_some() ==> effects::valid(result.unwrap()@.copy_sources) && effects::valid(result.unwrap()@.copy_targets),
             result.is_some() ==> result.unwrap()@.binding == binding@,
+            result.is_some() ==> result.unwrap()@.stage.targets.len() == plan.stage.len(),
+            result.is_some() ==> forall|i: int| 0 <= i < plan.stage.len() ==>
+                #[trigger] result.unwrap()@.stage.targets[i]@ == plan.stage[i]@,
             result.is_some() ==> effects::valid(result.unwrap()@.configuration),
             result.is_some() ==> effects::valid(result.unwrap()@.starts)
                 && effects::shutdown_valid(result.unwrap()@.shutdowns),
@@ -201,10 +212,11 @@ impl AuthorizedPlan {
         let copy_targets = Targets::policy_exempt(targets(plan.copy_targets.as_slice()));
         let pci_sources = Targets::policy_exempt(targets(plan.pci_sources.as_slice()));
         let pci_targets = Targets::policy_exempt(targets(plan.pci_targets.as_slice()));
+        let stage = Targets::policy_exempt(targets(plan.stage.as_slice()));
         let configuration = Targets::policy_exempt(targets(plan.configure.as_slice()));
         let starts = Targets::policy_exempt(targets(plan.start.as_slice()));
         let shutdowns = Shutdowns::policy_exempt(targets(plan.stop.as_slice()), gui)?;
-        Some(Self { starts, shutdowns, configuration, retire, restore, copy_sources, copy_targets, pci_sources, pci_targets, binding })
+        Some(Self { starts, shutdowns, configuration, stage, retire, restore, copy_sources, copy_targets, pci_sources, pci_targets, binding })
     }
 
     /// Bind decoded VM definitions to exactly the configuration targets in this plan.
@@ -230,10 +242,13 @@ impl AuthorizedPlan {
     /// Bind native storage to the same complete checked configuration namespace.
     pub fn storage(&self, definitions: Vec<crate::storage::Definition>) -> (out: Option<crate::storage::StoragePlan>)
         ensures out.is_some() ==> out.unwrap()@.2 == self@.binding,
+            out.is_some() ==> out.unwrap()@.3.targets.len() == self@.stage.targets.len(),
+            out.is_some() ==> forall|i: int| 0 <= i < self@.stage.targets.len() ==>
+                #[trigger] out.unwrap()@.3.targets[i]@ == self@.stage.targets[i]@,
             out.is_some() && effects::valid(self@.configuration) ==> crate::storage::valid(out.unwrap()@),
             out.is_some() ==> out.unwrap()@.0.allowed == self@.configuration.allowed && out.unwrap()@.0.reviewed == self@.configuration.reviewed,
     {
-        crate::storage::StoragePlan::new(self.configuration.duplicate(), definitions, PlanBinding::new(self.binding.as_str().to_string()))
+        crate::storage::StoragePlan::new(self.configuration.duplicate(), definitions, PlanBinding::new(self.binding.as_str().to_string()), self.stage.duplicate())
     }
 
     /// Bind copy definitions to the original ordered endpoints and complete execution plan.

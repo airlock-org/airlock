@@ -1,7 +1,10 @@
 //! Admission commits a verified software view before making it selectable.
 //! Retention and retirement are separate from selection so rollback and running guests stay safe.
 
-use super::{fs::*, records, root, segments, views};
+use super::{
+    GenerationMatch, GenerationMatchOutcome, GenerationMatchSchema, fs::*, records, root, segments,
+    views,
+};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::{fs, path::Path, time::Instant};
@@ -463,7 +466,7 @@ pub(super) fn find(
     root_source: &str,
     kernel: &str,
     approved_by: &str,
-) -> Result<Value> {
+) -> Result<GenerationMatch> {
     let mut matches = Vec::new();
     for path in records::manifests(root)? {
         let manifest: Value = read(&path)?;
@@ -479,21 +482,25 @@ pub(super) fn find(
         }
     }
     matches.sort_by_key(|(generation, _, _)| *generation);
+    let namespace = domain.parse()?;
     let Some((generation, path, manifest)) = matches.pop() else {
-        return Ok(
-            json!({"schema":"airlock.closure-store.generation-match.v1","status":"missing","domain":domain}),
-        );
+        return Ok(GenerationMatch {
+            schema: GenerationMatchSchema::V1,
+            domain: namespace,
+            outcome: GenerationMatchOutcome::Missing,
+        });
     };
     records::root_image(root, &manifest)?;
     views::verify(root, &manifest["store"])?;
-    Ok(json!({
-        "schema": "airlock.closure-store.generation-match.v1",
-        "status": "found",
-        "domain": domain,
-        "generation": generation,
-        "manifest": path,
-        "closure_hash": manifest["store"]["closure_hash"],
-    }))
+    Ok(GenerationMatch {
+        schema: GenerationMatchSchema::V1,
+        domain: namespace,
+        outcome: GenerationMatchOutcome::Found {
+            generation: generation.to_string().parse()?,
+            manifest: path,
+            closure_hash: text(&manifest["store"], "closure_hash")?.parse()?,
+        },
+    })
 }
 
 pub(super) fn resolve_root(

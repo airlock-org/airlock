@@ -14,38 +14,6 @@ struct Activation<'a> {
 }
 
 impl Coordinator {
-    fn stage_images(&self, r: &Release, record: &Record, directory: &Path) -> Result<()> {
-        let mut staged = r.manifest.staged_generations.clone();
-        for name in &record.plan.stage {
-            if staged.contains_key(name) {
-                continue;
-            }
-            let backend = &r.topology.domains[name].backend;
-            if Path::new(backend.store.source.as_str())
-                .join("prepared.json")
-                .is_file()
-            {
-                continue;
-            }
-            let matched: Value = self.store().find(name, backend, "usr-assistant")?;
-            ensure!(
-                matched["status"] == "found",
-                "retained image generation unavailable; refusing implicit admission"
-            );
-            let generation: GenerationId = serde_json::from_value(matched["generation"].clone())?;
-            let info = self.generation(name, generation)?;
-            ensure!(
-                info.system == backend.system.source
-                    && info.root_source == backend.root.source
-                    && info.closure_source == backend.store.source
-                    && info.kernel_name == backend.kernel.name,
-                "retained image generation identity differs"
-            );
-            staged.insert(name.clone(), generation);
-        }
-        state::save(&directory.join("staged.json"), &staged)
-    }
-
     pub(super) fn publish_phase(
         &self,
         record: &mut Record,
@@ -434,11 +402,7 @@ impl Coordinator {
         )?)?;
         self.host_effect(durable.host(record, HostAction::PinController)?)?;
         self.host_effect(durable.host(record, HostAction::InstallController)?)?;
-        state::save(
-            &directory.join("staged.json"),
-            &r.manifest.staged_generations,
-        )?;
-        self.stage_images(r, record, &directory)?;
+        let staged = self.stage_images(r, record, &directory, durable)?;
 
         self.publish_phase(record, Phase::HostBootPreparation, lock)?;
         for action in [
@@ -521,7 +485,7 @@ impl Coordinator {
             crate::setup_config::reconcile::apply(
                 &self.runner,
                 durable.configuration_definitions(),
-                Some((durable, record)),
+                Some((durable, record, &staged)),
                 true,
                 None,
             )?;

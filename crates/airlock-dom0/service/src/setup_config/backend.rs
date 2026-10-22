@@ -237,9 +237,10 @@ pub(super) fn reconcile_selected(
 fn reconcile_with(
     session: &mut Session,
     domain: &str,
-    authority: Option<&verified::Backend<'_>>,
+    staged_authority: Option<&verified::staging::StagedBackend<'_>>,
     selected: Option<&airlock_deployment_core::boot::SelectedGeneration>,
 ) -> Result<()> {
+    let authority = staged_authority.map(|staged| staged.backend());
     let definition = session.topology["domains"][domain].clone();
     if definition["backend"]["type"] != "nix-closure" {
         ensure!(
@@ -302,17 +303,23 @@ fn reconcile_with(
     };
     let kernel_source = field(&backend["kernel"], "source", "")?;
 
-    let staged: Value = match &session.staged {
-        Some(path) if path.is_file() => crate::state::read(path)?,
-        _ => Value::Null,
+    let generation = if let Some(staged) = staged_authority {
+        staged
+            .selected()
+            .map(|selected| selected.selection().generation.to_string())
+    } else {
+        let staged: Value = match &session.staged {
+            Some(path) if path.is_file() => crate::state::read(path)?,
+            _ => Value::Null,
+        };
+        staged
+            .get(domain)
+            .filter(|value| !value.is_null())
+            .map(|value| match value {
+                Value::String(value) => value.clone(),
+                _ => value.to_string(),
+            })
     };
-    let generation = staged
-        .get(domain)
-        .filter(|value| !value.is_null())
-        .map(|value| match value {
-            Value::String(value) => value.clone(),
-            _ => value.to_string(),
-        });
     let generation = match chosen {
         Some(s) => {
             if let Some(ambient) = &generation {
@@ -350,11 +357,10 @@ fn reconcile_with(
             );
         }
     }
-    let selected_generation = generation.as_ref().map(|g| g.parse::<u64>()).transpose()?;
-    let store_request = authority
+    let store_request = staged_authority
         .map(|a| {
-            a.store(selected_generation)
-                .context("store generation differs from checked backend")
+            a.store()
+                .context("store selection differs from checked staging")
         })
         .transpose()?;
     let artifact = if generation.is_some() {
@@ -516,16 +522,16 @@ fn reconcile_with(
     if store_deferred {
         session.defer(domain, "domain-store", "source", store)?;
     } else if session.apply {
-        let output = if let Some(request) = &checked {
-            let args = super::selection::arguments(request.store_arguments());
-            session.service(&args.iter().map(String::as_str).collect::<Vec<_>>())?
-        } else if authority.is_some() {
+        let output = if authority.is_some() {
             install_store(
                 session,
                 store_request
                     .as_ref()
                     .context("missing checked native store")?,
             )?
+        } else if let Some(request) = &checked {
+            let args = super::selection::arguments(request.store_arguments());
+            session.service(&args.iter().map(String::as_str).collect::<Vec<_>>())?
         } else {
             session.service(&[
                 "storage",
@@ -557,6 +563,15 @@ fn reconcile_with(
             Path::new("<storage-installation>"),
         )?;
 
+        if authority.is_some() {
+            let evidence = store_evidence(&result);
+            store_request
+                .as_ref()
+                .context("missing checked store request")?
+                .outcome(&evidence)
+                .context("store receipt differs from approved boot identity or generation")?;
+            observed_store = Some(evidence);
+        }
         if let Some(request) = &checked {
             let observed = crate::store::handoff::installed(&result);
             ensure!(
@@ -570,15 +585,6 @@ fn reconcile_with(
                 request.selection().generation == observed.generation,
                 "storage selected another generation"
             );
-        }
-        if authority.is_some() {
-            let evidence = store_evidence(&result);
-            store_request
-                .as_ref()
-                .context("missing checked store request")?
-                .outcome(&evidence)
-                .context("store receipt differs from approved boot identity or generation")?;
-            observed_store = Some(evidence);
         }
         let volumes = result
             .volumes_created
@@ -999,10 +1005,7 @@ fn resize(session: &mut Session, request: verified::ResizeRequest<'_>) -> Result
 
 /// The storage service retains admission, locking and offline-attachment safeguards.
 fn install_store(session: &mut Session, request: &verified::StoreRequest<'_>) -> Result<String> {
-    let mut args = request.arguments();
-    if let Some(generation) = request.generation() {
-        args.extend(["--generation".into(), generation.to_string()]);
-    }
+    let args = super::selection::arguments(request.dispatch_arguments());
     session.command(
         request.program(),
         &args.iter().map(String::as_str).collect::<Vec<_>>(),
@@ -1042,13 +1045,15 @@ pub(crate) fn apply_boot(
 pub(crate) fn apply_deployment(
     authority: &crate::coordinator::approval::DurableAuthorization,
     record: &crate::model::Record,
+    staged: &verified::staging::StagedGenerations,
     index: usize,
     definition: &airlock_deployment_core::configuration::Definition,
     log: &Path,
 ) -> Result<Option<super::report::SetupReport>> {
-    let Some(backend) = authority.storage(record, index)? else {
+    let Some(staged_backend) = authority.staged_storage(record, index, staged)? else {
         return Ok(None);
     };
+    let backend = staged_backend.backend();
     ensure!(
         backend.definition().name == definition.name,
         "backend/configuration index differs"
@@ -1066,17 +1071,19 @@ pub(crate) fn apply_deployment(
         "backend-only",
         directory,
     )?;
-    session.staged = Some(
-        log.parent()
-            .context("missing transaction directory")?
-            .join("staged.json"),
-    );
+    // Native deployment carries its checked selection in memory, without ambient staging input.
+    session.staged = None;
     session.result.run_id = record.id.clone();
     session.result.task = Some(super::report::tasks::Task::Vm {
         domain: definition.name.parse()?,
         kind: super::report::tasks::Kind::Backend,
     });
-    let result = reconcile_with(&mut session, &definition.name, Some(&backend), None);
+    let result = reconcile_with(
+        &mut session,
+        &definition.name,
+        Some(&staged_backend),
+        staged_backend.selected(),
+    );
     session.finish(&result)?;
     result?;
     Ok(Some(session.result))
