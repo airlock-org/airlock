@@ -80,6 +80,9 @@ pub(crate) fn execute(root: &Path, name: &str, args: &[String]) -> Result<()> {
             if let Some(diagnostics) = config["nix_stderr"].as_str() {
                 eprint!("{diagnostics}");
             }
+            if config["nix_wait_stdin"].as_bool() == Some(true) {
+                std::io::stdin().read_exact(&mut [0])?;
+            }
             if let Some(remote) = config["fetch_remote"].as_str() {
                 let target = root.join("apps-fetch");
                 for mut command in [

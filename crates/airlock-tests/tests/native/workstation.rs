@@ -2,13 +2,18 @@
 
 use crate::common;
 use airlock_tests::{
+    dialogue::Dialogue,
     process::{binary, run},
     repository::{Repository, git},
 };
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use flate2::read::GzDecoder;
 use serde_json::{Value, json};
-use std::{fs, process::Command};
+use std::{
+    fs,
+    process::Command,
+    time::{Duration, Instant},
+};
 
 /// Read a successful CLI report without obscuring tool diagnostics.
 fn report(command: &mut Command) -> Result<Value> {
@@ -43,6 +48,39 @@ fn image_build_logs_preserve_diagnostics_and_exit_status() -> Result<()> {
             json!([{"outputs": {"out": release}}])
         );
     }
+
+    fixture.configure(json!({
+        "nix_stderr": "nixos-disk-image> copying store\nnixos-disk-image>\n",
+        "nix_wait_stdin": true,
+        "nix_exit": 42,
+        "release": release,
+    }))?;
+    let mut dialogue =
+        Dialogue::spawn(&mut fixture.command(&["nix", "build", "--print-build-logs", "--json"]))?;
+    let deadline = Instant::now() + Duration::from_secs(45);
+    loop {
+        let diagnostics = dialogue.errors()?;
+        if diagnostics.contains("Airlock build: Nix command still running") {
+            assert!(diagnostics.contains("last output: nixos-disk-image> copying store"));
+            break;
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "quiet build emitted no status: {diagnostics}"
+        );
+        ensure!(
+            dialogue.running()?,
+            "quiet build exited before release: {diagnostics}"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(dialogue.running()?);
+    dialogue.send(b"x")?;
+    assert_eq!(
+        dialogue.reply(Duration::from_secs(5))?,
+        json!([{"outputs": {"out": release}}])
+    );
+    assert_eq!(dialogue.finish()?.code(), Some(42));
     Ok(())
 }
 
