@@ -528,7 +528,7 @@ fn vm_installed_input_receivers() -> Result<()> {
     let mut command = packages.runtime(runner.to_str().context("VM runner")?);
     command
         .current_dir(temporary.path())
-        .env("QEMU_OPTS", "-accel kvm -display none");
+        .env("QEMU_OPTS", "-display none");
     let logs = packages.logs.join("boot");
     system::run(&mut command, &logs, Duration::from_secs(180))?;
     let console = fs::read_to_string(logs.join("stdout.log"))?;

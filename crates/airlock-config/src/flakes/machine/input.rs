@@ -72,8 +72,9 @@ pub(super) fn fixture(build: &Build) -> NixValue {
                     "serviceConfig": nix_record! {
                         "Type": "oneshot",
                         "ExecStart": nix_text!(
-                            "{probe}/bin/airlock-input-probe --inside-test-vm",
+                            "{probe}/bin/airlock-input-probe --inside-test-vm --udevadm {systemd}/bin/udevadm",
                             probe = probe,
+                            systemd = pkgs.clone().select("systemd"),
                         ),
                         "ExecStopPost": nix_text!(
                             "{systemd}/bin/systemctl --no-block poweroff",

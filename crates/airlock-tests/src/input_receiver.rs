@@ -67,7 +67,8 @@ fn hello(name: &str, kind: &str) -> Vec<u8> {
     let mut caps = vec![0_u8; 176 + 128 + 64 * 24];
     set(&mut caps, 8, 1); // EV_KEY
     if matches!(kind, "keyboard" | "composite") {
-        for key in [28, 30, 44] {
+        // A normal PC keyboard lets the real udev input classifier recognize typing.
+        for key in 1..=127 {
             set(&mut caps, 16, key);
         }
     }
@@ -80,6 +81,7 @@ fn hello(name: &str, kind: &str) -> Vec<u8> {
     if kind == "tablet" {
         set(&mut caps, 8, 3); // EV_ABS
         set(&mut caps, 16, 330); // BTN_TOUCH
+        set(&mut caps, 16, 320); // BTN_TOOL_PEN
         for axis in [0, 1] {
             set(&mut caps, 120, axis);
             let maximum = 176 + 128 + axis * 24 + 8;
@@ -139,7 +141,11 @@ fn event(pipe: &mut ChildStdin, kind: u16, code: u16, value: i32) -> Result<()> 
 }
 
 /// Verify authorization, registration, event delivery and disconnect for each installed receiver route.
-pub(crate) fn run() -> Result<()> {
+pub(crate) fn run(udevadm: &Path) -> Result<()> {
+    ensure!(
+        udevadm.is_absolute(),
+        "supply the fixture udev observer by absolute path"
+    );
     ensure!(
         Path::new("/etc/airlock-input-test").is_file(),
         "run only in the disposable input test VM"
@@ -216,6 +222,39 @@ pub(crate) fn run() -> Result<()> {
             )
         })?;
         let node = event_node(&full_name)?.context("registered evdev node")?;
+        let mut properties = String::new();
+        wait(|| {
+            let output = support::run(
+                Command::new(udevadm)
+                    .args(["info", "--query=property", "--name"])
+                    .arg(&node),
+                None,
+                Duration::from_secs(5),
+            )?;
+            properties = String::from_utf8(output.stdout)?;
+            let values: std::collections::BTreeMap<_, _> = properties
+                .lines()
+                .filter_map(|line| line.split_once('='))
+                .collect();
+            let keyboard = !matches!(*kind, "keyboard" | "composite")
+                || values.get("ID_INPUT_KEYBOARD") == Some(&"1");
+            let pointer = *kind == "keyboard"
+                || [
+                    "ID_INPUT_MOUSE",
+                    "ID_INPUT_TOUCHPAD",
+                    "ID_INPUT_TABLET",
+                    "ID_INPUT_TOUCHSCREEN",
+                ]
+                .iter()
+                .any(|key| values.get(key) == Some(&"1"));
+            let seat = values
+                .get("TAGS")
+                .is_some_and(|tags| tags.split(':').any(|tag| tag == "seat"));
+            Ok(output.status.success() && keyboard && pointer && seat)
+        })
+        .with_context(|| {
+            format!("{service}: udev did not classify the device for a local seat: {properties}")
+        })?;
         let mut events = fs::OpenOptions::new()
             .read(true)
             .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
@@ -281,7 +320,7 @@ pub(crate) fn run() -> Result<()> {
     }
     println!(
         "{}",
-        json!({"schema":"airlock.input-smoke.v1","status":"passed","services":passed,"event_delivery":true,"disconnect":true,"physical_input_verified":false})
+        json!({"schema":"airlock.input-smoke.v1","status":"passed","services":passed,"event_delivery":true,"udev_seat":true,"disconnect":true,"physical_input_verified":false})
     );
     Ok(())
 }
