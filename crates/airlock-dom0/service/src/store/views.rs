@@ -2,10 +2,10 @@
 //! Device-mapper exposes that stream without copying package bytes into each VM.
 
 use super::{fs::*, records, segments};
+use airlock_nix_core::artifact::cache::layout_hash;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
@@ -47,39 +47,6 @@ pub(super) fn references(map: &Value, source: &str) -> Result<Vec<Value>> {
         segments::segment_id(&item.segment_id)?;
         Ok(json!({"segment_id":item.segment_id,"source":source,"entry":item.object,"offset":item.segment_offset,"length":item.length,"logical_offset":item.logical_offset}))
     }).collect()
-}
-
-// Python's original layout digest uses sorted JSON with the default separators.
-fn canonical_json(value: &Value) -> Result<String> {
-    Ok(match value {
-        Value::Array(items) => format!(
-            "[{}]",
-            items
-                .iter()
-                .map(canonical_json)
-                .collect::<Result<Vec<_>>>()?
-                .join(", ")
-        ),
-        Value::Object(items) => format!(
-            "{{{}}}",
-            items
-                .iter()
-                .map(|(key, value)| Ok(format!(
-                    "{}: {}",
-                    serde_json::to_string(key)?,
-                    canonical_json(value)?
-                )))
-                .collect::<Result<Vec<_>>>()?
-                .join(", ")
-        ),
-        _ => serde_json::to_string(value)?,
-    })
-}
-
-/// Bind the bytes and logical offsets consumed by EROFS, independently of VM identity or pool location.
-fn layout_hash(map: &Value) -> Result<String> {
-    let layout = json!({"logical_size":map["logical_size"],"extents":extents(map)?.iter().map(|item| json!({"object":item.object,"object_sha256":item.object_sha256,"logical_offset":item.logical_offset,"length":item.length})).collect::<Vec<_>>()});
-    Ok(hex(&Sha256::digest(canonical_json(&layout)?)))
 }
 
 pub(super) fn integrity(store: &Value) -> Result<Value> {
@@ -654,7 +621,10 @@ pub(super) fn materialize(request: ViewRequest<'_>) -> Result<Value> {
         // A VM's system/generation identify its manifest, but do not alter these EROFS bytes.
         let image_key = image_build().then(|| layout_hash(&map)).transpose()?;
         let shared = match &image_key {
-            Some(key) => reuse_image_index(key, temporary_metadata.path())?,
+            Some(key) => {
+                super::image_cache::index(key, temporary_metadata.path())?
+                    || reuse_image_index(key, temporary_metadata.path())?
+            }
             None => false,
         };
         if shared {

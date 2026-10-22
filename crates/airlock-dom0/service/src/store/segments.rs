@@ -405,6 +405,13 @@ pub(super) fn admit_fragment(
     target: u64,
 ) -> Result<Value> {
     let name = entry(logical)?;
+    let cached = super::image_cache::fragment(logical)?;
+    if let Some(cached) = &cached {
+        ensure!(
+            cached.identity.tree_hash == tree_hash && cached.path == fragment,
+            "cached fragment admission mismatch"
+        );
+    }
     let meta = object_metadata(root, name)?;
     let existing = if meta.try_exists()? {
         Some(read::<Value>(&meta)?)
@@ -416,10 +423,22 @@ pub(super) fn admit_fragment(
             value["tree_hash"] == tree_hash,
             "existing object hash mismatch"
         );
-        extent(root, &value, true)?;
+        let extent = extent(root, &value, true)?;
+        if let Some(cached) = &cached {
+            ensure!(
+                extent.sha256 == cached.identity.sha256 && extent.size == cached.identity.size,
+                "cached object extent mismatch"
+            );
+        }
         (value, false)
     } else {
         let location = append(root, fragment, name, transaction, target)?;
+        if let Some(cached) = &cached {
+            ensure!(
+                location.sha256 == cached.identity.sha256 && location.size == cached.identity.size,
+                "cached fragment checksum mismatch"
+            );
+        }
         failpoint("object-after-append")?;
         let mut location_json = serde_json::to_value(&location)?;
         location_json["status"] = json!("current");
@@ -479,6 +498,29 @@ pub(super) fn admit(
     transaction: &str,
     target: u64,
 ) -> Result<Value> {
+    if let Some(cached) = super::image_cache::fragment(logical)? {
+        // These descriptors are explicit Nix build inputs, not a sender-supplied runtime cache.
+        // Verify bytes while appending; unchanged packages need no source rehash or tar rebuild.
+        if let Some(value) = reusable(root, logical)? {
+            let extent = extent(root, &value["tar_fragment"], true)?;
+            ensure!(
+                value["tree_hash"] == cached.identity.tree_hash
+                    && extent.sha256 == cached.identity.sha256
+                    && extent.size == cached.identity.size,
+                "cached object identity mismatch"
+            );
+            return Ok(value);
+        }
+        return admit_fragment(
+            root,
+            logical,
+            &cached.path,
+            &cached.identity.tree_hash,
+            transaction,
+            target,
+        );
+    }
+
     let source = physical.join(entry(logical)?);
     let digest = tree_hash(&source)?;
     if image_build()

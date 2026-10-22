@@ -16,6 +16,8 @@ pub mod overlays;
 
 pub mod vm;
 
+pub mod store;
+
 pub mod script;
 
 pub mod native;

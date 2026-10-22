@@ -2,6 +2,41 @@
 
 use super::*;
 
+/// Exercise real cache derivations with two tiny package closures instead of an image or VM build.
+pub(super) fn cache(inputs: NixValue) -> NixValue {
+    let pkgs = NixValue::builtin("import").call(inputs.clone().select("nixpkgs")).call(rusix::nix_record! {
+        "system": "x86_64-linux",
+        "overlays": NixValue::list([airlock_build::overlays::image_tools(&NixPath::from_source_text(inputs.clone().select("machine").to_text().into_expr::<String>()))]),
+    });
+    pkgs.bind(|pkgs| {
+        let left = pkgs
+            .clone()
+            .select("writeText")
+            .call("airlock-cache-left")
+            .call("unchanged package");
+        let right = pkgs
+            .clone()
+            .select("writeText")
+            .call("airlock-cache-right")
+            .call(inputs.clone().select("variant"));
+        let closure = |roots| {
+            pkgs.clone()
+                .select("closureInfo")
+                .call(rusix::nix_record! { "rootPaths": roots })
+        };
+        airlock_build::store::image_cache(
+            &pkgs,
+            &airlock_build::Workspace::new(NixPath::from_source_text(
+                inputs.select("apps").to_text().into_expr::<String>(),
+            )),
+            NixValue::list([
+                closure(NixValue::list([left.clone()])),
+                closure(NixValue::list([left, right])),
+            ]),
+        )
+    })
+}
+
 /// Inspect evaluated configuration for test usb prepared store preserves sealed view mode.
 pub(super) fn sealed_store(inputs: NixValue) -> NixValue {
     NixValue::builtin("getFlake")

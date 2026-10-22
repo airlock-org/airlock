@@ -60,6 +60,8 @@ mod progress;
 
 mod image_cli;
 
+mod image_cache;
+
 pub(crate) mod handoff;
 
 mod fs;

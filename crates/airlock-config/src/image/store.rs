@@ -160,6 +160,18 @@ pub(crate) fn prepared(
         "prepared-guest-specs.json",
         NixValue::concat_lists([specs, builder_specs]),
     );
+    let guest_closures = NixValue::builtin("map")
+        .call(NixValue::function(|entry| {
+            pkgs.clone().select("closureInfo").call(nix_record! {
+                "rootPaths": NixValue::list([entry.select("configuration.config.system.build.toplevel")]),
+            })
+        }))
+        .call(NixValue::builtin("attrValues").call(entries.clone()));
+    let cache = airlock_build::store::image_cache(
+        pkgs,
+        workspace,
+        NixValue::concat_lists([guest_closures, NixValue::list([closure.clone()])]),
+    );
     let seed = pkgs
         .clone()
         .select("runCommand")
@@ -187,9 +199,11 @@ pub(crate) fn prepared(
         .call(nix_text!(
             r#"
         airlock-dom0-service storage image prepare-pool \
-          "$out/pool" "$descriptors" {specs} /var/lib/airlock/closure-store
+          "$out/pool" "$descriptors" {specs} /var/lib/airlock/closure-store \
+          --cache {cache}
     "#,
             specs = specs,
+            cache = cache.clone(),
         ));
 
     seed.bind(|seed| {
@@ -217,6 +231,7 @@ pub(crate) fn prepared(
         seed.merge_attrs(nix_record! {
             "checkCommand": check,
             "validation": validation,
+            "imageCache": cache,
         })
     })
 }
@@ -233,6 +248,17 @@ pub(super) fn unified(
     let closure = pkgs.clone().select("closureInfo").call(nix_record! {
         "rootPaths": NixValue::list([system.clone()]),
     });
+    let builder_closure = pkgs.clone().select("closureInfo").call(nix_record! {
+        "rootPaths": NixValue::concat_lists([
+            vm_store.clone().select("builderInputRoots"),
+            NixValue::list([system.clone()]),
+        ]),
+    });
+    let cache = airlock_build::store::image_cache(
+        pkgs,
+        workspace,
+        NixValue::list([closure.clone(), builder_closure]),
+    );
     let choices = pkgs
         .clone()
         .select("lib.mapAttrs'")
@@ -288,13 +314,14 @@ pub(super) fn unified(
           --paths {closure}/store-paths --settings {preflight} \
           --launcher {launcher}/bin/airlock-exec --readelf {binutils}/bin/readelf
         airlock-dom0-service storage image prepare-host {vm_store} "$out" \
-          {closure}/registration {system} {choices}
+          {closure}/registration {system} {choices} --cache {cache}
         cp "$TMPDIR/airlock-host-preflight/boot-preflight.json" "$out/boot-preflight.json"
     "#,
             vm_store = vm_store.clone(),
             closure = closure,
             system = system,
             choices = json(pkgs, "airlock-host-boot-choices.json", choices),
+            cache = cache.clone(),
             preparer = Application::PrepareBoot.build(pkgs, workspace),
             launcher = Application::Launcher.build(pkgs, workspace),
             binutils = pkgs.clone().select("binutils"),
@@ -313,8 +340,9 @@ pub(super) fn unified(
         );
 
         seed.merge_attrs(nix_record! {
-            "descriptors": vm_store.select("descriptors"),
+            "descriptors": vm_store.clone().select("descriptors"),
             "checkCommand": check,
+            "imageCaches": NixValue::list([vm_store.clone().select("imageCache"), cache]),
         })
     })
 }

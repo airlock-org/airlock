@@ -284,14 +284,24 @@ fn disk(
                 .call(command);
             let definitions = nix_record! {
                 "buildCommand": replaced,
-                "postVM": NixValue::builtin("replaceStrings")
+                "postVM": NixValue::concat_text([NixValue::builtin("replaceStrings")
                     .call(NixValue::list([publish.into()]))
                     .call(NixValue::list([nix_text!(
                         "{native}/bin/airlock-dom0-service storage build-progress --label 'USB image: publishing disk image' -- {publish}",
                         native = native.clone(),
                         publish = publish,
                     ).into()]))
-                    .call(post_vm),
+                    .call(post_vm), nix_text!(
+                        r#"
+                        # Keep reusable build inputs reachable from the image's existing GC root.
+                        # These sidecars belong to the Nix output directory, never the installed disk.
+                        mkdir -p "$out/build-cache"
+                        ln -s {guests} "$out/build-cache/guests.json"
+                        ln -s {host} "$out/build-cache/host.json"
+                    "#,
+                        guests = NixValue::builtin("elemAt").call(unified.clone().select("imageCaches")).call(0_i64),
+                        host = NixValue::builtin("elemAt").call(unified.clone().select("imageCaches")).call(1_i64),
+                    ).into()]),
                 "preVM": NixValue::concat_text([
                     nix_text!(
                         r#"

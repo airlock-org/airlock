@@ -10,6 +10,11 @@ description = "Shared Nix types, validation and runtime support for Airlock appl
 [lib]
 path = "src/lib.rs"
 
+[[bin]]
+name = "airlock-store-cache"
+path = "src/bin/airlock-store-cache.rs"
+required-features = ["artifacts"]
+
 [features]
 default = []
 runtime = []

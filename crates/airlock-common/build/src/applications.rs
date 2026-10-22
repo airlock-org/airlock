@@ -14,6 +14,8 @@ use rusix::{
 pub enum Application {
     /// Build-directory VM boot filesystems and closure manifests.
     PrepareBoot,
+    /// Independently cacheable package fragments and common store indexes used only during image builds.
+    StoreCache,
     /// Read-only host observation with no Qubes control implementation.
     Observation,
     /// Fixed native argument and environment adapters.
@@ -64,6 +66,12 @@ impl Application {
         let pkgs = &package_set;
 
         let (package, name, description, binaries): (&str, &str, &str, &[&str]) = match self {
+            Self::StoreCache => (
+                "airlock-nix-core",
+                "airlock-store-cache",
+                "Cacheable immutable store preparation",
+                &["airlock-store-cache"],
+            ),
             Self::PrepareBoot => (
                 "airlock-image",
                 "airlock-prepare-boot",
@@ -190,6 +198,9 @@ impl Application {
         }
         for binary in binaries {
             flags.extend(["--bin".into(), (*binary).into()]);
+        }
+        if matches!(self, Self::StoreCache) {
+            flags.extend(["--features".into(), "artifacts".into()]);
         }
         let mut attributes = vec![
             ("pname", name.into()),
@@ -326,6 +337,7 @@ impl Application {
                 ]);
             }
             Self::PrepareBoot
+            | Self::StoreCache
             | Self::Observation
             | Self::Launcher
             | Self::Cli

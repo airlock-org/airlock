@@ -17,6 +17,127 @@ fn includes(value: &Value, expected: &str) {
     );
 }
 
+/// Changing one package rebuilds only its fragment and affected index; another closure reuses both outputs.
+#[test]
+#[ignore = "explicit tiny Nix builds: prepares the store-cache executable, fragments and real EROFS indexes"]
+fn package_store_cache_reuses_unchanged_fragments_and_indexes() -> Result<()> {
+    let nix = context()?;
+    let apps = nix.temporary.path().join("cache-apps");
+    copy_tree(&nix.prepared.join("crates"), &apps)?;
+    let trial = std::cell::Cell::new(0);
+
+    let build = |variant: &str| -> Result<Value> {
+        trial.set(trial.get() + 1);
+        let input = nix
+            .temporary
+            .path()
+            .join(format!("store-cache-{variant}.nix"));
+        fs::write(&input, nix.fixture("prepared_store/cache", json!({
+            "nixpkgs":nix.sources["nixpkgsSource"], "machine":nix.prepared.join("airlock-machine"),
+            "apps":apps, "variant":variant,
+        }))?)?;
+        let mut command = Command::new("nix");
+        nix.environment(&mut command);
+        command
+            .arg("--store")
+            .arg(std::env::var_os("AIRLOCK_NIX_ROOT").context("guarded store")?)
+            .arg("--cores")
+            .arg(std::thread::available_parallelism()?.get().to_string())
+            .args([
+                "--extra-experimental-features",
+                "nix-command flakes",
+                "--option",
+                "builders",
+                "",
+                "--option",
+                "build-users-group",
+                "",
+                "--offline",
+                "build",
+                "--impure",
+                "--no-link",
+                "--json",
+                "--file",
+            ])
+            .arg(input);
+        let output = support::run(&mut command, None, Duration::from_secs(600))?;
+        fs::write(
+            nix.logs.join(format!(
+                "store-cache-{trial}-{variant}.stderr",
+                trial = trial.get()
+            )),
+            &output.stderr,
+        )?;
+        let result: Value = serde_json::from_slice(&output.checked()?)?;
+        let manifest = Path::new(result[0]["outputs"]["out"].as_str().unwrap());
+        let physical = PathBuf::from(std::env::var_os("AIRLOCK_NIX_ROOT").unwrap())
+            .join(manifest.strip_prefix("/")?);
+        let manifest_value: Value = serde_json::from_slice(&fs::read(physical)?)?;
+        let mut references = Command::new("nix-store");
+        nix.environment(&mut references);
+        references
+            .arg("--store")
+            .arg(std::env::var_os("AIRLOCK_NIX_ROOT").unwrap())
+            .args(["--query", "--requisites"])
+            .arg(manifest);
+        let references = String::from_utf8(common::run(&mut references, None)?.checked()?)?;
+        for artifact in manifest_value["fragments"]
+            .as_object()
+            .unwrap()
+            .values()
+            .chain(manifest_value["indexes"].as_array().unwrap())
+        {
+            assert!(
+                references
+                    .lines()
+                    .any(|path| path == artifact.as_str().unwrap()),
+                "cache manifest failed to retain {artifact}"
+            );
+        }
+        for package in manifest_value["fragments"].as_object().unwrap().keys() {
+            assert!(
+                !references.lines().any(|path| path == package),
+                "cache manifest retained source package {package}"
+            );
+        }
+        fs::write(
+            nix.logs.join(format!(
+                "store-cache-{trial}-{variant}.json",
+                trial = trial.get()
+            )),
+            serde_json::to_vec_pretty(&manifest_value)?,
+        )?;
+        Ok(manifest_value)
+    };
+    let first = build("first")?;
+    let second = build("second")?;
+    let fragments = |value: &Value, suffix: &str| -> (String, String) {
+        let (package, artifact) = value["fragments"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .find(|(path, _)| path.ends_with(suffix))
+            .unwrap();
+        (package.clone(), artifact.as_str().unwrap().to_owned())
+    };
+    assert_eq!(
+        fragments(&first, "-airlock-cache-left"),
+        fragments(&second, "-airlock-cache-left")
+    );
+    assert_ne!(
+        fragments(&first, "-airlock-cache-right"),
+        fragments(&second, "-airlock-cache-right")
+    );
+    assert_eq!(first["indexes"][0], second["indexes"][0]);
+    assert_ne!(first["indexes"][1], second["indexes"][1]);
+    let service = apps.join("airlock-dom0/service/src/lib.rs");
+    let mut body = fs::read_to_string(&service)?;
+    body.push_str("\n// Unrelated service edit must not invalidate package packing.\n");
+    fs::write(service, body)?;
+    assert_eq!(build("second")?, second);
+    Ok(())
+}
+
 /// The real unit graph keeps transient input jobs outside boot prerequisites and gates completion on health.
 #[test]
 #[ignore = "requires explicitly prepared offline Nix sources"]
@@ -125,13 +246,13 @@ fn usb_startup_gates_are_acyclic_and_preserve_health_budgets() -> Result<()> {
 
 /// Image validation runs before assembly, recovery logging survives failure and the runtime closure does not retain its pool payload twice.
 #[test]
-#[ignore = "requires explicitly prepared offline Nix sources"]
+#[ignore = "explicit image input builds: cache discovery realizes the host and guest closure lists"]
 fn prepared_image_validates_sealed_pool_before_assembly() -> Result<()> {
     let nix = context()?;
     let report = inspect(
         &nix,
         "prepared_store/sealed_store",
-        json!({"root": nix.prepared}),
+        json!({"root": nix.prepared, "realizeImageInputs": true}),
     )?;
     assert_eq!(report["mode"], "go-rwx");
     includes(&report["hostOrdering"], "airlock-host-store.service");
@@ -149,7 +270,7 @@ fn prepared_image_validates_sealed_pool_before_assembly() -> Result<()> {
     let mut previous = 0;
     for token in [
         "mount $rootDisk $mountPoint",
-        "Installing prepared Qubes runtime state",
+        "USB image: installing prepared Qubes runtime state",
         "switch-to-configuration boot",
         "chown -R root:qubes /var/lib/qubes",
         "umount -R /mnt",

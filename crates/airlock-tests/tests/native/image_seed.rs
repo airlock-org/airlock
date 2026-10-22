@@ -121,6 +121,72 @@ impl Seed {
         Ok(command)
     }
 
+    /// Build reusable fragment and common-index outputs without retaining any pool placement.
+    fn cache(&self, real_mkfs: Option<&std::ffi::OsStr>) -> Result<PathBuf> {
+        let root = self.store.temporary.path().join("artifact-cache");
+        fs::create_dir(&root)?;
+        let mut fragments = BTreeMap::new();
+        let mut closures = Vec::new();
+        for spec in self.specs.as_array().unwrap() {
+            let paths: Vec<String> = fs::read_to_string(
+                Path::new(spec["closure_source"].as_str().unwrap()).join("store-paths"),
+            )?
+            .lines()
+            .map(str::to_owned)
+            .collect();
+            for logical in &paths {
+                if fragments.contains_key(logical) {
+                    continue;
+                }
+                let name = Path::new(logical).file_name().unwrap();
+                let directory = root.join(name);
+                airlock_nix_core::artifact::cache::pack(
+                    logical,
+                    &self.store.physical.join(name),
+                    &directory,
+                )?;
+                fragments.insert(logical.clone(), directory);
+            }
+            closures.push(paths);
+        }
+        let tool = common::binary("AIRLOCK_STORE_CACHE_BIN", "airlock-store-cache");
+        let mut indexes = Vec::new();
+        for (number, paths) in closures.iter().enumerate() {
+            let input = root.join(format!("index-{number}.json"));
+            fs::write(
+                &input,
+                serde_json::to_vec(
+                    &paths
+                        .iter()
+                        .map(|path| (path, &fragments[path]))
+                        .collect::<BTreeMap<_, _>>(),
+                )?,
+            )?;
+            let index = root.join(format!("index-{number}"));
+            common::run(
+                Command::new(&tool)
+                    .arg("index")
+                    .arg(&input)
+                    .arg(&index)
+                    .arg(
+                        real_mkfs
+                            .unwrap_or(self.store.temporary.path().join("mkfs.erofs").as_os_str()),
+                    ),
+                None,
+            )?
+            .checked()?;
+            indexes.push(index);
+        }
+        let manifest = root.join("manifest.json");
+        fs::write(
+            &manifest,
+            serde_json::to_vec(
+                &json!({"schema":"airlock.image-cache.v1","fragments":fragments,"indexes":indexes}),
+            )?,
+        )?;
+        Ok(manifest)
+    }
+
     /// Install the sealed pool and remove all source packages before boot-adoption assertions.
     fn install(&self) -> Result<()> {
         fs::rename(&self.store.pool, &self.installed)?;
@@ -157,6 +223,103 @@ impl Seed {
             None,
         )
     }
+}
+
+/// Independent cached artifacts reproduce the original pool without rehashing or repacking package trees.
+#[test]
+fn prepared_image_reuses_cached_artifacts_and_rejects_corruption() -> Result<()> {
+    let seed = Seed::create(true)?;
+    let cache = seed.cache(None)?;
+    let root = seed.store.temporary.path();
+    // Preserve the root image, but make every original package unavailable to the preparer.
+    for path in fs::read_dir(&seed.store.physical)? {
+        let path = path?.path();
+        if path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with("-system")
+        {
+            fs::remove_dir_all(path)?;
+        }
+    }
+    let pool = root.join("cached-pool");
+    let descriptors = root.join("cached-descriptors");
+    let calls = root.join("cached-indexes.jsonl");
+    common::run(
+        seed.prepare_command(&pool, &descriptors)?
+            .arg("--cache")
+            .arg(&cache)
+            .env("AIRLOCK_TEST_EROFS_CALLS", &calls),
+        None,
+    )?
+    .checked()?;
+    let calls = fs::read_to_string(calls)?;
+    assert!(
+        !calls.contains("--tar=i"),
+        "cached preparation rebuilt a common index: {calls}"
+    );
+    assert_eq!(
+        common::json(
+            seed.store
+                .command(&["image", "verify-outputs"])
+                .arg(&pool)
+                .arg(&descriptors),
+            None
+        )?["status"],
+        "passed"
+    );
+
+    let manifest: Value = serde_json::from_slice(&fs::read(&cache)?)?;
+    let fragment =
+        Path::new(manifest["fragments"][&seed.store.system].as_str().unwrap()).join("object.tar");
+    let original = fs::read(&fragment)?;
+    let mut damaged = original.clone();
+    damaged[0] ^= 0xff;
+    fs::write(&fragment, damaged)?;
+    let result = common::run(
+        seed.prepare_command(
+            &root.join("damaged-pool"),
+            &root.join("damaged-descriptors"),
+        )?
+        .arg("--cache")
+        .arg(&cache),
+        None,
+    )?;
+    assert!(!result.status.success());
+    let diagnostic = format!(
+        "{stdout}{stderr}",
+        stdout = String::from_utf8_lossy(&result.stdout),
+        stderr = String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(
+        diagnostic.contains("cached fragment checksum mismatch"),
+        "{diagnostic}"
+    );
+    fs::write(fragment, original)?;
+
+    let index = Path::new(manifest["indexes"][0].as_str().unwrap()).join("store.erofs");
+    fs::write(index, b"corrupt cached index")?;
+    let result = common::run(
+        seed.prepare_command(
+            &root.join("damaged-index-pool"),
+            &root.join("damaged-index-descriptors"),
+        )?
+        .arg("--cache")
+        .arg(&cache),
+        None,
+    )?;
+    assert!(!result.status.success());
+    let diagnostic = format!(
+        "{stdout}{stderr}",
+        stdout = String::from_utf8_lossy(&result.stdout),
+        stderr = String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(
+        diagnostic.contains("cached image index checksum mismatch"),
+        "{diagnostic}"
+    );
+    Ok(())
 }
 
 /// The build-time command decodes the complete boot topology before any Qubes work is attempted.
@@ -292,8 +455,11 @@ fn packaged_image_indexes_preserve_both_builder_identities() -> Result<()> {
     let pool = root.join("real-pool");
     let descriptors = root.join("real-descriptors");
     let mkfs = std::env::var_os("AIRLOCK_EROFS_MKFS").expect("prepare EROFS explicitly");
+    let cache = seed.cache(Some(&mkfs))?;
     let output = common::run(
         seed.prepare_command(&pool, &descriptors)?
+            .arg("--cache")
+            .arg(cache)
             .env("AIRLOCK_MKFS_EROFS", mkfs),
         None,
     )?;

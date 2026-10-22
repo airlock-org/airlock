@@ -83,6 +83,7 @@ pub(super) fn fixture(
             "machine" => machine::expression().call(inputs),
             "equivalence" => equivalence::expression().call(inputs),
             "prepared_store/sealed_store" => prepared_store::sealed_store(inputs),
+            "prepared_store/cache" => prepared_store::cache(inputs),
             "usr_assistant_machine_source/seed_archive" => {
                 usr_assistant_machine_source::seed_archive(inputs)
             }

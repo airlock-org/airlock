@@ -371,7 +371,13 @@ impl Nix {
                 "",
                 "--option",
                 "allow-import-from-derivation",
-                "false",
+                // Image cache discovery explicitly realizes closureInfo inputs. Ordinary
+                // configuration checks remain evaluation-only and reject implicit builds.
+                if inputs["realizeImageInputs"] == true {
+                    "true"
+                } else {
+                    "false"
+                },
                 "--offline",
                 "eval",
                 "--impure",

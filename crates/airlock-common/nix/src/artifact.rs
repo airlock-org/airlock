@@ -3,6 +3,9 @@
 
 mod root;
 
+/// Reproducible package fragments and logical indexes cached by image builds.
+pub mod cache;
+
 /// Transport generated candidate source across the existing validation boundary.
 pub mod prepared;
 

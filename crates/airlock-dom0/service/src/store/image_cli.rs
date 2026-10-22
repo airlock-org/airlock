@@ -29,6 +29,9 @@ enum Operation {
         specs: PathBuf,
         // Installed location embedded in the prepared pool metadata.
         runtime_root: PathBuf,
+        // Nix-built package fragments and common indexes for this image only.
+        #[arg(long)]
+        cache: Option<PathBuf>,
     },
     VerifyOutputs {
         // Physical prepared pool to validate without mutation.
@@ -60,6 +63,9 @@ enum Operation {
         system: String,
         // JSON mapping specialised boot paths to their actual host systems.
         choices: PathBuf,
+        // Nix-built fragments for the host and refreshed builder closures.
+        #[arg(long)]
+        cache: Option<PathBuf>,
     },
     InstallHost {
         // Mounted image whose conventional bootstrap store is being discarded.
@@ -132,8 +138,11 @@ fn execute(command: Request) -> Result<Value> {
             descriptors,
             specs,
             runtime_root,
-        } => with_image_build(|| {
-            prepared::prepare_pool(&root, &descriptors, &read(&specs)?, &runtime_root)
+            cache,
+        } => super::image_cache::with(cache.as_deref(), || {
+            with_image_build(|| {
+                prepared::prepare_pool(&root, &descriptors, &read(&specs)?, &runtime_root)
+            })
         }),
         Operation::VerifyOutputs { root, descriptors } => {
             prepared::verify_outputs(&root, &descriptors)
@@ -159,8 +168,11 @@ fn execute(command: Request) -> Result<Value> {
             registration,
             system,
             choices,
-        } => with_image_build(|| {
-            prepared::prepare_host(&seed, &output, &registration, &system, &read(&choices)?)
+            cache,
+        } => super::image_cache::with(cache.as_deref(), || {
+            with_image_build(|| {
+                prepared::prepare_host(&seed, &output, &registration, &system, &read(&choices)?)
+            })
         }),
         Operation::InstallHost {
             root,
