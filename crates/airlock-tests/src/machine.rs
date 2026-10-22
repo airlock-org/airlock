@@ -293,7 +293,7 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
                     "image":"/var/lib/airlock/pool/root.img", "artifact":generation["root_artifact"]})
                 );
             }
-            Some("gc" | "retire-generation" | "set-retention") => {
+            Some("gc" | "retire-generation" | "set-retention" | "release-automatic") => {
                 println!("{}", json!({"status": "passed"}))
             }
             _ => bail!("unexpected pool operation"),

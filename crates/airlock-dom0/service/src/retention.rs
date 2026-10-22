@@ -6,8 +6,45 @@ use crate::{
     state::{self, Release},
 };
 use anyhow::{Context, Result, ensure};
-use serde_json::{Value, json};
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::Path};
+
+/// Advisory retention choices, kept typed until the user-facing JSON boundary.
+#[derive(Serialize)]
+pub(crate) struct RetentionPlan {
+    /// Stable report format, not execution authority.
+    schema: &'static str,
+    /// This report proposes removals but cannot execute them.
+    authority: &'static str,
+    /// Policy-protected releases and the reasons for keeping them.
+    pub(crate) keep_generations: Vec<KeptRelease>,
+    /// Older verified releases still requiring independent blocker checks.
+    pub(crate) prune_candidates: Vec<PruneCandidate>,
+}
+
+/// One policy-protected verified release.
+#[derive(Serialize, Deserialize)]
+pub(crate) struct KeptRelease {
+    /// Stable digest of the admitted release.
+    pub(crate) key: String,
+    /// Canonical release retained for rollback or policy.
+    pub(crate) release: ReleasePath,
+    /// Earliest successful verification, used for aging decisions.
+    first_verified_at: f64,
+    /// Policy and runtime reasons for preserving this release.
+    reasons: Vec<String>,
+}
+
+/// Advisory candidate; absence of policy protection does not authorize pruning.
+#[derive(Serialize)]
+pub(crate) struct PruneCandidate {
+    /// Stable digest of the verified release.
+    pub(crate) key: String,
+    /// Canonical release considered for pruning.
+    pub(crate) release: ReleasePath,
+    /// Explicit reminder that runtime blockers still apply.
+    requires_existing_prune_blocker_checks: bool,
+}
 
 fn pruned(root: &Path, release: &ReleasePath) -> Result<bool> {
     use sha2::{Digest, Sha256};
@@ -42,7 +79,7 @@ pub fn validate_history(history: &BTreeMap<String, VerifiedGeneration>) -> Resul
 /// Read retained generations and retired data to propose policy-permitted removals.
 ///
 /// This does not apply the proposal or invoke garbage collection.
-pub fn plan(root: &Path) -> Result<Value> {
+pub(crate) fn plan(root: &Path) -> Result<RetentionPlan> {
     let mut history = state::optional::<BTreeMap<String, VerifiedGeneration>>(
         &root.join("maintenance/verified-generations.json"),
     )?
@@ -168,13 +205,25 @@ pub fn plan(root: &Path) -> Result<Value> {
         }
 
         if !reasons.is_empty() {
-            retained.push(json!({"key":key,"release":entry.release,"first_verified_at":entry.first_verified_at,"reasons":reasons}));
+            retained.push(KeptRelease {
+                key: key.clone(),
+                release: entry.release.clone(),
+                first_verified_at: entry.first_verified_at,
+                reasons: reasons.into_iter().map(str::to_owned).collect(),
+            });
         } else {
-            candidates.push(json!({"key":key,"release":entry.release,"requires_existing_prune_blocker_checks":true}));
+            candidates.push(PruneCandidate {
+                key: key.clone(),
+                release: entry.release.clone(),
+                requires_existing_prune_blocker_checks: true,
+            });
         }
     }
 
-    Ok(
-        json!({"schema":"airlock.dom0-retention-plan.v1","authority":"planning-only","keep_generations":retained,"prune_candidates":candidates}),
-    )
+    Ok(RetentionPlan {
+        schema: "airlock.dom0-retention-plan.v1",
+        authority: "planning-only",
+        keep_generations: retained,
+        prune_candidates: candidates,
+    })
 }

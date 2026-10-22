@@ -2,6 +2,9 @@
 //! Durable journals retain exact root and profile targets across interrupted pruning.
 
 use super::*;
+use airlock_deployment_core::retention::{
+    Candidate, Generation, Pin, ProtectedGenerations, Protection,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -38,6 +41,52 @@ enum PruneState {
     Pruned,
 }
 
+/// Typed deletion candidates; serialization is reserved for reports and durable journals.
+#[derive(Serialize, Deserialize)]
+struct GenerationPlan {
+    // Existing external report format.
+    schema: String,
+    // Exact policy digests retained for diagnostics.
+    keep_keys: BTreeSet<String>,
+    // Policy-protected releases; execution still rechecks independent references.
+    keep_generations: Vec<crate::retention::KeptRelease>,
+    // Exact release targets eligible after all independent blocker checks.
+    prune: BTreeSet<ReleasePath>,
+    // Releases with current independent blockers.
+    protected: Vec<Value>,
+    // Recorded releases lacking successful verification evidence.
+    unverified: Vec<ReleasePath>,
+    // Exact guest coordinates from eligible release manifests.
+    storage_candidates: BTreeSet<(GuestName, GenerationId)>,
+}
+
+/// Only successful collection suppresses retrying the saved plan.
+#[derive(Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum MaintenanceStatus {
+    #[default]
+    // No completed pass is available.
+    Running,
+    // Every pruning and collection operation returned successfully.
+    Passed,
+    // An interrupted or failed pass must be reconsidered against fresh protections.
+    Failed,
+}
+
+/// Typed security-relevant fields of an existing maintenance journal.
+#[derive(Default, Deserialize)]
+struct SavedMaintenance {
+    // Required in a persisted record; default applies only when no record exists.
+    status: MaintenanceStatus,
+    // An interrupted single release whose deletion must recheck fresh blockers.
+    pruning: Option<ReleasePath>,
+    // Previous proposal, never sufficient authority to delete by itself.
+    plan: Option<GenerationPlan>,
+    // Previously published guest candidates retained across interruptions.
+    #[serde(default)]
+    storage_candidates: BTreeSet<(GuestName, GenerationId)>,
+}
+
 fn entries(path: &Path) -> Result<Vec<PathBuf>> {
     if !path.try_exists()? {
         return Ok(Vec::new());
@@ -59,6 +108,82 @@ fn resolved(path: &Path) -> Result<String> {
 }
 
 impl Coordinator {
+    /// Gather complete machine references, including exact generations not present in release manifests.
+    /// A malformed or contradictory journal refuses collection before any pruning starts.
+    fn protected_generations(&self) -> Result<ProtectedGenerations> {
+        let mut exact = BTreeSet::new();
+        let mut systems = BTreeSet::new();
+        for release in self.release_inventory()?.keys() {
+            let path = self.prune_path(release)?;
+            if path.try_exists()? && self.pruning_record(&path)?.status == PruneState::Pruned {
+                continue;
+            }
+            let r = Release::load(Path::new(release))?;
+            exact.extend(
+                r.manifest
+                    .staged_generations
+                    .iter()
+                    .map(|(n, g)| (crate::store::runtime_namespace(n.as_str()), g.get())),
+            );
+            for (name, domain) in &r.topology.domains {
+                if !r.manifest.staged_generations.contains_key(name) {
+                    systems.insert((
+                        crate::store::runtime_namespace(name.as_str()),
+                        domain.backend.system.source.to_string(),
+                    ));
+                }
+            }
+        }
+        for record in self.deployment_records()? {
+            for saved in staging::retained_snapshots(&record)? {
+                let path = self.prune_path(saved.release.as_str())?;
+                if path.try_exists()? && self.pruning_record(&path)?.status == PruneState::Pruned {
+                    continue;
+                }
+                let release = Release::load(saved.release.as_path())?;
+                ensure!(
+                    &saved.fingerprint == release.fingerprint(),
+                    "protected journal release changed"
+                );
+                let mut names = BTreeSet::new();
+                for entry in saved.entries {
+                    let domain = match &entry {
+                        GuestGenerationEntry::Retained { domain, .. }
+                        | GuestGenerationEntry::Existing { domain }
+                        | GuestGenerationEntry::NonNative { domain } => domain,
+                    };
+                    ensure!(
+                        names.insert(domain.clone())
+                            && release.topology.domains.contains_key(domain),
+                        "invalid protected journal coordinates"
+                    );
+                    if let GuestGenerationEntry::Retained { domain, identity } = entry {
+                        exact.insert((
+                            crate::store::runtime_namespace(domain.as_str()),
+                            identity.generation.get(),
+                        ));
+                    }
+                }
+                ensure!(
+                    names == release.topology.domains.keys().cloned().collect(),
+                    "incomplete protected journal coordinates"
+                );
+            }
+        }
+        ProtectedGenerations::new(
+            exact
+                .into_iter()
+                .map(|(domain, number)| Protection::Exact(Generation { domain, number }))
+                .chain(
+                    systems
+                        .into_iter()
+                        .map(|(domain, system)| Protection::System { domain, system }),
+                )
+                .collect(),
+        )
+        .context("invalid machine generation protections")
+    }
+
     /// Include current intent even when its historical projection was not published.
     fn deployment_records(&self) -> Result<Vec<Record>> {
         let current = self.current()?;
@@ -266,12 +391,7 @@ impl Coordinator {
             let retained = crate::retention::plan(&self.state)?;
             let r = loaded.as_ref().context("missing release")?;
             let key = state::release_key(r)?;
-            if retained["keep_generations"]
-                .as_array()
-                .context("invalid retention plan")?
-                .iter()
-                .any(|v| v["key"] == key)
-            {
+            if retained.keep_generations.iter().any(|v| v.key == key) {
                 blockers.insert(
                     "machine generation retention: newest two, weekly anchor or aging successor"
                         .into(),
@@ -568,23 +688,21 @@ impl Coordinator {
             "Inspect generation retention policy",
             MachineOperation::Maintenance,
         )?;
-        self.generation_plan_locked()
+        Ok(serde_json::to_value(self.generation_plan_locked()?)?)
     }
 
-    fn generation_plan_locked(&self) -> Result<Value> {
+    fn generation_plan_locked(&self) -> Result<GenerationPlan> {
         let policy = crate::retention::plan(&self.state)?;
-        let keep: BTreeSet<_> = policy["keep_generations"]
-            .as_array()
-            .context("invalid retention choices")?
+        let keep: BTreeSet<_> = policy
+            .keep_generations
             .iter()
-            .filter_map(|v| v["key"].as_str().map(str::to_owned))
+            .map(|v| v.key.clone())
             .collect();
-        let verified: BTreeSet<_> = policy["keep_generations"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .chain(policy["prune_candidates"].as_array().into_iter().flatten())
-            .filter_map(|v| v["key"].as_str().map(str::to_owned))
+        let verified: BTreeSet<_> = policy
+            .keep_generations
+            .iter()
+            .map(|v| v.key.clone())
+            .chain(policy.prune_candidates.iter().map(|v| v.key.clone()))
             .collect();
         let mut prune = Vec::new();
         let mut protected = Vec::new();
@@ -597,7 +715,7 @@ impl Coordinator {
             let r = Release::load(Path::new(release))?;
             let key = state::release_key(&r)?;
             if !verified.contains(&key) {
-                unverified.push(release.clone());
+                unverified.push(release.parse()?);
                 continue;
             }
             let preview = self.prune_preview(release, None, &[])?;
@@ -609,13 +727,19 @@ impl Coordinator {
             {
                 protected.push(json!({"release":release,"blockers":preview["blockers"]}));
             } else {
-                prune.push(release.clone());
+                prune.push(release.parse()?);
                 storage.extend(r.manifest.staged_generations);
             }
         }
-        Ok(
-            json!({"schema":"airlock.machine-generation-retention.v1","keep_keys":keep,"keep_generations":policy["keep_generations"],"prune":prune,"protected":protected,"unverified":unverified,"storage_candidates":storage}),
-        )
+        Ok(GenerationPlan {
+            schema: "airlock.machine-generation-retention.v1".into(),
+            keep_keys: keep,
+            keep_generations: policy.keep_generations,
+            prune: prune.into_iter().collect(),
+            protected,
+            unverified,
+            storage_candidates: storage,
+        })
     }
 
     /// Resume journalled background pruning and pool GC only for the verified selected generation.
@@ -653,86 +777,73 @@ impl Coordinator {
         self.check_recorded_release(&r, &status)?;
         guard.update(Phase::Preflight, Some(&selected.transaction))?;
         let journal = directory.join("latest.json");
-        let previous: Value = state::optional(&journal)?.unwrap_or(json!({}));
+        let previous: SavedMaintenance = state::optional(&journal)?.unwrap_or_default();
         let mut result = json!({"status":"running","started_at":state::now(),"request":request});
         let outcome = (|| -> Result<()> {
-            if let Some(target) = previous["pruning"].as_str() {
-                self.prune_locked(target, &[])?;
+            // Validate authority and original snapshots before resuming even a partial pruning journal.
+            self.protected_generations()?;
+            if let Some(target) = &previous.pruning {
+                self.prune_locked(target.as_str(), &[])?;
             }
             let mut plan = self.generation_plan_locked()?;
-            let mut prune: BTreeSet<String> = serde_json::from_value(plan["prune"].clone())?;
-            if previous["status"] != "passed" {
-                for target in previous["plan"]["prune"].as_array().into_iter().flatten() {
-                    let target = target
-                        .as_str()
-                        .context("invalid maintenance prune target")?;
-                    if !self.prune_path(target)?.try_exists()?
-                        && self.prune_preview(target, None, &[])?["blockers"]
+            let mut prune = plan.prune.clone();
+            if previous.status != MaintenanceStatus::Passed {
+                for target in previous.plan.as_ref().into_iter().flat_map(|p| &p.prune) {
+                    if !self.prune_path(target.as_str())?.try_exists()?
+                        && self.prune_preview(target.as_str(), None, &[])?["blockers"]
                             .as_array()
                             .is_some_and(Vec::is_empty)
                     {
-                        prune.insert(target.into());
+                        prune.insert(target.clone());
                     }
                 }
             }
-            let mut storage: BTreeSet<(GuestName, GenerationId)> =
-                serde_json::from_value(plan["storage_candidates"].clone())?;
-            if let Some(saved) = previous.get("storage_candidates") {
-                storage.extend(
-                    serde_json::from_value::<BTreeSet<(GuestName, GenerationId)>>(saved.clone())?,
-                );
-            }
-            plan["prune"] = json!(prune);
-            result["plan"] = plan;
+            let mut storage = plan.storage_candidates.clone();
+            storage.extend(previous.storage_candidates.clone());
+            plan.prune = prune.clone();
+            result["plan"] = serde_json::to_value(plan)?;
             result["storage_candidates"] = json!(storage);
             state::save(&journal, &result)?;
             for target in prune {
                 result["pruning"] = json!(target);
                 state::save(&journal, &result)?;
-                self.prune_locked(&target, &[])?;
+                self.prune_locked(target.as_str(), &[])?;
                 result
                     .as_object_mut()
                     .context("invalid maintenance journal")?
                     .remove("pruning");
                 state::save(&journal, &result)?;
             }
-            let mut referenced = BTreeSet::new();
-            let mut systems = BTreeSet::new();
-            for release in self.release_inventory()?.keys() {
-                if self.prune_path(release)?.try_exists()? {
-                    continue;
-                }
-                let r = Release::load(Path::new(release))?;
-                referenced.extend(
-                    r.manifest
-                        .staged_generations
-                        .iter()
-                        .map(|(n, g)| (n.clone(), *g)),
-                );
-                for (name, domain) in r.topology.domains {
-                    if !r.manifest.staged_generations.contains_key(&name) {
-                        systems.insert((name, domain.backend.system.source));
-                    }
-                }
-            }
+            let protected = self.protected_generations()?;
             for (name, generation) in storage {
-                if referenced.contains(&(name.clone(), generation)) {
-                    continue;
-                }
                 let Some(info) = self.store().generation_record(&name, generation)? else {
                     continue;
                 };
+                let domain = crate::store::runtime_namespace(name.as_str());
+                ensure!(
+                    info["domain"] == domain && info["generation"] == generation.get(),
+                    "retention generation record identity differs"
+                );
                 let system: StorePath = serde_json::from_value(info["system"].clone())?;
-                if systems.contains(&(name.clone(), system))
-                    || info["retention"]["retain"] != true
-                    || info["retention"].get("updated_at").is_some()
-                {
-                    continue;
+                let retain = info["retention"]["retain"]
+                    .as_bool()
+                    .context("invalid retention pin")?;
+                let pin = Pin::classify(retain, info["retention"].get("updated_at").is_some());
+                if let Some(request) = protected.release(
+                    Candidate {
+                        generation: Generation {
+                            domain,
+                            number: generation.get(),
+                        },
+                        system: system.to_string(),
+                    },
+                    pin,
+                ) {
+                    self.store().release_retention(&request)?;
                 }
-                self.store().retain(&name, generation, false)?;
             }
             self.ensure_no_pruning()?;
-            result["gc"] = self.store().collect(2)?;
+            result["gc"] = self.store().collect_protected(&protected)?;
             result["status"] = json!("passed");
             result["finished_at"] = json!(state::now());
             state::save(&journal, &result)?;
@@ -743,10 +854,15 @@ impl Coordinator {
         if let Err(error) = outcome {
             result["status"] = json!("failed");
             result["error"] = json!(format!("{error:#}"));
-            if result.get("plan").is_none()
-                && let Some(target) = previous.get("pruning")
-            {
-                result["pruning"] = target.clone();
+            if result.get("plan").is_none() {
+                // An early validation failure must not lose the prior cleanup backlog.
+                if let Some(plan) = &previous.plan {
+                    result["plan"] = serde_json::to_value(plan)?;
+                }
+                result["storage_candidates"] = json!(previous.storage_candidates);
+                if let Some(target) = &previous.pruning {
+                    result["pruning"] = json!(target);
+                }
             }
             state::save(&journal, &result)?;
             return Err(error);

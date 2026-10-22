@@ -103,6 +103,66 @@ fn admission_selection_running_pins_and_gc() -> Result<()> {
         "--volume",
         "store-data",
     ])?;
+    // Original journal pins protect a generation after it is neither selected nor running.
+    for _ in 0..2 {
+        let kept = store.run(&[
+            "pool",
+            "gc",
+            "--pool-root",
+            store.pool_text(),
+            "--keep-generations",
+            "0",
+            "--protect-generation",
+            "usr-home-runtime-store:2",
+        ])?;
+        assert!(kept["removed_generations"].as_array().unwrap().is_empty());
+        assert!(
+            kept["retained_generations"]
+                .as_array()
+                .unwrap()
+                .contains(&json!({"domain":"usr-home-runtime-store","generation":2}))
+        );
+    }
+    let source = format!("usr-home-runtime-store:{system}", system = store.system);
+    assert!(
+        store.run(&[
+            "pool",
+            "gc",
+            "--pool-root",
+            store.pool_text(),
+            "--keep-generations",
+            "0",
+            "--protect-system",
+            &source
+        ])?["removed_generations"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    // A lost or malformed exact pin aborts before deleting even an otherwise reclaimable generation.
+    let before = manifests(&store)?;
+    for pin in [
+        "usr-home-runtime-store:99",
+        "other-runtime-store:2",
+        "../escape:2",
+        "usr-home-runtime-store:0",
+    ] {
+        let output = common::run(
+            &mut store.command(&[
+                "pool",
+                "gc",
+                "--pool-root",
+                store.pool_text(),
+                "--keep-generations",
+                "0",
+                "--protect-generation",
+                pin,
+            ]),
+            None,
+        )?;
+        assert!(!output.status.success(), "{pin}");
+        assert_eq!(manifests(&store)?, before);
+    }
     assert_eq!(
         store.run(&[
             "pool",
@@ -136,6 +196,53 @@ fn admission_selection_running_pins_and_gc() -> Result<()> {
         json!([first["root_artifact"]["sha256"]])
     );
     assert!(store.admit(true)?["generation"].as_u64().unwrap() > 1);
+    Ok(())
+}
+
+/// A later explicit retention decision wins over a delayed automatic release and its retries.
+#[test]
+fn automatic_retention_release_rechecks_manual_decisions_under_lock() -> Result<()> {
+    let store = Store::new()?;
+    store.admit(false)?;
+    let path = store
+        .pool
+        .join("domains/usr-home-runtime-store/generations/1/manifest.json");
+    // Represent the original admission pin before any explicit user retention update.
+    let mut admitted = read(&path)?;
+    admitted["retention"]["retain"] = json!(true);
+    fs::write(&path, serde_json::to_vec(&admitted)?)?;
+    let args = [
+        "pool",
+        "release-automatic",
+        "--pool-root",
+        store.pool_text(),
+        "--domain",
+        "usr-home-runtime-store",
+        "--generation",
+        "1",
+    ];
+    let mut protected = args.to_vec();
+    protected.extend(["--protect-generation", "usr-home-runtime-store:1"]);
+    assert_eq!(store.run(&protected)?["status"], "unchanged");
+    assert_eq!(store.run(&args)?["retain"], false);
+    assert_eq!(store.run(&args)?["status"], "unchanged");
+    store.run(&[
+        "pool",
+        "set-retention",
+        "--pool-root",
+        store.pool_text(),
+        "--domain",
+        "usr-home-runtime-store",
+        "--generation",
+        "1",
+        "--retain",
+        "true",
+    ])?;
+    let before = fs::read(&path)?;
+    for _ in 0..2 {
+        assert_eq!(store.run(&args)?["status"], "unchanged");
+        assert_eq!(fs::read(&path)?, before);
+    }
     Ok(())
 }
 

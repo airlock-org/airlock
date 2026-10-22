@@ -389,6 +389,36 @@ pub(super) fn switch(root: &Path, domain: &str, generation: u64, rollback: bool)
     Ok(result)
 }
 
+/// Recheck manual retention under the pool lock; an uncertain retry never overwrites it.
+pub(super) fn release_automatic(
+    root: &Path,
+    domain: &str,
+    generation: u64,
+    references: Vec<airlock_deployment_core::retention::Protection>,
+) -> Result<Value> {
+    use airlock_deployment_core::retention::{Candidate, Generation, Pin, ProtectedGenerations};
+    let manifest = records::generation(root, domain, generation)?;
+    let retain = manifest["retention"]["retain"]
+        .as_bool()
+        .context("invalid retention pin")?;
+    let pin = Pin::classify(retain, manifest["retention"].get("updated_at").is_some());
+    let protection = ProtectedGenerations::new(references).context("invalid protection set")?;
+    let request = protection.release(
+        Candidate {
+            generation: Generation {
+                domain: domain.to_owned(),
+                number: generation,
+            },
+            system: text(&manifest, "system")?,
+        },
+        pin,
+    );
+    match request {
+        Some(request) => retention(root, request.domain(), request.generation(), false),
+        None => Ok(json!({"status":"unchanged", "domain":domain, "generation":generation})),
+    }
+}
+
 pub(super) fn retention(root: &Path, domain: &str, generation: u64, retain: bool) -> Result<Value> {
     let path = records::manifest_path(root, domain, generation)?;
     let mut manifest = records::generation(root, domain, generation)?;

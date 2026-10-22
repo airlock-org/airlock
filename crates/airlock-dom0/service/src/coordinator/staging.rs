@@ -190,7 +190,7 @@ pub(super) fn target(release: &ReleasePath, fingerprint: &ReleaseFingerprint) ->
 }
 
 /// Retain both endpoint snapshots across rollback/resume, never an unrelated target or authority.
-fn retained_snapshots(previous: &Record) -> Result<Vec<GuestGenerationSnapshot>> {
+pub(super) fn retained_snapshots(previous: &Record) -> Result<Vec<GuestGenerationSnapshot>> {
     let Some(snapshots) = &previous.metadata.details.guest_generations else {
         return Ok(Vec::new());
     };

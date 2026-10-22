@@ -757,6 +757,10 @@ fn namespace_release_pruning_protects_recovery_references() -> Result<()> {
 #[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]
 fn namespace_maintenance_follows_verification_and_detects_wrong_runtime() -> Result<()> {
     let mut machine = Machine::new()?;
+    let manifest_path = machine.physical(&machine.candidate).join("release.json");
+    let mut manifest = read(&manifest_path)?;
+    manifest["staged_generations"] = json!({});
+    save(&manifest_path, &manifest)?;
     machine.approve(None)?;
     machine.run(&["apply", &machine.candidate], None, true)?;
     save(
@@ -768,10 +772,73 @@ fn namespace_maintenance_follows_verification_and_detects_wrong_runtime() -> Res
     let result = machine.run(&["generation-maintenance"], None, true)?;
     assert_eq!(result["status"], "passed");
     assert_eq!(result["gc"]["status"], "passed");
+    assert!(machine.calls()?.iter().any(|call| call[0] == "storage-pool"
+        && call.as_array().unwrap().windows(2).any(|pair| pair
+            == [
+                json!("--protect-generation"),
+                json!("usr-home-runtime-store:2")
+            ])));
     assert!(!machine.path("machine/maintenance/pending.json").exists());
     assert_eq!(
         machine.run(&["generation-maintenance"], None, true)?["status"],
         "idle"
+    );
+
+    // Snapshot omissions cannot silently turn into an empty protection set on a later cleanup.
+    machine.run(&["verify"], None, true)?;
+    let last_cleaned = machine.path("machine/maintenance/last-cleaned-generation.json");
+    fs::remove_file(&last_cleaned)?;
+    machine.run(&["verify"], None, true)?;
+    let journal_path = machine.path("machine/latest.json");
+    let original = read(&journal_path)?;
+    let history = machine.path(&format!(
+        "machine/transactions/{id}/status.json",
+        id = original["id"].as_str().unwrap()
+    ));
+    let mut omitted = original.clone();
+    omitted["guest_generations"][0]["entries"] = json!([]);
+    save(&journal_path, &omitted)?;
+    save(&history, &omitted)?;
+    let before = machine.calls()?.len();
+    error(
+        &machine.run(&["generation-maintenance"], None, false)?,
+        "protected journal coordinates",
+    );
+    assert!(
+        !machine.calls()?[before..]
+            .iter()
+            .any(|call| call[0] == "storage-pool" && call[1] == "gc")
+    );
+    assert!(machine.path("machine/maintenance/pending.json").exists());
+    save(&journal_path, &original)?;
+    save(&history, &original)?;
+    assert_eq!(
+        machine.run(&["generation-maintenance"], None, true)?["status"],
+        "passed"
+    );
+
+    // A malformed saved candidate set is an error, rather than an absent list on restart.
+    fs::remove_file(&last_cleaned)?;
+    machine.run(&["verify"], None, true)?;
+    let maintenance_path = machine.path("machine/maintenance/latest.json");
+    let saved_maintenance = read(&maintenance_path)?;
+    let mut malformed = saved_maintenance.clone();
+    malformed["plan"]["prune"] = json!("not-a-list");
+    save(&maintenance_path, &malformed)?;
+    let before = machine.calls()?.len();
+    error(
+        &machine.run(&["generation-maintenance"], None, false)?,
+        "invalid type",
+    );
+    assert!(
+        !machine.calls()?[before..]
+            .iter()
+            .any(|call| call[0] == "storage-pool" && call[1] == "gc")
+    );
+    save(&maintenance_path, &saved_maintenance)?;
+    assert_eq!(
+        machine.run(&["generation-maintenance"], None, true)?["status"],
+        "passed"
     );
 
     machine.reload()?;

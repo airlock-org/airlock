@@ -2,6 +2,9 @@
 //! Relocation publishes verified replacement extents before refreshing unpinned views.
 
 use super::{fs::*, records, root, segments, views};
+use airlock_deployment_core::retention::{
+    Candidate, Generation, ProtectedGenerations, Protection, ReclaimRequest,
+};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::{
@@ -111,7 +114,10 @@ fn liveness(root: &Path, keep: usize) -> Result<Liveness> {
         }
     }
     for (key, (_, value)) in &live.manifests {
-        if value["retention"]["retain"] == true {
+        if value["retention"]["retain"]
+            .as_bool()
+            .context("invalid generation retention pin")?
+        {
             live.generations.insert(key.clone());
         }
     }
@@ -308,8 +314,62 @@ fn delete_segments(root: &Path, inventory: &[Value]) -> Result<Value> {
     )
 }
 
-pub(super) fn gc(root: &Path, keep: usize) -> Result<Value> {
-    let live = liveness(root, keep)?;
+/// The only GC generation-forget adapter accepts an exact verified request.
+fn reclaim(root: &Path, request: &ReclaimRequest) -> Result<()> {
+    records::forget(
+        root,
+        request.domain(),
+        request.generation(),
+        "garbage-collected",
+    )
+}
+
+pub(super) fn gc(root: &Path, keep: usize, mut references: Vec<Protection>) -> Result<Value> {
+    let mut live = liveness(root, keep)?;
+    // A missing journal pin is uncertain authority, not an empty protection set.
+    for reference in &references {
+        if let Protection::Exact(g) = reference {
+            ensure!(
+                live.manifests.contains_key(&(g.domain.clone(), g.number)),
+                "protected generation missing: {domain}:{number}",
+                domain = g.domain,
+                number = g.number
+            );
+        }
+    }
+    references.extend(live.generations.iter().map(|(domain, number)| {
+        Protection::Exact(Generation {
+            domain: domain.clone(),
+            number: *number,
+        })
+    }));
+    let protected =
+        ProtectedGenerations::new(references).context("invalid collection protections")?;
+    let mut requests = Vec::new();
+    for ((domain, number), (_, manifest)) in &live.manifests {
+        let candidate = Candidate {
+            generation: Generation {
+                domain: domain.clone(),
+                number: *number,
+            },
+            system: text(manifest, "system")?,
+        };
+        if let Some(request) = protected.reclaim(candidate) {
+            requests.push(request);
+        } else {
+            live.generations.insert((domain.clone(), *number));
+        }
+    }
+    // Explicit machine references retain objects and views as well as generation records.
+    for key in live.generations.clone() {
+        let manifest = live
+            .manifests
+            .get(&key)
+            .context("protected generation missing")?
+            .1
+            .clone();
+        add_manifest(&mut live, &manifest)?;
+    }
     // Resolve every retained pin before the first deletion, so damaged metadata fails closed.
     let locations = locations(root, &live)?;
     let PhysicalReferences {
@@ -318,12 +378,11 @@ pub(super) fn gc(root: &Path, keep: usize) -> Result<Value> {
     } = physical_refs(root, &live, &locations)?;
     let inventory = inventory(root, &locations, &references)?;
     let mut removed_generations = Vec::new();
-    for key in live.manifests.keys() {
-        if !live.generations.contains(key) {
-            records::forget(root, &key.0, key.1, "garbage-collected")?;
-            removed_generations.push(json!({"domain":key.0,"generation":key.1}));
-            failpoint("gc-after-generation-remove")?;
-        }
+    for request in requests {
+        reclaim(root, &request)?;
+        removed_generations
+            .push(json!({"domain":request.domain(),"generation":request.generation()}));
+        failpoint("gc-after-generation-remove")?;
     }
     let mut removed_metadata = Vec::new();
     let mut removed_blobs = Vec::new();

@@ -70,6 +70,8 @@ mod generations;
 
 mod maintenance;
 
+mod protection;
+
 mod mounts;
 
 mod root;
@@ -97,6 +99,31 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+
+/// Encode every immutable reference for the private, locked storage receiver.
+fn protection_arguments(
+    references: &[airlock_deployment_core::retention::Protection],
+) -> Vec<String> {
+    use airlock_deployment_core::retention::Protection;
+    let mut args = Vec::new();
+    for reference in references {
+        match reference {
+            Protection::Exact(g) => {
+                args.push("--protect-generation".into());
+                args.push(format!(
+                    "{domain}:{number}",
+                    domain = g.domain,
+                    number = g.number
+                ));
+            }
+            Protection::System { domain, system } => {
+                args.push("--protect-system".into());
+                args.push(format!("{domain}:{system}"));
+            }
+        }
+    }
+    args
+}
 
 /// Reject root-image descriptors with unknown fields, formats or invalid sizes.
 pub(crate) fn validate_root_descriptor(value: &Value) -> Result<()> {
@@ -270,31 +297,6 @@ impl<'a> Store<'a> {
         ])?)?)
     }
 
-    /// Change explicit retention for one generation; this does not run GC.
-    pub(crate) fn retain(
-        &self,
-        domain: &GuestName,
-        generation: GenerationId,
-        retain: bool,
-    ) -> Result<()> {
-        self.call(
-            "pool",
-            &[
-                "set-retention",
-                "--pool-root",
-                "/var/lib/airlock/closure-store",
-                "--domain",
-                &runtime_namespace(domain.as_str()),
-                "--generation",
-                &generation.to_string(),
-                "--retain",
-                if retain { "true" } else { "false" },
-            ],
-            Duration::from_secs(60),
-        )?;
-        Ok(())
-    }
-
     /// Retire a guest generation after storage checks its running references.
     pub(crate) fn retire_generation(
         &self,
@@ -315,17 +317,45 @@ impl<'a> Store<'a> {
         Ok(())
     }
 
-    /// Reclaim unreferenced pool data while preserving the requested recent generations.
-    pub(crate) fn collect(&self, keep_generations: u64) -> Result<Value> {
+    /// Release only the exact automatic pin accepted by the complete protection decision.
+    pub(crate) fn release_retention(
+        &self,
+        request: &airlock_deployment_core::retention::ReleaseRequest<'_>,
+    ) -> Result<()> {
+        let mut args = vec![
+            "release-automatic".to_owned(),
+            "--pool-root".into(),
+            "/var/lib/airlock/closure-store".into(),
+            "--domain".into(),
+            request.domain().into(),
+            "--generation".into(),
+            request.generation().to_string(),
+        ];
+        args.extend(protection_arguments(request.references()));
+        self.call(
+            "pool",
+            &args.iter().map(String::as_str).collect::<Vec<_>>(),
+            Duration::from_secs(60),
+        )?;
+        Ok(())
+    }
+
+    /// Transport every protection to the receiver, which rechecks its own live references under lock.
+    pub(crate) fn collect_protected(
+        &self,
+        protected: &airlock_deployment_core::retention::ProtectedGenerations,
+    ) -> Result<Value> {
+        let mut args = vec![
+            "gc".to_owned(),
+            "--pool-root".into(),
+            "/var/lib/airlock/closure-store".into(),
+            "--keep-generations".into(),
+            "2".into(),
+        ];
+        args.extend(protection_arguments(protected.references()));
         self.json(
             "pool",
-            &[
-                "gc",
-                "--pool-root",
-                "/var/lib/airlock/closure-store",
-                "--keep-generations",
-                &keep_generations.to_string(),
-            ],
+            &args.iter().map(String::as_str).collect::<Vec<_>>(),
             Duration::from_secs(3600),
         )
     }

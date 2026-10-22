@@ -967,5 +967,34 @@ fn interrupted_switch_and_gc_preserve_the_last_published_selection() -> Result<(
             .len(),
         1
     );
+    // Repeated recovery also preserves an exact machine-journal pin with no live VM reference.
+    assert_eq!(store.admit(false)?["generation"], 3);
+    assert_eq!(store.admit(false)?["generation"], 4);
+    let args = [
+        "pool",
+        "gc",
+        "--pool-root",
+        store.pool_text(),
+        "--keep-generations",
+        "0",
+        "--protect-generation",
+        "usr-home-runtime-store:3",
+    ];
+    let interrupted = common::run(
+        store.command(&args).env(
+            "AIRLOCK_CLOSURE_STORE_FAILPOINT",
+            "gc-after-generation-remove",
+        ),
+        None,
+    )?;
+    assert!(!interrupted.status.success());
+    for _ in 0..2 {
+        store.run(&["pool", "recover", "--pool-root", store.pool_text()])?;
+        let gc = store.run(&args)?;
+        let retained = gc["retained_generations"].as_array().unwrap();
+        assert!(retained.contains(&json!({"domain":"usr-home-runtime-store","generation":1})));
+        assert!(retained.contains(&json!({"domain":"usr-home-runtime-store","generation":3})));
+        assert_eq!(retained.len(), 2);
+    }
     Ok(())
 }

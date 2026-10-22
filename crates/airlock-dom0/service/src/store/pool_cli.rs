@@ -39,6 +39,24 @@ struct Generation {
     generation: u64,
 }
 
+/// Validated machine references shared by collection and conditional automatic-pin release.
+#[derive(Args)]
+struct Protections {
+    // Exact machine-journal or manifest references retained even when not selected or running.
+    #[arg(long)]
+    protect_generation: Vec<super::protection::GenerationPin>,
+    // Effective unpinned sources retained independently of numeric generation freshness.
+    #[arg(long)]
+    protect_system: Vec<super::protection::SystemPin>,
+}
+
+impl Protections {
+    /// Preserve every parsed coordinate when crossing into verified decisions.
+    fn decode(self) -> Vec<airlock_deployment_core::retention::Protection> {
+        super::protection::decode(self.protect_generation, self.protect_system)
+    }
+}
+
 #[derive(Args)]
 struct Identity {
     // Pool containing the candidate or retained view.
@@ -115,6 +133,14 @@ enum Operation {
     AttachBlobView(Generation),
     DetachBlobView(Generation),
     RetireGeneration(Generation),
+    ReleaseAutomatic {
+        // Original generation whose admission pin may be released.
+        #[command(flatten)]
+        generation: Generation,
+        // Original immutable protection set, rechecked under the pool lock.
+        #[command(flatten)]
+        protections: Protections,
+    },
     SetRetention {
         // Generation whose explicit GC protection is being changed.
         #[command(flatten)]
@@ -162,6 +188,9 @@ enum Operation {
         // Most recent generations retained in addition to explicit pins.
         #[arg(long, default_value_t = 2)]
         keep_generations: usize,
+        // Complete machine references transported from the checked collection pass.
+        #[command(flatten)]
+        protections: Protections,
     },
     Compact {
         // Pool in which verified fragments may be relocated.
@@ -215,7 +244,8 @@ pub(super) fn run(command: Request) -> Result<Value> {
         | Operation::AttachBlobView(g)
         | Operation::DetachBlobView(g)
         | Operation::RetireGeneration(g) => &g.pool,
-        Operation::SetRetention { generation, .. }
+        Operation::ReleaseAutomatic { generation, .. }
+        | Operation::SetRetention { generation, .. }
         | Operation::MarkRunning { generation, .. }
         | Operation::ClearRunning { generation, .. } => &generation.pool,
         Operation::ResolveRoot { pool, .. }
@@ -281,6 +311,10 @@ pub(super) fn run(command: Request) -> Result<Value> {
         Operation::AttachBlobView(g) => views::attach(&root, &g.domain, g.generation, true),
         Operation::DetachBlobView(g) => views::attach(&root, &g.domain, g.generation, false),
         Operation::RetireGeneration(g) => generations::retire(&root, &g.domain, g.generation),
+        Operation::ReleaseAutomatic {
+            generation: g,
+            protections,
+        } => generations::release_automatic(&root, &g.domain, g.generation, protections.decode()),
         Operation::SetRetention {
             generation: g,
             retain,
@@ -307,8 +341,12 @@ pub(super) fn run(command: Request) -> Result<Value> {
         Operation::Status(_) => maintenance::status(&root),
         Operation::Recover(_) => super::segments::with_verification(|| maintenance::recover(&root)),
         Operation::Gc {
-            keep_generations, ..
-        } => super::segments::with_verification(|| maintenance::gc(&root, keep_generations)),
+            keep_generations,
+            protections,
+            ..
+        } => super::segments::with_verification(|| {
+            maintenance::gc(&root, keep_generations, protections.decode())
+        }),
         Operation::Compact {
             dry_run,
             threshold_percent,
