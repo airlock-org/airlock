@@ -295,7 +295,7 @@ impl Coordinator {
             generation_verified_at: None,
             metadata: JournalMetadata {
                 origin: JournalOrigin::Native(NativeJournal {
-                    native_coordinator: NativeVersion::V2,
+                    native_coordinator: NativeVersion::V3,
                     release_fingerprint: fingerprint.clone(),
                     previous_fingerprint: baseline.fingerprint().clone(),
                 }),
@@ -310,6 +310,12 @@ impl Coordinator {
                 },
             },
         };
+        let pinned = self.pin_images(
+            &r,
+            &mut record,
+            previous_attempt,
+            authorization.storage_plan(),
+        )?;
         if administrative {
             record
                 .metadata
@@ -335,6 +341,7 @@ impl Coordinator {
             &mut record,
             lock,
             &mut durable,
+            pinned,
         );
         durable.finish(result.is_ok());
         if let Err(error) = result {
@@ -376,6 +383,7 @@ impl Coordinator {
         record: &mut Record,
         lock: &mut MachineLock,
         durable: &mut super::approval::DurableAuthorization,
+        pinned: airlock_deployment_core::storage::staging::persistence::PinnedGenerations,
     ) -> Result<()> {
         durable.begin(record)?;
         let Activation {
@@ -402,7 +410,7 @@ impl Coordinator {
         )?)?;
         self.host_effect(durable.host(record, HostAction::PinController)?)?;
         self.host_effect(durable.host(record, HostAction::InstallController)?)?;
-        let staged = self.stage_images(r, record, &directory, durable)?;
+        let staged = self.stage_images(record, &directory, durable, pinned)?;
 
         self.publish_phase(record, Phase::HostBootPreparation, lock)?;
         for action in [

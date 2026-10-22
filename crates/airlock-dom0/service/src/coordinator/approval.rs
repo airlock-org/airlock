@@ -135,30 +135,20 @@ pub(super) struct AuthorizedDeployment {
 }
 
 impl DurableAuthorization {
-    /// Immutable storage coordinates drive both staging and backend dispatch.
-    pub(crate) fn storage_definitions(&self) -> &[airlock_deployment_core::storage::Definition] {
-        self.storage.definitions()
-    }
-
-    /// Derive generation obligations from the original checked plan.
-    pub(super) fn staging_requirement(
-        &self,
-        index: usize,
-    ) -> Result<airlock_deployment_core::storage::staging::Requirement> {
-        self.storage
-            .requirement(index)
-            .context("missing staging coordinate")
-    }
-
-    /// Reject an incomplete or substituted set under the current executing durable intent.
-    pub(super) fn check_staged(
+    /// Enter storage execution only with selections captured before this intent was published.
+    pub(super) fn activate_pinned(
         &self,
         record: &Record,
-        entries: Vec<airlock_deployment_core::storage::staging::Resolution>,
+        pinned: airlock_deployment_core::storage::staging::persistence::PinnedGenerations,
     ) -> Result<airlock_deployment_core::storage::staging::StagedGenerations> {
         self.storage
-            .check_staged(&self.operation, &effect_context(record)?, entries)
-            .context("staging differs from original storage plan or execution context")
+            .activate_pinned(
+                &self.operation,
+                &effect_context(record)?,
+                pinned,
+                &super::staging::current_snapshot(record)?,
+            )
+            .context("pinned generations differ from published execution intent")
     }
 
     /// Backend setup consumes the accepted in-memory staging result, never a raw map.
@@ -504,6 +494,11 @@ impl CheckedAuthorization {
 }
 
 impl AuthorizedDeployment {
+    /// Read-only resolution uses the same original definitions later consumed by execution.
+    pub(super) fn storage_plan(&self) -> &airlock_deployment_core::storage::StoragePlan {
+        &self.storage
+    }
+
     /// Serialize the selected identity; the record is evidence, not an execution token.
     pub(super) fn record(&self) -> Result<DeploymentOperation> {
         Ok(DeploymentOperation {
@@ -937,10 +932,16 @@ impl Coordinator {
         ensure!(
             matches!(
                 record.metadata.origin.require_native()?.native_coordinator,
-                NativeVersion::V2
+                NativeVersion::V2 | NativeVersion::V3
             ),
-            "durable intent requires journal v2"
+            "durable intent requires journal v2 or v3"
         );
+        if matches!(
+            record.metadata.origin.require_native()?.native_coordinator,
+            NativeVersion::V3
+        ) {
+            super::staging::current_snapshot(record)?;
+        }
         let operation = record
             .metadata
             .details

@@ -13,6 +13,7 @@
 //! | Original source approval and permitted effect scope | Protected review and candidate binding, rechecked before every new execution attempt. A started-status projection alone grants nothing. |
 //! | Intended machine/boot selection | `selection.json` and its referenced journal. Selection is published before VM shutdown/configuration and does not attest that either completed. |
 //! | Actual selected and running generations | Fresh Qubes, pool and guest observations plus host inspection; desired selection is not a substitute. |
+//! | Guest generations in native journal v3 | Complete target-specific snapshots in the authoritative intent, checked before publication and reauthenticated from committed storage on recovery. Missing originals stop execution; a newer matching generation is not a substitute. |
 //! | Private-copy completion | Identity-bound copy receipt, checked by the migration adapter; not inferred from the deployment phase. |
 //!
 //! `RecoveryDecision::reconcile` executes in production. Its success is proved

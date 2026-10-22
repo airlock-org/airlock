@@ -1,6 +1,8 @@
 //! Bind complete generation selections to checked storage definitions and one executing attempt.
 //! Committed-record authentication and source decoding remain adapter obligations.
 
+pub mod persistence;
+
 use super::{Backend, Definition, StoragePlan, StoreRequest};
 use crate::{
     boot::{SelectedGeneration, Selection},
@@ -92,6 +94,37 @@ pub open spec fn complete(definitions: Seq<Definition>, stage: crate::effects::S
             && forall|j: int| 0 <= j < i ==> definitions[i].name@ != #[trigger] definitions[j].name@
 }
 
+/// Decide complete plan correspondence independently of publication or authority.
+fn complete_entries(plan: &StoragePlan, entries: &[Resolution]) -> (yes: bool)
+    ensures yes == complete(plan@.1, plan@.3, entries@),
+{
+    if entries.len() != plan.definitions.len() { return false; }
+
+    let mut i = 0;
+    while i < entries.len()
+        invariant 0 <= i <= entries.len(), entries.len() == plan.definitions.len(),
+            forall|k: int| 0 <= k < i ==> entry(#[trigger] plan.definitions[k], plan@.3, entries[k])
+                && plan.definitions[k].name@.len() > 0
+                && forall|j: int| 0 <= j < k ==> plan.definitions[k].name@ != #[trigger] plan.definitions[j].name@,
+        decreases entries.len() - i,
+    {
+        let d = &plan.definitions[i];
+        if d.name.is_empty() || !entry_matches(plan, d, &entries[i]) { return false; }
+
+        let mut j = 0;
+        while j < i
+            invariant 0 <= j <= i < plan.definitions.len(),
+                forall|k: int| 0 <= k < j ==> plan.definitions[i as int].name@ != #[trigger] plan.definitions[k].name@,
+            decreases i - j,
+        {
+            if plan.definitions[i].name.as_str() == plan.definitions[j].name.as_str() { return false; }
+            j += 1;
+        }
+        i += 1;
+    }
+    true
+}
+
 /// Opaque selection set; decoded maps or individual generation numbers cannot replace it.
 ///
 /// ```compile_fail,E0451
@@ -154,28 +187,7 @@ impl StoragePlan {
     {
         if !durable.allows_effect(c) || self.binding.as_str() != c.plan.as_str() || entries.len() != self.definitions.len() { return None; }
 
-        let mut i = 0;
-        while i < entries.len()
-            invariant 0 <= i <= entries.len(), entries.len() == self.definitions.len(),
-                forall|k: int| 0 <= k < i ==> entry(#[trigger] self.definitions[k], self@.3, entries[k])
-                    && self.definitions[k].name@.len() > 0
-                    && forall|j: int| 0 <= j < k ==> self.definitions[k].name@ != #[trigger] self.definitions[j].name@,
-            decreases entries.len() - i,
-        {
-            let d = &self.definitions[i];
-            if d.name.is_empty() || !entry_matches(self, d, &entries[i]) { return None; }
-
-            let mut j = 0;
-            while j < i
-                invariant 0 <= j <= i < self.definitions.len(),
-                    forall|k: int| 0 <= k < j ==> self.definitions[i as int].name@ != #[trigger] self.definitions[k].name@,
-                decreases i - j,
-            {
-                if self.definitions[i].name.as_str() == self.definitions[j].name.as_str() { return None; }
-                j += 1;
-            }
-            i += 1;
-        }
+        if !complete_entries(self, &entries) { return None; }
         Some(StagedGenerations { entries, attempt: c.attempt.as_str().to_string(), operation: c.operation.as_str().to_string(),
             authority: c.authority.as_str().to_string(), plan: c.plan.as_str().to_string() })
     }

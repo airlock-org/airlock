@@ -17,6 +17,9 @@ pub enum NativeVersion {
     #[serde(rename = "airlock-dom0-service-v2")]
     /// Current intent is authoritative and carries a durable operation binding.
     V2,
+    #[serde(rename = "airlock-dom0-service-v3")]
+    /// Authoritative intent also retains exact target-specific guest selections.
+    V3,
 }
 
 /// Complete native version and candidate/baseline fingerprints required for recovery.
@@ -104,6 +107,43 @@ pub struct DeploymentOperation {
     pub authority: OperationAuthority,
 }
 
+/// Exact target-specific guest selection retained before any deployment effects.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GuestGenerationSnapshot {
+    /// Stable original deployment identity and source authority.
+    pub operation: DeploymentOperation,
+    /// Release endpoint for which these selections were checked.
+    pub release: ReleasePath,
+    /// Complete immutable release contents, independent of its path.
+    pub fingerprint: ReleaseFingerprint,
+    /// Complete original storage-definition order, including unchanged and nonnative VMs.
+    pub entries: Vec<GuestGenerationEntry>,
+}
+
+/// One named VM's original staging classification; decoding alone grants no permission.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum GuestGenerationEntry {
+    /// No native generation can be selected for this VM.
+    NonNative {
+        /// Original VM at this coordinate.
+        domain: GuestName,
+    },
+    /// Unchanged, unpinned VM retaining its original reuse/prepared compatibility policy.
+    Existing {
+        /// Original VM at this coordinate.
+        domain: GuestName,
+    },
+    /// Concrete generation and complete immutable boot identity.
+    Retained {
+        /// Original consuming VM, not a storage namespace.
+        domain: GuestName,
+        /// Full identity reauthenticated from committed storage on every attempt.
+        identity: Box<super::StorageIdentity>,
+    },
+}
+
 /// Optional recovery links and diagnostics retained alongside an activation journal.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct JournalDetails {
@@ -114,6 +154,13 @@ pub struct JournalDetails {
         skip_serializing_if = "Option::is_none"
     )]
     pub operation: Option<DeploymentOperation>,
+    /// Original target selections, retained unchanged when recovering either endpoint.
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub guest_generations: Option<Vec<GuestGenerationSnapshot>>,
     /// GUI-provider and guest boot identities captured before disruption.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gui_preserved: Option<BTreeMap<GuestName, GuiSnapshot>>,
@@ -192,10 +239,16 @@ impl TryFrom<JournalWire> for JournalMetadata {
             }
             _ => bail!("incomplete native transaction identity"),
         };
-        let durable = matches!(&origin, JournalOrigin::Native(native) if matches!(native.native_coordinator, NativeVersion::V2));
+        let durable = matches!(&origin, JournalOrigin::Native(native) if matches!(native.native_coordinator, NativeVersion::V2 | NativeVersion::V3));
         ensure!(
             durable == w.details.operation.is_some(),
             "journal version and durable operation binding disagree"
+        );
+
+        let pinned = matches!(&origin, JournalOrigin::Native(native) if matches!(native.native_coordinator, NativeVersion::V3));
+        ensure!(
+            pinned == w.details.guest_generations.is_some(),
+            "journal version and guest generation snapshots disagree"
         );
 
         Ok(Self {

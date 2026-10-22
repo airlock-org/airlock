@@ -276,10 +276,29 @@ fn durable_handoff() -> Result<()> {
     Ok(())
 }
 
+/// Include complete checked selections in the same journal writes exercised by crash injection.
+fn pin_intent(
+    fixture: &Fixture,
+    record: &mut Record,
+    previous: Option<&Record>,
+    authorization: &AuthorizedDeployment,
+) -> Result<airlock_deployment_core::storage::staging::persistence::PinnedGenerations> {
+    if let JournalOrigin::Native(native) = &mut record.metadata.origin {
+        native.native_coordinator = NativeVersion::V3;
+    }
+    fixture.coordinator.pin_images(
+        &fixture.release,
+        record,
+        previous,
+        authorization.storage_plan(),
+    )
+}
+
 /// Exit at a requested real persistence boundary or return an uncertain write error.
 fn crash_worker(path: &Path) -> Result<()> {
     let fixture = Fixture::reopen(path)?;
-    let (record, authorization) = fixture.intent(None, "100")?;
+    let (mut record, authorization) = fixture.intent(None, "100")?;
+    let pinned = pin_intent(&fixture, &mut record, None, &authorization)?;
     let boundary: usize = std::env::var("AIRLOCK_DURABLE_TEST_BOUNDARY")?.parse()?;
     let uncertain = std::env::var_os("AIRLOCK_DURABLE_TEST_UNCERTAIN").is_some();
     let mut writes = 0;
@@ -306,6 +325,7 @@ fn crash_worker(path: &Path) -> Result<()> {
     }
     let mut durable = result?;
     durable.begin(&record)?;
+    durable.activate_pinned(&record, pinned)?;
     if boundary == 3 {
         std::process::exit(86);
     }
@@ -369,13 +389,22 @@ fn scenarios() -> Result<()> {
             .map(|r| r.metadata.details.operation.clone());
         for attempt in ["101", "102", "103"] {
             let (mut record, checked) = fixture.intent(current.as_ref(), attempt)?;
+            let pinned = pin_intent(&fixture, &mut record, current.as_ref(), &checked)?;
             let mut durable = fixture.coordinator.publish_intent(&record, checked)?;
             durable.begin(&record)?;
+            durable.activate_pinned(&record, pinned)?;
             let saved = fixture
                 .coordinator
                 .current()?
                 .context("published intent missing")?;
             assert_eq!(saved.id, record.id);
+            assert!(saved.metadata.details.guest_generations.is_some());
+            if let Some(previous) = &current {
+                assert_eq!(
+                    serde_json::to_value(&saved.metadata.details.guest_generations)?,
+                    serde_json::to_value(&previous.metadata.details.guest_generations)?
+                );
+            }
             if let Some(expected) = &operation {
                 assert_eq!(&saved.metadata.details.operation, expected);
             }

@@ -123,6 +123,7 @@ fn namespace_failed_setup_has_durable_resume_and_rollback() -> Result<()> {
         if native_v1 {
             // Historical V1 journals and approvals predate the stable operation field.
             failed.as_object_mut().unwrap().remove("operation");
+            failed.as_object_mut().unwrap().remove("guest_generations");
             failed["native_coordinator"] = json!("airlock-dom0-service-v1");
             save(machine.path("machine/latest.json"), &failed)?;
             save(
@@ -1260,6 +1261,17 @@ fn namespace_native_backend_reconciles_lost_root_and_store_replies() -> Result<(
         topology["domains"]["usr-home"]["backend"]["state"]["persistent_size"] = json!(512);
         save(path, &topology)?;
     }
+    // Exercise genuine unpinned retained lookup, rather than a manifest's fixed number.
+    let manifest_path = machine.physical(&machine.candidate).join("release.json");
+    let mut manifest = read(&manifest_path)?;
+    manifest.as_object_mut().unwrap().remove("guestTransport");
+    manifest["stagedGenerations"] = json!({});
+    save(&manifest_path, &manifest)?;
+    save(
+        machine.physical(&machine.candidate).join("staged.json"),
+        &json!({}),
+    )?;
+    machine.data["generations"]["usr-home:2"]["approval"]["approved_by"] = json!("usr-assistant");
     machine.data["native_setup"] = json!(true);
     machine.data["lose_root_reply"] = json!(true);
     machine.persist()?;
@@ -1272,6 +1284,57 @@ fn namespace_native_backend_reconciles_lost_root_and_store_replies() -> Result<(
     assert_eq!(machine.data["root_import_count"], 1);
     assert!(machine.data["resize_count"].is_null());
     let interrupted = read(machine.path("machine/latest.json"))?;
+    assert_eq!(interrupted["native_coordinator"], "airlock-dom0-service-v3");
+    let original = interrupted["guest_generations"].clone();
+    assert_eq!(original[0]["entries"][0]["identity"]["generation"], 2);
+    // A newer, otherwise identical committed generation would win a fresh lookup.
+    let generation = machine.data["generations"]["usr-home:2"].clone();
+    let mut newer = generation.clone();
+    newer["generation"] = json!(3);
+    newer["manifest"] = json!("/var/lib/airlock/pool/usr-home/3/manifest.json");
+    machine.data["generations"]["usr-home:3"] = newer;
+    machine.data["generations"]
+        .as_object_mut()
+        .unwrap()
+        .remove("usr-home:2");
+    machine.persist()?;
+    assert!(machine.run(&["resume"], None, false)?["error"].is_string());
+    assert_eq!(
+        read(machine.path("machine/latest.json"))?["id"],
+        interrupted["id"]
+    );
+    machine.reload()?;
+    assert_eq!(machine.data["root_import_count"], 1);
+    machine.data["generations"]["usr-home:2"] = generation;
+    // History may lag in progress, but its immutable selection set must agree.
+    let history = machine
+        .path("machine/transactions")
+        .join(interrupted["id"].as_str().unwrap())
+        .join("status.json");
+    let mut conflicting = read(&history)?;
+    conflicting["guest_generations"][0]["entries"][0]["identity"]["generation"] = json!(3);
+    save(&history, &conflicting)?;
+    error(
+        &machine.run(&["resume"], None, false)?,
+        "journal identities disagree",
+    );
+    save(&history, &interrupted)?;
+    // A historical record cannot invent an original unpinned selection during adoption.
+    let mut historical = interrupted.clone();
+    historical["native_coordinator"] = json!("airlock-dom0-service-v2");
+    historical
+        .as_object_mut()
+        .unwrap()
+        .remove("guest_generations");
+    save(machine.path("machine/latest.json"), &historical)?;
+    save(&history, &historical)?;
+    error(
+        &machine.run(&["resume"], None, false)?,
+        "legacy recovery has no durable guest generation selection",
+    );
+    save(machine.path("machine/latest.json"), &interrupted)?;
+    save(&history, &interrupted)?;
+
     machine.data["lose_root_reply"] = json!(false);
     machine.data["lose_store_reply"] = json!(true);
     machine.persist()?;
@@ -1313,6 +1376,16 @@ fn namespace_native_backend_reconciles_lost_root_and_store_replies() -> Result<(
     let completed = read(machine.path("machine/latest.json"))?;
     assert!(interrupted["operation"].is_object());
     assert_eq!(interrupted["operation"], completed["operation"]);
+    assert_eq!(completed["guest_generations"], original);
+    assert_eq!(
+        machine
+            .calls()?
+            .iter()
+            .filter(|call| call[0] == "storage-pool" && call[1] == "find-generation")
+            .count(),
+        1
+    );
+
     assert_eq!(
         read(
             machine

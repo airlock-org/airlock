@@ -49,7 +49,7 @@ pub open spec fn same(a: Selection, b: Selection) -> bool {
         && a.backend@ == b.backend@
 }
 
-fn matching(a: &Selection, b: &Selection) -> (yes: bool)
+pub(crate) fn matching(a: &Selection, b: &Selection) -> (yes: bool)
     ensures yes == same(*a, *b),
 {
     a.domain == b.domain && a.generation == b.generation

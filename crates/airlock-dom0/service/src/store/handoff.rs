@@ -55,7 +55,7 @@ pub(crate) fn installed(value: &InstalledStorageReceipt) -> Selection {
 }
 
 /// Preserve every typed identity field without wire-key selection or namespace guessing.
-fn fields(domain: &GuestName, identity: &StorageIdentity) -> Selection {
+pub(crate) fn fields(domain: &GuestName, identity: &StorageIdentity) -> Selection {
     Selection {
         domain: domain.to_string(),
         generation: identity.generation.get(),

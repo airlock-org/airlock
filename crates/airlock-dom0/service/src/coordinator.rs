@@ -110,6 +110,7 @@ impl Coordinator {
                 "origin": r.metadata.origin, "operation": r.metadata.details.operation,
                 "recovery_of": r.metadata.details.recovery_of,
                 "gui_preserved": r.metadata.details.gui_preserved,
+                "guest_generations": r.metadata.details.guest_generations,
                 "administrative": r.metadata.details.extra.get("administrative"),
             })
         };

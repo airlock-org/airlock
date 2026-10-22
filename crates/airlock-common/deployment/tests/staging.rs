@@ -288,3 +288,170 @@ fn staging_scope_and_duplicate_coordinates_are_checked() {
         .is_none()
     );
 }
+
+/// Retained inert evidence is not a capability, even when it has the correct generation number.
+fn saved() -> persistence::Snapshot {
+    persistence::Snapshot {
+        operation: "attempt".into(),
+        authority: "authority".into(),
+        target: "candidate+fingerprint".into(),
+        entries: vec![persistence::RecordedResolution::Retained(Box::new(
+            identity("vm", 7),
+        ))],
+    }
+}
+
+/// Both the original source scope and every immutable generation field survive recovery.
+#[test]
+fn recovery_pin_rejects_substituted_snapshot_identity_or_classification() {
+    let mut effects = effects();
+    effects.configure = vec!["vm"];
+    effects.stage = vec!["vm"];
+    let plan = approved(&effects, vec!["vm"])
+        .unwrap()
+        .storage(vec![definition("vm", None)])
+        .unwrap();
+    for field in [
+        "operation",
+        "authority",
+        "target",
+        "missing",
+        "extra",
+        "generation",
+        "source",
+        "domain",
+        "classification",
+    ] {
+        let mut s = saved();
+        match field {
+            "operation" => s.operation = "different".into(),
+            "authority" => s.authority = "different".into(),
+            "target" => s.target = "different".into(),
+            "missing" => s.entries.clear(),
+            "extra" => s
+                .entries
+                .push(persistence::RecordedResolution::Existing("extra".into())),
+            "classification" => {
+                s.entries[0] = persistence::RecordedResolution::Existing("vm".into())
+            }
+            _ => {
+                let persistence::RecordedResolution::Retained(s) = &mut s.entries[0] else {
+                    unreachable!()
+                };
+                match field {
+                    "generation" => s.generation = 8,
+                    "source" => s.source = "/other".into(),
+                    _ => s.domain = "other".into(),
+                }
+            }
+        }
+        assert!(
+            plan.pin(
+                &context(),
+                "candidate+fingerprint".into(),
+                Some(&s),
+                vec![retained("vm", 7)]
+            )
+            .is_none(),
+            "accepted {field}"
+        );
+    }
+    assert!(
+        plan.pin(
+            &context(),
+            "candidate+fingerprint".into(),
+            Some(&saved()),
+            vec![retained("vm", 7)]
+        )
+        .is_some()
+    );
+    assert!(
+        plan.pin(
+            &context(),
+            "candidate+fingerprint".into(),
+            Some(&saved()),
+            vec![retained("vm", 8)]
+        )
+        .is_none()
+    );
+}
+
+/// A new plan and attempt may reuse an original selection, but never another target or authority.
+#[test]
+fn recovery_rebinds_exact_selections_to_a_fresh_checked_plan() {
+    let mut effects = effects();
+    effects.configure = vec!["vm"];
+    effects.stage = vec!["vm"];
+    let approved = airlock_deployment_core::plan::AuthorizedPlan::policy_exempt(
+        &effects,
+        vec![],
+        PlanBinding::new("new-plan".into()),
+    )
+    .unwrap();
+    let plan = approved.storage(vec![definition("vm", None)]).unwrap();
+    let mut c = context();
+    c.attempt = AttemptId::new("retry".into());
+    c.plan = PlanBinding::new("new-plan".into());
+    let s = saved();
+    assert!(
+        plan.pin(
+            &c,
+            "candidate+fingerprint".into(),
+            Some(&s),
+            vec![retained("vm", 7)]
+        )
+        .is_some()
+    );
+    c.plan = PlanBinding::new("foreign-plan".into());
+    assert!(
+        plan.pin(
+            &c,
+            "candidate+fingerprint".into(),
+            Some(&s),
+            vec![retained("vm", 7)]
+        )
+        .is_none()
+    );
+}
+
+/// The durable gate must cover the same actual journal snapshot that was pinned before publication.
+#[test]
+fn pinned_execution_requires_durability_and_the_published_selection_set() {
+    let mut effects = effects();
+    effects.configure = vec!["vm"];
+    effects.stage = vec!["vm"];
+    let p = approved(&effects, vec!["vm"]).unwrap();
+    let plan = p.storage(vec![definition("vm", None)]).unwrap();
+    let gate = durable(p, true);
+    let blocked = durable(approved(&effects, vec!["vm"]).unwrap(), false);
+    let pin = || {
+        plan.pin(
+            &context(),
+            "candidate+fingerprint".into(),
+            None,
+            vec![retained("vm", 7)],
+        )
+        .unwrap()
+    };
+    assert!(
+        plan.activate_pinned(&blocked, &context(), pin(), &saved())
+            .is_none()
+    );
+    let mut changed = saved();
+    changed.entries[0] = persistence::RecordedResolution::Retained(Box::new(identity("vm", 8)));
+    assert!(
+        plan.activate_pinned(&gate, &context(), pin(), &changed)
+            .is_none()
+    );
+    let checked = plan
+        .activate_pinned(&gate, &context(), pin(), &saved())
+        .unwrap();
+    assert_eq!(
+        plan.select_staged(&gate, &context(), &checked, 0)
+            .unwrap()
+            .store()
+            .unwrap()
+            .generation(),
+        Some(7)
+    );
+}

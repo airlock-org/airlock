@@ -236,6 +236,38 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
             _ => bail!("unexpected domain storage operation"),
         },
         "storage-pool" => match arguments.first().map(String::as_str) {
+            Some("find-generation") => {
+                let namespace = option(arguments, "--domain")?;
+                let system = option(arguments, "--system")?;
+                let source = option(arguments, "--closure-source")?;
+                let root = option(arguments, "--root-source")?;
+                let kernel = option(arguments, "--kernel-name")?;
+                let approved_by = option(arguments, "--approved-by")?;
+                let matches = data["generations"]
+                    .as_object()
+                    .context("fixture generations")?
+                    .values()
+                    .filter(|info| {
+                        info["domain"] == namespace
+                            && info["system"] == system
+                            && info["closure_source"] == source
+                            && info["root_source"] == root
+                            && info["kernel_name"] == kernel
+                            && info["approval"]["approved_by"] == approved_by
+                    })
+                    .max_by_key(|info| info["generation"].as_u64());
+                let reply = match matches {
+                    Some(info) => {
+                        json!({"schema":"airlock.closure-store.generation-match.v1", "domain":namespace,
+                        "status":"found", "generation":info["generation"], "manifest":info["manifest"],
+                        "closure_hash":info["store"]["closure_hash"]})
+                    }
+                    None => {
+                        json!({"schema":"airlock.closure-store.generation-match.v1", "domain":namespace, "status":"missing"})
+                    }
+                };
+                println!("{reply}");
+            }
             Some("describe-generation") => {
                 let namespace = option(arguments, "--domain")?;
                 let name = namespace
