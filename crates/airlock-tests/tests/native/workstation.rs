@@ -15,6 +15,37 @@ fn report(command: &mut Command) -> Result<Value> {
     Ok(serde_json::from_slice(&run(command, None)?.checked()?)?)
 }
 
+/// Human build logs omit empty prefixes without changing JSON stdout, failures or explicit log protocols.
+#[test]
+fn image_build_logs_preserve_diagnostics_and_exit_status() -> Result<()> {
+    let fixture = Repository::new()?;
+    let diagnostics =
+        "nixos-disk-image>\nnixos-disk-image> copying store\nerror: fixture failure\n";
+    let release = "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-built";
+    fixture.configure(json!({"nix_stderr": diagnostics, "nix_exit": 42, "release": release}))?;
+
+    for (format, expected) in [
+        (
+            None,
+            "nixos-disk-image> copying store\nerror: fixture failure\n",
+        ),
+        (Some("--log-format=internal-json"), diagnostics),
+    ] {
+        let mut command = fixture.command(&["nix", "build", "--print-build-logs", "--json"]);
+        if let Some(format) = format {
+            command.arg(format);
+        }
+        let output = run(&mut command, None)?;
+        assert_eq!(output.status.code(), Some(42));
+        assert_eq!(output.stderr, expected.as_bytes());
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stdout)?,
+            json!([{"outputs": {"out": release}}])
+        );
+    }
+    Ok(())
+}
+
 /// A bounded Make invocation covers prerequisites, nested wrappers, threads and subprocesses.
 #[test]
 fn image_build_budget_reserves_a_physical_core_through_make_and_children() -> Result<()> {

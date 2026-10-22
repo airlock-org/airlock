@@ -345,7 +345,19 @@ pub(crate) fn command(root: &Path, args: &[impl AsRef<OsStr>]) -> Result<(Comman
 
 pub(crate) fn nix(root: &Path, arguments: &[OsString]) -> Result<u8> {
     let (mut command, _source) = command(root, arguments)?;
-    let status = command.status()?;
+    // Only human-readable build logs contain these prefixes. Keep explicit log
+    // formats (including Nix's JSON event protocol) completely untouched.
+    let build_logs = arguments
+        .iter()
+        .any(|arg| arg == "--print-build-logs" || arg == "-L");
+    let explicit_format = arguments
+        .iter()
+        .any(|arg| arg == "--log-format" || arg.to_string_lossy().starts_with("--log-format="));
+    let status = if build_logs && !explicit_format {
+        crate::build_log::run(&mut command)?
+    } else {
+        command.status()?
+    };
     Ok(status
         .code()
         .and_then(|n| u8::try_from(n).ok())

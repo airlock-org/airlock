@@ -23,6 +23,8 @@ mod cleanup;
 
 mod build_budget;
 
+mod build_log;
+
 mod nested;
 
 use anyhow::Result;

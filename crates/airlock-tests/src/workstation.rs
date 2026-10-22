@@ -77,6 +77,9 @@ pub(crate) fn execute(root: &Path, name: &str, args: &[String]) -> Result<()> {
             return Err(Command::new(bash).args(["-c", &script]).exec().into());
         }
         "nix" => {
+            if let Some(diagnostics) = config["nix_stderr"].as_str() {
+                eprint!("{diagnostics}");
+            }
             if let Some(remote) = config["fetch_remote"].as_str() {
                 let target = root.join("apps-fetch");
                 for mut command in [
