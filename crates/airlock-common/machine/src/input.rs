@@ -53,6 +53,7 @@ impl Receiver {
         if !physical.iter().any(|device| device.keyboard) {
             return Err("no physical typing keyboard was discovered".into());
         }
+        let mut available: Vec<_> = self.devices.iter().collect();
         for expected in physical
             .iter()
             .filter(|device| device.keyboard || device.pointer)
@@ -65,15 +66,18 @@ impl Receiver {
                 return Err("physical input name is unsupported by the upstream receiver".into());
             }
             let name = forwarded_name(&expected.name);
-            if !self.devices.iter().any(|actual| {
+            let Some(index) = available.iter().position(|actual| {
                 actual.name == name
                     && (!expected.keyboard || actual.keyboard)
                     && (!expected.pointer || actual.pointer)
-            }) {
+            }) else {
                 return Err(format!(
                     "forwarded input interface is missing or incomplete: {name}"
                 ));
-            }
+            };
+            // Equal kernel names are common for two identical physical devices.
+            // One live receiver must not satisfy both physical interfaces.
+            available.remove(index);
         }
         Ok(())
     }
@@ -116,6 +120,12 @@ mod tests {
         });
         assert!(receiver.covers(&physical).is_ok());
         assert!(receiver.covers(&[]).is_err());
+        let mut duplicate = physical.clone();
+        duplicate.push(physical[0].clone());
+        assert!(receiver.covers(&duplicate).is_err());
+        receiver.devices.push(receiver.devices[0].clone());
+        assert!(receiver.covers(&duplicate).is_ok());
+        receiver.devices.pop();
         receiver.devices[0].name = "unrelated: Keyboard".into();
         assert!(receiver.covers(&physical).is_err());
         assert_eq!(forwarded_name(&"x".repeat(200)).len(), 79);

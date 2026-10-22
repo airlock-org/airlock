@@ -28,6 +28,8 @@ mod builder;
 
 mod terminal;
 
+mod input_receiver;
+
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::json;
 use std::{
@@ -295,6 +297,7 @@ fn main() -> Result<()> {
         }
         "boot-cache-maintenance" => maintenance::execute(&args[1..])?,
         "airlock-test-peer" => match args.get(1).map(String::as_str) {
+            Some("input-receiver-smoke") => input_receiver::run()?,
             Some("observe-build-cpus") => observe_build_cpus(&args[2..])?,
             Some("host-capabilities") => println!("{}", airlock_tests::system::capabilities()),
             Some("systemd-order-setup") => {

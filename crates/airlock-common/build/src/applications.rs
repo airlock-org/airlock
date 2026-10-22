@@ -20,6 +20,8 @@ pub enum Application {
     Launcher,
     /// Disposable NixOS test-VM systemd/udev regression, never installed in production VMs.
     UplinkTest,
+    /// Disposable VM input protocol regression; never installed in production guests.
+    InputTest,
     /// Explicit smoke-test orchestration and read-only structured evidence helpers.
     TestReport,
     /// Development-only probes of upstream Qubes Python interfaces and event ordering.
@@ -91,6 +93,12 @@ impl Application {
                 "airlock-qubes-probe",
                 "Airlock upstream Qubes interface probes",
                 &["airlock-qubes-probe"],
+            ),
+            Self::InputTest => (
+                "airlock-tests",
+                "airlock-input-test",
+                "Airlock installed input RPC regression",
+                &["airlock-test-peer"],
             ),
             Self::UplinkTest => (
                 "airlock-tests",
@@ -173,6 +181,7 @@ impl Application {
                 | Self::Usb
                 | Self::Dom0
                 | Self::TestReport
+                | Self::InputTest
                 | Self::UplinkTest
                 | Self::PrepareBoot
         ) {
@@ -321,6 +330,7 @@ impl Application {
             | Self::Launcher
             | Self::Cli
             | Self::ControllerService
+            | Self::InputTest
             | Self::UplinkTest
             | Self::TestReport
             | Self::VmInit => {}

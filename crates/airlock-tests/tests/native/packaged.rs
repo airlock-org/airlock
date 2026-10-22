@@ -509,6 +509,38 @@ fn vm_uplink_hotplug() -> Result<()> {
     Ok(())
 }
 
+/// Installed RPCs register input devices and deliver real evdev events in a closure-isolated disposable VM.
+#[test]
+#[ignore = "explicit isolated input receiver VM and boot-preflight build"]
+fn vm_installed_input_receivers() -> Result<()> {
+    let packages = Packages::new("input-receiver")?;
+    let output = packages.fixture(
+        "build",
+        "network_uplink_vm/input_receiver",
+        json!({"root":packages.source.join("airlock-machine")}),
+    )?;
+    let vm = fs::read_link(output.join("vm"))?;
+    let physical = packages.physical(vm.to_str().context("VM store path")?)?;
+    let runners = fs::read_dir(physical.join("bin"))?.collect::<std::io::Result<Vec<_>>>()?;
+    ensure!(runners.len() == 1, "expected one disposable VM runner");
+    let runner = vm.join("bin").join(runners[0].file_name());
+    let temporary = tempfile::tempdir()?;
+    let mut command = packages.runtime(runner.to_str().context("VM runner")?);
+    command
+        .current_dir(temporary.path())
+        .env("QEMU_OPTS", "-accel kvm -display none");
+    let logs = packages.logs.join("boot");
+    system::run(&mut command, &logs, Duration::from_secs(180))?;
+    let console = fs::read_to_string(logs.join("stdout.log"))?;
+    ensure!(
+        console.contains(r#""schema":"airlock.input-smoke.v1""#)
+            && console.contains(r#""status":"passed""#),
+        "installed input RPC smoke failed; inspect {}",
+        logs.display()
+    );
+    Ok(())
+}
+
 /// A VM policy probe uses live QubesDB role/name observations while keeping its configured safe fallback.
 #[test]
 #[ignore = "explicit packaged Qubes PolicyProbe RPC build"]

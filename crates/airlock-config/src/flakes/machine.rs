@@ -8,6 +8,8 @@ mod checks;
 
 mod uplink;
 
+mod input;
+
 use airlock_build::{Workspace, overlays};
 use rusix::{
     interop::{
@@ -382,6 +384,7 @@ pub(super) fn outputs() -> NixValue {
                                 "configInputs": build.configuration_inputs(),
                                 "tests": nix_record! {
                                     "uplinkHotplug": uplink::fixture(&build),
+                                    "inputReceiver": input::fixture(&build),
                                 },
                             },
                             "overlays": nix_record! {

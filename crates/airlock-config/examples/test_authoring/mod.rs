@@ -118,6 +118,7 @@ pub(super) fn fixture(
             "gpu_probe/gpu_lab" => gpu_probe::gpu_lab(inputs),
             "qubes_gui_window_state/window_state" => qubes_gui_window_state::window_state(inputs),
             "network_uplink_vm/uplink_hotplug" => network_uplink_vm::uplink_hotplug(inputs),
+            "network_uplink_vm/input_receiver" => network_uplink_vm::input_receiver(inputs),
             "pool_admission_module/admission_receiver" => {
                 pool_admission_module::admission_receiver(inputs)
             }

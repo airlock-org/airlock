@@ -111,6 +111,7 @@ fn boot_preflight_checks_installed_contracts_and_exact_store_membership() -> Res
         "copied",
         "missing-contract",
         "missing-program",
+        "missing-resource",
         "cross-view",
         "interpreter",
     ] {
@@ -126,6 +127,10 @@ fn boot_preflight_checks_installed_contracts_and_exact_store_membership() -> Res
                 "0555\n",
             )?,
             "missing-contract" => fs::remove_file(tools.join("fixed-command.json"))?,
+            "missing-resource" => fs::write(
+                tools.join("fixed-command.json"),
+                r#"{"program":"/nix/store/11111111111111111111111111111111-tools/bin/sh","args":["/nix/store/11111111111111111111111111111111-tools/absent.json"]}"#,
+            )?,
             "missing-program" => fs::write(
                 tools.join("fixed-command.json"),
                 r#"{"program":"/nix/store/11111111111111111111111111111111-tools/bin/absent"}"#,

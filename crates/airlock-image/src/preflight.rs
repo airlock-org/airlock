@@ -320,12 +320,22 @@ impl Inspector<'_> {
                 logical.display()
             );
             self.executable(Path::new(&contract.program), inherited)?;
-            for value in contract
-                .args
-                .iter()
-                .chain(contract.env.values())
-                .chain(contract.prefix_env.values())
-            {
+            for value in &contract.args {
+                // A complete immutable argv path is an installed resource, unlike
+                // optional PATH directories or partial paths inside shell text.
+                let path = value
+                    .split_once('=')
+                    .map_or(value.as_str(), |(_, value)| value);
+                if path.starts_with("/nix/store/")
+                    && !path
+                        .chars()
+                        .any(|ch| ch.is_whitespace() || matches!(ch, '$' | '\'' | '"' | ';'))
+                {
+                    self.view.resolve(Path::new(path))?;
+                }
+                self.text(value, inherited)?;
+            }
+            for value in contract.env.values().chain(contract.prefix_env.values()) {
                 self.text(value, inherited)?;
             }
         }

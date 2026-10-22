@@ -100,7 +100,7 @@ fn boot_desktop_wait_checks_health_generation_and_xen_instance() -> Result<()> {
             "qvm-ls",
             json!([
                 {"missing":"seen-xid", "write":{"seen-xid":""}, "stdout":if state == "dom0-xid" {"0\n"} else {"7\n"}},
-                {"stdout":if state == "restarted" {"8\n"} else {"7\n"}}
+                {"stdout":if state == "restarted" {"8\n"} else if state == "dom0-xid" {"0\n"} else {"7\n"}}
             ]),
         )?;
         peers.rules("qrexec-client", json!([

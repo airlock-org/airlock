@@ -202,12 +202,15 @@ test-nix-prepare: test-fixtures-build test-reports-build
 test-nix: ensure-generated-dirs
 	AIRLOCK_PREPARED_SOURCE="$${AIRLOCK_PREPARED_SOURCE:-$$(cat "$(NIX_TEST_LOG_DIR)/prepared-source")}" "$(NATIVE_TEST_RUNNER)" "$(NATIVE_TEST_RECEIPT)" --ignored nix:: --skip remote_ --skip package_ $(NATIVE_TEST_ARGS)
 
-.PHONY: test-packages test-uplink-vm test-native-runtime test-native-systemd test-native-storage-linux
+.PHONY: test-packages test-uplink-vm test-input-vm test-native-runtime test-native-systemd test-native-storage-linux
 test-packages:
 	AIRLOCK_PREPARED_SOURCE="$${AIRLOCK_PREPARED_SOURCE:-$$(cat "$(NIX_TEST_LOG_DIR)/prepared-source")}" "$(NATIVE_TEST_RUNNER)" "$(NATIVE_TEST_RECEIPT)" --ignored package_ $(NATIVE_TEST_ARGS)
 
 test-uplink-vm:
 	"$(NATIVE_TEST_RUNNER)" "$(NATIVE_TEST_RECEIPT)" --ignored --exact packaged::vm_uplink_hotplug --nocapture
+
+test-input-vm:
+	"$(NATIVE_TEST_RUNNER)" "$(NATIVE_TEST_RECEIPT)" --ignored --exact packaged::vm_installed_input_receivers --nocapture
 
 test-native-runtime:
 	"$(NATIVE_TEST_RUNNER)" "$(NATIVE_TEST_RECEIPT)" --ignored external_tool_packaged_runtime_ --nocapture
