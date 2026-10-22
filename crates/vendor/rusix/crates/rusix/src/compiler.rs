@@ -95,7 +95,7 @@ use std::{cell::Cell, rc::Rc};
 /// References to final NixOS options or the system’s supplied package set require
 /// [`crate::nixos::compile_module`] and are rejected by this standalone compiler.
 /// Repeated substantial expressions with identical attribution share lazy local
-/// bindings. Sharing stays within lexical scopes and preserves authored error paths.
+/// bindings. Shared bindings preserve lexical dependencies and authored error paths.
 #[track_caller]
 pub fn compile(config: impl IntoConfig) -> Result<Generated, Box<Diagnostic>> {
     compile_with_options(config, RenderOptions::default())
@@ -495,7 +495,7 @@ fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
                     NixKind::ArgumentSelect(Box::new(lower_value(value)), path.parts().to_vec())
                 }
             } else {
-                interop::select(lower_value(value), path).kind
+                interop::select_opaque(lower_value(value), path).kind
             };
             return NixExpr::attributed(kind, node.origin.clone());
         }

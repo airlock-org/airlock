@@ -61,7 +61,7 @@ struct Build {
     source: NixPath,
     /// Admitted native application source workspace.
     workspace: Workspace,
-    /// Lazily shared package-set and VM-builder functions plus finalized VM factory sets.
+    /// Lazy platform package sets, VM-builder functions and finalized VM factory sets.
     shared: NixValue,
 }
 
@@ -73,7 +73,9 @@ impl Build {
 
     /// Select host packages with the pinned upstream overlays and Airlock integration patches.
     fn pkgs(&self, system: NixValue) -> NixValue {
-        self.shared.clone().select("pkgs").call(system)
+        NixValue::builtin("getAttr")
+            .call(system)
+            .call(self.shared.clone().select("pkgs"))
     }
 
     /// Resolve one source-relative implementation asset.
@@ -247,7 +249,9 @@ pub(super) fn outputs() -> NixValue {
                         }
                     })
                 });
-                let packages = NixValue::function(|system| {
+                // A function is shared, but applying it repeatedly does not memoize
+                // its result. Keep one lazy package set per supported platform.
+                let packages = super::systems(|system| {
                     NixValue::builtin("import")
                         .call(inputs.clone().select("nixpkgs"))
                         .call(nix_record! {

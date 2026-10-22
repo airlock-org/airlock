@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rndhouse/rusix/master/docs/assets/rusix-wordmark-dark.svg">
-    <img alt="Rusix" src="https://raw.githubusercontent.com/rndhouse/rusix/master/docs/assets/rusix-wordmark-light.svg" height="64">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rndhouse/rusix/main/docs/assets/rusix-wordmark-dark.svg">
+    <img alt="Rusix" src="https://raw.githubusercontent.com/rndhouse/rusix/main/docs/assets/rusix-wordmark-light.svg" height="64">
   </picture>
 </p>
 
@@ -70,7 +70,7 @@ error[nixos-merge]: conflicting definitions for a NixOS option
    = option: services.openssh.authorizedKeysCommandUser
 ```
 
-[Error reporting](https://github.com/rndhouse/rusix/blob/master/docs/error-reporting.md) shows complete diagnostics and their
+[Error reporting](https://github.com/rndhouse/rusix/blob/main/docs/error-reporting.md) shows complete diagnostics and their
 original Nix errors.
 
 Rusix is experimental, and some Nix errors cannot be traced to a Rust source
@@ -80,6 +80,6 @@ configuration records, diagnostics identify the contribution and the NixOS optio
 path; they do not infer a Rust source location for each nested field. Imported
 Nix definitions retain their own source locations.
 
-- [Examples](https://github.com/rndhouse/rusix/blob/master/examples/README.md)
-- [Library usage](https://github.com/rndhouse/rusix/blob/master/docs/library-usage.md)
-- [Developing Rusix](https://github.com/rndhouse/rusix/blob/master/docs/development.md)
+- [Examples](https://github.com/rndhouse/rusix/blob/main/examples/README.md)
+- [Library usage](https://github.com/rndhouse/rusix/blob/main/docs/library-usage.md)
+- [Developing Rusix](https://github.com/rndhouse/rusix/blob/main/docs/development.md)

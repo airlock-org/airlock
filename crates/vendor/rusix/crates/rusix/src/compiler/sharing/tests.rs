@@ -6,7 +6,7 @@ use crate::{
     compiler::{
         context_audit::equivalent_diagnostics, lower, render::render as render_without_sharing,
     },
-    interop::raw::NixValue,
+    interop::{NixExpression, raw::NixValue},
 };
 
 /// Compile the optimized tree while retaining the raw renderer as an evaluator oracle.
@@ -46,6 +46,97 @@ fn repeated_computations_are_memoized() {
     assert_eq!(before.value, after.value);
     assert_eq!(before.raw_nix.matches("rusix-sharing-evaluated").count(), 2);
     assert_eq!(after.raw_nix.matches("rusix-sharing-evaluated").count(), 1);
+}
+
+/// One function's invariant work is shared across different calls without changing argument values.
+#[test]
+fn function_invariants_are_memoized_across_calls() {
+    let constant = traced("payload".into());
+    let function = NixValue::function(|argument| {
+        NixValue::record([("argument", argument), ("constant", constant)])
+    });
+    let value = function
+        .bind(|function| NixValue::list([function.clone().call(1_i64), function.call(2_i64)]));
+    let ast = lower(&Config::new().set_dynamic("values", value));
+    let session = NixSession::new().unwrap();
+    let before = session.evaluate(&render_without_sharing(&ast)).unwrap();
+    let after = session.evaluate(&render(&ast)).unwrap();
+
+    assert_eq!(before.value, after.value);
+    assert_eq!(after.value["values"][0]["argument"], 1);
+    assert_eq!(after.value["values"][1]["argument"], 2);
+    assert_eq!(before.raw_nix.matches("rusix-sharing-evaluated").count(), 2);
+    assert_eq!(after.raw_nix.matches("rusix-sharing-evaluated").count(), 1);
+}
+
+/// Some attribute consumers inspect a function before forcing thunks, as Nix's flake loader does.
+#[test]
+fn exported_functions_keep_their_direct_function_shape() {
+    let outputs = NixValue::function_attrs(["self"], |_| {
+        (Vec::<(&str, NixValue)>::new(), traced("payload".into()))
+    });
+    let ast = lower(&Config::new().set_dynamic("outputs", outputs));
+    let optimized = optimize(ast);
+    let NixKind::AttrSet(fields) = optimized.kind else {
+        panic!("root attribute set changed shape")
+    };
+    let NixKind::Group(value) = &fields[0].1.kind else {
+        panic!("assignment attribution lost")
+    };
+    assert!(matches!(value.kind, NixKind::ArgumentFunction(..)));
+}
+
+/// Captured outer arguments remain different for each factory call while inner calls share invariants.
+#[test]
+fn lifted_inner_work_retains_outer_captures() {
+    let factory = NixValue::function(|outer| NixValue::function(|_| traced(outer)));
+    let value = factory.bind(|factory| {
+        NixValue::list([
+            factory
+                .clone()
+                .call("one")
+                .bind(|inner| NixValue::list([inner.clone().call(0_i64), inner.call(1_i64)])),
+            factory
+                .call("two")
+                .bind(|inner| NixValue::list([inner.clone().call(0_i64), inner.call(1_i64)])),
+        ])
+    });
+    let ast = lower(&Config::new().set_dynamic("values", value));
+    let session = NixSession::new().unwrap();
+    let before = session.evaluate(&render_without_sharing(&ast)).unwrap();
+    let after = session.evaluate(&render(&ast)).unwrap();
+
+    assert_eq!(before.value, after.value);
+    assert_ne!(after.value["values"][0], after.value["values"][1]);
+    assert_eq!(before.raw_nix.matches("rusix-sharing-evaluated").count(), 4);
+    assert_eq!(after.raw_nix.matches("rusix-sharing-evaluated").count(), 2);
+}
+
+/// Moving a potentially failing value outside a function must not force it or lose its source path.
+#[test]
+fn lifted_failures_stay_lazy_and_keep_diagnostics() {
+    let bad = traced(NixValue::builtin("throw").call("invariant failure"));
+    let function =
+        NixValue::function(|argument| NixValue::record([("argument", argument), ("bad", bad)]));
+    let value = function.call(42_i64);
+    let ast = lower(
+        &Config::new()
+            .set_dynamic("good", value.clone().select("argument"))
+            .set_dynamic("bad", value.select("bad")),
+    );
+    let session = NixSession::new().unwrap();
+    let original = render_without_sharing(&ast);
+    let optimized = render(&ast);
+    assert_eq!(
+        session
+            .evaluate_attribute(&optimized, "good")
+            .unwrap()
+            .value,
+        42
+    );
+    let before = session.evaluate_attribute(&original, "bad").unwrap_err();
+    let after = session.evaluate_attribute(&optimized, "bad").unwrap_err();
+    equivalent_diagnostics(&before, &after);
 }
 
 /// A shared failing definition must remain lazy and preserve the demanded operation's blame.

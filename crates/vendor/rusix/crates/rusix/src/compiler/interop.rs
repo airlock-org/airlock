@@ -20,11 +20,26 @@ fn string(value: impl Into<String>) -> NixExpr {
     NixExpr::plain(NixKind::String(value.into()))
 }
 
-pub(crate) fn select(mut root: NixExpr, path: &AttrPath) -> NixExpr {
-    for segment in path.parts() {
-        root = NixExpr::plain(NixKind::Call(Builtin::GetAttr, vec![string(segment), root]));
-    }
-    root
+pub(crate) fn select(root: NixExpr, path: &AttrPath) -> NixExpr {
+    // These names are literal attribute data, so native selection can escape
+    // them directly. Keep separate authored lookups as separate AST nodes;
+    // the renderer preserves their distinct diagnostic positions.
+    NixExpr::plain(NixKind::Select(Box::new(root), path.parts().to_vec()))
+}
+
+/// Keep the demanding call position when an opaque selected value fails inside foreign Nix.
+pub(crate) fn select_opaque(root: NixExpr, path: &AttrPath) -> NixExpr {
+    let (last, prefix) = path.parts().split_last().expect("validated nonempty path");
+    let root = if prefix.is_empty() {
+        root
+    } else {
+        NixExpr::plain(NixKind::Select(Box::new(root), prefix.to_vec()))
+    };
+
+    // Native selection alone may leave only the enclosing attribute's position
+    // when forcing drvPath or another deferred foreign value. Preserve the final
+    // builtin frame; intermediate fixed segments do not need their own calls.
+    NixExpr::plain(NixKind::Call(Builtin::GetAttr, vec![string(last), root]))
 }
 
 pub(crate) fn source(source: &Source) -> NixExpr {

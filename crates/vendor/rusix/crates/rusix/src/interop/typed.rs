@@ -26,7 +26,7 @@ pub trait NixExpression: NixRepresentation + Clone + IntoRusixValue {
     /// the value later and evaluates it only if the callback's expression needs it.
     /// Reusing the parameter avoids repeating the original expression in Nix.
     /// Use this to guarantee sharing across different authored fields or closures;
-    /// automatic compiler sharing is limited to identical diagnostic paths within one scope.
+    /// automatic compiler sharing is conservative about lexical dependencies and diagnostic paths.
     ///
     /// ```
     /// use rusix::{Expr, interop::NixExpression};
