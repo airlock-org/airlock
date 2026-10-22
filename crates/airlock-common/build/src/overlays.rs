@@ -38,7 +38,33 @@ pub fn qubes_startup() -> NixValue {
         NixValue::function(|previous| {
             let extension = NixValue::function(|python| {
                 NixValue::function(|packages| {
+                    let usb = packages.clone().select("qubes-app-linux-usb-proxy");
+                    let exporter =
+                        usb.clone()
+                            .select("sys-usb")
+                            .override_attrs(NixValue::function(|old| {
+                                nix_record! {
+                                    // This custom patch phase does not run postPatch hooks. Fix the
+                                    // Python source before wrapPython preserves its interpreter line.
+                                    "patchPhase": NixValue::concat_text([
+                                        old.attr_or("patchPhase", ""),
+                                        "\n".into(),
+                                        nix_text!(r#"
+                                            substituteInPlace src/usb-reset \
+                                      --replace-fail /usr/bin/python3 {python}
+                                "#, python = python.clone().select("interpreter")).into(),
+                                    ]),
+                                }
+                            }));
+
                     nix_record! {
+                        "qubes-app-linux-usb-proxy": usb.override_attrs(NixValue::function(|old| {
+                            nix_record! {
+                                "passthru": old.select("passthru").merge_attrs(nix_record! {
+                                    "sys-usb": exporter,
+                                }),
+                            }
+                        })),
                         "qubes-core-admin": packages.select("qubes-core-admin").override_attrs(
                             NixValue::function(|old| nix_record! {
                                 // patsh resolves upstream's bare qvm-features command at build time.
@@ -80,14 +106,26 @@ pub fn qubes_startup() -> NixValue {
                 }));
 
             let notifications =
-                previous
+                previous.clone()
                     .select("qubes-notification-proxy")
-                    .override_attrs(NixValue::function(|_| {
+                    .override_attrs(NixValue::function(|old| {
                         nix_record! {
                             // Upstream's lndir join transplants leaf symlinks. The stdenv
                             // deduplication hook would turn this RPC's absolute package
                             // link into ../../bin, which escapes the joined directory.
                             "dontRewriteSymlinks": true,
+                            // Upstream links libqubes-pure but omits its runtime search path.
+                            "postFixup": NixValue::concat_text([
+                                old.attr_or("postFixup", ""),
+                                "\n".into(),
+                                nix_text!(r#"
+                                    {patchelf}/bin/patchelf --add-rpath {utils}/lib "$out/bin/qubes-notification-proxy-server"
+                                    {patchelf}/bin/patchelf --add-rpath {utils}/lib "$out/bin/qubes-notification-proxy-client"
+                                "#,
+                                    patchelf = previous.clone().select("patchelf"),
+                                    utils = previous.clone().select("qubes-linux-utils"),
+                                ).into(),
+                            ]),
                         }
                     }));
 
