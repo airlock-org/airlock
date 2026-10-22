@@ -10,6 +10,10 @@ mod cli;
 
 mod response;
 
+mod host_receipt;
+
+pub(crate) use host_receipt::HostReceipt;
+
 pub(crate) use response::{AdmissionReceipt, ResolvedRoot};
 
 mod domain;
@@ -323,13 +327,17 @@ impl<'a> Store<'a> {
     }
 
     /// Publish and validate the host software view without selecting its boot entry.
-    pub(crate) fn publish_host(&self, system: &StorePath) -> Result<Value> {
-        self.host(&["publish", system.as_str()])
+    pub(crate) fn publish_host(&self, system: &StorePath) -> Result<HostReceipt> {
+        Ok(serde_json::from_value(
+            self.host(&["publish", system.as_str()])?,
+        )?)
     }
 
     /// Verify the already published host view and return its recorded identity.
-    pub(crate) fn validate_host(&self, system: &StorePath) -> Result<Value> {
-        self.host(&["validate", system.as_str()])
+    pub(crate) fn validate_host(&self, system: &StorePath) -> Result<HostReceipt> {
+        Ok(serde_json::from_value(
+            self.host(&["validate", system.as_str()])?,
+        )?)
     }
 
     /// Install boot artifacts in the existing isolated host installation path.

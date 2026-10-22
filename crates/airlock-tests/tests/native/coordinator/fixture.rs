@@ -168,7 +168,12 @@ impl Machine {
         }
         let mut data = json!({
             "running": ["usr-home"], "selected": {"usr-home": 1}, "generations": {},
-            "host_pool": {"schema": "fixture.host-view", "host": HOST}
+            "host_pool": {"schema":"airlock.host-store.v1", "system":HOST, "generation":1,
+                "manifest":"/var/lib/airlock/closure-store/domains/dom0/generations/1/manifest.json",
+                "closure_hash":"d".repeat(64), "registration":"/var/lib/airlock/closure-store/host/registration",
+                "registration_sha256":"a".repeat(64), "metadata_image":"/var/lib/airlock/closure-store/host/metadata.erofs",
+                "metadata_image_sha256":"b".repeat(64), "blob_map":"/var/lib/airlock/closure-store/host/map.json",
+                "blob_map_sha256":"c".repeat(64)}
         });
         for version in [1, 2] {
             let backend = &declaration("usr-home", version)["backend"];

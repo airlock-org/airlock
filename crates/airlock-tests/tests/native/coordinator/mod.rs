@@ -189,6 +189,46 @@ fn namespace_failed_setup_has_durable_resume_and_rollback() -> Result<()> {
     Ok(())
 }
 
+/// A successful preflight cannot authorise boot work after the publication response changes.
+#[test]
+#[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]
+fn namespace_host_generation_handoff_rejects_changed_publication() -> Result<()> {
+    for field in ["system", "generation", "metadata_image_sha256", "schema"] {
+        let mut machine = Machine::new()?;
+        machine.approve(None)?;
+        let mut changed = machine.data["host_pool"].clone();
+        changed[field] = match field {
+            "system" => json!("/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-other-host"),
+            "generation" => json!(2),
+            "metadata_image_sha256" => json!("e".repeat(64)),
+            "schema" => json!("unexpected.receipt"),
+            _ => unreachable!(),
+        };
+        machine.data["host_response_after_preflight"] = changed;
+        machine.data["host_validations"] = json!(0);
+        machine.persist()?;
+
+        let rejected = machine.run(&["apply", &machine.candidate], None, false)?;
+        error(
+            &rejected,
+            if field == "schema" {
+                "unknown variant"
+            } else {
+                "host generation differs"
+            },
+        );
+
+        let calls = machine.calls()?;
+        assert!(
+            !calls.iter().any(|call| call[0] == "nix-env"
+                || call[0] == "qvm-shutdown"
+                || (call[0] == "storage-host" && call[1] == "install-boot")),
+            "accepted {field}"
+        );
+    }
+    Ok(())
+}
+
 /// Real coordinator crashes leave uncertain effects; recovery reobserves them under the original operation.
 #[test]
 #[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]

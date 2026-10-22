@@ -129,6 +129,143 @@ efi /EFI/nixos/xen.efi
     }
 }
 
+/// The fixture's flat ASCII host record uses the existing canonical JSON fingerprint protocol.
+fn binding(record: &Value) -> Result<String> {
+    let fields = record
+        .as_object()
+        .unwrap()
+        .iter()
+        .map(|(key, value)| {
+            Ok(format!(
+                "{key}: {value}",
+                key = serde_json::to_string(key)?,
+                value = serde_json::to_string(value)?
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?
+        .join(", ");
+    Ok(format!(
+        "{hash:x}",
+        hash = Sha256::digest(format!("{{{fields}}}").as_bytes())
+    ))
+}
+
+/// A checked deployment passes the exact immutable generation observed before boot preparation.
+fn expected(host: &Host) -> Result<Vec<String>> {
+    Ok(vec![
+        "--expected-system".into(),
+        host.store.system.clone(),
+        "--expected-generation".into(),
+        host.record["generation"].to_string(),
+        "--expected-record".into(),
+        binding(&host.record)?,
+    ])
+}
+
+/// A complete checked receipt selects the same sealed generation as the administrative path.
+#[test]
+fn checked_host_selection_preserves_the_observed_generation() -> Result<()> {
+    let host = Host::new()?;
+    host.run(&["seal-boot", "--keep-default"])?;
+    let mut select = host.command(&["select", &host.store.system]);
+    select.args(expected(&host)?);
+    assert_eq!(common::json(&mut select, None)?, host.record);
+    Ok(())
+}
+
+/// Stale identities fail before boot, machine-binding or installation effects, even after a valid observation.
+#[test]
+fn changed_host_record_cannot_reach_a_checked_boot_effect() -> Result<()> {
+    for operation in [
+        "select",
+        "seal-boot",
+        "bind-machine",
+        "install-boot-isolated",
+    ] {
+        let host = Host::new()?;
+        host.run(&["seal-boot", "--keep-default"])?;
+        let arguments = expected(&host)?;
+        let mut changed = host.record.clone();
+        changed["changed_after_observation"] = json!(true);
+        let name = PathBuf::from(&host.store.system)
+            .file_name()
+            .unwrap()
+            .to_owned();
+        fs::write(
+            host.store
+                .pool
+                .join("host/boots")
+                .join(name)
+                .with_extension("json"),
+            serde_json::to_vec(&changed)?,
+        )?;
+        // The new record remains internally valid. The checked request must reject its changed identity.
+        host.run(&["validate", &host.store.system])?;
+        let before = fs::read(host.esp.join("loader/loader.conf"))?;
+        let mut command = if operation == "seal-boot" {
+            host.command(&[operation, "--keep-default"])
+        } else {
+            host.command(&[operation, &host.store.system])
+        };
+        command.args(&arguments);
+        let output = common::run(&mut command, None)?;
+        assert!(
+            !output.status.success(),
+            "accepted changed record for {operation}"
+        );
+        let rejection: Value = serde_json::from_slice(&output.stdout)?;
+        assert!(
+            rejection["error"]
+                .as_str()
+                .unwrap()
+                .contains("host generation changed"),
+            "{operation}: {rejection}"
+        );
+        assert_eq!(fs::read(host.esp.join("loader/loader.conf"))?, before);
+        assert!(!host.store.pool.join("host/selected.json").exists());
+    }
+    Ok(())
+}
+
+/// Partial or substituted nominal identities cannot silently downgrade a checked request to administration.
+#[test]
+fn checked_host_cli_rejects_partial_and_substituted_identity() -> Result<()> {
+    let host = Host::new()?;
+    host.run(&["seal-boot", "--keep-default"])?;
+    let before = fs::read(host.esp.join("loader/loader.conf"))?;
+    for (index, value) in [
+        (1, "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-other"),
+        (3, "2"),
+        (3, "0"),
+        (5, "bad-hash"),
+    ] {
+        let mut arguments = expected(&host)?;
+        arguments[index] = value.into();
+        let mut command = host.command(&["select", &host.store.system]);
+        command.args(arguments);
+        assert!(!common::run(&mut command, None)?.status.success());
+    }
+    let isolated = common::run(
+        &mut host.command(&["install-boot-isolated", &host.store.system]),
+        None,
+    )?;
+    assert!(!isolated.status.success());
+    let rejection: Value = serde_json::from_slice(&isolated.stdout)?;
+    assert!(
+        rejection["error"]
+            .as_str()
+            .unwrap()
+            .contains("checked generation or explicit administration"),
+        "{rejection}"
+    );
+    let mut partial = host.command(&["select", &host.store.system]);
+    partial.args(["--expected-generation", "1"]);
+    assert!(!common::run(&mut partial, None)?.status.success());
+    assert_eq!(fs::read(host.esp.join("loader/loader.conf"))?, before);
+    assert!(!host.store.pool.join("host/selected.json").exists());
+    Ok(())
+}
+
 /// Encode one bounded PE configuration section; scenarios corrupt its declared length or contents explicitly.
 pub(super) fn pe(config: &str) -> Vec<u8> {
     let mut bytes = vec![0; 512 + config.len()];

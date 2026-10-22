@@ -2,7 +2,7 @@
 //! Store/Nix/Qubes boot adapters remain responsible for faithful execution and persistence.
 
 use super::*;
-use airlock_deployment_core::host::{Action, Definition, HostRequest};
+use airlock_deployment_core::host::{Action, CheckedGeneration, Definition, HostRequest};
 
 /// Retain the existing recovery/controller policy without consulting environment at effect dispatch.
 pub(super) fn definition(release: &Release, recovery: bool) -> Result<Definition> {
@@ -31,8 +31,16 @@ pub(super) fn definition(release: &Release, recovery: bool) -> Result<Definition
     } else {
         String::new()
     };
+    let expected = release
+        .manifest
+        .extra
+        .get("hostPool")
+        .map(|record| -> Result<_> {
+            serde_json::from_value::<crate::store::HostReceipt>(record.clone())?.observation()
+        })
+        .transpose()?;
     Ok(Definition {
-        prepared: release.manifest.extra.contains_key("hostPool"),
+        expected,
         host: release.manifest.host.as_str().into(),
         transport: release
             .manifest
@@ -54,9 +62,30 @@ pub(super) fn definition(release: &Release, recovery: bool) -> Result<Definition
 }
 
 impl Coordinator {
+    /// Retain the typed publication/validation result under its exact authorised request.
+    pub(super) fn host_generation(&self, request: HostRequest<'_>) -> Result<CheckedGeneration> {
+        ensure!(
+            matches!(request.action(), Action::Publish | Action::Validate),
+            "host observation requires publication or validation"
+        );
+
+        let output = self.runner.host_deployment(&request, "")?;
+        let receipt: crate::store::HostReceipt =
+            airlock_nix_core::state::parse_json(output.as_bytes(), Path::new("<host-response>"))?;
+
+        request
+            .checked(receipt.observation()?)
+            .context("host generation differs from the authorised candidate or prepared record")
+    }
+
     /// The privileged boundary has no independently supplied host, operation or program argument.
     pub(super) fn host_effect(&self, request: HostRequest<'_>) -> Result<()> {
         let action = request.action();
+        ensure!(
+            !matches!(action, Action::Publish | Action::Validate),
+            "host publication must retain its checked result"
+        );
+
         if matches!(action, Action::InstallController) {
             let executable = Path::new(request.target());
             if executable.starts_with("/nix/store") {
@@ -84,16 +113,10 @@ impl Coordinator {
         if !root.as_os_str().is_empty() {
             state::directory(&roots)?;
         }
-        let output = self.runner.host_deployment(
-            request,
+        self.runner.host_deployment(
+            &request,
             root.to_str().context("invalid retention root path")?,
         )?;
-        if matches!(action, Action::Publish | Action::Validate) {
-            let _: Value = airlock_nix_core::state::parse_json(
-                output.as_bytes(),
-                Path::new("<host-response>"),
-            )?;
-        }
         Ok(())
     }
 }

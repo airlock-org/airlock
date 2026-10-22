@@ -1,7 +1,9 @@
 //! Native host-store entry points used during deployment, recovery and early boot.
 //! Boot installation runs in a private mount namespace; approval never implies an immediate reboot.
 
-use super::{boot_artifacts, fs::*, host, host_boot, host_install, host_machine};
+use super::{HostReceipt, boot_artifacts, fs::*, host, host_boot, host_install, host_machine};
+use crate::model::{GenerationId, StorePath};
+use airlock_nix_core::identity::LockHash;
 use anyhow::{Context, Result, ensure};
 use clap::{Args, Subcommand};
 use serde_json::{Value, json};
@@ -22,9 +24,69 @@ pub(crate) struct Request {
     // Avoid firmware-variable access when editing an offline image.
     #[arg(long, global = true)]
     offline: bool,
+    /// Optional checked identity, mandatory together on deployment-issued requests.
+    #[command(flatten)]
+    expected: Expected,
     // Host store operation; no command implicitly reboots the machine.
     #[command(subcommand)]
     operation: Operation,
+}
+
+/// Explicit administrative calls may omit identity; deployment requests carry all three values.
+#[derive(Args)]
+struct Expected {
+    // Candidate system carried by the verified request, including commands without a positional target.
+    #[arg(long, global = true, requires_all = ["expected_generation", "expected_record"])]
+    expected_system: Option<StorePath>,
+    // Positive host generation checked by the coordinator.
+    #[arg(long, global = true, requires_all = ["expected_system", "expected_record"])]
+    expected_generation: Option<GenerationId>,
+    // Complete host-record digest, not merely its software path.
+    #[arg(long, global = true, requires_all = ["expected_system", "expected_generation"])]
+    expected_record: Option<LockHash>,
+}
+
+impl Expected {
+    /// Revalidate under the pool lock before the first requested mutation.
+    fn check(&self, pool: &Path, system: Option<&str>) -> Result<()> {
+        if let Some(expected) = &self.expected_system {
+            ensure!(
+                system.is_none_or(|system| system == expected.as_str()),
+                "expected host target differs"
+            );
+            let record: HostReceipt =
+                serde_json::from_value(host::validate(pool, pool, expected.as_str(), false)?)?;
+            let expected = self
+                .observation()?
+                .context("missing expected host identity")?;
+            ensure!(
+                airlock_deployment_core::host::same_observation(&expected, &record.observation()?),
+                "host generation changed after validation"
+            );
+        }
+        Ok(())
+    }
+
+    /// Decode the complete checked handoff or retain explicit administrative absence.
+    fn observation(&self) -> Result<Option<airlock_deployment_core::host::Observation>> {
+        self.expected_system
+            .as_ref()
+            .map(|system| {
+                Ok(airlock_deployment_core::host::Observation {
+                    system: system.as_str().into(),
+                    generation: self
+                        .expected_generation
+                        .context("missing expected generation")?
+                        .to_string(),
+                    record: self
+                        .expected_record
+                        .as_ref()
+                        .context("missing expected record")?
+                        .to_string(),
+                })
+            })
+            .transpose()
+    }
 }
 
 #[derive(Subcommand)]
@@ -72,6 +134,9 @@ enum Operation {
     InstallBootIsolated {
         // Host system to install after entering a private mount namespace.
         system: String,
+        // Only the explicit administrative parent may omit checked generation evidence.
+        #[arg(long, conflicts_with = "expected_system")]
+        administrative: bool,
     },
     Assemble {
         // Real root mounted by initramfs before stage two starts.
@@ -117,6 +182,19 @@ pub(super) fn run(command: Request) -> Result<Value> {
     let storage = Path::new(host::HOST);
     let machine = Path::new(host::MACHINE);
     let esp = command.efi_directory.as_path();
+    if command.expected.expected_system.is_some() {
+        ensure!(
+            matches!(
+                command.operation,
+                Operation::Select { .. }
+                    | Operation::BindMachine { .. }
+                    | Operation::InstallBoot { .. }
+                    | Operation::InstallBootIsolated { .. }
+                    | Operation::SealBoot { .. }
+            ),
+            "host operation does not consume an expected generation"
+        );
+    }
     match command.operation {
         Operation::BootLabels { esp, menu } => {
             label_entries(&esp)?;
@@ -162,10 +240,26 @@ pub(super) fn run(command: Request) -> Result<Value> {
         }
         Operation::InstallBoot { system } => {
             entry(&system)?;
-            command_process(&system)?;
+            command_process(&system, &command.expected, pool, esp, command.offline)?;
             Ok(json!({"installed":system}))
         }
-        Operation::InstallBootIsolated { system } => {
+        Operation::InstallBootIsolated {
+            system,
+            administrative,
+        } => {
+            ensure!(
+                command.expected.expected_system.is_some() || administrative,
+                "isolated boot installation requires a checked generation or explicit administration"
+            );
+            // The child owns the pool lock throughout validation and boot installation.
+            // The parent must not hold it while waiting for this isolated process.
+            let _lock = if command.expected.expected_system.is_some() {
+                ensure_pool(pool)?;
+                Some(PoolLock::acquire(&pool.join("admission.lock"))?)
+            } else {
+                None
+            };
+            command.expected.check(pool, Some(&system))?;
             host_install::install(
                 &system,
                 Path::new("/nix/var/nix/profiles"),
@@ -179,7 +273,9 @@ pub(super) fn run(command: Request) -> Result<Value> {
                 pool == Path::new(host::POOL),
                 "live publication requires the installed pool"
             );
-            host::publish_live(&system)
+            Ok(serde_json::to_value(
+                serde_json::from_value::<HostReceipt>(host::publish_live(&system)?)?,
+            )?)
         }
         Operation::Status => Ok(json!({
             "schema": "airlock.host-store.status.v1",
@@ -192,8 +288,15 @@ pub(super) fn run(command: Request) -> Result<Value> {
             ensure_pool(pool)?;
             let _lock = PoolLock::acquire(&pool.join("admission.lock"))?;
             match operation {
-                Operation::Validate { system } => host::validate(pool, pool, &system, false),
-                Operation::Select { system } => host::select(pool, esp, &system, firmware),
+                Operation::Validate { system } => Ok(serde_json::to_value(
+                    serde_json::from_value::<HostReceipt>(host::validate(
+                        pool, pool, &system, false,
+                    )?)?,
+                )?),
+                Operation::Select { system } => {
+                    command.expected.check(pool, Some(&system))?;
+                    host::select(pool, esp, &system, firmware)
+                }
                 Operation::Retire { system } => host::retire(pool, esp, &system),
                 Operation::Recover { system } => {
                     ensure!(
@@ -207,10 +310,12 @@ pub(super) fn run(command: Request) -> Result<Value> {
                     host::select(pool, esp, &text(&running, "system")?, firmware)
                 }
                 Operation::SealBoot { keep_default } => {
+                    command.expected.check(pool, None)?;
                     boot_artifacts::seal(pool, esp, keep_default, firmware)?;
                     Ok(json!({"sealed":true}))
                 }
                 Operation::BindMachine { system } => {
+                    command.expected.check(pool, Some(&system))?;
                     let record = host::validate(pool, pool, &system, false)?;
                     host_machine::save(pool, storage, machine, &record)?;
                     Ok(json!({"bound":system}))
@@ -235,21 +340,27 @@ pub(super) fn run(command: Request) -> Result<Value> {
     }
 }
 
-fn command_process(system: &str) -> Result<()> {
+fn command_process(
+    system: &str,
+    expected: &Expected,
+    pool: &Path,
+    esp: &Path,
+    offline: bool,
+) -> Result<()> {
+    let service = std::env::current_exe()?;
+    let observation = expected.observation()?;
+    let arguments = airlock_deployment_core::host::isolated_arguments(
+        system,
+        service.to_str().context("invalid service path")?,
+        pool.to_str().context("invalid pool path")?,
+        esp.to_str().context("invalid EFI path")?,
+        offline,
+        observation.as_ref(),
+    )
+    .context("isolated host target differs from checked generation")?;
     command(
         "unshare",
-        &[
-            "--mount",
-            "--propagation",
-            "private",
-            std::env::current_exe()?
-                .to_str()
-                .context("invalid service path")?,
-            "storage",
-            "host",
-            "install-boot-isolated",
-            system,
-        ],
+        &arguments.iter().map(String::as_str).collect::<Vec<_>>(),
         None,
     )?;
     Ok(())

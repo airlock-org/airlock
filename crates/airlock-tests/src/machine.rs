@@ -235,7 +235,14 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
         },
         "storage-host" => {
             if ["validate", "publish"].contains(&arguments[0].as_str()) {
-                println!("{}", data["host_pool"]);
+                let count = data["host_validations"].as_u64().unwrap_or(0) + 1;
+                data["host_validations"] = json!(count);
+                let response = if count > 1 && !data["host_response_after_preflight"].is_null() {
+                    &data["host_response_after_preflight"]
+                } else {
+                    &data["host_pool"]
+                };
+                println!("{response}");
             }
         }
         "storage-artifact" => {
@@ -261,7 +268,10 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
                 symlink(last()?, link)?;
                 println!("{target}", target = last()?);
             } else if arguments.iter().any(|value| value == "--print-live") {
-                println!("{host}", host = data["host_pool"]["host"].as_str().unwrap());
+                println!(
+                    "{host}",
+                    host = data["host_pool"]["system"].as_str().unwrap()
+                );
             }
         }
         "qvm-shutdown" => {
@@ -476,7 +486,15 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
     // The concurrent validation driver must not overwrite data its child updated.
     if program != "machine-lock-race" {
         fs::write(path, serde_json::to_vec(&data)?)?;
-        let matches = |key: &str| data[key] == program || data[key] == call;
+        // A fixed command/target prefix still identifies the interruption boundary
+        // when production carries additional checked identity arguments.
+        let matches = |key: &str| {
+            data[key] == program
+                || data[key] == call
+                || data[key]
+                    .as_array()
+                    .is_some_and(|prefix| row_prefix(&call, prefix))
+        };
         if matches("crash_after") {
             // The inert peer runs only in the disposable namespace. Kill the actual coordinator,
             // after the external outcome was saved but before its phase can be acknowledged.
@@ -487,4 +505,12 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
         ensure!(!matches("fail_after"), "simulated uncertain helper outcome");
     }
     Ok(())
+}
+
+/// Match an explicit fault-injection command prefix, including the exact named target when supplied.
+fn row_prefix(call: &Value, prefix: &[Value]) -> bool {
+    !prefix.is_empty()
+        && call
+            .as_array()
+            .is_some_and(|arguments| arguments.starts_with(prefix))
 }

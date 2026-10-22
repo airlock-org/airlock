@@ -88,9 +88,10 @@ impl Coordinator {
         }
 
         if let Some(expected) = r.manifest.extra.get("hostPool") {
-            let actual: Value = self.store().validate_host(&r.manifest.host)?;
+            let expected: crate::store::HostReceipt = serde_json::from_value(expected.clone())?;
+            let actual = self.store().validate_host(&r.manifest.host)?;
             ensure!(
-                expected == &actual,
+                expected.binding()? == actual.binding()?,
                 "prepared host view differs from release"
             );
         }
@@ -423,7 +424,7 @@ impl Coordinator {
         use airlock_deployment_core::host::Action as HostAction;
         self.host_effect(durable.host(record, HostAction::PinHost)?)?;
         self.host_effect(durable.host(record, HostAction::PinTransport)?)?;
-        self.host_effect(durable.host(
+        let host_generation = self.host_generation(durable.host(
             record,
             if r.manifest.extra.contains_key("hostPool") {
                 HostAction::Validate
@@ -447,7 +448,15 @@ impl Coordinator {
             HostAction::SealBoot,
             HostAction::Checkpoint,
         ] {
-            self.host_effect(durable.host(record, action)?)?;
+            let request = if matches!(
+                action,
+                HostAction::Profile | HostAction::InstallBoot | HostAction::SealBoot
+            ) {
+                durable.host_checked(record, action, &host_generation)?
+            } else {
+                durable.host(record, action)?
+            };
+            self.host_effect(request)?;
         }
 
         let mut retirement = Vec::new();
@@ -532,7 +541,14 @@ impl Coordinator {
         } else {
             CompletedSetup::legacy(&result_path)?
         };
-        self.finish_activation(activation, record, lock, durable, &completed)
+        self.finish_activation(
+            activation,
+            record,
+            lock,
+            durable,
+            &completed,
+            &host_generation,
+        )
     }
 
     /// All post-configuration progress consumes a checked setup result for this attempt and topology.
@@ -543,6 +559,7 @@ impl Coordinator {
         lock: &mut MachineLock,
         durable: &super::approval::DurableAuthorization,
         completed: &crate::setup_config::report::CompletedSetup,
+        host_generation: &airlock_deployment_core::host::CheckedGeneration,
     ) -> Result<()> {
         let Activation {
             release: r,
@@ -597,8 +614,8 @@ impl Coordinator {
 
         self.publish_phase(record, Phase::HostBootSelection, lock)?;
         r.recheck()?;
-        self.host_effect(durable.host(record, HostAction::Bind)?)?;
-        self.host_effect(durable.host(record, HostAction::Select)?)?;
+        self.host_effect(durable.host_checked(record, HostAction::Bind, host_generation)?)?;
+        self.host_effect(durable.host_checked(record, HostAction::Select, host_generation)?)?;
 
         let host = state::host()?;
         let phase = if host == r.manifest.host {

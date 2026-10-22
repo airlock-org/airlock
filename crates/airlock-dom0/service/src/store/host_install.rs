@@ -52,6 +52,28 @@ fn copy_profiles(
     Ok(())
 }
 
+/// Capture the selected profile and pin its private copy to the requested immutable system.
+/// A concurrent profile change must not cause the approved installer to generate another host's boot entry.
+fn prepare_profiles(
+    source: &Path,
+    target: &Path,
+    sealed: &BTreeSet<PathBuf>,
+    system: &Path,
+) -> Result<()> {
+    copy_profiles(source, target, sealed, system)?;
+    let selected = target.join("system");
+    ensure!(
+        fs::canonicalize(&selected)? == system,
+        "boot installation profile differs from requested host"
+    );
+
+    // Eliminate references through mutable global profile links before the namespace mount.
+    fs::remove_file(&selected)?;
+    symlink(system, selected)?;
+
+    Ok(())
+}
+
 pub(super) fn publish_loader(staged: &Path, loader: &Path) -> Result<()> {
     let old = fs::read_to_string(loader.join("loader.conf"))?;
     let choices: Vec<_> = old
@@ -135,12 +157,7 @@ pub(super) fn install(system: &str, profiles: &Path, loader: &Path, pool: &Path)
         boot_artifacts::verify(pool, loader.parent().context("loader has no ESP")?, &record)?;
         sealed.insert(PathBuf::from(text(&record, "system")?));
     }
-    copy_profiles(
-        profiles,
-        &copied,
-        &sealed,
-        &fs::canonicalize(profiles.join("system"))?,
-    )?;
+    prepare_profiles(profiles, &copied, &sealed, Path::new(system))?;
     ensure!(
         copied.join("system").try_exists()?,
         "selected host profile unavailable"
@@ -184,4 +201,39 @@ pub(super) fn install(system: &str, profiles: &Path, loader: &Path, pool: &Path)
     result?;
     unmount?;
     publish_loader(&staged, loader)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Private boot installation cannot follow a changed global system profile after its check.
+    #[test]
+    fn private_profile_retains_the_requested_system_and_rejects_substitution() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let system = directory.path().join("system-a");
+        let other = directory.path().join("system-b");
+        let profiles = directory.path().join("profiles");
+        fs::create_dir(&system)?;
+        fs::create_dir(&other)?;
+        fs::create_dir(&profiles)?;
+        symlink(&system, profiles.join("system-1-link"))?;
+        symlink("system-1-link", profiles.join("system"))?;
+        let copied = directory.path().join("copied");
+        prepare_profiles(&profiles, &copied, &BTreeSet::new(), &system)?;
+        assert_eq!(fs::read_link(copied.join("system"))?, system);
+        fs::remove_file(profiles.join("system-1-link"))?;
+        symlink(&other, profiles.join("system-1-link"))?;
+        assert_eq!(fs::canonicalize(copied.join("system"))?, system);
+        assert!(
+            prepare_profiles(
+                &profiles,
+                &directory.path().join("rejected"),
+                &BTreeSet::new(),
+                &system
+            )
+            .is_err()
+        );
+        Ok(())
+    }
 }

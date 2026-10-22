@@ -17,12 +17,35 @@
 //! are selected by verified Rust, not reconstructed from current environment or raw journal
 //! fields at dispatch. The recovery path retains the existing running-controller policy.
 //!
-//! The Nix/storage process adapter executes those parameters; the controller filesystem
-//! adapter consumes the immutable selected target. Retention directories, atomic symlink
-//! publication, store effects and bootloader/firmware behavior remain trusted. Protect/seal/
-//! checkpoint commands intentionally observe existing host state inside the storage adapter;
-//! the proof covers their requests, not the truth or atomicity of those observations.
-//! Recovery reissues only requests admitted under its newly checked, original authority.
+//! Publication/validation returns a typed host record. `HostRequest::checked` verifies its
+//! immutable system, positive canonical generation and complete record digest against the
+//! retained prepared record, when present. The opaque `CheckedGeneration` also retains the
+//! attempt, operation, original approval and complete plan. Profile, installation, sealing,
+//! machine binding and selection requests require that result and the current executing gate;
+//! ordinary `request` cannot construct those actions. Prepared recovery revalidates the exact
+//! original record; an old attempt's token cannot be reused by a new attempt. Publication-only
+//! releases without a prepared record capture the validated generation anew for each attempt.
+//!
+//! Verified argv carries the checked system, generation and record digest to storage actions.
+//! The storage adapter revalidates that identity under its pool lock before mutation. Isolated
+//! installation uses verified argument construction to retain identity and pool/ESP paths across the mount child; a
+//! missing child expectation requires an explicit administrative mode. Profile changes target
+//! the immutable host system rather than a pool generation. Installation rejects a different
+//! copied system profile and pins its private profile directly to the requested host, avoiding
+//! mutable global profile indirection. Protect/checkpoint intentionally
+//! inspect the running baseline, while sealing may also preserve other retained boot entries.
+//!
+//! Wire decoding, canonical positive generation/string projection, complete-record SHA-256,
+//! cooperative pool/machine locks and faithful file/process execution remain trusted. Hashes
+//! exclude diagnostic timing and retain unknown record extensions. This proves authorised
+//! requests and checked identity comparisons, not physical storage/firmware behavior, global
+//! atomicity, durable receipt publication or exactly-once effects. Host machine bindings still
+//! read the protected live selection and guest generation records in ordinary Rust. Independent
+//! recovery and maintenance boot repair retain their explicit administrative policies.
+
+mod receipt;
+
+pub use receipt::{CheckedGeneration, Observation, equal as same_observation, isolated_arguments};
 
 use crate::operation::{DurableOperation, ExecutionContext, PlanBinding};
 use vstd::prelude::*;
@@ -31,8 +54,8 @@ verus! {
 
 /// Exact artifacts and native storage adapter captured from the admitted execution context.
 pub struct Definition {
-    /// Whether the transport has already admitted the host view.
-    pub prepared: bool,
+    /// Prepared host record retained from the immutable release; absent before publication.
+    pub expected: Option<Observation>,
     /// Approved candidate's complete host system.
     pub host: String,
     /// Retained transport closure, which may differ from the host system.
@@ -78,7 +101,7 @@ pub enum Action {
 
 /// An admitted host is validated; a transport-supplied view is published exactly once per request.
 pub open spec fn allowed(d: Definition, action: Action) -> bool {
-    match action { Action::Publish => !d.prepared, Action::Validate => d.prepared,
+    match action { Action::Publish => d.expected.is_none(), Action::Validate => d.expected.is_some(),
         Action::PinHost | Action::PinTransport | Action::PinController | Action::InstallController
         | Action::ProtectBoot | Action::Profile | Action::InstallBoot | Action::SealBoot
         | Action::Checkpoint | Action::Bind | Action::Select => true }
@@ -107,13 +130,16 @@ impl HostPlan {
     /// No action is executable with a replaced candidate/baseline/plan or a nonexecuting gate.
     pub fn request<'a>(&'a self, durable: &'a DurableOperation, context: &ExecutionContext, action: Action)
         -> (out: Option<HostRequest<'a>>)
-        ensures out.is_some() == (self@.1 == context.plan@ && crate::operation::executing(durable, context) && allowed(self@.0, action)),
-            out.is_some() ==> out.unwrap()@ == (self@.0, action, context.attempt@),
+        ensures out.is_some() == (self@.1 == context.plan@ && crate::operation::executing(durable, context) && allowed(self@.0, action) && !receipt::required(action)),
+            out.is_some() ==> out.unwrap()@ == (self@.0, action, context.attempt@, context.operation@, context.authority@, context.plan@, None),
     {
-        if self.binding.as_str() != context.plan.as_str() || !durable.allows_effect(context) { return None; }
-        if matches!(action, Action::Publish) && self.definition.prepared { return None; }
-        if matches!(action, Action::Validate) && !self.definition.prepared { return None; }
-        Some(HostRequest { definition: &self.definition, action, attempt: context.attempt.as_str().to_string(), _durable: durable })
+        if self.binding.as_str() != context.plan.as_str() || !durable.allows_effect(context)
+            || receipt::needs_receipt(action) { return None; }
+        if matches!(action, Action::Publish) && self.definition.expected.is_some() { return None; }
+        if matches!(action, Action::Validate) && self.definition.expected.is_none() { return None; }
+        Some(HostRequest { definition: &self.definition, action, attempt: context.attempt.as_str().to_string(),
+            operation: context.operation.as_str().to_string(), authority: context.authority.as_str().to_string(),
+            plan: context.plan.as_str().to_string(), checked: None, _durable: durable })
     }
 }
 
@@ -125,14 +151,23 @@ pub struct HostRequest<'a> {
     action: Action,
     // Verified attempt used to choose transaction-local retention roots.
     attempt: String,
+    // Stable operation retained by this request's original execution context.
+    operation: String,
+    // Original source approval and candidate identity.
+    authority: String,
+    // Full candidate/baseline/plan binding.
+    plan: String,
+    // Required for candidate profile, boot preparation, binding and selection.
+    checked: Option<&'a CheckedGeneration>,
     // Keep the authorised durable context borrowed throughout execution.
     _durable: &'a DurableOperation,
 }
 
 impl<'a> View for HostRequest<'a> {
-    type V = (Definition, Action, Seq<char>);
+    type V = (Definition, Action, Seq<char>, Seq<char>, Seq<char>, Seq<char>, Option<Observation>);
 
-    closed spec fn view(&self) -> Self::V { (*self.definition, self.action, self.attempt@) }
+    closed spec fn view(&self) -> Self::V { (*self.definition, self.action, self.attempt@, self.operation@, self.authority@, self.plan@,
+        match self.checked { Some(receipt) => Some(receipt@.0), None => None }) }
 }
 
 /// Exact artifact for each operation; host selection cannot become transport/controller selection.
@@ -186,7 +221,7 @@ impl<'a> HostRequest<'a> {
     }
 
     /// Construct the exact privileged command; root is an adapter-owned local retention path.
-    pub fn arguments(&self, root: &str) -> (args: Vec<String>)
+    fn base_arguments(&self, root: &str) -> (args: Vec<String>)
         ensures
             (self@.1 is PinHost || self@.1 is PinTransport || self@.1 is PinController) ==>
                 args.len() == 4 && args[0]@ == "--add-root"@ && args[1]@ == root@
@@ -219,6 +254,52 @@ impl<'a> HostRequest<'a> {
             Action::Checkpoint => vec!["storage".to_string(), "host".to_string(), "checkpoint-machine".to_string()],
         }
     }
+
+    /// Carry the exact checked generation through the storage process boundary.
+    /// Profile selection uses only the already checked immutable system target.
+    pub fn arguments(&self, root: &str) -> (args: Vec<String>)
+        ensures
+            (self@.1 is PinHost || self@.1 is PinTransport || self@.1 is PinController) ==>
+                args.len() == 4 && args[0]@ == "--add-root"@ && args[1]@ == root@
+                    && args[2]@ == "--realise"@ && args[3]@ == target(self@.0, self@.1),
+            self@.1 is Profile ==> args.len() == 4 && args[0]@ == "-p"@
+                && args[1]@ == "/nix/var/nix/profiles/system"@ && args[2]@ == "--set"@ && args[3]@ == self@.0.host@,
+            self@.1 is InstallController ==> args.len() == 0,
+            (self@.1 is Publish || self@.1 is Validate || self@.1 is InstallBoot || self@.1 is Bind || self@.1 is Select) ==>
+                args.len() == (if receipt::required(self@.1) && self@.6.is_some() { 10usize } else { 4usize }) && args[0]@ == "storage"@ && args[1]@ == "host"@ && args[3]@ == self@.0.host@,
+            self@.1 is Publish ==> args[2]@ == "publish"@,
+            self@.1 is Validate ==> args[2]@ == "validate"@,
+            self@.1 is InstallBoot ==> args[2]@ == "install-boot"@,
+            self@.1 is Bind ==> args[2]@ == "bind-machine"@,
+            self@.1 is Select ==> args[2]@ == "select"@,
+            self@.1 is ProtectBoot ==> args.len() == 3 && args[0]@ == "storage"@ && args[1]@ == "host"@ && args[2]@ == "protect-boot"@,
+            self@.1 is SealBoot ==> args.len() == (if receipt::required(self@.1) && self@.6.is_some() { 10usize } else { 4usize }) && args[0]@ == "storage"@ && args[1]@ == "host"@ && args[2]@ == "seal-boot"@ && args[3]@ == "--keep-default"@,
+            self@.1 is Checkpoint ==> args.len() == 3 && args[0]@ == "storage"@ && args[1]@ == "host"@ && args[2]@ == "checkpoint-machine"@,
+            (receipt::required(self@.1) && !(self@.1 is Profile) && self@.6.is_some()) ==>
+                args.len() == 10 && args[4]@ == "--expected-system"@ && args[5]@ == self@.6.unwrap().system@
+                && args[6]@ == "--expected-generation"@ && args[7]@ == self@.6.unwrap().generation@
+                && args[8]@ == "--expected-record"@ && args[9]@ == self@.6.unwrap().record@,
+            (self@.1 is InstallBoot || self@.1 is Bind || self@.1 is Select) ==>
+                args[0]@ == "storage"@ && args[1]@ == "host"@ && args[3]@ == self@.0.host@,
+            self@.1 is InstallBoot ==> args[2]@ == "install-boot"@,
+            self@.1 is Bind ==> args[2]@ == "bind-machine"@,
+            self@.1 is Select ==> args[2]@ == "select"@,
+            self@.1 is Profile ==> args.len() == 4 && args[0]@ == "-p"@
+                && args[1]@ == "/nix/var/nix/profiles/system"@ && args[2]@ == "--set"@ && args[3]@ == self@.0.host@,
+    {
+        let mut args = self.base_arguments(root);
+        let selected = if receipt::needs_receipt(self.action) && !matches!(self.action, Action::Profile) {
+            self.checked
+        } else { None };
+        if let Some(receipt) = selected {
+            let observation = receipt.observation();
+            args.push("--expected-system".to_string()); args.push(observation.system.clone());
+            args.push("--expected-generation".to_string()); args.push(observation.generation.clone());
+            args.push("--expected-record".to_string()); args.push(observation.record.clone());
+        }
+        args
+    }
+
 }
 
 }

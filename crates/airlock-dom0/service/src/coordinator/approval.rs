@@ -257,6 +257,18 @@ impl DurableAuthorization {
             .context("host execution authority differs or is not executing")
     }
 
+    /// Candidate boot effects require the checked result from this exact durable context.
+    pub(super) fn host_checked<'a>(
+        &'a self,
+        record: &Record,
+        action: airlock_deployment_core::host::Action,
+        receipt: &'a airlock_deployment_core::host::CheckedGeneration,
+    ) -> Result<airlock_deployment_core::host::HostRequest<'a>> {
+        self.host
+            .request_checked(&self.operation, &effect_context(record)?, action, receipt)
+            .context("checked host generation or execution authority differs")
+    }
+
     /// Select an exact approved private-copy pair; uncertainty never returns a clone request.
     pub(super) fn copy<'a>(
         &'a self,

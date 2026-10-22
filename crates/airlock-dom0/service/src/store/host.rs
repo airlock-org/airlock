@@ -40,6 +40,7 @@ pub(super) fn validate(
         .join(format!("{}.json", entry(system)?));
     pool_path(root, &path)?;
     let value: Value = read(&path)?;
+    let _: super::HostReceipt = serde_json::from_value(value.clone())?;
     ensure!(
         value["schema"] == "airlock.host-store.v1"
             && value["system"] == system

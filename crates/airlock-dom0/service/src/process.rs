@@ -307,7 +307,7 @@ impl Runner {
     /// Dispatch only verified host/Nix arguments and the adapter captured before publication.
     pub(crate) fn host_deployment(
         &self,
-        request: airlock_deployment_core::host::HostRequest<'_>,
+        request: &airlock_deployment_core::host::HostRequest<'_>,
         root: &str,
     ) -> Result<String> {
         use airlock_deployment_core::host::Action;

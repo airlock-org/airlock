@@ -164,13 +164,14 @@ impl Coordinator {
         }
         r.recheck()?;
 
-        let mut host: Value = self.store().publish_host(&r.manifest.host)?;
-        let timings = host
-            .as_object_mut()
-            .context("invalid host publication")?
-            .remove("timings")
-            .unwrap_or(json!({}));
-        manifest["hostPool"] = host;
+        let mut host = self.store().publish_host(&r.manifest.host)?;
+        host.observation()?;
+        ensure!(
+            host.system == r.manifest.host,
+            "published host differs from candidate"
+        );
+        let timings = host.timings.take().unwrap_or(json!({}));
+        manifest["hostPool"] = serde_json::to_value(host)?;
         manifest["sourceRelease"] = json!(r.path);
         let path = self.publish_candidate(
             &manifest,
