@@ -336,7 +336,7 @@ pub(super) fn ensure(args: &Ensure) -> Result<InstalledStorageReceipt> {
         false
     };
 
-    let result = if unchanged {
+    let mut result = if unchanged {
         vm.frontends(
             &[],
             &[
@@ -369,7 +369,28 @@ pub(super) fn ensure(args: &Ensure) -> Result<InstalledStorageReceipt> {
     };
 
     if ["usr-assistant", "sys-ctrl"].contains(&target.domain.as_str()) {
-        ensure_builder(target)?;
+        let builder = ensure_builder(target)?;
+        result.qubesd_restarted |= builder.restarted;
+        result.qubesd_restart_required =
+            (result.qubesd_restart_required || builder.changed) && !result.qubesd_restarted;
+        for (key, changed) in [
+            ("metadata_changed", builder.changed),
+            ("qubesd_was_active", builder.was_active),
+        ] {
+            let previous = result
+                .diagnostics
+                .get(key)
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            result
+                .diagnostics
+                .insert(key.into(), json!(previous || changed));
+        }
+        result.volume_created |= !builder.created.is_empty();
+        result
+            .volumes_created
+            .get_or_insert_default()
+            .extend(builder.created);
     }
     Ok(result)
 }
@@ -659,7 +680,7 @@ fn check_builder(
     Ok(true)
 }
 
-fn ensure_builder(target: &Target) -> Result<()> {
+fn ensure_builder(target: &Target) -> Result<Attachment> {
     let (configs, descriptor) = builder_configs(target)?;
     let vm = snapshot(&target.domain)?;
     if configs.is_empty() {
@@ -669,20 +690,29 @@ fn ensure_builder(target: &Target) -> Result<()> {
                 .any(|volume| volume.name.starts_with("builder-")),
             "attached builder volumes have no authenticated descriptor"
         );
-        return Ok(());
+        return Ok(Attachment::default());
     }
     let attached = check_builder(target, &vm, &configs, &descriptor)?;
     let frontends = [("builder-store", "xvdg"), ("builder-data", "xvdh")];
     vm.frontends(&configs, &frontends)?;
     let unchanged = vm.matches(&configs);
     if attached && vm.running {
-        return Ok(());
+        return Ok(Attachment::default());
     }
     if unchanged {
         let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
-        if !builder::predecessors_pending(&target.pool_root, target.domain.as_str(), &descriptor)? {
-            return Ok(());
+        // The image already attached this exact successor. Releasing old pool pins
+        // changes no Qubes configuration and must not interrupt unrelated RPCs.
+        let current = snapshot(&target.domain)?;
+        ensure!(
+            current.matches(&configs),
+            "builder volumes changed before completing handoff"
+        );
+        current.frontends(&[], &frontends)?;
+        if !current.running {
+            builder::release_predecessors(&target.pool_root, target.domain.as_str(), &descriptor)?;
         }
+        return Ok(Attachment::default());
     }
     ensure!(
         !vm.running,
@@ -690,7 +720,14 @@ fn ensure_builder(target: &Target) -> Result<()> {
         target.domain
     );
 
-    with_qubesd_stopped(&integration_root(), || {
+    let created = configs
+        .iter()
+        .filter_map(|config| {
+            let name = config["name"].as_str()?;
+            vm.volume(name).is_none().then(|| name.to_owned())
+        })
+        .collect();
+    let ((), restarted, was_active) = with_qubesd_stopped(&integration_root(), || {
         let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
         let current = builder::volume_configs(
             &target.pool_root,
@@ -724,21 +761,19 @@ fn ensure_builder(target: &Target) -> Result<()> {
             !before.running,
             "builder started before completing its handoff"
         );
-        let persisted = if unchanged {
-            ensure!(
-                before.matches(&configs),
-                "builder volumes changed before completing handoff"
-            );
-            before
-        } else {
-            install(target, &before, &configs)?
-        };
+        let persisted = install(target, &before, &configs)?;
         persisted.frontends(&[], &frontends)?;
 
         builder::release_predecessors(&target.pool_root, target.domain.as_str(), &descriptor)?;
         Ok(())
     })?;
-    Ok(())
+    Ok(Attachment {
+        changed: true,
+        created,
+        restarted,
+        was_active,
+        ..Default::default()
+    })
 }
 
 /// One host-wide namespace serializes qubesd updates across every closure pool.

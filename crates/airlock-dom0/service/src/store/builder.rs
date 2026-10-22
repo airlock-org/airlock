@@ -407,11 +407,6 @@ pub(super) fn configs_for_generation(
     Ok(result)
 }
 
-/// Report whether a completed attachment still needs to release old retention pins.
-pub(super) fn predecessors_pending(root: &Path, role: &str, descriptor: &Value) -> Result<bool> {
-    Ok(!predecessors_to_release(root, role, descriptor)?.is_empty())
-}
-
 fn predecessors_to_release(
     root: &Path,
     role: &str,

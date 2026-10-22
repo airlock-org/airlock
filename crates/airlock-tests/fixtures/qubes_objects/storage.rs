@@ -201,7 +201,16 @@ fn vm(
                 let configs =
                     keyword(py, Some(data.cast::<PyDict>()?), "volume_config", json!({}))?;
                 object.setattr("volume_config", &configs)?;
-                for (name, config) in configs.cast::<PyDict>()?.iter() {
+                let configs = configs.cast::<PyDict>()?;
+                // Qubes preserves XML insertion order; a JSON object's sorted keys cannot model it.
+                let order: Vec<String> = match data.cast::<PyDict>()?.get_item("volume_order")? {
+                    Some(order) => order.extract()?,
+                    None => configs.keys().extract()?,
+                };
+                for name in order {
+                    let config = configs
+                        .get_item(&name)?
+                        .expect("persisted volume definition");
                     storage
                         .call_method1("init_volume", (name, config.cast::<PyDict>()?.copy()?))?;
                 }
@@ -296,12 +305,15 @@ fn save(object: &Bound<'_, PyAny>) -> PyResult<()> {
     let mut domains = serde_json::Map::new();
     for (name, vm) in object.getattr("domains")?.cast::<PyDict>()?.iter() {
         let mut volumes = serde_json::Map::new();
+        let mut order = Vec::new();
         for (name, volume) in vm.getattr("volumes")?.cast::<PyDict>()?.iter() {
-            volumes.insert(name.extract()?, field(&volume, "config")?);
+            let name: String = name.extract()?;
+            order.push(name.clone());
+            volumes.insert(name, field(&volume, "config")?);
         }
         domains.insert(
             name.extract()?,
-            json!({"features":field(&vm, "features")?, "volume_config":volumes}),
+            json!({"features":field(&vm, "features")?, "volume_config":volumes,"volume_order":order}),
         );
     }
 

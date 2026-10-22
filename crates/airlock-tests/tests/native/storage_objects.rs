@@ -47,6 +47,66 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
         systems.push(system);
         closures.push(closure);
     }
+    // Prepare real immutable builder generations, retaining the predecessor as an image does.
+    let mut builder_specs = Vec::new();
+    let mut builder_paths = std::collections::BTreeSet::new();
+    for (index, closure) in closures.iter().enumerate() {
+        builder_paths.extend(
+            fs::read_to_string(closure.join("store-paths"))?
+                .lines()
+                .map(str::to_owned),
+        );
+        let source = peers.path(format!("builder-{index}"));
+        fs::create_dir(&source)?;
+        fs::write(source.join("manifest.json"), "{}")?;
+        fs::write(
+            source.join("store-paths"),
+            builder_paths
+                .iter()
+                .map(|path| format!("{path}\n"))
+                .collect::<String>(),
+        )?;
+        fs::write(
+            source.join("registration"),
+            builder_paths
+                .iter()
+                .map(|path| format!("{path}\n{hash}\n42\n\n0\n", hash = "0".repeat(64)))
+                .collect::<String>(),
+        )?;
+        builder_specs.push(json!({"name":format!("builder-{index}"), "domain":"usr-assistant-build-store", "system":systems[index], "closure_source":source, "physical_store_root":store.physical, "root_source":"", "kernel_name":"", "builder":true}));
+    }
+    let specs = peers.path("builder-specs.json");
+    fs::write(&specs, serde_json::to_vec(&builder_specs)?)?;
+    common::run(
+        store
+            .command(&["image", "prepare-pool"])
+            .arg(&store.pool)
+            .arg(peers.path("builder-descriptors"))
+            .arg(&specs)
+            .arg(&store.pool),
+        None,
+    )?
+    .checked()?;
+    let descriptor = store.pool.join("builders/usr-assistant.json");
+    let manifest = |generation| {
+        store.pool.join(format!(
+            "domains/usr-assistant-build-store/generations/{generation}/manifest.json"
+        ))
+    };
+    let read =
+        |path: &std::path::Path| -> Result<Value> { Ok(serde_json::from_slice(&fs::read(path)?)?) };
+    let predecessor = read(&manifest(1))?;
+    let mut identity = read(&descriptor)?;
+    identity["predecessors"] = json!([{
+        "generation":1, "closure_hash":predecessor["builder"]["closure_hash"],
+        "registration_sha256":predecessor["builder"]["registration_sha256"]
+    }]);
+    let mut successor_manifest = read(&manifest(2))?;
+    successor_manifest["builder"] = identity.clone();
+    fs::write(manifest(2), serde_json::to_vec(&successor_manifest)?)?;
+    fs::write(&descriptor, serde_json::to_vec(&identity)?)?;
+    let withheld = peers.path("builder-withheld.json");
+    fs::rename(&descriptor, &withheld)?;
     peers.rules(
         "systemctl",
         json!([
@@ -81,7 +141,7 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
             .env("PYTHONDONTWRITEBYTECODE", "1")
             .env("AIRLOCK_NIX_ROOT", &nix_root)
             .env("AIRLOCK_CLOSURE_STORE_VERIFY", "tree")
-            .env("AIRLOCK_FAKE_QUBES_DOMAIN", "usr-home")
+            .env("AIRLOCK_FAKE_QUBES_DOMAIN", "usr-assistant")
             .env("AIRLOCK_FAKE_QUBES_RUNNING", "0")
             .env("AIRLOCK_FAKE_QUBES_SAVE_JSON", peers.path("saved.json"))
             .env("AIRLOCK_FAKE_QUBES_STATE_JSON", peers.path("qubes.json"))
@@ -89,7 +149,7 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
         Ok(command)
     };
     let ensure = |index: usize| -> Result<Value> {
-        let mut command = command(&["ensure-store", "usr-home"])?;
+        let mut command = command(&["ensure-store", "usr-assistant"])?;
         command
             .arg(&closures[index])
             .arg(if index == 0 {
@@ -120,7 +180,7 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
     };
     let first = ensure(0)?;
     assert_eq!(first["schema"], "airlock.nix-domain-storage.v1");
-    assert_eq!(first["domain"], "usr-home");
+    assert_eq!(first["domain"], "usr-assistant");
     for field in [
         "pool_created",
         "volume_created",
@@ -132,8 +192,8 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
     }
     assert_eq!(first["generation"], 1);
     assert_eq!(first["objects_total"], 3);
-    assert_eq!(first["objects_admitted"], 3);
-    assert_eq!(first["objects_reused"], 0);
+    assert_eq!(first["objects_admitted"], 0);
+    assert_eq!(first["objects_reused"], 3);
     assert_eq!(
         PathBuf::from(first["metadata_image"].as_str().unwrap())
             .metadata()?
@@ -156,7 +216,7 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
         ("store", "metadata-image"),
         ("store-data", "erofs-blob-map"),
     ] {
-        let volume = &state["domains"]["usr-home"]["volume_config"][name];
+        let volume = &state["domains"]["usr-assistant"]["volume_config"][name];
         assert_eq!(volume["pool"], "airlock-closure");
         assert_eq!(volume["rw"], false);
         assert_eq!(volume["snap_on_start"], false);
@@ -167,7 +227,7 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
     }
     let features = |receipt: &Value, source: &str| -> Result<()> {
         let mut state = saved()?;
-        state["domains"]["usr-home"]["features"] = json!({"airlock-store-source": source, "airlock-store-mode": "shared-closure",
+        state["domains"]["usr-assistant"]["features"] = json!({"airlock-store-source": source, "airlock-store-mode": "shared-closure",
             "airlock-store-view-backend": receipt["view_backend"], "airlock-store-generation": receipt["generation"].to_string(),
             "airlock-store-closure-hash": receipt["closure_hash"], "airlock-store-view-image": receipt["view_image"], "airlock-store-blob-map": receipt["blob_map"]});
         fs::write(peers.path("qubes.json"), serde_json::to_vec(&state)?)?;
@@ -183,10 +243,48 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
     ] {
         assert_eq!(again[field], false, "{field}");
     }
+
+    // A builder-only attachment must report its actual daemon restart in the runtime receipt.
+    fs::rename(&withheld, &descriptor)?;
+    let pin = store
+        .pool
+        .join("running/usr-assistant-build-store/1/builder-persistent.json");
+    let pinned = fs::read(&pin)?;
+    let attached = ensure(0)?;
+    assert_eq!(attached["metadata_changed"], true);
+    assert_eq!(attached["qubesd_restarted"], true);
+    assert_eq!(attached["qubesd_restart_required"], false);
+    assert_eq!(
+        attached["volumes_created"],
+        json!(["builder-store", "builder-data"])
+    );
+
+    // Recreate the fresh-image boundary: successor already attached, predecessor still retained.
+    fs::write(manifest(1), serde_json::to_vec(&predecessor)?)?;
+    fs::create_dir_all(pin.parent().unwrap())?;
+    fs::write(&pin, &pinned)?;
+    let before = peers
+        .calls()?
+        .iter()
+        .filter(|call| call["command"] == "systemctl")
+        .count();
+    let cleaned = ensure(0)?;
+    assert_eq!(cleaned["qubesd_restarted"], false);
+    assert_eq!(cleaned["metadata_changed"], false);
+    assert_eq!(
+        peers
+            .calls()?
+            .iter()
+            .filter(|call| call["command"] == "systemctl")
+            .count(),
+        before
+    );
+    assert_eq!(read(&manifest(1))?["retention"]["retain"], false);
+    assert!(!pin.exists());
     let successor = ensure(1)?;
     assert_eq!(successor["generation"], 2);
-    assert_eq!(successor["objects_admitted"], 2);
-    assert_eq!(successor["objects_reused"], 1);
+    assert_eq!(successor["objects_admitted"], 0);
+    assert_eq!(successor["objects_reused"], 3);
     // Use actual admitted maps to verify the evidence helper's canonical-sharing proof.
     let evidence = peers.path("sharing.json");
     common::run(
@@ -194,7 +292,12 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
             "AIRLOCK_TEST_REPORT_BIN",
             "airlock-test-report",
         ))
-        .args(["sharing", "generation-reuse", "usr-home-1", "usr-home-2"])
+        .args([
+            "sharing",
+            "generation-reuse",
+            "usr-assistant-1",
+            "usr-assistant-2",
+        ])
         .arg(first["blob_map"].as_str().unwrap())
         .arg(successor["blob_map"].as_str().unwrap())
         .arg(&evidence),
@@ -208,7 +311,7 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
     assert_eq!(proof["same_canonical_segment_offset_and_hash"], true);
 
     let switch = || -> Result<Command> {
-        let mut command = command(&["switch-store", "usr-home", "1", "--pool-root"])?;
+        let mut command = command(&["switch-store", "usr-assistant", "1", "--pool-root"])?;
         command.arg(&store.pool);
         Ok(command)
     };
@@ -229,7 +332,7 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
     assert_eq!(repaired["metadata_changed"], true);
     assert_eq!(repaired["qubesd_restarted"], true);
     let state = saved()?;
-    let volumes = &state["domains"]["usr-home"]["volume_config"];
+    let volumes = &state["domains"]["usr-assistant"]["volume_config"];
     assert_eq!(volumes["store"]["generation"], "2");
     assert_eq!(volumes["store"]["view_path"], successor["view_image"]);
     assert_eq!(
@@ -243,6 +346,6 @@ fn storage_bridge_persists_volume_identity_across_generation_switches() -> Resul
         .filter_map(|call| call["args"][0].as_str().map(str::to_owned))
         .filter(|action| ["start", "stop"].contains(&action.as_str()))
         .collect::<Vec<_>>();
-    assert_eq!(actions, ["stop", "start"].repeat(4));
+    assert_eq!(actions, ["stop", "start"].repeat(5));
     Ok(())
 }
