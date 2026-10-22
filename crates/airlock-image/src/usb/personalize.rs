@@ -1,4 +1,4 @@
-//! Personalization installs a clean source checkout and local credentials offline.
+//! Personalization installs a committed source snapshot and local credentials offline.
 
 use super::device;
 use crate::support::{captured, output, read, reported, root_only, run};
@@ -16,7 +16,7 @@ use std::{
 
 #[derive(Args)]
 pub(crate) struct Settings {
-    // Committed source repository copied without local hooks or Git configuration.
+    /// Source repository: copy HEAD, ignoring staged, unstaged and untracked changes.
     #[arg(long)]
     repo: PathBuf,
     // Exactly one public SSH key; private keys are rejected.
@@ -31,16 +31,92 @@ pub(crate) struct Settings {
 }
 
 pub(crate) struct Prepared {
-    // Private Git copy keeps the selected source available even after USB erasure.
-    repository: tempfile::TempDir,
-    // Exact committed tree selected before any destructive operation.
-    commit: GitRevision,
+    // Committed source captured before any destructive operation.
+    source: CommittedSource,
     // Validated public key bytes; the input file is never reopened during install.
     key: Vec<u8>,
     // Optional validated firmware bytes, independent of their original filesystem.
     firmware: Option<Vec<u8>>,
     // Only the password hash is retained for installation.
     password_hash: Vec<u8>,
+}
+
+struct CommittedSource {
+    // Private Git copy keeps the selected source available even after USB erasure.
+    repository: tempfile::TempDir,
+    // Exact committed tree selected before any destructive operation.
+    commit: GitRevision,
+}
+
+impl CommittedSource {
+    fn capture(repo: &Path, temporary_parent: &Path) -> Result<Self> {
+        let repo = fs::canonicalize(repo)?;
+        let commit = output(
+            Command::new("git")
+                .arg("-c")
+                .arg(format!("safe.directory={repo}", repo = repo.display()))
+                .arg("-C")
+                .arg(&repo)
+                .args(["rev-parse", "--verify", "HEAD^{commit}"]),
+        )
+        .context("Provisioning requires a committed source HEAD")?;
+        let commit: GitRevision = commit.parse()?;
+
+        // Clone Git objects rather than copying the index or working directory.
+        // Capture HEAD once so another agent can keep editing and committing.
+        let repository = tempfile::Builder::new()
+            .prefix("airlock-usb-source-")
+            .tempdir_in(temporary_parent)?;
+        let bare = repository.path().join("repo.git");
+        reported(
+            Command::new("git")
+                .arg("-c")
+                .arg(format!("safe.directory={repo}", repo = repo.display()))
+                .args(["clone", "--bare", "--no-local", "--"])
+                .arg(&repo)
+                .arg(&bare),
+            None,
+            &[0],
+        )?;
+
+        // Keep the captured commit reachable even if the source branch advanced
+        // while cloning. Failure still occurs before any USB writes.
+        output(
+            Command::new("git")
+                .arg("-C")
+                .arg(&bare)
+                .args(["update-ref", "refs/heads/usb-dev"])
+                .arg(commit.as_str()),
+        )?;
+
+        Ok(Self { repository, commit })
+    }
+
+    fn checkout(&self, destination: &Path) -> Result<()> {
+        reported(
+            Command::new("git")
+                .args(["clone", "--no-local", "--no-checkout", "--"])
+                .arg(self.repository.path().join("repo.git"))
+                .arg(destination),
+            None,
+            &[0],
+        )?;
+
+        reported(
+            Command::new("git")
+                .arg("-C")
+                .arg(destination)
+                .args(["checkout", "-B", "usb-dev"])
+                .arg(self.commit.as_str()),
+            None,
+            &[0],
+        )?;
+
+        run(Command::new("git")
+            .arg("-C")
+            .arg(destination)
+            .args(["remote", "remove", "origin"]))
+    }
 }
 
 impl Settings {
@@ -71,46 +147,11 @@ impl Settings {
             String::from_utf8_lossy(&validated.stderr)
         );
 
-        let repo = fs::canonicalize(&self.repo)?;
-        let mut git = Command::new("git");
-        git.arg("-c")
-            .arg(format!("safe.directory={}", repo.display()))
-            .arg("-C")
-            .arg(&repo);
-        ensure!(
-            output(git.arg("status").arg("--porcelain"))?.is_empty(),
-            "Commit the repo before copying it."
+        let source = CommittedSource::capture(&self.repo, Path::new("/run"))?;
+        println!(
+            "Provisioning source commit: {commit} (staged, unstaged and untracked changes excluded).",
+            commit = source.commit
         );
-        let commit = output(
-            Command::new("git")
-                .arg("-c")
-                .arg(format!("safe.directory={}", repo.display()))
-                .arg("-C")
-                .arg(&repo)
-                .args(["rev-parse", "HEAD"]),
-        )?;
-        let commit: GitRevision = commit.parse()?;
-
-        let repository = tempfile::Builder::new()
-            .prefix("airlock-usb-source-")
-            .tempdir_in("/run")?;
-        reported(
-            Command::new("git")
-                .arg("-c")
-                .arg(format!("safe.directory={}", repo.display()))
-                .args(["clone", "--bare", "--no-local", "--"])
-                .arg(&repo)
-                .arg(repository.path().join("repo.git")),
-            None,
-            &[0],
-        )?;
-        output(
-            Command::new("git")
-                .arg("-C")
-                .arg(repository.path().join("repo.git"))
-                .args(["cat-file", "-e"])
-                .arg(format!("{commit}^{{commit}}")),
-        )?;
 
         let mut password = password(self.insecure_dev_password)?.into_bytes();
         ensure!(
@@ -135,8 +176,7 @@ impl Settings {
         );
 
         Ok(Prepared {
-            repository,
-            commit,
+            source,
             key,
             firmware,
             password_hash: format!("{hash}\n").into_bytes(),
@@ -278,28 +318,7 @@ impl Prepared {
             .mode(0o700)
             .create(key_target.parent().context("key parent")?)?;
 
-        reported(
-            Command::new("git")
-                .args(["clone", "--no-local", "--"])
-                .arg(self.repository.path().join("repo.git"))
-                .arg(&repo_target),
-            None,
-            &[0],
-        )?;
-
-        reported(
-            Command::new("git")
-                .arg("-C")
-                .arg(&repo_target)
-                .args(["checkout", "-B", "usb-dev"])
-                .arg(self.commit.as_str()),
-            None,
-            &[0],
-        )?;
-        run(Command::new("git")
-            .arg("-C")
-            .arg(&repo_target)
-            .args(["remote", "remove", "origin"]))?;
+        self.source.checkout(&repo_target)?;
 
         private_file(&key_target, &self.key, 1000, 100, false)?;
         private_file(&password_file, &self.password_hash, 0, 0, false)?;
@@ -317,9 +336,89 @@ impl Prepared {
             fs::Permissions::from_mode(0o700),
         )?;
         println!(
-            "Personalized USB; writable repo at /home/user/dev/airlock ({}).",
-            self.commit
+            "Personalized USB; writable repo at /home/user/dev/airlock ({commit}).",
+            commit = self.source.commit
         );
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Run Git against a temporary source or checkout with a fixture-only commit identity.
+    fn git(repository: &Path, arguments: &[&str]) -> Result<String> {
+        output(
+            Command::new("git")
+                .args([
+                    "-c",
+                    "user.name=Airlock test",
+                    "-c",
+                    "user.email=test@example.invalid",
+                ])
+                .arg("-C")
+                .arg(repository)
+                .args(arguments),
+        )
+    }
+
+    /// Provisioning ignores all local edits, preserves the source and installs its captured commit independently.
+    #[test]
+    #[ignore = "requires explicitly prepared git"]
+    fn external_tool_personalization_copies_only_the_captured_commit() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let repository = temporary.path().join("source");
+        fs::create_dir(&repository)?;
+        git(&repository, &["init", "-q"])?;
+        for name in ["staged", "unstaged", "deleted"] {
+            fs::write(repository.join(name), "committed\n")?;
+        }
+        git(&repository, &["add", "."])?;
+        git(&repository, &["commit", "-qm", "Committed source"])?;
+        let commit = git(&repository, &["rev-parse", "HEAD"])?;
+
+        fs::write(repository.join("staged"), "index edit\n")?;
+        fs::write(repository.join("staged-new"), "new index file\n")?;
+        git(&repository, &["add", "staged", "staged-new"])?;
+        fs::write(repository.join("staged"), "working edit after staging\n")?;
+        fs::write(repository.join("unstaged"), "working edit\n")?;
+        fs::remove_file(repository.join("deleted"))?;
+        fs::write(repository.join("untracked"), "untracked file\n")?;
+        let status = git(&repository, &["status", "--porcelain"])?;
+        let staged = git(&repository, &["diff", "--cached"])?;
+        let unstaged = git(&repository, &["diff"])?;
+
+        let source = CommittedSource::capture(&repository, temporary.path())?;
+        assert_eq!(source.commit.as_str(), commit);
+        assert_eq!(git(&repository, &["status", "--porcelain"])?, status);
+        assert_eq!(git(&repository, &["diff", "--cached"])?, staged);
+        assert_eq!(git(&repository, &["diff"])?, unstaged);
+        assert_eq!(
+            fs::read_to_string(repository.join("untracked"))?,
+            "untracked file\n"
+        );
+
+        // A later commit and a moved source cannot affect the already saved copy.
+        git(&repository, &["add", "-A"])?;
+        git(&repository, &["commit", "-qm", "Later agent work"])?;
+        assert_ne!(git(&repository, &["rev-parse", "HEAD"])?, commit);
+        fs::rename(&repository, temporary.path().join("moved-source"))?;
+
+        let destination = temporary.path().join("checkout");
+        source.checkout(&destination)?;
+        assert_eq!(git(&destination, &["rev-parse", "HEAD"])?, commit);
+        assert_eq!(git(&destination, &["branch", "--show-current"])?, "usb-dev");
+        assert!(git(&destination, &["status", "--porcelain"])?.is_empty());
+        assert!(git(&destination, &["remote"])?.is_empty());
+
+        for name in ["staged", "unstaged", "deleted"] {
+            assert_eq!(fs::read_to_string(destination.join(name))?, "committed\n");
+        }
+        for name in ["staged-new", "untracked"] {
+            assert!(!destination.join(name).exists());
+        }
 
         Ok(())
     }

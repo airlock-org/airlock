@@ -48,7 +48,7 @@ enum Action {
         // Build result and selected disk; this operation always writes.
         #[command(flatten)]
         source: LatestSource,
-        // Clean source and authorized SSH key to install offline.
+        // Committed source snapshot and authorized SSH key to install offline.
         #[command(flatten)]
         settings: personalize::Settings,
         // Off-USB location for partition-table backups and receipts.
@@ -60,7 +60,7 @@ enum Action {
         // Offline ext4 root of the previously written Airlock image.
         #[arg(long)]
         root: PathBuf,
-        // Clean source and authorized SSH key to install offline.
+        // Committed source snapshot and authorized SSH key to install offline.
         #[command(flatten)]
         settings: personalize::Settings,
     },

@@ -360,7 +360,7 @@ fn external_tool_password_prompt_validates_empty_and_confirmation() -> Result<()
     Ok(())
 }
 
-/// Invalid keys, dirty repositories and invalid firmware fail before a password prompt or source copy can begin.
+/// Invalid keys, missing commits and invalid firmware fail before a password prompt or source copy can begin.
 #[test]
 #[ignore = "requires explicitly prepared ssh-keygen and git"]
 fn external_tool_personalization_validates_inputs_before_credentials_or_disk_access() -> Result<()>
@@ -379,7 +379,7 @@ fn external_tool_personalization_validates_inputs_before_credentials_or_disk_acc
         "invalid-key",
         "multiple-keys",
         "private-key",
-        "dirty-source",
+        "missing-commit",
         "firmware",
     ] {
         let temporary = tempfile::tempdir()?;
@@ -430,8 +430,8 @@ fn external_tool_personalization_validates_inputs_before_credentials_or_disk_acc
         );
         assert!(!error.to_lowercase().contains("password"));
         assert!(!error.contains("airlock-usb-source"));
-        if damage == "dirty-source" {
-            assert!(error.contains("Commit the repo"));
+        if damage == "missing-commit" {
+            assert!(error.contains("requires a committed source HEAD"));
         } else {
             assert!(error.to_lowercase().contains("key") || error.contains("VFCT"));
         }
