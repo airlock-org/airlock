@@ -70,7 +70,7 @@ impl Capture {
             common::binary("AIRLOCK_VM_BIN", "airlock-vm-service")
         });
         if sender {
-            command.arg("capture");
+            command.arg("screen-capture");
         }
         command
             .args(arguments)

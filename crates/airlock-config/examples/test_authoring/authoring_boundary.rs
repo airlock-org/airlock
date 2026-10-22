@@ -112,7 +112,7 @@ pub(super) fn commands(settings: &Value) -> Result<NixValue, String> {
     };
     let source = NixPath::from_expression("/unneeded-source".into());
     let service = authoring::deployment(&pkgs, &Sources::new(source.clone(), source));
-    let command = DesktopCommand::Capture {
+    let command = DesktopCommand::ScreenCapture {
         config: Some(argument.into()),
         action: CaptureAction::CheckConfig,
     };

@@ -15,7 +15,7 @@ pub const WINDOW_IDENTITY: &str = "window-identity";
 #[derive(Debug, PartialEq, Subcommand)]
 pub enum DesktopCommand {
     /// Deliver GNOME captures and route their notification actions to a personal VM.
-    Capture {
+    ScreenCapture {
         /// Generation-provided sender contract; omission uses the CLI default.
         #[arg(long, global = true)]
         config: Option<PathBuf>,
@@ -105,8 +105,8 @@ impl DesktopCommand {
 
                 args
             }
-            Self::Capture { config, action } => {
-                let mut args = vec!["capture".into()];
+            Self::ScreenCapture { config, action } => {
+                let mut args = vec!["screen-capture".into()];
                 args.extend(action.arguments());
                 if let Some(config) = config {
                     args.push("--config".into());

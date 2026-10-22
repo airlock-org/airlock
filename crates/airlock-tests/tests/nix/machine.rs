@@ -361,7 +361,7 @@ fn capture_connections_control_contracts_policy_and_authorization() -> Result<()
                 "AIRLOCK_SYS_GUI_BIN",
                 "airlock-sys-gui-service"
             ))
-            .args(["capture", "check-config", "--config"])
+            .args(["screen-capture", "check-config", "--config"])
             .arg(&config),
             None
         )?,

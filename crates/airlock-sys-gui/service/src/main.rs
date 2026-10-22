@@ -84,7 +84,7 @@ fn run(args: Args) -> Result<ExitCode> {
         Action::Launch(request) => return launch::execute(request).map(ExitCode::from),
         Action::Gpu(request) => gpu::execute(request),
         Action::Menus { action } => menus::execute(action),
-        Action::Desktop(DesktopCommand::Capture { config, action }) => {
+        Action::Desktop(DesktopCommand::ScreenCapture { config, action }) => {
             captures::execute(action, config.as_deref())
         }
         Action::Workspace { action } => workspace::execute(action),
@@ -166,7 +166,7 @@ mod tests {
         .chain(
             capture_actions
                 .into_iter()
-                .map(|action| DesktopCommand::Capture {
+                .map(|action| DesktopCommand::ScreenCapture {
                     config: Some("/tmp/a 'quoted' $config; %name.json".into()),
                     action,
                 }),

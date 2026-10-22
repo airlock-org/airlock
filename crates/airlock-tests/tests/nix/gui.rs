@@ -84,7 +84,7 @@ Exec={exec}
         common::until(|| Ok(receipt.exists()))?;
         assert_eq!(
             serde_json::from_slice::<Value>(&fs::read(receipt)?)?,
-            json!(["capture", "check-config", "--config", argument])
+            json!(["screen-capture", "check-config", "--config", argument])
         );
     }
     Ok(())

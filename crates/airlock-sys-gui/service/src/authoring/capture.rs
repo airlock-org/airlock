@@ -57,7 +57,7 @@ impl Deployment {
                 OnlyShowIn=GNOME;
                 NoDisplay=true
             "#,
-            command = self.desktop_command(&DesktopCommand::Capture {
+            command = self.desktop_command(&DesktopCommand::ScreenCapture {
                 config: Some(CONFIG_PATH.into()),
                 action: CaptureAction::Retry { target: None },
             }),
