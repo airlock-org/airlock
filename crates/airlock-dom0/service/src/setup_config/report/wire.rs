@@ -216,6 +216,12 @@ pub(crate) struct SetupReport {
     /// Run for which helper aggregation has already completed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rust_reconciled: Option<TransactionId>,
+    /// Helper-owned task identity, absent for root preparation/finalization reports.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<super::tasks::Task>,
+    /// Complete task outcomes, checked independently against the caller's configuration.
+    #[serde(default)]
+    pub task_results: Vec<super::tasks::Outcome>,
     /// Human-readable outcome, independent of success classification.
     pub reason: String,
     /// Paths and informational extensions retained for external diagnostic consumers.

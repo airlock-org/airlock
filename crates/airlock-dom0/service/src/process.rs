@@ -19,6 +19,8 @@ const CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 /// Negotiated setup capabilities; old admitted helpers keep an explicit weaker report contract.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SetupProtocol {
+    /// Bound reports plus independently required, exact per-VM task coverage.
+    Covered,
     /// Typed reports bound to run, configuration and finalization.
     Bound,
     /// Earlier Rust helper supporting split phases without bound reports.
@@ -33,9 +35,14 @@ impl SetupProtocol {
         self != Self::Legacy
     }
 
+    /// Only v4 promises complete task accounting; v3 retains its original bound reports.
+    pub(crate) fn covered(self) -> bool {
+        self == Self::Covered
+    }
+
     /// Only the negotiated new protocol can produce typed completion evidence.
     pub(crate) fn bound(self) -> bool {
-        self == Self::Bound
+        matches!(self, Self::Bound | Self::Covered)
     }
 }
 
@@ -450,6 +457,7 @@ impl Runner {
         );
         if captured.status.success() {
             match captured.stdout.as_slice() {
+                b"airlock.setup.v4\n" => Ok(SetupProtocol::Covered),
                 b"airlock.setup.v3\n" => Ok(SetupProtocol::Bound),
                 b"airlock.setup.v2\n" => Ok(SetupProtocol::UnboundNative),
                 _ => anyhow::bail!("unsupported setup protocol response"),
@@ -827,7 +835,12 @@ mod tests {
             Runner::configuration_version(&output).unwrap(),
             SetupProtocol::Bound
         );
-        for unexpected in [b"".as_slice(), b"airlock.setup.v4\n".as_slice()] {
+        output.stdout = b"airlock.setup.v4\n".to_vec();
+        assert_eq!(
+            Runner::configuration_version(&output).unwrap(),
+            SetupProtocol::Covered
+        );
+        for unexpected in [b"".as_slice(), b"airlock.setup.v5\n".as_slice()] {
             output.stdout = unexpected.to_vec();
             assert!(Runner::configuration_version(&output).is_err());
         }

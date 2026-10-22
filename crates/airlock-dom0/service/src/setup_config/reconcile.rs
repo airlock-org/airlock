@@ -195,6 +195,21 @@ fn apply_inner(
             .map(PathBuf::from)
             .unwrap_or_else(|| "/var/log/airlock".into())
     };
+    let run: crate::model::TransactionId = deployment
+        .map(|(_, record)| record.id.clone())
+        .map_or_else(
+            || {
+                std::env::var("AIRLOCK_SETUP_RUN_ID")
+                    .unwrap_or_else(|_| std::process::id().to_string())
+                    .try_into()
+            },
+            Ok,
+        )?;
+    for definition in definitions {
+        if only.is_none_or(|name| definition.name == name) {
+            super::report::tasks::clear(&log, &definition.name)?;
+        }
+    }
     for (index, definition) in definitions.iter().enumerate() {
         if only.is_some_and(|name| definition.name != name) {
             continue;
@@ -257,6 +272,15 @@ fn apply_inner(
                 &log,
             )?
         };
+        if backend.is_none() && deployment.is_some() {
+            task_completed(
+                &log,
+                definition,
+                &run,
+                apply,
+                super::report::tasks::Kind::Backend,
+            )?;
+        }
         let deferred = backend.as_ref().is_some_and(|report| {
             report.restart_actions.iter().any(|action| {
                 matches!(
@@ -313,6 +337,13 @@ fn apply_inner(
                 "device/configuration index identity differs"
             );
             super::devices::apply_deployment(runner, authority, record, index, &log)?;
+            task_completed(
+                &log,
+                definition,
+                &run,
+                apply,
+                super::report::tasks::Kind::Devices,
+            )?;
         } else {
             helper(
                 runner,
@@ -345,8 +376,39 @@ fn apply_inner(
                 )?;
             }
         }
+        task_completed(
+            &log,
+            definition,
+            &run,
+            apply,
+            super::report::tasks::Kind::Configuration,
+        )?;
     }
     Ok(())
+}
+
+/// Record completion after all in-process work for this responsibility returned successfully.
+fn task_completed(
+    log: &Path,
+    definition: &Definition,
+    run: &crate::model::TransactionId,
+    apply: bool,
+    kind: super::report::tasks::Kind,
+) -> Result<()> {
+    let helper = definition
+        .helper
+        .as_ref()
+        .context("missing task topology")?;
+    super::report::tasks::completed(
+        log,
+        Path::new(&helper.topology),
+        run,
+        apply,
+        super::report::tasks::Task::Vm {
+            domain: definition.name.parse()?,
+            kind,
+        },
+    )
 }
 
 /// Backend-selected boot identities must change together with root/store state.

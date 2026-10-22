@@ -449,8 +449,10 @@ impl Coordinator {
                     a == "--prepare-only" || a == "--backend-only" || a == "--devices-only"
                 })
             {
-                let complete = if protocol.bound() {
+                let complete = if protocol.covered() {
                     expected.complete(&result_path)?
+                } else if protocol.bound() {
+                    expected.complete_bound(&result_path)?
                 } else {
                     CompletedSetup::legacy(&result_path)?
                 };
@@ -527,8 +529,10 @@ impl Coordinator {
                 Duration::from_secs(1800),
                 &env,
             )?;
-            let complete = if protocol.bound() {
+            let complete = if protocol.covered() {
                 expected.complete(&result_path)?
+            } else if protocol.bound() {
+                expected.complete_bound(&result_path)?
             } else {
                 crate::setup_config::report::CompletedSetup::legacy(&result_path)?
             };

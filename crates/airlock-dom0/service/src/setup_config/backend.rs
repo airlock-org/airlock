@@ -1028,6 +1028,10 @@ pub(crate) fn apply_boot(
         "backend-only",
         directory,
     )?;
+    session.result.task = Some(super::report::tasks::Task::Vm {
+        domain: definition.name.parse()?,
+        kind: super::report::tasks::Kind::Backend,
+    });
     let result = reconcile_with(&mut session, &definition.name, None, Some(selected));
     session.finish(&result)?;
     result?;
@@ -1053,7 +1057,8 @@ pub(crate) fn apply_deployment(
         .helper
         .as_ref()
         .context("missing admitted topology")?;
-    let directory = super::report::helper_directory(log, &definition.name, "--backend-only")?;
+    let directory =
+        super::report::helper_directory_for(log, &definition.name, "--backend-only", &record.id)?;
     let mut session = Session::at(
         Path::new(&helper.topology),
         true,
@@ -1067,6 +1072,10 @@ pub(crate) fn apply_deployment(
             .join("staged.json"),
     );
     session.result.run_id = record.id.clone();
+    session.result.task = Some(super::report::tasks::Task::Vm {
+        domain: definition.name.parse()?,
+        kind: super::report::tasks::Kind::Backend,
+    });
     let result = reconcile_with(&mut session, &definition.name, Some(&backend), None);
     session.finish(&result)?;
     result?;

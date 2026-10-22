@@ -65,7 +65,7 @@ fn dependency<'a>(topology: &'a Value, name: &str) -> Option<&'a str> {
 }
 
 /// Retain setup's provider-first NetVM ordering and boot-scope selection, independently of deployment planning.
-fn selected(topology: &Value, scope: &str) -> Result<Vec<String>> {
+pub(super) fn selected(topology: &Value, scope: &str) -> Result<Vec<String>> {
     let domains = topology["domains"]
         .as_object()
         .context("topology domains must be an object")?;
@@ -296,7 +296,7 @@ pub(super) fn execute(request: Request) -> Result<()> {
                 && request.devices_only.is_none(),
             "protocol query cannot execute setup"
         );
-        println!("airlock.setup.v3");
+        println!("airlock.setup.v4");
         return Ok(());
     }
     ensure!(
@@ -353,6 +353,22 @@ pub(super) fn execute(request: Request) -> Result<()> {
             return failure;
         }
     };
+    session.result.task = request
+        .backend_only
+        .as_ref()
+        .map(|domain| super::report::tasks::Task::Vm {
+            domain: domain.clone(),
+            kind: super::report::tasks::Kind::Backend,
+        })
+        .or_else(|| {
+            request
+                .devices_only
+                .as_ref()
+                .map(|domain| super::report::tasks::Task::Vm {
+                    domain: domain.clone(),
+                    kind: super::report::tasks::Kind::Devices,
+                })
+        });
     let mut status =
         super::status::Display::new(scope, session.directory.join("setup-config.commands.log"));
     let result = (|| {
@@ -424,6 +440,7 @@ pub(super) fn execute(request: Request) -> Result<()> {
                 "Checking reusable boot files and VM templates.",
             );
             prepare(&mut session, &domains)?;
+            super::report::tasks::prepared(&session.directory, &session.result)?;
         }
         if request.prepare_only {
             return Ok(());
@@ -519,6 +536,21 @@ mod tests {
             "sys-firewall":{"netvm":"sys-net"},
             "sys-net":{"netvm":null}
         }});
+        let critical = super::super::report::tasks::required(
+            &topology,
+            super::super::report::Scope::BootCritical,
+        )?;
+        let deferred = super::super::report::tasks::required(
+            &topology,
+            super::super::report::Scope::Deferred,
+        )?;
+        // Both phases need their own global preparation; each selected VM contributes three tasks.
+        assert_eq!(critical.len(), 10);
+        assert_eq!(deferred.len(), 4);
+        assert!(matches!(
+            critical[0],
+            super::super::report::tasks::Task::Preparation
+        ));
         assert_eq!(
             selected(&topology, "all")?,
             ["sys-net", "idle", "sys-firewall", "app"]

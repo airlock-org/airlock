@@ -1,5 +1,8 @@
-//! Setup completion preserves failures and pending work across same-configuration reports.
+//! Setup completion preserves blockers and requires evidence for independently required work.
 //! Decoding, topology fingerprints and truthful helper outcomes remain adapter obligations.
+
+/// Required setup tasks and exact outcome coverage.
+pub mod tasks;
 
 use vstd::prelude::*;
 

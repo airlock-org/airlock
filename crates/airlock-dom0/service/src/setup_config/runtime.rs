@@ -65,6 +65,12 @@ impl Session {
         let decoded = crate::state::configuration(topology)?;
 
         fs::create_dir_all(&directory)?;
+        if matches!(phase, "all" | "prepare-only") {
+            let scope = serde_json::from_value(json!(scope))?;
+            for task in super::report::tasks::required(&decoded, scope)? {
+                super::report::clear_result(&task.path(&directory))?;
+            }
+        }
         for name in ["live-actions", "restart-actions", "unsupported-domains"] {
             File::create(directory.join(format!("setup-config-{name}.jsonl")))?;
         }
@@ -107,6 +113,8 @@ impl Session {
             unsupported_domains: Vec::new(),
             restart_required: false,
             rust_reconciled: None,
+            task: None,
+            task_results: Vec::new(),
             reason: "setup interrupted".into(),
             diagnostics: serde_json::from_value(json!({"topology":topology,
                 "live_actions_log":directory.join("setup-config-live-actions.jsonl"), "restart_actions_log":directory.join("setup-config-restart-actions.jsonl"), "unsupported_domains_log":directory.join("setup-config-unsupported-domains.jsonl"),

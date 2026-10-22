@@ -525,8 +525,10 @@ impl Coordinator {
                 .configuration_batch(durable.configuration_batch(record, SetupPhase::Legacy)?)?;
         }
 
-        let completed = if protocol.bound() {
+        let completed = if protocol.covered() {
             expected.complete(&result_path)?
+        } else if protocol.bound() {
+            expected.complete_bound(&result_path)?
         } else {
             CompletedSetup::legacy(&result_path)?
         };

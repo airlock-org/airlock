@@ -267,11 +267,22 @@
 //! `setup::Evidence` verifies that merging reports preserves failures, applied mode, unsupported
 //! counts and pending work; its completion token binds the exact requested run/configuration/scope.
 //! Deployment post-configuration progress consumes that token through its completion adapter.
-//! Helper enumeration, phase/scope projection, JSON decoding, truthful results and fingerprint
-//! computation remain ordinary Rust. Event-driven pending work is accumulated through the same
-//! verified boundary. Receipt finalization and log publication are not crash-durability theorems.
-//! Negotiated setup v2 and shell-era helpers keep an explicit compatibility path: mandatory
-//! success, unsupported count and pending-work checks, without claiming native identity binding.
+//! Setup v4 independently derives required tasks from the effective topology and requested scope.
+//! Verified expansion requires global preparation and configuration, backend and device work for
+//! every selected VM, including explicit not-applicable outcomes. The coordinator checks exact,
+//! distinct task correspondence and matching run/topology identities, applied success and no
+//! blockers for every task; missing helper logs cannot remove required work. Preparation must
+//! match the root scope. Per-VM results retain blockers independently of diagnostic logs.
+//! JSON decoding, setup-scope selection, wire/task projections, truthful task publication and
+//! fingerprints remain ordinary Rust. Task evidence records successful adapter returns rather
+//! than proving external Qubes effects or ongoing machine health. Generation attachment retains
+//! its separate verified selection checks; task coverage does not re-prove generation identity.
+//! Missing or incomplete evidence prevents completion. Receipt persistence, directory ownership
+//! and truthful same-run snapshots remain filesystem/adapter assumptions; these proofs do not
+//! establish power-loss durability or exactly-once execution.
+//! Negotiated v3 helpers retain the earlier bound-report guarantee without task completeness.
+//! Setup v2 and shell-era helpers keep their mandatory success/unsupported/pending checks.
+//! Compatibility is selected by protocol negotiation, never by malformed new report contents.
 //!
 //! Boot quarantine, retention/reference discovery and other maintenance policies have separate
 //! authority and incomplete proof coverage. Below those policy boundaries, truthful observations,

@@ -54,7 +54,7 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
     writeln!(calls, "{call}")?;
     if program == "airlock-setup-config" && arguments == ["--protocol"] {
         if data["native_setup"] == true {
-            println!("airlock.setup.v3");
+            println!("airlock.setup.v4");
             return Ok(());
         }
         // Match the admitted legacy script's unsupported-option response without
@@ -369,6 +369,17 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
                     fs::write(output.join("rust-vm-actions.jsonl"), "")?;
                     fs::write(output.join("rust-setup-helpers.jsonl"), "")?;
                 }
+                let topology_hash = format!("{:x}", Sha256::digest(serde_json::to_vec(&topology)?));
+                if phase == "prepare-only" {
+                    fs::write(
+                        output.join("task-preparation.json"),
+                        serde_json::to_vec(&json!({
+                            "task":"preparation", "run_id":run, "topology_hash":topology_hash,
+                            "scope":"all", "mode":"apply", "status":"passed", "pending":false, "unsupported":0
+                        }))?,
+                    )?;
+                }
+                report["topology"] = json!(option(arguments, "--topology")?);
                 for (key, value) in json!({"mode":"apply", "scope":"all", "phase":phase,
                     "run_id":run, "topology_hash":format!("{:x}", Sha256::digest(serde_json::to_vec(&topology)?)),
                     "reason":"fixture completed", "live_actions":[], "restart_actions":[], "unsupported_domains":[]}).as_object().unwrap() {

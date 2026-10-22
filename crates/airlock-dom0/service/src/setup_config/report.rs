@@ -2,6 +2,8 @@
 
 mod wire;
 
+pub(crate) mod tasks;
+
 pub(crate) use wire::{Counts, Mode, Phase, Schema, Scope, SetupReport};
 
 use crate::model::CheckStatus;
@@ -22,6 +24,8 @@ pub(crate) struct ExpectedSetup {
     topology: airlock_nix_core::identity::LockHash,
     // Scope requested by the invoking coordinator.
     scope: Scope,
+    // Effective configuration retained independently of reported task coverage.
+    topology_input: Value,
 }
 
 /// Completion is native evidence or an explicitly selected admitted legacy compatibility result.
@@ -45,6 +49,7 @@ impl ExpectedSetup {
             run,
             topology: fingerprint(topology)?,
             scope: Scope::All,
+            topology_input: topology.clone(),
         })
     }
 
@@ -69,18 +74,41 @@ impl ExpectedSetup {
 
     /// Decode once and require same-run, same-configuration, applied final completion.
     pub(crate) fn complete(&self, path: &Path) -> Result<CompletedSetup> {
+        self.complete_protocol(path, true)
+    }
+
+    /// An explicitly negotiated v3 helper retains its older bound-report guarantee.
+    pub(crate) fn complete_bound(&self, path: &Path) -> Result<CompletedSetup> {
+        self.complete_protocol(path, false)
+    }
+
+    fn complete_protocol(&self, path: &Path, task_coverage: bool) -> Result<CompletedSetup> {
         let report: SetupReport = crate::state::read(path)?;
         ensure!(
             report.scope == self.scope && report.rust_reconciled.as_ref() == Some(&report.run_id),
             "setup did not finalize the complete requested configuration"
         );
         let pending = report.evidence().pending;
-        let evidence = verified::CompletedSetup::check(
-            self.run.as_str(),
-            self.topology.as_str(),
-            self.scope.as_str(),
-            report.evidence(),
-        )
+        let domains = if task_coverage {
+            tasks::domains(&self.topology_input, self.scope)?
+        } else {
+            Vec::new()
+        };
+        let outcomes = report
+            .task_results
+            .iter()
+            .map(tasks::Outcome::verified)
+            .collect::<Vec<_>>();
+        let evidence = if task_coverage {
+            verified::CompletedSetup::check_tasks(
+                self.run.as_str(), self.topology.as_str(), self.scope.as_str(),
+                report.evidence(), &domains, &outcomes,
+            )
+        } else {
+            verified::CompletedSetup::check(
+                self.run.as_str(), self.topology.as_str(), self.scope.as_str(), report.evidence(),
+            )
+        }
         .with_context(|| format!("setup left failed, unsupported, deferred or mismatched work: run={run} expected={expected} topology={topology} expected_topology={expected_topology} scope={scope:?} status={status:?} mode={mode:?} phase={phase:?} pending={pending} unsupported={unsupported} deferred={deferred:?}",
             run = report.run_id.as_str(), expected = self.run.as_str(), topology = report.topology_hash,
             expected_topology = self.topology, scope = report.scope, status = report.status, mode = report.mode,
@@ -188,7 +216,7 @@ fn lines(path: &Path) -> Result<Vec<Value>> {
         .collect()
 }
 
-/// Merge only child helpers actually invoked by this run and fixed local receipt names.
+/// Merge diagnostic helper reports and require independent task outcomes for a final result.
 /// Finalization is idempotent; it never changes VM or storage state.
 pub(super) fn finalize(path: &Path) -> Result<()> {
     let directory = path.parent().context("setup result directory")?;
@@ -290,8 +318,45 @@ pub(super) fn finalize(path: &Path) -> Result<()> {
         }
     }
     root.restart_required = evidence.pending;
+    if matches!(root.phase, Phase::All | Phase::FinishOnly) && root.status == CheckStatus::Passed {
+        let topology = root
+            .diagnostics
+            .get("topology")
+            .and_then(Value::as_str)
+            .context("setup topology path is missing")?;
+        let topology = crate::state::configuration(Path::new(topology))?;
+        ensure!(
+            fingerprint(&topology)? == root.topology_hash,
+            "setup topology changed before finalization"
+        );
+        let required = tasks::required(&topology, root.scope)?;
+        root.task_results = tasks::collect(directory, &required)?;
+        for outcome in &root.task_results {
+            let task = outcome.verified().evidence;
+            let merged = root
+                .evidence()
+                .merge(&task)
+                .context("setup task belongs to another run or topology")?;
+            root.status = if merged.passed {
+                CheckStatus::Passed
+            } else {
+                CheckStatus::Failed
+            };
+            root.mode = if merged.applied {
+                Mode::Apply
+            } else {
+                Mode::Plan
+            };
+            root.restart_required = merged.pending;
+            // Detailed reports already contribute their totals. Compact snapshots preserve
+            // blockers when invocation logs are lost without counting the same work twice.
+            root.counts.unsupported_domains_count =
+                root.counts.unsupported_domains_count.max(task.unsupported);
+        }
+    }
     root.rust_reconciled = Some(run);
     save(path, &root)?;
+    tasks::publish(directory, &root)?;
     if root.phase == Phase::PrepareOnly {
         save(&directory.join("setup-prepare.json"), &root)?;
     }
@@ -300,13 +365,25 @@ pub(super) fn finalize(path: &Path) -> Result<()> {
 
 /// Derive one fixed helper log directory; arbitrary path components are refused.
 pub(crate) fn helper_directory(root: &Path, domain: &str, mode: &str) -> Result<PathBuf> {
+    let run = std::env::var("AIRLOCK_SETUP_RUN_ID")
+        .unwrap_or_else(|_| std::process::id().to_string())
+        .try_into()?;
+    helper_directory_for(root, domain, mode, &run)
+}
+
+/// In-process deployment helpers use the transaction's explicit invocation identity.
+pub(crate) fn helper_directory_for(
+    root: &Path,
+    domain: &str,
+    mode: &str,
+    run: &crate::model::TransactionId,
+) -> Result<PathBuf> {
     let _: airlock_nix_core::identity::GuestName = domain.parse()?;
     ensure!(
         matches!(mode, "--backend-only" | "--devices-only"),
         "invalid helper mode"
     );
-    let run =
-        std::env::var("AIRLOCK_SETUP_RUN_ID").unwrap_or_else(|_| std::process::id().to_string());
+    let run = run.as_str();
     ensure!(
         run.bytes().all(|b| b.is_ascii_digit()) && !run.is_empty(),
         "invalid setup run ID"
@@ -324,7 +401,8 @@ pub(crate) fn helper_directory(root: &Path, domain: &str, mode: &str) -> Result<
 }
 
 /// Replace an informational receipt atomically, independently of the trusted journal writer.
-/// Logs are not authority and need not reside beneath the protected state directory.
+/// These root-owned progress records do not grant deployment approval. Their truthfulness
+/// is trusted completion evidence; publication is atomic but does not promise crash durability.
 pub(crate) fn save(path: &Path, value: &impl serde::Serialize) -> Result<()> {
     let mut output = tempfile::NamedTempFile::new_in(path.parent().context("receipt directory")?)?;
     serde_json::to_writer_pretty(&mut output, value)?;
@@ -338,13 +416,22 @@ mod tests {
     use super::*;
 
     /// A minimal receipt keeps each merge boundary and run identity explicit.
-    fn receipt(phase: &str) -> Value {
+    fn receipt(root: &Path, phase: &str) -> Value {
+        let topology = json!({"schema":"test", "domains":{}});
+        fs::write(
+            root.join("topology.json"),
+            serde_json::to_vec(&topology).unwrap(),
+        )
+        .unwrap();
         let mut value = serde_json::to_value(Counts::default()).unwrap();
         for (key, field) in json!({"schema":"airlock.setup-config.v1", "mode":"apply", "scope":"all",
-            "topology_hash":"a".repeat(64), "run_id":"123", "phase":phase, "status":"passed", "prefs_changed":1,
+            "topology_hash":fingerprint(&topology).unwrap(), "topology":root.join("topology.json"), "run_id":"123", "phase":phase, "status":"passed", "prefs_changed":1,
             "reason":"fixture completed", "live_actions":[{"type":"global-pref","action":"set"}], "restart_actions":[],
             "unsupported_domains":[], "restart_required":false}).as_object().unwrap() {
             value[key] = field.clone();
+        }
+        if matches!(phase, "all" | "prepare-only") {
+            tasks::prepared(root, &serde_json::from_value(value.clone()).unwrap()).unwrap();
         }
         value
     }
@@ -355,10 +442,10 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let root = directory.path();
         let path = root.join("setup-config.json");
-        save(&path, &receipt("prepare-only"))?;
+        save(&path, &receipt(root, "prepare-only"))?;
         finalize(&path)?;
         fs::create_dir(root.join("child"))?;
-        let mut child = receipt("backend-only");
+        let mut child = receipt(root, "backend-only");
         child["restart_required"] = json!(true);
         child["restart_actions"] = json!([{"type":"domain-root","domain":"usr-home"}]);
         save(&root.join("child/setup-config.json"), &child)?;
@@ -373,7 +460,7 @@ mod tests {
             "rust-vm-actions.jsonl",
             &json!({"type":"domain-pref","action":"defer"}),
         )?;
-        save(&path, &receipt("finish-only"))?;
+        save(&path, &receipt(root, "finish-only"))?;
         finalize(&path)?;
         let result: Value = crate::state::read(&path)?;
         assert_eq!(result["prefs_changed"], 3);
@@ -398,8 +485,8 @@ mod tests {
         fs::create_dir(root.join("child"))?;
         append(root, "rust-setup-helpers.jsonl", &json!("child"))?;
         for invalid in 0..5 {
-            save(&path, &receipt("all"))?;
-            let mut child = receipt("backend-only");
+            save(&path, &receipt(root, "all"))?;
+            let mut child = receipt(root, "backend-only");
             match invalid {
                 0 => {}
                 1 => {
@@ -428,10 +515,11 @@ mod tests {
     #[test]
     fn completion_requires_final_applied_matching_and_unblocked_results() -> Result<()> {
         let directory = tempfile::tempdir()?;
-        let path = directory.path().join("setup-config.json");
+        let root = directory.path();
+        let path = root.join("setup-config.json");
         let topology = json!({"schema":"test", "domains":{}});
         let expected = ExpectedSetup::new("123".to_string().try_into()?, &topology)?;
-        let mut valid = receipt("all");
+        let mut valid = receipt(root, "all");
         valid["topology_hash"] = json!(fingerprint(&topology)?);
         save(&path, &valid)?;
         finalize(&path)?;
@@ -489,6 +577,175 @@ mod tests {
         invalid["unsupported_domains_count"] = json!("0");
         save(&path, &invalid)?;
         assert!(expected.complete(&path).is_err());
+        Ok(())
+    }
+
+    /// Build independent required-work evidence without a helper invocation list.
+    fn task_fixture(root: &Path) -> Result<(ExpectedSetup, Value)> {
+        let mut report = receipt(root, "all");
+        let topology = json!({"schema":"test", "domains":{"app":{}}});
+        let topology_path = root.join("topology.json");
+        fs::write(&topology_path, serde_json::to_vec(&topology)?)?;
+        report["topology_hash"] = json!(fingerprint(&topology)?);
+        let typed: SetupReport = serde_json::from_value(report.clone())?;
+        tasks::prepared(root, &typed)?;
+        for kind in [
+            tasks::Kind::Configuration,
+            tasks::Kind::Backend,
+            tasks::Kind::Devices,
+        ] {
+            tasks::completed(
+                root,
+                &topology_path,
+                &typed.run_id,
+                true,
+                tasks::Task::Vm {
+                    domain: "app".parse()?,
+                    kind,
+                },
+            )?;
+        }
+        Ok((ExpectedSetup::new(typed.run_id, &topology)?, report))
+    }
+
+    /// Independent requirements reject missing work even when no helper log was published.
+    #[test]
+    fn missing_task_cannot_disappear_with_the_invocation_log() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let root = directory.path();
+        let path = root.join("setup-config.json");
+        let (expected, report) = task_fixture(root)?;
+        assert!(!root.join("rust-setup-helpers.jsonl").exists());
+        fs::remove_file(root.join("task-app-devices.json"))?;
+        save(&path, &report)?;
+        assert!(finalize(&path).is_err());
+        assert!(expected.complete(&path).is_err());
+
+        let (_, report) = task_fixture(root)?;
+        fs::remove_file(root.join("task-preparation.json"))?;
+        save(&path, &report)?;
+        assert!(finalize(&path).is_err());
+
+        // A repeated attempt cannot reuse an earlier successful per-VM receipt.
+        let (_, report) = task_fixture(root)?;
+        tasks::clear(root, "app")?;
+        save(&path, &report)?;
+        assert!(finalize(&path).is_err());
+        Ok(())
+    }
+
+    /// The coordinator rechecks coverage even if finalization was skipped, corrupted or misimplemented.
+    #[test]
+    fn completion_rechecks_exact_task_identity_and_each_outcome() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let root = directory.path();
+        let path = root.join("setup-config.json");
+        let (expected, report) = task_fixture(root)?;
+        save(&path, &report)?;
+        finalize(&path)?;
+        expected.complete(&path)?.require(&expected)?;
+        let valid: Value = crate::state::read(&path)?;
+        assert_eq!(valid["task_results"].as_array().unwrap().len(), 4);
+        let mut invalid = valid.clone();
+        invalid["task_results"].as_array_mut().unwrap().remove(1);
+        save(&path, &invalid)?;
+        assert!(expected.complete(&path).is_err());
+        // Negotiation, never report contents, explicitly selects the older guarantee.
+        expected.complete_bound(&path)?;
+
+        for field in [
+            "task",
+            "run_id",
+            "topology_hash",
+            "mode",
+            "status",
+            "pending",
+            "unsupported",
+        ] {
+            let mut invalid = valid.clone();
+            let task = &mut invalid["task_results"][1];
+            task[field] = match field {
+                "task" => json!({"vm":{"domain":"other","kind":"configuration"}}),
+                "run_id" => json!("124"),
+                "topology_hash" => json!("b".repeat(64)),
+                "mode" => json!("plan"),
+                "status" => json!("failed"),
+                "pending" => json!(true),
+                "unsupported" => json!(1),
+                _ => unreachable!(),
+            };
+            save(&path, &invalid)?;
+            assert!(expected.complete(&path).is_err(), "accepted task {field}");
+        }
+        for replacement in [valid["task_results"][1].clone(), json!({"unknown":true})] {
+            let mut invalid = valid.clone();
+            invalid["task_results"][2] = replacement;
+            save(&path, &invalid)?;
+            assert!(expected.complete(&path).is_err());
+        }
+        let mut invalid = valid.clone();
+        invalid["task_results"]
+            .as_array_mut()
+            .unwrap()
+            .push(valid["task_results"][1].clone());
+        save(&path, &invalid)?;
+        assert!(expected.complete(&path).is_err());
+        let mut invalid = valid.clone();
+        invalid["task_results"][0]["scope"] = json!("deferred");
+        save(&path, &invalid)?;
+        assert!(expected.complete(&path).is_err());
+        Ok(())
+    }
+
+    /// Task snapshots retain deferred VM changes independently of later diagnostic-log loss.
+    #[test]
+    fn task_outcome_retains_pending_configuration() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let root = directory.path();
+        let path = root.join("setup-config.json");
+        let (expected, report) = task_fixture(root)?;
+        append(
+            root,
+            "rust-vm-actions.jsonl",
+            &json!({"domain":"app", "action":"defer", "restart":true}),
+        )?;
+        let typed: SetupReport = serde_json::from_value(report.clone())?;
+        tasks::completed(
+            root,
+            &root.join("topology.json"),
+            &typed.run_id,
+            true,
+            tasks::Task::Vm {
+                domain: "app".parse()?,
+                kind: tasks::Kind::Configuration,
+            },
+        )?;
+        fs::remove_file(root.join("rust-vm-actions.jsonl"))?;
+        save(&path, &report)?;
+        finalize(&path)?;
+        assert!(expected.complete(&path).is_err());
+        Ok(())
+    }
+
+    /// Direct administrative helpers keep results in their own directory; nested helpers report to their root.
+    #[test]
+    fn helper_task_publication_stays_within_the_owning_setup_directory() -> Result<()> {
+        let parent = tempfile::tempdir()?;
+        let root = parent.path().join("logs");
+        fs::create_dir(&root)?;
+        let mut report: SetupReport = serde_json::from_value(receipt(&root, "backend-only"))?;
+        report.task = Some(tasks::Task::Vm {
+            domain: "app".parse()?,
+            kind: tasks::Kind::Backend,
+        });
+        tasks::publish(&root, &report)?;
+        assert!(root.join("task-app-backend.json").exists());
+        assert!(!parent.path().join("task-app-backend.json").exists());
+        fs::remove_file(root.join("task-app-backend.json"))?;
+        let child = helper_directory_for(&root, "app", "--backend-only", &report.run_id)?;
+        tasks::publish(&child, &report)?;
+        assert!(root.join("task-app-backend.json").exists());
+        assert!(!child.join("task-app-backend.json").exists());
         Ok(())
     }
 

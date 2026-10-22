@@ -207,6 +207,42 @@ impl Setup {
     }
 }
 
+/// Split setup refuses missing task evidence even when the helper invocation log is empty.
+#[test]
+fn setup_completion_requires_every_configured_vm_task() -> Result<()> {
+    let mut desired = topology();
+    desired["domains"]["app"] = domain("green", Value::Null);
+    let setup = Setup::new(desired, json!({}), json!({}))?;
+    let mut prepare = setup.command("--apply")?;
+    prepare
+        .arg("--prepare-only")
+        .env("AIRLOCK_SETUP_RUN_ID", "123");
+    setup.peers.run(&mut prepare)?;
+    let mut configure = setup.domain_command("app")?;
+    configure.env("AIRLOCK_SETUP_RUN_ID", "123");
+    setup.peers.run(&mut configure)?;
+    // Independent task snapshots retain all three per-VM outcomes without the helper list.
+    fs::write(setup.peers.path("logs/rust-setup-helpers.jsonl"), "")?;
+    let mut finish = setup.command("--apply")?;
+    finish
+        .arg("--finish-only")
+        .env("AIRLOCK_SETUP_RUN_ID", "123");
+    setup.peers.run(&mut finish)?;
+    assert_eq!(setup.result()?["task_results"].as_array().unwrap().len(), 4);
+
+    fs::remove_file(setup.peers.path("logs/task-app-devices.json"))?;
+    let mut finish = setup.command("--apply")?;
+    finish
+        .arg("--finish-only")
+        .env("AIRLOCK_SETUP_RUN_ID", "123");
+    let result = finish.output()?;
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("setup task"));
+    // The failed finish cannot reuse the earlier finalized success.
+    assert!(setup.result()?["rust_reconciled"].is_null());
+    Ok(())
+}
+
 /// Empty global settings must be made explicit even if the observed default is already empty.
 #[test]
 fn empty_global_defaults_become_explicit() -> Result<()> {
