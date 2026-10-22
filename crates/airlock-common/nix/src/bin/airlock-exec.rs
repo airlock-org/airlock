@@ -1,61 +1,17 @@
 //! Execute a fixed command contract installed beside this copied native launcher.
 //! Arguments cannot select another contract; privileged installations own both files.
 
-use serde::Deserialize;
+use airlock_nix_core::command::Contract;
 use std::{
-    collections::BTreeMap,
     env,
     ffi::OsString,
-    fs,
     os::unix::process::CommandExt,
     process::{Command, ExitCode},
 };
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Contract {
-    /// Executable selected by the trusted package definition.
-    program: String,
-    /// Compatibility executable override exposed only by administrative tool packages.
-    program_env: Option<String>,
-    /// Fixed arguments prepended to caller arguments; @self@ denotes this installed command.
-    #[serde(default)]
-    args: Vec<String>,
-    /// Exact environment bindings supplied by the package.
-    #[serde(default)]
-    env: BTreeMap<String, String>,
-    /// Colon-separated prefixes retaining a nonempty inherited suffix.
-    #[serde(default)]
-    prefix_env: BTreeMap<String, String>,
-    /// Environment bindings intentionally removed at this boundary.
-    #[serde(default)]
-    unset_env: Vec<String>,
-    /// Whether caller arguments are forwarded after the fixed arguments.
-    #[serde(default = "yes")]
-    inherit_args: bool,
-    /// Optional exact argument count enforced before command execution.
-    argument_count: Option<usize>,
-    /// Optional authenticated Qubes caller allowlist, including an empty deny-all list.
-    callers: Option<Vec<String>>,
-    /// Reject a nonempty Qubes RPC argument when this service has no argument protocol.
-    #[serde(default)]
-    empty_service_argument: bool,
-}
-
-/// Forward ordinary CLI arguments unless the package explicitly selects a fixed invocation.
-fn yes() -> bool {
-    true
-}
-
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let executable = env::current_exe()?;
-    let mut contract_name = executable
-        .file_name()
-        .ok_or("launcher has no filename")?
-        .to_os_string();
-    contract_name.push(".json");
-    let contract: Contract =
-        serde_json::from_slice(&fs::read(executable.with_file_name(contract_name))?)?;
+    let contract = Contract::read(&executable)?;
     let arguments: Vec<OsString> = env::args_os().skip(1).collect();
     if contract
         .argument_count

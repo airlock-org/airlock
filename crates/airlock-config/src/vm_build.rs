@@ -433,7 +433,7 @@ fn domain_constructor(sources: &Sources, pkgs: &NixValue) -> NixValue {
                         "rootImageName": request.clone().select("rootImageName"),
                         "storeArtifactName": request.clone().select("storeArtifactName"),
                         "rootImage": images.root(root_capacity(sources, &request)),
-                        "storeArtifact": images.manifest(
+                        "storeArtifact": images.boot_manifest(
                             request.clone().select("storeArtifactName"),
                             NixValue::list([configuration
                                 .clone()

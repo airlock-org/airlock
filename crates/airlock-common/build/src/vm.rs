@@ -63,6 +63,29 @@ impl Images<'_> {
         device: NixValue,
         mountpoint: NixValue,
     ) -> Package {
+        self.closure_manifest(name, roots, device, mountpoint, false)
+    }
+
+    /// Verify installed boot commands against the exact VM closure before publishing its manifest.
+    pub fn boot_manifest(
+        &self,
+        name: NixValue,
+        roots: NixValue,
+        device: NixValue,
+        mountpoint: NixValue,
+    ) -> Package {
+        self.closure_manifest(name, roots, device, mountpoint, true)
+    }
+
+    /// Generic payload closures contain data roots; only boot closures contain NixOS systems to inspect.
+    fn closure_manifest(
+        &self,
+        name: NixValue,
+        roots: NixValue,
+        device: NixValue,
+        mountpoint: NixValue,
+        boot: bool,
+    ) -> Package {
         let closure = self
             .pkgs
             .clone()
@@ -75,14 +98,26 @@ impl Images<'_> {
             .call(NixValue::builtin("toJSON").call(nix_record! {
                 "name": name.clone(), "device": device, "mountpoint": mountpoint, "root_paths": root_paths,
             }));
+        let preflight: NixValue = if boot {
+            nix_text!(
+                "--launcher {launcher}/bin/airlock-exec --readelf {binutils}/bin/readelf",
+                launcher = Application::Launcher.build(self.pkgs, self.workspace),
+                binutils = self.pkgs.clone().select("binutils"),
+            )
+            .into()
+        } else {
+            "".into()
+        };
         let script = nix_text!(
             r#"
             exec {native}/bin/airlock-prepare-boot manifest --out "$out" \
-              --paths {closure}/store-paths --settings {settings}
+              --paths {closure}/store-paths --settings {settings} \
+              {preflight}
         "#,
             native = Application::PrepareBoot.build(self.pkgs, self.workspace),
             closure = closure,
-            settings = settings
+            settings = settings,
+            preflight = preflight,
         );
 
         Package::from_expression(

@@ -253,6 +253,19 @@ pub(super) fn unified(
             })
         }))
         .call(config.clone().select("specialisation"));
+    let preflight = json(
+        pkgs,
+        "airlock-host-preflight.json",
+        nix_record! {
+            "name": "host-boot",
+            "device": "/nix/store",
+            "mountpoint": "/nix/store",
+            "root_paths": NixValue::concat_lists([
+                NixValue::list([system.clone().to_text()]),
+                NixValue::builtin("attrValues").call(choices.clone()),
+            ]),
+        },
+    );
     let seed = pkgs
         .clone()
         .select("runCommand")
@@ -271,13 +284,21 @@ pub(super) fn unified(
         })
         .call(nix_text!(
             r#"
+        {preparer}/bin/airlock-prepare-boot manifest --out "$TMPDIR/airlock-host-preflight" \
+          --paths {closure}/store-paths --settings {preflight} \
+          --launcher {launcher}/bin/airlock-exec --readelf {binutils}/bin/readelf
         airlock-dom0-service storage image prepare-host {vm_store} "$out" \
           {closure}/registration {system} {choices}
+        cp "$TMPDIR/airlock-host-preflight/boot-preflight.json" "$out/boot-preflight.json"
     "#,
             vm_store = vm_store.clone(),
             closure = closure,
             system = system,
             choices = json(pkgs, "airlock-host-boot-choices.json", choices),
+            preparer = Application::PrepareBoot.build(pkgs, workspace),
+            launcher = Application::Launcher.build(pkgs, workspace),
+            binutils = pkgs.clone().select("binutils"),
+            preflight = preflight,
         ));
 
     seed.bind(|seed| {

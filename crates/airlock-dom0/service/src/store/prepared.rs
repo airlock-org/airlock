@@ -152,6 +152,11 @@ pub(super) fn prepare_pool(
             fs::copy(source.join(name), target.join(name))?;
         }
 
+        let preflight = source.join("boot-preflight.json");
+        if preflight.is_file() {
+            fs::copy(preflight, target.join("boot-preflight.json"))?;
+        }
+
         eprintln!("Preparing guest configuration: {name}");
         let domain = text(spec, "domain")?;
         let system = text(spec, "system")?;

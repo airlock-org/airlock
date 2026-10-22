@@ -20,6 +20,8 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Operation {
+    /// Inspect installed entry points against the exact guest store view without executing them.
+    Preflight(crate::preflight::Request),
     /// Build the fixed empty-store boot filesystem and its descriptor.
     Root {
         /// New derivation output holding the filesystem and manifest.
@@ -52,6 +54,12 @@ enum Operation {
         /// Serialized settings with name, device, mountpoint, and root_paths.
         #[arg(long)]
         settings: PathBuf,
+        /// Reference native launcher; supplying it enables mandatory boot preflight before publication.
+        #[arg(long)]
+        launcher: Option<PathBuf>,
+        /// ELF metadata inspector selected by the image recipe.
+        #[arg(long, default_value = "readelf")]
+        readelf: PathBuf,
     },
 }
 
@@ -87,6 +95,7 @@ fn write_json(path: &Path, value: &Value) -> Result<()> {
 
 pub(crate) fn main() -> Result<()> {
     match Args::parse().operation {
+        Operation::Preflight(request) => crate::preflight::run(request),
         Operation::Root {
             out,
             metadata,
@@ -215,9 +224,40 @@ store_formats=erofs
             out,
             paths,
             settings,
+            launcher,
+            readelf,
         } => {
             let settings: Value = serde_json::from_slice(&fs::read(settings)?)?;
             fs::create_dir_all(&out)?;
+            if let Some(launcher) = launcher {
+                ensure!(
+                    settings["root_paths"]
+                        .as_array()
+                        .is_some_and(|roots| !roots.is_empty()),
+                    "boot preflight requires at least one system root"
+                );
+                let mut reports = Vec::new();
+                for system in settings["root_paths"]
+                    .as_array()
+                    .context("closure root paths")?
+                {
+                    let report = crate::preflight::check(
+                        Path::new(system.as_str().context("system path")?),
+                        &paths,
+                        Path::new("/nix/store"),
+                        &launcher,
+                        &readelf,
+                    )?;
+                    reports.push(report);
+                }
+                write_json(
+                    &out.join("boot-preflight.json"),
+                    &serde_json::to_value(&reports)?,
+                )?;
+                for report in reports {
+                    report.require_success()?;
+                }
+            }
             let bytes = fs::read(paths)?;
             let count = bytes.iter().filter(|byte| **byte == b'\n').count();
             fs::write(out.join("store-paths"), bytes)?;

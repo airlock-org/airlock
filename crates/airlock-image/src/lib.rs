@@ -8,6 +8,8 @@ mod acceptance;
 
 mod boot_filesystem;
 
+mod preflight;
+
 #[cfg(feature = "qubes")]
 mod runtime;
 

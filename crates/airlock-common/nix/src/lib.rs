@@ -14,6 +14,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod command;
+
 /// Failures kept structured until the command or wire boundary.
 pub mod error;
 

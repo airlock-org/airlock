@@ -8,6 +8,9 @@ mod process;
 #[path = "native/launchers.rs"]
 mod launchers;
 
+#[path = "native/preflight.rs"]
+mod preflight;
+
 #[path = "native/journal.rs"]
 mod journal;
 
