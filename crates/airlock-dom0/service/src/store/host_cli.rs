@@ -331,7 +331,9 @@ pub(super) fn run(command: Request) -> Result<Value> {
                             return Ok(json!({"checkpoint":"unchanged","system":record["system"]}));
                         }
                     }
-                    host_machine::save(pool, storage, machine, &record)?;
+                    if !host_machine::checkpoint(pool, storage, machine, &record)? {
+                        return Ok(json!({"checkpoint":"unchanged","system":record["system"]}));
+                    }
                     Ok(json!({"bound":record["system"]}))
                 }
                 _ => unreachable!("handled before acquiring pool lock"),

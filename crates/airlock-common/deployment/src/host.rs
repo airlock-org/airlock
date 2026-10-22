@@ -39,9 +39,26 @@
 //! cooperative pool/machine locks and faithful file/process execution remain trusted. Hashes
 //! exclude diagnostic timing and retain unknown record extensions. This proves authorised
 //! requests and checked identity comparisons, not physical storage/firmware behavior, global
-//! atomicity, durable receipt publication or exactly-once effects. Host machine bindings still
-//! read the protected live selection and guest generation records in ordinary Rust. Independent
-//! recovery and maintenance boot repair retain their explicit administrative policies.
+//! atomicity, durable receipt publication or exactly-once effects.
+//!
+//! [`boot`] checks the complete saved host/machine/guest binding before stage-one restoration.
+//! Current bindings retain the full host receipt and manifest/topology fingerprint. Legacy
+//! bindings retain their narrower system-only identity guarantee. Both require exact guest
+//! maps (including empty declarations), transaction/release/baseline/profile correspondence
+//! and a completed or reboot-required journal. Snapshot publication alone also permits the
+//! final host-selection phase; an interrupted transaction cannot restore automatically.
+//! The opaque restoration emits the exact selection, journal, guest-map and host-link payloads
+//! in fixed order and preserves its accepted evidence. Each boot starts from fresh evidence
+//! and replays all publications before runtime coordination; no on-disk partial write set
+//! grants permission to skip work. Canonical record/entry projections, release loading,
+//! protected path containment, filesystem exclusion and durable writes remain adapter
+//! obligations. Guest admission and runtime attachment perform their own generation checks;
+//! this theorem does not prove block-device contents. Generation-one images without any
+//! selection, latest record or prior boot guest map retain the explicit no-restoration
+//! bootstrap exception. Independent recovery and maintenance boot repair retain their explicit
+//! administrative policies.
+
+pub mod boot;
 
 mod receipt;
 
