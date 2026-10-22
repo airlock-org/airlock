@@ -426,8 +426,13 @@ fn main() -> Result<()> {
                         .success(),
                     "mount failed"
                 );
+                let operation = args.get(6).map(String::as_str).unwrap_or("recover");
+                ensure!(
+                    matches!(operation, "recover" | "gc"),
+                    "invalid cleanup fixture operation"
+                );
                 let result = Command::new(&args[4])
-                    .args(["storage", "pool", "recover", "--pool-root", &args[5]])
+                    .args(["storage", "pool", operation, "--pool-root", &args[5]])
                     .output();
                 let visible = fs::read_to_string(Path::new(target).join("sentinel"));
                 let unmounted = Command::new("umount").arg(target).status()?;
@@ -437,10 +442,7 @@ fn main() -> Result<()> {
                     visible? == "preserve mounted bytes",
                     "mounted path lost its contents"
                 );
-                ensure!(
-                    !result.status.success(),
-                    "mounted temporary tree was removed"
-                );
+                ensure!(!result.status.success(), "mounted cleanup tree was removed");
                 ensure!(
                     String::from_utf8_lossy(&result.stderr)
                         .contains("refusing cleanup of mounted path")

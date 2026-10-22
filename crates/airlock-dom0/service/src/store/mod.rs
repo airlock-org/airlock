@@ -76,6 +76,8 @@ mod tracing;
 
 mod segment_retirement;
 
+mod logical_retirement;
+
 mod runtime;
 
 mod mounts;

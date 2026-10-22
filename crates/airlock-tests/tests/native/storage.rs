@@ -848,35 +848,42 @@ fn bad_current_pointer_stops_recovery() -> Result<()> {
     Ok(())
 }
 
-/// A bind-mounted temporary tree requires an explicitly prepared user mount namespace.
+/// Mounted temporary, view and root trees remain protected in an isolated user mount namespace.
 #[test]
 #[ignore = "requires unprivileged user/mount namespaces and mount tools"]
 fn cleanup_refuses_bind_mounts() -> Result<()> {
     let store = Store::new()?;
     store.run(&["pool", "status", "--pool-root", store.pool_text()])?;
     let source = store.temporary.path().join("mounted-source");
-    let target = store.pool.join("tmp/interrupted-mount");
     fs::create_dir(&source)?;
-    fs::create_dir(&target)?;
     fs::write(source.join("sentinel"), b"preserve mounted bytes")?;
-    common::run(
-        Command::new("unshare")
-            .args([
-                "--user",
-                "--map-root-user",
-                "--mount",
-                "--propagation",
-                "private",
-            ])
-            .arg(common::peer())
-            .arg("recover-mounted")
-            .arg(&source)
-            .arg(&target)
-            .arg(&store.service)
-            .arg(&store.pool),
-        None,
-    )?
-    .checked()?;
+    for (target, operation) in [
+        ("tmp/interrupted-mount", "recover"),
+        ("views/by-closure/mounted-view", "gc"),
+        ("root-artifacts/mounted-root", "gc"),
+    ] {
+        let target = store.pool.join(target);
+        fs::create_dir_all(&target)?;
+        common::run(
+            Command::new("unshare")
+                .args([
+                    "--user",
+                    "--map-root-user",
+                    "--mount",
+                    "--propagation",
+                    "private",
+                ])
+                .arg(common::peer())
+                .arg("recover-mounted")
+                .arg(&source)
+                .arg(&target)
+                .arg(&store.service)
+                .arg(&store.pool)
+                .arg(operation),
+            None,
+        )?
+        .checked()?;
+    }
     assert_eq!(
         fs::read(source.join("sentinel"))?,
         b"preserve mounted bytes"

@@ -1077,14 +1077,39 @@ fn recovery_distinguishes_active_objects_from_committed_unselected_generations()
 #[test]
 fn interrupted_switch_and_gc_preserve_the_last_published_selection() -> Result<()> {
     let store = Store::new()?;
-    store.admit(true)?;
+    let first = store.admit(true)?;
+    let selected_view = Path::new(first["canonical_metadata_image"].as_str().unwrap())
+        .parent()
+        .unwrap();
+    let selected_root = store
+        .pool
+        .join("root-artifacts")
+        .join(first["root_artifact"]["sha256"].as_str().unwrap());
+    // Recovery may refresh physical segment-size diagnostics in the location map.
+    // Its original extents, immutable index and object list must remain intact.
+    let selected_map = selected_view.join("store.blob-map.json");
+    let extents_before = read(&selected_map)?["extents"].clone();
+    let mut view_before = snapshot(selected_view)?;
+    view_before.remove(Path::new("store.blob-map.json"));
+    let root_before = snapshot(&selected_root)?;
     let addition = format!("{hash}-new", hash = "b".repeat(32));
     fs::write(store.physical.join(&addition), "new data")?;
     let mut paths = fs::OpenOptions::new()
         .append(true)
         .open(store.closure.join("store-paths"))?;
     writeln!(paths, "/nix/store/{addition}")?;
-    store.admit(false)?;
+    // The second generation has both an extra object and a different immutable boot disk.
+    let mut root = fs::OpenOptions::new().write(true).open(&store.root)?;
+    root.seek(SeekFrom::Start(2 * 65536))?;
+    root.write_all(b"second boot disk")?;
+    let second = store.admit(false)?;
+    let stale_view = Path::new(second["canonical_metadata_image"].as_str().unwrap())
+        .parent()
+        .unwrap();
+    let stale_root = store
+        .pool
+        .join("root-artifacts")
+        .join(second["root_artifact"]["sha256"].as_str().unwrap());
     for (failure, expected) in [
         ("switch-before-current-replace", 1),
         ("switch-after-current-replace", 2),
@@ -1122,24 +1147,49 @@ fn interrupted_switch_and_gc_preserve_the_last_published_selection() -> Result<(
         "--generation",
         "1",
     ])?;
-    let output = common::run(
-        store
-            .command(&[
-                "pool",
-                "gc",
-                "--pool-root",
-                store.pool_text(),
-                "--keep-generations",
-                "0",
-            ])
-            .env(
-                "AIRLOCK_CLOSURE_STORE_FAILPOINT",
-                "gc-after-object-metadata-remove",
-            ),
-        None,
-    )?;
-    assert!(!output.status.success());
-    store.run(&["pool", "recover", "--pool-root", store.pool_text()])?;
+    for failure in [
+        "gc-before-logical-delete",
+        "gc-after-object-metadata-remove",
+        "gc-after-view-delete",
+        "gc-after-root-delete",
+    ] {
+        let output = common::run(
+            store
+                .command(&[
+                    "pool",
+                    "gc",
+                    "--pool-root",
+                    store.pool_text(),
+                    "--keep-generations",
+                    "0",
+                ])
+                .env("AIRLOCK_CLOSURE_STORE_FAILPOINT", failure),
+            None,
+        )?;
+        assert!(
+            !output.status.success(),
+            "missing logical deletion boundary: {failure}"
+        );
+        store.run(&["pool", "recover", "--pool-root", store.pool_text()])?;
+        let mut observed_view = snapshot(selected_view)?;
+        observed_view.remove(Path::new("store.blob-map.json"));
+        assert_eq!(observed_view, view_before);
+        assert_eq!(read(&selected_map)?["extents"], extents_before);
+        assert_eq!(snapshot(&selected_root)?, root_before);
+        if failure == "gc-before-logical-delete" {
+            assert!(stale_view.is_dir());
+            assert!(stale_root.is_dir());
+            // Model interrupted recursive removal: orphan directories need not remain complete.
+            fs::remove_file(stale_view.join("manifest.json"))?;
+            fs::remove_file(stale_root.join("root.img"))?;
+        }
+        if failure == "gc-after-view-delete" {
+            assert!(!stale_view.exists());
+        }
+        if failure == "gc-after-root-delete" {
+            assert!(!stale_root.exists());
+        }
+    }
     let status = store.run(&["pool", "status", "--pool-root", store.pool_text()])?;
     assert_eq!(status["domains"]["usr-home-runtime-store"]["current"], 1);
     assert_eq!(
@@ -1178,6 +1228,63 @@ fn interrupted_switch_and_gc_preserve_the_last_published_selection() -> Result<(
         assert!(retained.contains(&json!({"domain":"usr-home-runtime-store","generation":3})));
         assert_eq!(retained.len(), 2);
     }
+    Ok(())
+}
+
+/// Invalid orphan targets refuse collection before even an unrelated generation is forgotten.
+#[test]
+fn logical_cleanup_preflights_every_target_before_destructive_effects() -> Result<()> {
+    let store = Store::new()?;
+    store.admit(true)?;
+    let inactive = store.admit(false)?;
+    let outside = store.temporary.path().join("outside");
+    fs::create_dir(&outside)?;
+    fs::write(outside.join("keep"), b"preserve")?;
+    for (kind, target) in [
+        ("directory", store.pool.join("objects/metadata/orphan.json")),
+        ("file", store.pool.join("views/by-closure/orphan")),
+        ("symlink", store.pool.join("root-artifacts/orphan")),
+    ] {
+        match kind {
+            "directory" => fs::create_dir(&target)?,
+            "file" => fs::write(&target, b"not a view")?,
+            "symlink" => symlink(&outside, &target)?,
+            _ => unreachable!(),
+        }
+        let before = snapshot(&store.pool)?;
+        let failed = common::run(
+            &mut store.command(&[
+                "pool",
+                "gc",
+                "--pool-root",
+                store.pool_text(),
+                "--keep-generations",
+                "0",
+            ]),
+            None,
+        )?;
+        assert!(
+            !failed.status.success(),
+            "accepted invalid logical target: {target:?}"
+        );
+        assert_eq!(snapshot(&store.pool)?, before);
+        assert!(Path::new(inactive["manifest"].as_str().unwrap()).is_file());
+        assert_eq!(fs::read(outside.join("keep"))?, b"preserve");
+        if kind == "directory" {
+            fs::remove_dir(&target)?;
+        } else {
+            fs::remove_file(&target)?;
+        }
+    }
+    store.run(&[
+        "pool",
+        "gc",
+        "--pool-root",
+        store.pool_text(),
+        "--keep-generations",
+        "0",
+    ])?;
+    assert!(!Path::new(inactive["manifest"].as_str().unwrap()).exists());
     Ok(())
 }
 

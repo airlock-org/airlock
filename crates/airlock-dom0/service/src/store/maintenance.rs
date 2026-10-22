@@ -1,10 +1,13 @@
 //! Storage reclamation traces logical generations and physical pins before deleting bytes.
 //! Relocation publishes verified replacement extents before refreshing unpinned views.
 
-use super::{fs::*, records, runtime, segment_retirement, segments, tracing, views};
+use super::{
+    fs::*, logical_retirement, records, runtime, segment_retirement, segments, tracing, views,
+};
 use airlock_deployment_core::retention::{
     Candidate, Generation, Protection, ReclaimRequest,
     inventory::{self as protection_inventory, PoolSources, ProtectionInventory, StoredGeneration},
+    logical::Target,
     runtime::Context as ReleaseContext,
     segments::SegmentIndex,
     tracing::{Resource, Sources, Trace},
@@ -482,15 +485,7 @@ pub(super) fn gc(root: &Path, keep: usize, references: Vec<Protection>) -> Resul
             ensure!(live.trace.include_root(digest), "invalid root reference");
         }
     }
-    let roots: BTreeSet<_> = live
-        .trace
-        .references()
-        .iter()
-        .filter_map(|r| match r {
-            Resource::Root(digest) => Some(digest.clone()),
-            _ => None,
-        })
-        .collect();
+    let logical_requests = logical_retirement::prepare(root, &live.trace)?;
     // Resolve every retained pin before the first deletion, so damaged metadata fails closed.
     let locations = locations(root, &live)?;
     let PhysicalReferences {
@@ -509,53 +504,37 @@ pub(super) fn gc(root: &Path, keep: usize, references: Vec<Protection>) -> Resul
     let mut removed_metadata = Vec::new();
     let mut removed_blobs = Vec::new();
     let mut removed_special = Vec::new();
-    for (directory, removed) in [
-        ("objects/metadata", &mut removed_metadata),
-        ("objects/blob-metadata", &mut removed_blobs),
-    ] {
-        for path in children(&root.join(directory))? {
-            if path.extension().is_none_or(|s| s != "json") {
-                continue;
+    let mut removed_views = Vec::new();
+    let mut removed_roots = Vec::new();
+    for request in logical_requests {
+        // These copies report successful effects only. Execution consumes the original permission.
+        let reported = match request.target() {
+            Target::ObjectMetadata(name) => Target::ObjectMetadata(name.clone()),
+            Target::FragmentMetadata(name) => Target::FragmentMetadata(name.clone()),
+            Target::View(path) => Target::View(path.clone()),
+            Target::Root(name) => Target::Root(name.clone()),
+        };
+        logical_retirement::execute(request)?;
+        match reported {
+            Target::ObjectMetadata(name) | Target::FragmentMetadata(name) if name == ".tar-eof" => {
+                removed_special.push(name);
             }
-            let name = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .context("invalid metadata name")?;
-            if name == ".tar-eof" {
-                if !live.objects.contains(name) {
-                    remove(&path)?;
-                    removed_special.push(name.to_owned());
-                }
-            } else if !live.objects.contains(name) {
-                remove(&path)?;
-                removed.push(name.to_owned());
+            Target::ObjectMetadata(name) => {
+                removed_metadata.push(name);
                 failpoint("gc-after-object-metadata-remove")?;
             }
-        }
-    }
-    let mut removed_views = Vec::new();
-    for directory in children(&root.join("views/by-closure"))? {
-        if !live.views.contains(&directory) {
-            removed_views.push(
-                directory
+            Target::FragmentMetadata(name) => {
+                removed_blobs.push(name);
+                failpoint("gc-after-object-metadata-remove")?;
+            }
+            Target::View(path) => removed_views.push(
+                Path::new(&path)
                     .file_name()
-                    .context("invalid view name")?
-                    .to_string_lossy()
-                    .into_owned(),
-            );
-            remove(&directory)?;
-        }
-    }
-    let mut removed_roots = Vec::new();
-    for path in children(&root.join("root-artifacts"))? {
-        let name = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .context("invalid root artifact name")?;
-        if !roots.contains(name) {
-            pool_path(root, &path)?;
-            removed_roots.push(name.to_owned());
-            remove(&path)?;
+                    .and_then(|n| n.to_str())
+                    .context("invalid view identity")?
+                    .to_owned(),
+            ),
+            Target::Root(name) => removed_roots.push(name),
         }
     }
     let mut result = delete_segments(root, &inventory, &trace)?;

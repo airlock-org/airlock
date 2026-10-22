@@ -14,6 +14,9 @@ pub mod segments;
 /// Conservative mapping observations and exact runtime-pin release permissions.
 pub mod runtime;
 
+/// Exact logical-resource deletion permissions derived from the original immutable trace.
+pub mod logical;
+
 use vstd::prelude::*;
 
 verus! {

@@ -331,9 +331,17 @@
 //! schema, and obtains the kernel inventory. Successful truthful enumeration and admission-lock
 //! exclusion of Airlock attach operations remain assumptions; independent kernel/administrator
 //! changes between observation and execution are not excluded by these proofs.
-//! Filesystem discovery, source-to-core projection, record integrity, object/view/root lookup indexes
-//! and their deletion decisions remain ordinary Rust. Segment record decoding, the adapter's faithful
-//! use of requests, lock discipline, truthful observations and actual unlink/fsync remain trusted.
+//! Logical object/fragment metadata, software views and root artifacts also require consumed deletion
+//! permissions against the original trace. Their verified index preserves every category and full
+//! identity, including collisions in its numeric lookup buckets. Requests retain their original pool
+//! and target, and borrow the immutable trace through dispatch. Collection validates every proposed
+//! logical target before forgetting generations; the adapter checks path confinement, file kinds
+//! and mounts again before removing anything. Metadata unlink cannot recursively remove a directory.
+//! Filesystem discovery, source-to-core projection, record integrity and object/view lookup indexes
+//! used for physical-reference discovery remain ordinary Rust. They do not grant logical deletion.
+//! Record decoding, faithful request-to-path dispatch, lock discipline, truthful observations and
+//! actual unlink/fsync remain trusted. Recursive removal checks mounts and does not follow symlinks,
+//! but these filesystem properties are tested adapter contracts, not Verus theorems.
 //! These snapshots do not exclude independent raw filesystem writers, prove root contents or establish
 //! exactly-once execution or power-loss durability.
 //! Pin-release classification is rechecked under the same storage lock, so a newer manual retention
