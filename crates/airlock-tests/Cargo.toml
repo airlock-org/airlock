@@ -65,3 +65,7 @@ path = "src/report.rs"
 [[bin]]
 name = "airlock-smoke"
 path = "src/smoke.rs"
+
+[[bin]]
+name = "airlock-input-probe"
+path = "src/bin/airlock-input-probe.rs"

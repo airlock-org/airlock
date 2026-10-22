@@ -5,6 +5,9 @@ use anyhow::{Context, Result};
 use serde_json::{Value, json};
 use std::{collections::BTreeSet, fs, process::Command};
 
+/// A fresh, complete observation keeps unrelated supervisor failure scenarios focused on their own boundary.
+const INPUT_REPLY: &str = r#"{"schema":"airlock.input-receiver.v1","devices":[{"name":"dom0: Keyboard","keyboard":true,"pointer":false}]}"#;
+
 /// One boot history, independent runtime publications and finite diagnostic helpers.
 struct Boot {
     // Owns every state file and command receipt used by the production supervisor.
@@ -22,7 +25,7 @@ impl Boot {
         peers.rules("qvm-ls", json!([{"stdout":"7\n"}]))?;
         peers.rules("qrexec-client", json!([
             {"args":["-d","sys-gui","user:readlink -f /run/current-system"], "stdout":crate::coordinator::fixture::store("sys-gui-system", 1)},
-            {"contains":"DEFAULT:QUBESRPC airlock.InputReceiverReady dom0", "stdout":r#"{"schema":"airlock.input-receiver.v1","devices":[{"name":"dom0: Keyboard","keyboard":true,"pointer":false}]}"#},
+            {"contains":"DEFAULT:QUBESRPC airlock.InputReceiverReady dom0", "stdout":INPUT_REPLY},
             {"prefix":["-d","sys-gui"], "stdout":""}
         ]))?;
         fs::write(
@@ -497,6 +500,7 @@ fn namespace_boot_acceptance_requires_fresh_complete_evidence() -> Result<()> {
         "generation",
         "desktop",
         "input",
+        "input-empty",
         "worker",
         "restart",
         "missing-policy",
@@ -528,7 +532,7 @@ fn namespace_boot_acceptance_requires_fresh_complete_evidence() -> Result<()> {
             {"args":["-d","sys-gui","user:readlink -f /run/current-system"], "stdout":store("sys-gui-system", if failure == "generation" {2} else {1})},
             {"args":["-d","sys-ctrl","user:readlink -f /run/current-system"], "stdout":store("sys-ctrl-system", 1)},
             {"contains":"root:/run/current-system/sw/bin/airlock-vm-service boot-health desktop", "exit":if failure == "desktop" {1} else {0}},
-            {"contains":"DEFAULT:QUBESRPC airlock.InputReceiverReady dom0", "exit":if failure == "input" {1} else {0}, "stdout":r#"{"schema":"airlock.input-receiver.v1","devices":[{"name":"dom0: Keyboard","keyboard":true,"pointer":false}]}"#},
+            {"contains":"DEFAULT:QUBESRPC airlock.InputReceiverReady dom0", "exit":if failure == "input" {1} else {0}, "stdout":if failure == "input-empty" {r#"{"schema":"airlock.input-receiver.v1","devices":[]}"#} else {INPUT_REPLY}},
             {"contains":"root:/run/current-system/sw/bin/airlock-vm-service boot-health build-store --domain sys-ctrl", "exit":if failure == "worker" {1} else {0}, "write":{"worker-observed":""}}
         ]))?;
         // sys-ctrl sorts before sys-gui: change its instance after the GUI capability probe,
@@ -538,6 +542,7 @@ fn namespace_boot_acceptance_requires_fresh_complete_evidence() -> Result<()> {
                 {"args":["-d","sys-gui","user:readlink -f /run/current-system"], "stdout":store("sys-gui-system", 1)},
                 {"args":["-d","sys-ctrl","user:readlink -f /run/current-system"], "stdout":store("sys-ctrl-system", 1)},
                 {"contains":"root:/run/current-system/sw/bin/airlock-vm-service boot-health desktop", "write":{"gui-observed":""}},
+                {"contains":"DEFAULT:QUBESRPC airlock.InputReceiverReady dom0", "stdout":INPUT_REPLY},
                 {"prefix":["-d"]}
             ]))?;
             boot.peers.rules("qvm-ls", json!([
@@ -553,6 +558,7 @@ fn namespace_boot_acceptance_requires_fresh_complete_evidence() -> Result<()> {
                 {"args":["-d","sys-gui","user:readlink -f /run/current-system"], "stdout":store("sys-gui-system", 1)},
                 {"args":["-d","sys-ctrl","user:readlink -f /run/current-system"], "stdout":store("sys-ctrl-system", 1)},
                 {"contains":"root:/run/current-system/sw/bin/airlock-vm-service boot-health build-store --domain sys-ctrl", "write":{"state/acceptance/state.json":serde_json::to_string(&failed)?}},
+                {"contains":"DEFAULT:QUBESRPC airlock.InputReceiverReady dom0", "stdout":INPUT_REPLY},
                 {"prefix":["-d"]}
             ]))?;
         }

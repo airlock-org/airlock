@@ -182,14 +182,14 @@ pub(crate) fn run() -> Result<()> {
     );
     let mut passed = Vec::new();
     for (index, (service, kind)) in services.iter().enumerate() {
+        eprintln!("Testing installed input RPC {service} ({kind})");
         let name = format!("Airlock smoke {index}");
         let full_name = format!("dom0: {name}");
+        let errors = PathBuf::from(format!("/tmp/input-receiver-{index}.stderr"));
         let mut child = command(service, "dom0", "")
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .stderr(fs::File::create(format!(
-                "/tmp/input-receiver-{index}.stderr"
-            ))?)
+            .stderr(fs::File::create(&errors)?)
             .spawn()?;
         let pipe = child.stdin.take().context("receiver protocol pipe")?;
         let mut receiver = Receiver {
@@ -201,7 +201,20 @@ pub(crate) fn run() -> Result<()> {
             .as_mut()
             .context("protocol")?
             .write_all(&hello(&name, kind))?;
-        wait(|| Ok(event_node(&full_name)?.is_some_and(|node| node.exists())))?;
+        wait(|| {
+            ensure!(
+                receiver.child.try_wait()?.is_none(),
+                "{service} exited before registration: {error}",
+                error = fs::read_to_string(&errors).unwrap_or_default()
+            );
+            Ok(event_node(&full_name)?.is_some_and(|node| node.exists()))
+        })
+        .with_context(|| {
+            format!(
+                "{service} registration: {error}",
+                error = fs::read_to_string(&errors).unwrap_or_default()
+            )
+        })?;
         let node = event_node(&full_name)?.context("registered evdev node")?;
         let mut events = fs::OpenOptions::new()
             .read(true)
@@ -251,6 +264,11 @@ pub(crate) fn run() -> Result<()> {
         })?;
         receiver.pipe.take();
         wait(|| Ok(receiver.child.try_wait()?.is_some()))?;
+        ensure!(
+            receiver.child.wait()?.success(),
+            "{service} failed on disconnect: {error}",
+            error = fs::read_to_string(&errors).unwrap_or_default()
+        );
         wait(|| Ok(event_node(&full_name)?.is_none()))?;
         ensure!(
             readiness()?["devices"]

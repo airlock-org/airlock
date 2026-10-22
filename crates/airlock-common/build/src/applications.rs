@@ -98,7 +98,7 @@ impl Application {
                 "airlock-tests",
                 "airlock-input-test",
                 "Airlock installed input RPC regression",
-                &["airlock-test-peer"],
+                &["airlock-input-probe"],
             ),
             Self::UplinkTest => (
                 "airlock-tests",

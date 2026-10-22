@@ -72,7 +72,7 @@ pub(super) fn fixture(build: &Build) -> NixValue {
                     "serviceConfig": nix_record! {
                         "Type": "oneshot",
                         "ExecStart": nix_text!(
-                            "{probe}/bin/airlock-test-peer input-receiver-smoke",
+                            "{probe}/bin/airlock-input-probe --inside-test-vm",
                             probe = probe,
                         ),
                         "ExecStopPost": nix_text!(

@@ -2,11 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
-/// A keyboard or pointer interface already registered in the guest kernel.
+/// A physical keyboard/pointer interface or its registered counterpart in the guest.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Device {
-    /// Kernel name, including the upstream receiver's authenticated source-domain prefix.
+    /// Kernel name; guest observations include the receiver's authenticated source-domain prefix.
     pub name: String,
     /// Whether the interface supports ordinary typing, rather than only multimedia keys.
     pub keyboard: bool,
@@ -33,7 +33,7 @@ pub enum Schema {
 }
 
 /// Match physical interface names as the upstream receiver prefixes and truncates them.
-pub fn forwarded_name(name: &str) -> String {
+fn forwarded_name(name: &str) -> String {
     // input-proxy accepts printable ASCII only, then adds "dom0: " within the
     // kernel's 80-byte uinput name (including its terminating zero).
     let name: String = name.chars().take(127).collect();
