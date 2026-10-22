@@ -42,6 +42,8 @@ pub mod diagnostic;
 
 pub mod interop;
 
+pub mod installation;
+
 pub mod nixos;
 
 pub mod package;

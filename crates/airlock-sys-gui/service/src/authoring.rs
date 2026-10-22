@@ -5,8 +5,10 @@ mod capture;
 
 mod package;
 
-use crate::command::{DesktopCommand, EXECUTABLE, WINDOW_IDENTITY};
+use crate::command::{DesktopCommand, EXECUTABLE, RUNTIME_COMMAND_NAMES, WINDOW_IDENTITY};
+use clap::Subcommand;
 use rusix::{
+    installation::Application,
     interop::{
         NixPath, Package,
         raw::{NixRepresentation, NixValue},
@@ -64,6 +66,20 @@ pub fn deployment(pkgs: &NixValue, sources: &Sources) -> Deployment {
 }
 
 impl Deployment {
+    /// Declares this package's executable export and shared desktop command schema.
+    /// The machine must compose all participating apps for a VM together before
+    /// emitting their modules. Other runtime-only nested commands are not registered.
+    pub fn installation(&self) -> Application {
+        let mut paths = RUNTIME_COMMAND_NAMES
+            .iter()
+            .map(|name| vec![(*name).into()])
+            .collect::<Vec<_>>();
+        let parser = DesktopCommand::augment_subcommands(clap::Command::new(EXECUTABLE));
+        desktop_command_paths(&parser, &[], &mut paths);
+
+        Application::new(EXECUTABLE).executable(self.package(), EXECUTABLE, paths)
+    }
+
     /// Returns the package to install in this VM's system environment.
     pub fn package(&self) -> Package {
         self.package.clone()
@@ -153,6 +169,21 @@ impl Deployment {
     }
 }
 
+/// Collects the parser's desktop commands and aliases in their literal parent scopes.
+fn desktop_command_paths(parser: &clap::Command, parent: &[String], paths: &mut Vec<Vec<String>>) {
+    for child in parser.get_subcommands() {
+        for name in std::iter::once(child.get_name()).chain(child.get_all_aliases()) {
+            let path = parent
+                .iter()
+                .cloned()
+                .chain([name.into()])
+                .collect::<Vec<_>>();
+            paths.push(path.clone());
+            desktop_command_paths(child, &path, paths);
+        }
+    }
+}
+
 /// Quotes literal desktop arguments according to the Exec grammar, without shell evaluation.
 fn desktop_argument(argument: &str) -> String {
     if !argument.is_empty()
@@ -209,5 +240,58 @@ pub fn packages() -> impl rusix::IntoConfig {
     Packages {
         native,
         deployment: wrapped,
+    }
+}
+
+#[cfg(test)]
+mod installation_tests {
+    use super::*;
+    use airlock_machine_core::services::CaptureSenderConfig;
+    use rusix::installation::{self, CollisionChecks, InstallationError};
+
+    /// A real sender contract owns the same path used by its login command and JSON reader.
+    #[test]
+    fn sender_contract_checks_its_declared_files() {
+        let source = NixPath::from_expression("/unneeded-source".into());
+        let service = deployment(
+            &NixValue::record([] as [(&str, NixValue); 0]),
+            &Sources::new(source.clone(), source),
+        );
+        let sender = service.capture_sender(&CaptureSenderConfig::default());
+        installation::compose("sys-gui", CollisionChecks::Enabled, [sender.clone()]).unwrap();
+
+        let conflicting =
+            Application::new("other-app").etc_text("airlock/capture-sender.json", "{}");
+        let error =
+            installation::compose("sys-gui", CollisionChecks::Enabled, [sender, conflicting])
+                .unwrap_err();
+        assert!(matches!(error, InstallationError::Collision { .. }));
+        assert!(
+            error
+                .to_string()
+                .contains("/etc/airlock/capture-sender.json")
+        );
+    }
+
+    /// Desktop aliases share the executable's namespace with runtime-only root commands.
+    #[test]
+    fn desktop_aliases_cannot_shadow_runtime_roots() {
+        let mut paths = RUNTIME_COMMAND_NAMES
+            .iter()
+            .map(|name| vec![(*name).into()])
+            .collect::<Vec<_>>();
+        let parser = clap::Command::new(EXECUTABLE)
+            .subcommand(clap::Command::new("capture-example").alias(crate::command::LAUNCH));
+        desktop_command_paths(&parser, &[], &mut paths);
+        let app = Application::new(EXECUTABLE).executable(
+            Package::from_expression("/unneeded-package".into()),
+            EXECUTABLE,
+            paths,
+        );
+
+        assert!(matches!(
+            installation::compose("sys-gui", CollisionChecks::Enabled, [app]),
+            Err(InstallationError::Collision { .. })
+        ));
     }
 }

@@ -4,7 +4,10 @@
 
 use rusix::{
     Config, DiagnosticKind, Expr, Generated, NixSession, Provenance,
-    interop::{NixPath, raw::NixValue},
+    interop::{
+        NixPath,
+        raw::{NixRepresentation, NixValue},
+    },
     nix_record,
     nixos::{ContextualModule, ModuleBody, NixosArtifact, NixosModule, compile_module},
 };
@@ -28,6 +31,17 @@ fn driver(selection: &str) -> Generated {
                         type = lib.types.listOf lib.types.str;
                         default = [];
                       }};
+                      options.environment.systemPackages = lib.mkOption {{
+                        type = lib.types.listOf lib.types.str;
+                        default = [];
+                      }};
+                      options.environment.etc = lib.mkOption {{
+                        type = lib.types.attrsOf (lib.types.submodule {{
+                          options.text = lib.mkOption {{ type = lib.types.lines; }};
+                          options.target = lib.mkOption {{ type = lib.types.str; }};
+                        }});
+                        default = {{}};
+                      }};
                       config._module.args = {{
                         pkgs.label = "caller-package-set";
                         extra = "late-argument";
@@ -50,6 +64,112 @@ fn imported_module(session: &NixSession) {
         }"#,
     )
     .unwrap();
+}
+
+/// Checked contracts emit the same packages and file definitions that were accepted.
+#[test]
+fn application_installations_preserve_normal_module_composition() {
+    use rusix::{
+        installation::{self, Application, CollisionChecks},
+        interop::Package,
+    };
+
+    let module = NixosModule::with_context(|_| {
+        let first = Application::new("first")
+            .executable(
+                Package::from_expression("first-package".into()),
+                "first",
+                [vec!["capture".into()]],
+            )
+            .etc_text("first/config", "first settings")
+            .module(ModuleBody::new(
+                nix_record! { "items": NixValue::list(["first".into()]) },
+            ));
+        let second = Application::new("second")
+            .executable(
+                Package::from_expression("second-package".into()),
+                "second",
+                [],
+            )
+            .etc_text("second/config", "second settings")
+            .module(ModuleBody::new(
+                nix_record! { "items": NixValue::list(["second".into()]) },
+            ));
+
+        installation::compose("desktop", CollisionChecks::Enabled, [first, second]).unwrap()
+    });
+    let artifact = compile_module(&module).unwrap();
+    let session = NixSession::new().unwrap();
+    let environment = session
+        .evaluate_nixos_with_driver(&artifact, &driver("environment"))
+        .unwrap()
+        .value;
+    assert_eq!(
+        environment["systemPackages"],
+        serde_json::json!(["second-package", "first-package"])
+    );
+    assert_eq!(
+        environment["etc"],
+        serde_json::json!({
+            "first/config": { "text": "first settings", "target": "first/config" },
+            "second/config": { "text": "second settings", "target": "second/config" },
+        })
+    );
+    assert_eq!(
+        session
+            .evaluate_nixos_with_driver(&artifact, &driver("items"))
+            .unwrap()
+            .value,
+        serde_json::json!(["second", "first"])
+    );
+}
+
+/// Opting out preserves duplicate contributions and lets NixOS apply text priorities.
+#[test]
+fn disabled_collision_checks_preserve_duplicates_for_nixos_merging() {
+    use rusix::{
+        installation::{self, Application, CollisionChecks},
+        interop::Package,
+    };
+
+    let module = NixosModule::with_context(|context| {
+        let repeated = Application::new("shared")
+            .executable(
+                Package::from_expression("shared-package".into()),
+                "shared",
+                [vec!["capture".into()], vec!["capture".into()]],
+            )
+            .etc_text("merged.conf", "first")
+            .etc_text("merged.conf", "second")
+            .etc_text("selected.conf", "ordinary");
+        let overriding = Application::new("shared")
+            .executable(
+                Package::from_expression("shared-package".into()),
+                "shared",
+                [],
+            )
+            .etc_text(
+                "selected.conf",
+                context.lib.select("mkForce").call("chosen"),
+            );
+
+        installation::compose("desktop", CollisionChecks::Disabled, [repeated, overriding]).unwrap()
+    });
+    let artifact = compile_module(&module).unwrap();
+    let environment = NixSession::new()
+        .unwrap()
+        .evaluate_nixos_with_driver(&artifact, &driver("environment"))
+        .unwrap()
+        .value;
+    assert_eq!(
+        environment["systemPackages"],
+        serde_json::json!(["shared-package", "shared-package"])
+    );
+    assert_eq!(environment["etc"]["selected.conf"]["text"], "chosen");
+    let merged = environment["etc"]["merged.conf"]["text"].as_str().unwrap();
+    let mut lines = merged.lines().collect::<Vec<_>>();
+    lines.sort_unstable();
+    assert_eq!(lines, ["first", "second"]);
 }
 
 #[test]

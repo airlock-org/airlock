@@ -23,7 +23,7 @@ mod style;
 
 mod workspace;
 
-use airlock_sys_gui_service::command::DesktopCommand;
+use airlock_sys_gui_service::command::{self, DesktopCommand};
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
@@ -39,15 +39,19 @@ struct Args {
 #[derive(Subcommand)]
 enum Action {
     /// Explicitly start one VM and refresh its application menu.
+    #[command(name = command::SYNC_APPMENUS)]
     SyncAppmenus {
         /// Validated VM selected by the user.
         name: airlock_nix_core::identity::GuestName,
     },
     /// Wait for an explicitly selected VM session and submit its application RPC once.
+    #[command(name = command::LAUNCH)]
     Launch(launch::Request),
     /// Capture or explicitly recover the display GPU owned by this VM.
+    #[command(name = command::GPU)]
     Gpu(gpu::Request),
     /// Maintain Qubes application menus without background VM starts.
+    #[command(name = command::MENUS)]
     Menus {
         // Inventory reconciliation or one explicitly scoped catalog refresh.
         #[command(subcommand)]
@@ -57,17 +61,20 @@ enum Action {
     #[command(flatten)]
     Desktop(DesktopCommand),
     /// Reserve or cancel a desktop workspace for an application launch.
+    #[command(name = command::WORKSPACE)]
     Workspace {
         // Fixed session-bus workspace operation.
         #[command(subcommand)]
         action: workspace::Action,
     },
     /// Select the existing readiness RPC appropriate to this VM's advertised capabilities.
+    #[command(name = command::READINESS_SERVICE)]
     ReadinessService {
         // Qubes VM whose supported RPC feature should be queried.
         name: airlock_nix_core::identity::GuestName,
     },
     /// Wait for background startup before submitting one interactive Tailscale enrollment request.
+    #[command(name = command::TAILSCALE_ENROLLMENT)]
     TailscaleEnrollment {
         /// Maximum time to wait for dom0's background startup, in seconds.
         #[arg(long, default_value_t = 600, value_parser = clap::value_parser!(u64).range(1..=900))]
@@ -122,6 +129,24 @@ fn main() -> ExitCode {
 mod tests {
     use super::{Action, Args};
     use airlock_sys_gui_service::command::DesktopCommand;
+
+    /// Runtime root operations use exactly the names collected by installation authoring.
+    #[test]
+    fn installation_root_names_match_the_production_parser() {
+        use airlock_sys_gui_service::command::root_command_names;
+        use clap::CommandFactory;
+
+        let parser = Args::command();
+        let mut actual = parser
+            .get_subcommands()
+            .map(|child| child.get_name())
+            .collect::<Vec<_>>();
+        let mut declared = root_command_names().collect::<Vec<_>>();
+        actual.sort_unstable();
+        declared.sort_unstable();
+        assert_eq!(actual, declared);
+        parser.debug_assert();
+    }
 
     /// Authored commands round-trip through the production parser with literal argument boundaries.
     #[test]

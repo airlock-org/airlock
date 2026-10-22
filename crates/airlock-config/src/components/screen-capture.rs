@@ -7,6 +7,7 @@ use airlock_machine_core::services::{
     CaptureConnection, CaptureKind, CaptureOperation, CaptureReceiverConfig, CaptureSenderConfig,
 };
 use rusix::{
+    installation,
     interop::raw::{NixRepresentation, NixValue},
     nix_record, nix_text,
     nixos::{ModuleBody, ModuleContext, NixosModule},
@@ -31,9 +32,12 @@ pub(crate) fn configure(vms: &mut [VmSnapshot], connections: &[CaptureConnection
             .iter()
             .find(|connection| connection.source == vm.name)
         {
-            vm.modules.push(sender(CaptureSenderConfig {
-                target: connection.target.clone(),
-            }));
+            vm.modules.push(sender(
+                vm.name.to_string(),
+                CaptureSenderConfig {
+                    target: connection.target.clone(),
+                },
+            ));
         }
 
         let sources = connections
@@ -77,7 +81,7 @@ pub fn policy(connections: &[CaptureConnection]) -> String {
 }
 
 /// Installs the sender contract, package and GNOME completion adapter.
-fn sender(config: CaptureSenderConfig) -> NixosModule {
+fn sender(scope: String, config: CaptureSenderConfig) -> NixosModule {
     NixosModule::with_arguments([machine_source::ARGUMENT], |inputs| {
         let service = airlock_sys_gui_service::authoring::deployment(
             &inputs.pkgs,
@@ -96,11 +100,13 @@ fn sender(config: CaptureSenderConfig) -> NixosModule {
                 },
                 contract_assertion(&inputs, "airlock/capture-sender.json", expected),
             ]),
-            "environment": nix_record! {
-                "systemPackages": NixValue::list([service.package().as_expression()]),
-            },
         });
-        let behavior = ModuleBody::new(service.capture_sender(&config));
+        let behavior = installation::compose(
+            &scope,
+            installation::CollisionChecks::Enabled,
+            [service.capture_sender(&config)],
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
 
         ModuleBody::empty().module(behavior).module(contract)
     })
