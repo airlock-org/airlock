@@ -92,6 +92,18 @@ fn main() -> Result<()> {
         std::process::exit(37);
     }
     if name == "mkfs.erofs" {
+        if let Some(path) = std::env::var_os("AIRLOCK_TEST_EROFS_CALLS") {
+            let mut calls = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)?;
+            writeln!(
+                calls,
+                "{arguments}",
+                arguments = serde_json::to_string(&args[1..])?
+            )?;
+        }
+
         return Ok(fs::write(&args[args.len() - 2], b"index fixture")?);
     }
     if name == "terminal-relay" {

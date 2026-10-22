@@ -76,13 +76,79 @@ fn canonical_json(value: &Value) -> Result<String> {
     })
 }
 
+/// Bind the bytes and logical offsets consumed by EROFS, independently of VM identity or pool location.
+fn layout_hash(map: &Value) -> Result<String> {
+    let layout = json!({"logical_size":map["logical_size"],"extents":extents(map)?.iter().map(|item| json!({"object":item.object,"object_sha256":item.object_sha256,"logical_offset":item.logical_offset,"length":item.length})).collect::<Vec<_>>()});
+    Ok(hex(&Sha256::digest(canonical_json(&layout)?)))
+}
+
 pub(super) fn integrity(store: &Value) -> Result<Value> {
     let metadata = PathBuf::from(text(store, "canonical_metadata_image")?);
     let map: Value = read(&PathBuf::from(text(store, "canonical_blob_map")?))?;
-    let layout = json!({"logical_size":map["logical_size"],"extents":extents(&map)?.iter().map(|item| json!({"object":item.object,"object_sha256":item.object_sha256,"logical_offset":item.logical_offset,"length":item.length})).collect::<Vec<_>>()});
-    Ok(
-        json!({"metadata_sha256":hash(&metadata)?,"layout_sha256":hex(&Sha256::digest(canonical_json(&layout)?))}),
-    )
+    Ok(json!({"metadata_sha256":hash(&metadata)?,"layout_sha256":layout_hash(&map)?}))
+}
+
+/// One index produced during this image command, before VM-specific builder metadata is injected.
+#[derive(Clone)]
+struct ImageIndex {
+    // Immutable metadata image; each consuming closure receives its own copy.
+    path: PathBuf,
+    // Expected contents, checked again before reusing the saved image.
+    sha256: String,
+}
+
+thread_local! {
+    static IMAGE_INDEXES: std::cell::RefCell<Option<BTreeMap<String, ImageIndex>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Share only indexes created inside one reproducible preparation command, never a previous invocation.
+pub(super) fn with_image_indexes<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {
+    struct Reset(
+        // Restore a surrounding context on normal return, failure or unwinding.
+        Option<BTreeMap<String, ImageIndex>>,
+    );
+
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            IMAGE_INDEXES.set(self.0.take());
+        }
+    }
+
+    let _reset = Reset(IMAGE_INDEXES.replace(Some(BTreeMap::new())));
+    operation()
+}
+
+/// Reuse exact logical contents only after checking that the source index has not changed.
+fn reuse_image_index(key: &str, destination: &Path) -> Result<bool> {
+    let cached = IMAGE_INDEXES
+        .with_borrow(|scope| scope.as_ref().and_then(|indexes| indexes.get(key)).cloned());
+    let Some(cached) = cached else {
+        return Ok(false);
+    };
+    ensure!(
+        hash(&cached.path)? == cached.sha256,
+        "shared image index checksum mismatch"
+    );
+    fs::copy(&cached.path, destination)?;
+    ensure!(
+        hash(destination)? == cached.sha256,
+        "shared image index changed during reuse"
+    );
+    Ok(true)
+}
+
+/// Remember a completed common index; the logical-layout key also determines its reproducible UUID.
+fn remember_image_index(key: String, path: &Path) -> Result<()> {
+    let index = ImageIndex {
+        path: path.to_owned(),
+        sha256: hash(path)?,
+    };
+    IMAGE_INDEXES.with_borrow_mut(|scope| {
+        if let Some(indexes) = scope {
+            indexes.insert(key, index);
+        }
+    });
+    Ok(())
 }
 
 pub(super) fn verify(root: &Path, store: &Value) -> Result<()> {
@@ -583,88 +649,100 @@ pub(super) fn materialize(request: ViewRequest<'_>) -> Result<Value> {
             source_map["extents"] = serde_json::to_value(items)?;
         }
 
-        let mut temporary = tempfile::NamedTempFile::new_in(root.join("tmp"))?;
         let temporary_metadata = tempfile::NamedTempFile::new_in(&directory)?;
         let started = std::time::Instant::now();
-        let source_mode = std::env::var("AIRLOCK_CLOSURE_STORE_INDEX_SOURCE")
-            .unwrap_or_else(|_| "auto".to_owned());
-        ensure!(
-            ["auto", "file", "dm"].contains(&source_mode.as_str()),
-            "invalid index source mode"
-        );
-
-        let name = format!("airlock-build-{}-{}", &closure[..16], &transaction[..8]);
-        let use_dm =
-            source_mode == "dm" || (source_mode == "auto" && rustix::process::geteuid().is_root());
-        let mut mapping = if use_dm {
-            Some(IndexMapping::new(root, &name, &blob_path, &source_map)?)
-        } else {
-            None
+        // A VM's system/generation identify its manifest, but do not alter these EROFS bytes.
+        let image_key = image_build().then(|| layout_hash(&map)).transpose()?;
+        let shared = match &image_key {
+            Some(key) => reuse_image_index(key, temporary_metadata.path())?,
+            None => false,
         };
-        let dm_view = if use_dm {
-            match attach_map(root, &name, &source_map) {
-                Ok(value) => Some(value),
-                Err(error) if source_mode == "dm" => return Err(error),
-                Err(error) => {
-                    mapping
-                        .as_mut()
-                        .context("missing index pin")?
-                        .release()
-                        .with_context(|| format!("index mapper setup failed: {error:#}"))?;
-                    None
+        if shared {
+            super::progress::detail("Reusing verified shared EROFS index");
+        } else {
+            let mut temporary = tempfile::NamedTempFile::new_in(root.join("tmp"))?;
+            let source_mode = std::env::var("AIRLOCK_CLOSURE_STORE_INDEX_SOURCE")
+                .unwrap_or_else(|_| "auto".to_owned());
+            ensure!(
+                ["auto", "file", "dm"].contains(&source_mode.as_str()),
+                "invalid index source mode"
+            );
+
+            let name = format!("airlock-build-{}-{}", &closure[..16], &transaction[..8]);
+            let use_dm = source_mode == "dm"
+                || (source_mode == "auto" && rustix::process::geteuid().is_root());
+            let mut mapping = if use_dm {
+                Some(IndexMapping::new(root, &name, &blob_path, &source_map)?)
+            } else {
+                None
+            };
+            let dm_view = if use_dm {
+                match attach_map(root, &name, &source_map) {
+                    Ok(value) => Some(value),
+                    Err(error) if source_mode == "dm" => return Err(error),
+                    Err(error) => {
+                        mapping
+                            .as_mut()
+                            .context("missing index pin")?
+                            .release()
+                            .with_context(|| format!("index mapper setup failed: {error:#}"))?;
+                        None
+                    }
                 }
+            } else {
+                None
+            };
+            if dm_view.is_none() {
+                reconstruct(root, &source_map, temporary.path())?;
+                temporary.flush()?;
             }
-        } else {
-            None
-        };
-        if dm_view.is_none() {
-            reconstruct(root, &source_map, temporary.path())?;
-            temporary.flush()?;
+
+            let source = dm_view
+                .as_ref()
+                .and_then(|v| v["device"].as_str())
+                .map(str::to_owned)
+                .unwrap_or_else(|| temporary.path().to_string_lossy().into_owned());
+            let mut args = vec!["--quiet".to_owned(), "--tar=i".to_owned()];
+            if let Some(previous) = &predecessor {
+                fs::copy(previous, temporary_metadata.path())?;
+                fs::set_permissions(temporary_metadata.path(), fs::Permissions::from_mode(0o644))?;
+                args.extend([
+                    "--incremental=data".into(),
+                    format!("--tar-offset={base_offset}"),
+                ]);
+            }
+            if let Some(key) = &image_key {
+                args.extend([
+                    "-T".into(),
+                    "1".into(),
+                    "-U".into(),
+                    format!(
+                        "{}-{}-{}-{}-{}",
+                        &key[..8],
+                        &key[8..12],
+                        &key[12..16],
+                        &key[16..20],
+                        &key[20..32]
+                    ),
+                ]);
+            }
+            args.extend([
+                temporary_metadata.path().to_string_lossy().into_owned(),
+                source,
+            ]);
+
+            super::progress::detail("Building EROFS metadata index");
+            let result = command(
+                &tool("mkfs.erofs", "AIRLOCK_MKFS_EROFS"),
+                &args.iter().map(String::as_str).collect::<Vec<_>>(),
+                None,
+            );
+            let cleanup = mapping.as_mut().map(IndexMapping::release).transpose();
+            result?;
+            cleanup?;
         }
 
-        let source = dm_view
-            .as_ref()
-            .and_then(|v| v["device"].as_str())
-            .map(str::to_owned)
-            .unwrap_or_else(|| temporary.path().to_string_lossy().into_owned());
-        let mut args = vec!["--quiet".to_owned(), "--tar=i".to_owned()];
-        if let Some(previous) = &predecessor {
-            fs::copy(previous, temporary_metadata.path())?;
-            fs::set_permissions(temporary_metadata.path(), fs::Permissions::from_mode(0o644))?;
-            args.extend([
-                "--incremental=data".into(),
-                format!("--tar-offset={base_offset}"),
-            ]);
-        }
-        if image_build() {
-            args.extend([
-                "-T".into(),
-                "1".into(),
-                "-U".into(),
-                format!(
-                    "{}-{}-{}-{}-{}",
-                    &closure[..8],
-                    &closure[8..12],
-                    &closure[12..16],
-                    &closure[16..20],
-                    &closure[20..32]
-                ),
-            ]);
-        }
-        args.extend([
-            temporary_metadata.path().to_string_lossy().into_owned(),
-            source,
-        ]);
-
-        super::progress::detail("Building EROFS metadata index");
-        let result = command(
-            &tool("mkfs.erofs", "AIRLOCK_MKFS_EROFS"),
-            &args.iter().map(String::as_str).collect::<Vec<_>>(),
-            None,
-        );
-        let cleanup = mapping.as_mut().map(IndexMapping::release).transpose();
-        result?;
-        cleanup?;
+        let reused = if shared { paths.len() } else { reused };
 
         preparation = json!({"index_reused_objects":reused,"index_new_objects":paths.len() - reused,"index_build_seconds":started.elapsed().as_secs_f64()});
         failpoint("view-after-metadata-build")?;
@@ -700,6 +778,9 @@ pub(super) fn materialize(request: ViewRequest<'_>) -> Result<Value> {
             0o644,
         )?;
         sync_dir(&directory)?;
+        if let Some(key) = image_key {
+            remember_image_index(key, &metadata)?;
+        }
         created = true;
     }
 
@@ -742,4 +823,36 @@ pub(super) fn materialize(request: ViewRequest<'_>) -> Result<Value> {
     });
     output["integrity"] = integrity(&output)?;
     Ok(output)
+}
+
+#[cfg(test)]
+mod image_index_tests {
+    use super::*;
+
+    /// Common indexes remain content-bound, reject corruption and cannot escape their preparation scope.
+    #[test]
+    fn reuse_requires_the_same_layout_and_unchanged_index() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let original = temporary.path().join("index.erofs");
+        let destination = temporary.path().join("copy.erofs");
+        fs::write(&original, "verified index")?;
+        let map = json!({"logical_size":512,"extents":[{"logical_offset":0,"segment_id":"000001","segment_blob":"/pool/one.blob","segment_offset":0,"length":512,"object":"package","object_sha256":"a".repeat(64)}]});
+        let key = layout_hash(&map)?;
+
+        with_image_indexes(|| {
+            remember_image_index(key.clone(), &original)?;
+            assert!(reuse_image_index(&key, &destination)?);
+            assert_eq!(fs::read(&original)?, fs::read(&destination)?);
+            let mut changed = map.clone();
+            changed["extents"][0]["object_sha256"] = json!("b".repeat(64));
+            assert!(!reuse_image_index(&layout_hash(&changed)?, &destination)?);
+
+            fs::write(&original, "damaged index")?;
+            assert!(reuse_image_index(&key, &destination).is_err());
+            assert_eq!(fs::read(&destination)?, b"verified index");
+            Ok(())
+        })?;
+        assert!(!reuse_image_index(&key, &destination)?);
+        Ok(())
+    }
 }

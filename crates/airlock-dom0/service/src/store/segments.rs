@@ -481,6 +481,19 @@ pub(super) fn admit(
 ) -> Result<Value> {
     let source = physical.join(entry(logical)?);
     let digest = tree_hash(&source)?;
+    if image_build()
+        && let Some(value) = reusable(root, logical)?
+    {
+        // Image preparation visits the same immutable packages for several views.
+        // Recheck the source tree and backing bytes, without serializing another tar.
+        ensure!(
+            value["tree_hash"] == digest,
+            "existing object hash mismatch"
+        );
+        extent(root, &value["tar_fragment"], true)?;
+        return Ok(value);
+    }
+
     let temporary = tempfile::NamedTempFile::new_in(root.join("tmp"))?;
     tar_fragment(&source, temporary.path())?;
     admit_fragment(
@@ -559,4 +572,47 @@ pub(super) fn with_verification(operation: impl FnOnce() -> Result<Value>) -> Re
         }
     });
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Image reuse preserves object metadata while still rejecting changed source trees and backing bytes.
+    #[test]
+    fn image_reuse_rechecks_objects_without_republishing_them() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = temporary.path().join("pool");
+        ensure_pool(&root)?;
+        let physical = temporary.path().join("source");
+        let logical = format!("/nix/store/{hash}-package", hash = "a".repeat(32));
+        let source = physical.join(entry(&logical)?);
+        fs::create_dir_all(&source)?;
+        fs::write(source.join("payload"), b"immutable package")?;
+
+        with_image_build(|| {
+            let first = admit(&root, &logical, &physical, "first", SEGMENT_TARGET)?;
+            let object = root
+                .join("objects/metadata")
+                .join(format!("{}.json", entry(&logical)?));
+            let inode = fs::metadata(&object)?.ino();
+            let second = admit(&root, &logical, &physical, "second", SEGMENT_TARGET)?;
+            assert_eq!(second["admitted"], false);
+            assert_eq!(fs::metadata(&object)?.ino(), inode);
+            assert_eq!(first["tar_fragment"], second["tar_fragment"]);
+
+            fs::write(source.join("payload"), b"changed package")?;
+            assert!(admit(&root, &logical, &physical, "changed", SEGMENT_TARGET).is_err());
+            fs::write(source.join("payload"), b"immutable package")?;
+
+            let extent = extent(&root, &second["tar_fragment"], false)?;
+            let mut backing = OpenOptions::new().write(true).open(extent.segment_blob)?;
+            backing.seek(SeekFrom::Start(extent.segment_offset))?;
+            backing.write_all(&[0xff])?;
+            backing.sync_all()?;
+            assert!(admit(&root, &logical, &physical, "corrupt", SEGMENT_TARGET).is_err());
+            Ok(json!({}))
+        })?;
+        Ok(())
+    }
 }

@@ -30,6 +30,11 @@ struct Seed {
 impl Seed {
     /// Prepare sparse source files and two variants without evaluating or building a Nix system.
     fn new() -> Result<Self> {
+        Self::create(false)
+    }
+
+    /// Optionally include distinct builder identities over the same union of immutable packages.
+    fn create(builders: bool) -> Result<Self> {
         let store = Store::new()?;
         let root = store.temporary.path();
         let installed = root.join("installed-pool");
@@ -57,6 +62,32 @@ impl Seed {
                 "physical_store_root": store.physical}),
             );
         }
+
+        if builders {
+            let closure = root.join("builder-closure");
+            fs::create_dir(&closure)?;
+            let paths = [
+                store.system.clone(),
+                specs[0]["system"].as_str().unwrap().into(),
+                specs[1]["system"].as_str().unwrap().into(),
+            ];
+            fs::write(closure.join("manifest.json"), "{}")?;
+            fs::write(
+                closure.join("store-paths"),
+                format!("{}\n", paths.join("\n")),
+            )?;
+            fs::write(
+                closure.join("registration"),
+                paths
+                    .iter()
+                    .map(|path| format!("{path}\n{hash}\n42\n\n0\n", hash = "0".repeat(64)))
+                    .collect::<String>(),
+            )?;
+            for (index, role) in ["sys-ctrl", "usr-assistant"].into_iter().enumerate() {
+                specs.push(json!({"name":role,"domain":format!("{role}-build-store"),"system":specs[index]["system"],"root_source":"","kernel_name":"","closure_source":closure,"physical_store_root":store.physical,"builder":true}));
+            }
+        }
+
         let seed = Self {
             store,
             specs: json!(specs),
@@ -69,19 +100,25 @@ impl Seed {
 
     /// Produce both outputs with the same logical runtime location.
     fn prepare(&self, pool: &Path, descriptors: &Path) -> Result<()> {
+        common::run(&mut self.prepare_command(pool, descriptors)?, None)?.checked()?;
+        Ok(())
+    }
+
+    /// Allow an explicitly prepared real index tool at the same native command boundary.
+    fn prepare_command(&self, pool: &Path, descriptors: &Path) -> Result<Command> {
         let path = self.store.temporary.path().join("specs.json");
         fs::write(&path, serde_json::to_vec(&self.specs)?)?;
-        common::run(
-            self.store
-                .command(&["image", "prepare-pool"])
-                .arg(pool)
-                .arg(descriptors)
-                .arg(path)
-                .arg(&self.installed),
-            None,
-        )?
-        .checked()?;
-        Ok(())
+        let mut command = self.store.command(&["image", "prepare-pool"]);
+        command
+            .arg(pool)
+            .arg(descriptors)
+            .arg(path)
+            .arg(&self.installed)
+            .env(
+                "AIRLOCK_TEST_EROFS_CALLS",
+                self.store.temporary.path().join("indexes.jsonl"),
+            );
+        Ok(command)
     }
 
     /// Install the sealed pool and remove all source packages before boot-adoption assertions.
@@ -166,7 +203,44 @@ fn prepared_topology_uses_runtime_validation() -> Result<()> {
 /// Rebuilding deterministic outputs can reuse either cache half despite changed source timestamps.
 #[test]
 fn prepared_image_outputs_are_independently_reusable() -> Result<()> {
-    let seed = Seed::new()?;
+    let seed = Seed::create(true)?;
+    let indexes = seed.store.temporary.path().join("indexes.jsonl");
+    let builds = || -> Result<usize> {
+        Ok(fs::read_to_string(&indexes)?
+            .lines()
+            .map(serde_json::from_str::<Vec<String>>)
+            .collect::<std::result::Result<Vec<_>, _>>()?
+            .iter()
+            .filter(|args| args.iter().any(|arg| arg == "--tar=i"))
+            .count())
+    };
+    // Two distinct guest closures and one shared builder layout require three indexes, not four.
+    assert_eq!(builds()?, 3);
+    let builder = |role| -> Result<Value> {
+        let path = seed.store.pool.join(format!(
+            "domains/{role}-build-store/generations/1/manifest.json"
+        ));
+        Ok(serde_json::from_slice(&fs::read(path)?)?)
+    };
+    let control = builder("sys-ctrl")?;
+    let assistant = builder("usr-assistant")?;
+    assert_ne!(control["builder"]["domain"], assistant["builder"]["domain"]);
+    assert_ne!(
+        control["builder"]["metadata_image"],
+        assistant["builder"]["metadata_image"]
+    );
+    assert_ne!(
+        control["store"]["closure_hash"],
+        assistant["store"]["closure_hash"]
+    );
+    assert_eq!(
+        control["store"]["integrity"]["layout_sha256"],
+        assistant["store"]["integrity"]["layout_sha256"]
+    );
+    assert_eq!(
+        control["store"]["integrity"]["metadata_sha256"],
+        assistant["store"]["integrity"]["metadata_sha256"]
+    );
     let old_pool = seed.store.temporary.path().join("cached-pool");
     let old_descriptors = seed.store.temporary.path().join("cached-descriptors");
     fs::rename(&seed.store.pool, &old_pool)?;
@@ -179,6 +253,8 @@ fn prepared_image_outputs_are_independently_reusable() -> Result<()> {
             .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(3))?;
     }
     seed.prepare(&seed.store.pool, &seed.descriptors)?;
+    // A separate preparation command must construct and validate its own indexes.
+    assert_eq!(builds()?, 6);
     let content = |root: &Path| -> Result<BTreeMap<PathBuf, Vec<u8>>> {
         Ok(snapshot(root)?
             .into_iter()
@@ -203,6 +279,49 @@ fn prepared_image_outputs_are_independently_reusable() -> Result<()> {
             None,
         )?;
         assert_eq!(result["status"], "passed");
+    }
+    Ok(())
+}
+
+/// Real shared indexes serve the complete packages while each builder retains its own injected identity.
+#[test]
+#[ignore = "requires explicitly prepared AIRLOCK_EROFS_MKFS and fsck.erofs"]
+fn packaged_image_indexes_preserve_both_builder_identities() -> Result<()> {
+    let seed = Seed::create(true)?;
+    let root = seed.store.temporary.path();
+    let pool = root.join("real-pool");
+    let descriptors = root.join("real-descriptors");
+    let mkfs = std::env::var_os("AIRLOCK_EROFS_MKFS").expect("prepare EROFS explicitly");
+    let output = common::run(
+        seed.prepare_command(&pool, &descriptors)?
+            .env("AIRLOCK_MKFS_EROFS", mkfs),
+        None,
+    )?;
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("Reusing verified shared EROFS index")
+    );
+    output.checked()?;
+    fs::rename(&pool, &seed.installed)?;
+
+    for role in ["sys-ctrl", "usr-assistant"] {
+        let manifest: Value = serde_json::from_slice(&fs::read(seed.installed.join(format!(
+            "domains/{role}-build-store/generations/1/manifest.json"
+        )))?)?;
+        let receipt = json!({"canonical_metadata_image":manifest["builder"]["metadata_image"],"canonical_blob_map":manifest["store"]["canonical_blob_map"]});
+        let extracted = crate::storage_integrity::extract(&seed.store, &receipt)?;
+        let identity: Value =
+            serde_json::from_slice(&fs::read(extracted.join(".airlock-builder/identity.json"))?)?;
+        assert_eq!(identity["domain"], format!("{role}-build-store"));
+        for spec in seed.specs.as_array().unwrap().iter().take(2) {
+            let name = Path::new(spec["system"].as_str().unwrap())
+                .file_name()
+                .unwrap();
+            assert_eq!(
+                fs::read(extracted.join(name).join("payload"))?,
+                fs::read(seed.store.physical.join(name).join("payload"))?
+            );
+        }
+        fs::remove_dir_all(extracted)?;
     }
     Ok(())
 }

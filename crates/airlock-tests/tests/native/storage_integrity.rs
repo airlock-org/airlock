@@ -610,7 +610,7 @@ fn interrupted_or_corrupt_compaction_preserves_selected_data() -> Result<()> {
 }
 
 /// Reconstruct separately retained extents only for an explicitly prepared real EROFS index check.
-fn extract(store: &Store, receipt: &Value) -> Result<PathBuf> {
+pub(super) fn extract(store: &Store, receipt: &Value) -> Result<PathBuf> {
     let directory = store.temporary.path().join("extracted");
     let external = store.temporary.path().join("external.tar");
     let mut file = File::create(&external)?;

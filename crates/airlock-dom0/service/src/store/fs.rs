@@ -249,7 +249,7 @@ pub(super) fn image_build() -> bool {
     IMAGE_BUILD.get()
 }
 
-pub(super) fn with_image_build<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {
+pub(super) fn with_image_build(operation: impl FnOnce() -> Result<Value>) -> Result<Value> {
     struct Reset(
         // Previous reproducibility context restored on every exit path.
         bool,
@@ -262,7 +262,7 @@ pub(super) fn with_image_build<T>(operation: impl FnOnce() -> Result<T>) -> Resu
     }
 
     let _reset = Reset(IMAGE_BUILD.replace(true));
-    operation()
+    super::views::with_image_indexes(|| super::segments::with_verification(operation))
 }
 
 pub(super) fn transaction(identity: &str) -> Result<String> {
