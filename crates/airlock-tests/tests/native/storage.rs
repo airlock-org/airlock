@@ -1,12 +1,12 @@
 //! Admission recovery and artifact protocols use real services on ordinary temporary files.
 
 use crate::common::{self, store::Store};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::{Read, Seek, Write},
+    io::{Read, Write},
     path::Path,
     process::{Command, Stdio},
     time::Duration,
@@ -549,35 +549,33 @@ fn gzip_trailer_is_checked_after_split_signature() -> Result<()> {
             let index = payload.len() - 8;
             payload[index] ^= 1;
         }
-        // Output files and a polling deadline avoid a pipe writer/readback deadlock.
-        let mut stdout = tempfile::tempfile()?;
-        let stderr = tempfile::tempfile()?;
-        let mut child = store
-            .receiver()
-            .stdin(Stdio::piped())
-            .stdout(stdout.try_clone()?)
-            .stderr(stderr.try_clone()?)
-            .spawn()?;
-        let mut input = child.stdin.take().unwrap();
+        // Admission performs durable filesystem writes. Use the normal process
+        // budget, not the three-second fixture-handshake budget, under image-build I/O.
+        let logs = tempfile::tempdir()?;
+        let mut job = airlock_tests::system::Job::spawn_input(
+            &mut store.receiver(),
+            logs.path(),
+            Stdio::piped(),
+        )?;
+        let mut input = job.take_stdin().context("gzip receiver input")?;
         input.write_all(&payload[..1])?;
         input.flush()?;
         std::thread::sleep(Duration::from_millis(50));
         input.write_all(&payload[1..])?;
         drop(input);
-        let waited = common::until(|| Ok(child.try_wait()?.is_some()));
-        if waited.is_err() {
-            let _ = child.kill();
-        }
-        let status = child.wait()?;
-        waited?;
+        let status = job.wait(Duration::from_secs(30)).with_context(|| {
+            format!(
+                "gzip receiver did not finish: {error}",
+                error = fs::read_to_string(logs.path().join("stderr.log")).unwrap_or_default()
+            )
+        })?;
         if corrupt {
             assert!(!status.success());
             assert!(manifests(&store)?.is_empty());
         } else {
             assert!(status.success());
-            stdout.rewind()?;
             assert_eq!(
-                serde_json::from_reader::<_, Value>(&stdout)?["retained"],
+                serde_json::from_slice::<Value>(&fs::read(logs.path().join("stdout.log"))?)?["retained"],
                 true
             );
         }

@@ -35,6 +35,11 @@ impl Job {
         Ok(Self { child })
     }
 
+    /// Take a piped input stream while retaining ownership and cancellation of the process group.
+    pub fn take_stdin(&mut self) -> Option<std::process::ChildStdin> {
+        self.child.stdin.take()
+    }
+
     /// Observe liveness while retaining cancellation ownership.
     pub fn running(&mut self) -> Result<bool> {
         Ok(self.child.try_wait()?.is_none())
