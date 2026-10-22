@@ -5,6 +5,7 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeSet,
+    os::unix::fs::FileTypeExt,
     path::Path,
     process::Command,
     time::{Duration, Instant},
@@ -73,6 +74,17 @@ fn main() -> Result<()> {
             && Path::new("/etc/airlock-uplink-test").is_file(),
         "run only in the explicitly prepared uplink test VM"
     );
+    // A network-driver VM may have no wireless card. Its radio-control node
+    // must still exist before WPA Supplicant constructs its upstream sandbox.
+    ensure!(
+        std::fs::metadata("/dev/rfkill")?
+            .file_type()
+            .is_char_device(),
+        "network driver boot did not create the rfkill device"
+    );
+    run("systemctl", &["start", "wpa_supplicant.service"])?;
+    wait("wpa_supplicant.service", "active")?;
+
     let ordinary = Interface {
         name: "altest0",
         unit: "qubes-network-uplink@altest0.service".into(),
@@ -141,7 +153,7 @@ fn main() -> Result<()> {
     drop(blocking);
     println!(
         "{}",
-        json!({"schema": "airlock.uplink-hotplug-test.v1", "status": "passed", "invocations": invocations.len(), "blocking_control": "refused"})
+        json!({"schema": "airlock.uplink-hotplug-test.v1", "status": "passed", "invocations": invocations.len(), "blocking_control": "refused", "wireless_sandbox": "active"})
     );
     Ok(())
 }

@@ -16,6 +16,20 @@ pub(super) fn fixture(build: &Build) -> NixValue {
         .build(&pkgs, &build.workspace)
         .as_expression();
     let config = build.output("nixosConfigurations.airlock-domain-usr-assistant.config");
+    let driver = build.output("nixosConfigurations.airlock-domain-sys-net.config");
+    // Retain the production network driver's boot modules, excluding Xen-only
+    // interfaces that this disposable KVM guest deliberately does not expose.
+    let modules = pkgs
+        .clone()
+        .select("lib.filter")
+        .call(NixValue::function(|name| {
+            pkgs.clone()
+                .select("lib.hasPrefix")
+                .call("xen-")
+                .call(name)
+                .equals(false)
+        }))
+        .call(driver.clone().select("boot.kernelModules"));
     let uplink = config
         .clone()
         .select_segments(["systemd", "services", "qubes-network-uplink@"]);
@@ -72,8 +86,12 @@ pub(super) fn fixture(build: &Build) -> NixValue {
             "name": "airlock-uplink-hotplug",
             "nodes": nix_record! {
                 "machine": nix_record! {
+                    "boot": nix_record! { "kernelModules": modules },
                     "networking": nix_record! {
                         "useDHCP": false,
+                        "networkmanager": nix_record! {
+                            "enable": driver.select("networking.networkmanager.enable"),
+                        },
                     },
                     "services": nix_record! {
                         "udev": nix_record! {

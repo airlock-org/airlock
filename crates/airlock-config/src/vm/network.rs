@@ -190,6 +190,12 @@ fn settings(context: &ModuleContext, driver: NixValue, provider: NixValue) -> Ni
     };
 
     nix_record! {
+        "boot": nix_record! {
+            // WPA Supplicant's upstream sandbox binds /dev/rfkill. Load the
+            // radio-control module before services start, including on wired
+            // hosts or when wireless hardware arrives after initial coldplug.
+            "kernelModules": when(driver.clone(), NixValue::list(["rfkill".into()])),
+        },
         "networking": nix_record! {
             "useDHCP": context.lib.clone().select("mkDefault").call(false),
             // setup-ip writes the resolver file for Qubes uplinks; resolvconf would race it.
