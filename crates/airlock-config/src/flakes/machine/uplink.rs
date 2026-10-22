@@ -126,7 +126,7 @@ pub(super) fn fixture(build: &Build) -> NixValue {
                     },
                 },
             },
-            "testScript": r#"
+            "testScript": nix_text!(r#"
             from datetime import timedelta
 
             machine.start()
@@ -140,7 +140,7 @@ pub(super) fn fixture(build: &Build) -> NixValue {
                 machine.succeed("journalctl -b --no-pager > /tmp/uplink-journal.txt")
                 machine.copy_from_machine("/tmp/uplink-journal.txt")
                 machine.copy_from_machine("/tmp/uplink-hotplug.json")
-        "#,
+        "#),
         })
 }
 
