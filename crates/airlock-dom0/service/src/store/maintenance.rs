@@ -1,10 +1,11 @@
 //! Storage reclamation traces logical generations and physical pins before deleting bytes.
 //! Relocation publishes verified replacement extents before refreshing unpinned views.
 
-use super::{fs::*, records, segments, tracing, views};
+use super::{fs::*, records, segment_retirement, segments, tracing, views};
 use airlock_deployment_core::retention::{
     Candidate, Generation, Protection, ReclaimRequest,
     inventory::{self as protection_inventory, PoolSources, ProtectionInventory, StoredGeneration},
+    segments::SegmentIndex,
     tracing::{Resource, Sources, Trace},
 };
 use anyhow::{Context, Result, ensure};
@@ -228,8 +229,8 @@ fn locations(root: &Path, live: &Liveness) -> Result<BTreeMap<String, (Value, se
 }
 
 struct PhysicalReferences {
-    // Exact segment identities from verified tracing of every resolved physical range.
-    protected_segments: BTreeSet<String>,
+    // Complete verified physical trace, retained through request selection without an unchecked set projection.
+    trace: Trace,
     // Physical extents protected by retained views and live or preparing consumers.
     by_segment: BTreeMap<String, Vec<Value>>,
     // Stale kernel mappings reported for recovery without releasing live pins.
@@ -311,16 +312,8 @@ fn physical_refs(
             );
         }
     }
-    let protected_segments = trace
-        .references()
-        .iter()
-        .map(|r| match r {
-            Resource::Segment(id) => Ok(id.clone()),
-            _ => anyhow::bail!("unexpected physical resource category"),
-        })
-        .collect::<Result<_>>()?;
     Ok(PhysicalReferences {
-        protected_segments,
+        trace,
         by_segment: references,
         stale_runtime: stale,
     })
@@ -336,7 +329,9 @@ fn inventory(
         let path = segments::blob(root, &id)?;
         let metadata = segments::metadata(root, &id)?;
         let value: Value = read(&metadata)?;
-        let used = fs::metadata(&path)?.len();
+        // Validate physical identity and lifecycle before GC can begin any deletion.
+        segment_retirement::observe(root, &id)?;
+        let used = segment_retirement::bytes(root, &id)?;
         let current: Vec<_> = locations
             .iter()
             .filter(|(_, (_, extent))| extent.segment_id == id)
@@ -366,38 +361,39 @@ fn inventory(
     Ok(output)
 }
 
-fn delete_segments(
-    root: &Path,
-    inventory: &[Value],
-    protected: &BTreeSet<String>,
-) -> Result<Value> {
-    let current = root.join("objects/current-segment");
-    let current = if current.try_exists()? {
-        fs::read_to_string(current)?.trim().to_owned()
-    } else {
-        String::new()
-    };
+fn delete_segments(root: &Path, inventory: &[Value], trace: &Trace) -> Result<Value> {
+    let index = SegmentIndex::new(
+        root.to_str().context("non-UTF-8 pool identity")?.to_owned(),
+        trace,
+    )
+    .context("invalid segment protection index")?;
+    let current = segment_retirement::current(root)?;
+    // Decode and select every request before starting physical deletion. Report
+    // flags and reference counts are diagnostics, never permission to unlink.
+    let mut selected = Vec::new();
+    let mut seen = BTreeSet::new();
+    for value in inventory {
+        let id = text(value, "id")?;
+        ensure!(
+            seen.insert(id.clone()),
+            "duplicate segment deletion candidate"
+        );
+        let observed = segment_retirement::observe(root, &id)?;
+        selected.push((value, index.reclaim(observed, &current)));
+    }
 
     let mut removed = Vec::new();
     let mut retained = Vec::new();
     let mut partial = Vec::new();
     let mut blocked = Vec::new();
     let mut reclaimed = 0;
-    for value in inventory {
-        let id = text(value, "id")?;
-        if value["sealed"] == true
-            && id != current
-            && number(value, "physical_reference_count")? == 0
-            && !protected.contains(&id)
-        {
-            failpoint("gc-before-segment-delete")?;
-            remove(&segments::blob(root, &id)?)?;
-            remove(&segments::metadata(root, &id)?)?;
-            sync_dir(&root.join("objects/segments"))?;
-            reclaimed += number(value, "used_bytes")?;
+    for (value, request) in selected {
+        if let Some(request) = request {
+            let id = request.id().to_owned();
+            reclaimed += segment_retirement::execute(request)?;
             removed.push(id);
-            failpoint("gc-after-segment-delete")?;
         } else {
+            let id = text(value, "id")?;
             if number(value, "current_live_bytes")? == 0
                 && number(value, "physical_reference_count")? > 0
             {
@@ -406,7 +402,7 @@ fn delete_segments(
             if number(value, "current_live_bytes")? > 0 && number(value, "dead_bytes")? > 0 {
                 partial.push(id);
             }
-            retained.push(value.clone());
+            retained.push((*value).clone());
         }
     }
     Ok(
@@ -502,7 +498,7 @@ pub(super) fn gc(root: &Path, keep: usize, references: Vec<Protection>) -> Resul
     let PhysicalReferences {
         by_segment: references,
         stale_runtime: stale,
-        protected_segments,
+        trace,
     } = physical_refs(root, &live, &locations)?;
     let inventory = inventory(root, &locations, &references)?;
     let mut removed_generations = Vec::new();
@@ -564,7 +560,7 @@ pub(super) fn gc(root: &Path, keep: usize, references: Vec<Protection>) -> Resul
             remove(&path)?;
         }
     }
-    let mut result = delete_segments(root, &inventory, &protected_segments)?;
+    let mut result = delete_segments(root, &inventory, &trace)?;
     for (key,value) in json!({
         "schema": "airlock.closure-store.gc.v1",
         "status": "passed",
@@ -910,13 +906,13 @@ pub(super) fn compact(
     let live_locations = locations(root, &live)?;
     let PhysicalReferences {
         by_segment: references,
-        protected_segments,
+        trace,
         ..
     } = physical_refs(root, &live, &live_locations)?;
     let retirement = delete_segments(
         root,
         &inventory(root, &live_locations, &references)?,
-        &protected_segments,
+        &trace,
     )?;
     failpoint("compact-after-retirement")?;
     let dead: u64 = candidates

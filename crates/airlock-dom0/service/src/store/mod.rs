@@ -74,6 +74,8 @@ mod protection;
 
 mod tracing;
 
+mod segment_retirement;
+
 mod mounts;
 
 mod root;

@@ -315,9 +315,19 @@
 //! repeated extensions preserve earlier requirements. Invalid names or physical-range arithmetic
 //! refuse tracing. Ordinary Rust decodes mandatory manifest fields, checks view/list correspondence
 //! and physical bounds, and validates surviving root references before GC starts deleting.
-//! Filesystem discovery, source-to-core projection, indexed lookup construction, record integrity
-//! and the final deletion loops remain outside these proofs. Root contents and faithful filesystem
-//! execution are not established by tracing references.
+//! Physical segment deletion adds an exact verified index over the original trace. Only an unpinned,
+//! sealed, noncurrent segment can produce an opaque request; its original pool and exact filename
+//! reach the shared GC/compaction adapter through verified accessors. Borrowing the trace prevents
+//! extending that source while a permission survives. The adapter consumes the request, rechecks
+//! physical identity, lifecycle and current selection under segment exclusion, then unlinks only files.
+//! A sealed, unreferenced metadata-only remainder can finish its interrupted unlink. A remaining blob
+//! without metadata, or any referenced missing bytes, refuses cleanup. Repeated cleanup rebuilds requests
+//! from fresh observations.
+//! Filesystem discovery, source-to-core projection, record integrity, object/view/root lookup indexes
+//! and their deletion decisions remain ordinary Rust. Segment record decoding, the adapter's faithful
+//! use of requests, lock discipline, truthful observations and actual unlink/fsync remain trusted.
+//! These snapshots do not exclude independent raw filesystem writers, prove root contents or establish
+//! exactly-once execution or power-loss durability.
 //! Pin-release classification is rechecked under the same storage lock, so a newer manual retention
 //! update is not overwritten. Repeated collection rebuilds protections and requests; it does not replay
 //! cached deletion authority. Independent raw filesystem writers, durable publication, physical-byte

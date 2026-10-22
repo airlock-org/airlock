@@ -8,6 +8,9 @@ pub mod inventory;
 /// Exact immutable-resource tracing for retained generations and physical pins.
 pub mod tracing;
 
+/// Exact physical segment deletion requests derived from complete resource traces.
+pub mod segments;
+
 use vstd::prelude::*;
 
 verus! {

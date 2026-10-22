@@ -998,3 +998,134 @@ fn interrupted_switch_and_gc_preserve_the_last_published_selection() -> Result<(
     }
     Ok(())
 }
+
+/// Segment unlinking can be interrupted before, between, or after its two files without losing selected bytes.
+#[test]
+fn interrupted_segment_retirement_reconciles_partial_files_without_replaying_authority()
+-> Result<()> {
+    for failure in [
+        "gc-before-segment-delete",
+        "gc-between-segment-files",
+        "gc-after-segment-delete",
+    ] {
+        let (store, receipt) = fragmented()?;
+        let output = common::run(
+            compact(&store).env("AIRLOCK_CLOSURE_STORE_FAILPOINT", failure),
+            None,
+        )?;
+        assert!(
+            !output.status.success(),
+            "missing retirement failure boundary: {failure}"
+        );
+        if failure == "gc-between-segment-files" {
+            assert!(
+                fs::read_dir(store.pool.join("objects/segments"))?
+                    .filter_map(std::result::Result::ok)
+                    .any(|entry| {
+                        entry.path().extension().is_some_and(|e| e == "json")
+                            && !entry.path().with_extension("blob").exists()
+                    })
+            );
+        }
+        store.run(&["pool", "recover", "--pool-root", store.pool_text()])?;
+        for _ in 0..2 {
+            store.run(&[
+                "pool",
+                "gc",
+                "--pool-root",
+                store.pool_text(),
+                "--keep-generations",
+                "0",
+            ])?;
+            let generation = receipt["generation"].to_string();
+            let loaded = store.run(&[
+                "pool",
+                "load-generation",
+                "--pool-root",
+                store.pool_text(),
+                "--domain",
+                "usr-home-runtime-store",
+                "--generation",
+                &generation,
+            ])?;
+            assert_eq!(loaded["system"], store.system);
+        }
+        let again = store.run(&[
+            "pool",
+            "gc",
+            "--pool-root",
+            store.pool_text(),
+            "--keep-generations",
+            "0",
+        ])?;
+        assert!(again["removed_segments"].as_array().unwrap().is_empty());
+        for entry in fs::read_dir(store.pool.join("objects/segments"))? {
+            let path = entry?.path();
+            if path.extension().is_some_and(|e| e == "json") {
+                assert!(
+                    path.with_extension("blob").is_file(),
+                    "partial retirement did not reconcile"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Corrupt physical identity or lifecycle is rejected before GC removes any logical or physical data.
+#[test]
+fn segment_retirement_refuses_malformed_observations_before_cleanup() -> Result<()> {
+    let (store, _) = fragmented()?;
+    let path = fs::read_dir(store.pool.join("objects/segments"))?
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.extension().is_some_and(|e| e == "json"))
+        .unwrap();
+    let original = read(&path)?;
+    let permissions = fs::metadata(&path)?.permissions();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+    for defect in ["schema", "id", "blob", "status", "sealed"] {
+        let mut damaged = original.clone();
+        match defect {
+            "schema" => damaged["schema"] = json!("unsupported"),
+            "id" => damaged["id"] = json!("999999"),
+            "blob" => damaged["blob"] = json!(store.pool.join("objects/segments/999999.blob")),
+            "status" => damaged["status"] = json!("unknown"),
+            "sealed" => damaged["sealed"] = json!(!original["sealed"].as_bool().unwrap()),
+            _ => unreachable!(),
+        }
+        fs::write(&path, serde_json::to_vec(&damaged)?)?;
+        let before = snapshot(&store.pool)?;
+        let output = common::run(
+            &mut store.command(&[
+                "pool",
+                "gc",
+                "--pool-root",
+                store.pool_text(),
+                "--keep-generations",
+                "0",
+            ]),
+            None,
+        )?;
+        assert!(
+            !output.status.success(),
+            "accepted invalid segment {defect}"
+        );
+        assert_eq!(
+            snapshot(&store.pool)?,
+            before,
+            "mutated pool before rejecting {defect}"
+        );
+    }
+    fs::write(&path, serde_json::to_vec(&original)?)?;
+    fs::set_permissions(&path, permissions)?;
+    store.run(&[
+        "pool",
+        "gc",
+        "--pool-root",
+        store.pool_text(),
+        "--keep-generations",
+        "0",
+    ])?;
+    Ok(())
+}
