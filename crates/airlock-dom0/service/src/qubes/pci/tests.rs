@@ -10,16 +10,20 @@ fn fields(port: &str, identity: &str) -> String {
 #[test]
 fn exact_wildcard_and_concrete_rows_round_trip() -> Result<()> {
     let owner: VmName = "usr-assistant".parse()?;
-    for identity in ["*", "8086:153a::p020000", "0000:0000::?******"] {
-        let head = argument("dom0", "01_00.0", identity);
+    for (port, identity) in [
+        ("01_00.0", "*"),
+        ("00_1c.0-00_00.0", "8086:153a::p020000"),
+        ("0001_40_01.0-00_00.0", "0000:0000::?******"),
+    ] {
+        let head = argument("dom0", port, identity);
         let reply = format!(
             "{head} {fields} mode='required' frontend_domain='usr-assistant' _no-strict-reset='True'",
-            fields = fields("01_00.0", identity)
+            fields = fields(port, identity)
         );
         let rows = usages(&reply, &owner, Kind::Assigned)?;
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].identity, identity);
-        assert_eq!(rows[0].port, "01_00.0");
+        assert_eq!(rows[0].port, port);
     }
     Ok(())
 }
@@ -58,13 +62,25 @@ fn unavailable_network_hardware_is_not_silently_omitted() -> Result<()> {
     fs::write(path.join("class"), "0x020000\n")?;
     assert!(devices(root.path(), &BTreeMap::new()).is_err());
     let reply = format!(
-        "01_00.0:8086:153a::p020000 {fields} interfaces='p020000'",
+        "01_00.0:8086:153a::p020000 {fields} interfaces='p020000' _sbdf='0000:01:00.0'",
         fields = fields("01_00.0", "8086:153a::p020000")
     );
     let available = available(&reply)?;
     let observed = devices(root.path(), &available)?;
     assert_eq!(observed[0].class, 0x020000);
     assert_eq!(observed[0].identity, "8086:153a::p020000");
+    for invalid in [
+        reply.replace(" _sbdf='0000:01:00.0'", ""),
+        reply.replace("0000:01:00.0", "../../elsewhere"),
+        format!(
+            "{reply}\n{duplicate}",
+            duplicate = reply
+                .replace("01_00.0:", "02_00.0:")
+                .replace("port_id='01_00.0'", "port_id='02_00.0'")
+        ),
+    ] {
+        assert!(super::available(&invalid).is_err(), "accepted {invalid}");
+    }
     fs::remove_dir_all(path)?;
     assert!(devices(root.path(), &available).is_err());
     assert!(
@@ -83,12 +99,12 @@ fn complete_snapshot_and_uncertain_unassignment_reconcile_without_duplicate_effe
     fs::create_dir(root.path().join("0000:01:00.0"))?;
     fs::write(root.path().join("0000:01:00.0/class"), "0x020000")?;
     let available = format!(
-        "01_00.0:8086:153a::p020000 {fields}",
-        fields = fields("01_00.0", "8086:153a::p020000")
+        "00_1c.0-00_00.0:8086:153a::p020000 {fields} _sbdf='0000:01:00.0'",
+        fields = fields("00_1c.0-00_00.0", "8086:153a::p020000")
     );
     let assigned = format!(
-        "dom0+01_00.0+_ {fields} mode='required'",
-        fields = fields("01_00.0", "*")
+        "dom0+00_1c.0-00_00.0+_ {fields} mode='required'",
+        fields = fields("00_1c.0-00_00.0", "*")
     );
     let mut complete = Vec::new();
     let mut observe = |removed: bool, foreign: bool, fail: bool| {
@@ -166,7 +182,7 @@ fn complete_snapshot_and_uncertain_unassignment_reconcile_without_duplicate_effe
     assert!(
         unassign_with(request, |owner, arg| {
             assert_eq!(owner.as_str(), "usr-assistant");
-            assert_eq!(arg, "dom0+01_00.0+_");
+            assert_eq!(arg, "dom0+00_1c.0-00_00.0+_");
             changes += 1;
             anyhow::bail!("effect succeeded, reply lost")
         })
@@ -185,6 +201,50 @@ fn complete_snapshot_and_uncertain_unassignment_reconcile_without_duplicate_effe
             |(domain, method)| domain == "foreign" && *method == "admin.vm.device.pci.Attached"
         )
     );
+    Ok(())
+}
+
+/// Physical route addresses must resolve to topology ports before the recovery NIC is excluded.
+#[test]
+fn recovery_routes_use_upstream_physical_addresses() -> Result<()> {
+    let reply = format!(
+        "00_1c.0-00_00.0:8086:153a::p020000 {first} _sbdf='0000:04:00.0'\n0001_40_01.0-00_00.0:8086:153b::p020000 {second} _sbdf='0001:41:00.0'",
+        first = fields("00_1c.0-00_00.0", "8086:153a::p020000"),
+        second = fields("0001_40_01.0-00_00.0", "8086:153b::p020000")
+    );
+    let inventory = available(&reply)?;
+    assert_eq!(
+        ports_for_addresses(&[address("0000:04:00.0")?], &inventory)?,
+        ["00_1c.0-00_00.0"]
+    );
+    assert!(ports_for_addresses(&[address("0000:05:00.0")?], &inventory).is_err());
+    let root = tempfile::tempdir()?;
+    for physical in ["0000:04:00.0", "0001:41:00.0"] {
+        fs::create_dir(root.path().join(physical))?;
+        fs::write(root.path().join(physical).join("class"), "0x020000")?;
+    }
+    let observed = devices(root.path(), &inventory)?;
+    assert_eq!(observed.len(), 2);
+    assert!(
+        observed
+            .iter()
+            .any(|device| device.port == "0001_40_01.0-00_00.0")
+    );
+
+    for invalid in [
+        "",
+        "00_20.0",
+        "00_00.8",
+        "00_1c.0-",
+        "-00_00.0",
+        "00_1c.0--00_00.0",
+        "00_1c.0/00_00.0",
+        "00_1c.0+00_00.0",
+        "00_1c.0-*",
+        "*",
+    ] {
+        assert!(validate_port(invalid).is_err(), "accepted {invalid}");
+    }
     Ok(())
 }
 

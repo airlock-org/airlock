@@ -127,6 +127,8 @@ impl Setup {
             "qvm-device",
             "systemctl",
             "airlock-dom0-service",
+            // Recovery-route observation belongs to this fixture, never the workstation's NIC.
+            "ip",
         ] {
             peers.rules(name, json!([{}]))?;
         }
@@ -585,9 +587,14 @@ fn startup_scope_preserves_network_device_and_gui_order() -> Result<()> {
 #[test]
 fn automatic_pci_assignment_preserves_recovery_exclusions() -> Result<()> {
     for (name, route, exclusions, expected) in [
-        ("sys-net", "00_1f.6", "", vec!["02_00.0"]),
-        ("sys-net", "", "02_00.0", vec!["00_1f.6"]),
-        ("usr-assistant", "00_1f.6", "", vec!["00_1f.6", "02_00.0"]),
+        ("sys-net", "00_1f.6", "", vec!["00_1c.0-00_00.0"]),
+        ("sys-net", "", "00_1c.0-00_00.0", vec!["00_1f.6"]),
+        (
+            "usr-assistant",
+            "00_1f.6",
+            "",
+            vec!["00_1f.6", "00_1c.0-00_00.0"],
+        ),
     ] {
         let mut desired = topology();
         desired["domains"][name] = domain("red", Value::Null);
@@ -599,7 +606,7 @@ fn automatic_pci_assignment_preserves_recovery_exclusions() -> Result<()> {
         command
             .env(
                 "AIRLOCK_DOM0_NETWORK_PCI_DEVICES",
-                "00_1f.6\n02_00.0\n02_00.0\n",
+                "00_1f.6\n00_1c.0-00_00.0\n00_1c.0-00_00.0\n",
             )
             .env("AIRLOCK_DOM0_DEFAULT_ROUTE_PCI_DEVICES", route)
             .env("AIRLOCK_SYS_NET_PCI_EXCLUDE", exclusions);

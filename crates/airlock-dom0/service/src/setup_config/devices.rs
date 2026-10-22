@@ -15,29 +15,6 @@ fn words(value: &str) -> Vec<String> {
         .collect()
 }
 
-/// Normalize a sysfs PCI address to the Qubes port spelling; ignore non-PCI interfaces.
-fn port(bdf: &str) -> Option<String> {
-    let short = if bdf.is_ascii()
-        && bdf.len() == 12
-        && bdf.as_bytes()[4] == b':'
-        && bdf.as_bytes()[..4].iter().all(u8::is_ascii_hexdigit)
-    {
-        &bdf[5..]
-    } else {
-        bdf
-    };
-    let bytes = short.as_bytes();
-    (bytes.len() == 7
-        && bytes[2] == b':'
-        && bytes[5] == b'.'
-        && bytes[6] >= b'0'
-        && bytes[6] <= b'7'
-        && [0, 1, 3, 4]
-            .into_iter()
-            .all(|index| bytes[index].is_ascii_hexdigit()))
-    .then(|| short.replace(':', "_"))
-}
-
 /// Identify PCI interfaces supporting dom0's current default route, or an explicit test override.
 fn recovery_ports(mut command: impl FnMut(&str, &[&str]) -> Result<String>) -> Result<Vec<String>> {
     if let Ok(value) = std::env::var("AIRLOCK_DOM0_DEFAULT_ROUTE_PCI_DEVICES")
@@ -59,14 +36,14 @@ fn recovery_ports(mut command: impl FnMut(&str, &[&str]) -> Result<String>) -> R
                     && let Some(name) = device
                         .file_name()
                         .and_then(|name| name.to_str())
-                        .and_then(port)
+                        .and_then(|name| crate::qubes::pci::address(name).ok())
                 {
                     ports.insert(name);
                 }
             }
         }
     }
-    Ok(ports.into_iter().collect())
+    crate::qubes::pci::recovery_ports(&ports.into_iter().collect::<Vec<_>>())
 }
 
 /// The conventional root provider, or an explicit opt-in provider, receives automatic network PCI.

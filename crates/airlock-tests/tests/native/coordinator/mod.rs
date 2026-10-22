@@ -1202,7 +1202,7 @@ fn namespace_native_pci_assignment_rejects_foreign_ownership_and_reconciles_lost
     let path = machine.physical(&machine.candidate).join("topology.json");
     let mut topology = read(&path)?;
     topology["domains"]["usr-home"]["devices"]["pci"] = json!([{
-        "backend":"dom0", "id":"01_00.0", "mode":"required", "match":"port", "options":{"no-strict-reset":"True"}
+        "backend":"dom0", "id":"00_1c.0-00_00.0", "mode":"required", "match":"port", "options":{"no-strict-reset":"True"}
     }]);
     save(path, &topology)?;
     // Existing VM device declarations are immutable in an ordinary deployment.
@@ -1215,9 +1215,9 @@ fn namespace_native_pci_assignment_rejects_foreign_ownership_and_reconciles_lost
     fs::write(machine.path("sys-pci/0000:01:00.0/class"), "0x020000\n")?;
     machine.data["native_setup"] = json!(true);
     machine.data["pci_available"] = json!(
-        "01_00.0:8086:1234::p020000 device_id='8086:1234::p020000' port_id='01_00.0' backend_domain='dom0' devclass='pci'"
+        "00_1c.0-00_00.0:8086:1234::p020000 device_id='8086:1234::p020000' port_id='00_1c.0-00_00.0' backend_domain='dom0' devclass='pci' _sbdf='0000:01:00.0'"
     );
-    machine.data["pci_assigned"] = json!({"unmanaged-vm":"dom0+01_00.0+_ device_id='*' port_id='01_00.0' backend_domain='dom0' devclass='pci' mode='required'"});
+    machine.data["pci_assigned"] = json!({"unmanaged-vm":"dom0+00_1c.0-00_00.0+_ device_id='*' port_id='00_1c.0-00_00.0' backend_domain='dom0' devclass='pci' mode='required'"});
     machine.persist()?;
     machine.approve(None)?;
     let _api = Volumes::new(&machine)?;

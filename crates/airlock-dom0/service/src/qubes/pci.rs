@@ -29,19 +29,57 @@ fn identity(value: &str, wildcard: bool) -> Result<&str> {
     Ok(value)
 }
 
-/// Physical PCI ports are canonical Qubes BDFs; a whole-port wildcard is explicit.
+/// Accept Qubes' bridge-relative paths and optional segment prefix, without transport metacharacters.
 fn port(value: &str, wildcard: bool) -> Result<&str> {
-    let b = value.as_bytes();
+    let path = if value.len() >= 5
+        && value.as_bytes()[..4].iter().all(u8::is_ascii_hexdigit)
+        && value.as_bytes()[4] == b'_'
+    {
+        &value[5..]
+    } else {
+        value
+    };
     ensure!(
         (wildcard && value == "*")
-            || (b.len() == 7
-                && b[2] == b'_'
-                && b[5] == b'.'
-                && (b'0'..=b'7').contains(&b[6])
-                && [0, 1, 3, 4].into_iter().all(|i| b[i].is_ascii_hexdigit())),
-        "invalid PCI port"
+            || (value.len() <= 2048
+                && path.split('-').all(|part| {
+                    let b = part.as_bytes();
+                    b.len() == 7
+                        && b[2] == b'_'
+                        && b[5] == b'.'
+                        && (b'0'..=b'7').contains(&b[6])
+                        && [0, 1, 3, 4].into_iter().all(|i| b[i].is_ascii_hexdigit())
+                        && u8::from_str_radix(&part[3..5], 16).is_ok_and(|device| device <= 31)
+                })),
+        "invalid Qubes PCI port: {value}"
     );
     Ok(value)
+}
+
+/// Normalize the physical address supplied by Qubes or a sysfs PCI directory.
+pub(crate) fn address(value: &str) -> Result<String> {
+    let b = value.as_bytes();
+    ensure!(
+        b.len() == 12
+            && b[4] == b':'
+            && b[7] == b':'
+            && b[10] == b'.'
+            && [0, 1, 2, 3, 5, 6, 8, 9, 11]
+                .into_iter()
+                .all(|i| b[i].is_ascii_hexdigit())
+            && (b'0'..=b'7').contains(&b[11])
+            && u8::from_str_radix(&value[8..10], 16).is_ok_and(|device| device <= 31),
+        "invalid physical PCI address: {value}"
+    );
+    Ok(value.to_ascii_lowercase())
+}
+
+/// Upstream PCI identity and its already resolved sysfs address; port paths are not physical BDFs.
+struct Physical {
+    /// Device identity used to detect replacement at the same Qubes port.
+    identity: String,
+    /// Segment, bus, device and function reported by upstream's `_sbdf` property.
+    address: String,
 }
 
 /// Decode every named frontend row, checking the head against all identity properties.
@@ -101,8 +139,9 @@ fn usages(reply: &str, owner: &VmName, kind: Kind) -> Result<Vec<Usage>> {
 }
 
 /// Decode authoritative Available identities; missing fields never become wildcard ownership.
-fn available(reply: &str) -> Result<BTreeMap<String, String>> {
+fn available(reply: &str) -> Result<BTreeMap<String, Physical>> {
     let mut devices = BTreeMap::new();
+    let mut addresses = std::collections::BTreeSet::new();
     for line in reply.lines() {
         let (head, rest) = line.split_once(' ').context("invalid PCI Available row")?;
         let (raw_port, raw_identity) = head
@@ -122,8 +161,27 @@ fn available(reply: &str) -> Result<BTreeMap<String, String>> {
                 "inconsistent PCI Available identity"
             );
         }
+
+        // Qubes resolves bridge-relative ports itself and includes the physical address in data.
+        let address = address(
+            fields
+                .get("_sbdf")
+                .context("missing Qubes PCI physical address")?,
+        )?;
         ensure!(
-            devices.insert(port.into(), identity.into()).is_none(),
+            addresses.insert(address.clone()),
+            "duplicate Qubes PCI physical address"
+        );
+        ensure!(
+            devices
+                .insert(
+                    port.into(),
+                    Physical {
+                        identity: identity.into(),
+                        address
+                    }
+                )
+                .is_none(),
             "duplicate PCI Available port"
         );
     }
@@ -131,8 +189,12 @@ fn available(reply: &str) -> Result<BTreeMap<String, String>> {
 }
 
 /// Join all sysfs functions to the independently reported Qubes hardware identity.
-fn devices(root: &Path, available: &BTreeMap<String, String>) -> Result<Vec<Device>> {
+fn devices(root: &Path, available: &BTreeMap<String, Physical>) -> Result<Vec<Device>> {
     let mut devices: BTreeMap<String, Device> = BTreeMap::new();
+    let by_address: BTreeMap<_, _> = available
+        .iter()
+        .map(|(port, device)| (device.address.as_str(), (port, device)))
+        .collect();
     for entry in fs::read_dir(root)? {
         let path = entry?.path();
         let raw_class = fs::read_to_string(path.join("class"))?;
@@ -144,28 +206,31 @@ fn devices(root: &Path, available: &BTreeMap<String, String>) -> Result<Vec<Devi
             16,
         )?;
         ensure!(class < 0x1000000, "invalid PCI class width");
-        let address = path
+        let physical_address = path
             .file_name()
             .and_then(|n| n.to_str())
             .context("invalid PCI address")?;
-        let Some(short) = address.strip_prefix("0000:") else {
-            ensure!(class / 65536 != 2, "unsupported network PCI segment");
-            continue;
-        };
-        let spelling = short.replace(':', "_");
-        let port = port(&spelling, false)?;
-        let identity = available.get(port);
+        let address = address(physical_address)?;
+        let reported = by_address.get(address.as_str());
         ensure!(
-            identity.is_some() || class / 65536 != 2,
+            reported.is_some() || class / 65536 != 2,
             "network PCI function missing from Qubes inventory"
         );
+        // Unreported non-network functions remain visible without claiming an upstream identity.
+        let spelling = address
+            .strip_prefix("0000:")
+            .unwrap_or(&address)
+            .replace(':', "_");
+        let (port, identity) = reported.map_or((spelling.as_str(), ""), |(port, device)| {
+            (port.as_str(), device.identity.as_str())
+        });
         ensure!(
             devices
                 .insert(
                     port.into(),
                     Device {
                         port: port.into(),
-                        identity: identity.cloned().unwrap_or_default(),
+                        identity: identity.into(),
                         class
                     }
                 )
@@ -178,6 +243,33 @@ fn devices(root: &Path, available: &BTreeMap<String, String>) -> Result<Vec<Devi
         "Qubes PCI device missing from sysfs"
     );
     Ok(devices.into_values().collect())
+}
+
+/// Resolve dom0's active physical NICs through the same upstream identities used for assignment.
+pub(crate) fn recovery_ports(addresses: &[String]) -> Result<Vec<String>> {
+    if addresses.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let raw = super::setup_dom0("admin.vm.device.pci.Available", "", &[])?;
+    ports_for_addresses(addresses, &available(std::str::from_utf8(&raw)?)?)
+}
+
+/// Missing route hardware makes the observation incomplete; it must never authorize reassignment.
+fn ports_for_addresses(
+    addresses: &[String],
+    available: &BTreeMap<String, Physical>,
+) -> Result<Vec<String>> {
+    addresses
+        .iter()
+        .map(|address| {
+            available
+                .iter()
+                .find(|(_, device)| device.address == *address)
+                .map(|(port, _)| port.clone())
+                .context("dom0 recovery PCI function missing from Qubes inventory")
+        })
+        .collect()
 }
 
 /// Read all registered frontends, including undeclared VMs, before making an ownership decision.

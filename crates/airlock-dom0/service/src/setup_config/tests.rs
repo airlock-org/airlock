@@ -47,12 +47,12 @@ fn explicit_properties_are_scoped_to_the_requested_owner() -> Result<()> {
 /// Device descriptions may contain escaped quotes; selection depends on encoded interfaces only.
 #[test]
 fn network_inventory_uses_upstream_interface_identity() -> Result<()> {
-    let reply = r#"00_14.0 vendor='Network manufacturer' interfaces='p0c0330'
-02_00.0:8086:1234::020000 vendor='A \'quoted\' device' interfaces='p020000' port_id='02_00.0'
+    let reply = r#"00_08.1-00_00.0 vendor='Display controller' interfaces='p030000'
+00_1c.0-00_00.0:8086:1234::020000 vendor='A \'quoted\' device' interfaces='p020000' port_id='00_1c.0-00_00.0'
 03_00.0 interfaces='p028000p020000'
 04_00.0 vendor='not an interface'
 "#;
-    assert_eq!(network_ports(reply)?, ["02_00.0", "03_00.0"]);
+    assert_eq!(network_ports(reply)?, ["00_1c.0-00_00.0", "03_00.0"]);
     for invalid in [
         "02_00.0 interfaces='p02'",
         "02_00.0 interfaces='p020000' interfaces='p030000'",

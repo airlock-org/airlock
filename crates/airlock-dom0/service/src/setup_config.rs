@@ -176,14 +176,7 @@ fn network_ports(reply: &str) -> Result<Vec<String>> {
             .split(':')
             .next()
             .context("missing Qubes PCI port")?;
-        ensure!(
-            !port.is_empty()
-                && port.len() <= 32
-                && port
-                    .bytes()
-                    .all(|b| b.is_ascii_hexdigit() || b"_:.".contains(&b)),
-            "invalid Qubes PCI port"
-        );
+        qubes::pci::validate_port(port)?;
         let fields = properties(text)?;
         for (field, expected) in [
             ("port_id", port),
