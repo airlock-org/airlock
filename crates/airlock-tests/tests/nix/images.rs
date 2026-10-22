@@ -109,81 +109,12 @@ fn raw_disk_hooks(root: &Path, changed: bool) -> Result<Reply> {
     let sources: Value = serde_json::from_slice(&fs::read(
         std::env::var_os("AIRLOCK_RUSIX_SOURCES").context("prepared upstream sources")?,
     )?)?;
-    let store =
-        PathBuf::from(std::env::var_os("AIRLOCK_NIX_ROOT").context("guarded Airlock store")?);
-    ensure!(
-        store.is_absolute() && store != Path::new("/"),
-        "select the guarded Airlock store"
-    );
-    let logs = PathBuf::from(
-        std::env::var_os("AIRLOCK_RUSIX_LOG_DIR").context("explicit test log directory")?,
-    );
-    fs::create_dir_all(&logs)?;
-    let driver = root.join(format!("raw-hooks-{changed}.nix"));
-    let source = common::run(
-        Command::new(common::binary(
-            "AIRLOCK_TEST_FIXTURES_BIN",
-            "examples/test_fixtures",
-        ))
-        .arg("prepared_store/raw_disk_hooks")
-        .arg(serde_json::to_string(
-            &json!({"nixpkgs":sources["nixpkgsSource"], "changedUpstream":changed}),
-        )?),
-        None,
-    )?
-    .checked()?;
-    fs::write(&driver, source)?;
-
-    let mut command = Command::new("nix");
-    command
-        .arg("--store")
-        .arg(store)
-        .args([
-            "--extra-experimental-features",
-            "nix-command flakes",
-            "--option",
-            "substituters",
-            "",
-            "--option",
-            "builders",
-            "",
-            "--option",
-            "build-users-group",
-            "",
-            "--option",
-            "allow-import-from-derivation",
-            "false",
-            "--offline",
-            "eval",
-            "--impure",
-            "--json",
-            "--eval-store",
-        ])
-        .arg(root.join("evaluation-store"))
-        .arg("--file")
-        .arg(driver)
-        .env_remove("NIX_REMOTE")
-        .env_remove("NIX_STORE_DIR")
-        .env("NIX_CONFIG", "")
-        .env("NIX_PATH", "")
-        .env("NIX_CONF_DIR", root.join("config"))
-        .env("NIX_USER_CONF_FILES", root.join("config/nix.conf"))
-        .env("XDG_CACHE_HOME", root.join("cache"))
-        .env("XDG_STATE_HOME", root.join("state"))
-        .env("XDG_DATA_HOME", root.join("data"));
-    let output = support::run(&mut command, None, Duration::from_secs(60))?;
-    let reply = Reply {
-        success: output.status.success(),
-        stdout: String::from_utf8(output.stdout)?,
-        stderr: String::from_utf8(output.stderr)?,
-        diagnostics: logs.join(format!("raw-hooks-{changed}.stderr")),
-    };
-    fs::write(&reply.diagnostics, &reply.stderr)?;
-    fs::write(
-        logs.join(format!("raw-hooks-{changed}.json")),
-        &reply.stdout,
-    )?;
-    Ok(reply)
+    evaluate_fixture(
+        root,
+        &format!("raw-hooks-{changed}"),
+        "prepared_store/raw_disk_hooks",
+        json!({"nixpkgs":sources["nixpkgsSource"], "changedUpstream":changed}),
+    )
 }
 
 /// Changing one package rebuilds only its fragment and affected index; another closure reuses both outputs.

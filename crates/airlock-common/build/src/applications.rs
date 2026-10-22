@@ -182,8 +182,7 @@ impl Application {
             ),
         };
         let lib = pkgs.clone().select("lib");
-        let mut flags = vec!["-p".into(), package.into()];
-        if matches!(
+        let default_features = !matches!(
             self,
             Self::Image
                 | Self::Usb
@@ -192,20 +191,30 @@ impl Application {
                 | Self::InputTest
                 | Self::UplinkTest
                 | Self::PrepareBoot
-        ) {
+        );
+        let features: &[&str] = if matches!(self, Self::StoreCache) {
+            &["artifacts"]
+        } else {
+            &[]
+        };
+        let mut flags = vec!["-p".into(), package.into()];
+        if !default_features {
             // USB and validation commands never load Qubes' offline Python object model.
             flags.push("--no-default-features".into());
         }
         for binary in binaries {
             flags.extend(["--bin".into(), (*binary).into()]);
         }
-        if matches!(self, Self::StoreCache) {
-            flags.extend(["--features".into(), "artifacts".into()]);
+        if !features.is_empty() {
+            flags.extend(["--features".into(), features.join(",").into()]);
         }
         let mut attributes = vec![
             ("pname", name.into()),
             ("version", env!("CARGO_PKG_VERSION").into()),
-            ("src", workspace.source(&lib, package)),
+            (
+                "src",
+                workspace.source_with_features(&lib, package, default_features, features),
+            ),
             (
                 "cargoLock",
                 nix_record! { "lockFile": workspace.file("Cargo.lock").snapshot() },
