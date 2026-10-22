@@ -65,6 +65,7 @@ fn hello(name: &str, kind: &str) -> Vec<u8> {
     // prop, ev, key, rel, abs, msc, led, snd, ff, sw. A 128-byte name
     // precedes 64 Linux input_absinfo records of six signed 32-bit fields.
     let mut caps = vec![0_u8; 176 + 128 + 64 * 24];
+    set(&mut caps, 8, 0); // EV_SYN: without it the receiver drops the packet boundary.
     set(&mut caps, 8, 1); // EV_KEY
     if matches!(kind, "keyboard" | "composite") {
         // A normal PC keyboard lets the real udev input classifier recognize typing.
@@ -323,15 +324,23 @@ pub(crate) fn run(udevadm: &Path) -> Result<()> {
                         && i32::from_le_bytes(event[20..24].try_into().unwrap()) == value
                 })
             }))
+        })
+        .with_context(|| {
+            format!(
+                "{service}: forwarded events were not delivered: {error}",
+                error = fs::read_to_string(&errors).unwrap_or_default()
+            )
         })?;
         receiver.pipe.take();
-        wait(|| Ok(receiver.child.try_wait()?.is_some()))?;
+        wait(|| Ok(receiver.child.try_wait()?.is_some()))
+            .with_context(|| format!("{service} did not exit after EOF"))?;
         ensure!(
             receiver.child.wait()?.success(),
             "{service} failed on disconnect: {error}",
             error = fs::read_to_string(&errors).unwrap_or_default()
         );
-        wait(|| Ok(event_node(&full_name)?.is_none()))?;
+        wait(|| Ok(event_node(&full_name)?.is_none()))
+            .with_context(|| format!("{service} kept its input device after EOF"))?;
         ensure!(
             readiness()?["devices"]
                 .as_array()
