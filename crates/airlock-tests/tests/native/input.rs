@@ -330,6 +330,8 @@ fn boot_input_readiness_survives_connection_job_cancellation() -> Result<()> {
 fn input_receiver_readiness_enforces_caller_device_and_handler_guards() -> Result<()> {
     for state in [
         "ready",
+        "relative-pointer",
+        "multitouch-pointer",
         "wrong-caller",
         "argument",
         "regular-device",
@@ -343,8 +345,22 @@ fn input_receiver_readiness_enforces_caller_device_and_handler_guards() -> Resul
         fs::create_dir_all(device_path.join("capabilities"))?;
         fs::write(device_path.join("name"), "dom0: Keyboard\n")?;
         fs::write(device_path.join("capabilities/key"), "100050000000\n")?;
-        fs::write(device_path.join("capabilities/rel"), "0\n")?;
-        fs::write(device_path.join("capabilities/abs"), "0\n")?;
+        fs::write(
+            device_path.join("capabilities/rel"),
+            if state == "relative-pointer" {
+                "3\n"
+            } else {
+                "0\n"
+            },
+        )?;
+        fs::write(
+            device_path.join("capabilities/abs"),
+            if state == "multitouch-pointer" {
+                "60000000000000\n"
+            } else {
+                "0\n"
+            },
+        )?;
         let first = peers.path("first-handler");
         fs::write(&first, "not executed")?;
         fs::set_permissions(&first, fs::Permissions::from_mode(0o755))?;
@@ -398,15 +414,16 @@ fn input_receiver_readiness_enforces_caller_device_and_handler_guards() -> Resul
         let output = common::run(&mut command, None)?;
         assert_eq!(
             output.status.success(),
-            state == "ready",
+            matches!(state, "ready" | "relative-pointer" | "multitouch-pointer"),
             "state={state}: {error}",
             error = String::from_utf8_lossy(&output.stderr)
         );
         assert!(peers.calls()?.is_empty());
-        if state == "ready" {
+        if matches!(state, "ready" | "relative-pointer" | "multitouch-pointer") {
             let reply: Value = serde_json::from_slice(&output.stdout)?;
             assert_eq!(reply["devices"][0]["name"], "dom0: Keyboard");
             assert_eq!(reply["devices"][0]["keyboard"], true);
+            assert_eq!(reply["devices"][0]["pointer"], state != "ready");
         }
     }
     Ok(())

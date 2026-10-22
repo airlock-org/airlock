@@ -158,8 +158,9 @@ pub(super) fn host_rpcs(inputs: NixValue) -> NixValue {
         .call(inputs.select("root"))
         .bind(|flake| {
             let host = flake
+                .clone()
                 .select("nixosConfigurations.usb-dev.config.specialisation.usb-lab.configuration");
-            let pkgs = host.clone().select("nixpkgs.pkgs");
+            let pkgs = flake.select("inputs.nixpkgs.legacyPackages.x86_64-linux");
             let join = pkgs
                 .clone()
                 .select("lib.removeSuffix")

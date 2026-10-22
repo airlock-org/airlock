@@ -70,11 +70,14 @@ pub(crate) fn ready(request: Request) -> Result<()> {
         let keys = fs::read_to_string(path.join("capabilities/key"))?;
         let relative = fs::read_to_string(path.join("capabilities/rel"))?;
         let absolute = fs::read_to_string(path.join("capabilities/abs"))?;
+        // Linux evdev codes: A/Z/Enter distinguish typing from multimedia keys;
+        // movement can use REL_X/Y, ABS_X/Y or multitouch-only ABS_MT_POSITION_X/Y.
         devices.push(Device {
             name,
             keyboard: bit(&keys, 30)? && bit(&keys, 44)? && bit(&keys, 28)?,
             pointer: (bit(&relative, 0)? && bit(&relative, 1)?)
-                || (bit(&absolute, 0)? && bit(&absolute, 1)?),
+                || (bit(&absolute, 0)? && bit(&absolute, 1)?)
+                || (bit(&absolute, 53)? && bit(&absolute, 54)?),
         });
         ensure!(devices.len() <= 1024, "too many forwarded input interfaces");
     }
