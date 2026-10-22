@@ -722,7 +722,11 @@ fn native_vm_setup_coordinates_root_private_and_shared_store() -> Result<()> {
         "metadata_changed":true,"qubesd_restart_required":false,"qubesd_restarted":true,
         "generation":1,"closure_hash":"fixture","filesystem":"erofs","view_backend":"erofs-objectmap",
         "view_image":"/pool/view.erofs","metadata_image":"/pool/view.erofs",
-        "blob_map":"/pool/view.blob-map.json","blob_volume":"store-data","blob_device":"/dev/xvdf","blob_logical_size":65536});
+        "blob_map":"/pool/view.blob-map.json","blob_volume":"store-data","blob_device":"/dev/xvdf","blob_logical_size":65536,
+        "system":setup.topology["domains"]["usr-home"]["backend"]["system"]["source"],
+        "root_source":setup.topology["domains"]["usr-home"]["backend"]["root"]["source"],
+        "kernel_name":setup.topology["domains"]["usr-home"]["backend"]["kernel"]["name"],
+        "device":"/dev/xvde", "mountpoint":"/nix/store"});
     setup.peers.rules(
         "airlock-dom0-service",
         json!([

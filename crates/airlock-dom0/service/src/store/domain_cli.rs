@@ -145,7 +145,7 @@ pub(super) fn run(request: Request) -> Result<Value> {
             metadata_size,
         } => Ok(serde_json::to_value(domain::shared_configs(
             &target,
-            &request_value(&admission)?,
+            &serde_json::from_value(request_value(&admission)?)?,
             Some(metadata_size),
         )?)?),
         Operation::VerifySnapshot { domain, request } => {
@@ -170,7 +170,7 @@ pub(super) fn run(request: Request) -> Result<Value> {
                 )?,
             )?;
             domain::restore_daemon(&root)?;
-            domain::ensure(&args)
+            Ok(serde_json::to_value(domain::ensure(&args)?)?)
         }
         Operation::SwitchStore { target, generation } => {
             validate(&target)?;
@@ -191,7 +191,7 @@ pub(super) fn run(request: Request) -> Result<Value> {
                 )?,
             )?;
             domain::restore_daemon(&root)?;
-            domain::switch(&target, generation)
+            Ok(serde_json::to_value(domain::switch(&target, generation)?)?)
         }
     }
 }

@@ -16,9 +16,12 @@ mod journal;
 
 mod protocol;
 
+mod storage;
+
 pub use identity::*;
 pub use journal::*;
 pub use protocol::*;
+pub use storage::*;
 
 pub use airlock_nix_core::store_path::{StoreArtifact, StoreFile, StorePath};
 

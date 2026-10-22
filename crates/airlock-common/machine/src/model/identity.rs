@@ -105,6 +105,13 @@ pub struct GenerationId(
     NonZeroU64,
 );
 
+impl GenerationId {
+    /// Return the positive numeric identity without converting through a wire string.
+    pub fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
 impl FromStr for GenerationId {
     type Err = anyhow::Error;
 

@@ -42,15 +42,14 @@ impl Coordinator {
         name: &GuestName,
         generation: GenerationId,
     ) -> Result<Value> {
-        let value: Value = self.store().describe(name, generation)?;
-        let info: GenerationInfo = serde_json::from_value(value.clone())?;
+        let info = self.store().describe(name, generation)?;
         ensure!(
             info.domain.as_str() == crate::store::runtime_namespace(name.as_str())
                 && info.generation == generation
                 && info.status == CheckStatus::Passed,
             "generation identity differs"
         );
-        Ok(value)
+        Ok(serde_json::to_value(info)?)
     }
 
     fn receipt_identity(

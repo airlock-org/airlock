@@ -2,8 +2,15 @@
 //! Running and retained generations keep shared data alive until it can be reclaimed.
 //! The coordinator supplies deployment decisions; this boundary owns storage
 //! operations, image preparation and early boot through one native implementation.
+//! Loaded generations, guest installation receipts and resolved roots cross internal
+//! boundaries as distinct records. JSON is decoded at ingress and encoded at CLI
+//! egress; diagnostic extensions do not supply identity or daemon-restoration decisions.
 
 mod cli;
+
+mod response;
+
+pub(crate) use response::ResolvedRoot;
 
 mod domain;
 
@@ -215,14 +222,18 @@ impl<'a> Store<'a> {
     }
 
     /// Describe an exact committed guest generation without selecting it.
-    pub(crate) fn describe(&self, domain: &GuestName, generation: GenerationId) -> Result<Value> {
-        self.pool(&[
+    pub(crate) fn describe(
+        &self,
+        domain: &GuestName,
+        generation: GenerationId,
+    ) -> Result<crate::model::GenerationInfo> {
+        Ok(serde_json::from_value(self.pool(&[
             "describe-generation",
             "--domain",
             &runtime_namespace(domain.as_str()),
             "--generation",
             &generation.to_string(),
-        ])
+        ])?)?)
     }
 
     /// Find a retained generation matching every supplied guest artifact identity.

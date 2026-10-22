@@ -22,8 +22,7 @@ impl Coordinator {
         name: &GuestName,
         generation: GenerationId,
     ) -> Result<GenerationInfo> {
-        let info: GenerationInfo =
-            serde_json::from_value(self.store().describe(name, generation)?)?;
+        let info = self.store().describe(name, generation)?;
         ensure!(
             info.status == CheckStatus::Passed,
             "{name}: invalid generation description"

@@ -170,7 +170,17 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
                 let generation = staged[name].clone();
                 ensure!(!generation.is_null(), "missing staged fixture generation");
                 let mut receipt = data["generations"][format!("{name}:{generation}")].clone();
+                receipt["schema"] = json!("airlock.nix-domain-storage.v1");
                 receipt["domain"] = json!(name);
+                for key in [
+                    "mode",
+                    "device",
+                    "blob_device",
+                    "mountpoint",
+                    "view_backend",
+                ] {
+                    receipt[key] = receipt["store"][key].clone();
+                }
                 data["selected"][name] = generation;
                 data["store_install_count"] =
                     json!(data["store_install_count"].as_u64().unwrap_or(0) + 1);
@@ -205,10 +215,16 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
             Some("resolve-root") => {
                 let name = option(arguments, "--domain")?;
                 let source = option(arguments, "--root-source")?;
+                let generation = data["generations"]
+                    .as_object()
+                    .context("missing fixture generations")?
+                    .values()
+                    .find(|info| info["domain"] == name && info["root_source"] == source)
+                    .context("missing root fixture")?;
                 println!(
                     "{}",
                     json!({"domain":name, "root_source":source,
-                    "image":"/var/lib/airlock/pool/root.img", "artifact":{"sha256":"c".repeat(64)}})
+                    "image":"/var/lib/airlock/pool/root.img", "artifact":generation["root_artifact"]})
                 );
             }
             Some("gc" | "retire-generation" | "set-retention") => {

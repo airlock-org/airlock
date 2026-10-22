@@ -269,7 +269,12 @@ pub(super) fn run(command: Request) -> Result<Value> {
             &id.kernel_name,
             &id.approved_by,
         ),
-        Operation::LoadGeneration(g) => generations::load(&root, &root, &g.domain, g.generation),
+        Operation::LoadGeneration(g) => Ok(serde_json::to_value(generations::load(
+            &root,
+            &root,
+            &g.domain,
+            g.generation,
+        )?)?),
         Operation::DescribeGeneration(g) => generations::describe(&root, &g.domain, g.generation),
         Operation::Switch(g) => generations::switch(&root, &g.domain, g.generation, false),
         Operation::Rollback(g) => generations::switch(&root, &g.domain, g.generation, true),
@@ -293,7 +298,12 @@ pub(super) fn run(command: Request) -> Result<Value> {
             root_source,
             generation,
             ..
-        } => generations::resolve_root(&root, &domain, &root_source, generation),
+        } => Ok(serde_json::to_value(generations::resolve_root(
+            &root,
+            &domain,
+            &root_source,
+            generation,
+        )?)?),
         Operation::Status(_) => maintenance::status(&root),
         Operation::Recover(_) => super::segments::with_verification(|| maintenance::recover(&root)),
         Operation::Gc {

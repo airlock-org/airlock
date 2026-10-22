@@ -501,7 +501,7 @@ pub(super) fn resolve_root(
     domain: &str,
     source: &str,
     generation: Option<u64>,
-) -> Result<Value> {
+) -> Result<super::ResolvedRoot> {
     let mut matches = std::collections::BTreeMap::new();
     for path in records::manifests(root)? {
         let manifest: Value = read(&path)?;
@@ -523,10 +523,22 @@ pub(super) fn resolve_root(
         .into_iter()
         .next()
         .context("missing root identity")?;
-    Ok(json!({"image":image,"artifact":descriptor,"domain":domain,"root_source":source}))
+    let artifact: airlock_nix_core::artifact::RootDescriptor = serde_json::from_value(descriptor)?;
+    artifact.validate()?;
+    Ok(super::ResolvedRoot {
+        image,
+        artifact,
+        domain: domain.parse()?,
+        root_source: source.into(),
+    })
 }
 
-pub(super) fn load(root: &Path, logical: &Path, domain: &str, generation: u64) -> Result<Value> {
+pub(super) fn load(
+    root: &Path,
+    logical: &Path,
+    domain: &str,
+    generation: u64,
+) -> Result<crate::model::GenerationReceipt> {
     let manifest = records::generation(root, domain, generation)?;
     let root_image = records::root_image(root, &manifest)?;
     let store = &manifest["store"];
@@ -561,5 +573,5 @@ pub(super) fn load(root: &Path, logical: &Path, domain: &str, generation: u64) -
     {
         value[key] = field.clone();
     }
-    Ok(value)
+    Ok(serde_json::from_value(value)?)
 }

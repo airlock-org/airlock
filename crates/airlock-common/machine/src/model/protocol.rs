@@ -225,11 +225,13 @@ pub enum CheckStatus {
 }
 
 /// Guest-facing closure storage view reported by generation inspection.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GenerationStore {
     /// Required shared-closure protocol marker, validated during decoding.
     #[serde(rename = "mode")]
     pub _mode: StoreMode,
+    /// Content identity shared by the inspected generation's immutable volumes.
+    pub closure_hash: String,
     /// Guest mount location exposing the shared Nix closure.
     pub mountpoint: String,
     /// Block-device identifier providing the guest closure view.
@@ -241,22 +243,28 @@ pub struct GenerationStore {
 }
 
 /// Storage-integrity outcome attached to an inspected guest generation.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct VerificationReport {
     /// Whether the storage helper reports verification succeeded.
     pub status: CheckStatus,
+    /// Additional verification diagnostics retained only for wire publication.
+    #[serde(flatten)]
+    pub diagnostics: BTreeMap<String, Value>,
 }
 
 /// Storage retention protection attached to an inspected guest generation.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct RetentionReport {
     /// Whether this guest generation must be kept during retention planning.
     #[serde(default)]
     pub retain: bool,
+    /// Retention diagnostics preserved without treating unknown keys as protection.
+    #[serde(flatten)]
+    pub diagnostics: BTreeMap<String, Value>,
 }
 
 /// Existing storage generation and its artifacts, selection and verification metadata.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GenerationInfo {
     /// Required generation-info version, validated during decoding.
     #[serde(rename = "schema")]
@@ -267,6 +275,8 @@ pub struct GenerationInfo {
     pub domain: StoreNamespace,
     /// Nonzero storage generation number identifying the admitted guest system.
     pub generation: GenerationId,
+    /// Committed manifest whose path is compared when binding admission receipts.
+    pub manifest: std::path::PathBuf,
     /// NixOS system closure selected for the guest to boot.
     pub system: StorePath,
     /// Immutable guest root image inside the Nix store.
@@ -295,6 +305,9 @@ pub struct GenerationInfo {
     /// Build-source information retained for admission and identity checks.
     #[serde(default)]
     pub provenance: Value,
+    /// Additional inspection diagnostics retained without extending the typed decision fields.
+    #[serde(flatten)]
+    pub diagnostics: BTreeMap<String, Value>,
 }
 
 /// Transport marker required before treating new storage admission as qrexec-bound.

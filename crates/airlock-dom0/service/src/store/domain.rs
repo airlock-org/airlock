@@ -14,6 +14,7 @@ use super::{
     generations::{self, Admission},
     pool_cli, prepared, records, runtime_namespace,
 };
+use crate::model::{GenerationReceipt, InstallationSchema, InstalledStorageReceipt};
 use airlock_nix_core::identity::GuestName;
 use anyhow::{Context, Result, anyhow, ensure};
 use serde_json::{Value, json};
@@ -96,7 +97,7 @@ pub(super) fn verify_snapshot(domain: &GuestName, request: &Value) -> Result<()>
     snapshot.frontends(&[], &expected)
 }
 
-fn load(target: &Target, generation: u64) -> Result<Value> {
+fn load(target: &Target, generation: u64) -> Result<GenerationReceipt> {
     let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
     generations::load(
         &target.pool_root,
@@ -109,13 +110,13 @@ fn load(target: &Target, generation: u64) -> Result<Value> {
 /// Describe the immutable volume pair; offline callers supply its physical image size.
 pub(super) fn shared_configs(
     target: &Target,
-    admission: &Value,
+    admission: &GenerationReceipt,
     metadata_size: Option<u64>,
 ) -> Result<Vec<Value>> {
     attachment::project(target, admission, metadata_size)
 }
 
-fn check_features(target: &Target, vm: &Snapshot) -> Result<Option<Value>> {
+fn check_features(target: &Target, vm: &Snapshot) -> Result<Option<GenerationReceipt>> {
     let generation = vm.feature("airlock-store-generation");
     if generation.is_empty() {
         return Ok(None);
@@ -124,28 +125,40 @@ fn check_features(target: &Target, vm: &Snapshot) -> Result<Option<Value>> {
     let source = vm.feature("airlock-store-source");
     ensure!(
         source.is_empty()
-            || admission["source"] == source
-            || admission["approval_source"] == source,
+            || admission.identity.source == source
+            || admission.approval_source.as_deref() == Some(source),
         "Nix-native store feature/source mismatch"
     );
-    for (feature, key) in [
-        ("airlock-store-closure-hash", "closure_hash"),
-        ("airlock-store-view-image", "metadata_image"),
-        ("airlock-store-blob-map", "blob_map"),
+    for (feature, actual) in [
+        (
+            "airlock-store-closure-hash",
+            admission.closure_hash.as_str(),
+        ),
+        (
+            "airlock-store-view-image",
+            admission
+                .metadata_image
+                .to_str()
+                .context("metadata image path")?,
+        ),
+        (
+            "airlock-store-blob-map",
+            admission.blob_map.to_str().context("blob map path")?,
+        ),
     ] {
         let expected = vm.feature(feature);
         ensure!(
-            expected.is_empty() || admission[key] == expected,
-            "Nix-native store feature/{key} mismatch"
+            expected.is_empty() || actual == expected,
+            "Nix-native store feature/{feature} mismatch"
         );
     }
     Ok(Some(admission))
 }
 
-fn boot_matches(admission: &Value, args: &Ensure) -> bool {
-    admission["system"] == args.system
-        && admission["root_source"] == args.root
-        && admission["kernel_name"] == args.kernel
+fn boot_matches(admission: &GenerationReceipt, args: &Ensure) -> bool {
+    admission.identity.system == args.system
+        && admission.identity.root_source == args.root
+        && admission.identity.kernel_name == args.kernel
 }
 
 /// A retained request keeps its authenticated receipt and original target until dispatch.
@@ -153,14 +166,14 @@ struct Retained<'a> {
     // Exact target whose committed records were validated.
     target: &'a Target,
     // Private receipt cannot be replaced by an independently supplied generation.
-    receipt: Value,
+    receipt: GenerationReceipt,
     // Verus-checked complete boot identity.
     selected: airlock_deployment_core::boot::SelectedGeneration,
 }
 
 impl Retained<'_> {
-    fn install(&self, observed: &Snapshot, source: &str) -> Result<Value> {
-        let actual = super::handoff::observed(&self.receipt, &self.receipt, "source")?;
+    fn install(&self, observed: &Snapshot, source: &str) -> Result<InstalledStorageReceipt> {
+        let actual = super::handoff::observed(&self.receipt)?;
         ensure!(
             self.selected.setup(&actual).is_some(),
             "retained receipt changed before attachment"
@@ -212,11 +225,11 @@ fn staged(args: &Ensure) -> Result<Option<Retained<'_>>> {
         mountpoint: args.target.mountpoint.clone(),
         backend: args.view_backend.clone(),
     };
-    let observed = super::handoff::observed(&admission, &admission, "source")?;
+    let observed = super::handoff::observed(&admission)?;
     let selected = airlock_deployment_core::boot::SelectedGeneration::check(wanted, &observed)
         .context("staged generation identity mismatch")?;
     ensure!(
-        admission["approval_source"] == args.source,
+        admission.approval_source.as_deref() == Some(args.source.as_str()),
         "staged generation approval source mismatch"
     );
     Ok(Some(Retained {
@@ -226,7 +239,7 @@ fn staged(args: &Ensure) -> Result<Option<Retained<'_>>> {
     }))
 }
 
-fn admit(args: &Ensure) -> Result<Value> {
+fn admit(args: &Ensure) -> Result<GenerationReceipt> {
     let target = &args.target;
     let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
     if args.artifact.join("prepared.json").try_exists()? {
@@ -250,7 +263,7 @@ fn admit(args: &Ensure) -> Result<Value> {
         !args.require_retained,
         "reviewed deployment requires a retained or prepared generation; refusing implicit admission"
     );
-    generations::admit(&Admission {
+    let value = generations::admit(&Admission {
         pool: &target.pool_root,
         domain: &runtime_namespace(target.domain.as_str()),
         system: &args.system,
@@ -269,11 +282,12 @@ fn admit(args: &Ensure) -> Result<Value> {
         device: &target.device,
         blob_device: &target.blob_device,
         mountpoint: &target.mountpoint,
-    })
+    })?;
+    Ok(serde_json::from_value(value)?)
 }
 
 /// Reuse the exact current boot identity or attach an approved successor to a stopped VM.
-pub(super) fn ensure(args: &Ensure) -> Result<Value> {
+pub(super) fn ensure(args: &Ensure) -> Result<InstalledStorageReceipt> {
     let target = &args.target;
     // An explicit retained selection must validate before any Qubes observation or fallback decision.
     let staged = staged(args)?;
@@ -312,9 +326,9 @@ pub(super) fn ensure(args: &Ensure) -> Result<Value> {
     };
     let reusable = current.as_ref().filter(|admission| {
         boot_matches(admission, args)
-            && staged
-                .as_ref()
-                .is_none_or(|requested| requested.receipt["generation"] == admission["generation"])
+            && staged.as_ref().is_none_or(|requested| {
+                requested.receipt.identity.generation == admission.identity.generation
+            })
     });
     let unchanged = if let Some(admission) = reusable {
         vm.matches(&shared_configs(target, admission, None)?)
@@ -361,7 +375,7 @@ pub(super) fn ensure(args: &Ensure) -> Result<Value> {
 }
 
 /// Select and attach an existing committed generation without admitting new package bytes.
-pub(super) fn switch(target: &Target, generation: u64) -> Result<Value> {
+pub(super) fn switch(target: &Target, generation: u64) -> Result<InstalledStorageReceipt> {
     let admission = load(target, generation)?;
     let vm = snapshot(&target.domain)?;
     ensure!(
@@ -369,12 +383,7 @@ pub(super) fn switch(target: &Target, generation: u64) -> Result<Value> {
         "shared store generation switch requested but domain is running: {}",
         target.domain
     );
-    install_shared(
-        target,
-        &admission,
-        &vm,
-        admission["source"].as_str().unwrap_or(""),
-    )
+    install_shared(target, &admission, &vm, &admission.identity.source)
 }
 
 fn install(target: &Target, before: &Snapshot, configs: &[Value]) -> Result<Snapshot> {
@@ -422,10 +431,10 @@ pub(super) fn verify_installed(
 
 fn install_shared(
     target: &Target,
-    admission: &Value,
+    admission: &GenerationReceipt,
     inspected: &Snapshot,
     source: &str,
-) -> Result<Value> {
+) -> Result<InstalledStorageReceipt> {
     let configs = shared_configs(target, admission, None)?;
     let frontends = [
         ("store", target.device.as_str()),
@@ -442,7 +451,7 @@ fn install_shared(
     let ((), restarted, was_active) = with_qubesd_stopped(&integration_root(), || {
         let _lock = PoolLock::acquire(&target.pool_root.join("admission.lock"))?;
         let retained =
-            attachment::CommittedGeneration::load(target, number(admission, "generation")?)?;
+            attachment::CommittedGeneration::load(target, admission.identity.generation.get())?;
         ensure!(
             retained.definitions(target)? == configs,
             "generation changed before attachment"
@@ -462,7 +471,7 @@ fn install_shared(
         generations::switch(
             &target.pool_root,
             &runtime_namespace(target.domain.as_str()),
-            number(admission, "generation")?,
+            admission.identity.generation.get(),
             false,
         )?;
         Ok(())
@@ -495,32 +504,56 @@ struct Attachment {
     was_active: bool,
 }
 
-fn receipt(target: &Target, admission: &Value, source: &str, outcome: Attachment) -> Value {
-    let mut result = admission.clone();
-    let update = json!({
-        "schema": "airlock.nix-domain-storage.v1",
-        "domain": target.domain,
-        "volume": "store",
-        "mode": "shared-closure",
-        "source": source,
-        "read_only": true,
-        "volume_created": !outcome.created.is_empty(),
-        "volumes_created": outcome.created,
-        "metadata_changed": outcome.changed,
-        "qubesd_restart_required": outcome.changed && !outcome.restarted,
-        "qubesd_restarted": outcome.restarted,
-        "qubesd_was_active": outcome.was_active,
-        "pool": target.pool_name,
-        "pool_created": outcome.pool_created,
-        "pool_root": target.pool_root,
-    });
-    for (key, value) in update.as_object().expect("receipt object") {
-        result[key] = value.clone();
+fn receipt(
+    target: &Target,
+    admission: &GenerationReceipt,
+    source: &str,
+    outcome: Attachment,
+) -> InstalledStorageReceipt {
+    let mut identity = admission.identity.clone();
+    identity.source = source.into();
+    // Diagnostic fields are preserved for existing wire consumers, never used to construct identity.
+    let mut diagnostics = admission.diagnostics.clone();
+    for key in [
+        "schema",
+        "volume_created",
+        "volumes_created",
+        "qubesd_restart_required",
+        "qubesd_restarted",
+    ] {
+        diagnostics.remove(key);
+    }
+    for (key, value) in json!({
+        "volume":"store", "read_only":true, "metadata_changed":outcome.changed,
+        "qubesd_was_active":outcome.was_active, "pool":target.pool_name,
+        "pool_created":outcome.pool_created, "pool_root":target.pool_root,
+        "manifest":admission.manifest, "metadata_image":admission.metadata_image,
+        "blob_logical_size":admission.blob_logical_size, "approval_source":admission.approval_source,
+    }).as_object().expect("diagnostic object") {
+        diagnostics.insert(key.clone(), value.clone());
     }
     if outcome.changed {
-        result["engine_current_generation"] = admission["generation"].clone();
+        diagnostics.insert(
+            "engine_current_generation".into(),
+            json!(identity.generation),
+        );
     }
-    result
+    InstalledStorageReceipt {
+        schema: InstallationSchema::V1,
+        domain: target.domain.clone(),
+        identity,
+        qubesd_restart_required: outcome.changed && !outcome.restarted,
+        qubesd_restarted: outcome.restarted,
+        volume_created: !outcome.created.is_empty(),
+        volumes_created: Some(outcome.created),
+        view_created: admission.view_created,
+        closure_hash: Some(admission.closure_hash.clone()),
+        view_image: admission.view_image.clone(),
+        image: admission.image.clone(),
+        blob_map: Some(admission.blob_map.to_string_lossy().into_owned()),
+        blob_volume: admission.blob_volume.clone(),
+        diagnostics,
+    }
 }
 
 fn builder_configs(target: &Target) -> Result<(Vec<Value>, Value)> {

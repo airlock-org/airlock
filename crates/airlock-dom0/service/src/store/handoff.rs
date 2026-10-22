@@ -3,7 +3,10 @@
 //! the equality and complete-set decision executes the deployment core's Verus code.
 
 use super::{fs::*, generations, prepared, runtime_namespace};
-use crate::model::{Backend, GenerationId, Topology};
+use crate::model::{
+    Backend, CheckStatus, GenerationId, GenerationInfo, GenerationReceipt, InstalledStorageReceipt,
+    StorageIdentity, Topology,
+};
 use airlock_deployment_core::boot::{Handoff, SelectedGeneration, Selection};
 use airlock_machine_core::boot::BootInputs;
 use airlock_nix_core::identity::GuestName;
@@ -35,41 +38,68 @@ pub(crate) fn expected(
     })
 }
 
-/// Decode a loaded or described committed generation using its actual identity fields.
-pub(crate) fn observed(value: &Value, store: &Value, source: &str) -> Result<Selection> {
-    let domain = text(value, "domain")?
+/// Project only a loaded generation; installation receipts cannot be supplied here.
+pub(crate) fn observed(value: &GenerationReceipt) -> Result<Selection> {
+    let domain: GuestName = value
+        .domain
+        .as_str()
         .strip_suffix("-runtime-store")
         .context("boot generation is not a runtime storage view")?
-        .to_owned();
-    fields(domain, value, store, source)
+        .parse()?;
+    Ok(fields(&domain, &value.identity))
 }
 
-/// Storage execution receipts identify the consuming guest, unlike committed generation records.
-/// Preserve that identity rather than applying storage-namespace decoding to a VM name.
-pub(crate) fn installed(value: &Value) -> Result<Selection> {
+/// Project only an installation addressed to a guest; wire decoding checked its schema.
+pub(crate) fn installed(value: &InstalledStorageReceipt) -> Selection {
+    fields(&value.domain, &value.identity)
+}
+
+/// Preserve every typed identity field without wire-key selection or namespace guessing.
+fn fields(domain: &GuestName, identity: &StorageIdentity) -> Selection {
+    Selection {
+        domain: domain.to_string(),
+        generation: identity.generation.get(),
+        system: identity.system.clone(),
+        root: identity.root_source.clone(),
+        source: identity.source.clone(),
+        kernel: identity.kernel_name.clone(),
+        mode: match identity.mode {
+            crate::model::StoreMode::SharedClosure => "shared-closure".into(),
+        },
+        device: identity.device.clone(),
+        blob_device: identity.blob_device.clone(),
+        mountpoint: identity.mountpoint.clone(),
+        backend: identity.view_backend.clone(),
+    }
+}
+
+/// Inspection has its own typed schema and nested layout, distinct from a loaded generation.
+fn described(value: &GenerationInfo) -> Result<Selection> {
     ensure!(
-        value["schema"] == "airlock.nix-domain-storage.v1",
-        "invalid storage execution receipt"
+        value.status == CheckStatus::Passed,
+        "boot generation inspection failed"
     );
-    let domain: GuestName = text(value, "domain")?.parse()?;
-    fields(domain.to_string(), value, value, "source")
-}
-
-/// Retain all remaining identity and layout fields without choosing a namespace interpretation.
-fn fields(domain: String, value: &Value, store: &Value, source: &str) -> Result<Selection> {
-    Ok(Selection {
-        domain,
-        generation: number(value, "generation")?,
-        system: text(value, "system")?,
-        root: text(value, "root_source")?,
-        source: text(value, source)?,
-        kernel: text(value, "kernel_name")?,
-        mode: text(store, "mode")?,
-        device: text(store, "device")?,
-        blob_device: text(store, "blob_device")?,
-        mountpoint: text(store, "mountpoint")?,
-        backend: text(store, "view_backend")?,
-    })
+    let domain: GuestName = value
+        .domain
+        .as_str()
+        .strip_suffix("-runtime-store")
+        .context("boot generation is not a runtime storage view")?
+        .parse()?;
+    Ok(fields(
+        &domain,
+        &StorageIdentity {
+            generation: value.generation,
+            system: value.system.to_string(),
+            root_source: value.root_source.to_string(),
+            source: value.closure_source.to_string(),
+            kernel_name: value.kernel_name.clone(),
+            mode: value.store._mode,
+            device: value.store.device.clone(),
+            blob_device: value.store.blob_device.clone(),
+            mountpoint: value.store.mountpoint.clone(),
+            view_backend: value.store.view_backend.clone(),
+        },
+    ))
 }
 
 /// Compare every explicitly staged VM before privileged boot setup.
@@ -77,7 +107,7 @@ fn fields(domain: String, value: &Value, store: &Value, source: &str) -> Result<
 pub(crate) fn selected(
     topology: &Topology,
     mapping: &BTreeMap<GuestName, GenerationId>,
-    mut describe: impl FnMut(&GuestName, GenerationId) -> Result<Value>,
+    mut describe: impl FnMut(&GuestName, GenerationId) -> Result<GenerationInfo>,
 ) -> Result<Handoff> {
     let mut wanted = Vec::new();
     let mut actual = Vec::new();
@@ -90,13 +120,7 @@ pub(crate) fn selected(
         wanted.push(expected(name, &domain.backend, generation)?);
         let described = describe(name, generation)
             .with_context(|| format!("inspect boot generation for {name}"))?;
-        // Preserve typed protocol validation in addition to the exact comparison.
-        let _: crate::model::GenerationInfo = serde_json::from_value(described.clone())?;
-        ensure!(
-            described["status"] == "passed",
-            "boot generation inspection failed: {name}"
-        );
-        actual.push(observed(&described, &described["store"], "closure_source")?);
+        actual.push(self::described(&described)?);
     }
     Handoff::check(wanted, &actual)
         .context("boot artifacts differ from selected committed generations")
@@ -128,12 +152,13 @@ pub(super) fn image(topology: Value, physical: &Path, logical: &Path) -> Result<
             &runtime_namespace(name.as_str()),
             generation.to_string().parse()?,
         )?;
-        for field in ["system", "root_source", "kernel_name", "closure_hash"] {
-            ensure!(
-                descriptor[field] == loaded[field],
-                "prepared {field} differs from committed generation: {name}"
-            );
-        }
+        ensure!(
+            descriptor["system"] == loaded.identity.system
+                && descriptor["root_source"] == loaded.identity.root_source
+                && descriptor["kernel_name"] == loaded.identity.kernel_name
+                && descriptor["closure_hash"] == loaded.closure_hash,
+            "prepared identity differs from committed generation: {name}"
+        );
         let manifest = super::records::manifest_path(
             physical,
             &runtime_namespace(name.as_str()),
@@ -164,7 +189,7 @@ pub(super) fn image(topology: Value, physical: &Path, logical: &Path) -> Result<
             "missing boot kernel: {name}"
         );
         wanted.push(expected(name, backend, generation)?);
-        actual.push(observed(&loaded, &loaded, "source")?);
+        actual.push(observed(&loaded)?);
         mapping.insert(name.clone(), generation);
     }
     let handoff = Handoff::check(wanted, &actual)
@@ -189,30 +214,10 @@ pub(crate) fn authenticate(selected: SelectedGeneration) -> Result<SelectedGener
         &runtime_namespace(&wanted.domain),
         wanted.generation,
     )?;
-    let actual = observed(&receipt, &receipt, "source")?;
+    let actual = observed(&receipt)?;
     ensure!(
         selected.setup(&actual).is_some(),
         "committed generation differs from checked setup selection"
     );
     Ok(selected)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Each wire format retains its own identity meaning; neither decoder silently accepts the other.
-    #[test]
-    fn storage_execution_and_committed_names_have_distinct_decoders() -> Result<()> {
-        let mut receipt = json!({"schema":"airlock.nix-domain-storage.v1", "domain":"sys-gui",
-            "generation":1, "system":"system", "root_source":"root", "source":"source", "kernel_name":"kernel",
-            "mode":"shared-closure", "device":"metadata", "blob_device":"data", "mountpoint":"/nix/store", "view_backend":"erofs-objectmap"});
-        assert_eq!(installed(&receipt)?.domain, "sys-gui");
-        assert!(observed(&receipt, &receipt, "source").is_err());
-        receipt["schema"] = json!("airlock.closure-store.generation.v1");
-        receipt["domain"] = json!("sys-gui-runtime-store");
-        assert_eq!(observed(&receipt, &receipt, "source")?.domain, "sys-gui");
-        assert!(installed(&receipt).is_err());
-        Ok(())
-    }
 }

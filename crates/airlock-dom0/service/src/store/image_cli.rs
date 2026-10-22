@@ -194,13 +194,14 @@ fn execute(command: Request) -> Result<Value> {
                 &namespace,
                 number(&descriptor, "generation")?,
             )?;
-            for key in ["system", "root_source", "kernel_name", "closure_hash"] {
-                ensure!(
-                    result[key] == descriptor[key],
-                    "prepared {key} differs from committed generation"
-                );
-            }
-            Ok(result)
+            ensure!(
+                descriptor["system"] == result.identity.system
+                    && descriptor["root_source"] == result.identity.root_source
+                    && descriptor["kernel_name"] == result.identity.kernel_name
+                    && descriptor["closure_hash"] == result.closure_hash,
+                "prepared identity differs from committed generation"
+            );
+            Ok(serde_json::to_value(result)?)
         }
         Operation::RootDescriptor { source, output } => {
             let descriptor = root::encode(&source, None)?;

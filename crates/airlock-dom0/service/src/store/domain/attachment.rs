@@ -15,7 +15,7 @@ use std::{fs, num::NonZeroU64, path::Path};
 /// Immutable generation loaded through the existing committed-record validator.
 pub(super) struct CommittedGeneration {
     // Authenticated receipt used only to derive the checked software-volume pair.
-    receipt: Value,
+    receipt: crate::model::GenerationReceipt,
 }
 
 impl CommittedGeneration {
@@ -36,29 +36,27 @@ impl CommittedGeneration {
     }
 }
 
-/// Decode the projection input for image construction or a previously authenticated receipt.
+/// Validate the typed volume-pair projection for image construction or authenticated attachment.
 pub(super) fn project(
     target: &Target,
-    receipt: &Value,
+    receipt: &crate::model::GenerationReceipt,
     metadata_size: Option<u64>,
 ) -> Result<Vec<Value>> {
-    use super::super::fs::{number, text};
-
     ensure!(
-        receipt["view_backend"] == "erofs-objectmap",
+        receipt.identity.view_backend == "erofs-objectmap",
         "unsupported store view backend"
     );
-    for (key, expected) in [
-        ("device", &target.device),
-        ("blob_device", &target.blob_device),
-        ("mountpoint", &target.mountpoint),
-    ] {
-        ensure!(
-            receipt[key].as_str() == Some(expected.as_str()),
-            "store generation {key} binding mismatch"
-        );
-    }
-    let metadata = text(receipt, "metadata_image")?;
+    ensure!(
+        receipt.identity.device == target.device
+            && receipt.identity.blob_device == target.blob_device
+            && receipt.identity.mountpoint == target.mountpoint,
+        "store generation frontend binding mismatch"
+    );
+    let metadata = receipt
+        .metadata_image
+        .to_str()
+        .context("non-UTF-8 metadata image")?
+        .to_owned();
     let metadata_size = match metadata_size {
         Some(size) => size,
         None => fs::metadata(&metadata)?.len(),
@@ -67,14 +65,22 @@ pub(super) fn project(
         target.domain.as_str(),
         target.pool_name.clone(),
         Generation {
-            domain: text(receipt, "domain")?,
-            number: number(receipt, "generation")?,
-            closure_hash: text(receipt, "closure_hash")?,
-            manifest: text(receipt, "manifest")?,
+            domain: receipt.domain.to_string(),
+            number: receipt.identity.generation.get(),
+            closure_hash: receipt.closure_hash.clone(),
+            manifest: receipt
+                .manifest
+                .to_str()
+                .context("non-UTF-8 manifest")?
+                .into(),
             metadata,
             metadata_size,
-            data: text(receipt, "blob_map")?,
-            data_size: number(receipt, "blob_logical_size")?,
+            data: receipt
+                .blob_map
+                .to_str()
+                .context("non-UTF-8 blob map")?
+                .into(),
+            data_size: receipt.blob_logical_size,
         },
     )
     .context("invalid or mismatched storage generation projection")?;

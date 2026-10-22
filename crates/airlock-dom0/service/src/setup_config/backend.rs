@@ -1,6 +1,8 @@
 //! Native closure boot metadata and private/root/store volume reconciliation through existing adapters.
 
 use super::runtime::{Session, path};
+use crate::model::InstalledStorageReceipt;
+use crate::store::ResolvedRoot;
 use airlock_deployment_core::storage as verified;
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
@@ -406,30 +408,30 @@ fn reconcile_with(
         if let Some(generation) = &generation {
             args.extend(["--generation", generation]);
         }
-        let record: Value = serde_json::from_str(&if let Some(args) = selected_args {
-            session.service(&args.iter().map(String::as_str).collect::<Vec<_>>())?
-        } else {
-            session.service(&args)?
-        })?;
+        let record: ResolvedRoot = airlock_nix_core::state::parse_json(
+            (if let Some(args) = selected_args {
+                session.service(&args.iter().map(String::as_str).collect::<Vec<_>>())?
+            } else {
+                session.service(&args)?
+            })
+            .as_bytes(),
+            Path::new("<resolved-root>"),
+        )?;
         ensure!(
-            record["domain"] == namespace,
-            "resolved root namespace mismatch"
+            record.domain.as_str() == namespace && record.root_source == root,
+            "resolved root differs from requested namespace or source"
         );
-        if checked.is_some() {
-            ensure!(
-                record["root_source"] == root,
-                "resolved root differs from checked boot selection"
-            );
-        }
-        root_image = PathBuf::from(
-            record["image"]
-                .as_str()
-                .context("missing resolved root image")?,
+        ensure!(
+            record.image.is_absolute()
+                && !record
+                    .image
+                    .components()
+                    .any(|c| matches!(c, std::path::Component::ParentDir)),
+            "invalid resolved root image path"
         );
-        root_hash = record["artifact"]["sha256"]
-            .as_str()
-            .context("missing resolved root artifact hash")?
-            .into();
+        record.artifact.validate()?;
+        root_image = record.image.clone();
+        root_hash = record.artifact.sha256.clone();
         resolved = Some(record);
     }
     let root_current = feature(session, domain, "airlock-root-source").as_deref() == Some(root)
@@ -459,11 +461,7 @@ fn reconcile_with(
                 name: domain.into(),
                 source: resolved
                     .as_ref()
-                    .map_or(Ok(root), |r| {
-                        r["root_source"]
-                            .as_str()
-                            .context("resolved root source missing")
-                    })?
+                    .map_or(root, |r| r.root_source.as_str())
                     .into(),
                 image: root_image.to_str().context("root image path")?.into(),
                 hash: root_hash.clone(),
@@ -513,12 +511,12 @@ fn reconcile_with(
     let store_current = feature(session, domain, "airlock-store-source").as_deref() == Some(store)
         && current_mode == mode;
     let store_deferred = !store_current && session.running(domain)?;
-    let mut store_result = Value::Null;
+    let mut store_result: Option<InstalledStorageReceipt> = None;
     let mut observed_store = None;
     if store_deferred {
         session.defer(domain, "domain-store", "source", store)?;
     } else if session.apply {
-        store_result = serde_json::from_str(&if let Some(request) = &checked {
+        let output = if let Some(request) = &checked {
             let args = super::selection::arguments(request.store_arguments());
             session.service(&args.iter().map(String::as_str).collect::<Vec<_>>())?
         } else if authority.is_some() {
@@ -553,9 +551,14 @@ fn reconcile_with(
                 "--view-backend",
                 view,
             ])?
-        })?;
+        };
+        let result: InstalledStorageReceipt = airlock_nix_core::state::parse_json(
+            output.as_bytes(),
+            Path::new("<storage-installation>"),
+        )?;
+
         if let Some(request) = &checked {
-            let observed = crate::store::handoff::installed(&store_result)?;
+            let observed = crate::store::handoff::installed(&result);
             ensure!(
                 selected
                     .context("missing selected generation")?
@@ -569,7 +572,7 @@ fn reconcile_with(
             );
         }
         if authority.is_some() {
-            let evidence = store_evidence(&store_result)?;
+            let evidence = store_evidence(&result);
             store_request
                 .as_ref()
                 .context("missing checked store request")?
@@ -577,28 +580,27 @@ fn reconcile_with(
                 .context("store receipt differs from approved boot identity or generation")?;
             observed_store = Some(evidence);
         }
-        let volumes = match store_result.get("volumes_created") {
-            Some(value) => value
-                .as_array()
-                .context("invalid created volumes")?
-                .iter()
-                .map(|value| value.as_str().context("invalid created volume"))
-                .collect::<Result<Vec<_>>>()?,
-            None if store_result["volume_created"] == true => vec!["store"],
-            _ => vec![],
-        };
+        let volumes = result
+            .volumes_created
+            .as_ref()
+            .map(|v| v.iter().map(String::as_str).collect::<Vec<_>>())
+            .unwrap_or_else(|| {
+                if result.volume_created {
+                    vec!["store"]
+                } else {
+                    vec![]
+                }
+            });
         for volume in volumes {
             session.count("store_volumes_changed")?;
             session.action("domain-store-volume", "create", domain, "volume", volume)?;
         }
-        if store_result["view_created"] == true {
+        if result.view_created {
             session.count("store_views_changed")?;
             session.action("domain-store-view", "materialize", domain, "source", store)?;
         }
-        if store_result["qubesd_restarted"] == true
-            || store_result["qubesd_restart_required"] == true
-        {
-            if store_result["qubesd_restarted"] != true {
+        if result.qubesd_restarted || result.qubesd_restart_required {
+            if !result.qubesd_restarted {
                 if let Some(request) = &store_request {
                     let outcome = request
                         .outcome(observed_store.as_ref().context("missing storage outcome")?)
@@ -616,6 +618,7 @@ fn reconcile_with(
             session.count("qubesd_restarts")?;
             session.action("systemd", "restart", "", "service", "qubesd.service")?;
         }
+        store_result = Some(result);
     } else {
         for volume in ["store", "store-data"] {
             session.count("store_volumes_changed")?;
@@ -706,24 +709,21 @@ fn reconcile_with(
                     ("qvm-features", domain, key, value),
                 )?;
             }
-            for (key, field) in [
-                ("airlock-store-generation", "generation"),
-                ("airlock-store-closure-hash", "closure_hash"),
-                ("airlock-store-view-image", "view_image"),
-                ("airlock-store-blob-map", "blob_map"),
-                ("airlock-store-blob-volume", "blob_volume"),
-            ] {
-                let value = if field == "view_image" && store_result[field].is_null() {
-                    &store_result["image"]
-                } else {
-                    &store_result[field]
-                };
-                if !value.is_null() {
-                    let value = match value {
-                        Value::String(value) => value.clone(),
-                        _ => value.to_string(),
-                    };
-                    if !value.is_empty() {
+            if let Some(result) = &store_result {
+                for (key, value) in [
+                    (
+                        "airlock-store-generation",
+                        Some(result.identity.generation.to_string()),
+                    ),
+                    ("airlock-store-closure-hash", result.closure_hash.clone()),
+                    (
+                        "airlock-store-view-image",
+                        result.view_image.clone().or_else(|| result.image.clone()),
+                    ),
+                    ("airlock-store-blob-map", result.blob_map.clone()),
+                    ("airlock-store-blob-volume", result.blob_volume.clone()),
+                ] {
+                    if let Some(value) = value.filter(|value| !value.is_empty()) {
                         setting(
                             session,
                             authority,
@@ -829,42 +829,27 @@ pub(crate) fn definitions(
         .collect()
 }
 
-/// Decode storage's full boot identity; all fields are compared in verified executable Rust.
-fn store_evidence(value: &Value) -> Result<verified::StoreEvidence> {
-    let required = |key: &str| {
-        value[key]
-            .as_str()
-            .with_context(|| format!("missing storage receipt {key}"))
-    };
-    let optional = |key: &str| -> Result<String> {
-        match &value[key] {
-            Value::Null => Ok(String::new()),
-            Value::String(v) => Ok(v.clone()),
-            _ => anyhow::bail!("invalid storage receipt {key}"),
-        }
-    };
-    let generation = value["generation"]
-        .as_u64()
-        .context("invalid storage receipt generation")?;
-    Ok(verified::StoreEvidence {
-        name: required("domain")?.into(),
-        system: required("system")?.into(),
-        root: required("root_source")?.into(),
-        source: required("source")?.into(),
-        kernel: required("kernel_name")?.into(),
-        generation,
-        generation_text: generation.to_string(),
-        closure_hash: optional("closure_hash")?,
-        view_image: if value["view_image"].is_null() {
-            optional("image")?
-        } else {
-            optional("view_image")?
-        },
-        blob_map: optional("blob_map")?,
-        blob_volume: optional("blob_volume")?,
-        restart_required: value["qubesd_restart_required"] == true,
-        restarted: value["qubesd_restarted"] == true,
-    })
+/// Project storage's typed boot identity for comparison in verified executable Rust.
+fn store_evidence(value: &InstalledStorageReceipt) -> verified::StoreEvidence {
+    verified::StoreEvidence {
+        name: value.domain.to_string(),
+        system: value.identity.system.clone(),
+        root: value.identity.root_source.clone(),
+        source: value.identity.source.clone(),
+        kernel: value.identity.kernel_name.clone(),
+        generation: value.identity.generation.get(),
+        generation_text: value.identity.generation.to_string(),
+        closure_hash: value.closure_hash.clone().unwrap_or_default(),
+        view_image: value
+            .view_image
+            .clone()
+            .or_else(|| value.image.clone())
+            .unwrap_or_default(),
+        blob_map: value.blob_map.clone().unwrap_or_default(),
+        blob_volume: value.blob_volume.clone().unwrap_or_default(),
+        restart_required: value.qubesd_restart_required,
+        restarted: value.qubesd_restarted,
+    }
 }
 
 /// Select derived settings by typed fields; unknown keys cannot fall back to a raw mutation.
