@@ -91,6 +91,32 @@ fn admission_selection_running_pins_and_gc() -> Result<()> {
             .unwrap()
             .contains(&json!({"domain":"usr-home-runtime-store","generation":2}))
     );
+    // A stale logical running reference keeps its physical pins until explicit release.
+    let manifest = store
+        .pool
+        .join("domains/usr-home-runtime-store/generations/2/manifest.json");
+    let saved = fs::read(&manifest)?;
+    let running = store
+        .pool
+        .join("running/usr-home-runtime-store/2/store-data.json");
+    let physical_pin = fs::read(&running)?;
+    fs::remove_file(&manifest)?;
+    assert_eq!(
+        store.run(&[
+            "pool",
+            "gc",
+            "--pool-root",
+            store.pool_text(),
+            "--keep-generations",
+            "0"
+        ])?["stale_running_refs"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(fs::read(&running)?, physical_pin);
+    fs::write(&manifest, saved)?;
     store.run(&[
         "pool",
         "clear-running",
@@ -196,6 +222,54 @@ fn admission_selection_running_pins_and_gc() -> Result<()> {
         json!([first["root_artifact"]["sha256"]])
     );
     assert!(store.admit(true)?["generation"].as_u64().unwrap() > 1);
+    Ok(())
+}
+
+/// A selected namespace with no committed manifest must block all collection before deletion.
+#[test]
+fn gc_rejects_missing_selected_namespace_before_reclamation() -> Result<()> {
+    let store = Store::new()?;
+    store.admit(false)?;
+    let lost = store.pool.join("domains/lost-runtime-store");
+    fs::create_dir_all(lost.join("generations"))?;
+    std::os::unix::fs::symlink("generations/99", lost.join("current"))?;
+    let before = manifests(&store)?;
+    let output = common::run(
+        &mut store.command(&[
+            "pool",
+            "gc",
+            "--pool-root",
+            store.pool_text(),
+            "--keep-generations",
+            "0",
+        ]),
+        None,
+    )?;
+    assert!(
+        !output.status.success(),
+        "a selected namespace disappeared from the inventory"
+    );
+    let failure: Value = serde_json::from_slice(&output.stdout)?;
+    assert!(
+        failure["error"]
+            .as_str()
+            .unwrap()
+            .contains("missing selected pool generation"),
+        "{failure}"
+    );
+    assert_eq!(manifests(&store)?, before);
+    fs::remove_file(lost.join("current"))?;
+    assert_eq!(
+        store.run(&[
+            "pool",
+            "gc",
+            "--pool-root",
+            store.pool_text(),
+            "--keep-generations",
+            "0"
+        ])?["removed_generations"],
+        json!([{"domain":"usr-home-runtime-store","generation":1}])
+    );
     Ok(())
 }
 

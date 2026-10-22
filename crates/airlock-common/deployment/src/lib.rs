@@ -177,7 +177,7 @@
 //! | Verification and GUI observation | `qvm-ls`/prefs/features and fixed read-only qrexec probes observe runtime generation, boot IDs and reconnect status. No explicit GUI restart command is issued here. Qubes may start dependencies or terminate a shutdown target implicitly; those external effects are not proved. |
 //! | Boot/post-boot trash quarantine | Separate boot/verification policy, outside `activate` and its durable gate. The protected trash record must match the registered UUID and complete volume set before normal shutdown, autostart suppression or tag repair. Unknown power refuses enforcement; known non-halted states require shutdown. These are ordinary runtime checks, not verified deployment requests. |
 //! | Trash purge | Separate explicit maintenance confirmation and lock, not a call from `activate`. Verified intent selection checks canonical confirmation, original UUID/volumes/generation/system/manifest, retired tag and named halted state. The remove adapter consumes the publication-gated request; cleanup preserves the same VM/generation/trash root. Expiry/waiver, retained references and alias discovery remain ordinary runtime checks. This independent authority cannot be derived from a deployment request. |
-//! | Generation/host pruning and scheduled maintenance | Separate maintenance policies and locks, not calls from `activate`. Completion only writes a maintenance request. Typed policy and maintenance plans preserve candidate identities across internal handoffs. Automatic guest-pin release requires a verified `ReleaseRequest`, preserving explicit manual retention. Complete unpruned release references and exact journal snapshots reach the pool collector; its locked selected/running/retained/recent inventory joins these protections. Verified `ReclaimRequest` construction excludes every supplied exact-generation and effective-system reference; the generation-forget adapter consumes that request alone. Missing exact pins refuse collection before deletion. Age-policy selection, release/profile/root pruning, complete reference discovery and physical reclamation remain ordinary runtime-checked Rust. |
+//! | Generation/host pruning and scheduled maintenance | Separate maintenance policies and locks, not calls from `activate`. Completion only writes a maintenance request. Typed policy and maintenance plans preserve candidate identities across internal handoffs. Automatic guest-pin release requires a verified `ReleaseRequest`, preserving explicit manual retention. Opaque `ProtectionInventory` interpretation proves complete and sound projection of the supplied release and journal groups, including verified guest-to-pool namespace derivation. The collector verifies the union with raw selected/running observations, committed retention fields and recent-policy choices; selected and policy-recent references must resolve. Verified `ReclaimRequest` construction excludes every supplied exact-generation and effective-system reference; the generation-forget adapter consumes that request alone. Missing exact pins refuse collection before deletion. Age-policy selection, release/profile/root pruning, filesystem reference enumeration, authenticated decoding and physical reclamation remain ordinary runtime-checked Rust. |
 //! | Admission, candidate preparation, baseline capture | Separate pre-execution protocols write protected artifacts, provenance, roots and baseline snapshots. They use their existing review/admission/boot policies; possession of a deployment request does not grant admission or arbitrary filesystem authority. |
 //! | Boot setup/start, local development and administrative repair | Deliberate distinct policies. Checked boot carries opaque generation selections and verified retained/root/identity requests through native setup; reviewed deployment approval proofs do not apply. Raw lifecycle commands are rejected by the deployment runner. Raw non-lifecycle mutations, the native setup executable, older admitted compatibility helpers and storage subcommands remain trusted escape boundaries. |
 //! ## Trusted boundaries
@@ -299,12 +299,16 @@
 //! durable acknowledgments, process resolution and faithful filesystem/Qubes execution remain
 //! necessary environmental assumptions.
 //!
-//! Retention checks prove exclusion from the supplied protection set, not completeness of discovery.
-//! Journal authentication, snapshot/topology correspondence, runtime namespace encoding and CLI
-//! transport remain adapter duties. The coordinator holds machine exclusion while its storage
-//! receiver loads committed manifests and live references under the pool lock. The receiver adds
+//! Retention inventory proves complete and sound interpretation of the supplied decoded source groups
+//! and preserves their union through reclamation. Filesystem enumeration, journal authentication,
+//! snapshot/topology correspondence, raw field projection and CLI transport remain adapter duties.
+//! Recent-generation ranking remains policy input; its complete chosen set is preserved. Verified
+//! deduplication preserves all distinct requirements across retry histories. The coordinator holds
+//! machine exclusion while its storage receiver loads committed manifests and live references under the pool lock. The receiver adds
 //! all selected, running, retained and policy-recent generations before requesting reclamation;
-//! supplied exact pins must exist. Source references conservatively protect every matching generation.
+//! supplied exact pins must exist. Stale running references lacking logical records retain their separate
+//! physical-pin handling; they never invent a committed record. Source references conservatively protect
+//! every matching generation.
 //! Pin-release classification is rechecked under the same storage lock, so a newer manual retention
 //! update is not overwritten. Repeated collection rebuilds protections and requests; it does not replay
 //! cached deletion authority. Independent raw filesystem writers, durable publication, physical-byte

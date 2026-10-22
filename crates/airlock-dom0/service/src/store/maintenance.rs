@@ -3,7 +3,8 @@
 
 use super::{fs::*, records, root, segments, views};
 use airlock_deployment_core::retention::{
-    Candidate, Generation, ProtectedGenerations, Protection, ReclaimRequest,
+    Candidate, Generation, Protection, ReclaimRequest,
+    inventory::{self as protection_inventory, PoolSources, ProtectionInventory, StoredGeneration},
 };
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
@@ -50,7 +51,7 @@ fn add_manifest(live: &mut Liveness, manifest: &Value) -> Result<()> {
     Ok(())
 }
 
-fn liveness(root: &Path, keep: usize) -> Result<Liveness> {
+fn liveness(root: &Path, keep: usize) -> Result<(Liveness, ProtectionInventory)> {
     let mut live = Liveness {
         objects: BTreeSet::new(),
         views: BTreeSet::new(),
@@ -70,6 +71,7 @@ fn liveness(root: &Path, keep: usize) -> Result<Liveness> {
         }
     }
 
+    let mut committed = Vec::new();
     let mut by_domain: BTreeMap<String, Vec<u64>> = BTreeMap::new();
     for path in records::manifests(root)? {
         let value: Value = read(&path)?;
@@ -81,7 +83,21 @@ fn liveness(root: &Path, keep: usize) -> Result<Liveness> {
                 .entry(domain.clone())
                 .or_default()
                 .push(generation);
-            live.manifests.insert((domain, generation), (path, value));
+            committed.push(StoredGeneration {
+                generation: Generation {
+                    domain: domain.clone(),
+                    number: generation,
+                },
+                retained: value["retention"]["retain"]
+                    .as_bool()
+                    .context("invalid generation retention pin")?,
+            });
+            ensure!(
+                live.manifests
+                    .insert((domain, generation), (path, value))
+                    .is_none(),
+                "duplicate committed generation identity"
+            );
         } else if let Some(id) = value["transaction"].as_str() {
             let tx_path = root
                 .join("transactions")
@@ -94,31 +110,59 @@ fn liveness(root: &Path, keep: usize) -> Result<Liveness> {
         }
     }
 
+    let mut recent = Vec::new();
     for (domain, mut generations) in by_domain {
         generations.sort_unstable_by(|a, b| b.cmp(a));
-        for generation in generations
-            .into_iter()
-            .take(keep)
-            .chain(records::current(root, &domain)?)
-        {
-            live.generations.insert((domain.clone(), generation));
+        recent.extend(generations.into_iter().take(keep).map(|number| Generation {
+            domain: domain.clone(),
+            number,
+        }));
+    }
+
+    let mut selected = Vec::new();
+    for directory in children(&root.join("domains"))? {
+        let domain = directory
+            .file_name()
+            .and_then(|s| s.to_str())
+            .context("invalid domain namespace")?;
+        if let Some(number) = records::current(root, domain)? {
+            selected.push(Generation {
+                domain: domain.to_owned(),
+                number,
+            });
         }
     }
 
+    let mut running = Vec::new();
     for (path, value) in records::running_refs(root)? {
-        let key = (text(&value, "domain")?, number(&value, "generation")?);
-        if live.manifests.contains_key(&key) {
-            live.generations.insert(key);
-        } else {
+        let g = Generation {
+            domain: text(&value, "domain")?,
+            number: number(&value, "generation")?,
+        };
+        if !protection_inventory::committed(&committed, &g) {
             live.stale_running.push(path);
         }
+        running.push(g);
     }
-    for (key, (_, value)) in &live.manifests {
-        if value["retention"]["retain"]
-            .as_bool()
-            .context("invalid generation retention pin")?
-        {
-            live.generations.insert(key.clone());
+
+    let sources = PoolSources {
+        committed,
+        selected,
+        running,
+        recent,
+    };
+
+    let protected = ProtectionInventory::pool(&sources)
+        .context("invalid or missing selected pool generation")?;
+
+    for reference in protected.references() {
+        match reference {
+            Protection::Exact(g) => {
+                live.generations.insert((g.domain.clone(), g.number));
+            }
+            Protection::System { .. } => {
+                anyhow::bail!("unexpected system reference in pool inventory")
+            }
         }
     }
 
@@ -144,7 +188,7 @@ fn liveness(root: &Path, keep: usize) -> Result<Liveness> {
             live.objects.insert(component(name)?.to_owned());
         }
     }
-    Ok(live)
+    Ok((live, protected))
 }
 
 fn locations(root: &Path, live: &Liveness) -> Result<BTreeMap<String, (Value, segments::Extent)>> {
@@ -324,8 +368,8 @@ fn reclaim(root: &Path, request: &ReclaimRequest) -> Result<()> {
     )
 }
 
-pub(super) fn gc(root: &Path, keep: usize, mut references: Vec<Protection>) -> Result<Value> {
-    let mut live = liveness(root, keep)?;
+pub(super) fn gc(root: &Path, keep: usize, references: Vec<Protection>) -> Result<Value> {
+    let (mut live, pool_inventory) = liveness(root, keep)?;
     // A missing journal pin is uncertain authority, not an empty protection set.
     for reference in &references {
         if let Protection::Exact(g) = reference {
@@ -337,14 +381,9 @@ pub(super) fn gc(root: &Path, keep: usize, mut references: Vec<Protection>) -> R
             );
         }
     }
-    references.extend(live.generations.iter().map(|(domain, number)| {
-        Protection::Exact(Generation {
-            domain: domain.clone(),
-            number: *number,
-        })
-    }));
-    let protected =
-        ProtectedGenerations::new(references).context("invalid collection protections")?;
+    let protected = pool_inventory
+        .with_references(references)
+        .context("invalid collection protections")?;
     let mut requests = Vec::new();
     for ((domain, number), (_, manifest)) in &live.manifests {
         let candidate = Candidate {
@@ -627,7 +666,7 @@ pub(super) fn compact(
         (1..=100).contains(&threshold) && maximum > 0,
         "invalid compaction bounds"
     );
-    let live = liveness(root, keep)?;
+    let (live, _inventory) = liveness(root, keep)?;
     let live_locations = locations(root, &live)?;
     let PhysicalReferences {
         by_segment: references,
@@ -788,7 +827,7 @@ pub(super) fn compact(
         )?;
     }
     failpoint("compact-after-tx-commit")?;
-    let live = liveness(root, keep)?;
+    let (live, _inventory) = liveness(root, keep)?;
     let live_locations = locations(root, &live)?;
     let PhysicalReferences {
         by_segment: references,
@@ -1014,7 +1053,7 @@ pub(super) fn recover(root: &Path) -> Result<Value> {
 }
 
 pub(super) fn status(root: &Path) -> Result<Value> {
-    let live = liveness(root, 2)?;
+    let (live, _inventory) = liveness(root, 2)?;
     let locations = locations(root, &live)?;
     let PhysicalReferences {
         by_segment: references,

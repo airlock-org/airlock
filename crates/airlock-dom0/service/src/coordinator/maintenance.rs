@@ -3,7 +3,10 @@
 
 use super::*;
 use airlock_deployment_core::retention::{
-    Candidate, Generation, Pin, ProtectedGenerations, Protection,
+    Candidate, Generation, Pin,
+    inventory::{
+        EffectiveSystem, GuestPin, JournalSource, ProtectionInventory, ReleaseSource, ReleaseState,
+    },
 };
 use serde::{Deserialize, Serialize};
 
@@ -108,80 +111,90 @@ fn resolved(path: &Path) -> Result<String> {
 }
 
 impl Coordinator {
-    /// Gather complete machine references, including exact generations not present in release manifests.
-    /// A malformed or contradictory journal refuses collection before any pruning starts.
-    fn protected_generations(&self) -> Result<ProtectedGenerations> {
-        let mut exact = BTreeSet::new();
-        let mut systems = BTreeSet::new();
-        for release in self.release_inventory()?.keys() {
-            let path = self.prune_path(release)?;
+    /// Treat only completed pruning as permission to omit a release's references.
+    fn protection_state(&self, release: &str) -> Result<ReleaseState> {
+        let path = self.prune_path(release)?;
+        Ok(
             if path.try_exists()? && self.pruning_record(&path)?.status == PruneState::Pruned {
-                continue;
-            }
-            let r = Release::load(Path::new(release))?;
-            exact.extend(
-                r.manifest
-                    .staged_generations
-                    .iter()
-                    .map(|(n, g)| (crate::store::runtime_namespace(n.as_str()), g.get())),
-            );
-            for (name, domain) in &r.topology.domains {
-                if !r.manifest.staged_generations.contains_key(name) {
-                    systems.insert((
-                        crate::store::runtime_namespace(name.as_str()),
-                        domain.backend.system.source.to_string(),
-                    ));
-                }
-            }
+                ReleaseState::Pruned
+            } else {
+                ReleaseState::Present
+            },
+        )
+    }
+
+    /// Decode complete source groups; verified interpretation chooses every protection.
+    fn protected_generations(&self) -> Result<ProtectionInventory> {
+        let mut releases = Vec::new();
+        let mut journals = Vec::new();
+        for release in self.release_inventory()?.keys() {
+            let state = self.protection_state(release)?;
+            let (systems, pins) = if matches!(state, ReleaseState::Pruned) {
+                (Vec::new(), Vec::new())
+            } else {
+                let r = Release::load(Path::new(release))?;
+                (
+                    r.topology
+                        .domains
+                        .iter()
+                        .map(|(name, domain)| EffectiveSystem {
+                            domain: name.to_string(),
+                            system: domain.backend.system.source.to_string(),
+                        })
+                        .collect(),
+                    r.manifest
+                        .staged_generations
+                        .iter()
+                        .map(|(name, generation)| GuestPin {
+                            guest: name.to_string(),
+                            number: generation.get(),
+                        })
+                        .collect(),
+                )
+            };
+            releases.push(ReleaseSource {
+                state,
+                systems,
+                pins,
+            });
         }
+
         for record in self.deployment_records()? {
             for saved in staging::retained_snapshots(&record)? {
-                let path = self.prune_path(saved.release.as_str())?;
-                if path.try_exists()? && self.pruning_record(&path)?.status == PruneState::Pruned {
-                    continue;
-                }
-                let release = Release::load(saved.release.as_path())?;
-                ensure!(
-                    &saved.fingerprint == release.fingerprint(),
-                    "protected journal release changed"
-                );
-                let mut names = BTreeSet::new();
-                for entry in saved.entries {
-                    let domain = match &entry {
-                        GuestGenerationEntry::Retained { domain, .. }
-                        | GuestGenerationEntry::Existing { domain }
-                        | GuestGenerationEntry::NonNative { domain } => domain,
-                    };
+                let state = self.protection_state(saved.release.as_str())?;
+                if matches!(state, ReleaseState::Present) {
+                    let release = Release::load(saved.release.as_path())?;
                     ensure!(
-                        names.insert(domain.clone())
-                            && release.topology.domains.contains_key(domain),
-                        "invalid protected journal coordinates"
+                        &saved.fingerprint == release.fingerprint(),
+                        "protected journal release changed"
                     );
-                    if let GuestGenerationEntry::Retained { domain, identity } = entry {
-                        exact.insert((
-                            crate::store::runtime_namespace(domain.as_str()),
-                            identity.generation.get(),
-                        ));
+                    let mut names = BTreeSet::new();
+                    for entry in &saved.entries {
+                        let domain = match entry {
+                            GuestGenerationEntry::Retained { domain, .. }
+                            | GuestGenerationEntry::Existing { domain }
+                            | GuestGenerationEntry::NonNative { domain } => domain,
+                        };
+                        ensure!(
+                            names.insert(domain.clone())
+                                && release.topology.domains.contains_key(domain),
+                            "invalid protected journal coordinates"
+                        );
                     }
+                    ensure!(
+                        names == release.topology.domains.keys().cloned().collect(),
+                        "incomplete protected journal coordinates"
+                    );
                 }
-                ensure!(
-                    names == release.topology.domains.keys().cloned().collect(),
-                    "incomplete protected journal coordinates"
-                );
+                journals.push(JournalSource {
+                    state,
+                    entries: staging::snapshot(&saved)?.entries,
+                });
             }
         }
-        ProtectedGenerations::new(
-            exact
-                .into_iter()
-                .map(|(domain, number)| Protection::Exact(Generation { domain, number }))
-                .chain(
-                    systems
-                        .into_iter()
-                        .map(|(domain, system)| Protection::System { domain, system }),
-                )
-                .collect(),
-        )
-        .context("invalid machine generation protections")
+
+        ProtectionInventory::machine(&releases, &journals)
+            .context("invalid machine generation protections")
     }
 
     /// Include current intent even when its historical projection was not published.

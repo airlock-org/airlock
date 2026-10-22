@@ -343,7 +343,7 @@ impl<'a> Store<'a> {
     /// Transport every protection to the receiver, which rechecks its own live references under lock.
     pub(crate) fn collect_protected(
         &self,
-        protected: &airlock_deployment_core::retention::ProtectedGenerations,
+        protected: &airlock_deployment_core::retention::inventory::ProtectionInventory,
     ) -> Result<Value> {
         let mut args = vec![
             "gc".to_owned(),

@@ -240,7 +240,7 @@ pub(super) fn current_snapshot(record: &Record) -> Result<Snapshot> {
 }
 
 /// Decode typed journal evidence into inert Verus inputs, preserving every field.
-fn snapshot(saved: &GuestGenerationSnapshot) -> Result<Snapshot> {
+pub(super) fn snapshot(saved: &GuestGenerationSnapshot) -> Result<Snapshot> {
     Ok(Snapshot {
         operation: saved.operation.id.as_str().to_owned(),
         authority: serde_json::to_string(&saved.operation.authority)?,

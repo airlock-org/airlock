@@ -1,6 +1,9 @@
 //! Preserve named generations and effective systems when releasing pins or reclaiming storage.
-//! Callers supply complete, authenticated references. These checks do not discover references,
-//! establish filesystem durability, or exclude independent administrators.
+//! Inventory interpretation accounts for every supplied decoded source group. Authentication,
+//! filesystem enumeration and durability remain adapter duties; independent administrators are not excluded.
+
+/// Interpret complete release, journal and pool source groups.
+pub mod inventory;
 
 use vstd::prelude::*;
 
@@ -128,6 +131,10 @@ impl ProtectedGenerations {
     /// Read the complete immutable set for transport to the locked storage receiver.
     pub fn references(&self) -> (out: &[Protection]) ensures out@ == self@,
     { &self.references }
+
+    /// Move the complete immutable set into a subsequent verified aggregation.
+    pub fn into_references(self) -> (out: Vec<Protection>) ensures out@ == self@,
+    { self.references }
 
     /// Permit exactly a well-formed candidate not protected by any supplied reference.
     pub fn reclaim(&self, candidate: Candidate) -> (out: Option<ReclaimRequest>)
