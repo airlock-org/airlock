@@ -1369,6 +1369,25 @@ fn namespace_native_backend_reconciles_lost_root_and_store_replies() -> Result<(
     machine.data["staged_after_prepare"] = json!({"usr-home":999,"unexpected-vm":42});
     machine.data["setup_report_override"] = json!({});
     machine.persist()?;
+    // Same software sources do not permit reporting completion with another original generation.
+    machine.data["selected_after_setup"] = json!({"usr-home":3});
+    machine.persist()?;
+    error(
+        &machine.run(&["resume"], None, false)?,
+        "guest observations differ from journal selections",
+    );
+    let rejected = read(machine.path("machine/latest.json"))?;
+    assert_eq!(rejected["phase"], "failed");
+    assert_eq!(rejected["failed_phase"], "verifying");
+    assert!(rejected["verified_at"].is_null());
+    assert!(rejected["generation_verified_at"].is_null());
+    machine.reload()?;
+    machine
+        .data
+        .as_object_mut()
+        .unwrap()
+        .remove("selected_after_setup");
+    machine.persist()?;
     assert_eq!(machine.run(&["resume"], None, true)?["phase"], "complete");
     machine.reload()?;
     assert_eq!(machine.data["resize_count"], 1);
@@ -1395,5 +1414,28 @@ fn namespace_native_backend_reconciles_lost_root_and_store_replies() -> Result<(
         )?["usr-home"],
         999
     );
+
+    // Post-reboot verification follows the same exact-generation decision.
+    let mut previous_boot = completed.clone();
+    previous_boot["boot_id"] = json!("00000000-0000-0000-0000-000000000001");
+    let history = machine
+        .path("machine/transactions")
+        .join(completed["id"].as_str().unwrap())
+        .join("status.json");
+    save(machine.path("machine/latest.json"), &previous_boot)?;
+    save(&history, &previous_boot)?;
+    machine.data["selected"]["usr-home"] = json!(3);
+    machine.data["features"]["usr-home"]["airlock-store-generation"] = json!("3");
+    machine.persist()?;
+    error(
+        &machine.run(&["verify"], None, false)?,
+        "guest observations differ from journal selections",
+    );
+    assert_eq!(read(machine.path("machine/latest.json"))?, previous_boot);
+    machine.reload()?;
+    machine.data["selected"]["usr-home"] = json!(2);
+    machine.data["features"]["usr-home"]["airlock-store-generation"] = json!("2");
+    machine.persist()?;
+    assert_eq!(machine.run(&["verify"], None, true)?["phase"], "complete");
     Ok(())
 }

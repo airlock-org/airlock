@@ -173,7 +173,7 @@
 //! | Restoration; `restore` and candidate domain | A separately checked restore namespace binds compatible class/template/private-state configuration. Verified requests require the named UUID/private volume and halted state, reject purge states and select only removal of the retired tag. Approved new root generations remain permitted. Metadata and root unlink use the validated canonical trash ID; filesystem execution remains trusted. |
 //! | Host roots/view/controller; candidate host, transport and coordinator manifest | `HostPlan` retains the original typed prepared-host identity, admitted host/transport/controller and native storage service. Publication/validation yields an opaque `CheckedGeneration` bound to its full record and original execution context; mismatched responses cannot create it. Controller link publication and retention-root filesystem effects remain trusted adapters. |
 //! | Host boot preparation/selection; candidate host and transaction | Profile, install, seal, bind and select requests require the checked generation plus the unchanged durable gate. Verified argv preserves exact system/generation/record identity; storage rechecks it under the pool lock. Verified installation arguments forward identity and pool/ESP context through the private mount child, which cannot omit it without explicit administration. Protect/checkpoint observe the running baseline; sealing may preserve other retained boot entries. Typed v2 boot bindings fix the full host receipt and release fingerprint. Verified snapshot/reconciliation checks exact guest maps and transaction endpoints; an opaque restoration emits only matching selection/status/guest/controller documents. Stage one revalidates and replays all writes before runtime. Legacy v1 lacks a full receipt/fingerprint. Bootloader behavior, canonical decoding/projections, filesystem truth/durability, protected inputs and successful stage-one exclusion remain adapter obligations. |
-//! | Completion metadata | Phase/history/`latest.json`, observed VM receipts and maintenance scheduling are transaction protocol writes. They publish authority/progress and therefore cannot all require an already executing deployment. Atomic publication/fsync remains a trusted I/O boundary. |
+//! | Completion and verification metadata | Journal-v3 activation and explicit verification collect complete topology/storage/readiness facts, then consume an opaque `completion::VerifiedGuests` through one completion publisher. Verified checks require original snapshot classifications, exact saved generations/boot fields, selected feature/pool agreement, required running-system evidence and current attempt/operation/authority/plan/target/host-boot bindings. Verified host comparison distinguishes completion from required reboot. Maintenance verification timestamps require the same opaque result. Historical journals retain their explicit runtime/manifest checks. Phase/history/`latest.json` writes and atomic publication/fsync remain trusted adapters. |
 //! | Verification and GUI observation | `qvm-ls`/prefs/features and fixed read-only qrexec probes observe runtime generation, boot IDs and reconnect status. No explicit GUI restart command is issued here. Qubes may start dependencies or terminate a shutdown target implicitly; those external effects are not proved. |
 //! | Boot/post-boot trash quarantine | Separate boot/verification policy, outside `activate` and its durable gate. The protected trash record must match the registered UUID and complete volume set before normal shutdown, autostart suppression or tag repair. Unknown power refuses enforcement; known non-halted states require shutdown. These are ordinary runtime checks, not verified deployment requests. |
 //! | Trash purge | Separate explicit maintenance confirmation and lock, not a call from `activate`. Verified intent selection checks canonical confirmation, original UUID/volumes/generation/system/manifest, retired tag and named halted state. The remove adapter consumes the publication-gated request; cleanup preserves the same VM/generation/trash root. Expiry/waiver, retained references and alias discovery remain ordinary runtime checks. This independent authority cannot be derived from a deployment request. |
@@ -263,6 +263,16 @@
 //! Input evidence covers receiver readiness and active forwarding discovery, not physical delivery
 //! of every keyboard/mouse event. Explicit recovery acknowledgement remains a distinct console policy.
 //!
+//! Deployment completion proves correspondence of the collected observations, not an atomic
+//! machine snapshot. Journal provenance, topology/readiness-scope projections, probe dispatch,
+//! full record projection and the coordinator's publication call graph remain adapter duties.
+//! Guest probes report their running system path, not the numeric storage generation mounted
+//! inside Xen. Storage/Qubes observations must truthfully describe the selected generation;
+//! independent administrators can change state after a probe. A prior successful journal or
+//! stage-one restoration remains historical evidence, not proof of current guest readiness.
+//! Unchanged/unpinned entries keep their explicit existing-storage policy. V1/V2/legacy
+//! journals cannot acquire an exact-original-generation theorem absent their own snapshot.
+//!
 //! Native setup reports carry a typed run, effective-topology fingerprint, scope and phase.
 //! `setup::Evidence` verifies that merging reports preserves failures, applied mode, unsupported
 //! counts and pending work; its completion token binds the exact requested run/configuration/scope.
@@ -305,6 +315,9 @@ pub mod operation;
 pub mod planning;
 
 pub mod recovery;
+
+/// Exact guest-generation observations required before deployment completion.
+pub mod completion;
 
 pub mod plan;
 

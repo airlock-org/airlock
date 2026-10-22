@@ -1,5 +1,9 @@
 use super::*;
 
+mod completion;
+
+pub(super) use completion::VerifiedDeployment;
+
 impl Coordinator {
     pub(super) fn check_recorded_release(&self, r: &Release, record: &Record) -> Result<()> {
         ensure!(
@@ -30,6 +34,7 @@ impl Coordinator {
         Ok(info)
     }
 
+    /// Retain the legacy validation API for admission and boot callers.
     pub(super) fn validate_generation(
         &self,
         r: &Release,
@@ -37,6 +42,17 @@ impl Coordinator {
         generation: GenerationId,
         selected: bool,
     ) -> Result<()> {
+        self.checked_generation(r, name, generation, selected)
+            .map(|_| ())
+    }
+
+    fn checked_generation(
+        &self,
+        r: &Release,
+        name: &GuestName,
+        generation: GenerationId,
+        selected: bool,
+    ) -> Result<GenerationInfo> {
         let info = self.generation(name, generation)?;
         let b = &r.topology.domains[name].backend;
         ensure!(
@@ -97,15 +113,15 @@ impl Coordinator {
                 "{name}: root artifact differs"
             );
 
-            let approval: GenerationApproval =
-                serde_json::from_value(info.approval).context("invalid generation approval")?;
+            let approval: GenerationApproval = serde_json::from_value(info.approval.clone())
+                .context("invalid generation approval")?;
             ensure!(
                 approval.source == b.store.source,
                 "{name}: generation approval differs"
             );
 
-            let actual: GenerationProvenance =
-                serde_json::from_value(info.provenance).context("invalid generation provenance")?;
+            let actual: GenerationProvenance = serde_json::from_value(info.provenance.clone())
+                .context("invalid generation provenance")?;
             let expected = r
                 .manifest
                 .guest_provenance
@@ -121,7 +137,7 @@ impl Coordinator {
                 "{name}: generation provenance differs"
             );
         }
-        Ok(())
+        Ok(info)
     }
 
     pub(super) fn wait_guest(&self, name: &GuestName, domain: &Domain) -> Result<StorePath> {
@@ -205,6 +221,23 @@ impl Coordinator {
         r: &Release,
         required: &BTreeSet<GuestName>,
     ) -> Result<BTreeMap<GuestName, Observation>> {
+        self.observe_topology(r, required)
+            .map(|(observed, _)| observed)
+    }
+
+    /// Gather the original status projection and full numeric/storage facts from the same probes.
+    fn observe_topology(
+        &self,
+        r: &Release,
+        required: &BTreeSet<GuestName>,
+    ) -> Result<(
+        BTreeMap<GuestName, Observation>,
+        Vec<airlock_deployment_core::completion::Observation>,
+    )> {
+        use airlock_deployment_core::completion::{
+            NativeObservation, Observation as GuestObservation,
+        };
+        let mut facts = Vec::new();
         let mut observed = BTreeMap::new();
         for (name, d) in &r.topology.domains {
             let selected: StorePath = self
@@ -228,13 +261,20 @@ impl Coordinator {
                     "{name}: selected pool generation differs from staged generation"
                 );
             }
-            self.validate_generation(r, name, generation, true)?;
+            let info = self.checked_generation(r, name, generation, true)?;
 
             let actual = if required.contains(name) {
                 Some(self.wait_guest(name, d)?)
             } else {
                 None
             };
+            facts.push(GuestObservation::Native(Box::new(NativeObservation {
+                selection: crate::store::handoff::described(&info)?,
+                feature_system: selected.to_string(),
+                feature_generation: generation.get(),
+                pool_selected: info.selected,
+                running_system: actual.as_ref().map(ToString::to_string),
+            })));
             observed.insert(
                 name.clone(),
                 Observation {
@@ -244,7 +284,7 @@ impl Coordinator {
             );
         }
 
-        Ok(observed)
+        Ok((observed, facts))
     }
 
     pub(super) fn expected_running(
@@ -310,23 +350,12 @@ impl Coordinator {
         self.check_recorded_release(&r, &record)?;
 
         guard.update(Phase::Verifying, Some(&record.id))?;
-        let observed = self.verify_topology(&r, &self.expected_running(&r, &record)?)?;
+        let required = self.expected_running(&r, &record)?;
+        let verified = self.verify_deployment(&r, &mut record, &required)?;
         self.enforce_trash(&r.topology)?;
         r.recheck()?;
 
-        let host = state::host()?;
-        record.phase = if host == r.manifest.host {
-            Phase::Complete
-        } else {
-            Phase::RebootRequired
-        };
-        record.observed = observed;
-        record.host_running = Some(host);
-        record.host_selected = Some(r.manifest.host.clone());
-        record.verified_at = Some(state::now());
-
-        self.persist(&record)?;
-        self.record_verified(&r, &mut record)?;
+        self.complete_deployment(&r, &mut record, guard, verified)?;
 
         Ok(record)
     }

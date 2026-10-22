@@ -464,6 +464,17 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
                         }))?,
                     )?;
                 }
+                if phase == "finish-only"
+                    && let Some(mapping) = data["selected_after_setup"].as_object().cloned()
+                {
+                    // External selection can drift after setup succeeded but before final verification.
+                    for (name, generation) in mapping {
+                        data["selected"][&name] = generation.clone();
+                        data["features"][&name]["airlock-store-generation"] =
+                            json!(generation.to_string());
+                    }
+                }
+
                 report["topology"] = json!(option(arguments, "--topology")?);
                 for (key, value) in json!({"mode":"apply", "scope":"all", "phase":phase,
                     "run_id":run, "topology_hash":format!("{:x}", Sha256::digest(serde_json::to_vec(&topology)?)),

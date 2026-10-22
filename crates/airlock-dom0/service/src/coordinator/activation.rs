@@ -569,7 +569,8 @@ impl Coordinator {
         }
 
         self.publish_phase(record, Phase::Verifying, lock)?;
-        record.observed = self.verify_topology(r, &record.plan.start.iter().cloned().collect())?;
+        let required = record.plan.start.iter().cloned().collect();
+        let verified = self.verify_deployment(r, record, &required)?;
         if !snapshots.is_empty() {
             self.publish_phase(record, Phase::GuiReconnecting, lock)?;
             record.metadata.details.gui_reconnected = Some(self.gui_verify(snapshots)?);
@@ -589,17 +590,7 @@ impl Coordinator {
         self.host_effect(durable.host_checked(record, HostAction::Bind, host_generation)?)?;
         self.host_effect(durable.host_checked(record, HostAction::Select, host_generation)?)?;
 
-        let host = state::host()?;
-        let phase = if host == r.manifest.host {
-            Phase::Complete
-        } else {
-            Phase::RebootRequired
-        };
-        record.host_running = Some(host);
-        record.host_selected = Some(r.manifest.host.clone());
-        record.verified_at = Some(state::now());
-        self.publish_phase(record, phase, lock)?;
-        self.record_verified(r, record)
+        self.complete_deployment(r, record, lock, verified)
     }
 
     /// Lock before selecting the recorded native transaction, then resume it or restore its baseline.

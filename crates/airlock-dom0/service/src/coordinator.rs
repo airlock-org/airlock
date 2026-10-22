@@ -440,7 +440,24 @@ impl Coordinator {
         save(&history(&record.id), &value)
     }
 
-    fn record_verified(&self, r: &Release, record: &mut Record) -> Result<()> {
+    fn record_verified(
+        &self,
+        r: &Release,
+        record: &mut Record,
+        verified: &verification::VerifiedDeployment,
+    ) -> Result<()> {
+        ensure!(
+            verified.phase(
+                self,
+                r,
+                record,
+                record
+                    .host_running
+                    .as_ref()
+                    .context("missing verified host observation")?
+            )? == record.phase,
+            "verified deployment phase differs"
+        );
         if record.phase != Phase::Complete {
             return Ok(());
         }

@@ -64,7 +64,7 @@ pub open spec fn entry(d: Definition, stage: crate::effects::Scope, r: Resolutio
     }
 }
 
-fn selection_matches(d: &Definition, s: &Selection) -> (yes: bool)
+pub(crate) fn selection_matches(d: &Definition, s: &Selection) -> (yes: bool)
     ensures yes == agrees(*d, *s),
 {
     let n = match &d.native { Some(n) => n, None => return false };

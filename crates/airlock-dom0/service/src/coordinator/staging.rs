@@ -185,7 +185,7 @@ impl Coordinator {
 }
 
 /// Fingerprint and path together identify the target independently of a rebuilt plan.
-fn target(release: &ReleasePath, fingerprint: &ReleaseFingerprint) -> Result<String> {
+pub(super) fn target(release: &ReleasePath, fingerprint: &ReleaseFingerprint) -> Result<String> {
     Ok(serde_json::to_string(&(release, fingerprint))?)
 }
 
