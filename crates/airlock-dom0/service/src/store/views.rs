@@ -668,7 +668,11 @@ pub(super) fn materialize(request: ViewRequest<'_>) -> Result<Value> {
                 "invalid index source mode"
             );
 
-            let name = format!("airlock-build-{}-{}", &closure[..16], &transaction[..8]);
+            let name = format!(
+                "airlock-build-{closure}-{transaction}",
+                closure = &closure[..16],
+                transaction = &transaction[..8]
+            );
             let use_dm = source_mode == "dm"
                 || (source_mode == "auto" && rustix::process::geteuid().is_root());
             let mut mapping = if use_dm {
@@ -717,12 +721,12 @@ pub(super) fn materialize(request: ViewRequest<'_>) -> Result<Value> {
                     "1".into(),
                     "-U".into(),
                     format!(
-                        "{}-{}-{}-{}-{}",
-                        &key[..8],
-                        &key[8..12],
-                        &key[12..16],
-                        &key[16..20],
-                        &key[20..32]
+                        "{first}-{second}-{third}-{fourth}-{fifth}",
+                        first = &key[..8],
+                        second = &key[8..12],
+                        third = &key[12..16],
+                        fourth = &key[16..20],
+                        fifth = &key[20..32]
                     ),
                 ]);
             }

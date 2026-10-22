@@ -74,7 +74,7 @@ impl Seed {
             fs::write(closure.join("manifest.json"), "{}")?;
             fs::write(
                 closure.join("store-paths"),
-                format!("{}\n", paths.join("\n")),
+                format!("{paths}\n", paths = paths.join("\n")),
             )?;
             fs::write(
                 closure.join("registration"),

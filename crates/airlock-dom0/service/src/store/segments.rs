@@ -594,7 +594,7 @@ mod tests {
             let first = admit(&root, &logical, &physical, "first", SEGMENT_TARGET)?;
             let object = root
                 .join("objects/metadata")
-                .join(format!("{}.json", entry(&logical)?));
+                .join(format!("{name}.json", name = entry(&logical)?));
             let inode = fs::metadata(&object)?.ino();
             let second = admit(&root, &logical, &physical, "second", SEGMENT_TARGET)?;
             assert_eq!(second["admitted"], false);
