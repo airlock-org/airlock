@@ -18,10 +18,6 @@ privileged control VM.
 
 [![VM layout: Xen runs dom0 and the system and user VMs. Dom0 manages the shared Nix store and provides read-only closure views to the other VMs.](docs/assets/system-overview.svg)](docs/assets/system-overview.svg)
 
-[Contributor setup](CONTRIBUTING.md) covers source layout, builds, and checks.
-The landing page and product documentation are maintained in the sibling
-`website` project.
-
 AirlockOS is under active development. Qubes OS security equivalence has not
 been established. See [Security](SECURITY.md) for limitations and reporting.
 
