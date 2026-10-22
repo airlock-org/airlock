@@ -8,7 +8,7 @@ use crate::{
 use anyhow::Result;
 use serde_json::{Value, json};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs::{self, File},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
@@ -223,6 +223,94 @@ impl Seed {
             None,
         )
     }
+}
+
+/// Shared payloads are read once per verification, conflicting expectations fail, and later corruption is detected.
+#[test]
+fn prepared_image_verification_deduplicates_shared_files() -> Result<()> {
+    use rustix::fs::inotify;
+    use std::mem::MaybeUninit;
+
+    let seed = Seed::new()?;
+    seed.install()?;
+    let first: Value =
+        serde_json::from_slice(&fs::read(seed.descriptors.join("variant-0/prepared.json"))?)?;
+    let second_path = seed.descriptors.join("variant-1/prepared.json");
+    let second: Value = serde_json::from_slice(&fs::read(&second_path)?)?;
+    let first_files = first["files"].as_object().unwrap();
+    let second_files = second["files"].as_object().unwrap();
+    let shared = first_files
+        .keys()
+        .find(|path| path.ends_with(".blob") && second_files.contains_key(*path))
+        .unwrap();
+    let unique = first_files
+        .keys()
+        .chain(second_files.keys())
+        .collect::<BTreeSet<_>>()
+        .len();
+    let blob = seed.installed.join(shared);
+
+    let watch = inotify::init(inotify::CreateFlags::NONBLOCK | inotify::CreateFlags::CLOEXEC)?;
+    // Close events separate opens so the kernel cannot coalesce repeated reads into one event.
+    inotify::add_watch(
+        &watch,
+        &blob,
+        inotify::WatchFlags::OPEN | inotify::WatchFlags::CLOSE_NOWRITE,
+    )?;
+    let mut buffer = [MaybeUninit::uninit(); 512];
+    let mut events = inotify::Reader::new(&watch, &mut buffer);
+    for invocation in 0..2 {
+        let report: Value = serde_json::from_slice(&seed.outputs()?.checked()?)?;
+        assert_eq!(report["variants"], 2);
+        assert_eq!(report["files"], unique);
+        let mut opens = 0;
+        loop {
+            match events.next() {
+                Ok(event) => {
+                    assert!(!event.events().contains(inotify::ReadFlags::QUEUE_OVERFLOW));
+                    if event.events().contains(inotify::ReadFlags::OPEN) {
+                        opens += 1;
+                    }
+                }
+                Err(rustix::io::Errno::AGAIN) => break,
+                Err(error) => return Err(error.into()),
+            }
+        }
+        assert_eq!(opens, 1, "verification invocation {invocation}");
+    }
+
+    for (field, invalid) in [
+        (
+            "size",
+            json!(first["files"][shared]["size"].as_u64().unwrap() + 1),
+        ),
+        ("sha256", json!("0".repeat(64))),
+    ] {
+        let mut conflicting = second.clone();
+        conflicting["files"][shared][field] = invalid;
+        fs::write(&second_path, serde_json::to_vec(&conflicting)?)?;
+        let failed = seed.outputs()?;
+        assert!(!failed.status.success());
+        let report: Value = serde_json::from_slice(&failed.stdout)?;
+        let error = report["error"].as_str().unwrap();
+        assert!(
+            error.contains("conflicting prepared fingerprints"),
+            "{error}"
+        );
+        assert!(error.contains(shared), "{error}");
+    }
+    fs::write(second_path, serde_json::to_vec(&second)?)?;
+
+    fs::set_permissions(&blob, fs::Permissions::from_mode(0o600))?;
+    let mut bytes = fs::read(&blob)?;
+    bytes[0] ^= 1;
+    fs::write(blob, bytes)?;
+    let failed = seed.outputs()?;
+    assert!(!failed.status.success());
+    let report: Value = serde_json::from_slice(&failed.stdout)?;
+    let error = report["error"].as_str().unwrap();
+    assert!(error.contains("prepared integrity check failed"), "{error}");
+    Ok(())
 }
 
 /// Independent cached artifacts reproduce the original pool without rehashing or repacking package trees.

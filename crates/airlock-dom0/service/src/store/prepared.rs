@@ -293,9 +293,10 @@ pub(super) fn prepare_pool(
     Ok(json!({"status":"prepared"}))
 }
 
+/// Authenticate each file once across descriptors of the same immutable pool, within this call only.
 pub(super) fn verify_outputs(root: &Path, descriptors: &Path) -> Result<Value> {
-    let mut count = 0;
-    let mut files = BTreeSet::new();
+    let mut manifests = Vec::new();
+    let mut files = serde_json::Map::new();
     for directory in children(descriptors)? {
         if !fs::symlink_metadata(&directory)?.is_dir() {
             continue;
@@ -320,19 +321,31 @@ pub(super) fn verify_outputs(root: &Path, descriptors: &Path) -> Result<Value> {
             descriptor["files"].get(relative).is_some(),
             "prepared manifest checksum missing"
         );
-        verify_files(root, &descriptor["files"], false)?;
-        records::root_image(root, &read(&manifest)?)?;
-        files.extend(
-            descriptor["files"]
-                .as_object()
-                .context("invalid fingerprints")?
-                .keys()
-                .cloned(),
-        );
-        count += 1;
+        for (relative, expected) in descriptor["files"]
+            .as_object()
+            .context("invalid fingerprints")?
+        {
+            if let Some(previous) = files.get(relative) {
+                ensure!(
+                    number(previous, "size")? == number(expected, "size")?
+                        && text(previous, "sha256")? == text(expected, "sha256")?,
+                    "conflicting prepared fingerprints: {relative}"
+                );
+            } else {
+                files.insert(relative.clone(), expected.clone());
+            }
+        }
+        manifests.push(manifest);
     }
-    ensure!(count > 0, "prepared store has no descriptors");
-    Ok(json!({"status":"passed","variants":count,"files":files.len()}))
+    ensure!(!manifests.is_empty(), "prepared store has no descriptors");
+
+    // Check agreement before reading shared bytes; retain every variant's root-artifact validation.
+    let files = verify_files(root, &Value::Object(files), false)?;
+    for manifest in &manifests {
+        records::root_image(root, &read(manifest)?)?;
+    }
+
+    Ok(json!({"status":"passed","variants":manifests.len(),"files":files}))
 }
 
 pub(super) fn verify_prepared(request: &Value) -> Result<Value> {
