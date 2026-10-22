@@ -38,6 +38,7 @@ fn compare(arguments: &[std::ffi::OsString]) -> Result<(), Box<dyn std::error::E
             "gui-derivation",
             "network-derivation",
             "packages-and-check",
+            "machine-derivations",
         ] {
             let mut results = Vec::new();
             for position in 0..2 {
@@ -159,7 +160,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
         (
             "network-derivation",
-            flake.select("nixosConfigurations.airlock-domain-sys-net.config.system.build.toplevel.drvPath"),
+            flake.clone().select("nixosConfigurations.airlock-domain-sys-net.config.system.build.toplevel.drvPath"),
+        ),
+        (
+            "machine-derivations",
+            // Demand the physical host and its guest systems together so the
+            // evaluator can reuse work across the real machine's VM factories.
+            // This evaluates derivations only; builders remain disabled below.
+            NixValue::record(
+                ["sys-net", "sys-firewall", "usr-assistant", "sys-ctrl", "sys-gui", "usr-home"]
+                    .into_iter()
+                    .map(|name| (
+                        name.to_owned(),
+                        flake.clone().select(&format!(
+                            "nixosConfigurations.airlock-domain-{name}.config.system.build.toplevel.drvPath"
+                        )),
+                    ))
+                    .chain(std::iter::once((
+                        "dom0".to_owned(),
+                        flake.clone().select("nixosConfigurations.usb-dev.config.system.build.toplevel.drvPath"),
+                    ))),
+            ),
         ),
     ];
     let mut measurements = Vec::new();
