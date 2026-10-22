@@ -529,6 +529,31 @@ impl Gui<'_> {
         NixValue::list([launcher, desktop])
     }
 
+    /// Supply the icon receiver's Admin API imports at the session boundary.
+    /// Adding the client to the daemon package itself would create a cycle,
+    /// because the upstream client already depends on that daemon.
+    fn icon_receiver(&self) -> NixValue {
+        self.script(
+            "airlock-qubes-icon-receiver",
+            nix_record! {
+                "program": nix_text!(
+                    "{daemon}/lib/qubes/icon-receiver",
+                    daemon = self.package("qubes-gui-daemon"),
+                ),
+                "env": nix_record! {
+                    "PYTHONPATH": self.package("python3.pkgs.makePythonPath")
+                        .call(NixValue::list([self.package("python3.pkgs.qubes-core-admin-client")])),
+                },
+                "prefix_env": nix_record! {
+                    "PATH": self.context.lib.clone().select("makeBinPath").call(
+                        self.packages(&["python3.pkgs.qubes-core-qrexec.domU"]),
+                    ),
+                },
+            },
+            false,
+        )
+    }
+
     /// Install Qubes display protocol adapters and their authenticated-session restrictions.
     fn files(&self, service: &NixValue, agent: &NixValue, hybrid: &NixValue) -> NixValue {
         let user = self.context.config.clone().select("airlock.qubeGuest.user");
@@ -578,6 +603,20 @@ impl Gui<'_> {
             false,
         );
         let mut files = vec![
+            (
+                "xdg/autostart/qubes-icon-receiver.desktop",
+                nix_record! {
+                    "text": nix_text!(r#"
+                        [Desktop Entry]
+                        Name=Qubes window icon receiver
+                        Comment=Receives and updates Qubes window icons
+                        Icon=qubes
+                        Exec={receiver}
+                        Terminal=false
+                        Type=Application
+                    "#, receiver = self.icon_receiver()),
+                },
+            ),
             (
                 "qubes-rpc/qubes.SyncAppMenus",
                 nix_record! {
@@ -634,7 +673,6 @@ impl Gui<'_> {
             "qubes-rpc/qubes.WindowIconUpdater",
             "qubes/guid.conf",
             "qubes/rpc-config/qubes.WindowIconUpdater",
-            "xdg/autostart/qubes-icon-receiver.desktop",
             "xdg/autostart/qubes-screen-layout-watches.desktop",
         ] {
             files.push((

@@ -4,6 +4,40 @@
 use super::*;
 use rusix::{nix_record, nix_text};
 
+/// Realize the actual GUI autostart launcher without booting or building its VM image.
+pub(super) fn icon_receiver(inputs: NixValue) -> NixValue {
+    NixValue::builtin("getFlake")
+        .call(inputs.select("root"))
+        .bind(|flake| {
+            let config = flake
+                .clone()
+                .select("nixosConfigurations.airlock-domain-sys-gui-usb-gui-lab.config");
+            let text = config.select_segments([
+                "environment",
+                "etc",
+                "xdg/autostart/qubes-icon-receiver.desktop",
+                "text",
+            ]);
+            let pkgs = flake.select("inputs.nixpkgs.legacyPackages.x86_64-linux");
+            let lines = pkgs.clone().select("lib.splitString").call("\n").call(text);
+            let commands = pkgs
+                .clone()
+                .select("lib.filter")
+                .call(pkgs.clone().select("lib.hasPrefix").call("Exec="))
+                .call(lines);
+            let command = pkgs
+                .clone()
+                .select("lib.removePrefix")
+                .call("Exec=")
+                .call(NixValue::builtin("head").call(commands));
+            pkgs.select("linkFarm")
+                .call("airlock-icon-receiver-test")
+                .call(NixValue::list([
+                    nix_record! { "name": "launcher", "path": command },
+                ]))
+        })
+}
+
 /// Retain native executable entries and their installation modes from one evaluated system.
 fn entries(config: NixValue, scope: NixValue) -> NixValue {
     let candidates =

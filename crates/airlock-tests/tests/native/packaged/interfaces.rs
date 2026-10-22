@@ -7,6 +7,27 @@ fn text(value: &Value) -> &str {
     value.as_str().expect("interface text")
 }
 
+/// The installed icon receiver imports its own Python dependencies before parsing arguments.
+#[test]
+#[ignore = "explicit real GUI launcher package build"]
+fn package_icon_receiver_has_complete_python_environment() -> Result<()> {
+    let packages = Packages::new("icon-receiver")?;
+    let output = packages.fixture(
+        "build",
+        "native_etc/icon_receiver",
+        json!({"root": packages.source.join("airlock-machine")}),
+    )?;
+    let launcher = fs::read_link(output.join("launcher"))?;
+    let mut command = packages.runtime(launcher.to_str().context("icon receiver launcher")?);
+    command
+        .arg("--help")
+        .env_remove("PYTHONPATH")
+        .env_remove("DISPLAY");
+    let output = common::run(&mut command, None)?.checked()?;
+    assert!(String::from_utf8(output)?.contains("--force"));
+    Ok(())
+}
+
 /// Native /etc entry points keep their package identity and adjacent JSON in NixOS's real artifacts.
 #[test]
 #[ignore = "explicit small NixOS /etc artifact builds with prepared sources"]
