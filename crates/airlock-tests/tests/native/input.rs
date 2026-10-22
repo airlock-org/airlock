@@ -179,6 +179,21 @@ fn failed_pointer_does_not_retry_or_stop_keyboard() -> Result<()> {
     Ok(())
 }
 
+/// Supply an explicit physical observation while process peers stand in for the GUI VM.
+fn input_inventory(peers: &Peers) -> Result<PathBuf> {
+    let path = peers.path("physical.json");
+    fs::write(
+        &path,
+        br#"[{"name":"Keyboard","keyboard":true,"pointer":false}]"#,
+    )?;
+    Ok(path)
+}
+
+/// A fresh guest-side observation of the kernel device registered by the upstream receiver.
+fn receiver_reply() -> Value {
+    json!({"schema":"airlock.input-receiver.v1","devices":[{"name":"dom0: Keyboard","keyboard":true,"pointer":false}]})
+}
+
 /// Forwarding starts only after readiness from the same still-running Xen instance.
 #[test]
 fn input_connection_requires_the_same_ready_instance() -> Result<()> {
@@ -186,6 +201,7 @@ fn input_connection_requires_the_same_ready_instance() -> Result<()> {
         "ready",
         "halted",
         "invalid-xid",
+        "dom0-xid",
         "readiness-failed",
         "stopped",
         "restarted",
@@ -197,11 +213,12 @@ fn input_connection_requires_the_same_ready_instance() -> Result<()> {
             {"args":["--running","sys-gui"],"exit":if state == "halted" {1} else {0}}
         ]))?;
         peers.rules("qvm-ls", json!([
-            {"args":["--raw-data","--fields","XID","sys-gui"],"missing":"xid-seen","write":{"xid-seen":""},"stdout":if state == "invalid-xid" {" 7\n"} else {"7\n"}},
+            {"args":["--raw-data","--fields","XID","sys-gui"],"missing":"xid-seen","write":{"xid-seen":""},"stdout":if state == "invalid-xid" {" 7\n"} else if state == "dom0-xid" {"0\n"} else {"7\n"}},
             {"args":["--raw-data","--fields","XID","sys-gui"],"stdout":if state == "restarted" {"8\n"} else {"7\n"}}
         ]))?;
         peers.rules("qrexec-client", json!([
-            {"args":["-d","sys-gui","-T","-w","60","DEFAULT:QUBESRPC airlock.InputReceiverReady dom0"],"write":{"ready":""},"exit":if state == "readiness-failed" {1} else {0}}
+            {"args":["-d","sys-gui","-T","-w","60","DEFAULT:QUBESRPC airlock.InputReceiverReady dom0"],"write":{"ready":""},"exit":if state == "readiness-failed" {1} else {0}},
+            {"args":["-d","sys-gui","-T","-w","5","DEFAULT:QUBESRPC airlock.InputReceiverReady dom0"],"stdout":serde_json::to_string(&receiver_reply())?}
         ]))?;
         peers.rules("systemctl", json!([
             {"args":["restart","airlock-gui-input.target"]},
@@ -211,6 +228,7 @@ fn input_connection_requires_the_same_ready_instance() -> Result<()> {
             peers.command(common::binary("AIRLOCK_DOM0_BIN", "airlock-dom0-service"))?;
         command
             .args(["input", "connect", "--target", "sys-gui"])
+            .env("AIRLOCK_INPUT_PHYSICAL", input_inventory(&peers)?)
             .env("AIRLOCK_INPUT_QVM_CHECK", peers.path("bin/qvm-check"))
             .env("AIRLOCK_INPUT_QVM_LS", peers.path("bin/qvm-ls"))
             .env("AIRLOCK_INPUT_QREXEC", peers.path("bin/qrexec-client"))
@@ -229,28 +247,29 @@ fn input_connection_requires_the_same_ready_instance() -> Result<()> {
             .collect();
         assert_eq!(
             forwarding.len(),
-            if matches!(state, "ready" | "discovery-failed") {
-                2
-            } else {
-                0
+            match state {
+                "ready" => 3,
+                "discovery-failed" => 2,
+                _ => 0,
             }
         );
         if state == "ready" {
             assert_eq!(
                 calls
                     .iter()
-                    .map(|call| call["command"].as_str().unwrap())
-                    .collect::<Vec<_>>(),
-                [
-                    "qvm-check",
-                    "qvm-ls",
-                    "qrexec-client",
-                    "qvm-check",
-                    "qvm-ls",
-                    "systemctl",
-                    "systemctl"
-                ]
+                    .filter(|call| call["command"] == "qvm-ls")
+                    .count(),
+                3
             );
+            assert!(calls.iter().any(|call| call["args"]
+                == json!([
+                    "-d",
+                    "sys-gui",
+                    "-T",
+                    "-w",
+                    "5",
+                    "DEFAULT:QUBESRPC airlock.InputReceiverReady dom0"
+                ])));
         }
     }
     Ok(())
@@ -262,6 +281,10 @@ fn boot_input_readiness_survives_connection_job_cancellation() -> Result<()> {
     for state in ["ready", "unavailable", "restarted"] {
         let mut peers = Peers::new()?;
         peers.rules("qvm-check", json!([{}]))?;
+        peers.rules(
+            "qrexec-client",
+            json!([{"stdout":serde_json::to_string(&receiver_reply())?}]),
+        )?;
         peers.rules(
             "qvm-ls",
             json!([
@@ -285,6 +308,8 @@ fn boot_input_readiness_survives_connection_job_cancellation() -> Result<()> {
                 "--timeout",
                 "1",
             ])
+            .env("AIRLOCK_INPUT_PHYSICAL", input_inventory(&peers)?)
+            .env("AIRLOCK_INPUT_QREXEC", peers.path("bin/qrexec-client"))
             .env("AIRLOCK_INPUT_QVM_CHECK", peers.path("bin/qvm-check"))
             .env("AIRLOCK_INPUT_QVM_LS", peers.path("bin/qvm-ls"))
             .env("AIRLOCK_INPUT_SYSTEMCTL", peers.path("bin/systemctl"));
@@ -313,6 +338,13 @@ fn input_receiver_readiness_enforces_caller_device_and_handler_guards() -> Resul
         "non-executable-handler",
     ] {
         let peers = Peers::new()?;
+        let sys_input = peers.path("sys-input");
+        let device_path = sys_input.join("event1/device");
+        fs::create_dir_all(device_path.join("capabilities"))?;
+        fs::write(device_path.join("name"), "dom0: Keyboard\n")?;
+        fs::write(device_path.join("capabilities/key"), "100050000000\n")?;
+        fs::write(device_path.join("capabilities/rel"), "0\n")?;
+        fs::write(device_path.join("capabilities/abs"), "0\n")?;
         let first = peers.path("first-handler");
         fs::write(&first, "not executed")?;
         fs::set_permissions(&first, fs::Permissions::from_mode(0o755))?;
@@ -339,6 +371,8 @@ fn input_receiver_readiness_enforces_caller_device_and_handler_guards() -> Resul
         let mut command = peers.command(common::binary("AIRLOCK_VM_BIN", "airlock-vm-service"))?;
         command
             .arg("input-receiver-ready")
+            .arg("--sys-input")
+            .arg(&sys_input)
             .arg("--uinput")
             .arg(device)
             .arg("--handler")
@@ -369,6 +403,71 @@ fn input_receiver_readiness_enforces_caller_device_and_handler_guards() -> Resul
             error = String::from_utf8_lossy(&output.stderr)
         );
         assert!(peers.calls()?.is_empty());
+        if state == "ready" {
+            let reply: Value = serde_json::from_slice(&output.stdout)?;
+            assert_eq!(reply["devices"][0]["name"], "dom0: Keyboard");
+            assert_eq!(reply["devices"][0]["keyboard"], true);
+        }
+    }
+    Ok(())
+}
+
+/// Read-only resampling rejects missing, partial or malformed receiver observations without starting services.
+#[test]
+fn input_check_requires_registered_physical_interfaces() -> Result<()> {
+    for failure in [
+        "",
+        "empty",
+        "wrong-name",
+        "missing-pointer",
+        "schema",
+        "daemon",
+        "rpc",
+    ] {
+        let mut peers = Peers::new()?;
+        let physical = input_inventory(&peers)?;
+        fs::write(&physical, br#"[{"name":"Keyboard","keyboard":true,"pointer":false},{"name":"Mouse","keyboard":false,"pointer":true}]"#)?;
+        let mut reply = receiver_reply();
+        if failure != "missing-pointer" {
+            reply["devices"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!({"name":"dom0: Mouse","keyboard":false,"pointer":true}));
+        }
+        match failure {
+            "empty" => reply["devices"] = json!([]),
+            "wrong-name" => reply["devices"][0]["name"] = json!("sys-usb: Keyboard"),
+            "schema" => reply["schema"] = json!("unknown"),
+            _ => {}
+        }
+        peers.rules("systemctl",json!([{"args":["is-active","--quiet","airlock-gui-input-discovery.service"],"exit":if failure == "daemon" {1} else {0}}]))?;
+        peers.rules("qrexec-client",json!([{"stdout":serde_json::to_string(&reply)?,"exit":if failure == "rpc" {1} else {0}}]))?;
+        let mut command =
+            peers.command(common::binary("AIRLOCK_DOM0_BIN", "airlock-dom0-service"))?;
+        command
+            .args(["input", "check", "--target", "sys-gui"])
+            .env("AIRLOCK_INPUT_PHYSICAL", physical)
+            .env("AIRLOCK_INPUT_SYSTEMCTL", peers.path("bin/systemctl"))
+            .env("AIRLOCK_INPUT_QREXEC", peers.path("bin/qrexec-client"));
+        let output = common::run(&mut command, None)?;
+        assert_eq!(
+            output.status.success(),
+            failure.is_empty(),
+            "{failure}: {error}",
+            error = String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            peers
+                .calls()?
+                .iter()
+                .all(|call| call["command"] == "qrexec-client"
+                    || call["args"]
+                        == json!([
+                            "is-active",
+                            "--quiet",
+                            "airlock-gui-input-discovery.service"
+                        ]))
+        );
     }
     Ok(())
 }

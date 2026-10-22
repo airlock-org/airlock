@@ -3,7 +3,7 @@
 
 mod discovery;
 
-mod connect;
+pub(crate) mod connect;
 
 mod events;
 
@@ -39,8 +39,14 @@ enum Action {
         #[arg(long)]
         target: GuestName,
         // Total retry budget, including cancelled connection jobs.
-        #[arg(long, default_value_t = 180, value_parser = clap::value_parser!(u64).range(1..=180))]
+        #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(1..=300))]
         timeout: u64,
+    },
+    /// Observe an already-running input connection without changing VM or service state.
+    Check {
+        // Guest whose physical input connection is inspected.
+        #[arg(long)]
+        target: GuestName,
     },
     /// Enable forwarding only after the same running GUI instance answers readiness.
     Connect {
@@ -109,6 +115,7 @@ pub(crate) fn execute(request: Request) -> Result<()> {
     match request.action {
         Action::BootReady { target, timeout } => connect::boot_ready(&target, timeout),
         Action::Connect { target } => connect::connect(&target),
+        Action::Check { target } => connect::check(&crate::process::Runner::default(), &target),
         Action::Discover {
             target,
             qrexec,

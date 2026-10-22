@@ -2,8 +2,9 @@
 
 use super::tool;
 use crate::process::Runner;
+use airlock_machine_core::input::Receiver;
 use airlock_nix_core::identity::GuestName;
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use std::{
     ffi::OsString,
     thread,
@@ -16,6 +17,7 @@ pub(super) fn boot_ready(target: &GuestName, timeout: u64) -> Result<()> {
     let before = instance(&runner, target)?;
     let deadline = Instant::now() + Duration::from_secs(timeout);
     let mut error = "input forwarding is not ready".to_owned();
+    let mut delay = Duration::from_millis(500);
     while Instant::now() < deadline {
         let result = (|| -> Result<()> {
             runner.run(
@@ -24,17 +26,7 @@ pub(super) fn boot_ready(target: &GuestName, timeout: u64) -> Result<()> {
                 deadline.saturating_duration_since(Instant::now()),
                 &[],
             )?;
-            run(
-                &runner,
-                "AIRLOCK_INPUT_SYSTEMCTL",
-                "systemctl",
-                &[
-                    "is-active",
-                    "--quiet",
-                    "airlock-gui-input-discovery.service",
-                ],
-                10,
-            )?;
+            check(&runner, target)?;
             ensure!(
                 instance(&runner, target)? == before,
                 "{target} restarted during boot input readiness"
@@ -43,11 +35,16 @@ pub(super) fn boot_ready(target: &GuestName, timeout: u64) -> Result<()> {
         })();
         match result {
             Ok(()) => return Ok(()),
-            Err(failure) => error = failure.to_string(),
+            Err(failure) => {
+                let latest = format!("{failure:#}");
+                if latest != error {
+                    eprintln!("Waiting for input on {target}: {latest}");
+                }
+                error = latest;
+            }
         }
-        thread::sleep(
-            Duration::from_millis(100).min(deadline.saturating_duration_since(Instant::now())),
-        );
+        thread::sleep(delay.min(deadline.saturating_duration_since(Instant::now())));
+        delay = (delay * 2).min(Duration::from_secs(4));
     }
     bail!("{target}: boot input readiness timed out: {error}")
 }
@@ -97,7 +94,9 @@ fn instance(runner: &Runner, target: &GuestName) -> Result<String> {
         .trim_end_matches('\n')
         .to_owned();
     ensure!(
-        !xid.is_empty() && xid.bytes().all(|byte| byte.is_ascii_digit()),
+        !xid.is_empty()
+            && xid.bytes().all(|byte| byte.is_ascii_digit())
+            && xid.parse::<u32>().is_ok_and(|xid| xid > 0),
         "could not identify the running {target} instance"
     );
     Ok(xid)
@@ -140,7 +139,67 @@ pub(super) fn connect(target: &GuestName) -> Result<()> {
             "--quiet",
             "airlock-gui-input-discovery.service",
         ],
+        5,
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut last_error = None;
+    loop {
+        match check(&runner, target) {
+            Ok(()) => break,
+            Err(error) if Instant::now() >= deadline => {
+                return Err(error).context("input forwarding did not become ready");
+            }
+            Err(error) => {
+                let detail = format!("{error:#}");
+                if last_error
+                    .as_ref()
+                    .is_none_or(|(previous, at): &(String, Instant)| {
+                        previous != &detail || at.elapsed() >= Duration::from_secs(5)
+                    })
+                {
+                    eprintln!("Waiting for forwarded devices on {target}: {detail}");
+                    last_error = Some((detail, Instant::now()));
+                }
+            }
+        }
+        thread::sleep(Duration::from_millis(500));
+    }
+    ensure!(
+        instance(&runner, target)? == before,
+        "{target} restarted while connecting input"
+    );
+    Ok(())
+}
+
+/// Observe the daemon and kernel-registered receivers without starting or restarting anything.
+pub(crate) fn check(runner: &Runner, target: &GuestName) -> Result<()> {
+    run(
+        runner,
+        "AIRLOCK_INPUT_SYSTEMCTL",
+        "systemctl",
+        &[
+            "is-active",
+            "--quiet",
+            "airlock-gui-input-discovery.service",
+        ],
+        5,
+    )?;
+    let physical = super::discovery::physical()?;
+    let reply = run(
+        runner,
+        "AIRLOCK_INPUT_QREXEC",
+        "qrexec-client",
+        &[
+            "-d",
+            target.as_str(),
+            "-T",
+            "-w",
+            "5",
+            "DEFAULT:QUBESRPC airlock.InputReceiverReady dom0",
+        ],
         10,
     )?;
-    Ok(())
+    let receiver: Receiver =
+        serde_json::from_str(&reply).context("invalid input receiver observation")?;
+    receiver.covers(&physical).map_err(anyhow::Error::msg)
 }

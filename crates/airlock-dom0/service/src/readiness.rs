@@ -76,7 +76,9 @@ pub(crate) fn desktop(request: Desktop) -> Result<()> {
             run("qvm-check", &["--running", "sys-gui"])?;
             let before = run("qvm-ls", &["--raw-data", "--fields", "XID", "sys-gui"])?;
             ensure!(
-                !before.is_empty() && before.bytes().all(|byte| byte.is_ascii_digit()),
+                !before.is_empty()
+                    && before.bytes().all(|byte| byte.is_ascii_digit())
+                    && before.parse::<u32>().is_ok_and(|xid| xid > 0),
                 "invalid GUI Xen identity"
             );
             let initial = instance.get_or_insert_with(|| before.clone());

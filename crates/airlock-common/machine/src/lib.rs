@@ -17,3 +17,6 @@ pub mod inspection;
 pub mod services;
 
 pub mod host_store;
+
+/// Read-only input transport evidence shared by the host and GUI guest.
+pub mod input;

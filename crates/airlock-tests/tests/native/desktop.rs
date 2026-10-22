@@ -85,7 +85,13 @@ fn boot_health_requires_an_active_graphical_login() -> Result<()> {
 fn boot_desktop_wait_checks_health_generation_and_xen_instance() -> Result<()> {
     use crate::coordinator::fixture::{declaration, store};
 
-    for state in ["ready", "failed-display", "wrong-generation", "restarted"] {
+    for state in [
+        "ready",
+        "failed-display",
+        "wrong-generation",
+        "restarted",
+        "dom0-xid",
+    ] {
         let mut peers = Peers::new()?;
         let topology = json!({"schema":"airlock.qubes-topology.v1", "domains":{"sys-gui":declaration("sys-gui", 1)}});
         fs::write(peers.path("topology.json"), serde_json::to_vec(&topology)?)?;
@@ -93,7 +99,7 @@ fn boot_desktop_wait_checks_health_generation_and_xen_instance() -> Result<()> {
         peers.rules(
             "qvm-ls",
             json!([
-                {"missing":"seen-xid", "write":{"seen-xid":""}, "stdout":"7\n"},
+                {"missing":"seen-xid", "write":{"seen-xid":""}, "stdout":if state == "dom0-xid" {"0\n"} else {"7\n"}},
                 {"stdout":if state == "restarted" {"8\n"} else {"7\n"}}
             ]),
         )?;

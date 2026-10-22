@@ -212,7 +212,7 @@ pub(super) fn configuration(
                                 "serviceConfig": nix_record! {
                                     "Type": "oneshot",
                                     "RemainAfterExit": true,
-                                    "TimeoutStartSec": 240_i64,
+                                    "TimeoutStartSec": 360_i64,
                                     "ExecStart": nix_text!(
                                         "{engine}/bin/airlock-dom0-service input boot-ready --target {target}",
                                         engine = engine.clone(),

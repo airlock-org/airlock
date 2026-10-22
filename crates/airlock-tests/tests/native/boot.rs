@@ -22,8 +22,13 @@ impl Boot {
         peers.rules("qvm-ls", json!([{"stdout":"7\n"}]))?;
         peers.rules("qrexec-client", json!([
             {"args":["-d","sys-gui","user:readlink -f /run/current-system"], "stdout":crate::coordinator::fixture::store("sys-gui-system", 1)},
+            {"contains":"DEFAULT:QUBESRPC airlock.InputReceiverReady dom0", "stdout":r#"{"schema":"airlock.input-receiver.v1","devices":[{"name":"dom0: Keyboard","keyboard":true,"pointer":false}]}"#},
             {"prefix":["-d","sys-gui"], "stdout":""}
         ]))?;
+        fs::write(
+            peers.path("physical.json"),
+            br#"[{"name":"Keyboard","keyboard":true,"pointer":false}]"#,
+        )?;
         fs::write(peers.path("boot-id"), id)?;
         fs::write(
             peers.path("policy.json"),
@@ -54,6 +59,7 @@ impl Boot {
             .env("AIRLOCK_BOOT_SETUP", crate::coordinator::fixture::SETUP);
         for (key, path) in [
             ("AIRLOCK_BOOT_ID_FILE", "boot-id"),
+            ("AIRLOCK_INPUT_PHYSICAL", "physical.json"),
             ("AIRLOCK_BOOT_STATE_ROOT", "state"),
             ("AIRLOCK_BOOT_LOG_ROOT", "logs"),
             ("AIRLOCK_BOOT_RUN_ROOT", "run"),
@@ -457,6 +463,7 @@ fn optional_packaged_startup_helper_has_complete_runtime_dependencies() -> Resul
         ("AIRLOCK_QVM_LS", "bin/qvm-ls"),
         ("AIRLOCK_QREXEC_CLIENT", "bin/qrexec-client"),
         ("AIRLOCK_BOOT_ID_FILE", "boot-id"),
+        ("AIRLOCK_INPUT_PHYSICAL", "physical.json"),
         ("AIRLOCK_BOOT_STATE_ROOT", "state"),
         ("AIRLOCK_BOOT_LOG_ROOT", "logs"),
         ("AIRLOCK_BOOT_RUN_ROOT", "run"),
@@ -521,7 +528,7 @@ fn namespace_boot_acceptance_requires_fresh_complete_evidence() -> Result<()> {
             {"args":["-d","sys-gui","user:readlink -f /run/current-system"], "stdout":store("sys-gui-system", if failure == "generation" {2} else {1})},
             {"args":["-d","sys-ctrl","user:readlink -f /run/current-system"], "stdout":store("sys-ctrl-system", 1)},
             {"contains":"root:/run/current-system/sw/bin/airlock-vm-service boot-health desktop", "exit":if failure == "desktop" {1} else {0}},
-            {"contains":"DEFAULT:QUBESRPC airlock.InputReceiverReady dom0", "exit":if failure == "input" {1} else {0}},
+            {"contains":"DEFAULT:QUBESRPC airlock.InputReceiverReady dom0", "exit":if failure == "input" {1} else {0}, "stdout":r#"{"schema":"airlock.input-receiver.v1","devices":[{"name":"dom0: Keyboard","keyboard":true,"pointer":false}]}"#},
             {"contains":"root:/run/current-system/sw/bin/airlock-vm-service boot-health build-store --domain sys-ctrl", "exit":if failure == "worker" {1} else {0}, "write":{"worker-observed":""}}
         ]))?;
         // sys-ctrl sorts before sys-gui: change its instance after the GUI capability probe,

@@ -82,30 +82,7 @@ fn instance(runner: &Runner, boot: &str, name: &str) -> Result<Instance> {
 /// Invoke only fixed read-only health commands through the existing Qubes transport.
 fn service(runner: &Runner, name: &str, kind: Service) -> Result<()> {
     match kind {
-        Service::Input => {
-            runner.run(
-                "qrexec-client",
-                &[
-                    "-d".into(),
-                    name.into(),
-                    "-T".into(),
-                    "-w".into(),
-                    "5".into(),
-                    "DEFAULT:QUBESRPC airlock.InputReceiverReady dom0".into(),
-                ],
-                Duration::from_secs(10),
-                &[],
-            )?;
-            probe(
-                runner,
-                "systemctl",
-                &[
-                    "is-active",
-                    "--quiet",
-                    "airlock-gui-input-discovery.service",
-                ],
-            )?;
-        }
+        Service::Input => crate::input::connect::check(runner, &name.parse()?)?,
         kind => {
             let command = match kind {
                 Service::Desktop => {

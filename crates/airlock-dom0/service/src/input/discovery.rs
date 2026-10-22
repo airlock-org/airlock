@@ -79,9 +79,24 @@ impl Inventory {
 }
 
 fn add(device: &udev::Device, forwarder: &mut Forwarder, inventory: &mut Inventory, path: &Path) {
-    let Some(node) = device.devnode() else {
+    let Some(descriptor) = describe(device) else {
         return;
     };
+    let node = descriptor.node.path().to_owned();
+    if let Err(error) = inventory.remember(path, descriptor.hardware) {
+        eprintln!("cannot persist input inventory: {error:#}; forwarding will continue");
+    }
+    if let Err(error) = forwarder.add(descriptor.node) {
+        eprintln!(
+            "cannot forward {}: {error}; other devices remain connected",
+            node.display()
+        );
+    }
+}
+
+/// Describe the same eligible physical interfaces for transport and read-only readiness.
+fn describe(device: &udev::Device) -> Option<model::Descriptor> {
+    let node = device.devnode()?;
     let properties = device
         .properties()
         .map(|p| {
@@ -93,18 +108,39 @@ fn add(device: &udev::Device, forwarder: &mut Forwarder, inventory: &mut Invento
         .collect();
     let parent = device.parent();
     let name = parent.as_ref().and_then(|p| p.attribute_value("name"));
-    let Some(descriptor) = model::describe(node, device.syspath(), name, &properties) else {
-        return;
-    };
-    if let Err(error) = inventory.remember(path, descriptor.hardware) {
-        eprintln!("cannot persist input inventory: {error:#}; forwarding will continue");
+    model::describe(node, device.syspath(), name, &properties)
+}
+
+/// Enumerate independently of the daemon, so an empty or incomplete initial scan cannot pass readiness.
+pub(super) fn physical() -> Result<Vec<airlock_machine_core::input::Device>> {
+    if let Some(path) = std::env::var_os("AIRLOCK_INPUT_PHYSICAL") {
+        return crate::state::read(std::path::Path::new(&path));
     }
-    if let Err(error) = forwarder.add(descriptor.node) {
-        eprintln!(
-            "cannot forward {}: {error}; other devices remain connected",
-            node.display()
-        );
+    let mut enumerator = udev::Enumerator::new()?;
+    enumerator.match_subsystem("input")?;
+    let mut result = Vec::new();
+    for device in enumerator.scan_devices()? {
+        if let Some(descriptor) = describe(&device) {
+            let classes = &descriptor.hardware.classes;
+            result.push(airlock_machine_core::input::Device {
+                name: descriptor.hardware.name,
+                keyboard: classes
+                    .iter()
+                    .any(|class| matches!(class, model::Class::Keyboard)),
+                pointer: classes.iter().any(|class| {
+                    matches!(
+                        class,
+                        model::Class::Mouse
+                            | model::Class::PointingStick
+                            | model::Class::Touchpad
+                            | model::Class::Touchscreen
+                            | model::Class::Tablet
+                    )
+                }),
+            });
+        }
     }
+    Ok(result)
 }
 
 pub(super) fn run(

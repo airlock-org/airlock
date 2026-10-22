@@ -335,7 +335,7 @@ fn sender(
                         "ExecStart": connect.to_text(),
                         // Include the 65-second receiver RPC, Xen identity checks
                         // and forwarding discovery instead of truncating their budgets.
-                        "TimeoutStartSec": 180_i64,
+                        "TimeoutStartSec": 240_i64,
                     },
                 },
                 "airlock-gui-input-events": nix_record! {
