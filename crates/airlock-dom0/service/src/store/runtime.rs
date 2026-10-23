@@ -1,8 +1,9 @@
 //! Kernel observations preserve runtime pins unless a complete query establishes absence.
 //! Callers hold admission exclusion across observing, tracing and releasing references.
 
-use super::fs::*;
+use super::{fs::*, tracing};
 use airlock_deployment_core::retention::runtime::{Observation, Phase, ReleaseRequest};
+use airlock_deployment_core::retention::tracing::Extent;
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 use std::{fs, path::Path, process::Command, time::Duration};
@@ -14,7 +15,7 @@ pub(super) struct Reference {
     /// Known lifecycle; an unknown state refuses maintenance.
     pub(super) phase: Phase,
     /// Physical ranges retained even when logical generations no longer exist.
-    pub(super) pins: Vec<Value>,
+    pub(super) pins: Vec<Extent>,
 }
 
 /// Airlock names use the subset that dmsetup reports without escaping or whitespace loss.
@@ -46,10 +47,11 @@ pub(super) fn load(root: &Path, path: &Path) -> Result<Reference> {
     );
     let phase =
         Phase::decode(&text(&value, "status")?).context("unknown runtime reference phase")?;
-    let pins = value["physical_references"]
-        .as_array()
-        .context("runtime reference lacks physical pins")?
-        .clone();
+    let pins = tracing::extents(
+        value["physical_references"]
+            .as_array()
+            .context("runtime reference lacks physical pins")?,
+    )?;
     ensure!(!pins.is_empty(), "runtime reference has no physical pins");
 
     Ok(Reference { name, phase, pins })

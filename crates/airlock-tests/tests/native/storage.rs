@@ -1027,6 +1027,7 @@ fn gc_refuses_incomplete_manifest_references_before_any_deletion() -> Result<()>
 fn gc_refuses_invalid_physical_pins_before_any_deletion() -> Result<()> {
     let store = Store::new()?;
     store.admit(true)?;
+    let inactive = store.admit(false)?;
     store.run(&[
         "pool",
         "mark-running",
@@ -1091,6 +1092,55 @@ fn gc_refuses_invalid_physical_pins_before_any_deletion() -> Result<()> {
         assert_eq!(fs::read(&blob)?, original_bytes);
     }
     fs::write(&path, serde_json::to_vec(&original)?)?;
+    // A valid range belonging to a different object must not resolve this logical requirement.
+    // Conflicting current locations are also rejected rather than selecting the first record.
+    let name = store.system.rsplit('/').next().unwrap();
+    let location_path = store
+        .pool
+        .join(format!("objects/blob-metadata/{name}.json"));
+    let location = read(&location_path)?;
+    for defect in [
+        "missing-entry",
+        "wrong-entry",
+        "schema",
+        "two-current",
+        "no-current",
+    ] {
+        let mut damaged = location.clone();
+        match defect {
+            "missing-entry" => {
+                damaged.as_object_mut().unwrap().remove("entry");
+            }
+            "wrong-entry" => damaged["entry"] = json!("other-object"),
+            "schema" => damaged["schema"] = json!("unknown-location"),
+            "two-current" => damaged["locations"]
+                .as_array_mut()
+                .unwrap()
+                .push(location["locations"][0].clone()),
+            "no-current" => damaged["locations"][0]["status"] = json!("retired"),
+            _ => unreachable!(),
+        }
+        fs::write(&location_path, serde_json::to_vec(&damaged)?)?;
+        let before = super::storage_integrity::snapshot(&store.pool)?;
+        let output = common::run(
+            &mut store.command(&[
+                "pool",
+                "gc",
+                "--pool-root",
+                store.pool_text(),
+                "--keep-generations",
+                "0",
+            ]),
+            None,
+        )?;
+        assert!(
+            !output.status.success(),
+            "GC accepted canonical location defect: {defect}"
+        );
+        assert_eq!(super::storage_integrity::snapshot(&store.pool)?, before);
+        assert!(Path::new(inactive["manifest"].as_str().unwrap()).is_file());
+    }
+    fs::write(&location_path, serde_json::to_vec(&location)?)?;
     store.run(&[
         "pool",
         "gc",

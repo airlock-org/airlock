@@ -141,6 +141,11 @@ impl Observation {
         ensures out == self.result(),
     { self.presence }
 
+    /// Exact mapping whose inventory evidence produced this observation.
+    pub fn name(&self) -> (out: &str)
+        ensures out@ == self.identity(),
+    { self.name.as_str() }
+
     /// Permit pin release only for the original observed absent mapping and a supported lifecycle.
     pub fn release(self, pool: String, phase: Phase, context: Context) -> (out: Option<ReleaseRequest>)
         ensures out.is_some() == (pool@.len() > 0 && releasable(self, phase, context)),

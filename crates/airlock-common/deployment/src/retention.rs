@@ -17,6 +17,9 @@ pub mod runtime;
 /// Exact logical-resource deletion permissions derived from the original immutable trace.
 pub mod logical;
 
+/// Complete logical-to-physical resolution before segment reclamation.
+pub mod physical;
+
 use vstd::prelude::*;
 
 verus! {

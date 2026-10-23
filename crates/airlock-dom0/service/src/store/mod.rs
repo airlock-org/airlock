@@ -74,6 +74,8 @@ mod protection;
 
 mod tracing;
 
+mod physical;
+
 mod segment_retirement;
 
 mod logical_retirement;
