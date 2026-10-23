@@ -22,7 +22,7 @@ use rusix::{
 struct System<'a> {
     /// This VM's final package set, library and merged settings.
     context: &'a ModuleContext,
-    /// Source tree containing Qubes integration patches and machine seed definitions.
+    /// Source tree containing machine settings and seed definitions.
     source: &'a NixPath,
     /// Native application sources used to build VM integration commands.
     workspace: &'a Workspace,
@@ -58,15 +58,6 @@ impl System<'_> {
     fn native(&self) -> NixValue {
         Application::VmService
             .build(&self.context.pkgs, self.workspace)
-            .as_expression()
-    }
-
-    /// Capture one machine asset as a store input for patches and sandboxed commands.
-    fn file(&self, name: &str) -> NixValue {
-        self.source
-            .join_relative(name)
-            .expect("machine asset paths are relative")
-            .snapshot()
             .as_expression()
     }
 

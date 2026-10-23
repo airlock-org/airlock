@@ -39,12 +39,9 @@ pub(super) fn application_source(inputs: &ModuleContext) -> NixPath {
     )
 }
 
-/// Supplies the GUI service with application and machine sources from this module's caller.
+/// Supplies the GUI service with its admitted application source from this module's caller.
 pub(super) fn service_sources(
     inputs: &ModuleContext,
 ) -> airlock_sys_gui_service::authoring::Sources {
-    airlock_sys_gui_service::authoring::Sources::new(
-        application_source(inputs),
-        inputs.argument(ARGUMENT),
-    )
+    airlock_sys_gui_service::authoring::Sources::new(application_source(inputs))
 }

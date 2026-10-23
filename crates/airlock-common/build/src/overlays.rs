@@ -1,10 +1,8 @@
 //! Extend upstream package sets with Airlock's Qubes integration patches.
 
+use crate::Workspace;
 use rusix::{
-    interop::{
-        NixPath,
-        raw::{NixRepresentation, NixValue},
-    },
+    interop::raw::{NixRepresentation, NixValue},
     nix_record, nix_text,
 };
 
@@ -134,8 +132,8 @@ pub fn qubes_startup() -> NixValue {
     })
 }
 
-/// Retain existing patches and append the machine's protocol extensions in order.
-pub fn gui_window_state(machine: &NixPath) -> NixValue {
+/// Retain existing patches and append Airlock's protocol extensions from the application workspace.
+pub fn gui_window_state(workspace: &Workspace) -> NixValue {
     NixValue::function(|_| {
         NixValue::function(|previous| {
             NixValue::record(
@@ -164,18 +162,20 @@ pub fn gui_window_state(machine: &NixPath) -> NixValue {
                     ),
                 ]
                 .map(|(package, patches)| {
-                    let updated = previous.clone().select(package).override_attrs(
-                        NixValue::function(|old| {
-                            nix_record! {
-                                "patches": NixValue::concat_lists([
-                                    old.attr_or("patches", NixValue::list([])),
-                                    NixValue::list(patches.iter().map(|patch| machine.join_relative(
-                                        &format!("patches/{package}/{patch}"),
-                                    ).unwrap().as_expression())),
-                                ]),
-                            }
-                        }),
-                    );
+                    let updated =
+                        previous
+                            .clone()
+                            .select(package)
+                            .override_attrs(NixValue::function(|old| {
+                                nix_record! {
+                                    "patches": NixValue::concat_lists([
+                                        old.attr_or("patches", NixValue::list([])),
+                                        NixValue::list(patches.iter().map(|patch| workspace.file(
+                                            &format!("patches/{package}/{patch}"),
+                                        ).snapshot().as_expression())),
+                                    ]),
+                                }
+                            }));
 
                     (package, updated)
                 }),
@@ -185,10 +185,10 @@ pub fn gui_window_state(machine: &NixPath) -> NixValue {
 }
 
 /// Correct per-CPU memory accounting and run upstream integration checks against the patch.
-pub fn memory_accounting(machine: &NixPath) -> NixValue {
+pub fn memory_accounting(workspace: &Workspace) -> NixValue {
     NixValue::function(|_| {
         NixValue::function(|previous| {
-            let file = |path| machine.join_relative(path).unwrap();
+            let file = |path| workspace.file(path);
             let smoke = previous
                 .clone()
                 .select("writeText")
@@ -204,7 +204,7 @@ pub fn memory_accounting(machine: &NixPath) -> NixValue {
                             NixValue::list([file(
                                 "patches/qubes-linux-utils/\
                                  0001-account-for-per-cpu-free-pages.patch",
-                            ).as_expression()]),
+                            ).snapshot().as_expression()]),
                         ]),
                         "postPatch": NixValue::concat_text([
                             old.clone().attr_or("postPatch", ""),
@@ -259,7 +259,7 @@ fn without_template_tools(previous: &NixValue) -> NixValue {
 }
 
 /// Apply image-builder fixes and hide unsupported template operations in the host package set.
-pub fn image_tools(machine: &NixPath) -> NixValue {
+pub fn image_tools(workspace: &Workspace) -> NixValue {
     NixValue::function(|_| {
         NixValue::function(|previous| {
             let lib = previous.clone().select("lib");
@@ -278,9 +278,9 @@ pub fn image_tools(machine: &NixPath) -> NixValue {
                                 .call("1.9.4"),
                         );
                     let patch = |name| {
-                        machine
-                            .join_relative(&format!("patches/erofs-utils/{name}"))
-                            .unwrap()
+                        workspace
+                            .file(&format!("patches/erofs-utils/{name}"))
+                            .snapshot()
                             .as_expression()
                     };
 

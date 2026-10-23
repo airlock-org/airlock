@@ -72,6 +72,19 @@ fn filtered_sources_preserve_cache_keys_and_compile() -> Result<()> {
         inspect(root, &workspace, "source-extension-change", &cases)?
     );
 
+    // Packaging reads these files independently; neither belongs to native compiler inputs.
+    change(&workspace.join("patches/qubes-linux-utils/memory-accounting.h"))?;
+    writeln!(
+        fs::OpenOptions::new()
+            .append(true)
+            .open(workspace.join("airlock-qubes-python/assets/amd-vbios.xml"))?,
+        "{{# source input regression #}}"
+    )?;
+    assert_eq!(
+        baseline,
+        inspect(root, &workspace, "source-integration-assets-change", &cases)?
+    );
+
     let relocated = root.join("relocated/workspace");
     copy_tree(&workspace, &relocated)?;
     assert_eq!(

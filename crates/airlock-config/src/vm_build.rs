@@ -135,9 +135,9 @@ impl Sources {
             import.clone().call(by_name).call(qubes("pkgs/by-name")),
             libvirt,
             import.call(qubes("nix/overlay.nix")),
-            overlays::gui_window_state(&self.machine),
+            overlays::gui_window_state(&self.apps),
             overlays::codex(),
-            overlays::memory_accounting(&self.machine),
+            overlays::memory_accounting(&self.apps),
             overlays::template_tools(),
             xwayland,
         ])

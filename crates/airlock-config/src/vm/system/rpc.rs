@@ -288,7 +288,9 @@ fn image(system: &System<'_>, environment: &NixValue, service: NixValue) -> NixV
             source = system.package("qubes-core-agent-linux.src"),
             icon = icon,
             patch = system
-                .file("patches/qubes-core-agent-linux/0001-render-svg-icons-with-librsvg.patch"),
+                .workspace
+                .file("patches/qubes-core-agent-linux/0001-render-svg-icons-with-librsvg.patch")
+                .snapshot(),
         ));
 
     script(

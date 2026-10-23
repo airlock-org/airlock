@@ -34,7 +34,7 @@ pub(crate) fn module(source: &NixPath, workspace: &Workspace) -> NixValue {
             .import_value(crate::dev_terminal::module())
             .import_value(super::admission::module(workspace))
             .import_value(crate::input::module(source, workspace))
-            .import_value(super::vbios::module(source, workspace))
+            .import_value(super::vbios::module(workspace))
             .import_value(super::gpu::module(source, workspace))
             .import_value(super::boot::module(source, workspace))
     })

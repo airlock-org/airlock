@@ -219,6 +219,15 @@ fn gui_gpu_assignment_hardware_override_body(f: NixValue) -> NixValue {
                                 "airlock", "qubes", "domains", "sys-gui", "devices", "pci",
                             ]),
                         ),
+                        (
+                            "firmwareTemplate",
+                            NixValue::builtin("readFile").call(cfg.clone().select_segments([
+                                "environment",
+                                "etc",
+                                "qubes/templates/libvirt/xen/by-name/sys-gui.xml",
+                                "source",
+                            ])),
+                        ),
                     ])
                 })
         })

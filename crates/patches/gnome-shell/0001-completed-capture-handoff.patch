@@ -1,0 +1,105 @@
+--- a/js/ui/screenshot.js
++++ b/js/ui/screenshot.js
+@@ -26,6 +26,18 @@
+ import {ScreencastErrors, ScreencastError} from '../misc/dbusErrors.js';
+ import {loadInterfaceXML} from '../misc/fileUtils.js';
+ import {DBusSenderChecker} from '../misc/util.js';
++
++// Transfers run outside Shell and are triggered only by completed captures.
++function airlockCapture(operation, kind, file) {
++    try {
++        Gio.Subprocess.new([
++            '@captureHelper@', '@captureCommand@', operation, kind, file.get_path(),
++            '--config', '@captureConfig@',
++        ], Gio.SubprocessFlags.NONE);
++    } catch (error) {
++        console.error(`Could not start capture handoff: ${error}`);
++    }
++}
+ 
+ const ScreenshotIface = loadInterfaceXML('org.gnome.Shell.Screenshot');
+ 
+@@ -2156,21 +2168,11 @@
+ 
+             // Translators: button on the screencast notification.
+             notification.addAction(_('Show in Files'), () => {
+-                const app =
+-                    Gio.app_info_get_default_for_type('inode/directory', false);
+-
+-                if (app === null) {
+-                    // It may be null e.g. in a toolbox without nautilus.
+-                    log('Error showing in files: no default app set for inode/directory');
+-                    return;
+-                }
+-
+-                app.launch([file], global.create_app_launch_context(0, -1));
++                airlockCapture('@captureShow@', 'video', file);
+             });
+             notification.connect('activated', () => {
+                 try {
+-                    Gio.app_info_launch_default_for_uri(
+-                        file.get_uri(), global.create_app_launch_context(0, -1));
++                    airlockCapture('@captureOpen@', 'video', file);
+                 } catch (err) {
+                     logError(err, 'Error opening screencast');
+                 }
+@@ -2356,6 +2358,7 @@
+             try {
+                 const stream = file.create(Gio.FileCreateFlags.NONE, null);
+                 stream.write_bytes(bytes, null);
++                stream.close(null);
+                 break;
+             } catch (e) {
+                 if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.EXISTS))
+@@ -2365,6 +2368,7 @@
+ 
+         // Add it to recent files.
+         saveRecentFile(file);
++        airlockCapture('@captureEnqueue@', 'image', file);
+     }
+ 
+     // Create a St.ImageContent icon for the notification. We want
+@@ -2399,21 +2403,11 @@
+     if (!disableSaveToDisk) {
+         // Translators: button on the screenshot notification.
+         notification.addAction(_('Show in Files'), () => {
+-            const app =
+-                Gio.app_info_get_default_for_type('inode/directory', false);
+-
+-            if (app === null) {
+-                // It may be null e.g. in a toolbox without nautilus.
+-                log('Error showing in files: no default app set for inode/directory');
+-                return;
+-            }
+-
+-            app.launch([file], global.create_app_launch_context(0, -1));
++            airlockCapture('@captureShow@', 'image', file);
+         });
+         notification.connect('activated', () => {
+             try {
+-                Gio.app_info_launch_default_for_uri(
+-                    file.get_uri(), global.create_app_launch_context(0, -1));
++                airlockCapture('@captureOpen@', 'image', file);
+             } catch (err) {
+                 logError(err, 'Error opening screenshot');
+             }
+--- a/js/dbusServices/screencast/screencastService.js
++++ b/js/dbusServices/screencast/screencastService.js
+@@ -436,6 +436,17 @@
+                 this._teardownPipeline();
+                 this._unwatchSender();
+                 this._stopSession();
++
++                // EOS has arrived and the pipeline/file sink is closed.
++                // Do not transfer at the UI's earlier recording-state change.
++                try {
++                    Gio.Subprocess.new([
++                        '@captureHelper@', '@captureCommand@', '@captureEnqueue@', 'video', this._filePath,
++                        '--config', '@captureConfig@',
++                    ], Gio.SubprocessFlags.NONE);
++                } catch (error) {
++                    console.error(`Could not start capture handoff: ${error}`);
++                }
+ 
+                 this._stopRequest.resolve();
+                 delete this._stopRequest;

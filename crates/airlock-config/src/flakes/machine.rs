@@ -236,8 +236,8 @@ pub(super) fn outputs() -> NixValue {
             let constructors = nix_record! {
                 "modules": crate::vm::module_constructors().call(source.clone()),
                 "template": crate::vm_build::constructors().as_expression(),
-                "windowState": overlays::gui_window_state(&source),
-                "imageTools": overlays::image_tools(&source),
+                "windowState": overlays::gui_window_state(&workspace),
+                "imageTools": overlays::image_tools(&workspace),
                 "qubesStartup": overlays::qubes_startup(),
                 "identity": super::source_identity(&inputs.clone().select("self")),
             };
@@ -261,7 +261,7 @@ pub(super) fn outputs() -> NixValue {
                                 apps_overlay.clone(),
                                 constructors.clone().select("windowState"),
                                 overlays::codex(),
-                                overlays::memory_accounting(&source),
+                                overlays::memory_accounting(&workspace),
                                 constructors.clone().select("imageTools"),
                                 constructors.clone().select("qubesStartup"),
                             ]),

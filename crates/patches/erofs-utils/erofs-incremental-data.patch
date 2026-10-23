@@ -1,0 +1,19 @@
+From 03f3a592cea02a067a8e0176b53e23f420e33f54 Mon Sep 17 00:00:00 2001
+From: Gao Xiang <xiang@kernel.org>
+Subject: [PATCH] erofs-utils: mkfs: fix `--incremental=data` failure
+
+Upstream: https://github.com/erofs/erofs-utils/commit/03f3a592cea02a067a8e0176b53e23f420e33f54
+`idata_size` should be set for erofs_prepare_tail_block().
+
+--- a/lib/inode.c
++++ b/lib/inode.c
+@@ -1605,7 +1605,8 @@
+ 	}
+ 
+ 	/* it will be used in erofs_prepare_inode_buffer */
+-	if (inode->datalayout == EROFS_INODE_FLAT_INLINE)
++	if (inode->datalayout == EROFS_INODE_FLAT_INLINE ||
++	    inode->datalayout == EROFS_INODE_FLAT_PLAIN)
+ 		inode->idata_size = inode->i_size & (bsz - 1);
+ 
+ 	/*

@@ -52,8 +52,10 @@ retain provenance and do not add an invented license to that directory.
 
 This licensing question is not resolved by adding MIT for original Airlock code.
 
-The vendored source and upstream patch directories live in the pinned
-[`airlock-machine`](airlock-machine/THIRD_PARTY.md) component.
+Shared upstream patches live in [`crates/patches`](crates/patches), grouped by
+upstream project with their provenance retained. The vendored `nixos-qubes`
+source remains in the pinned [`airlock-machine`](airlock-machine/THIRD_PARTY.md)
+component.
 
 ## Rusix
 

@@ -1,0 +1,124 @@
+From 68e551b8a4fcf77a20cc652d847e8a0a874a4efc Mon Sep 17 00:00:00 2001
+From: Airlock Developers <airlock@example.invalid>
+Date: Wed, 16 Sep 2026 01:01:43 +0100
+Subject: [PATCH] gui-agent: forward minimize and maximize requests
+
+---
+ gui-agent/vmside.c | 52 ++++++++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 48 insertions(+), 4 deletions(-)
+
+diff --git a/gui-agent/vmside.c b/gui-agent/vmside.c
+index ff9e5e0..0fa5bd5 100644
+--- a/gui-agent/vmside.c
++++ b/gui-agent/vmside.c
+@@ -116,6 +116,9 @@ typedef struct {
+     Atom wm_state_fullscreen; /* Atom: _NET_WM_STATE_FULLSCREEN */
+     Atom wm_state_demands_attention; /* Atom: _NET_WM_STATE_DEMANDS_ATTENTION */
+     Atom wm_state_hidden;  /* Atom: _NET_WM_STATE_HIDDEN */
++    Atom wm_state_maximized_vert; /* Atom: _NET_WM_STATE_MAXIMIZED_VERT */
++    Atom wm_state_maximized_horz; /* Atom: _NET_WM_STATE_MAXIMIZED_HORZ */
++    Atom wm_change_state;  /* Atom: WM_CHANGE_STATE */
+     Atom wm_take_focus;    /* Atom: WM_TAKE_FOCUS */
+     Atom net_wm_name;      /* Atom: _NET_WM_NAME */
+     Atom wm_normal_hints;  /* Atom: WM_NORMAL_HINTS */
+@@ -974,6 +977,10 @@ static inline uint32_t flags_from_atom(Ghandles * g, Atom a) {
+         return WINDOW_FLAG_DEMANDS_ATTENTION;
+     else if (a == g->wm_state_hidden)
+         return WINDOW_FLAG_MINIMIZE;
++    else if (a == g->wm_state_maximized_vert)
++        return WINDOW_FLAG_MAXIMIZE_VERT;
++    else if (a == g->wm_state_maximized_horz)
++        return WINDOW_FLAG_MAXIMIZE_HORZ;
+     else {
+         /* ignore unsupported states */
+     }
+@@ -1554,9 +1561,23 @@ static void process_xevent_message(Ghandles * g, XClientMessageEvent * ev)
+             msg.flags_set |= flags_from_atom(g, ev->data.l[1]);
+             msg.flags_set |= flags_from_atom(g, ev->data.l[2]);
+         } else if (ev->data.l[0] == 2) { /* toggle property */
+-            fprintf(stderr, "toggle window 0x%lx property %s not supported, "
+-                    "please report it with the application name\n", ev->window,
+-                    XGetAtomName(g->display, ev->data.l[1]));
++            uint32_t current_flags = 0;
++            Atom *state_list = NULL;
++            Atom act_type;
++            int act_fmt;
++            unsigned long nitems, bytesleft;
++
++            if (XGetWindowProperty(g->display, ev->window, g->net_wm_state,
++                    0, 10, False, XA_ATOM, &act_type, &act_fmt, &nitems,
++                    &bytesleft, (unsigned char **)&state_list) == Success) {
++                for (unsigned long i = 0; i < nitems; i++)
++                    current_flags |= flags_from_atom(g, state_list[i]);
++                XFree(state_list);
++            }
++            uint32_t toggle_flags = flags_from_atom(g, ev->data.l[1]) |
++                    flags_from_atom(g, ev->data.l[2]);
++            msg.flags_set |= toggle_flags & ~current_flags;
++            msg.flags_unset |= toggle_flags & current_flags;
+         } else {
+             fprintf(stderr, "invalid window state command (%ld) for window 0x%lx"
+                     "report with application name\n", ev->data.l[0], ev->window);
+@@ -1564,6 +1585,20 @@ static void process_xevent_message(Ghandles * g, XClientMessageEvent * ev)
+         hdr.window = ev->window;
+         hdr.type = MSG_WINDOW_FLAGS;
+         write_message(g->vchan, hdr, msg);
++    } else if (ev->message_type == g->wm_change_state &&
++            ev->format == 32 && ev->data.l[0] == IconicState) {
++        struct msg_hdr hdr;
++        struct msg_window_flags msg = {
++            .flags_set = WINDOW_FLAG_MINIMIZE,
++            .flags_unset = 0,
++        };
++
++        if (!lookup_window(g, windows_list, ev->window, "WM_CHANGE_STATE"))
++            return;
++
++        hdr.window = ev->window;
++        hdr.type = MSG_WINDOW_FLAGS;
++        write_message(g->vchan, hdr, msg);
+     }
+ }
+ 
+@@ -1835,7 +1870,7 @@ static void mkghandles(Ghandles * g)
+             "_NET_SYSTEM_TRAY_S%u", DefaultScreen(g->display)) >=
+         sizeof tray_sel_atom_name)
+         abort();
+-#define SUPPORTED_ATOMS 6
++#define SUPPORTED_ATOMS 9
+     const struct {
+         Atom *const dest;
+         const char *const name;
+@@ -1853,6 +1888,9 @@ static void mkghandles(Ghandles * g)
+         { &g->wm_state_fullscreen, "_NET_WM_STATE_FULLSCREEN" },
+         { &g->wm_state_demands_attention, "_NET_WM_STATE_DEMANDS_ATTENTION" },
+         { &g->wm_state_hidden, "_NET_WM_STATE_HIDDEN" },
++        { &g->wm_state_maximized_vert, "_NET_WM_STATE_MAXIMIZED_VERT" },
++        { &g->wm_state_maximized_horz, "_NET_WM_STATE_MAXIMIZED_HORZ" },
++        { &g->wm_change_state, "WM_CHANGE_STATE" },
+         { &g->wm_take_focus,    "WM_TAKE_FOCUS" },
+         { &g->net_wm_name,      "_NET_WM_NAME" },
+         { &g->wm_normal_hints,  "WM_NORMAL_HINTS" },
+@@ -1873,6 +1911,8 @@ static void mkghandles(Ghandles * g)
+         "_NET_WM_STATE_FULLSCREEN",
+         "_NET_WM_STATE_DEMANDS_ATTENTION",
+         "_NET_WM_STATE_HIDDEN",
++        "_NET_WM_STATE_MAXIMIZED_VERT",
++        "_NET_WM_STATE_MAXIMIZED_HORZ",
+     };
+     for (size_t i = 0; i < QUBES_ARRAY_SIZE(atoms_to_intern); ++i)
+         names[SUPPORTED_ATOMS + i] = atoms_to_intern[i].name;
+@@ -2447,6 +2487,10 @@ static void handle_window_flags(Ghandles *g, XID winid)
+         new_state_list[j++] = g->wm_state_demands_attention;
+     if (msg_flags.flags_set & WINDOW_FLAG_MINIMIZE)
+         new_state_list[j++] = g->wm_state_hidden;
++    if (msg_flags.flags_set & WINDOW_FLAG_MAXIMIZE_VERT)
++        new_state_list[j++] = g->wm_state_maximized_vert;
++    if (msg_flags.flags_set & WINDOW_FLAG_MAXIMIZE_HORZ)
++        new_state_list[j++] = g->wm_state_maximized_horz;
+ 
+     if (msg_flags.flags_set)
+         changed = 1;
+-- 
+2.54.0
+

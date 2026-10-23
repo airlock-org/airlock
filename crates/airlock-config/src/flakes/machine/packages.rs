@@ -51,10 +51,7 @@ pub(super) fn outputs(build: &Build, system: NixValue) -> NixValue {
             ] {
                 packages.push((name.to_owned(), pkgs.clone().select(attribute)));
             }
-            let gui = airlock_sys_gui_service::authoring::Sources::new(
-                build.workspace.root(),
-                build.source.clone(),
-            );
+            let gui = airlock_sys_gui_service::authoring::Sources::new(build.workspace.root());
             packages.extend([
                 (
                     "qubes-input-proxy".into(),

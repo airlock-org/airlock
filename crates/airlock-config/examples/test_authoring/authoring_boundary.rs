@@ -4,7 +4,7 @@ use airlock_config::{
     components::{desktop, screen_capture},
     model::{GiB, Machine, Vm},
 };
-use rusix::interop::raw::{NixRepresentation, NixValue};
+use rusix::interop::raw::NixValue;
 use serde_json::Value;
 use std::path::Path;
 
@@ -117,8 +117,15 @@ pub(super) fn commands(settings: &Value) -> Result<NixValue, String> {
         "writeShellApplication": NixValue::function(|_| nix_record! { "outPath": package }),
         "lib": lib.clone(),
     };
-    let source = NixPath::from_expression("/unneeded-source".into());
-    let service = authoring::deployment(&pkgs, &Sources::new(source.clone(), source));
+    let source = NixPath::from_source_text(
+        NixValue::from(
+            settings["apps"]
+                .as_str()
+                .ok_or("expected application source")?,
+        )
+        .into_expr::<String>(),
+    );
+    let service = authoring::deployment(&pkgs, &Sources::new(source));
     let command = DesktopCommand::ScreenCapture {
         config: Some(argument.into()),
         action: CaptureAction::CheckConfig,

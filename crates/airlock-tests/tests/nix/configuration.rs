@@ -88,7 +88,8 @@ fn guests_use_the_corrected_memory_reporter() -> Result<()> {
             patches
                 .as_array()
                 .unwrap()
-                .contains(&json!("0001-account-for-per-cpu-free-pages.patch"))
+                .iter()
+                .any(|patch| text(patch).ends_with("0001-account-for-per-cpu-free-pages.patch"))
         );
     }
     Ok(())
@@ -369,6 +370,13 @@ fn hardware_override_reaches_reservation_and_assignment() -> Result<()> {
     assert_eq!(
         report["assignments"],
         json!([{"backend":"dom0","id":"00_03.1-00_00.0","mode":"required","match":"port","options":{}}])
+    );
+    assert_eq!(
+        report["firmwareTemplate"],
+        fs::read_to_string(
+            nix.prepared
+                .join("crates/airlock-qubes-python/assets/amd-vbios.xml")
+        )?
     );
     Ok(())
 }

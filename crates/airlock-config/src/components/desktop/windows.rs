@@ -1,9 +1,12 @@
 //! Supervise Qubes window forwarding and restore trusted VM borders at boot.
 //! Applications retain their own title bars; the GUI daemon supplies VM identity borders.
 
-use super::{MachineFiles, ModuleContext};
+use super::{MachineFiles, ModuleContext, machine_source};
 use airlock_sys_gui_service::command::DesktopCommand;
-use rusix::{interop::raw::NixValue, nix_record, nix_text};
+use rusix::{
+    interop::raw::{NixRepresentation, NixValue},
+    nix_record, nix_text,
+};
 
 /// Installs the upstream watcher, declarative border restoration and GUI-daemon patch.
 /// The watcher retries when login precedes dom0's Admin API readiness.
@@ -126,10 +129,10 @@ fn border_overlay(inputs: &ModuleContext) -> NixValue {
                         ]),
                         "patches": NixValue::concat_lists([
                             old.attr_or("patches", NixValue::list([])),
-                            NixValue::list([inputs.file(
+                            NixValue::list([machine_source::application_source(inputs).join_relative(
                                 "patches/qubes-gui-daemon/\
                                                  0003-gui-daemon-leave-window-chrome-to-applications.patch",
-                            )]),
+                            ).unwrap().snapshot().as_expression()]),
                         ]),
                     })),
             }

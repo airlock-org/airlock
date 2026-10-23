@@ -2,16 +2,13 @@
 
 use airlock_build::{Workspace, adapters};
 use rusix::{
-    interop::{
-        NixPath,
-        raw::{NixRepresentation, NixValue},
-    },
+    interop::raw::{NixRepresentation, NixValue},
     nix_record,
     nixos::{ContextualModule, ModuleBody},
 };
 
 /// Select explicit HVM firmware recipients while Qubes remains responsible for PCI assignment.
-pub(super) fn module(source: &NixPath, workspace: &Workspace) -> NixValue {
+pub(super) fn module(workspace: &Workspace) -> NixValue {
     ContextualModule::new(|context| {
         let cfg = context.config.clone().select("airlock.amdVbios");
         let package = adapters::gpu(&context.pkgs, workspace).as_expression();
@@ -78,7 +75,7 @@ pub(super) fn module(source: &NixPath, workspace: &Workspace) -> NixValue {
                 NixValue::function(|_| nix_record! {
                     "name": rusix::nix_text!("qubes/templates/libvirt/xen/by-name/{name}.xml", name = name),
                     "value": nix_record! {
-                        "source": source.join_relative("assets/hardware/amd-vbios.xml").unwrap(),
+                        "source": workspace.file("airlock-qubes-python/assets/amd-vbios.xml").snapshot(),
                     },
                 })
             }))

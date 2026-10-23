@@ -1,0 +1,123 @@
+From: Airlock maintainers
+Subject: [PATCH] qmemman: include Linux per-CPU free pages in guest accounting
+
+Linux 6.12 excludes PCP pages from NR_FREE_PAGES/MemFree. Ballooning can
+move hundreds of MiB through these caches without changing real demand.
+Treating those pages as used creates a positive allocation feedback loop.
+Read every zone/CPU count with the kernel page size, bracket meminfo with
+PCP snapshots, and retain Xen-current consistency checks. Invalid PCP
+input falls back to the conservative upstream formula. Bound retries.
+The accompanying memory-accounting.h is supplied by the Nix overlay.
+
+--- a/qmemman/meminfo-writer.c
++++ b/qmemman/meminfo-writer.c
+@@ -10,13 +10,15 @@
+ #include <syslog.h>
+ #include <string.h>
+ #include <signal.h>
++#include "memory-accounting.h"
+ 
+ long prev_used_mem;
+ int used_mem_change_threshold;
+ int delay;
+ int usr1_received;
+ 
+-const char *parse(const char *meminfo_buf, const char* dom_current_buf)
++const char *parse(const char *meminfo_buf, const char* dom_current_buf,
++                  long long pcp_kib)
+ {
+ 	const char *ptr = meminfo_buf;
+ 	static char outbuf[4096];
+@@ -65,9 +67,8 @@
+ 			MemTotal = DomTotal;
+ 	}
+ 
+-	used_mem =
+-	    MemTotal - Buffers - Cached - MemFree + SwapTotal - SwapFree;
+-	if (used_mem < 0)
++	if (!memory_used_kib(MemTotal, MemFree, pcp_kib, Buffers, Cached,
++	                     SwapTotal, SwapFree, &used_mem))
+ 		return NULL;
+ 
+ 	used_mem_diff = used_mem - prev_used_mem;
+@@ -116,33 +117,57 @@
+ 	buf[n] = 0;
+ }
+ 
++static bool read_pcp(long long *free_kib)
++{
++	FILE *stream = fopen("/proc/zoneinfo", "re");
++	bool ok;
++
++	if (!stream)
++		return false;
++	ok = pcp_free_kib(stream, sysconf(_SC_PAGESIZE), free_kib);
++	fclose(stream);
++	return ok;
++}
++
+ static void update(struct xs_handle *xs, int meminfo_fd, int dom_current_fd)
+ {
+-	char dom_current_buf[32];
+-	char dom_current_buf2[32];
+-	char meminfo_buf[4096];
+-	const char *meminfo_data;
+-
+-	pread0_string(dom_current_fd, dom_current_buf, sizeof(dom_current_buf));
+-
+-	/* check until the dom current reading is stable to avoid races */
+-	for(;;) {
++	char dom_current_buf[32], dom_current_buf2[32], meminfo_buf[4096];
++	static bool fallback_logged;
++
++	/* Both procfs reads must be inside the stable Xen-current bracket.
++	 * Bound retries so an actively ballooning VM cannot spin indefinitely. */
++	for (int attempt = 0; attempt < 8; attempt++) {
++		long long pcp_before = 0, pcp_after = 0, pcp_kib = 0;
++		bool before_ok, after_ok;
++		const char *meminfo_data;
++
++		pread0_string(dom_current_fd, dom_current_buf, sizeof(dom_current_buf));
++		before_ok = read_pcp(&pcp_before);
+ 		pread0_string(meminfo_fd, meminfo_buf, sizeof(meminfo_buf));
++		after_ok = read_pcp(&pcp_after);
+ 		pread0_string(dom_current_fd, dom_current_buf2, sizeof(dom_current_buf2));
+-
+-		if(!strcmp(dom_current_buf, dom_current_buf2))
+-			break;
+-
+-		pread0_string(meminfo_fd, meminfo_buf, sizeof(meminfo_buf));
+-		pread0_string(dom_current_fd, dom_current_buf, sizeof(dom_current_buf));
+-
+-		if(!strcmp(dom_current_buf, dom_current_buf2))
+-			break;
+-	}
+-
+-	meminfo_data = parse(meminfo_buf, dom_current_buf);
+-	if (meminfo_data)
+-		send_to_qmemman(xs, meminfo_data);
++		if (strcmp(dom_current_buf, dom_current_buf2))
++			continue;
++
++		if (before_ok && after_ok) {
++			fallback_logged = false;
++			if (!pcp_sample_consistent(pcp_before, pcp_after,
++			                           used_mem_change_threshold))
++				continue;
++			pcp_kib = pcp_before + (pcp_after - pcp_before) / 2;
++		} else if (!fallback_logged) {
++			/* Missing/changed procfs formats retain conservative upstream
++			 * accounting, never a partial PCP subtraction or stale report. */
++			syslog(LOG_DAEMON | LOG_WARNING,
++			       "cannot read PCP free pages; using upstream memory accounting");
++			fallback_logged = true;
++		}
++
++		meminfo_data = parse(meminfo_buf, dom_current_buf, pcp_kib);
++		if (meminfo_data)
++			send_to_qmemman(xs, meminfo_data);
++		return;
++	}
+ }
+ 
+ int main(int argc, char **argv)

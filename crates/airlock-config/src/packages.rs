@@ -54,13 +54,15 @@ pub(crate) fn configuration() -> Config {
         }
     });
     let overlays = NixValue::function(|source| {
-        let machine = NixPath::from_source_text(source.to_text().into_expr::<String>());
+        let workspace = Workspace::new(NixPath::from_source_text(
+            source.to_text().into_expr::<String>(),
+        ));
         rusix::nix_record! {
             "codex": airlock_build::overlays::codex(),
-            "guiWindowState": airlock_build::overlays::gui_window_state(&machine),
-            "memoryAccounting": airlock_build::overlays::memory_accounting(&machine),
+            "guiWindowState": airlock_build::overlays::gui_window_state(&workspace),
+            "memoryAccounting": airlock_build::overlays::memory_accounting(&workspace),
             "templateTools": airlock_build::overlays::template_tools(),
-            "imageTools": airlock_build::overlays::image_tools(&machine),
+            "imageTools": airlock_build::overlays::image_tools(&workspace),
         }
     });
 

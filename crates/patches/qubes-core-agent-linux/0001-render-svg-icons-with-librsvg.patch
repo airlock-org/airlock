@@ -1,0 +1,20 @@
+--- a/qubes-rpc/qubes.GetImageRGBA
++++ b/qubes-rpc/qubes.GetImageRGBA
+@@ -28,6 +28,17 @@
+     exit 1
+ fi
+ 
++# GraphicsMagick cannot parse all SVG styles used by application icons.
++# Render standard SVG files with librsvg before probing their dimensions.
++case "$filename" in
++    *.svg|*.svgz)
++        tmpfile2="$(mktemp /tmp/qimg-XXXXXXXX.png)"
++        rsvg-convert --keep-aspect-ratio -w "$ICON_MAXSIZE" -h "$ICON_MAXSIZE" \
++            -o "$tmpfile2" "$filename"
++        filename="$tmpfile2"
++        ;;
++esac
++
+ s="$(gm identify -format '%w %h %m' "$filename")"
+ w="$(echo "$s"|cut -d " " -f 1)"
+ h="$(echo "$s"|cut -d " " -f 2)"

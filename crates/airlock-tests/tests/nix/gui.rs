@@ -53,7 +53,7 @@ fn rendered_commands_preserve_literal_arguments() -> Result<()> {
         .evaluate(
             "gui-command-rendering",
             "gui/render-command",
-            json!({"package":package,"library":nix.nixpkgs()?.join("lib"),"argument":argument}),
+            json!({"package":package,"library":nix.nixpkgs()?.join("lib"),"argument":argument,"apps":nix.prepared.join("crates")}),
         )?
         .value()?;
     for mode in ["shell", "desktop"] {
@@ -97,7 +97,7 @@ Exec={exec}
             .unwrap()
             .as_str()
             .unwrap()
-            .ends_with("/patches/gnome-shell/0001-completed-capture-handoff.patch")
+            .ends_with("-0001-completed-capture-handoff.patch")
     );
 
     let script = format!(

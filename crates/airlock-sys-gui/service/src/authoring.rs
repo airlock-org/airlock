@@ -16,26 +16,27 @@ use rusix::{
     nix_text,
 };
 
-/// Source trees needed by the native build and integration patches.
+/// Admitted application workspace supplying the native build and integration patches.
 #[derive(Clone)]
 pub struct Sources {
-    /// Cargo workspace containing service sources, manifests and the shared lockfile.
+    /// Cargo workspace containing service sources, integration patches and the shared lockfile.
     apps: NixPath,
-    /// Machine repository containing Qubes and GNOME integration assets.
-    machine: NixPath,
 }
 
 impl Sources {
     /// Uses caller-supplied symbolic paths without resolving a developer checkout.
-    pub fn new(apps: NixPath, machine: NixPath) -> Self {
-        Self { apps, machine }
+    pub fn new(apps: NixPath) -> Self {
+        Self {
+            apps: airlock_build::Workspace::new(apps).root(),
+        }
     }
 
-    /// Resolves an implementation-owned relative path inside the machine repository.
-    fn machine_file(&self, relative: &str) -> NixValue {
-        self.machine
+    /// Snapshot one shared integration asset without depending on unrelated application contents.
+    fn file(&self, relative: &str) -> NixValue {
+        self.apps
             .join_relative(relative)
             .expect("service asset paths are static and relative")
+            .snapshot()
             .as_expression()
     }
 }
@@ -224,11 +225,8 @@ pub fn packages() -> impl rusix::IntoConfig {
 
         (Vec::<(&str, NixValue)>::new(), package.as_expression())
     });
-    let wrapped = NixValue::function_attrs_open(["pkgs", "apps", "machine"], |args| {
-        let sources = Sources::new(
-            NixPath::from_expression(args.clone().select("apps")),
-            NixPath::from_expression(args.clone().select("machine")),
-        );
+    let wrapped = NixValue::function_attrs_open(["pkgs", "apps"], |args| {
+        let sources = Sources::new(NixPath::from_expression(args.clone().select("apps")));
         let service = deployment(&args.select("pkgs"), &sources);
 
         (
@@ -255,7 +253,7 @@ mod installation_tests {
         let source = NixPath::from_expression("/unneeded-source".into());
         let service = deployment(
             &NixValue::record([] as [(&str, NixValue); 0]),
-            &Sources::new(source.clone(), source),
+            &Sources::new(source),
         );
         let sender = service.capture_sender(&CaptureSenderConfig::default());
         installation::compose("sys-gui", CollisionChecks::Enabled, [sender.clone()]).unwrap();

@@ -15,7 +15,7 @@ use rusix::{
 /// Configure a GUI VM without moving display or input authority out of Qubes.
 pub(super) fn module(source: &NixPath, workspace: &Workspace) -> NixValue {
     ContextualModule::new(|context| {
-        let sources = Sources::new(workspace.root(), source.clone());
+        let sources = Sources::new(workspace.root());
         let deployment = authoring::deployment(&context.pkgs, &sources);
         let gui = Gui { context: &context };
         let configuration = deployment

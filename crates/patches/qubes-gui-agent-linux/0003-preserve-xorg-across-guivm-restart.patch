@@ -1,0 +1,346 @@
+diff --git a/gui-agent/vmside.c b/gui-agent/vmside.c
+index ff9e5e0..a54f25b 100644
+--- a/gui-agent/vmside.c
++++ b/gui-agent/vmside.c
+@@ -27,6 +27,7 @@
+ #include <stdlib.h>
+ #include <inttypes.h>
+ #include <signal.h>
++#include <setjmp.h>
+ 
+ #include <unistd.h>
+ #include <fcntl.h>
+@@ -55,6 +56,7 @@
+ #include "unix-addr.h"
+ #include <libvchan.h>
+ #include <poll.h>
++#include <qubesdb-client.h>
+ #include "unistr.h"
+ 
+ 
+@@ -161,6 +163,8 @@ struct embeder_data {
+ static struct genlist *windows_list;
+ static struct genlist *embeder_list;
+ static Ghandles *ghandles_for_vchan_reinitialize;
++static jmp_buf gui_message_checkpoint;
++static bool gui_message_checkpoint_ready;
+ 
+ static void log_unmanaged_window(Ghandles *g, const char *context, XID window) {
+     if (g->log_level > 0) {
+@@ -2555,25 +2559,83 @@ static void handshake(Ghandles *g)
+     g->protocol_version = version;
+ }
+ 
++static void reconnect_status(const char *state, uint32_t domid)
++{
++    FILE *file = fopen("/run/qubes/gui-reconnect-status.new", "w");
++    if (!file)
++        return;
++    fprintf(file, "%s %u\n", state, domid);
++    if (fclose(file) == 0)
++        rename("/run/qubes/gui-reconnect-status.new",
++               "/run/qubes/gui-reconnect-status");
++}
++
++static bool retarget_display(Ghandles *g, uint32_t domid, bool connected)
++{
++    unsigned char status;
++    feed_xdriver(g, connected ? 'T' : 'D', (int)domid, 0);
++    return read(g->xserver_fd, &status, sizeof(status)) == sizeof(status)
++        && status == 0;
++}
++
+ static void handle_guid_disconnect(void)
+ {
+     Ghandles *g = ghandles_for_vchan_reinitialize;
+     struct msg_xconf xconf;
++    qdb_handle_t qdb;
+ 
+-    if (!ghandles_for_vchan_reinitialize) {
++    if (!g || !gui_message_checkpoint_ready) {
+         fprintf(stderr, "gui-daemon disconnected before fully initialized, "
+                 "cannot reconnect, exiting!\n");
+         exit(1);
+     }
++    reconnect_status("disconnected", g->domid);
+     libvchan_close(g->vchan);
+-    g->vchan = libvchan_server_init(g->domid, 6000, 4096, 4096);
+-    /* wait for gui daemon */
+-    while (libvchan_is_open(g->vchan) == VCHAN_WAITING)
+-        libvchan_wait(g->vchan);
++    g->vchan = NULL;
++    /* Revoke the departed GuiVM's grants without terminating Xorg. */
++    while (!retarget_display(g, g->domid, false))
++        sleep(1);
++    while (!(qdb = qdb_open(NULL)))
++        sleep(1);
++    if (!qdb_watch(qdb, "/qubes-gui-domain-xid"))
++        errx(1, "cannot watch trusted GuiVM identity");
++    for (;;) {
++        char *value = qdb_read(qdb, "/qubes-gui-domain-xid", NULL);
++        char *end = NULL;
++        unsigned long domid = value ? strtoul(value, &end, 10) : UINT32_MAX;
++        if (value && *value && end && !*end && domid <= UINT16_MAX) {
++            if (domid != g->domid || !g->vchan) {
++                if (g->vchan)
++                    libvchan_close(g->vchan);
++                g->domid = domid;
++                g->vchan = libvchan_server_init(g->domid, 6000, 4096, 4096);
++            }
++        }
++        free(value);
++        if (g->vchan && libvchan_is_open(g->vchan) == VCHAN_CONNECTED)
++            break;
++        struct pollfd fds[] = {
++            { .fd = qdb_watch_fd(qdb), .events = POLLIN },
++            { .fd = g->vchan ? libvchan_fd_for_select(g->vchan) : -1,
++              .events = POLLIN },
++        };
++        if (poll(fds, 2, 1000) < 0 && errno != EINTR)
++            err(1, "waiting for GuiVM reconnection");
++        if (fds[0].revents & POLLIN)
++            free(qdb_read_watch(qdb));
++        if (g->vchan && (fds[1].revents & POLLIN))
++            libvchan_wait(g->vchan);
++    }
++    qdb_close(qdb);
+     handshake(g);
+-    /* discard */
+     read_struct(g->vchan, xconf);
++    while (!retarget_display(g, g->domid, true))
++        sleep(1);
+     send_all_windows_info(g);
++    reconnect_status("connected", g->domid);
++    /* A disconnect can interrupt a partial protocol read/write. Never return
++     * to that operation with a fresh channel or to its fatal error handler. */
++    longjmp(gui_message_checkpoint, 1);
+ }
+ 
+ static _Noreturn void handle_sigterm(int UNUSED(sig),
+@@ -2662,7 +2724,8 @@ int main(int argc, char **argv)
+ {
+     int i;
+     int xfd;
+-    Ghandles g = { .x_pid = -1 };
++    /* State modified across the message checkpoint needs static storage. */
++    static Ghandles g = { .x_pid = -1 };
+ 
+     g.created_input_device = access("/run/qubes-service/gui-agent-virtual-input-device", F_OK) == 0;
+ 
+@@ -2757,6 +2820,7 @@ int main(int argc, char **argv)
+     g.x_pid = get_xconf_and_run_x(&g);
+ 
+     mkghandles(&g);
++    reconnect_status("connected", g.domid);
+     /* Turn on Composite for all children of root window. This way X server
+      * keeps separate buffers for each (root child) window.
+      * There are two modes:
+@@ -2837,7 +2901,16 @@ int main(int argc, char **argv)
+             exit(1);
+         }
+ 
+-        fds[0].fd = libvchan_fd_for_select(g.vchan);
++        /* Reinitialize poll state after abandoning an interrupted message. */
++        fds[0] = (struct pollfd){ .fd = libvchan_fd_for_select(g.vchan), .events = POLLIN | POLLHUP };
++        fds[1] = (struct pollfd){ .fd = xfd, .events = POLLIN | POLLHUP };
++        fds[2] = (struct pollfd){ .fd = g.xserver_fd, .events = POLLIN | POLLHUP };
++        if (setjmp(gui_message_checkpoint))
++            continue;
++        gui_message_checkpoint_ready = true;
+-        wait_for_vchan_or_argfd(g.vchan, fds, QUBES_ARRAY_SIZE(fds));
++        /* Readiness also arms write notifications. A reconnect checkpoint
++         * skips the ordinary drain, so check before waiting on the new ring. */
++        if (!libvchan_data_ready(g.vchan) && !XPending(g.display))
++            wait_for_vchan_or_argfd(g.vchan, fds, QUBES_ARRAY_SIZE(fds));
+         /* first process possible qubes_drv reconnection, otherwise we may be
+          * using stale g.xserver_fd */
+diff --git a/xf86-input-mfndev/src/qubes.c b/xf86-input-mfndev/src/qubes.c
+index dfa2130..60bd34b 100644
+--- a/xf86-input-mfndev/src/qubes.c
++++ b/xf86-input-mfndev/src/qubes.c
+@@ -680,9 +680,19 @@ send_response:
+     }
+ }
+ 
++static Bool retarget_pending;
++static uint32_t retarget_domid;
++static Bool retarget_connected;
++
+ static void process_window_dump_request(InputInfoPtr pInfo) {
+     QubesDevicePtr pQubes = pInfo->private;
+ 
++    if (retarget_pending) {
++        unsigned char status = xf86_qubes_reconnect(retarget_domid,
++                                                    retarget_connected) ? 0 : 1;
++        retarget_pending = FALSE;
++        write_exact(pInfo->fd, &status, sizeof(status));
++    }
+     if (pQubes->window_id != 0) {
+         dump_window_grant_refs(pQubes->window_id, pInfo->fd);
+         pQubes->window_id = 0;
+@@ -725,6 +735,15 @@ static void process_request(int fd, InputInfoPtr pInfo)
+     write_exact(fd, "0", 1); // acknowledge the request has been received
+ 
+     switch (cmd.type) {
++    case 'T':
++    case 'D':
++        retarget_domid = cmd.arg1;
++        retarget_connected = cmd.type == 'T';
++        retarget_pending = TRUE;
++#if !HAVE_THREADED_INPUT
++        process_window_dump_request(pInfo);
++#endif
++        break;
+     case 'W':
+         pQubes->window_id = cmd.arg1;
+ #if HAVE_THREADED_INPUT
+diff --git a/xf86-qubes-common/include/xf86-qubes-common.h b/xf86-qubes-common/include/xf86-qubes-common.h
+index d5eeae0..7d02a58 100644
+--- a/xf86-qubes-common/include/xf86-qubes-common.h
++++ b/xf86-qubes-common/include/xf86-qubes-common.h
+@@ -7,6 +7,8 @@
+ 
+ // Metadata of mapped grant pages
+ struct xf86_qubes_pixmap {
++    struct xf86_qubes_pixmap *next, *prev;
++    Bool shared;
+     size_t pages; // Number of pages
+     uint32_t *refs; // Pointer to grant references
+     uint8_t *data; // Local mapping
+@@ -31,6 +33,8 @@ _X_EXPORT void xf86_qubes_pixmap_add_to_list(struct xf86_qubes_pixmap *);
+ _X_EXPORT void xf86_qubes_pixmap_remove_list_head(void);
+ _X_EXPORT void xf86_qubes_pixmap_remove_list_all(void);
+ 
++_X_EXPORT Bool xf86_qubes_reconnect(uint32_t domid, Bool connected);
++
+ // xenctrl and xorg headeres are not compatible, so define the required
+ // constants here.
+ #ifndef XC_PAGE_SHIFT
+diff --git a/xf86-video-dummy/src/dummy_driver.c b/xf86-video-dummy/src/dummy_driver.c
+index d8b1a9f..abab2c6 100644
+--- a/xf86-video-dummy/src/dummy_driver.c
++++ b/xf86-video-dummy/src/dummy_driver.c
+@@ -1,4 +1,7 @@
+ 
++#define _GNU_SOURCE
++#include <sys/mman.h>
++
+ /*
+  * Copyright 2002, SuSE Linux AG, Author: Egbert Eich
+  */
+@@ -104,6 +107,8 @@ static Bool     dummyDriverFunc(ScrnInfoPtr pScrn, xorgDriverFuncOp op,
+ #define DUMMY_MAX_WIDTH 32767
+ #define DUMMY_MAX_HEIGHT 32767
+ 
++static struct xf86_qubes_pixmap *all_pixmaps;
++static Bool gui_detached;
+ static ScrnInfoPtr DUMMYScrn; /* static-globalize it */
+ 
+ /*
+@@ -877,27 +882,75 @@ qubes_alloc_pixmap_private(size_t size) {
+     priv->refs = (uint32_t *) (((uint8_t *) priv) + sizeof(struct xf86_qubes_pixmap));
+     priv->refcount = 0;
+ 
+-    priv->data = xengntshr_share_pages(dPtr->xgs,
++    priv->shared = !gui_detached;
++    priv->data = gui_detached
++        ? mmap(NULL, pages * XC_PAGE_SIZE, PROT_READ | PROT_WRITE,
++               MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)
++        : xengntshr_share_pages(dPtr->xgs,
+                                        dPtr->gui_domid,
+                                        pages,
+                                        priv->refs,
+                                        0);
+-    if (priv->data == NULL) {
++    if (priv->data == NULL || priv->data == MAP_FAILED) {
+         xf86DrvMsg(DUMMYScrn->scrnIndex, X_ERROR,
+                    "Failed to allocate %zu grant pages!\n", pages);
+         free(priv);
+         return NULL;
+     }
+ 
++    priv->next = all_pixmaps;
++    if (all_pixmaps)
++        all_pixmaps->prev = priv;
++    all_pixmaps = priv;
+     return priv;
+ }
+ 
++/* Run on the Xorg main thread. Keep every drawing address stable while
++ * replacing grants: clients, pixmaps and the X server remain alive. Linux's
++ * gntalloc driver releases grants when their final VMA is removed. */
++Bool xf86_qubes_reconnect(uint32_t domid, Bool connected) {
++    DUMMYPtr dPtr = DUMMYPTR(DUMMYScrn);
++    struct xf86_qubes_pixmap *priv;
++    if (domid > UINT16_MAX)
++        return FALSE;
++    xf86_qubes_pixmap_remove_list_all();
++    gui_detached = !connected;
++    dPtr->gui_domid = domid;
++    for (priv = all_pixmaps; priv; priv = priv->next) {
++        size_t bytes = priv->pages * XC_PAGE_SIZE;
++        uint32_t *refs = calloc(priv->pages, sizeof(*refs));
++        void *replacement;
++        if (!refs)
++            return FALSE;
++        replacement = connected
++            ? xengntshr_share_pages(dPtr->xgs, domid, priv->pages, refs, 0)
++            : mmap(NULL, bytes, PROT_READ | PROT_WRITE,
++                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++        if (!replacement || replacement == MAP_FAILED) {
++            free(refs);
++            return FALSE;
++        }
++        memcpy(replacement, priv->data, bytes);
++        if (mremap(replacement, bytes, bytes, MREMAP_MAYMOVE | MREMAP_FIXED,
++                   priv->data) == MAP_FAILED) {
++            munmap(replacement, bytes);
++            free(refs);
++            return FALSE;
++        }
++        memcpy(priv->refs, refs, priv->pages * sizeof(*refs));
++        priv->shared = connected;
++        free(refs);
++    }
++    xf86DrvMsg(DUMMYScrn->scrnIndex, X_INFO,
++               "Airlock: display buffers %s for GuiVM %u\n",
++               connected ? "regranted" : "detached", domid);
++    return TRUE;
++}
++
+ static PixmapPtr
+ qubes_create_pixmap(ScreenPtr pScreen, int width, int height, int depth,
+                     unsigned hint)
+ {
+-    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+-    DUMMYPtr dPtr = DUMMYPTR(pScrn);
+     PixmapPtr pixmap;
+     struct xf86_qubes_pixmap *priv;
+     size_t bytes_per_line;
+@@ -930,9 +983,7 @@ qubes_create_pixmap(ScreenPtr pScreen, int width, int height, int depth,
+     return pixmap;
+ 
+ err_unshare:
+-    xengntshr_unshare(dPtr->xgs, priv->data, priv->pages);
+-    // Also frees refs
+-    free(priv);
++    xf86_qubes_free_pixmap_private(priv);
+ err_destroy_pixmap:
+     fbDestroyPixmap(pixmap);
+ 
+@@ -963,8 +1014,13 @@ void xf86_qubes_free_pixmap_private(struct xf86_qubes_pixmap *priv) {
+     uint32_t refcount = priv->refcount;
+     assert(refcount < INT32_MAX && "refcount overflow");
+     if (refcount == 0) {
+-        DUMMYPtr dPtr = DUMMYPTR(DUMMYScrn);
+-        xengntshr_unshare(dPtr->xgs, priv->data, priv->pages);
++        if (priv->prev)
++            priv->prev->next = priv->next;
++        else
++            all_pixmaps = priv->next;
++        if (priv->next)
++            priv->next->prev = priv->prev;
++        munmap(priv->data, priv->pages * XC_PAGE_SIZE);
+         // Also frees refs
+         free(priv);
+     } else {

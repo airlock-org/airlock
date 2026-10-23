@@ -49,7 +49,7 @@ impl Deployment {
 
         let capture_patch = self
             .sources
-            .machine_file("patches/gnome-shell/0001-completed-capture-handoff.patch");
+            .file("patches/gnome-shell/0001-completed-capture-handoff.patch");
         let capture_overlay = Overlay::from_function(|_final, previous| {
             let gnome_shell: Package = previous.field("gnome-shell");
             let patched = gnome_shell.override_attrs(|old| {

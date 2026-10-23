@@ -52,10 +52,19 @@ pub(super) fn raw_disk_hooks(inputs: NixValue) -> NixValue {
 
 /// Exercise real cache derivations with two tiny package closures instead of an image or VM build.
 pub(super) fn cache(inputs: NixValue) -> NixValue {
-    let pkgs = NixValue::builtin("import").call(inputs.clone().select("nixpkgs")).call(rusix::nix_record! {
-        "system": "x86_64-linux",
-        "overlays": NixValue::list([airlock_build::overlays::image_tools(&NixPath::from_source_text(inputs.clone().select("machine").to_text().into_expr::<String>()))]),
-    });
+    let workspace = airlock_build::Workspace::new(NixPath::from_source_text(
+        inputs
+            .clone()
+            .select("apps")
+            .to_text()
+            .into_expr::<String>(),
+    ));
+    let pkgs = NixValue::builtin("import")
+        .call(inputs.clone().select("nixpkgs"))
+        .call(rusix::nix_record! {
+            "system": "x86_64-linux",
+            "overlays": NixValue::list([airlock_build::overlays::image_tools(&workspace)]),
+        });
     pkgs.bind(|pkgs| {
         let left = pkgs
             .clone()
@@ -74,9 +83,7 @@ pub(super) fn cache(inputs: NixValue) -> NixValue {
         };
         airlock_build::store::image_cache(
             &pkgs,
-            &airlock_build::Workspace::new(NixPath::from_source_text(
-                inputs.select("apps").to_text().into_expr::<String>(),
-            )),
+            &workspace,
             NixValue::list([
                 closure(NixValue::list([left.clone()])),
                 closure(NixValue::list([left, right])),

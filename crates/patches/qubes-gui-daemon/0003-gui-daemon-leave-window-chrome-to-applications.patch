@@ -1,0 +1,134 @@
+From: Airlock Developers <airlock@example.invalid>
+Subject: gui-daemon: application chrome and reloadable trusted VM outlines
+
+diff --git a/gui-daemon/xside.c b/gui-daemon/xside.c
+--- a/gui-daemon/xside.c
++++ b/gui-daemon/xside.c
+@@ -337,6 +337,29 @@
+     return xcolor;
+ }
+ 
++/* Only the trusted GuiVM administrator can select a positive border width. */
++static void airlock_reload_border(Ghandles *g)
++{
++    int width = 10;
++    int fd = open("/rw/airlock/gui-border-width", O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
++    if (fd >= 0) {
++        struct stat st;
++        char buffer[32], *end;
++        ssize_t count;
++        if (fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && st.st_uid == 0
++                && !(st.st_mode & 022) && (count = read(fd, buffer, sizeof(buffer) - 1)) > 0) {
++            buffer[count] = 0;
++            long value = strtol(buffer, &end, 10);
++            if ((*end == '\n' && end[1] == 0) || *end == 0) {
++                if (value >= 1 && value <= 16)
++                    width = (int)value;
++            }
++        }
++        close(fd);
++    }
++    g->airlock_border_width = width + 1; /* fixed black contrast edge */
++}
++
+ /* prepare graphic context for painting colorful frame and set RGB value of the
+  * color */
+ static void get_frame_gc(Ghandles * g, const char *name)
+@@ -349,6 +372,9 @@
+         (fcolor.blue >> 8);
+     values.foreground = fcolor.pixel;
+     g->frame_gc =
++        XCreateGC(g->display, g->root_win, GCForeground, &values);
++    values.foreground = BlackPixel(g->display, g->screen);
++    g->black_frame_gc =
+         XCreateGC(g->display, g->root_win, GCForeground, &values);
+ }
+ 
+@@ -382,6 +408,13 @@
+     (void) XSetStandardProperties(g->display, child_win,
+                       "VMapp command", "Pixmap", None,
+                       gargv, 0, &my_size_hints);
++    /* Airlock's GNOME session uses its trusted panel for VM identity.
++     * Applications own their chrome; apply the same policy to every window
++     * before the window manager sees it, without changing managed state. */
++    const Atom motif_hints = XInternAtom(g->display, "_MOTIF_WM_HINTS", False);
++    const unsigned long no_decorations[5] = { 2, 0, 0, 0, 0 };
++    XChangeProperty(g->display, child_win, motif_hints, motif_hints, 32,
++            PropModeReplace, (const unsigned char *)no_decorations, 5);
+     if (g->time_win != None)
+         XChangeProperty(g->display, child_win, g->wm_user_time_window,
+                XA_WINDOW, 32, PropModeReplace,
+@@ -2251,7 +2284,9 @@
+            int untrusted_x, int untrusted_y, int untrusted_w,
+            int untrusted_h)
+ {
+-    int border_width = BORDER_WIDTH;
++    /* The frame colour comes from trusted Qubes state, never an application.
++     * All forwarded VM windows keep the same 11px outline; tray icons do not. */
++    int border_width = vm_window->is_docked ? 0 : g->airlock_border_width;
+     int border_padding = 0; /* start forced border x pixels from the edge */
+     int x = 0, y = 0, w = 0, h = 0;
+     ASSERT_WIDTH_UNSIGNED(vm_window->width);
+@@ -2367,19 +2402,6 @@
+     }
+ 
+     /* sanitize end */
+-
+-    if (!vm_window->override_redirect) {
+-        // Window Manager will take care of the frame...
+-        border_width = 0;
+-    }
+-
+-    if (vm_window->is_docked) {
+-        if (g->trayicon_border) {
+-            border_width = 1;
+-            border_padding = g->trayicon_border - 1;
+-        } else
+-            border_width = 0;
+-    }
+ 
+     assert(x >= 0 && y >= 0 && w >= 0 && h >= 0);
+     assert(border_width >= 0);
+@@ -2468,7 +2490,7 @@
+     /* if border_width is 0 the loop body will not execute */
+     for (int i = border_padding; i < border_padding + border_width; i++)
+         XDrawRectangle(g->display, vm_window->local_winid,
+-                   g->frame_gc, i, i,
++                   i == 0 ? g->black_frame_gc : g->frame_gc, i, i,
+                    vm_window->width - 1 - 2 * i,
+                    vm_window->height - 1 - 2 * i);
+ 
+@@ -4858,6 +4880,7 @@
+     parse_cmdline_config_path(&ghandles, argc, argv);
+     /* load config file */
+     parse_config(&ghandles);
++    airlock_reload_border(&ghandles);
+     /* parse cmdline, possibly overriding values from config */
+     parse_cmdline(&ghandles, argc, argv);
+     get_boot_lock(ghandles.domid);
+@@ -5046,6 +5069,13 @@
+         if (ghandles.reload_requested) {
+             fprintf(stderr, "reloading X server parameters...\n");
+             reload(&ghandles);
++            airlock_reload_border(&ghandles);
++            struct genlist *item;
++            list_for_each(item, ghandles.wid2windowdata) {
++                struct windowdata *window = item->data;
++                XClearArea(ghandles.display, window->local_winid, 0, 0, 0, 0, True);
++            }
++            XFlush(ghandles.display);
+             ghandles.reload_requested = 0;
+         }
+         do {
+diff --git a/gui-daemon/xside.h b/gui-daemon/xside.h
+--- a/gui-daemon/xside.h
++++ b/gui-daemon/xside.h
+@@ -167,6 +167,8 @@
+     int root_height;
+     GC context;        /* context for pixmap operations */
+     GC frame_gc;        /* graphic context to paint window frame */
++    int airlock_border_width; /* colour width plus black contrast edge */
++    GC black_frame_gc;  /* trusted outer contrast edge */
+     GC tray_gc;        /* graphic context to paint tray background - only in TRAY_BACKGROUND mode */
+     double tint_h;  /* precomputed H and S for tray coloring - only in TRAY_TINT mode */
+     double tint_s;

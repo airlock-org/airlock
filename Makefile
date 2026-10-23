@@ -555,8 +555,8 @@ native-integration-build:
 	cargo build --locked --manifest-path crates/Cargo.toml -p airlock-nix-core -p airlock-dom0-service -p airlock-cli -p airlock-config -p airlock-image -p airlock-tests -p airlock-qubes-python -p airlock-vm-service -p airlock-sys-gui-service -p airlock-sys-gui-setup -p airlock-sys-ctrl-gui -p airlock-dev -p airlock-diagnostics --features airlock-diagnostics/runtime
 	"$(dir $(NATIVE_TEST_RUNNER))airlock-dev" --repository-root "$(CURDIR)" ctrl-artifact record --binary "$(dir $(NATIVE_TEST_RUNNER))airlock-sys-ctrl-gui"
 	cargo build --locked --manifest-path crates/Cargo.toml -p airlock-dom0-service --example test_input -p airlock-config --example test_fixtures --example candidate_fixture -p airlock-tests --example qubes_objects
-	"$(dir $(NATIVE_TEST_RUNNER))airlock-test-peer" prepare-memory "$(CURDIR)/airlock-machine/patches/qubes-linux-utils/memory-accounting.h" "$(dir $(NATIVE_TEST_RUNNER))memory-accounting.so"
-	"$(dir $(NATIVE_TEST_RUNNER))airlock-test-peer" prepare-gui-tests "$(CURDIR)/airlock-machine/patches" "$(dir $(NATIVE_TEST_RUNNER))gui-c-fixtures"
+	"$(dir $(NATIVE_TEST_RUNNER))airlock-test-peer" prepare-memory "$(CURDIR)/crates/patches/qubes-linux-utils/memory-accounting.h" "$(dir $(NATIVE_TEST_RUNNER))memory-accounting.so"
+	"$(dir $(NATIVE_TEST_RUNNER))airlock-test-peer" prepare-gui-tests "$(CURDIR)/crates/patches" "$(dir $(NATIVE_TEST_RUNNER))gui-c-fixtures"
 	cargo test --workspace --all-features --locked --manifest-path crates/Cargo.toml --no-run --message-format=json > "$(NATIVE_TEST_RECEIPT)"
 
 test-native:

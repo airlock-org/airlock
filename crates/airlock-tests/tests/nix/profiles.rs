@@ -417,16 +417,27 @@ fn qubes_gui_packages_share_protocol_and_window_state_patches() -> Result<()> {
         ),
     ] {
         for patch in patches {
-            includes(&report[key], patch);
+            assert!(
+                report[key]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|path| text(path).ends_with(patch))
+            );
         }
     }
     assert_eq!(report["preparedGuestAgent"], report["agent"]);
     for patch in report["daemon"].as_array().unwrap() {
         includes(&report["preparedGuiDaemon"], text(patch));
     }
-    includes(
-        &report["preparedGuiDaemon"],
-        "0003-gui-daemon-leave-window-chrome-to-applications.patch",
+    assert!(
+        report["preparedGuiDaemon"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|path| {
+                text(path).ends_with("0003-gui-daemon-leave-window-chrome-to-applications.patch")
+            })
     );
     Ok(())
 }
