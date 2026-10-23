@@ -61,6 +61,37 @@ fn physical_expression_body(
                         .clone()
                         .select_segments(["virtualisation", "qubes", "packages"]),
                 );
+
+            let diagnostic_policy = arguments_1
+                .clone()
+                .select_segments(["lib", "findFirst"])
+                .call(NixValue::function(|package| {
+                    package
+                        .attr_or("destination", "")
+                        .equals("/etc/qubes/policy.d/44-airlock-diagnostics.policy")
+                }))
+                .call(NixValue::builtin("throw").call("missing physical diagnostic policy package"))
+                .call(
+                    normal
+                        .clone()
+                        .select_segments(["virtualisation", "qubes", "packages"]),
+                );
+
+            let policy_directory_conflicts = arguments_1
+                .clone()
+                .select_segments(["lib", "filter"])
+                .call(NixValue::function(|name| {
+                    arguments_1
+                        .clone()
+                        .select_segments(["lib", "hasPrefix"])
+                        .call("qubes/policy.d/")
+                        .call(name)
+                }))
+                .call(
+                    NixValue::builtin("attrNames")
+                        .call(normal.clone().select_segments(["environment", "etc"])),
+                );
+
             let field_stores = arguments_1
                 .clone()
                 .select("lib")
@@ -124,6 +155,8 @@ fn physical_expression_body(
                     ]),
                 ),
                 ("capturePolicy", capture_policy.select("text")),
+                ("diagnosticPolicy", diagnostic_policy.select("text")),
+                ("policyDirectoryConflicts", policy_directory_conflicts),
                 (
                     "release",
                     normal.clone().select_segments([

@@ -791,6 +791,13 @@ fn physical_machine_preserves_boot_release_and_recovery() -> Result<()> {
             .contains("airlock.CaptureImport +image sys-gui usr-home allow")
     );
     assert!(
+        normal["diagnosticPolicy"]
+            .as_str()
+            .unwrap()
+            .contains("airlock.Diagnostics.Self + usr-assistant dom0 allow user=root autostart=no")
+    );
+    assert_eq!(normal["policyDirectoryConflicts"], json!([]));
+    assert!(
         normal["release"]
             .as_str()
             .unwrap()

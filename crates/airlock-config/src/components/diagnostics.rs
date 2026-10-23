@@ -297,10 +297,20 @@ pub(crate) fn host_module(access: &Access, workspace: Workspace) -> NixValue {
     let executable = Application::Diagnostics;
     ContextualModule::new(move |inputs| {
         let package = executable.build(&inputs.pkgs, &workspace);
+        // Qubes joins policy packages into one immutable directory; /etc entries cannot extend it.
+        let policy_package = inputs
+            .pkgs
+            .clone()
+            .select("writeTextDir")
+            .call("etc/qubes/policy.d/44-airlock-diagnostics.policy")
+            .call(policy);
+
         endpoint_body(inputs, &host, Some(workspace)).module(ModuleBody::new(nix_record! {
+            "virtualisation": nix_record! {
+                "qubes": nix_record! { "packages": NixValue::list([policy_package]) },
+            },
             "environment": nix_record! {
                 "etc": nix_record! {
-                    "qubes/policy.d/44-airlock-diagnostics.policy": nix_record! { "text": policy },
                     "airlock/diagnostics-relay.json": nix_record! { "text": relay },
                     "qubes-rpc/airlock.Diagnostics.Self": nix_record! {
                         "source": nix_text!("{package}/bin/airlock-diagnostics-relay", package = package),
