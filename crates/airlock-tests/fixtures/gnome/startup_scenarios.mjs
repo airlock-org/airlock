@@ -23,6 +23,7 @@ if (scenario === 'snapshot_validation') {
     const extension = new StartupProgressExtension();
     extension.enable();
     assert.equal(extension._spinner.playing, true);
+    assert.equal(extension._label.text, 'Starting Airlock');
     assert.equal(reads.length, 1);
     if (scenario === 'wait_for_application_publication') {
         reply(0, snapshot('starting'));
@@ -34,7 +35,7 @@ if (scenario === 'snapshot_validation') {
         tick();
         reply(2, snapshot('ready'));
         assert.equal(extension._spinner.playing, false);
-        assert.equal(extension._label.text, 'Apps ready');
+        assert.equal(extension._label.text, 'Ready');
         tick();
         assert.equal(extension._button.visible, false);
         assert.equal(timers.size, 0);
@@ -47,6 +48,8 @@ if (scenario === 'snapshot_validation') {
         assert.equal(extension._rows.items, rows);
         assert.equal(extension._button.visible, true);
         assert.equal(extension._spinner.playing, true);
+        assert.equal(extension._label.text, 'Startup status unavailable');
+        assert.equal(extension._warning.visible, true);
         assert.match(extension._summary.label.text, /unavailable.*retrying/u);
         tick();
         reply(2, {...snapshot(), complete: true});
@@ -58,7 +61,7 @@ if (scenario === 'snapshot_validation') {
         assert.equal(extension._spinner.playing, false);
         tick();
         reply(1, snapshot('ready'));
-        assert.equal(extension._label.text, 'Apps ready');
+        assert.equal(extension._label.text, 'Ready');
     } else if (scenario === 'disable_rejects_stale_callbacks') {
         const firstButton = extension._button;
         extension.disable();

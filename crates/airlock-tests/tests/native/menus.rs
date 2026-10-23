@@ -338,7 +338,10 @@ impl Menus {
             "boot-rpc",
             json!([{"contains":"airlock.BootStatus", "stdout":json!({
             "boot_id":"host-boot", "status":"complete", "desktop_ready":true,
-            "guests":[{"name":"usr-home","phase":"ready","applications":true}]
+            "guests":[
+                {"name":"usr-home","phase":"ready","applications":true},
+                {"name":"sys-net","phase":"ready","applications":false}
+            ]
         }).to_string()}]),
         )?;
         let mut command = peers.command(common::binary(
@@ -361,6 +364,8 @@ fn startup_panel_waits_for_current_menu_publication() -> Result<()> {
     let before = menus.startup()?;
     assert_eq!(before["complete"], false);
     assert_eq!(before["guests"][0]["phase"], "loading");
+    assert_eq!(before["guests"][0]["detail"], "Loading applications");
+    assert_eq!(before["guests"][1]["detail"], "Ready");
     assert!(
         !menus.state("inventory.json").exists(),
         "observation must not create menu state"
@@ -374,7 +379,10 @@ fn startup_panel_waits_for_current_menu_publication() -> Result<()> {
     menus.data.as_object_mut().unwrap().remove("fail");
 
     menus.run(&["reconcile"], true)?;
-    assert_eq!(menus.startup()?["complete"], true);
+    let ready = menus.startup()?;
+    assert_eq!(ready["complete"], true);
+    assert_eq!(ready["detail"], "Ready");
+    assert_eq!(ready["guests"][0]["detail"], "Ready");
     let receipt_path = menus.state(&format!("{HOME}.json"));
     let mut receipt = menus.read(&format!("{HOME}.json"))?;
     let current = receipt["boot_id"].clone();

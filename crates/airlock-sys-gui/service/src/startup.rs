@@ -67,14 +67,14 @@ pub(crate) fn panel_status() -> Result<()> {
         .to_owned();
         if guest.applications && phase == "ready" {
             let publication = crate::menus::publication(&guest.name)?;
-            if publication.available {
-                detail = "Applications available".into();
-            } else if let Some(error) = publication.error {
-                phase = "failed".into();
-                detail = error;
-            } else {
-                phase = "loading".into();
-                detail = "Loading applications".into();
+            if !publication.available {
+                if let Some(error) = publication.error {
+                    phase = "failed".into();
+                    detail = error;
+                } else {
+                    phase = "loading".into();
+                    detail = "Loading applications".into();
+                }
             }
         }
         available &= phase == "ready";
@@ -83,7 +83,9 @@ pub(crate) fn panel_status() -> Result<()> {
     }
 
     let complete = status.status == "complete" && available;
-    let detail = if attention {
+    let detail = if complete {
+        "Ready".to_owned()
+    } else if attention {
         "Some applications or services need attention".to_owned()
     } else if status.status == "complete" && !available {
         "Loading applications".to_owned()
