@@ -51,6 +51,7 @@ name = "airlock-build"
 version = "0.1.0"
 dependencies = [
  "rusix",
+ "tempfile",
  "toml",
 ]
 

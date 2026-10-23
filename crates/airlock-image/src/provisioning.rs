@@ -165,6 +165,10 @@ pub fn wait_for_build(
         message.len() <= 16 * 1024,
         "USB build completion exceeds its limit"
     );
+    ensure!(
+        !message.is_empty(),
+        "Image build was cancelled or did not authorize provisioning; USB was not written."
+    );
     let completion: Completion =
         airlock_nix_core::state::parse_json(&message, Path::new("<USB build completion>"))
             .context("Image build did not authorize provisioning; USB was not written.")?;
@@ -216,6 +220,9 @@ mod tests {
             let result = wait_for_build(&run, input.as_slice(), &mut output);
             assert_eq!(output, READY);
             assert_eq!(result.is_ok(), input == valid);
+            if input.is_empty() {
+                assert!(result.err().unwrap().to_string().contains("cancelled"));
+            }
         }
         Ok(())
     }

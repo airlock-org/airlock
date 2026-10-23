@@ -303,7 +303,22 @@ pub(super) fn sources(
 mod tests {
     use super::*;
 
-    /// Every workspace member must have a manifest available even when its implementation is omitted.
+    /// Materialize exactly the chosen file set; do not supply omitted implementation entry points.
+    fn copy_input(source: &Path, destination: &Path) -> std::io::Result<()> {
+        if source.is_dir() {
+            std::fs::create_dir_all(destination)?;
+            for entry in std::fs::read_dir(source)? {
+                let entry = entry?;
+                copy_input(&entry.path(), &destination.join(entry.file_name()))?;
+            }
+        } else if source.is_file() {
+            std::fs::create_dir_all(destination.parent().unwrap())?;
+            std::fs::copy(source, destination)?;
+        }
+        Ok(())
+    }
+
+    /// Every workspace member must remain resolvable when unrelated implementations are omitted.
     #[test]
     fn inventory_covers_workspace_members() {
         let root: Value = toml::from_str(include_str!("../../../../Cargo.toml")).unwrap();
@@ -314,6 +329,30 @@ mod tests {
                     .any(|package| Some(package.directory) == member.as_str())
             );
         }
+
+        let original = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let filtered = tempfile::tempdir().unwrap();
+        for relative in sources("airlock-diagnostics", true, &[]) {
+            copy_input(&original.join(&relative), &filtered.path().join(&relative)).unwrap();
+        }
+        let output = std::process::Command::new(env!("CARGO"))
+            .args([
+                "metadata",
+                "--offline",
+                "--locked",
+                "--no-deps",
+                "--format-version",
+                "1",
+                "--manifest-path",
+            ])
+            .arg(filtered.path().join("Cargo.toml"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "filtered workspace failed Cargo resolution: {error}",
+            error = String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     /// Compare local closures with Cargo's actual normal/build dependency resolution, including feature boundaries.

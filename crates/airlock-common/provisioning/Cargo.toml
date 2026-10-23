@@ -7,6 +7,9 @@ publish = false
 license = "MIT"
 description = "Verified removable-media selection, build handoff and write requests"
 
+[lib]
+path = "src/lib.rs"
+
 [dependencies]
 vstd = "=0.0.0-2026-10-18-0147"
 
