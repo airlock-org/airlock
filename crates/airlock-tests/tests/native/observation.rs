@@ -183,6 +183,10 @@ fn guarded_gc_retains_structured_roots_and_preserves_store_selection() -> Result
     assert_eq!(dry["missing_backing_images"], json!([]));
     assert_eq!(dry["dead_count"], 1);
     assert_eq!(dry["gc_ran"], false);
+    let fragment = "77777777777777777777777777777777-airlock-store-fragment-test";
+    fs::create_dir(store.join(fragment))?;
+    fs::write(store.join(fragment).join("metadata.json"), "{}")?;
+    fs::write(store.join(fragment).join("object.tar"), "tar")?;
     for mode in ["run", "auto"] {
         let mut command = command(&peers, mode)?;
         command.env("AIRLOCK_GC_AUTO_THRESHOLD_GIB", "0");
@@ -190,6 +194,13 @@ fn guarded_gc_retains_structured_roots_and_preserves_store_selection() -> Result
         let report = read()?;
         assert_eq!(report["mode"], mode);
         assert_eq!(report["gc_ran"], true);
+        assert_eq!(
+            report["fragment_cache_roots"],
+            if mode == "auto" { 1 } else { 0 }
+        );
+        let manifest =
+            fs::read_to_string(nix_root.join("nix/var/nix/gcroots/airlock/manifest.tsv"))?;
+        assert_eq!(manifest.contains(fragment), mode == "auto");
     }
     let calls = peers.calls()?;
     let args = |expected: Value| {
@@ -235,7 +246,7 @@ fn guarded_gc_retains_structured_roots_and_preserves_store_selection() -> Result
         output.checked()?;
         let report = read()?;
         assert_eq!(report["gc_ran"], mode == "run");
-        assert_eq!(report["root_count"], 6);
+        assert_eq!(report["root_count"], if mode == "dry-run" { 7 } else { 6 });
         assert_eq!(
             report["missing_backing_images"],
             json!([{

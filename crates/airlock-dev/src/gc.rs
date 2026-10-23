@@ -11,11 +11,14 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File},
     io::Write,
-    os::unix::fs::symlink,
+    os::unix::fs::{MetadataExt, symlink},
     path::{Component, Path, PathBuf},
     process::Command,
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
+/// Retain recently built fragments across automatic GC without keeping stale packer generations forever.
+const FRAGMENT_CACHE_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
 /// Existing guarded store-maintenance entry modes.
 #[derive(Clone, Copy, ValueEnum)]
@@ -414,6 +417,53 @@ fn roots(
     Ok(roots)
 }
 
+/// Keep complete, recent fragment outputs during routine GC; explicit full GC may reclaim them.
+fn retain_recent_fragments(
+    store: &Path,
+    roots: &mut BTreeMap<PathBuf, (String, String)>,
+    now: SystemTime,
+) -> Result<usize> {
+    let now = now.duration_since(UNIX_EPOCH)?.as_secs();
+    let mut retained = 0;
+    for entry in entries(store)? {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Ok(path) = format!("/nix/store/{name}").parse::<StorePath>() else {
+            continue;
+        };
+        if !name
+            .get(33..)
+            .is_some_and(|suffix| suffix.starts_with("airlock-store-fragment-"))
+            || !entry.file_type()?.is_dir()
+            || !entry.path().join("metadata.json").is_file()
+            || !entry.path().join("object.tar").is_file()
+        {
+            continue;
+        }
+        // Nix normalizes output mtimes to 1970. Filesystem change time records when
+        // this private store received the completed output, including substitutes.
+        let changed = entry.metadata()?.ctime();
+        let Ok(changed) = u64::try_from(changed) else {
+            continue;
+        };
+        if now.saturating_sub(changed) > FRAGMENT_CACHE_MAX_AGE.as_secs() {
+            continue;
+        }
+        roots
+            .entry(PathBuf::from(path.as_str()))
+            .or_insert_with(|| {
+                (
+                    format!("fragment-cache-{name}"),
+                    "recent-image-fragment-cache".into(),
+                )
+            });
+        retained += 1;
+    }
+    Ok(retained)
+}
+
 /// Incomplete chains may add protection, but cannot revoke any previously known existing root.
 fn retain_previous(
     directory: &Path,
@@ -422,6 +472,15 @@ fn retain_previous(
 ) -> Result<()> {
     for entry in entries(directory)? {
         if !entry.file_type()?.is_symlink() {
+            continue;
+        }
+        // Cache roots are expendable even when a VM backing chain is incomplete.
+        // Carrying them forward would defeat explicit full GC and cache expiry.
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with("fragment-cache-")
+        {
             continue;
         }
         let target = fs::read_link(entry.path())?;
@@ -557,6 +616,11 @@ pub(crate) fn execute(root: &Path, mode: Mode) -> Result<()> {
         .context("another Airlock GC operation is running")?;
     let mut missing = Vec::new();
     let mut roots = roots(root, &vm, &links, &logs, &store, &mut missing)?;
+    let fragment_cache_roots = if matches!(mode, Mode::Run) {
+        0
+    } else {
+        retain_recent_fragments(&store, &mut roots, SystemTime::now())?
+    };
     if !missing.is_empty() {
         retain_previous(&managed, &store, &mut roots)?;
         for gap in &missing {
@@ -612,10 +676,10 @@ pub(crate) fn execute(root: &Path, mode: Mode) -> Result<()> {
     let result = logs.join("airlock-store-gc.json");
     support::record(
         &result,
-        &json!({"schema":"airlock.store-gc.v1","mode":match mode {Mode::Auto=>"auto",Mode::DryRun=>"dry-run",Mode::Run=>"run",Mode::Roots=>"roots"},"data_root":data,"nix_root":nix,"store_dir":store,"gcroots_dir":managed,"root_manifest":managed.join("manifest.tsv"),"root_count":roots.len(),"missing_backing_images":missing,"auto_threshold_gib":threshold,"threshold_bytes":threshold_bytes,"store_bytes_before":before,"store_bytes_after":size(&nix)?,"dead_count":dead,"gc_ran":collected,"dead_log":dead_log,"dead_stderr_log":dead_errors,"gc_log":gc_log,"result_json":result}),
+        &json!({"schema":"airlock.store-gc.v1","mode":match mode {Mode::Auto=>"auto",Mode::DryRun=>"dry-run",Mode::Run=>"run",Mode::Roots=>"roots"},"data_root":data,"nix_root":nix,"store_dir":store,"gcroots_dir":managed,"root_manifest":managed.join("manifest.tsv"),"root_count":roots.len(),"fragment_cache_roots":fragment_cache_roots,"missing_backing_images":missing,"auto_threshold_gib":threshold,"threshold_bytes":threshold_bytes,"store_bytes_before":before,"store_bytes_after":size(&nix)?,"dead_count":dead,"gc_ran":collected,"dead_log":dead_log,"dead_stderr_log":dead_errors,"gc_log":gc_log,"result_json":result}),
     )?;
     println!(
-        "Airlock data root: {data}\nAirlock Nix root:  {nix}\nRooted paths:     {count}\nDead path count:  {dead}\nResult JSON:      {result}",
+        "Airlock data root: {data}\nAirlock Nix root:  {nix}\nRooted paths:     {count}\nFragment cache:   {fragment_cache_roots} roots\nDead path count:  {dead}\nResult JSON:      {result}",
         data = data.display(),
         nix = nix.display(),
         count = roots.len(),
@@ -627,6 +691,35 @@ pub(crate) fn execute(root: &Path, mode: Mode) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Routine GC retains complete recent fragments and lets an aged packer cache expire.
+    #[test]
+    fn fragment_cache_roots_expire_without_accepting_incomplete_outputs() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let store = temporary.path();
+        let complete = "11111111111111111111111111111111-airlock-store-fragment-package";
+        let incomplete = "22222222222222222222222222222222-airlock-store-fragment-incomplete";
+        fs::create_dir(store.join(complete))?;
+        fs::write(store.join(complete).join("metadata.json"), "{}")?;
+        fs::write(store.join(complete).join("object.tar"), "tar")?;
+        fs::create_dir(store.join(incomplete))?;
+        let mut roots = BTreeMap::new();
+
+        let now = SystemTime::now();
+        assert_eq!(retain_recent_fragments(store, &mut roots, now)?, 1);
+        assert!(roots.contains_key(&PathBuf::from(format!("/nix/store/{complete}"))));
+        roots.clear();
+        assert_eq!(
+            retain_recent_fragments(
+                store,
+                &mut roots,
+                now + FRAGMENT_CACHE_MAX_AGE + Duration::from_secs(2)
+            )?,
+            0
+        );
+        assert!(roots.is_empty());
+        Ok(())
+    }
 
     /// Existing symlink parents are resolved before a missing path's lexical parent components.
     #[test]
