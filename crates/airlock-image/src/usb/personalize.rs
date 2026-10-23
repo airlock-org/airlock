@@ -66,6 +66,7 @@ impl CommittedSource {
         // Capture HEAD once so another agent can keep editing and committing.
         let repository = tempfile::Builder::new()
             .prefix("airlock-usb-source-")
+            .permissions(fs::Permissions::from_mode(0o700))
             .tempdir_in(temporary_parent)?;
         let bare = repository.path().join("repo.git");
         reported(

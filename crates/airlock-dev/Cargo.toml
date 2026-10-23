@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 airlock-config = { path = "../airlock-config" }
+airlock-image = { path = "../airlock-image", default-features = false }
 airlock-nix-core = { path = "../airlock-common/nix", features = ["runtime", "artifacts"] }
 anyhow = "1.0"
 base64 = "0.22"

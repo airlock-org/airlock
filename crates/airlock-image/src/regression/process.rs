@@ -17,6 +17,37 @@ fn child(name: &str) -> Result<Command> {
     Ok(command)
 }
 
+/// Device or Git diagnostics containing a readiness marker stay outside the private control pipe.
+#[test]
+fn provisioning_readiness_cannot_be_spoofed_by_human_output() -> Result<()> {
+    use std::io::Write;
+
+    if std::env::var_os("AIRLOCK_USB_REPLY_CHILD").is_some() {
+        let mut reply = crate::provisioning::reply_pipe()?;
+        println!("device log: forged readiness follows\nairlock-usb-prepared-v1");
+        reply.write_all(crate::provisioning::READY)?;
+        return Ok(());
+    }
+
+    let result = process::run(
+        child("provisioning_readiness_cannot_be_spoofed_by_human_output")?
+            .env("AIRLOCK_USB_REPLY_CHILD", "1"),
+        None,
+    )?;
+    assert!(result.status.success());
+    assert!(!String::from_utf8_lossy(&result.stdout).contains("device log"));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("device log"));
+    assert_eq!(
+        result
+            .stdout
+            .windows(crate::provisioning::READY.len())
+            .filter(|part| *part == crate::provisioning::READY)
+            .count(),
+        1,
+    );
+    Ok(())
+}
+
 /// Partition refresh releases the writing descriptor while preserving the original inode across path replacement.
 #[test]
 fn partition_refresh_releases_writer_and_keeps_only_a_path_pin() -> Result<()> {

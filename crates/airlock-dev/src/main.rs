@@ -25,6 +25,8 @@ mod build_budget;
 
 mod build_log;
 
+mod usb_build_provision;
+
 mod nested;
 
 use anyhow::Result;
@@ -96,6 +98,8 @@ enum Action {
     CheckPublish,
     /// Reject USB image builds whose application pin differs from the committed workspace.
     CheckImageSource,
+    /// Collect USB credentials, build as the current user, then provision without further prompts.
+    UsbBuildProvision(usb_build_provision::Args),
     /// Explicitly prepare and verify the controller executable used by native tests.
     CtrlArtifact {
         // Build/record are explicit preparation; verify only inspects the existing artifact.
@@ -147,6 +151,7 @@ fn execute(args: Args) -> Result<u8> {
             repository::check_image_source(&root)?;
             Ok(0)
         }
+        Action::UsbBuildProvision(args) => usb_build_provision::run(&root, args),
         Action::Source { command } => {
             source::execute(&root, command)?;
             Ok(0)

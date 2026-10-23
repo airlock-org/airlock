@@ -44,17 +44,9 @@ enum Action {
     /// Use a build result link and an exact hardware serial.
     WriteLatest(Latest),
     /// Write the image, expand root and personalize before first boot.
-    ProvisionLatest {
-        // Build result and selected disk; this operation always writes.
-        #[command(flatten)]
-        source: LatestSource,
-        // Committed source snapshot and authorized SSH key to install offline.
-        #[command(flatten)]
-        settings: personalize::Settings,
-        // Off-USB location for partition-table backups and receipts.
-        #[arg(long, default_value = "/var/log/airlock/usb-root-expansion")]
-        resize_backup_dir: PathBuf,
-    },
+    ProvisionLatest(Provision),
+    /// Collect credentials now and provision only after the build owner signals success on stdin.
+    ProvisionAfterBuild(Provision),
     /// Personalize an already mounted Airlock USB root.
     Personalize {
         // Offline ext4 root of the previously written Airlock image.
@@ -64,6 +56,19 @@ enum Action {
         #[command(flatten)]
         settings: personalize::Settings,
     },
+}
+
+#[derive(Args)]
+struct Provision {
+    // Build result and selected disk; this operation always writes after validation.
+    #[command(flatten)]
+    source: LatestSource,
+    // Committed source snapshot and authorized SSH key to install offline.
+    #[command(flatten)]
+    settings: personalize::Settings,
+    // Off-USB location for partition-table backups and receipts.
+    #[arg(long, default_value = "/var/log/airlock/usb-root-expansion")]
+    resize_backup_dir: PathBuf,
 }
 
 #[derive(Args)]
@@ -387,7 +392,8 @@ pub(crate) fn main() -> Result<()> {
         Action::WriteLatest(args) if args.write => {
             Some(format!("write image to USB serial {}", args.source.serial))
         }
-        Action::ProvisionLatest { source, .. } => Some(format!(
+        Action::ProvisionLatest(Provision { source, .. })
+        | Action::ProvisionAfterBuild(Provision { source, .. }) => Some(format!(
             "write, expand and personalize USB serial {}",
             source.serial
         )),
@@ -419,35 +425,78 @@ pub(crate) fn main() -> Result<()> {
             let selected = device::check_mount(&root, None)?;
             settings.prepare()?.install(&root, &selected)
         }
-        Action::ProvisionLatest {
-            source,
-            settings,
-            resize_backup_dir,
-        } => {
-            let prepared = settings.prepare()?;
-            let (args, selected) = latest(&source, true, false, false)?;
-            growth::backup_location(&resize_backup_dir, &selected)?;
-            write_image(&args, DigestSource::BuildResult, Some(&selected))?;
-            run(Command::new("udevadm").arg("settle"))?;
-            growth::expand(&args.device, &selected, &resize_backup_dir)?;
-
-            let root = tempfile::Builder::new()
-                .prefix("airlock-usb-")
-                .tempdir_in("/run")?
-                .keep();
-            let current = device::checked(&args.device)?;
-            selected.same_disk(&current)?;
-            let partition = current.partition(&args.device)?;
-            let mount = growth::Mounted::new(&partition, &root, "nosuid,nodev")?;
-            prepared.install(&root, &selected)?;
-            progress::waiting(
-                "Flushing personalized USB filesystem",
-                Some(&args.device),
-                || run(&mut Command::new("sync")),
-            )?;
-            progress::waiting("Unmounting personalized USB", Some(&args.device), || {
-                mount.unmount()
-            })
+        Action::ProvisionLatest(provision) => {
+            let prepared = provision.settings.prepare()?;
+            provision.install(prepared, None)
         }
+        Action::ProvisionAfterBuild(provision) => {
+            let mut reply = crate::provisioning::reply_pipe()?;
+            ensure!(
+                fs::symlink_metadata(&provision.source.result_link)
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound),
+                "The build result must be a new path unique to this run."
+            );
+            let device = device::select(&provision.source.serial)?;
+            let selected = device::inspect(&device, false)?;
+            ensure!(
+                selected.serial.as_deref() == Some(&provision.source.serial),
+                "USB serial changed during selection"
+            );
+            growth::backup_location(&provision.resize_backup_dir, &selected)?;
+            growth::backup_location(
+                provision
+                    .source
+                    .result_link
+                    .parent()
+                    .context("image result parent")?,
+                &selected,
+            )?;
+            println!(
+                "USB selected for provisioning after the build: {serial}, {model}, {bytes} bytes.",
+                serial = provision.source.serial,
+                model = selected.model.as_deref().unwrap_or("unknown model"),
+                bytes = selected.size,
+            );
+            let prepared = provision.settings.prepare()?;
+            crate::provisioning::wait_for_build(std::io::stdin().lock(), &mut reply)?;
+            drop(reply);
+            provision.install(prepared, Some(&selected))
+        }
+    }
+}
+
+impl Provision {
+    /// Revalidate the selected image and disk, then reuse the ordinary provisioning sequence.
+    fn install(
+        self,
+        prepared: personalize::Prepared,
+        expected: Option<&device::Disk>,
+    ) -> Result<()> {
+        let (args, selected) = latest(&self.source, true, false, false)?;
+        if let Some(expected) = expected {
+            expected.same_disk(&selected)?;
+        }
+        growth::backup_location(&self.resize_backup_dir, &selected)?;
+        write_image(&args, DigestSource::BuildResult, Some(&selected))?;
+        run(Command::new("udevadm").arg("settle"))?;
+        growth::expand(&args.device, &selected, &self.resize_backup_dir)?;
+
+        let root = tempfile::Builder::new()
+            .prefix("airlock-usb-")
+            .tempdir_in("/run")?
+            .keep();
+        let current = device::checked(&args.device)?;
+        selected.same_disk(&current)?;
+        let partition = current.partition(&args.device)?;
+        let mount = growth::Mounted::new(&partition, &root, "nosuid,nodev")?;
+        prepared.install(&root, &selected)?;
+        progress::waiting(
+            "Flushing personalized USB filesystem",
+            Some(&args.device),
+            || run(&mut Command::new("sync")),
+        )?;
+        progress::waiting("Unmounting personalized USB", Some(&args.device), || {
+            mount.unmount()
+        })
     }
 }

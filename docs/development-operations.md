@@ -6,6 +6,16 @@ SSH target for the machine's usr-assistant VM. The workstation commands require
 stable Rust; their launcher builds the local development tool before running it.
 This tool is separate from the applications installed in VMs.
 
+`make usb-dev-build-provision USB_SERIAL=...` collects sudo authentication and the
+dom0 password before the image build, then provisions that serial automatically
+after success. Run it as the normal user and keep the selected USB connected.
+The build stays unprivileged; the waiting provisioning helper retains only a
+password hash. sys-gui keeps its existing development password. A failed build
+or a changed committed source cancels provisioning. This combined operation uses
+its own temporary result link, so another build cannot replace its image through
+the shared `usb-dev-image` link. A successful build also updates that shared link
+and its GC root, allowing ordinary provisioning retries to use the new image.
+
 ## Deployment
 
 Before editing system configuration, inspect its recorded deployed source and

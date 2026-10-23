@@ -10,6 +10,8 @@ mod boot_filesystem;
 
 mod preflight;
 
+pub mod provisioning;
+
 #[cfg(feature = "qubes")]
 mod runtime;
 

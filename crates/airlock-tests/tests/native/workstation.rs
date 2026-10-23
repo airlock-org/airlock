@@ -11,6 +11,7 @@ use flate2::read::GzDecoder;
 use serde_json::{Value, json};
 use std::{
     fs,
+    os::unix::fs::symlink,
     process::Command,
     time::{Duration, Instant},
 };
@@ -18,6 +19,113 @@ use std::{
 /// Read a successful CLI report without obscuring tool diagnostics.
 fn report(command: &mut Command) -> Result<Value> {
     Ok(serde_json::from_slice(&run(command, None)?.checked()?)?)
+}
+
+/// Credentials precede an unprivileged build, and failures never authorize a write or reuse an old result.
+#[test]
+fn combined_usb_build_prepares_once_and_provisions_only_its_successful_image() -> Result<()> {
+    for outcome in [
+        "success",
+        "prepare_fail",
+        "build_fail",
+        "missing_result",
+        "source_change",
+        "publish_fail",
+        "provision_fail",
+    ] {
+        let fixture = Repository::new()?;
+        fs::create_dir(fixture.root.join("crates"))?;
+        fs::write(fixture.root.join("crates/application.rs"), "application")?;
+        git(&fixture.root, &["add", "crates"])?;
+        git(&fixture.root, &["commit", "-qm", "Applications"])?;
+        let revision = git(&fixture.root, &["rev-parse", "HEAD"])?;
+        fs::write(
+            fixture.root.join("flake.lock"),
+            serde_json::to_vec(&json!({"nodes":{"airlock-apps":{"locked":{"rev":revision}}}}))?,
+        )?;
+        git(&fixture.root, &["commit", "-qam", "Application pin"])?;
+
+        let mut flow = json!({});
+        if outcome != "success" {
+            flow[outcome] = json!(true);
+        }
+        fixture.configure(json!({"usb_flow":flow}))?;
+        airlock_tests::process::peer_link(&fixture.path("tools"), "make")?;
+        let usb = airlock_tests::process::peer_link(&fixture.path("tools"), "airlock-usb")?;
+        let public = fixture.path("public-key");
+        fs::write(&public, "public key fixture")?;
+        let results = fixture.path("results");
+        fs::create_dir(&results)?;
+        symlink(
+            "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-older-image",
+            results.join("usb-dev-image"),
+        )?;
+
+        let output = run(
+            &mut fixture.command(&[
+                "usb-build-provision",
+                "--usb-bin",
+                usb.to_str().unwrap(),
+                "--serial",
+                "fixture-serial",
+                "--public-key",
+                public.to_str().unwrap(),
+                "--nix-root",
+                fixture.path("store").to_str().unwrap(),
+                "--result-link-dir",
+                results.to_str().unwrap(),
+                "--resize-backup-dir",
+                fixture.path("backups").to_str().unwrap(),
+            ]),
+            None,
+        )?;
+
+        assert_eq!(
+            output.status.success(),
+            outcome == "success",
+            "{outcome}: {errors}",
+            errors = String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            fixture.path("usb-provisioned").exists(),
+            outcome == "success"
+        );
+        assert_eq!(fixture.calls("sudo")?.len(), 1);
+        assert_eq!(fixture.calls("airlock-usb")?.len(), 1);
+        assert_eq!(
+            fixture.calls("make")?.len(),
+            usize::from(outcome != "prepare_fail")
+        );
+        if [
+            "build_fail",
+            "missing_result",
+            "source_change",
+            "publish_fail",
+        ]
+        .contains(&outcome)
+        {
+            assert!(fixture.path("usb-cancelled").exists());
+        }
+        if outcome == "build_fail" {
+            assert_eq!(output.status.code(), Some(42));
+        }
+        let published = ["success", "provision_fail"].contains(&outcome);
+        assert_eq!(
+            fs::read_link(results.join("usb-dev-image"))?,
+            std::path::PathBuf::from(if published {
+                "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-usb-image"
+            } else {
+                "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-older-image"
+            })
+        );
+        assert_eq!(
+            fs::read_dir(&results)?.count(),
+            1,
+            "private result was not released"
+        );
+    }
+
+    Ok(())
 }
 
 /// Make rejects stale committed applications before build work, while unrelated commits and dirty edits are ignored.
@@ -52,6 +160,7 @@ fn image_build_rejects_stale_application_content_before_prerequisites() -> Resul
         "usb-dev-image",
         "usb-dom0-console-image",
         "usb-builder-offline-check",
+        "usb-dev-build-provision",
     ] {
         let mut command = Command::new("make");
         command.current_dir(common::root()).args([
@@ -224,6 +333,7 @@ prerequisite:
         "usb-dev-image",
         "usb-dom0-console-image",
         "usb-builder-offline-check",
+        "usb-dev-build-provision",
     ] {
         fs::remove_file(&budget_path)?;
         run(

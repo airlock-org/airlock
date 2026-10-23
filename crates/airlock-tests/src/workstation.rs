@@ -5,7 +5,10 @@ use serde_json::{Value, json};
 use std::{
     fs::{self, OpenOptions},
     io::{Read, Write},
-    os::unix::{fs::symlink, process::CommandExt},
+    os::unix::{
+        fs::{MetadataExt, PermissionsExt, symlink},
+        process::CommandExt,
+    },
     path::Path,
     process::Command,
 };
@@ -13,6 +16,16 @@ use std::{
 /// Record one child-tool invocation before returning its finite response or executing a local fixture shell.
 pub(crate) fn execute(root: &Path, name: &str, args: &[String]) -> Result<()> {
     let config: Value = serde_json::from_slice(&fs::read(root.join("peer.json"))?)?;
+    let name = if config["usb_flow"].is_object()
+        && name == "airlock-test-peer"
+        && args
+            .first()
+            .is_some_and(|arg| arg == "provision-after-build")
+    {
+        "airlock-usb"
+    } else {
+        name
+    };
     writeln!(
         OpenOptions::new()
             .create(true)
@@ -43,6 +56,107 @@ pub(crate) fn execute(root: &Path, name: &str, args: &[String]) -> Result<()> {
             } else {
                 println!("{}", json!({"status": "fixture"}));
             }
+        }
+        "sudo" if config["usb_flow"].is_object() => {
+            ensure!(
+                args.first().is_some_and(|arg| arg == "--"),
+                "unexpected USB sudo arguments"
+            );
+            return Err(Command::new(&args[1]).args(&args[2..]).exec().into());
+        }
+        "airlock-usb" if config["usb_flow"].is_object() => {
+            ensure!(
+                args.first()
+                    .is_some_and(|arg| arg == "provision-after-build"),
+                "unexpected USB action"
+            );
+            let index = args
+                .iter()
+                .position(|arg| arg == "--result-link")
+                .context("USB result link")?;
+            let result = Path::new(&args[index + 1]);
+            ensure!(
+                fs::symlink_metadata(result).is_err(),
+                "existing image was offered before build"
+            );
+            if config["usb_flow"]["prepare_fail"].as_bool() == Some(true) {
+                std::process::exit(19);
+            }
+            fs::write(root.join("usb-prepared"), b"credentials collected")?;
+            println!("airlock-usb-prepared-v1");
+            std::io::stdout().flush()?;
+            let mut completion = Vec::new();
+            std::io::stdin().read_to_end(&mut completion)?;
+            if completion != b"airlock-image-build-succeeded-v1\n" {
+                fs::write(root.join("usb-cancelled"), b"no write")?;
+                std::process::exit(1);
+            }
+            ensure!(
+                fs::read_link(result)?
+                    == Path::new("/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-usb-image"),
+                "wrong image selected"
+            );
+            if config["usb_flow"]["provision_fail"].as_bool() == Some(true) {
+                std::process::exit(23);
+            }
+            fs::write(
+                root.join("usb-provisioned"),
+                result.as_os_str().as_encoded_bytes(),
+            )?;
+        }
+        "make" if config["usb_flow"].is_object() => {
+            ensure!(
+                root.join("usb-prepared").is_file(),
+                "build started before credentials"
+            );
+            let result = args
+                .iter()
+                .find_map(|arg| arg.strip_prefix("AIRLOCK_RESULT_LINK_DIR="))
+                .context("private image result directory")?;
+            let directory = Path::new(result);
+            let info = fs::metadata(directory)?;
+            ensure!(
+                info.uid() == rustix::process::geteuid().as_raw(),
+                "build ran as a different user"
+            );
+            ensure!(
+                info.permissions().mode() & 0o777 == 0o700,
+                "result directory is not private"
+            );
+            if config["usb_flow"]["build_fail"].as_bool() == Some(true) {
+                std::process::exit(42);
+            }
+            if config["usb_flow"]["source_change"].as_bool() == Some(true) {
+                let repo = root.join("parent with spaces");
+                fs::write(repo.join("README"), "new source commit")?;
+                ensure!(
+                    Command::new("git")
+                        .arg("-C")
+                        .arg(repo)
+                        .args(["commit", "-qam", "Concurrent source change"])
+                        .status()?
+                        .success(),
+                    "source change failed"
+                );
+            }
+            if config["usb_flow"]["missing_result"].as_bool() != Some(true) {
+                symlink(
+                    "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-usb-image",
+                    directory.join("usb-dev-image"),
+                )?;
+            }
+        }
+        "nix-store" if config["usb_flow"].is_object() => {
+            if config["usb_flow"]["publish_fail"].as_bool() == Some(true) {
+                std::process::exit(33);
+            }
+            let index = args
+                .iter()
+                .position(|arg| arg == "--add-root")
+                .context("image root")?;
+            let link = Path::new(&args[index + 1]);
+            fs::remove_file(link)?;
+            symlink(args.last().context("built image")?, link)?;
         }
         "sudo" => {
             ensure!(
