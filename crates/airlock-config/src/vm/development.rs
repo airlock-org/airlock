@@ -12,14 +12,13 @@ use rusix::{
 };
 
 /// Install workspace initialization, Tailnet access and the developer's private build tools.
-pub(super) fn module(source: &NixPath) -> NixValue {
+pub(super) fn module() -> NixValue {
     ContextualModule::new(|context| {
         let cfg = context.config.select("airlock.qubeGuest");
         let user = cfg.clone().select("user");
         let pkgs = &context.pkgs;
         let package = |name: &str| pkgs.clone().select(name);
         let packages = |names: &[&str]| NixValue::list(names.iter().map(|name| package(name)));
-        let file = |relative| source.join_relative(relative).unwrap();
         let quote = |value| context.lib.clone().select("escapeShellArg").call(value);
         let state: NixValue =
             nix_text!("/home/{user}/.local/state/airlock", user = user.clone()).into();
@@ -36,6 +35,7 @@ pub(super) fn module(source: &NixPath) -> NixValue {
         let native_workspace = Workspace::new(NixPath::from_source_text(
             package("airlockAppsSource").to_text().into_expr::<String>(),
         ));
+        let file = |relative| native_workspace.file(relative).snapshot();
         let native = Application::VmService
             .build(pkgs, &native_workspace)
             .as_expression();
@@ -115,10 +115,13 @@ pub(super) fn module(source: &NixPath) -> NixValue {
                 },
                 "etc": nix_record! {
                     "airlock/usr-assistant/AGENTS.md": nix_record! {
-                        "source": file("assets/usr-assistant/AGENTS.md"),
+                        "source": file("airlock-config/assets/usr-assistant/AGENTS.md"),
                     },
                     "airlock/usr-assistant/home-AGENTS.md": nix_record! {
-                        "source": file("assets/usr-assistant/home-AGENTS.md"),
+                        "source": file("airlock-config/assets/usr-assistant/home-AGENTS.md"),
+                    },
+                    "airlock/usr-assistant/operations.md": nix_record! {
+                        "source": file("airlock-config/assets/usr-assistant/operations.md"),
                     },
                     "qubes-rpc/airlock.DevTailscaleUp": nix_record! {
                         "source": tailscale_up,

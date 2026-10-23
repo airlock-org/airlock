@@ -148,7 +148,7 @@ airlock-dom0-check: rust-spacing
 .PHONY: rust-fmt rust-fmt-check rust-spacing rust-spacing-fix rust-style-test rust-doc rust-check
 # Independent source-owned authoring crates use explicitly prepared offline dependencies.
 AIRLOCK_CARGO_VENDOR ?= /etc/airlock/authoring/vendor
-AUTHORING_CRATES := airlock-machine airlock-machine/bootstrap/initial-runtime-config
+AUTHORING_CRATES := airlock-machine crates/airlock-config/templates/initial-runtime-config
 RUST_STYLE_MANIFEST := tools/rust-style/Cargo.toml
 
 rust-fmt:
@@ -246,7 +246,7 @@ test-fixtures-build: native-test-fixtures-build runtime-config-build
 AUTHORING_TEST_VENDOR = $(if $(wildcard $(AIRLOCK_CARGO_VENDOR)/.),$(AIRLOCK_CARGO_VENDOR),$(CURDIR)/.airlock-cache/authoring-vendor)
 .PHONY: runtime-config-build
 runtime-config-build:
-	CARGO_TARGET_DIR="$(abspath $(or $(CARGO_TARGET_DIR),crates/target))" $(MAKE) -C airlock-machine/bootstrap/initial-runtime-config build AIRLOCK_APPS="$(CURDIR)/crates" AIRLOCK_CARGO_VENDOR="$(AUTHORING_TEST_VENDOR)"
+	CARGO_TARGET_DIR="$(abspath $(or $(CARGO_TARGET_DIR),crates/target))" $(MAKE) -C crates/airlock-config/templates/initial-runtime-config build AIRLOCK_APPS="$(CURDIR)/crates" AIRLOCK_CARGO_VENDOR="$(AUTHORING_TEST_VENDOR)"
 
 # Cargo owns dependency/feature resolution for process-boundary test drivers too.
 .PHONY: native-test-fixtures-build

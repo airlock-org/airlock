@@ -326,6 +326,35 @@ pub fn compile(source: &Path, applications: &Path, destination: &Path) -> Result
     Ok(())
 }
 
+/// Run a machine checkout's preparation adapter with its physical configuration and pinned apps.
+/// Accept `--emit DIRECTORY` or `prepare CACHE` from the process arguments. The nested validation
+/// machine comes from Airlock's shared profile; emission never evaluates Nix or deploys a system.
+/// Invalid arguments, source changes during preparation, or filesystem failures return an error.
+pub fn run_machine(
+    snapshot: &crate::model::MachineSnapshot,
+    application_revision: &str,
+) -> Result<()> {
+    let arguments: Vec<_> = std::env::args_os().skip(1).collect();
+    let emit = |directory: &Path| {
+        crate::export_machine(
+            snapshot,
+            &crate::profiles::bootstrap::machine()?,
+            application_revision,
+            directory,
+        )
+    };
+
+    match arguments.as_slice() {
+        [command, directory] if command == "--emit" => emit(&PathBuf::from(directory)),
+        [command, cache] if command == "prepare" => {
+            let tree = prepare(&std::env::current_dir()?, &PathBuf::from(cache), emit)?;
+            println!("path:{path}", path = tree.display());
+            Ok(())
+        }
+        _ => Err("usage: airlock-machine-config prepare CACHE | --emit DIRECTORY".into()),
+    }
+}
+
 /// Prepare the development flake and its complete machine and application source inputs.
 /// Builds the source-owned machine compiler before exposing any flake to Nix.
 pub fn development(source: &Path, cache: &Path) -> Result<PathBuf> {

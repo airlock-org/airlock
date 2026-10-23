@@ -153,6 +153,15 @@ fn usr_assistant_workspace_assistant_workspace_body(defaults: NixValue, c: NixVa
                 ])),
             ),
             (
+                "operations",
+                NixValue::builtin("readFile").call(c.clone().select_segments([
+                    "environment",
+                    "etc",
+                    "airlock/usr-assistant/operations.md",
+                    "source",
+                ])),
+            ),
+            (
                 "repoPath",
                 c.clone()
                     .select_segments(["airlock", "qubeGuest", "configRepoPath"]),

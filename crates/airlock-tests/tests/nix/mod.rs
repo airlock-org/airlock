@@ -539,7 +539,7 @@ impl Nix {
         copy_tree(
             &self
                 .prepared
-                .join("airlock-machine/bootstrap/initial-runtime-config"),
+                .join("crates/airlock-config/templates/initial-runtime-config"),
             &directory,
         )?;
         fs::write(

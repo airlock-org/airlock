@@ -1,0 +1,7 @@
+{
+  "nixpkgs": "/etc/airlock/config-inputs/nixpkgs",
+  "libvirt": "/etc/airlock/config-inputs/nixpkgs-libvirt_10_5",
+  "qubes": "/etc/airlock/config-inputs/nixos-qubes",
+  "machine": "/etc/airlock/config-inputs/airlock-support",
+  "applications": "/etc/airlock/config-inputs/airlock-apps"
+}

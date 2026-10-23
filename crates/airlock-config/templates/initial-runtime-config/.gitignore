@@ -1,0 +1,5 @@
+/target/
+
+# Rust compilation artifacts stay in ignored build directories.
+/flake.nix
+/generated/

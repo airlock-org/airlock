@@ -935,5 +935,31 @@ fn machine_entry_points_are_current() -> Result<()> {
         temporary.path(),
         Path::new(""),
         &nix.prepared.join("airlock-machine"),
-    )
+    )?;
+
+    // The installed adapter also prepares its own Git checkout without a parent source checkout.
+    let output = common::run(
+        Command::new(common::binary(
+            "AIRLOCK_MACHINE_CONFIG_BIN",
+            "airlock-machine-config",
+        ))
+        .arg("prepare")
+        .arg(temporary.path().join("cache"))
+        .current_dir(nix.root.join("airlock-machine")),
+        None,
+    )?
+    .checked()?;
+    let output = String::from_utf8(output)?;
+    let prepared = Path::new(
+        output
+            .trim()
+            .strip_prefix("path:")
+            .context("prepared machine reference")?,
+    );
+    assert!(prepared.join("airlock-prepared.json").is_file());
+    assert_eq!(
+        fs::read(temporary.path().join("flake.nix"))?,
+        fs::read(prepared.join("flake.nix"))?
+    );
+    compare(temporary.path(), Path::new("generated"), prepared)
 }

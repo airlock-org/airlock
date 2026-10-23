@@ -228,7 +228,7 @@ pub(crate) fn domain(inputs: &Inputs, vm: &VmSnapshot) -> DomainArguments {
     }
 
     if matches!(role, Role::Assistant { .. }) {
-        modules.push(crate::vm::development(&inputs.airlock_support()));
+        modules.push(crate::vm::development());
     }
 
     if !vm.modules.is_empty() {

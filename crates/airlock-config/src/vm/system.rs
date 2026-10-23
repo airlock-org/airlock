@@ -18,12 +18,10 @@ use rusix::{
     nixos::{ContextualModule, ModuleBody, ModuleContext},
 };
 
-/// NixOS evaluation context plus the machine-owned assets used by VM services.
+/// NixOS evaluation context and the application workspace used by VM services.
 struct System<'a> {
     /// This VM's final package set, library and merged settings.
     context: &'a ModuleContext,
-    /// Source tree containing machine settings and seed definitions.
-    source: &'a NixPath,
     /// Native application sources used to build VM integration commands.
     workspace: &'a Workspace,
 }
@@ -33,7 +31,6 @@ pub(super) fn module(source: &NixPath, workspace: &Workspace) -> NixValue {
     ContextualModule::new(|context| {
         let system = System {
             context: &context,
-            source,
             workspace,
         };
         let network = network::Packages {
@@ -219,7 +216,7 @@ impl System<'_> {
         );
 
         nix.bind(|nix| {
-            let seed = super::seed::configuration(self.source);
+            let seed = super::seed::configuration(self.workspace);
             let programs = configuration::constructor()
                 .as_expression()
                 .call(nix_record! {

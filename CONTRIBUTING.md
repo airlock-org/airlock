@@ -7,7 +7,7 @@ integrations. Repository rules and Rust documentation standards are in
 ## Source and checkout
 
 - `crates/`: applications, services, and shared Rust code.
-- `airlock-machine/`: pinned machine configuration and runtime integration.
+- `airlock-machine/`: the pinned, editable configuration of the physical machine.
 - `tools/`: Rust style checks.
 - `docs/`: essential development and image operating instructions.
 - `../website`: landing page and product documentation, with its own build.

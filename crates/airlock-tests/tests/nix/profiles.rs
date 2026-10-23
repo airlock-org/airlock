@@ -172,6 +172,20 @@ fn assistant_workspace_uses_existing_management_interfaces() -> Result<()> {
     }
     includes(&report["identity"]["before"], "qubes-qrexec-agent.service");
     assert_eq!(report["repoPath"], "/home/user/airlock-machine");
+    for (field, file) in [
+        ("instructions", "AGENTS.md"),
+        ("intro", "home-AGENTS.md"),
+        ("operations", "operations.md"),
+    ] {
+        assert_eq!(
+            report[field],
+            fs::read_to_string(
+                nix.prepared
+                    .join("crates/airlock-config/assets/usr-assistant")
+                    .join(file)
+            )?
+        );
+    }
     includes(&report["intro"], "~/airlock-machine");
     for action in ["plan", "apply", "status", "verify", "resume", "rollback"] {
         includes(

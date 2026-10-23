@@ -1,0 +1,12 @@
+[patch.crates-io]
+airlock-config = { path = "/etc/airlock/config-inputs/airlock-apps/airlock-config" }
+
+[source.crates-io]
+replace-with = "airlock-admitted"
+
+[source.airlock-admitted]
+directory = "/etc/airlock/authoring/vendor"
+
+# Keep Rust source identities stable when the admitted application tree moves.
+[build]
+rustflags = ["--remap-path-prefix=/etc/airlock/config-inputs/airlock-apps/="]

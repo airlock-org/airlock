@@ -85,6 +85,18 @@ fn filtered_sources_preserve_cache_keys_and_compile() -> Result<()> {
         inspect(root, &workspace, "source-integration-assets-change", &cases)?
     );
 
+    change(&workspace.join("airlock-config/assets/usr-assistant/AGENTS.md"))?;
+    change(&workspace.join("airlock-config/templates/initial-runtime-config/src/machine.rs"))?;
+    assert_eq!(
+        baseline,
+        inspect(
+            root,
+            &workspace,
+            "source-guidance-and-template-change",
+            &cases
+        )?
+    );
+
     let relocated = root.join("relocated/workspace");
     copy_tree(&workspace, &relocated)?;
     assert_eq!(

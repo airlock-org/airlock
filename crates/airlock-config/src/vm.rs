@@ -75,7 +75,7 @@ pub(crate) fn module_constructors() -> NixValue {
             "configuration": configuration::constructor(),
             "appGui": app_gui::module(),
             "personal": personal::module(),
-            "assistant": development::module(&source),
+            "assistant": development::module(),
             "assistantBuild": worker::module(WorkerRole::Development),
             "controllerBuild": worker::module(WorkerRole::Controller),
             "assistantStore": worker::store(WorkerRole::Development),
@@ -93,9 +93,9 @@ pub(crate) fn modules() -> Config {
         .set_dynamic("system", crate::system_plan::library())
 }
 
-/// Configure the development role with implementation assets from the selected machine source.
-pub(crate) fn development(source: &NixPath) -> NixValue {
-    development::module(source)
+/// Configure the development role with guidance from the admitted application workspace.
+pub(crate) fn development() -> NixValue {
+    development::module()
 }
 
 /// Install personal applications with the GUI agent used by ordinary application VMs.

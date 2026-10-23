@@ -793,47 +793,43 @@ fn publication_requires_the_actual_upstream_main() -> Result<()> {
     Ok(())
 }
 
-/// Both repository wrappers select the same external store, and native Nix refuses to spawn without explicit selection.
+/// The workstation wrapper selects the external store, and native Nix refuses to spawn without explicit selection.
 #[test]
 fn workstation_nix_requires_guarded_store_selection() -> Result<()> {
     let fixture = Repository::new()?;
     let data = fixture.path("external data");
-    for script in [
-        common::root().join("crates/airlock-dev/scripts/lib/airlock-env.sh"),
-        common::root().join("airlock-machine/scripts/dev/lib/airlock-env.sh"),
-    ] {
-        let mut command = Command::new("bash");
-        for (key, _) in std::env::vars_os() {
-            if key.to_string_lossy().starts_with("AIRLOCK_")
-                || ["NIX_CONFIG", "TMPDIR", "XDG_CACHE_HOME"]
-                    .iter()
-                    .any(|name| key == *name)
-            {
-                command.env_remove(key);
-            }
+    let script = common::root().join("crates/airlock-dev/scripts/lib/airlock-env.sh");
+    let mut command = Command::new("bash");
+    for (key, _) in std::env::vars_os() {
+        if key.to_string_lossy().starts_with("AIRLOCK_")
+            || ["NIX_CONFIG", "TMPDIR", "XDG_CACHE_HOME"]
+                .iter()
+                .any(|name| key == *name)
+        {
+            command.env_remove(key);
         }
-        command
-            .env(
-                "AIRLOCK_DEV_BIN",
-                common::binary("AIRLOCK_DEV_BIN", "airlock-dev"),
-            )
-            .env("AIRLOCK_DATA_ROOT", &data);
-        command
-            .args([
-                "-c",
-                "source \"$1\" && printf '%s\\n%s\\n' \"$AIRLOCK_NIX_ROOT\" \"$NIX_CONFIG\"",
-                "bash",
-            ])
-            .arg(script);
-        let text = String::from_utf8(run(&mut command, None)?.checked()?)?;
-        assert_eq!(
-            text,
-            format!(
-                "{store}\nstore = {store}\n",
-                store = data.join("nix-root").display()
-            )
-        );
     }
+    command
+        .env(
+            "AIRLOCK_DEV_BIN",
+            common::binary("AIRLOCK_DEV_BIN", "airlock-dev"),
+        )
+        .env("AIRLOCK_DATA_ROOT", &data);
+    command
+        .args([
+            "-c",
+            "source \"$1\" && printf '%s\\n%s\\n' \"$AIRLOCK_NIX_ROOT\" \"$NIX_CONFIG\"",
+            "bash",
+        ])
+        .arg(script);
+    let text = String::from_utf8(run(&mut command, None)?.checked()?)?;
+    assert_eq!(
+        text,
+        format!(
+            "{store}\nstore = {store}\n",
+            store = data.join("nix-root").display()
+        )
+    );
     let mut command = fixture.command(&["nix", "--", "--version"]);
     command
         .env_remove("AIRLOCK_USE_HOST_NIX_STORE")
