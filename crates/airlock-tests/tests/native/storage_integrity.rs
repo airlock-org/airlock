@@ -172,12 +172,17 @@ fn artifact_negotiation_rejects_changed_prepared_identity_and_bad_frames() -> Re
     let store = Store::new()?;
     let identity = store.temporary.path().join("identity.json");
     let inventory = json!({"schema": "airlock.pool-artifact.v4", "domain": "usr-home", "system": store.system,
-        "closure_source": store.closure, "root_source": store.root, "kernel_name": "",
-        "source_revision": "a".repeat(40), "lock_hash": "b".repeat(64), "root_artifact": null});
+        "closure_source":format!("/nix/store/{hash}-closure",hash="c".repeat(32)),
+        "root_source":format!("/nix/store/{hash}-root/root.img",hash="d".repeat(32)), "kernel_name": "",
+        "source_revision": "a".repeat(40), "lock_hash": "b".repeat(64),
+        "root_artifact":{"schema":"airlock.root-artifact.v1", "sha256":"d".repeat(64),
+            "logical_bytes":65536,"payload_bytes":64,"format":"ext4","boot_abi":"airlock.nix-closure-root.v1"}});
     let mut expected = inventory.clone();
-    expected["root_artifact"] = json!({"changed": true});
     expected.as_object_mut().unwrap().remove("schema");
-    fs::write(&identity, serde_json::to_vec(&expected)?)?;
+    let mut malformed = expected.clone();
+    malformed["root_artifact"] = json!({"changed": true});
+    let mut substituted = inventory.clone();
+    substituted["kernel_name"] = json!("other-kernel");
     let receiver = || {
         let mut command = store.command(&["artifact", "receive-incremental", "--pool-root"]);
         command.arg(&store.pool).args([
@@ -188,22 +193,27 @@ fn artifact_negotiation_rejects_changed_prepared_identity_and_bad_frames() -> Re
         ]);
         command
     };
-    let mut wire = serde_json::to_vec(&inventory)?;
-    wire.push(b'\n');
-    let output = common::run(
-        receiver().arg("--expected-identity").arg(identity),
-        Some(wire),
-    )?;
-    assert!(!output.status.success());
-    let error: Value = serde_json::from_slice(&output.stdout)?;
-    assert_eq!(error["schema"], "airlock.pool-artifact-error.v1");
-    assert!(
-        error["error"]
-            .as_str()
-            .unwrap()
-            .contains("prepared candidate")
-    );
-    assert!(manifests(&store.pool.join("domains"))?.is_empty());
+    // Both malformed protected records and well-formed substituted offers must fail before transfer.
+    for (expected, offered) in [(malformed, inventory), (expected, substituted)] {
+        fs::write(&identity, serde_json::to_vec(&expected)?)?;
+        let mut wire = serde_json::to_vec(&offered)?;
+        wire.push(b'\n');
+        let output = common::run(
+            receiver().arg("--expected-identity").arg(&identity),
+            Some(wire),
+        )?;
+        assert!(!output.status.success());
+        let error: Value = serde_json::from_slice(&output.stdout)?;
+        assert_eq!(error["schema"], "airlock.pool-artifact-error.v1");
+        assert!(
+            error["error"]
+                .as_str()
+                .unwrap()
+                .contains("prepared candidate"),
+            "{error}"
+        );
+        assert!(manifests(&store.pool.join("domains"))?.is_empty());
+    }
     for message in [b"{}".as_slice(), b"{invalid}\n", b"[]\n"] {
         let output = common::run(&mut receiver(), Some(message.to_vec()))?;
         assert!(!output.status.success());

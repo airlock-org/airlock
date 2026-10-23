@@ -3,7 +3,7 @@
 use super::absolute;
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{fmt, num::NonZeroU64, path::Path, str::FromStr};
+use std::{fmt, path::Path, str::FromStr};
 
 macro_rules! identity {
     ($(#[$docs:meta])* $name:ident, $description:literal, $valid:expr) => {
@@ -97,31 +97,5 @@ impl ReleasePath {
     }
 }
 
-/// Positive storage generation identifier; zero cannot name an admitted guest system.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct GenerationId(
-    /// Positive storage generation number; zero is never a valid generation.
-    NonZeroU64,
-);
-
-impl GenerationId {
-    /// Return the positive numeric identity without converting through a wire string.
-    pub fn get(self) -> u64 {
-        self.0.get()
-    }
-}
-
-impl FromStr for GenerationId {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Ok(Self(s.parse()?))
-    }
-}
-
-impl fmt::Display for GenerationId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
+/// Positive storage generation identity shared with admission senders and receivers.
+pub use airlock_nix_core::identity::GenerationId;

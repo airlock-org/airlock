@@ -4,6 +4,15 @@ use vstd::prelude::*;
 
 verus! {
 
+/// Name the runtime storage namespace separately from its consuming VM.
+pub fn runtime_namespace(target: &str) -> (out: String)
+    ensures out@ == target@ + "-runtime-store"@,
+{
+    let mut namespace = target.to_string();
+    namespace.push_str("-runtime-store");
+    namespace
+}
+
 /// Membership for owned names retained in plans and observations.
 pub open spec fn owned_member(names: Seq<String>, target: Seq<char>) -> bool {
     exists|i: int| 0 <= i < names.len() && #[trigger] names[i]@ == target

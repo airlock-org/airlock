@@ -9,8 +9,10 @@ use super::{
     records, require,
 };
 use airlock_nix_core::{
+    admission::{AdmissionReceipt, ExpectedAdmission},
     identity::*,
     review::{DeploymentPlan, PreparedPlan},
+    root_artifact::RootDescriptor,
     state::{OperationLock, StateStore},
     store_path::{StoreFile, StorePath},
 };
@@ -143,7 +145,7 @@ pub(super) fn execute(store: &StateStore, grant: &Grant, lock: &OperationLock) -
     } else {
         target.as_str()
     };
-    let mut receipt: Value = decode(&process::output(
+    let mut receipt: AdmissionReceipt = decode(&process::output(
         "airlock-usr-assistant-machine-build",
         &[
             "admit",
@@ -153,21 +155,17 @@ pub(super) fn execute(store: &StateStore, grant: &Grant, lock: &OperationLock) -
             ),
         ],
     )?)?;
-    require(
-        receipt.get("source_revision") == Some(&json!(grant.header.revision))
-            && receipt.get("lock_hash") == Some(&json!(grant.header.lock_hash))
-            && receipt.get("domain") == Some(&json!(target)),
-        "admission receipt differs from submitted candidate",
-    )?;
-
+    receipt.check_transfer(target, &grant.header.source())?;
     grant.check(lock)?;
-    receipt["review_authorization"] = json!(grant.id);
+    receipt
+        .diagnostics
+        .insert("review_authorization".into(), json!(grant.id));
     let service = if grant.header.action.is_plan() {
         "airlock.Ctrl.GuestPlan"
     } else {
         "airlock.Ctrl.GuestApply"
     };
-    let result = process::rpc(service, &receipt, None)?;
+    let result = process::rpc(service, &serde_json::to_value(&receipt)?, None)?;
     check_plan(&result, grant)?;
 
     records::save(
@@ -340,70 +338,26 @@ fn machine_metadata(topology: &Topology) -> Result<BTreeMap<StorePath, Value>> {
     Ok(result)
 }
 
-/// Admission provenance belongs to the retained generation. An unchanged
-/// generation keeps its original source identity; dom0 verifies its immutable
-/// artifacts against this candidate before accepting the receipt.
-#[derive(Deserialize)]
-struct GuestAdmission {
-    /// Wire format identifier used to reject unsupported record versions.
-    schema: String,
-    /// Storage transport expected to match direct-pool-v1.
-    transport: String,
-    /// Admission outcome expected to describe a prepared generation.
-    status: String,
-    /// Whether the admission reply claims activation; staging expects false.
-    activated: bool,
-    /// Whether storage admission marked the generation for retention.
-    retained: bool,
-    /// Guest VM to which this stored generation or observation belongs.
-    domain: GuestName,
-    /// Nonzero storage generation number identifying the admitted guest system.
-    generation: u64,
-    /// NixOS system closure selected for the guest to boot.
-    system: StorePath,
-    /// Immutable guest root image inside the Nix store.
-    root_source: StoreFile,
-    /// Qubes kernel directory name used when starting the guest.
-    kernel_name: String,
-    /// Git commit from which this guest system was built.
-    source_revision: GitRevision,
-    /// SHA-256 of flake.lock, binding the source to its dependency versions.
-    lock_hash: LockHash,
-    /// Whether admission reused an already verified guest generation.
-    #[serde(default)]
-    generation_reused: bool,
-}
-
+/// Use the shared candidate contract; dom0 still independently authenticates committed storage.
 fn check_guest_admission(
-    receipt: &Value,
+    receipt: &AdmissionReceipt,
     guest: &GuestName,
     backend: &Backend,
     grant: &Grant,
+    root: &RootDescriptor,
 ) -> Result<()> {
-    let admission: GuestAdmission = decode(&serde_json::to_vec(receipt)?)?;
-    let (system, _, root, kernel) = backend.sources()?;
-    require(
-        admission.schema == "airlock.closure-store.admission.v1"
-            && admission.transport == "qrexec"
-            && admission.status == "passed"
-            && admission.retained
-            && !admission.activated
-            && admission.generation > 0
-            && &admission.domain == guest
-            && &admission.system == system
-            && admission.root_source == *root
-            && admission.kernel_name == kernel,
-        &format!("guest admission artifacts differ from approved candidate for {guest}"),
-    )?;
-    if !admission.generation_reused {
-        require(
-            admission.source_revision == grant.header.revision
-                && admission.lock_hash == grant.header.lock_hash,
-            &format!(
-                "fresh guest admission provenance differs from approved candidate for {guest}"
-            ),
-        )?;
-    }
+    let (system, closure, source, kernel) = backend.sources()?;
+    let expected = ExpectedAdmission {
+        domain: guest.clone(),
+        system: system.clone(),
+        closure_source: closure.as_str().parse()?,
+        root_source: source.clone(),
+        kernel_name: kernel.to_owned(),
+        source_revision: grant.header.revision.clone(),
+        lock_hash: grant.header.lock_hash.clone(),
+        root_artifact: root.clone(),
+    };
+    receipt.check_expected(&expected)?;
     Ok(())
 }
 
@@ -420,7 +374,8 @@ fn send_release(
     let topology: Topology = decode(&serde_json::to_vec(&records::read_file(
         &physical.join("topology.json"),
     )?)?)?;
-    let roots = records::read_file(&physical.join("root-artifacts.json"))?;
+    let roots: BTreeMap<GuestName, RootDescriptor> =
+        serde_json::from_value(records::read_file(&physical.join("root-artifacts.json"))?)?;
     let transport = StorePath::try_from(
         fs::read_link(physical.join("transport"))?
             .to_str()
@@ -489,7 +444,7 @@ fn send_release(
 
         lock.check_path()?;
         let (system, closure, root, kernel) = domain.backend.sources()?;
-        let receipt: Value = decode(&process::output(
+        let receipt: AdmissionReceipt = decode(&process::output(
             "airlock",
             &[
                 "artifact",
@@ -518,12 +473,10 @@ fn send_release(
                 grant.header.lock_hash.as_str(),
             ],
         )?)?;
-        require(
-            roots.get(name.as_str()).is_some()
-                && receipt.get("root_artifact") == roots.get(name.as_str()),
-            "admitted root differs from built release",
-        )?;
-        check_guest_admission(&receipt, name, &domain.backend, grant)?;
+        let root = roots
+            .get(name)
+            .ok_or_else(|| Error::Message("built release has no guest root".into()))?;
+        check_guest_admission(&receipt, name, &domain.backend, grant, root)?;
         receipts.insert(name.clone(), receipt);
         records::save(store, &super::build::name(grant, "admissions"), &receipts)?;
     }
@@ -583,11 +536,16 @@ fn send_release(
             "root_allocated_bytes",
             "timings",
         ] {
-            metrics.insert(key.into(), receipt.get(key).cloned().unwrap_or(Value::Null));
+            let value = match key {
+                "generation_reused" => json!(receipt.generation_reused),
+                "root_artifact" => serde_json::to_value(&receipt.root_artifact)?,
+                _ => receipt.diagnostics.get(key).cloned().unwrap_or(Value::Null),
+            };
+            metrics.insert(key.into(), value);
         }
         guest_transfer.insert(name.to_string(), Value::Object(metrics));
-        if let Some(hash) = receipt["root_artifact"]["sha256"].as_str() {
-            root_inventory.insert(hash.into(),json!({"logical_bytes":receipt["root_logical_bytes"],"allocated_bytes":receipt["root_allocated_bytes"]}));
+        if let Some(root) = &receipt.root_artifact {
+            root_inventory.insert(root.sha256.clone(),json!({"logical_bytes":receipt.diagnostics.get("root_logical_bytes"),"allocated_bytes":receipt.diagnostics.get("root_allocated_bytes")}));
         }
     }
 

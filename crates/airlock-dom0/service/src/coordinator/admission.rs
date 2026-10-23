@@ -3,6 +3,7 @@
 
 use super::*;
 use airlock_nix_core::identity::LockHash;
+use airlock_nix_core::{admission::ExpectedAdmission, root_artifact::RootDescriptor};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -19,7 +20,7 @@ struct Admission {
     // Deployed selection and transaction at authorization time.
     state: Value,
     // Exact permitted system, closure, root and build identities for each guest.
-    guests: BTreeMap<GuestName, Value>,
+    guests: BTreeMap<GuestName, ExpectedAdmission>,
     // Fingerprint preventing release edits after preparation.
     release_fingerprint: ReleaseFingerprint,
 }
@@ -57,7 +58,8 @@ impl Coordinator {
                 && !r.topology.domains.is_empty(),
             "candidate requires direct pool admission"
         );
-        let roots: BTreeMap<GuestName, Value> = state::read(&r.path.join("root-artifacts.json"))?;
+        let roots: BTreeMap<GuestName, RootDescriptor> =
+            state::read(&r.path.join("root-artifacts.json"))?;
         ensure!(
             roots.keys().collect::<BTreeSet<_>>() == r.topology.domains.keys().collect(),
             "candidate root inventory differs from domains"
@@ -71,12 +73,24 @@ impl Coordinator {
         let plan = self.plan(&r)?;
         let mut guests = BTreeMap::new();
         for (name, d) in &r.topology.domains {
-            crate::store::validate_root_descriptor(&roots[name])?;
+            roots[name].validate()?;
             ensure!(
                 d.backend.root.source.as_str().ends_with("/root.img"),
                 "invalid candidate root source"
             );
-            guests.insert(name.clone(), json!({"domain":name,"system":d.backend.system.source,"closure_source":d.backend.store.source,"root_source":d.backend.root.source,"kernel_name":d.backend.kernel.name,"source_revision":r.manifest.revision,"lock_hash":r.manifest.lock_hash,"root_artifact":roots[name]}));
+            guests.insert(
+                name.clone(),
+                ExpectedAdmission {
+                    domain: name.clone(),
+                    system: d.backend.system.source.clone(),
+                    closure_source: d.backend.store.source.clone(),
+                    root_source: d.backend.root.source.clone(),
+                    kernel_name: d.backend.kernel.name.clone(),
+                    source_revision: r.manifest.revision.clone(),
+                    lock_hash: r.manifest.lock_hash.clone(),
+                    root_artifact: roots[name].clone(),
+                },
+            );
         }
         let record = Admission {
             schema: "airlock.machine-admission.v1".into(),

@@ -178,7 +178,7 @@
 //! | Boot/post-boot trash quarantine | Separate boot/verification policy, outside `activate` and its durable gate. The protected trash record must match the registered UUID and complete volume set before normal shutdown, autostart suppression or tag repair. Unknown power refuses enforcement; known non-halted states require shutdown. These are ordinary runtime checks, not verified deployment requests. |
 //! | Trash purge | Separate explicit maintenance confirmation and lock, not a call from `activate`. Verified intent selection checks canonical confirmation, original UUID/volumes/generation/system/manifest, retired tag and named halted state. The remove adapter consumes the publication-gated request; cleanup preserves the same VM/generation/trash root. Expiry/waiver, retained references and alias discovery remain ordinary runtime checks. This independent authority cannot be derived from a deployment request. |
 //! | Generation/host pruning and scheduled maintenance | Separate maintenance policies and locks, not calls from `activate`. Completion only writes a maintenance request. Typed policy and maintenance plans preserve candidate identities across internal handoffs. Automatic guest-pin release requires a verified `ReleaseRequest`, preserving explicit manual retention. Opaque `ProtectionInventory` interpretation proves complete and sound projection of the supplied release and journal groups, including verified guest-to-pool namespace derivation. The collector verifies the union with raw selected/running observations, committed retention fields and recent-policy choices; selected and policy-recent references must resolve. Verified `ReclaimRequest` construction excludes every supplied exact-generation and effective-system reference; the generation-forget adapter consumes that request alone. Missing exact pins refuse collection before deletion. Age-policy selection, release/profile/root pruning, filesystem reference enumeration, authenticated decoding and external deletion remain ordinary runtime-checked Rust. Logical/physical request construction and complete typed pin resolution use the verified boundaries described below. |
-//! | Admission, candidate preparation, baseline capture | Separate pre-execution protocols write protected artifacts, provenance, roots and baseline snapshots. They use their existing review/admission/boot policies; possession of a deployment request does not grant admission or arbitrary filesystem authority. |
+//! | Admission, candidate preparation, baseline capture | Separate pre-execution protocols write protected artifacts, provenance, roots and baseline snapshots. Build workers, artifact transport, sys-ctrl and dom0 share one typed admission receipt. Verified authentication compares claims with independently inspected committed storage; whole-machine binding also checks exact candidate artifacts, sender, provenance/reuse policy and complete guest evidence. Candidate generation/provenance fields come from the opaque bound collection. Existing review/admission/boot policies still govern preparation; possession of a deployment request does not grant admission or arbitrary filesystem authority. |
 //! | Boot setup/start, local development and administrative repair | Deliberate distinct policies. Checked boot carries opaque generation selections and verified retained/root/identity requests through native setup; reviewed deployment approval proofs do not apply. Raw lifecycle commands are rejected by the deployment runner. Raw non-lifecycle mutations, the native setup executable, older admitted compatibility helpers and storage subcommands remain trusted escape boundaries. |
 //! ## Trusted boundaries
 //!
@@ -366,6 +366,21 @@
 //! Copy/append/hash execution, decoded-record fingerprinting, atomic publication order and durability,
 //! complete map assembly, and discovery of pinned maps remain tested adapter obligations. These request
 //! contracts do not prove the full filesystem crash protocol or append allocator correct.
+//! Admission wire records are shared by sender and receiver; decoding a receipt alone produces no
+//! authority. The production authentication gate compares guest/runtime namespace, generation, manifest,
+//! system, complete root identity, kernel, closure hash and provenance with independent committed storage.
+//! Actual inspection, verification, retention and approval-source facts are mandatory. Whole-machine
+//! candidate binding additionally requires the controller sender, exact expected immutable artifacts and
+//! closure source, and the original protected release fingerprint. Fresh receipts require the current
+//! source; explicit reuse may preserve older provenance only after every actual artifact binding succeeds.
+//! A checked collection requires every supplied expected guest exactly once, with complete matching
+//! expectations and one original release fingerprint. Candidate generation and provenance publication
+//! reads the original evidence through verified accessors. Guest-only preparation retains its distinct
+//! sender/approval policy and does not acquire whole-machine binding authority.
+//! Root metadata validation, typed-field projection, complete topology/catalog enumeration, protected
+//! release and committed-record authentication, hashes, transport framing and candidate serialization
+//! remain adapter duties. Storage admission is not deployment activation authority; existing protected
+//! source approval, complete effect checks and durable execution gates still apply.
 //! Record decoding, faithful request-to-path dispatch, lock discipline, truthful observations and
 //! actual unlink/fsync remain trusted. Recursive removal checks mounts and does not follow symlinks,
 //! but these filesystem properties are tested adapter contracts, not Verus theorems.
@@ -396,6 +411,9 @@ pub mod recovery;
 
 /// Exact guest-generation observations required before deployment completion.
 pub mod completion;
+
+/// Candidate-bound admission evidence checked against independently inspected generations.
+pub use airlock_machine_planning::admission;
 
 /// Protection evidence shared by automatic pin release and locked storage reclamation.
 pub mod retention;

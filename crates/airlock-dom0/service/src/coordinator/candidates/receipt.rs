@@ -1,12 +1,16 @@
 //! Candidate admission keeps typed transport claims distinct from freshly inspected storage records.
-//! Validation here is ordinary Rust; deployment approval and effect execution retain their Verus gates.
+//! Shared wire types project into the production Verus authentication and candidate-binding gates.
 
 use crate::model::{
     AdmissionSender, CheckStatus, GenerationApproval, GenerationInfo, GenerationProvenance,
 };
 use crate::store::AdmissionReceipt;
-use airlock_nix_core::artifact::RootDescriptor;
-use anyhow::{Context, Result, ensure};
+use airlock_deployment_core::admission as verified;
+use airlock_nix_core::{
+    admission::{self, ExpectedAdmission},
+    root_artifact::RootDescriptor,
+};
+use anyhow::{Context, Result};
 
 /// A receipt matched against its retained, verified generation and recorded admission provenance.
 pub(super) struct CheckedAdmission {
@@ -14,73 +18,72 @@ pub(super) struct CheckedAdmission {
     receipt: AdmissionReceipt,
     // Fresh inspection; never converted back to generic JSON for decisions.
     info: GenerationInfo,
-    // Strict modern admission metadata; absent legacy metadata cannot stage a candidate.
-    approval: GenerationApproval,
+    // Opaque verified evidence; construction requires all independent storage and approval facts.
+    evidence: admission::Authenticated,
 }
 
 impl CheckedAdmission {
-    /// Refuse inactive/retention claims or identities that disagree with the actual committed generation.
+    /// Authenticate receipt claims against independently inspected, verified and retained storage.
     pub(super) fn check(receipt: AdmissionReceipt, info: GenerationInfo) -> Result<Self> {
-        ensure!(
-            receipt.status == CheckStatus::Passed && !receipt.activated && receipt.retained,
-            "receipt is not a retained inactive qrexec admission"
-        );
-        ensure!(
-            info.status == CheckStatus::Passed
-                && info.domain.as_str() == crate::store::runtime_namespace(receipt.domain.as_str())
-                && info.generation == receipt.generation,
-            "generation identity differs"
-        );
-        ensure!(
-            info.verification.status == CheckStatus::Passed
-                && info.retention.as_ref().is_some_and(|r| r.retain),
-            "admission generation is not verified and retained"
-        );
-        ensure!(
-            info.manifest == receipt.manifest
-                && info.system == receipt.system
-                && receipt.root_source.to_str() == Some(info.root_source.as_str())
-                && info.kernel_name == receipt.kernel_name,
-            "admission receipt identity mismatch"
-        );
-        ensure!(
-            info.store.closure_hash == receipt.closure_hash,
-            "admission receipt closure mismatch"
-        );
-        let root = receipt
-            .root_artifact
-            .as_ref()
-            .context("missing admission root artifact")?;
-        root.validate()?;
-        let actual: RootDescriptor = serde_json::from_value(
+        let root: RootDescriptor = serde_json::from_value(
             info.root_artifact
                 .clone()
                 .context("missing generation root artifact")?,
         )?;
-        actual.validate()?;
-        ensure!(
-            root == &actual,
-            "admission receipt identity mismatch: root artifact"
-        );
-
         let provenance: GenerationProvenance = serde_json::from_value(info.provenance.clone())
             .context("invalid generation provenance")?;
-        ensure!(
-            provenance.source_revision == receipt.source_revision
-                && provenance.lock_hash == receipt.lock_hash,
-            "receipt provenance differs from pool generation"
-        );
         let approval: GenerationApproval =
             serde_json::from_value(info.approval.clone()).context("invalid generation approval")?;
-        ensure!(
-            approval.source == info.closure_source,
-            "generation approval differs from admitted closure"
-        );
+        let inspection = admission::Inspection {
+            namespace: info.domain.as_str().to_owned(),
+            generation: info.generation.get(),
+            manifest: info
+                .manifest
+                .to_str()
+                .context("non-UTF-8 generation manifest")?
+                .to_owned(),
+            artifacts: verified::Artifacts {
+                system: info.system.as_str().to_owned(),
+                root_source: info.root_source.as_str().to_owned(),
+                kernel: info.kernel_name.clone(),
+                root: admission::root_identity(&root)?,
+            },
+            closure_source: info.closure_source.as_str().to_owned(),
+            closure_hash: info.store.closure_hash.clone(),
+            source: verified::Source {
+                revision: provenance.source_revision.as_str().to_owned(),
+                lock_hash: provenance.lock_hash.as_str().to_owned(),
+            },
+            passed: info.status == CheckStatus::Passed,
+            verified: info.verification.status == CheckStatus::Passed,
+            retained: info.retention.as_ref().is_some_and(|r| r.retain),
+            sender: match approval._approved_by {
+                AdmissionSender::Controller => admission::Sender::Controller,
+                AdmissionSender::Assistant => admission::Sender::Assistant,
+            },
+            approval_source: approval.source.as_str().to_owned(),
+        };
+        let evidence = admission::Authenticated::check(receipt.evidence()?, inspection).context(
+            "admission receipt identity mismatch or independently inspected authority mismatch",
+        )?;
         Ok(Self {
             receipt,
             info,
-            approval,
+            evidence,
         })
+    }
+
+    /// Consume independently checked storage evidence through this exact candidate's verified binding gate.
+    pub(super) fn bind(
+        self,
+        expected: &ExpectedAdmission,
+        candidate: &str,
+    ) -> Result<(AdmissionReceipt, admission::Bound)> {
+        let bound = self
+            .evidence
+            .bind(expected.evidence(candidate)?)
+            .context("admission artifacts, sender or provenance differ from candidate")?;
+        Ok((self.receipt, bound))
     }
 
     /// Original claims after comparison with the independently inspected generation.
@@ -88,19 +91,9 @@ impl CheckedAdmission {
         &self.receipt
     }
 
-    /// Publish transport evidence at the candidate's serialization boundary after validation.
-    pub(super) fn into_receipt(self) -> AdmissionReceipt {
-        self.receipt
-    }
-
     /// Complete inspection without erasing its typed identity and selection fields.
     pub(super) fn info(&self) -> &GenerationInfo {
         &self.info
-    }
-
-    /// Whole-machine binding requires the submitting controller, not a different recognized sender.
-    pub(super) fn controller(&self) -> bool {
-        matches!(self.approval._approved_by, AdmissionSender::Controller)
     }
 }
 
@@ -138,11 +131,58 @@ mod tests {
         )
     }
 
+    /// Independently declared candidate artifacts, kept separate from the admitted generation's provenance.
+    fn requirement(receipt: &Value, info: &Value) -> ExpectedAdmission {
+        serde_json::from_value(json!({
+            "domain":receipt["domain"], "system":receipt["system"], "root_source":receipt["root_source"],
+            "closure_source":info["closure_source"], "kernel_name":receipt["kernel_name"],
+            "source_revision":receipt["source_revision"], "lock_hash":receipt["lock_hash"], "root_artifact":receipt["root_artifact"],
+        })).unwrap()
+    }
+
+    #[test]
+    fn candidate_binding_checks_actual_artifacts_before_accepting_historical_provenance()
+    -> Result<()> {
+        let (receipt, info) = records();
+        let fingerprint = "c".repeat(64);
+        let mut expected = requirement(&receipt, &info);
+        expected.source_revision = "b".repeat(40).parse()?;
+        assert!(
+            checked(receipt.clone(), info.clone())?
+                .bind(&expected, &fingerprint)
+                .is_err()
+        );
+
+        let mut reused = receipt.clone();
+        reused["generation_reused"] = json!(true);
+        let (original, bound) =
+            checked(reused.clone(), info.clone())?.bind(&expected, &fingerprint)?;
+        assert_eq!(bound.generation(), original.generation.get());
+        assert_eq!(bound.source().revision, "f".repeat(40));
+        assert_eq!(bound.guest(), "app");
+
+        expected.root_artifact.sha256 = "b".repeat(64);
+        assert!(
+            checked(reused.clone(), info.clone())?
+                .bind(&expected, &fingerprint)
+                .is_err()
+        );
+        let expected = requirement(&receipt, &info);
+        let mut other_sender = info.clone();
+        other_sender["approval"]["approved_by"] = json!("usr-assistant");
+        assert!(
+            checked(reused, other_sender)?
+                .bind(&expected, &fingerprint)
+                .is_err()
+        );
+        Ok(())
+    }
+
     #[test]
     fn candidate_identity_is_checked_without_erasing_inspection_types() -> Result<()> {
         let (receipt, info) = records();
         let admission = checked(receipt.clone(), info.clone())?;
-        assert!(admission.controller());
+        assert!(admission.evidence.controller());
         // Candidate files compare retained receipts on retry; typing must preserve the wire record.
         assert_eq!(serde_json::to_value(admission.receipt())?, receipt);
         for reused in [false, true] {
@@ -183,7 +223,7 @@ mod tests {
 
         let mut other_sender = info.clone();
         other_sender["approval"]["approved_by"] = json!("usr-assistant");
-        assert!(!checked(receipt, other_sender)?.controller());
+        assert!(!checked(receipt, other_sender)?.evidence.controller());
         Ok(())
     }
 

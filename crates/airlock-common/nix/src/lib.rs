@@ -22,6 +22,12 @@ pub mod error;
 /// Validated names and source digests shared across VM boundaries.
 pub mod identity;
 
+/// Sparse boot-image identity without transport or filesystem dependencies.
+pub mod root_artifact;
+
+/// Shared guest-admission claims and candidate bindings.
+pub mod admission;
+
 #[cfg(feature = "artifacts")]
 pub mod artifact;
 

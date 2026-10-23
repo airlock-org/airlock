@@ -32,13 +32,8 @@ pub struct StorageIdentity {
     pub view_backend: String,
 }
 
-/// The optional legacy admission marker is never an installation marker.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum GenerationReceiptSchema {
-    /// Original native admission response; loaded generation projections have no marker.
-    #[serde(rename = "airlock.closure-store.admission.v1")]
-    Admission,
-}
+/// Admission protocol marker shared with build and controller components.
+pub use airlock_nix_core::admission::GenerationReceiptSchema;
 
 /// A generation projection whose domain is a storage namespace, never a consuming guest.
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -2,9 +2,9 @@
 //! Every rejection is reported over the duplex protocol as well as local stderr.
 
 use super::{artifacts, fs::*};
-use anyhow::Result;
+use airlock_nix_core::admission::ExpectedAdmission;
+use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
-use serde_json::Value;
 use std::path::PathBuf;
 
 /// Parsed store request, validated by the application's single command parser.
@@ -52,7 +52,10 @@ pub(super) fn run(command: Request) -> Result<()> {
                 receiver,
                 true,
                 expected_identity
-                    .map(|path| read::<Value>(&path))
+                    .map(|path| {
+                        read::<ExpectedAdmission>(&path)
+                            .context("invalid prepared candidate identity")
+                    })
                     .transpose()?,
             ),
         };

@@ -1,6 +1,10 @@
 //! Machine-source import and builds inside the existing private Qubes worker store.
 
-use airlock_nix_core::runtime::process;
+use airlock_nix_core::{
+    admission::AdmissionReceipt,
+    identity::{GuestName, SourceIdentity},
+    runtime::process,
+};
 use anyhow::{Context, Result, ensure};
 use clap::{Args, Subcommand};
 use flate2::read::GzDecoder;
@@ -571,7 +575,7 @@ fn build(request: &Request, action: &BuildAction) -> Result<()> {
             paths = paths.into_iter().collect::<Vec<_>>().join("\n")
         ),
     )?;
-    let receipt: Value = serde_json::from_str(&text(
+    let receipt: AdmissionReceipt = serde_json::from_str(&text(
         Command::new("airlock")
             .args(["artifact", "send", "--physical-store-root"])
             .arg(request.store.join("nix/store"))
@@ -592,21 +596,23 @@ fn build(request: &Request, action: &BuildAction) -> Result<()> {
                 &prepared.lock,
             ]),
     )?)?;
-    ensure!(
-        receipt["status"] == "passed"
-            && receipt["activated"] == false
-            && receipt["retained"] == true,
-        "admission did not create a retained inactive generation"
-    );
+    let domain: GuestName = target.parse()?;
+    let expected = SourceIdentity {
+        revision: prepared.revision.parse()?,
+        lock_hash: prepared.lock.parse()?,
+    };
+    receipt.check_transfer(&domain, &expected)?;
     let file = tempfile::Builder::new()
         .prefix("admission.")
         .suffix(".json")
         .tempfile_in(&admissions)?;
     let (_, path) = file.keep()?;
     let mut receipt = receipt;
-    receipt["receipt_path"] = json!(path);
+    receipt
+        .diagnostics
+        .insert("receipt_path".into(), json!(path));
     fs::write(&path, serde_json::to_vec_pretty(&receipt)?)?;
-    println!("{receipt}");
+    println!("{receipt}", receipt = serde_json::to_string(&receipt)?);
     Ok(())
 }
 

@@ -9,6 +9,9 @@
 //! snapshot belongs to one attempt; it is not a durable ownership ledger across
 //! crashes. A later attempt observes backing identities again through Qubes.
 
+/// Verified guest/runtime namespace derivation shared with admission matching.
+pub use airlock_machine_planning::names::runtime_namespace;
+
 use crate::inventory::PowerState;
 use vstd::prelude::*;
 
@@ -185,15 +188,6 @@ pub struct Definition {
     pub persistent: bool,
     /// Immutable views never request Qubes snapshot derivation.
     pub snap_on_start: bool,
-}
-
-/// Name the runtime storage namespace separately from its consuming VM.
-pub fn runtime_namespace(target: &str) -> (out: String)
-    ensures out@ == target@ + "-runtime-store"@,
-{
-    let mut namespace = target.to_string();
-    namespace.push_str("-runtime-store");
-    namespace
 }
 
 /// Meaning of projecting one committed software generation into its two volume roles.

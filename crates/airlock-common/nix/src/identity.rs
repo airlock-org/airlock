@@ -98,6 +98,14 @@ hex_identity!(
 );
 
 hex_identity!(
+    /// SHA-256 identifying the admitted software closure, distinct from its dependency lock.
+    ClosureHash,
+    64,
+    "closure hash",
+    "64 lowercase hexadecimal characters (SHA-256)"
+);
+
+hex_identity!(
     /// SHA-256 binding a human decision to the complete review material.
     ReviewFingerprint,
     64,
@@ -334,5 +342,51 @@ mod tests {
             assert!(name.parse::<StoreNamespace>().is_err(), "{name}");
             assert!(serde_json::from_value::<StoreNamespace>(serde_json::json!(name)).is_err());
         }
+    }
+}
+
+/// Positive storage generation identifier; zero cannot name an admitted guest system.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct GenerationId(
+    /// Positive storage generation number; zero is never a valid generation.
+    std::num::NonZeroU64,
+);
+
+impl GenerationId {
+    /// Return the positive numeric identity without converting through a wire string.
+    pub fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
+impl FromStr for GenerationId {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let value = s.parse::<u64>().map_err(|_| Error::InvalidField {
+            field: "generation",
+            expected: "a positive u64",
+        })?;
+        Self::try_from(value)
+    }
+}
+
+impl fmt::Display for GenerationId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl TryFrom<u64> for GenerationId {
+    type Error = Error;
+
+    fn try_from(value: u64) -> Result<Self> {
+        std::num::NonZeroU64::new(value)
+            .map(Self)
+            .ok_or(Error::InvalidField {
+                field: "generation",
+                expected: "a positive u64",
+            })
     }
 }

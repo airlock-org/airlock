@@ -14,6 +14,7 @@ mod util;
 pub use root::{RootDescriptor, decode as decode_root, encode as encode_root};
 
 use crate::runtime::process::OwnedChild;
+use crate::{admission::AdmissionReceipt, identity::SourceIdentity};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::{
@@ -473,7 +474,7 @@ impl Source {
         input: &mut dyn BufRead,
         output: &mut dyn Write,
         reuse_generation: bool,
-    ) -> Result<Value> {
+    ) -> Result<AdmissionReceipt> {
         component(&self.domain)?;
         validate_store_path(&self.system)?;
         validate_provenance(&self.source_revision, &self.lock_hash)?;
@@ -494,12 +495,12 @@ impl Source {
             )?;
             let probe = receiver_message(input)?;
             if probe["schema"] != PROBE_SCHEMA {
-                self.validate_receipt(&probe)?;
+                let receipt = self.validate_receipt(probe)?;
                 ensure!(
-                    probe["generation_reused"] == true,
+                    receipt.generation_reused == Some(true),
                     "invalid generation reuse response"
                 );
-                return Ok(probe);
+                return Ok(receipt);
             }
             ensure!(probe["reuse"] == false, "invalid generation reuse response");
         }
@@ -508,31 +509,33 @@ impl Source {
         let request = receiver_message(input)?;
         let manifest = self.payload(output, inventory, Some(&request))?;
         output.flush()?;
-        let receipt = receiver_message(input)?;
-        self.validate_receipt(&receipt)?;
+        let receipt = self.validate_receipt(receiver_message(input)?)?;
+        let root: Option<RootDescriptor> =
+            serde_json::from_value(manifest["root_artifact"].clone())?;
         ensure!(
-            manifest["root_artifact"] == receipt["root_artifact"],
+            root == receipt.root_artifact,
             "admission root identity differs from transferred artifact"
         );
         Ok(receipt)
     }
 
-    fn validate_receipt(&self, receipt: &Value) -> Result<()> {
+    fn validate_receipt(&self, value: Value) -> Result<AdmissionReceipt> {
+        let receipt: AdmissionReceipt =
+            serde_json::from_value(value).context("invalid pool admission receipt")?;
+        let expected = SourceIdentity {
+            revision: self.source_revision.parse()?,
+            lock_hash: self.lock_hash.parse()?,
+        };
+        receipt
+            .check_transfer(&self.domain.parse()?, &expected)
+            .context("invalid pool admission receipt")?;
         ensure!(
-            receipt["schema"] == "airlock.closure-store.admission.v1"
-                && receipt["status"] == "passed"
-                && receipt["generation"].as_u64().is_some_and(|id| id > 0)
-                && receipt["domain"] == self.domain
-                && receipt["system"] == self.system
-                && receipt["activated"] == false
-                && receipt["retained"] == true
-                && receipt["root_source"] == self.root_source
-                && receipt["kernel_name"] == self.kernel_name
-                && receipt["source_revision"] == self.source_revision
-                && receipt["lock_hash"] == self.lock_hash,
+            receipt.system.as_str() == self.system
+                && receipt.root_source.to_str() == Some(self.root_source.as_str())
+                && receipt.kernel_name == self.kernel_name,
             "invalid pool admission receipt"
         );
-        Ok(())
+        Ok(receipt)
     }
 
     /// Send through policy-controlled qrexec and require both a valid receipt and successful exit.
@@ -541,7 +544,7 @@ impl Source {
         qrexec: &str,
         admission: Option<&str>,
         reuse_generation: bool,
-    ) -> Result<Value> {
+    ) -> Result<AdmissionReceipt> {
         component(&self.domain)?;
         if let Some(admission) = admission {
             component(admission)?;

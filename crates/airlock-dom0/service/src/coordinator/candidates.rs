@@ -5,6 +5,10 @@ mod receipt;
 
 use super::*;
 use crate::store::AdmissionReceipt;
+use airlock_nix_core::{
+    admission::{BoundSet, ExpectedAdmission},
+    root_artifact::RootDescriptor,
+};
 use receipt::CheckedAdmission;
 
 impl Coordinator {
@@ -107,7 +111,11 @@ impl Coordinator {
     }
 
     /// Bind exact guest receipts and the retained host view into an immutable machine candidate.
-    pub fn machine_bind(&self, path: &Path, receipts: Value) -> Result<Value> {
+    pub fn machine_bind(
+        &self,
+        path: &Path,
+        receipts: BTreeMap<GuestName, AdmissionReceipt>,
+    ) -> Result<Value> {
         let _guard = MachineLock::acquire(
             &self.state,
             "Candidate preparation",
@@ -122,40 +130,65 @@ impl Coordinator {
             r.manifest.guest_transport == Some(GuestTransport::DirectPoolV1),
             "release does not use direct pool admission"
         );
-        let receipts: BTreeMap<GuestName, AdmissionReceipt> =
-            serde_json::from_value(receipts).context("invalid admission receipt map")?;
-        let roots: BTreeMap<GuestName, Value> = state::read(&r.path.join("root-artifacts.json"))?;
+        let roots: BTreeMap<GuestName, RootDescriptor> =
+            state::read(&r.path.join("root-artifacts.json"))?;
         ensure!(
             receipts.keys().eq(r.topology.domains.keys())
                 && roots.keys().collect::<BTreeSet<_>>() == r.topology.domains.keys().collect(),
             "admission receipts or root catalog differ from guests"
         );
         let mut manifest: Value = state::read(&r.path.join("release.json"))?;
-        manifest["guestRootArtifacts"] = serde_json::to_value(roots)?;
+        manifest["guestRootArtifacts"] = serde_json::to_value(&roots)?;
         manifest["guestProvenance"] = json!({});
         manifest["stagedGenerations"] = json!({});
+        let requirements: BTreeMap<_, _> = r
+            .topology
+            .domains
+            .iter()
+            .map(|(name, d)| {
+                (
+                    name.clone(),
+                    ExpectedAdmission {
+                        domain: name.clone(),
+                        system: d.backend.system.source.clone(),
+                        closure_source: d.backend.store.source.clone(),
+                        root_source: d.backend.root.source.clone(),
+                        kernel_name: d.backend.kernel.name.clone(),
+                        source_revision: r.manifest.revision.clone(),
+                        lock_hash: r.manifest.lock_hash.clone(),
+                        root_artifact: roots[name].clone(),
+                    },
+                )
+            })
+            .collect();
+        let expected = requirements
+            .values()
+            .map(|e| e.evidence(r.fingerprint().as_str()))
+            .collect::<Result<Vec<_>, _>>()?;
         let mut checked_receipts = BTreeMap::new();
+        let mut bound = Vec::new();
         for (key, receipt) in receipts {
-            let checked = self.receipt_identity(receipt)?;
-            let receipt = checked.receipt();
-            let name = &receipt.domain;
-            let generation = receipt.generation;
-            let revision = &receipt.source_revision;
-            let lock_hash = &receipt.lock_hash;
-            ensure!(&key == name, "admission domain differs from release");
             ensure!(
-                (revision == &r.manifest.revision && lock_hash == &r.manifest.lock_hash)
-                    || receipt.generation_reused == Some(true),
-                "admission provenance differs from release"
+                key == receipt.domain,
+                "admission domain differs from release"
             );
-            ensure!(
-                checked.controller(),
-                "whole-machine admission requires sys-ctrl"
-            );
-            manifest["guestProvenance"][key.as_str()] =
-                json!({"revision":revision,"lockHash":lock_hash});
-            manifest["stagedGenerations"][key.as_str()] = json!(generation);
-            checked_receipts.insert(key, checked.into_receipt());
+            let (receipt, evidence) = self
+                .receipt_identity(receipt)?
+                .bind(&requirements[&key], r.fingerprint().as_str())?;
+            checked_receipts.insert(key, receipt);
+            bound.push(evidence);
+        }
+        let admissions = BoundSet::new(&expected, bound, r.fingerprint().as_str().to_owned())
+            .context("incomplete or inconsistent candidate admissions")?;
+        ensure!(
+            admissions.candidate() == r.fingerprint().as_str(),
+            "admission set names another release"
+        );
+        for bound in admissions.entries() {
+            let source = bound.source();
+            manifest["guestProvenance"][bound.guest()] =
+                json!({"revision":source.revision,"lockHash":source.lock_hash});
+            manifest["stagedGenerations"][bound.guest()] = json!(bound.generation());
         }
         let mut prepared = Release::load(&r.path)?;
         prepared.manifest = serde_json::from_value(manifest.clone())?;
@@ -182,7 +215,7 @@ impl Coordinator {
     }
 
     /// Create a one-guest candidate while retaining all unchanged baseline identities.
-    pub fn guest_candidate(&self, receipt: Value) -> Result<PathBuf> {
+    pub fn guest_candidate(&self, receipt: AdmissionReceipt) -> Result<PathBuf> {
         let _guard = MachineLock::acquire(
             &self.state,
             "Guest preparation",
@@ -190,7 +223,7 @@ impl Coordinator {
             MachineOperation::Candidate,
         )?;
         self.ensure_no_pruning()?;
-        let checked = self.receipt_identity(serde_json::from_value(receipt)?)?;
+        let checked = self.receipt_identity(receipt)?;
         let receipt = checked.receipt();
         let info = checked.info();
         let name = &receipt.domain;

@@ -13,6 +13,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Errors remain distinguishable until the CLI/protocol boundary.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Sparse root metadata violates the existing boot-image identity contract.
+    #[error("{reason}")]
+    InvalidRootArtifact {
+        /// Specific format, digest or size constraint that failed.
+        reason: &'static str,
+    },
     /// Input violates a field constraint before it can become a validated value.
     #[error("invalid {field}: expected {expected}")]
     InvalidField {
@@ -129,6 +135,7 @@ impl Error {
     /// Return a stable machine-readable failure category for client branching.
     pub fn code(&self) -> &'static str {
         match self {
+            Self::InvalidRootArtifact { .. } => "invalid_root_artifact",
             Self::InvalidField { .. } => "invalid_field",
             Self::BindingMismatch { .. } => "binding_mismatch",
             Self::StaleReview => "stale_review",
@@ -150,6 +157,10 @@ impl Error {
     /// Preserve machine-readable context alongside the human diagnostic.
     pub fn report(&self) -> ErrorReport {
         let details = match self {
+            Self::InvalidRootArtifact { reason } => ErrorDetails::InvalidField {
+                field: "root artifact",
+                expected: reason,
+            },
             Self::InvalidField { field, expected } => {
                 ErrorDetails::InvalidField { field, expected }
             }

@@ -6,7 +6,13 @@ use airlock_nix_core::artifact::{
     self, ERROR_SCHEMA, FULL_SCHEMA, INCREMENTAL_SCHEMA, MAX_MESSAGE, PROBE_SCHEMA, REQUEST_SCHEMA,
     read_message, write_message,
 };
+use airlock_nix_core::{
+    admission::ExpectedAdmission,
+    identity::{GitRevision, GuestName, LockHash},
+    store_path::{StoreArtifact, StoreFile, StorePath},
+};
 use anyhow::{Context, Result, ensure};
+use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -387,25 +393,43 @@ fn validate_payload(
     Ok(objects)
 }
 
-fn candidate(inventory: &Value, identity: Option<&Value>, probe: bool) -> Result<()> {
-    if let Some(identity) = identity {
-        for key in [
-            "domain",
-            "system",
-            "closure_source",
-            "root_source",
-            "kernel_name",
-            "source_revision",
-            "lock_hash",
-        ]
-        .into_iter()
-        .chain((!probe).then_some("root_artifact"))
-        {
-            ensure!(
-                identity.get(key).is_some() && inventory.get(key) == identity.get(key),
-                "artifact differs from prepared candidate"
-            );
-        }
+/// Required candidate coordinates from a probe or full inventory; transfer metrics remain separate.
+#[derive(Deserialize)]
+struct CandidateOffer {
+    // Exact consuming guest from the incoming protocol message.
+    domain: GuestName,
+    // Exact built guest system.
+    system: StorePath,
+    // Original closure descriptor, including valid prepared child paths.
+    closure_source: StoreArtifact,
+    // Original root image source.
+    root_source: StoreFile,
+    // Paired boot kernel.
+    kernel_name: String,
+    // Submitted current source revision, independent of retained-generation provenance.
+    source_revision: GitRevision,
+    // Submitted dependency identity.
+    lock_hash: LockHash,
+    // A probe omits the root descriptor; full inventory must match it.
+    #[serde(default)]
+    root_artifact: Option<root::Descriptor>,
+}
+
+fn candidate(inventory: &Value, identity: Option<&ExpectedAdmission>, probe: bool) -> Result<()> {
+    if let Some(expected) = identity {
+        let offer: CandidateOffer = serde_json::from_value(inventory.clone())?;
+        expected.root_artifact.validate()?;
+        ensure!(
+            offer.domain == expected.domain
+                && offer.system == expected.system
+                && offer.closure_source == expected.closure_source
+                && offer.root_source == expected.root_source
+                && offer.kernel_name == expected.kernel_name
+                && offer.source_revision == expected.source_revision
+                && offer.lock_hash == expected.lock_hash
+                && (probe || offer.root_artifact.as_ref() == Some(&expected.root_artifact)),
+            "artifact differs from prepared candidate"
+        );
     }
     Ok(())
 }
@@ -714,7 +738,7 @@ pub(super) fn receive(
     domain: &str,
     approved_by: &str,
     incremental: bool,
-    identity: Option<&Value>,
+    identity: Option<&ExpectedAdmission>,
 ) -> Result<Value> {
     component(domain)?;
     ensure_pool(pool)?;
@@ -733,7 +757,11 @@ pub(super) fn receive(
         if let Some(receipt) = reuse(pool, probe, domain, approved_by)? {
             if let Some(identity) = identity {
                 ensure!(
-                    receipt["root_artifact"] == identity["root_artifact"],
+                    serde_json::from_value::<Option<root::Descriptor>>(
+                        receipt["root_artifact"].clone()
+                    )?
+                    .as_ref()
+                        == Some(&identity.root_artifact),
                     "reused root differs from candidate"
                 );
             }

@@ -2,8 +2,8 @@
 //! The stream names no files: validated extents are written into one new sparse image.
 
 use super::util::*;
+pub use crate::root_artifact::RootDescriptor;
 use anyhow::{Result, ensure};
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fs::{File, OpenOptions},
@@ -11,61 +11,7 @@ use std::{
     path::Path,
 };
 
-const MAGIC: &[u8] = b"AIRLOCK-ROOT-SPARSE-1\n";
-
-const BLOCK: u64 = 65536;
-
-/// Identity of the canonical sparse representation, rather than filesystem allocation.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RootDescriptor {
-    /// Wire format recognized by image preparation and admission.
-    schema: String,
-    /// SHA-256 of the complete sparse stream, including its header.
-    pub sha256: String,
-    /// Length of the fully reconstructed boot disk.
-    logical_bytes: u64,
-    /// Length of the canonical sparse stream.
-    payload_bytes: u64,
-    /// Filesystem format supported by the guest boot machinery.
-    format: String,
-    /// Guest boot contract required to mount the retained disk.
-    boot_abi: String,
-}
-
-impl RootDescriptor {
-    /// Reject unknown formats, malformed digests and impossible stream sizes.
-    pub fn validate(&self) -> Result<()> {
-        ensure!(
-            self.schema == "airlock.root-artifact.v1"
-                && self.format == "ext4"
-                && self.boot_abi == "airlock.nix-closure-root.v1",
-            "unsupported root artifact format"
-        );
-        ensure!(
-            self.sha256.len() == 64
-                && self
-                    .sha256
-                    .bytes()
-                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
-            "invalid root digest"
-        );
-        ensure!(
-            self.logical_bytes > 0 && self.logical_bytes <= 64 * 1024u64.pow(3),
-            "root size out of bounds"
-        );
-        ensure!(
-            (MAGIC.len() as u64 + 8
-                ..=self.logical_bytes
-                    + 12 * self.logical_bytes.div_ceil(BLOCK)
-                    + MAGIC.len() as u64
-                    + 8)
-                .contains(&self.payload_bytes),
-            "root payload size out of bounds"
-        );
-        Ok(())
-    }
-}
+use crate::root_artifact::{BLOCK, MAGIC};
 
 /// Encode a regular ext4 image into its canonical sparse identity and optional stream.
 pub fn encode(source: &Path, mut target: Option<&mut dyn Write>) -> Result<RootDescriptor> {

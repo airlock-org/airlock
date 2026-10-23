@@ -1,5 +1,5 @@
-//! Interpret machine relationships and calculate required VM lifecycle effects.
-//! These decisions grant no authority. Cargo executes the same Rust bodies that
+//! Match machine artifacts and relationships before calculating deployment effects.
+//! These decisions grant no activation authority. Cargo executes the same Rust bodies that
 //! Verus checks; configuration decoding and external observations remain adapters.
 
 #![warn(missing_docs)]
@@ -14,3 +14,6 @@ pub mod topology;
 pub mod deployment;
 
 pub mod effects;
+
+/// Guest-admission evidence matched to complete immutable candidate requirements.
+pub mod admission;

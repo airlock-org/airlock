@@ -389,15 +389,15 @@ fn run(args: Args) -> Result<Value> {
             release,
         } => c.review_bind(&request_id, &release)?,
         Action::MachineBind { release, receipts } => {
-            c.machine_bind(&release, input_value(&receipts)?)?
+            c.machine_bind(&release, serde_json::from_value(input_value(&receipts)?)?)?
         }
         Action::PreparedCheck { release } => c.prepared_check(&release)?,
         Action::GuestPlan { receipt } => {
-            let path = c.guest_candidate(input_value(&receipt)?)?;
+            let path = c.guest_candidate(serde_json::from_value(input_value(&receipt)?)?)?;
             json!({"candidate":path,"plan":c.inspect(&path)?})
         }
         Action::GuestApply { receipt } => {
-            let path = c.guest_candidate(input_value(&receipt)?)?;
+            let path = c.guest_candidate(serde_json::from_value(input_value(&receipt)?)?)?;
             json!(c.apply(&path, ApplyMode::New, None, false)?)
         }
         Action::Apply {

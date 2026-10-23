@@ -1,6 +1,10 @@
 //! Records exchanged with existing approval and closure-storage helpers.
 //! Decoding checks shape and identity; protected state and Qubes policy supply trust.
 
+pub use airlock_nix_core::admission::{
+    AdmissionSender, AdmissionTransport, CheckStatus, GuestTransport,
+};
+
 use super::{GenerationId, ReleasePath, StoreArtifact, StoreFile, StorePath};
 use airlock_nix_core::{
     identity::{
@@ -27,14 +31,6 @@ pub enum StoreMode {
     #[serde(rename = "shared-closure")]
     /// Expose immutable software through the shared-closure storage protocol.
     SharedClosure,
-}
-
-/// Supported protocol for admitting guest artifacts into pool-backed storage.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum GuestTransport {
-    #[serde(rename = "direct-pool-v1")]
-    /// Admit software directly into the existing Qubes pool using protocol version one.
-    DirectPoolV1,
 }
 
 /// Protected link from one admitted release to its human source approval.
@@ -214,16 +210,6 @@ pub enum GenerationSchema {
     V1,
 }
 
-/// Success or failure reported by a storage helper, independently of deployment status.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CheckStatus {
-    /// The named check satisfied its verification condition.
-    Passed,
-    /// The operation or check failed; its enclosing record carries the details.
-    Failed,
-}
-
 /// Guest-facing closure storage view reported by generation inspection.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenerationStore {
@@ -307,25 +293,6 @@ pub struct GenerationInfo {
     /// Additional inspection diagnostics retained without extending the typed decision fields.
     #[serde(flatten)]
     pub diagnostics: BTreeMap<String, Value>,
-}
-
-/// Transport marker required before treating new storage admission as qrexec-bound.
-#[derive(Debug, Serialize, Deserialize)]
-pub enum AdmissionTransport {
-    #[serde(rename = "qrexec")]
-    /// Use the existing Qubes RPC transport for admission.
-    Qrexec,
-}
-
-/// Recognized submitting VM named in storage admission provenance.
-#[derive(Debug, Deserialize)]
-pub enum AdmissionSender {
-    #[serde(rename = "usr-assistant")]
-    /// Accept artifacts from the configured interactive development VM.
-    Assistant,
-    #[serde(rename = "sys-ctrl")]
-    /// Accept artifacts from the configured build controller.
-    Controller,
 }
 
 /// Admission transport, sender and source identity required for newly staged output.
