@@ -97,7 +97,7 @@ fn build_release(store: &StateStore, grant: &Grant, lock: &OperationLock) -> Res
     )?)?;
     manifest(&release, grant)?;
     require(
-        identity(Path::new("/home/user/dev/airlock-machine"))? == grant.header.source(),
+        identity(Path::new("/home/user/dev/airlockos-machine"))? == grant.header.source(),
         "controller checkout changed during release build",
     )?;
     lock.check_path()?;

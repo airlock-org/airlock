@@ -269,7 +269,7 @@ fn machine_seed_installation_is_private_and_idempotent() -> Result<()> {
         command
             .arg("worker")
             .arg("--repo")
-            .arg(home.join("airlock-machine"))
+            .arg(home.join("airlockos-machine"))
             .arg("--cache")
             .arg(home.join(".cache/airlock-machine-source"))
             .arg("--state")
@@ -287,7 +287,7 @@ fn machine_seed_installation_is_private_and_idempotent() -> Result<()> {
         Ok(())
     };
     execute()?;
-    let seeded = home.join("airlock-machine");
+    let seeded = home.join("airlockos-machine");
     assert_eq!(
         git(&seeded, &["config", "airlock.seedRevision"])?,
         git(

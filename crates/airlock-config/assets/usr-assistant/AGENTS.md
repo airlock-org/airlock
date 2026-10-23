@@ -16,7 +16,7 @@ asking for permission; apply a deployment when the user's request authorizes it.
   `sys-firewall`; `sys-net` owns the network device.
 - `sys-ctrl` builds committed sources and submits validated artifacts. Dom0
   owns Xen, Qubes policy, VM configuration, and journalled deployment.
-- The editable machine checkout is `~/airlock-machine`. Start
+- The editable machine checkout is `~/airlockos-machine`. Start
   with `git status`, `AGENTS.md`, and `README.md` there.
 - Edit `src/machine.rs` for machine declarations; reusable VM and host components are in
   the admitted `airlock-config` Rust crate. `make prepare` emits a separate source tree and prints its `path:` flake

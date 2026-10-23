@@ -94,7 +94,7 @@ enum MachineCommand {
 
 #[derive(Args)]
 struct Source {
-    /// Clean committed checkout; defaults to $HOME/airlock-machine.
+    /// Clean committed checkout; defaults to $HOME/airlockos-machine.
     #[arg(long)]
     repo: Option<PathBuf>,
 }

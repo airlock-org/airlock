@@ -1,6 +1,6 @@
 # Installed-machine operations
 
-Open usr-assistant: Console and work from `~/airlock-machine`. The checkout and
+Open usr-assistant: Console and work from `~/airlockos-machine`. The checkout and
 private application data survive system updates. Local changes do not require pushing to an upstream
 remote.
 

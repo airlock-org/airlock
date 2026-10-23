@@ -7,7 +7,7 @@ branch; older lab snapshots are retained as evidence, not supported releases.
 ## Sensitive reports
 
 When GitHub private vulnerability reporting is enabled, use
-[Report a vulnerability](https://github.com/airlock-org/airlock/security/advisories/new).
+[Report a vulnerability](https://github.com/airlockos-org/airlockos/security/advisories/new).
 Repository preparation does not enable this service. Before it is available,
 request a private reporting channel from the maintainer without posting exploit
 details, credentials, or sensitive machine information in a public issue.

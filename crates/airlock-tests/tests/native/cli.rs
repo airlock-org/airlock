@@ -59,7 +59,7 @@ impl Cli {
 
     /// Create and commit a minimal source checkout with an explicit test-only Git identity.
     fn source(&self) -> Result<PathBuf> {
-        let source = self.path("home/airlock-machine");
+        let source = self.path("home/airlockos-machine");
         fs::create_dir_all(&source)?;
         fs::write(source.join("flake.lock"), "{}\n")?;
         for arguments in [

@@ -26,7 +26,7 @@ pub(super) fn inputs(revision: &str) -> NixValue {
         "airlock-apps": nix_record! {
             "flake": false,
             "type": "git",
-            "url": "https://github.com/airlock-org/airlock.git",
+            "url": "https://github.com/airlockos-org/airlockos.git",
             "dir": "crates",
             "ref": "main",
             "rev": revision,
@@ -40,7 +40,7 @@ pub(super) fn inputs(revision: &str) -> NixValue {
         "nixos-qubes": nix_record! {
             // Share the application's Git snapshot so compatibility fixes cannot drift from it.
             "type": "git",
-            "url": "https://github.com/airlock-org/airlock.git",
+            "url": "https://github.com/airlockos-org/airlockos.git",
             "dir": "crates/vendor/nixos-qubes",
             "ref": "main",
             "rev": revision,

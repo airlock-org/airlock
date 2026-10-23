@@ -41,7 +41,7 @@ fn usr_assistant_machine_build_build_script_body(apps: NixValue, tools: NixValue
                         ("configNixStoreRoot", NixValue::from("/unused")),
                         (
                             "configRepoPath",
-                            NixValue::from("/home/user/airlock-machine"),
+                            NixValue::from("/home/user/airlockos-machine"),
                         ),
                     ]),
                 );

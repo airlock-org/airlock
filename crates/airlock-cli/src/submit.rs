@@ -38,7 +38,7 @@ pub(crate) fn source(
 ) -> Result<u8> {
     let repo = match repo {
         Some(repo) => repo,
-        None => airlock_nix_core::runtime::home()?.join("airlock-machine"),
+        None => airlock_nix_core::runtime::home()?.join("airlockos-machine"),
     };
     let temp = tempfile::Builder::new()
         .prefix("airlock-nix-submit-")

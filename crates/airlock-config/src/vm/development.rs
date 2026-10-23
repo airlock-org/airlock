@@ -73,7 +73,7 @@ pub(super) fn module() -> NixValue {
                         .lib
                         .clone()
                         .select("mkDefault")
-                        .call(nix_text!("/home/{user}/airlock-machine", user = user.clone())),
+                        .call(nix_text!("/home/{user}/airlockos-machine", user = user.clone())),
                     // This privileged development VM is the Tailnet route to the lab host.
                     "allowQrexecUserSelection": true,
                 },

@@ -171,7 +171,7 @@ fn assistant_workspace_uses_existing_management_interfaces() -> Result<()> {
         includes(&report["identity"]["after"], service);
     }
     includes(&report["identity"]["before"], "qubes-qrexec-agent.service");
-    assert_eq!(report["repoPath"], "/home/user/airlock-machine");
+    assert_eq!(report["repoPath"], "/home/user/airlockos-machine");
     for (field, file) in [
         ("instructions", "AGENTS.md"),
         ("intro", "home-AGENTS.md"),
@@ -186,7 +186,7 @@ fn assistant_workspace_uses_existing_management_interfaces() -> Result<()> {
             )?
         );
     }
-    includes(&report["intro"], "~/airlock-machine");
+    includes(&report["intro"], "~/airlockos-machine");
     for action in ["plan", "apply", "status", "verify", "resume", "rollback"] {
         includes(
             &report["instructions"],

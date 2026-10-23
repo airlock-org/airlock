@@ -37,7 +37,7 @@ impl Workspace {
 
     /// The supported location of the user-owned machine repository.
     fn repo(&self) -> PathBuf {
-        self.path("home/airlock-machine")
+        self.path("home/airlockos-machine")
     }
 
     /// Build a child-local Git/home environment without changing process-global variables.

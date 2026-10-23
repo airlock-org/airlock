@@ -81,7 +81,7 @@ pub(crate) fn inline(inputs: &Inputs, vm: &VmSnapshot) -> PackageFunction {
                 hostname.merge(NixAttrs::from_expression(nix_record! {
                     "airlock": nix_record! {
                         "qubeGuest": nix_record! {
-                            "configRepoPath": "/home/user/dev/airlock-machine",
+                            "configRepoPath": "/home/user/dev/airlockos-machine",
                             "configNixPackage": package(airlock_build::Application::ControllerService),
                         },
                         "appGui": nix_record! {

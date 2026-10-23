@@ -111,7 +111,7 @@ pub(super) fn seed() -> NixValue {
                     ),
                 );
         let service = nix_record! {
-            "description": "Seed the pinned shallow airlock-machine checkout",
+            "description": "Seed the pinned shallow airlockos-machine checkout",
             "wantedBy": NixValue::list(["multi-user.target".into()]),
             "wants": NixValue::list(["airlock-qubes-rw-init.service".into()]),
             "requires": NixValue::list(["airlock-qubes-rw-init.service".into()]),

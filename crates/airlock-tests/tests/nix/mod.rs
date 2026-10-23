@@ -385,7 +385,7 @@ impl Nix {
             )
             .env(
                 format!("GIT_CONFIG_VALUE_{count}"),
-                "https://github.com/airlock-org/airlock.git",
+                "https://github.com/airlockos-org/airlockos.git",
             )
             .env("GIT_CONFIG_COUNT", (count + 1).to_string());
 

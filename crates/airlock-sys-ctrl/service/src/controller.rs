@@ -86,7 +86,7 @@ fn run(command: ControllerCommand) -> Result<u8> {
 }
 
 fn repo() -> PathBuf {
-    PathBuf::from("/home/user/dev/airlock-machine")
+    PathBuf::from("/home/user/dev/airlockos-machine")
 }
 
 fn operation_key() -> Result<airlock_nix_core::state::ResourceKey> {
