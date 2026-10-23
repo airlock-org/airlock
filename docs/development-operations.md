@@ -16,6 +16,11 @@ make machine-status DEPLOY_TARGET=user@TARGET
 make machine-verify DEPLOY_TARGET=user@TARGET
 ```
 
+Before the first deployment, a freshly flashed machine reports `image-baseline`
+with no deployment selection. Its `baseline` object identifies the image source;
+verification checks that snapshot against the host and running VM generations.
+An uninitialized baseline requires startup to finish before verification.
+
 Stop for older undeployed work, incomplete or failed deployments, a required
 reboot, or an unknown baseline. Resolve that state before preparing another
 change. Follow the full baseline and submission rules in the root [AGENTS.md](../AGENTS.md).

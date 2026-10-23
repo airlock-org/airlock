@@ -309,15 +309,19 @@ impl Coordinator {
         Ok(required)
     }
 
-    /// Verify the selected host and guests under exclusion and persist the resulting journal state.
-    pub fn verify(&self) -> Result<Record> {
+    /// Verify image generations or the selected deployment under exclusion.
+    /// Image verification reports observations without creating a deployment transaction.
+    pub fn verify(&self) -> Result<Value> {
         let mut guard = MachineLock::acquire(
             &self.state,
             "Deployment verification",
             "Verify selected and running generations",
             MachineOperation::Verify,
         )?;
-        self.verify_locked(&mut guard)
+        if self.selection()?.is_none() {
+            return self.verify_image_baseline();
+        }
+        Ok(serde_json::to_value(self.verify_locked(&mut guard)?)?)
     }
 
     pub(super) fn verify_locked(&self, guard: &mut MachineLock) -> Result<Record> {

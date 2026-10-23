@@ -58,6 +58,8 @@ mod verification;
 
 mod recovery;
 
+mod baseline;
+
 impl Coordinator {
     fn store(&self) -> Store<'_> {
         Store::new(&self.runner)
@@ -142,16 +144,29 @@ impl Coordinator {
 
     /// Report the selected release, current transaction and machine-lock diagnostics.
     pub fn status(&self) -> Result<Value> {
-        let mut result = state::optional::<Value>(&self.state.join("latest.json"))?
+        let latest = self.current()?;
+        let mut result = latest
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()?
             .unwrap_or(json!({"phase":"image-baseline"}));
-        ensure!(result.is_object(), "invalid latest record");
 
         let current = state::host()?;
-        result["selection"] = serde_json::to_value(self.selection()?)?;
+        let selection = self.selection()?;
+        result["selection"] = serde_json::to_value(&selection)?;
         result["lock"] = serde_json::to_value(lock::status(&self.state.join("lock"))?)?;
         result["host_running_now"] = json!(current);
-        result["host_matches_selection"] =
-            json!(result.get("host_selected") == Some(&json!(current)));
+        result["host_matches_selection"] = selection
+            .as_ref()
+            .map(|_| json!(result.get("host_selected") == Some(&json!(current))))
+            .unwrap_or(Value::Null);
+        if latest.is_none() {
+            let baseline = self.image_baseline()?.summary();
+            result["revision"] = baseline["revision"].clone();
+            result["lock_hash"] = baseline["lock_hash"].clone();
+            result["host_matches_baseline"] = baseline["host_matches_baseline"].clone();
+            result["baseline"] = baseline;
+        }
 
         Ok(result)
     }
@@ -169,17 +184,9 @@ impl Coordinator {
     }
 
     fn initialize_baseline(&self) -> Result<()> {
-        let source: Value = state::configuration(Path::new(
-            "/run/current-system/etc/airlock/machine-source.json",
-        ))?;
-        ensure!(
-            source["schema"] == "airlock.machine-source.v1",
-            "deployed source baseline is unavailable for review"
-        );
-        let revision: airlock_nix_core::identity::GitRevision =
-            serde_json::from_value(source["revision"].clone())?;
-        let lock_hash: airlock_nix_core::identity::LockHash =
-            serde_json::from_value(source["lockHash"].clone())?;
+        let source = baseline::installed_source()?;
+        let revision = source.revision;
+        let lock_hash = source.lock_hash;
         let raw: Value = state::read(Path::new("/var/lib/airlock/system/current-topology.json"))?;
         let topology: Topology = serde_json::from_value(raw.clone())?;
         topology.validate()?;

@@ -448,6 +448,12 @@ fn namespace_conflicting_recovery_records_fail_before_effects() -> Result<()> {
     save(&path, &original)?;
     // Missing initial selection is ambiguous about completion, but not about the two possible releases.
     fs::remove_file(&path)?;
+    let before = machine.calls()?.len();
+    error(
+        &machine.run(&["verify"], None, false)?,
+        "deployment history exists without a selection",
+    );
+    assert_eq!(machine.calls()?.len(), before);
     machine.reload()?;
     machine.data.as_object_mut().unwrap().remove("fail");
     machine.persist()?;
@@ -1199,7 +1205,7 @@ fn namespace_trash_purge_rechecks_references_and_is_idempotent() -> Result<()> {
 #[test]
 #[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]
 fn namespace_fresh_image_review_uses_installed_source() -> Result<()> {
-    let machine = Machine::new()?;
+    let mut machine = Machine::new()?;
     let topology = read(machine.physical(&machine.baseline).join("topology.json"))?;
     fs::remove_dir_all(machine.physical(&machine.baseline))?;
     save(
@@ -1207,11 +1213,82 @@ fn namespace_fresh_image_review_uses_installed_source() -> Result<()> {
         &json!({"schema": "airlock.machine-source.v1", "revision": revision(), "lockHash": lock_hash()}),
     )?;
     save(machine.path("system/current-topology.json"), &topology)?;
+    let status = machine.run(&["status"], None, true)?;
+    assert_eq!(status["phase"], "image-baseline");
+    assert_eq!(status["revision"], revision());
+    assert_eq!(status["baseline"]["initialized"], false);
+    assert!(status["host_matches_selection"].is_null());
+    error(&machine.run(&["verify"], None, false)?, "finish startup");
+    assert!(!machine.physical(&machine.baseline).exists());
+
     let result = machine.context("machine", None)?;
     assert_eq!(result["baseline"], revision());
     assert_eq!(
         read(machine.physical(&machine.baseline).join("release.json"))?["lockHash"],
         lock_hash()
+    );
+    let manifest = machine.physical(&machine.baseline).join("release.json");
+    let before = fs::read(&manifest)?;
+    let verified = machine.run(&["verify"], None, true)?;
+    assert_eq!(verified["status"], "passed");
+    assert_eq!(verified["phase"], "image-baseline");
+    assert_eq!(
+        verified["observed"]["usr-home"]["running"],
+        store("usr-home-system", 1)
+    );
+    assert_eq!(fs::read(&manifest)?, before);
+    assert!(!machine.path("machine/selection.json").exists());
+    assert!(!machine.path("machine/latest.json").exists());
+    let status = machine.run(&["status"], None, true)?;
+    assert_eq!(status["baseline"]["initialized"], true);
+    assert_eq!(status["host_matches_baseline"], true);
+    assert_eq!(status["baseline"]["source_matches_image"], true);
+
+    let original_manifest = read(&manifest)?;
+    let mut changed_manifest = original_manifest.clone();
+    changed_manifest["host"] = json!(store("wrong-host", 1));
+    save(&manifest, &changed_manifest)?;
+    assert_eq!(
+        machine.run(&["status"], None, true)?["host_matches_baseline"],
+        false
+    );
+    error(
+        &machine.run(&["verify"], None, false)?,
+        "running host or profile",
+    );
+    save(&manifest, &original_manifest)?;
+
+    let mut changed = topology;
+    changed["domains"]["usr-home"]["prefs"]["memory"] = json!(4096);
+    save(machine.path("system/current-topology.json"), &changed)?;
+    error(
+        &machine.run(&["verify"], None, false)?,
+        "applied topology differs",
+    );
+    save(
+        machine.path("system/current-topology.json"),
+        &read(machine.physical(&machine.baseline).join("topology.json"))?,
+    )?;
+    save(
+        machine.path("host/etc/airlock/machine-source.json"),
+        &json!({"schema":"airlock.machine-source.v1", "revision":"c".repeat(40), "lockHash":lock_hash()}),
+    )?;
+    assert_eq!(
+        machine.run(&["status"], None, true)?["baseline"]["source_matches_image"],
+        false
+    );
+    error(&machine.run(&["verify"], None, false)?, "source differs");
+    save(
+        machine.path("host/etc/airlock/machine-source.json"),
+        &json!({"schema":"airlock.machine-source.v1", "revision":revision(), "lockHash":lock_hash()}),
+    )?;
+    machine.data["generations"]["usr-home:1"]["system"] = json!(store("wrong-system", 1));
+    machine.data["features"]["usr-home"]["airlock-system-source"] =
+        json!(store("usr-home-system", 1));
+    machine.persist()?;
+    error(
+        &machine.run(&["verify"], None, false)?,
+        "generation system differs",
     );
     Ok(())
 }
