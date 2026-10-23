@@ -86,13 +86,19 @@ fn export_snapshot(settings: &Value) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Render arguments containing shell and desktop metacharacters through the real authoring API.
+/// Render command arguments and capture hooks through the real authoring and module APIs.
 pub(super) fn commands(settings: &Value) -> Result<NixValue, String> {
+    use airlock_machine_core::services::CaptureSenderConfig;
     use airlock_sys_gui_service::{
         authoring::{self, Sources},
         command::{CaptureAction, DesktopCommand},
     };
-    use rusix::{interop::NixPath, nix_record};
+    use rusix::{
+        installation::{self, CollisionChecks},
+        interop::NixPath,
+        nix_record,
+        nixos::ContextualModule,
+    };
 
     let package: NixValue = settings["package"]
         .as_str()
@@ -106,9 +112,10 @@ pub(super) fn commands(settings: &Value) -> Result<NixValue, String> {
         .as_str()
         .ok_or("expected literal argument")?;
 
+    let lib = NixValue::builtin("import").call(library);
     let pkgs = nix_record! {
         "writeShellApplication": NixValue::function(|_| nix_record! { "outPath": package }),
-        "lib": NixValue::builtin("import").call(library),
+        "lib": lib.clone(),
     };
     let source = NixPath::from_expression("/unneeded-source".into());
     let service = authoring::deployment(&pkgs, &Sources::new(source.clone(), source));
@@ -117,8 +124,40 @@ pub(super) fn commands(settings: &Value) -> Result<NixValue, String> {
         action: CaptureAction::CheckConfig,
     };
 
+    let sender = installation::compose(
+        "capture-hook-test",
+        CollisionChecks::Enabled,
+        [service.capture_sender(&CaptureSenderConfig::default())],
+    )
+    .map_err(|error| error.to_string())?;
+    let module = ContextualModule::new(|_| sender).into_expression();
+    let configured = lib.clone().select("evalModules").call(nix_record! {
+        "modules": NixValue::list([
+            module,
+            nix_record! {
+                "_module": nix_record! {
+                    "freeformType": lib.select("types.attrsOf").call(
+                        pkgs.clone().select("lib.types.anything")
+                    ),
+                },
+            },
+        ]),
+    });
+    let overlay = NixValue::builtin("head").call(configured.select("config.nixpkgs.overlays"));
+    // Deliberately omit the final newline to exercise the boundary between build hooks.
+    let previous = nix_record! {
+        "gnome-shell": nix_record! {
+            "overrideAttrs": NixValue::function(|update| update.call(nix_record! {
+                "patches": NixValue::list(["upstream.patch".into()]),
+                "postPatch": "printf '%s\\n' upstream",
+            })),
+        },
+    };
+    let capture = overlay.call(pkgs).call(previous).select("gnome-shell");
+
     Ok(nix_record! {
         "shell": service.shell_command(&command),
         "desktop": service.desktop_command(&command),
+        "capture": capture,
     })
 }

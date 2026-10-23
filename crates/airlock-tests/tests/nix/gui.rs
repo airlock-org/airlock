@@ -39,7 +39,7 @@ fn authoring_does_not_require_runtime_dependencies() -> Result<()> {
     Ok(())
 }
 
-/// Execute rendered shell and desktop commands against a Rust argument recorder.
+/// Execute rendered commands and preserve upstream behavior when extending capture build hooks.
 #[test]
 #[ignore = "requires explicitly prepared offline Nix sources and gio"]
 fn rendered_commands_preserve_literal_arguments() -> Result<()> {
@@ -87,5 +87,30 @@ Exec={exec}
             json!(["screen-capture", "check-config", "--config", argument])
         );
     }
+
+    let capture = &commands["capture"];
+    let patches = capture["patches"].as_array().unwrap();
+    assert_eq!(patches[0], "upstream.patch");
+    assert!(
+        patches
+            .last()
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .ends_with("/patches/gnome-shell/0001-completed-capture-handoff.patch")
+    );
+
+    let script = format!(
+        r#"
+            substituteInPlace() {{ printf '%s\n' substitution; }}
+            {hook}
+        "#,
+        hook = capture["postPatch"].as_str().unwrap(),
+    );
+    let output = common::run(Command::new("sh").args(["-eu", "-c", &script]), None)?.checked()?;
+    assert_eq!(
+        String::from_utf8(output)?.lines().collect::<Vec<_>>(),
+        ["upstream", "substitution", "substitution"]
+    );
     Ok(())
 }
