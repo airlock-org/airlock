@@ -166,7 +166,9 @@ pub(crate) fn observe(
             .into_iter()
             .collect()
     } else {
-        BTreeSet::new()
+        airlock_machine_core::boot::foreground_guests(topology)?
+            .into_iter()
+            .collect()
     };
     if policy.desktop {
         names.insert("sys-gui".parse()?);

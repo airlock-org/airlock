@@ -133,17 +133,20 @@ pub(crate) fn domain(inputs: &Inputs, vm: &VmSnapshot) -> DomainArguments {
     let (vm_role, autostart, virtualization) = match role {
         Role::Isolated { .. } => ("base", false.into(), Virtualization::Pvh),
         Role::NetworkDriver { .. } => {
+            features.insert("airlock-boot-foreground", "1");
             features.insert("airlock-auto-network-pci", "1");
             features.insert("airlock-network-provider", name.as_str());
             services.insert("network-manager", true);
             ("sys-net", true.into(), Virtualization::Hvm)
         }
         Role::Firewall { .. } => {
+            features.insert("airlock-boot-foreground", "1");
             features.insert("airlock-network-provider", name.as_str());
             features.insert("servicevm", "1");
             ("sys-firewall", !inputs.network_debug(), Virtualization::Pvh)
         }
         Role::Personal { .. } => {
+            features.insert("airlock-boot-foreground", "1");
             features.insert("airlock-label-color", "0x6b7a3d");
             features.insert("airlock-gui-reconnect", "1");
             features.insert("menu-items", "*");

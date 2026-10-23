@@ -1,7 +1,10 @@
 //! Boot-time VM readiness and declared network-provider startup through existing Qubes tools.
 //! These local boot commands retain their own policy, separate from reviewed deployment execution.
 
-use crate::process::{Captured, Runner};
+use crate::{
+    boot::{self, GuestState},
+    process::{Captured, Runner},
+};
 use airlock_machine_core::boot::{GUEST_READY_SECONDS, GUEST_START_SECONDS};
 use airlock_nix_core::identity::GuestName;
 use anyhow::{Context, Result, bail, ensure};
@@ -158,21 +161,31 @@ fn capture(
     Ok(output)
 }
 
-/// Notify the existing supervisor without granting this command additional RPC authority.
-fn supervise(action: &str, domain: &str, detail: &str) -> Result<()> {
-    Runner::default().run(
-        path("AIRLOCK_BOOT_SERVICE", "airlock-dom0-service"),
-        &[
-            "boot-supervisor".into(),
-            "guest".into(),
-            domain.into(),
-            action.into(),
-            detail.into(),
-        ],
-        Duration::from_secs(60),
-        &[],
-    )?;
-    Ok(())
+/// Publish progress locally; fixture overrides retain the existing transport seam.
+fn supervise(phase: GuestState, domain: &GuestName, detail: &str) -> Result<()> {
+    if let Some(program) = std::env::var_os("AIRLOCK_BOOT_SERVICE") {
+        Runner::default().run(
+            program,
+            &[
+                "boot-supervisor".into(),
+                "guest".into(),
+                domain.as_str().into(),
+                match phase {
+                    GuestState::Waiting => "waiting",
+                    GuestState::Starting => "starting",
+                    GuestState::Ready => "ready",
+                    GuestState::Failed => "failed",
+                }
+                .into(),
+                detail.into(),
+            ],
+            Duration::from_secs(60),
+            &[],
+        )?;
+        return Ok(());
+    }
+
+    boot::guest_checkpoint(domain, phase, detail)
 }
 
 /// Match the existing guest probe; each forwarding unit must independently be active.
@@ -256,8 +269,8 @@ fn wait(
                     "{domain} stopped during readiness checks"
                 );
                 return supervise(
-                    "ready",
-                    domain,
+                    GuestState::Ready,
+                    &domain.parse()?,
                     &format!("{domain} is qrexec-ready on {expected}"),
                 );
             }
@@ -311,8 +324,8 @@ pub(crate) fn start(request: Ready) -> Result<()> {
         .open(directory.join(format!("start-{domain}.log")))?;
     let result = (|| {
         supervise(
-            "starting",
-            domain,
+            GuestState::Starting,
+            &request.domain,
             &format!("starting {domain}; expecting {expected}"),
         )?;
         writeln!(
@@ -323,7 +336,7 @@ pub(crate) fn start(request: Ready) -> Result<()> {
     })();
     if let Err(error) = &result {
         writeln!(log, "{error:#}")?;
-        let _ = supervise("failed", domain, &format!("{error:#}"));
+        let _ = supervise(GuestState::Failed, &request.domain, &format!("{error:#}"));
     }
     result
 }

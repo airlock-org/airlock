@@ -74,6 +74,15 @@ pub fn execute(root: &Path, program: &str, original: &[String]) -> Result<()> {
             .context("command target")
     };
     match program.as_str() {
+        "qvm-check" => {
+            ensure!(
+                data["running"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!(last()?)),
+                "fixture guest is not running"
+            );
+        }
         "qvm-ls" => {
             if arguments.iter().any(|value| value == "--raw-list") {
                 println!("dom0");

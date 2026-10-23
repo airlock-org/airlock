@@ -8,6 +8,84 @@ use airlock_nix_core::identity::LockHash;
 use serde::{Deserialize, Serialize};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
+/// Bound simultaneous guest boots to avoid exhausting memory during startup.
+const BOOT_START_CONCURRENCY: usize = 2;
+
+/// Group independent starts while preserving every declared provider relationship.
+fn start_batches(
+    starts: &[GuestName],
+    running: &BTreeSet<GuestName>,
+    dependencies: &BTreeMap<GuestName, BTreeSet<GuestName>>,
+) -> Result<Vec<Vec<GuestName>>> {
+    let mut pending = starts
+        .iter()
+        .filter(|name| !running.contains(*name))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let mut batches = Vec::new();
+    while !pending.is_empty() {
+        let batch = starts
+            .iter()
+            .filter(|name| {
+                pending.contains(*name)
+                    && dependencies
+                        .get(*name)
+                        .is_none_or(|parents| parents.is_disjoint(&pending))
+            })
+            .take(BOOT_START_CONCURRENCY)
+            .cloned()
+            .collect::<Vec<_>>();
+        ensure!(!batch.is_empty(), "autostart VM dependency cycle");
+        for name in &batch {
+            pending.remove(name);
+        }
+        batches.push(batch);
+    }
+    Ok(batches)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Ready network providers can precede two independent application boots in one batch.
+    #[test]
+    fn startup_batches_keep_dependencies_and_bound_concurrency() -> Result<()> {
+        let net: GuestName = "sys-net".parse()?;
+        let firewall: GuestName = "sys-firewall".parse()?;
+        let assistant: GuestName = "usr-assistant".parse()?;
+        let home: GuestName = "usr-home".parse()?;
+        let controller: GuestName = "sys-ctrl".parse()?;
+        let starts = vec![
+            net.clone(),
+            firewall.clone(),
+            assistant.clone(),
+            home.clone(),
+            controller.clone(),
+        ];
+        let dependencies = BTreeMap::from([
+            (firewall.clone(), BTreeSet::from([net.clone()])),
+            (assistant.clone(), BTreeSet::from([firewall.clone()])),
+            (home.clone(), BTreeSet::from([firewall.clone()])),
+            (controller.clone(), BTreeSet::from([firewall.clone()])),
+        ]);
+        assert_eq!(
+            start_batches(&starts, &BTreeSet::new(), &dependencies)?,
+            vec![
+                vec![net.clone()],
+                vec![firewall.clone()],
+                vec![assistant.clone(), home.clone()],
+                vec![controller.clone()],
+            ]
+        );
+        assert_eq!(
+            start_batches(&starts, &BTreeSet::from([net, firewall]), &dependencies)?,
+            vec![vec![assistant, home], vec![controller]]
+        );
+        Ok(())
+    }
+}
+
 mod snapshot;
 
 #[derive(Serialize, Deserialize)]
@@ -274,47 +352,6 @@ impl Coordinator {
         )
     }
 
-    fn gui_domains(&self, topology: &Topology) -> Result<Vec<GuestName>> {
-        let gui: GuestName = "sys-gui".parse()?;
-        ensure!(
-            topology.domains.contains_key(&gui),
-            "physical GUI startup requires a declared sys-gui"
-        );
-        let mut deps = planning::dependencies(topology, false)?;
-        if let Some(default) = topology.prefs.get("default_netvm").and_then(Value::as_str) {
-            for (name, domain) in &topology.domains {
-                if domain.netvm.is_inherited() && default != name.as_str() {
-                    let default: GuestName = default.parse()?;
-                    if topology.domains.contains_key(&default) {
-                        deps.get_mut(name)
-                            .context("missing dependencies")?
-                            .insert(default);
-                    }
-                }
-            }
-        }
-        let mut names = BTreeSet::from([gui]);
-        loop {
-            let mut next = names.clone();
-            for n in &names {
-                next.extend(
-                    deps.get(n)
-                        .context("undeclared GUI dependency")?
-                        .iter()
-                        .cloned(),
-                );
-            }
-            if next == names {
-                break;
-            }
-            names = next;
-        }
-        Ok(planning::ordered(topology)?
-            .into_iter()
-            .filter(|n| names.contains(n))
-            .collect())
-    }
-
     fn scoped_topology(&self, selection: &BootSelection, names: &[GuestName]) -> Result<Value> {
         let mut raw = selection.inputs.raw().clone();
         raw["domains"]
@@ -465,7 +502,7 @@ impl Coordinator {
             "scoped boot setup accepts only --apply and one scope"
         );
         let started = Instant::now();
-        let gui_names = self.gui_domains(selected.inputs.topology())?;
+        let gui_names = airlock_machine_core::boot::foreground_guests(selected.inputs.topology())?;
         let names = if gui {
             gui_names.clone()
         } else {
@@ -542,8 +579,27 @@ impl Coordinator {
         }
         if gui {
             public_save(&runtime.join("gui-setup-result.json"), &result)?;
+            // Qubes updates running clients when their GUI provider starts. Boot their
+            // headless services now, keeping the physical startup screen visible until
+            // the home VM and network path are ready for the guarded GPU handoff.
             for name in &gui_names {
                 if name.as_str() != "sys-gui" {
+                    if let Some(device) = std::env::var_os("AIRLOCK_SETUP_CONFIG_STATUS_DEVICE")
+                        .filter(|path| !path.is_empty())
+                    {
+                        let _ = fs::write(
+                            device,
+                            format!(
+                                "\x1b[H\x1b[J
+  Airlock | Startup
+
+  Starting and checking {name}…
+
+  Your desktop will appear when home and network services are ready.
+"
+                            ),
+                        );
+                    }
                     self.runner.run(
                         "airlock-start-qube-ready",
                         &[
@@ -662,39 +718,41 @@ impl Coordinator {
             false,
         )?
         .start;
+        let batches = start_batches(
+            &starts,
+            &running,
+            &planning::dependencies(selected.inputs.topology(), false)?,
+        )?;
+        let topology_path = runtime()?.join("autostart-topology.json");
+        public_save(&topology_path, selected.inputs.raw())?;
+        let executable = std::env::current_exe()?;
         let mut started = Vec::new();
-        for name in &starts {
-            crate::boot::guest_checkpoint(
-                name,
-                crate::boot::GuestState::Starting,
-                &format!("Starting {name}"),
+        for batch in batches {
+            let arguments = batch
+                .iter()
+                .map(|name| {
+                    vec![
+                        "start-qube-ready".into(),
+                        name.as_str().into(),
+                        topology_path.as_os_str().to_owned(),
+                    ]
+                })
+                .collect::<Vec<_>>();
+            let outputs = self.runner.boot_workers(
+                &executable,
+                &arguments,
+                Duration::from_secs(airlock_machine_core::boot::GUEST_HELPER_SECONDS),
+                &[],
             )?;
-            if !self.running()?.contains(name)
-                && self
-                    .runner
-                    .run(
-                        "qvm-start",
-                        &["--skip-if-running".into(), name.as_str().into()],
-                        Duration::from_secs(180),
-                        &[],
-                    )
-                    .is_ok()
-            {
+            for (name, output) in batch.into_iter().zip(outputs) {
+                ensure!(
+                    output.status.success() && !output.limited,
+                    "{name} failed to become ready: {status}; {error}",
+                    status = output.status,
+                    error = String::from_utf8_lossy(&output.stderr),
+                );
                 started.push(name);
             }
-            if let Err(error) = self.wait_guest(name, &selected.inputs.topology().domains[name]) {
-                crate::boot::guest_checkpoint(
-                    name,
-                    crate::boot::GuestState::Failed,
-                    &format!("{name} could not become ready: {error:#}"),
-                )?;
-                return Err(error);
-            }
-            crate::boot::guest_checkpoint(
-                name,
-                crate::boot::GuestState::Ready,
-                &format!("{name} is ready"),
-            )?;
         }
         let baseline = self.baseline()?;
         let observed =

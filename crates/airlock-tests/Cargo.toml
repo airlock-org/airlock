@@ -37,6 +37,7 @@ tempfile = "3.0"
 airlock-vm-service = { path = "../airlock-vm/service" }
 
 [dev-dependencies]
+airlock-machine-core = { path = "../airlock-common/machine" }
 png = "0.18"
 libloading = "0.8"
 x11rb = { version = "0.13", features = ["res"] }

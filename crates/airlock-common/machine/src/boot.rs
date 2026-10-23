@@ -3,8 +3,10 @@
 //! and dependency semantics. Neither representation grants deployment approval.
 
 use crate::{model::Topology, planning};
-use anyhow::{Context, Result};
+use airlock_nix_core::identity::GuestName;
+use anyhow::{Context, Result, ensure};
 use serde_json::Value;
+use std::collections::BTreeSet;
 
 /// Default budget for Qubes to start one guest, before readiness polling begins.
 pub const GUEST_START_SECONDS: u64 = 240;
@@ -17,6 +19,45 @@ pub const GUEST_HELPER_SECONDS: u64 = GUEST_START_SECONDS + GUEST_READY_SECONDS 
 
 /// Additional time for systemd pre/post commands surrounding the native helper.
 pub const BOOT_UNIT_OVERHEAD_SECONDS: u64 = 120;
+
+/// Select the GUI, explicitly foreground guests and their local dependency closure.
+/// These VMs must be configured and usable before the physical display leaves startup.
+pub fn foreground_guests(topology: &Topology) -> Result<Vec<GuestName>> {
+    let gui: GuestName = "sys-gui".parse()?;
+    ensure!(
+        topology.domains.contains_key(&gui),
+        "physical GUI startup requires a declared sys-gui"
+    );
+    let mut names = BTreeSet::from([gui]);
+    for (name, domain) in &topology.domains {
+        match domain.features.get("airlock-boot-foreground") {
+            None => {}
+            Some(Value::String(value)) if value == "0" => {}
+            Some(Value::String(value)) if value == "1" => {
+                names.insert(name.clone());
+            }
+            Some(_) => anyhow::bail!("{name}: invalid foreground boot preference"),
+        }
+    }
+    let dependencies = planning::dependencies(topology, false)?;
+    loop {
+        let before = names.len();
+        let parents = names
+            .iter()
+            .flat_map(|name| dependencies.get(name).into_iter().flatten())
+            .filter(|name| topology.domains.contains_key(*name))
+            .cloned()
+            .collect::<Vec<_>>();
+        names.extend(parents);
+        if before == names.len() {
+            break;
+        }
+    }
+    Ok(planning::ordered(topology)?
+        .into_iter()
+        .filter(|name| names.contains(name))
+        .collect())
+}
 
 /// One immutable boot input accepted by the runtime topology and graph decoders.
 /// Keep this value across planning so later code cannot replace the declaration

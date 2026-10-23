@@ -283,6 +283,7 @@ name = "airlock-tests"
 version = "0.1.0"
 dependencies = [
  "airlock-dom0-service",
+ "airlock-machine-core",
  "airlock-nix-core",
  "airlock-qubes",
  "airlock-vm-service",

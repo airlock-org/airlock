@@ -23,6 +23,37 @@ fn error(value: &Value, expected: &str) {
     );
 }
 
+/// The foreground set includes the home VM's inherited network path while leaving the controller deferred.
+#[test]
+fn foreground_boot_includes_home_and_its_network_dependencies() -> Result<()> {
+    let mut home = declaration("usr-home", 1);
+    home["features"]["airlock-boot-foreground"] = json!("1");
+    home.as_object_mut().unwrap().remove("netvm");
+    home["prefs"]["guivm"] = json!("sys-gui");
+    let mut firewall = declaration("sys-firewall", 1);
+    firewall["netvm"] = json!("sys-net");
+    let mut controller = declaration("sys-ctrl", 1);
+    controller["prefs"]["autostart"] = json!(false);
+    let raw = json!({"schema":"airlock.qubes-topology.v1", "prefs":{"default_netvm":"sys-firewall"}, "domains":{
+        "sys-gui":declaration("sys-gui", 1), "usr-home":home,
+        "sys-net":declaration("sys-net", 1), "sys-firewall":firewall, "sys-ctrl":controller
+    }});
+    let inputs = airlock_machine_core::boot::BootInputs::new(raw.clone())?;
+    let names = airlock_machine_core::boot::foreground_guests(inputs.topology())?;
+    let names = names.iter().map(|name| name.as_str()).collect::<Vec<_>>();
+    assert_eq!(names.len(), 4);
+    assert!(names.contains(&"sys-gui"));
+    let position = |name| names.iter().position(|value| *value == name).unwrap();
+    assert!(position("sys-net") < position("sys-firewall"));
+    assert!(position("sys-firewall") < position("usr-home"));
+
+    let mut malformed = raw;
+    malformed["domains"]["usr-home"]["features"]["airlock-boot-foreground"] = json!(true);
+    let malformed = airlock_machine_core::boot::BootInputs::new(malformed)?;
+    assert!(airlock_machine_core::boot::foreground_guests(malformed.topology()).is_err());
+    Ok(())
+}
+
 /// Review, preparation, activation and verification share one approval and do not repeat completed work.
 #[test]
 #[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]
@@ -660,9 +691,26 @@ fn namespace_candidate_binding_checks_pool_identity_and_baseline() -> Result<()>
 fn namespace_boot_cache_checks_persistent_disks_before_reuse() -> Result<()> {
     let mut machine = Machine::new()?;
     machine.configure_boot(false)?;
+    let path = machine.physical(&machine.baseline).join("topology.json");
+    let mut topology = read(&path)?;
+    topology["domains"]["usr-home"]["features"]["airlock-boot-foreground"] = json!("1");
+    save(path, &topology)?;
+    save(machine.path("etc/qubes-topology.json"), &topology)?;
     let first = machine.run(&["boot-setup", "--gui", SETUP, "--apply"], None, true)?;
     assert_eq!(first["scope"], "gui");
     assert_eq!(first["reused"], false);
+    assert!(
+        first["domains"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("usr-home"))
+    );
+    assert!(
+        machine
+            .calls()?
+            .iter()
+            .any(|call| call[0] == "airlock-start-qube-ready" && call[1] == "usr-home")
+    );
     assert_eq!(
         machine.run(
             &["boot-setup", "--background", SETUP, "--apply"],

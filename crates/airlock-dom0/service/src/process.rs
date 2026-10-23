@@ -64,6 +64,22 @@ struct OwnedChild {
     child: Option<Child>,
     /// Process-group identity retained for cancelling all owned helpers.
     group: Pid,
+    /// A batch delays orphan cleanup until every sibling process group has stopped.
+    reap_orphans: bool,
+}
+
+/// Own all concurrent helpers before allowing process-wide orphan cleanup.
+#[derive(Default)]
+struct ChildBatch {
+    /// Process groups whose leaders remain owned until completion or cancellation.
+    children: Vec<OwnedChild>,
+}
+
+impl Drop for ChildBatch {
+    fn drop(&mut self) {
+        self.children.clear();
+        let _ = reap_descendants(Instant::now() + CLEANUP_TIMEOUT);
+    }
 }
 
 fn exited(pid: Pid) -> Result<bool> {
@@ -80,7 +96,7 @@ fn exited(pid: Pid) -> Result<bool> {
 }
 
 fn reap_descendants(deadline: Instant) -> Result<()> {
-    // Runner is the sole child owner in this single-threaded executable. A
+    // Runner owns all helpers in this single-threaded executable. A
     // subreaper adopts orphaned grandchildren, including ones that called
     // setsid() and escaped the original process group.
     let path = format!("/proc/self/task/{}/children", std::process::id());
@@ -134,7 +150,9 @@ impl OwnedChild {
         let status = child.wait()?;
         self.child = None;
 
-        reap_descendants(deadline)?;
+        if self.reap_orphans {
+            reap_descendants(deadline)?;
+        }
         Ok(status)
     }
 }
@@ -143,10 +161,20 @@ impl Drop for OwnedChild {
     fn drop(&mut self) {
         if self.child.is_some() {
             let _ = self.finish();
-        } else {
+        } else if self.reap_orphans {
             let _ = reap_descendants(Instant::now() + CLEANUP_TIMEOUT);
         }
     }
+}
+
+/// Read a bounded capture file after its process group has stopped writing.
+fn contents(mut file: File) -> Result<Vec<u8>> {
+    use std::io::{Seek, SeekFrom};
+    file.seek(SeekFrom::Start(0))?;
+    let mut bytes = Vec::new();
+    file.take(OUTPUT_LIMIT).read_to_end(&mut bytes)?;
+
+    Ok(bytes)
 }
 
 /// Bounded helper runner owning each process group through exit and descendant cleanup.
@@ -181,6 +209,88 @@ pub(crate) struct Files<'a> {
 }
 
 impl Runner {
+    /// Run independent boot helpers together, bounding output and cleaning every group before return.
+    /// Each helper is a separate process so its own Runner can retain sequential descendant ownership.
+    pub(crate) fn boot_workers(
+        &self,
+        program: &std::path::Path,
+        arguments: &[Vec<OsString>],
+        timeout: Duration,
+        environment: &[(OsString, OsString)],
+    ) -> Result<Vec<Captured>> {
+        self.require_separate_host_policy()?;
+        for args in arguments {
+            self.check_raw(program.as_os_str(), args)?;
+        }
+        rustix::process::set_child_subreaper(Some(rustix::process::getpid()))?;
+        let deadline = Instant::now()
+            .checked_add(timeout)
+            .context("boot worker timeout too large")?;
+        let mut batch = ChildBatch::default();
+        let mut files = Vec::new();
+        for args in arguments {
+            let output = tempfile::tempfile()?;
+            let errors = tempfile::tempfile()?;
+            let child = Command::new(program)
+                .args(args)
+                .env_remove("AIRLOCK_STAGED_GENERATIONS")
+                .envs(environment.iter().cloned())
+                .stdin(Stdio::null())
+                .stdout(Stdio::from(output.try_clone()?))
+                .stderr(Stdio::from(errors.try_clone()?))
+                .process_group(0)
+                .spawn()
+                .with_context(|| {
+                    format!("start boot helper {program}", program = program.display())
+                })?;
+            let group = Pid::from_child(&child);
+            batch.children.push(OwnedChild {
+                child: Some(child),
+                group,
+                reap_orphans: false,
+            });
+            files.push((output, errors));
+        }
+
+        let mut statuses = vec![None; arguments.len()];
+        while statuses.iter().any(Option::is_none) {
+            for (index, child) in batch.children.iter_mut().enumerate() {
+                if statuses[index].is_some() {
+                    continue;
+                }
+                let (output, errors) = &files[index];
+                let limited = Instant::now() >= deadline
+                    || output.metadata()?.len() > OUTPUT_LIMIT
+                    || errors.metadata()?.len() > OUTPUT_LIMIT;
+                if limited || exited(child.group)? {
+                    statuses[index] = Some((child.finish()?, limited));
+                }
+            }
+            if statuses.iter().any(Option::is_none) {
+                thread::sleep(Duration::from_millis(20));
+            }
+        }
+        // No sibling is still running when adopted descendants are inspected and killed.
+        reap_descendants(Instant::now() + CLEANUP_TIMEOUT)?;
+
+        files
+            .into_iter()
+            .zip(statuses)
+            .map(|((output, errors), status)| {
+                let (status, limited) = status.context("missing boot worker status")?;
+                let limited = limited
+                    || output.metadata()?.len() > OUTPUT_LIMIT
+                    || errors.metadata()?.len() > OUTPUT_LIMIT;
+                Ok(Captured {
+                    stdout: contents(output)?,
+                    stderr: contents(errors)?,
+                    status,
+                    limited,
+                })
+            })
+            .collect()
+    }
+
     /// Enter deployment execution and record subsequent helper evidence.
     /// Direct lifecycle commands require checked requests, including through capture/stream.
     pub fn record_to(&self, path: std::path::PathBuf) -> Result<()> {
@@ -543,6 +653,7 @@ impl Runner {
         let mut child = OwnedChild {
             child: Some(child),
             group,
+            reap_orphans: true,
         };
         let deadline = Instant::now()
             .checked_add(timeout)
@@ -578,6 +689,7 @@ impl Runner {
         let mut owned = OwnedChild {
             child: Some(child),
             group,
+            reap_orphans: true,
         };
         let deadline = Instant::now() + timeout;
         while !exited(group)? {
@@ -664,6 +776,7 @@ impl Runner {
         let mut child = OwnedChild {
             child: Some(child),
             group,
+            reap_orphans: true,
         };
 
         let deadline = Instant::now() + timeout;
@@ -685,15 +798,6 @@ impl Runner {
         // A fast helper may exit between polls after exceeding its output budget.
         limited |=
             output.metadata()?.len() > OUTPUT_LIMIT || errors.metadata()?.len() > OUTPUT_LIMIT;
-
-        fn contents(mut f: File) -> Result<Vec<u8>> {
-            use std::io::{Seek, SeekFrom};
-            f.seek(SeekFrom::Start(0))?;
-            let mut bytes = Vec::new();
-            f.take(OUTPUT_LIMIT).read_to_end(&mut bytes)?;
-
-            Ok(bytes)
-        }
 
         let stdout = contents(output)?;
         let stderr = contents(errors)?;
@@ -729,6 +833,83 @@ impl Runner {
 mod tests {
     use super::*;
     use std::os::unix::process::ExitStatusExt;
+
+    /// Both helpers must enter before the first exits; the later sibling must survive cleanup.
+    #[test]
+    fn boot_workers_overlap_and_keep_siblings_until_completion() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let environment = [(
+            "AIRLOCK_BOOT_WORKER_FIXTURE".into(),
+            root.path().as_os_str().to_owned(),
+        )];
+        let arguments = ["boot_worker_fast", "boot_worker_slow"].map(|name| {
+            vec![
+                "--ignored".into(),
+                "--exact".into(),
+                format!("process::tests::{name}").into(),
+            ]
+        });
+        let runner = Runner::default();
+        let executable = std::env::current_exe()?;
+        let outputs = runner.boot_workers(
+            &executable,
+            &arguments,
+            Duration::from_secs(5),
+            &environment,
+        )?;
+        for output in outputs {
+            assert!(
+                output.status.success() && !output.limited,
+                "{error}",
+                error = String::from_utf8_lossy(&output.stdout)
+            );
+        }
+        assert!(root.path().join("slow-finished").exists());
+
+        let output = runner.boot_workers(
+            &executable,
+            &arguments[1..],
+            Duration::from_millis(100),
+            &environment,
+        )?;
+        assert!(output[0].limited);
+        let pid = std::fs::read_to_string(root.path().join("slow-pid"))?;
+        assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+        Ok(())
+    }
+
+    /// Child fixture used only by the batch test's separately executed test binary.
+    #[test]
+    #[ignore = "internal subprocess fixture for boot_workers_overlap_and_keep_siblings_until_completion"]
+    fn boot_worker_fast() -> Result<()> {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("AIRLOCK_BOOT_WORKER_FIXTURE").context("worker fixture root")?,
+        );
+        std::fs::write(root.join("fast-started"), b"")?;
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !root.join("slow-started").exists() {
+            ensure!(
+                Instant::now() < deadline,
+                "sibling was not started concurrently"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        Ok(())
+    }
+
+    /// Remain alive after the first helper exits so premature process-wide cleanup is observable.
+    #[test]
+    #[ignore = "internal subprocess fixture for boot_workers_overlap_and_keep_siblings_until_completion"]
+    fn boot_worker_slow() -> Result<()> {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("AIRLOCK_BOOT_WORKER_FIXTURE").context("worker fixture root")?,
+        );
+        std::fs::write(root.join("slow-pid"), std::process::id().to_string())?;
+        std::fs::write(root.join("slow-started"), b"")?;
+        thread::sleep(Duration::from_millis(300));
+        std::fs::write(root.join("slow-finished"), b"")?;
+        Ok(())
+    }
 
     /// Every process entry checks raw device mutations before spawning; maintenance keeps its policy.
     #[test]

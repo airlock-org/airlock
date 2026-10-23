@@ -551,6 +551,56 @@ fn optional_packaged_startup_helper_has_complete_runtime_dependencies() -> Resul
     Ok(())
 }
 
+/// Desktop publication requires the home VM and healthy network forwarding as well as the GUI.
+#[test]
+#[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]
+fn namespace_desktop_readiness_requires_home_and_network() -> Result<()> {
+    use crate::coordinator::fixture::{declaration, store};
+
+    for failure in ["", "home", "network"] {
+        let mut boot = Boot::new("foreground")?;
+        let mut home = declaration("usr-home", 1);
+        home["features"]["airlock-boot-foreground"] = json!("1");
+        home["netvm"] = json!("sys-net");
+        let mut network = declaration("sys-net", 1);
+        network["prefs"]["provides_network"] = json!(true);
+        fs::write(
+            boot.peers.path("topology.json"),
+            serde_json::to_vec(&json!({"schema":"airlock.qubes-topology.v1","domains":{
+                "sys-gui":declaration("sys-gui", 1), "usr-home":home, "sys-net":network
+            }}))?,
+        )?;
+        boot.peers.rules(
+            "qvm-check",
+            json!([
+                {"args":["--running","usr-home"],"exit":if failure == "home" {1} else {0}},
+                {}
+            ]),
+        )?;
+        boot.peers.rules("qrexec-client", json!([
+            {"args":["-d","sys-gui","user:readlink -f /run/current-system"],"stdout":store("sys-gui-system",1)},
+            {"args":["-d","usr-home","user:readlink -f /run/current-system"],"stdout":store("usr-home-system",1)},
+            {"args":["-d","sys-net","user:readlink -f /run/current-system"],"stdout":store("sys-net-system",1)},
+            {"contains":"DEFAULT:QUBESRPC airlock.InputReceiverReady dom0","stdout":INPUT_REPLY},
+            {"prefix":["-d","sys-net"],"exit":if failure == "network" {1} else {0}},
+            {"prefix":["-d","sys-gui"]}
+        ]))?;
+        boot.run(&["prepare"])?;
+        let output = common::run(&mut boot.command(&["desktop-ready"])?, None)?;
+        assert_eq!(
+            output.status.success(),
+            failure.is_empty(),
+            "{failure}: {error}",
+            error = String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            boot.record("foreground")?["desktop_ready"],
+            failure.is_empty()
+        );
+    }
+    Ok(())
+}
+
 /// Final publication repeats observations rather than trusting earlier unit success or boot receipts.
 #[test]
 #[ignore = "requires explicitly prepared bubblewrap and unprivileged user namespaces"]

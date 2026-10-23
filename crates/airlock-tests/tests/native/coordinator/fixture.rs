@@ -142,6 +142,7 @@ impl Machine {
         )?;
         for name in [
             "qvm-ls",
+            "qvm-check",
             "qvm-features",
             "qvm-start",
             "qvm-shutdown",
