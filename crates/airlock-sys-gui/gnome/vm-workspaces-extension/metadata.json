@@ -1,0 +1,13 @@
+{
+  "name": "Airlock VM Workspaces",
+  "description": "Colour-grouped workspace tabs and overview borders with VM hover labels.",
+  "uuid": "airlock-vm-workspaces@airlock.local",
+  "shell-version": [
+    "50"
+  ],
+  "session-modes": [
+    "user",
+    "unlock-dialog"
+  ],
+  "version": 10
+}

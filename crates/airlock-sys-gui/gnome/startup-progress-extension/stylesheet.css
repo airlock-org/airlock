@@ -1,0 +1,6 @@
+.airlock-startup-panel { spacing: 6px; }
+.airlock-startup-summary { max-width: 380px; }
+.airlock-startup-guest { spacing: 3px; max-width: 380px; }
+.airlock-startup-guest-name { font-weight: bold; }
+.airlock-startup-detail { color: rgba(255, 255, 255, 0.7); }
+.airlock-startup-error { color: #f8b4b4; }

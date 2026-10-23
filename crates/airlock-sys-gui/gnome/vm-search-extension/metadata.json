@@ -1,0 +1,7 @@
+{
+  "name": "Airlock VM Search",
+  "description": "Show full application names in rows grouped by Qubes VM, with VM label colours.",
+  "uuid": "airlock-vm-search@airlock.local",
+  "shell-version": ["50"],
+  "version": 1
+}

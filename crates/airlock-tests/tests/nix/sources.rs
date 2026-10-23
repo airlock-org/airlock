@@ -65,6 +65,13 @@ fn filtered_sources_preserve_cache_keys_and_compile() -> Result<()> {
     let cases = json!(cases);
     let baseline = inspect(root, &workspace, "source-baseline", &cases)?;
 
+    // Shell extensions are packaged directly, so their edits must not rebuild native applications.
+    change(&workspace.join("airlock-sys-gui/gnome/startup-progress-extension/extension.js"))?;
+    assert_eq!(
+        baseline,
+        inspect(root, &workspace, "source-extension-change", &cases)?
+    );
+
     let relocated = root.join("relocated/workspace");
     copy_tree(&workspace, &relocated)?;
     assert_eq!(

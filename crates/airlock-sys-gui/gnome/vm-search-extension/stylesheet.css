@@ -1,0 +1,14 @@
+.airlock-vm-search { spacing: 18px; }
+.airlock-vm-search-group { spacing: 4px; }
+.airlock-vm-search-heading { spacing: 9px; padding: 4px 12px; }
+.airlock-vm-search-name { font-weight: bold; }
+.airlock-vm-search-status { color: rgba(255, 255, 255, 0.65); font-size: 0.9em; }
+.airlock-vm-search-color { width: 10px; height: 10px; border-radius: 5px; }
+.airlock-vm-search-row { padding: 8px 12px; border-radius: 10px; }
+.airlock-vm-search-row:hover { background-color: rgba(255, 255, 255, 0.12); }
+.airlock-vm-search-row:focus,
+.airlock-vm-search-row:selected { background-color: rgba(255, 255, 255, 0.20); }
+.airlock-vm-search-row:active { background-color: rgba(255, 255, 255, 0.28); }
+.airlock-vm-search-content { spacing: 12px; }
+.airlock-vm-search-icon { padding: 0; }
+.airlock-vm-search-title { text-align: left; }

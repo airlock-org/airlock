@@ -1,4 +1,4 @@
-//! Resolve Airlock-owned modules and assets inside the caller's machine source.
+//! Resolve admitted application and machine sources for shared configuration components.
 
 use rusix::{
     interop::{
@@ -27,14 +27,24 @@ impl MachineFiles for ModuleContext {
     }
 }
 
+/// Resolves the admitted Cargo workspace containing Airlock's implementations and desktop assets.
+pub(super) fn application_source(inputs: &ModuleContext) -> NixPath {
+    NixPath::from_source_text(
+        inputs
+            .pkgs
+            .clone()
+            .select("airlockAppsSource")
+            .to_text()
+            .into_expr::<String>(),
+    )
+}
+
 /// Supplies the GUI service with application and machine sources from this module's caller.
 pub(super) fn service_sources(
     inputs: &ModuleContext,
 ) -> airlock_sys_gui_service::authoring::Sources {
     airlock_sys_gui_service::authoring::Sources::new(
-        NixPath::from_expression(
-            NixValue::builtin("toPath").call(inputs.pkgs.clone().select("airlockAppsSource")),
-        ),
+        application_source(inputs),
         inputs.argument(ARGUMENT),
     )
 }

@@ -656,9 +656,14 @@ fn desktop_profiles_preserve_services_extensions_and_startup() -> Result<()> {
         .collect();
     let mut installed = BTreeSet::new();
     for extension in desktop["extensions"].as_object().unwrap().values() {
-        let metadata: Value = serde_json::from_slice(&fs::read(
-            Path::new(extension["source"].as_str().unwrap()).join("metadata.json"),
-        )?)?;
+        // Extension sources are independent store snapshots held by the private evaluation store.
+        let source = Path::new(extension["source"].as_str().unwrap());
+        let source = nix
+            .temporary
+            .path()
+            .join("store")
+            .join(source.strip_prefix("/")?);
+        let metadata: Value = serde_json::from_slice(&fs::read(source.join("metadata.json"))?)?;
         installed.insert(metadata["uuid"].as_str().unwrap().to_owned());
         let phase = extension["installPhase"].as_str().unwrap();
         assert!(

@@ -1,0 +1,7 @@
+{
+  "name": "Airlock Startup Progress",
+  "description": "Show VM startup and application availability in the top panel.",
+  "uuid": "airlock-startup-progress@airlock.local",
+  "shell-version": ["50"],
+  "version": 1
+}

@@ -1,7 +1,8 @@
 //! Package Airlock's GNOME Shell extensions while keeping their JavaScript and CSS as assets.
+//! Assets live beside the sys-gui crates, outside their filtered Rust build inputs.
 //! Extension order is shared by installation and GNOME's enabled-extension setting.
 
-use super::{MachineFiles, ModuleContext};
+use super::{ModuleContext, machine_source};
 use airlock_sys_gui_service::command::DesktopCommand;
 use rusix::{
     interop::{
@@ -192,7 +193,7 @@ fn extension(
         .call(nix_record! {
             "pname": format!("airlock-gnome-{name}"),
             "version": "1",
-            "src": asset(inputs, &format!("{name}-extension")),
+            "src": NixPath::from_expression(asset(inputs, &format!("{name}-extension"))).snapshot(),
             "dontBuild": true,
             "installPhase": install_phase,
             "passthru": passthru,
@@ -201,7 +202,10 @@ fn extension(
     Extension { id, package }
 }
 
-/// Resolves GNOME assets from the supplied machine source, retaining Nix path context.
+/// Resolves GNOME implementation assets from the admitted application source with Nix path context.
 fn asset(inputs: &ModuleContext, relative: &str) -> NixValue {
-    inputs.file(&format!("assets/sys-gui/gnome/{relative}"))
+    machine_source::application_source(inputs)
+        .join_relative(&format!("airlock-sys-gui/gnome/{relative}"))
+        .expect("extension asset paths are static and relative")
+        .as_expression()
 }
