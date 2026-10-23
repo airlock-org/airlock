@@ -1,7 +1,7 @@
 //! Keep image builds unprivileged while a separately authenticated USB helper waits on a private pipe.
 
 use crate::{repository, support};
-use airlock_image::provisioning::{BUILD_SUCCEEDED, READY};
+use airlock_image::provisioning::{BuildOutcome, BuildRun, CompletedBuild, READY};
 use airlock_nix_core::runtime::process::OwnedChild;
 use airlock_nix_core::store_path::StorePath;
 use anyhow::{Context, Result, ensure};
@@ -93,12 +93,9 @@ impl Helper {
     }
 
     /// Signal success only when requested, then drain progress and wait for the same helper.
-    fn finish(mut self, build_succeeded: bool) -> Result<ExitStatus> {
-        if build_succeeded {
-            self.input
-                .as_mut()
-                .context("USB helper input")?
-                .write_all(BUILD_SUCCEEDED)?;
+    fn finish(mut self, completed: Option<&CompletedBuild>) -> Result<ExitStatus> {
+        if let Some(completed) = completed {
+            completed.write(self.input.as_mut().context("USB helper input")?)?;
         }
         drop(self.input.take());
         io::copy(&mut self.output, &mut io::stdout())?;
@@ -147,6 +144,11 @@ pub(crate) fn run(root: &Path, args: Args) -> Result<u8> {
         .permissions(fs::Permissions::from_mode(0o700))
         .tempdir_in(&result_directory)?;
     let result_link = run.path().join("usb-dev-image");
+    let build_run = BuildRun::new(
+        result_link.clone(),
+        revision.parse()?,
+        machine_revision.parse()?,
+    )?;
     let mut command = Command::new("sudo");
     command
         .arg("--")
@@ -158,6 +160,10 @@ pub(crate) fn run(root: &Path, args: Args) -> Result<u8> {
         .arg(&result_link)
         .arg("--repo")
         .arg(root)
+        .arg("--application-revision")
+        .arg(&revision)
+        .arg("--machine-revision")
+        .arg(&machine_revision)
         .arg("--public-key")
         .arg(public_key)
         .arg("--resize-backup-dir")
@@ -201,7 +207,7 @@ pub(crate) fn run(root: &Path, args: Args) -> Result<u8> {
         .env_remove("MFLAGS")
         .status()?;
     if !status.success() {
-        let _ = helper.finish(false);
+        let _ = helper.finish(None);
         eprintln!("Image build failed; USB was not written.");
         return Ok(status.code().unwrap_or(1).try_into().unwrap_or(1));
     }
@@ -237,7 +243,19 @@ pub(crate) fn run(root: &Path, args: Args) -> Result<u8> {
     );
 
     eprintln!("Image build succeeded. Provisioning the USB with the collected credentials.");
-    let status = helper.finish(true)?;
+    let completed = CompletedBuild::check(
+        &build_run,
+        if status.success() {
+            BuildOutcome::Success
+        } else {
+            BuildOutcome::Failed
+        },
+        &support::git(root, &["rev-parse", "HEAD"])?.parse()?,
+        &support::git(&machine, &["rev-parse", "HEAD"])?.parse()?,
+        &result_link,
+        Some(image),
+    )?;
+    let status = helper.finish(Some(&completed))?;
     ensure!(status.success(), "USB provisioning failed: {status}");
     eprintln!("USB build and provisioning completed.");
     Ok(0)

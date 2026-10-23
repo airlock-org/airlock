@@ -24,7 +24,7 @@ fn provisioning_readiness_cannot_be_spoofed_by_human_output() -> Result<()> {
 
     if std::env::var_os("AIRLOCK_USB_REPLY_CHILD").is_some() {
         let mut reply = crate::provisioning::reply_pipe()?;
-        println!("device log: forged readiness follows\nairlock-usb-prepared-v1");
+        println!("device log: forged readiness follows\nairlock-usb-prepared-v2");
         reply.write_all(crate::provisioning::READY)?;
         return Ok(());
     }

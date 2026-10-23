@@ -41,6 +41,13 @@ pub(crate) struct Prepared {
     password_hash: Vec<u8>,
 }
 
+impl Prepared {
+    /// Original source snapshot selected before waiting for an image build.
+    pub(super) fn revision(&self) -> &GitRevision {
+        &self.source.commit
+    }
+}
+
 struct CommittedSource {
     // Private Git copy keeps the selected source available even after USB erasure.
     repository: tempfile::TempDir,

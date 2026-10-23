@@ -10,12 +10,13 @@ pub(crate) mod personalize;
 
 pub(crate) mod progress;
 
-use crate::support::{file_digest, regular, root_only, run};
+use crate::support::{regular, root_only, run};
+use airlock_nix_core::identity::GitRevision;
 use airlock_nix_core::state::{OperationKind, OperationOwner, StateStore};
+use airlock_provisioning_core as verified;
 use anyhow::{Context, Result, ensure};
 use clap::{Args, Parser, Subcommand};
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use std::{
     fs::{self, OpenOptions},
     io::{Read, Seek, SeekFrom},
@@ -46,7 +47,17 @@ enum Action {
     /// Write the image, expand root and personalize before first boot.
     ProvisionLatest(Provision),
     /// Collect credentials now and provision only after the build owner signals success on stdin.
-    ProvisionAfterBuild(Provision),
+    ProvisionAfterBuild {
+        // Existing USB and personalization settings for this run.
+        #[command(flatten)]
+        provision: Provision,
+        // Application source captured by the build owner before preparation.
+        #[arg(long)]
+        application_revision: GitRevision,
+        // Machine source captured by the build owner before preparation.
+        #[arg(long)]
+        machine_revision: GitRevision,
+    },
     /// Personalize an already mounted Airlock USB root.
     Personalize {
         // Offline ext4 root of the previously written Airlock image.
@@ -183,9 +194,47 @@ pub(crate) fn result_image(link: &Path, nix_root: Option<&Path>) -> Result<PathB
 
 // A direct image needs an independent digest; a selected build result computes
 // its own digest once, immediately before writing the pinned source file.
-enum DigestSource {
-    Explicit,
-    BuildResult,
+enum SourcePolicy {
+    /// Standalone command requires an independently supplied digest.
+    Direct,
+    /// Standalone command explicitly selects a published output.
+    Published(
+        // Exact supplying output selected by the standalone command.
+        String,
+    ),
+    /// A waiting run must retain its original confirmed disk and exact successful output.
+    Built {
+        // Original confirmed target and same-run publication.
+        authority: verified::Authority,
+        // Freshly observed output supplying the actual opened image.
+        publication: String,
+    },
+}
+
+/// Manual provisioning and waiting-build completion retain different authority sources.
+enum ProvisionAuthority {
+    /// Explicit standalone provisioning without a waiting build.
+    Published,
+    /// Original waiting-build authority, never a fresh post-build confirmation.
+    Built(
+        // Original confirmed physical target and opaque successful build publication.
+        verified::Authority,
+    ),
+}
+
+/// Snapshot the selected output coordinate independently of its physical private-store mapping.
+fn publication(source: &LatestSource) -> Result<String> {
+    let path = match fs::read_link(&source.result_link) {
+        Ok(path) => path,
+        Err(error) if error.kind() == std::io::ErrorKind::InvalidInput => {
+            fs::canonicalize(&source.result_link)?
+        }
+        Err(error) => return Err(error.into()),
+    };
+    Ok(path
+        .to_str()
+        .context("non-UTF-8 image publication")?
+        .to_owned())
 }
 
 fn latest(
@@ -193,8 +242,13 @@ fn latest(
     write: bool,
     full_write: bool,
     verify: bool,
-) -> Result<(Write, device::Disk)> {
+) -> Result<(Write, device::Disk, String)> {
+    let output = publication(source)?;
     let image = result_image(&source.result_link, source.nix_root.as_deref())?;
+    ensure!(
+        output == publication(source)?,
+        "image publication changed during selection"
+    );
     let device = device::select(&source.serial)?;
     let selected = device::inspect(&device, false)?;
     ensure!(
@@ -212,14 +266,11 @@ fn latest(
             verify,
         },
         selected,
+        output,
     ))
 }
 
-fn write_image(
-    args: &Write,
-    digest_source: DigestSource,
-    selected: Option<&device::Disk>,
-) -> Result<()> {
+fn write_image(args: &Write, policy: SourcePolicy, selected: Option<&device::Disk>) -> Result<()> {
     let image = fs::canonicalize(&args.image)?;
     ensure!(
         image.extension().is_some_and(|e| e == "img"),
@@ -270,31 +321,49 @@ fn write_image(
         args.confirm_serial == info.serial,
         "Serial confirmation does not match."
     );
-    let actual = file_digest(&image)?;
-    let expected = match digest_source {
-        DigestSource::Explicit => args
-            .sha256
-            .as_ref()
-            .context("Image SHA-256 is required.")?
-            .to_ascii_lowercase(),
-        DigestSource::BuildResult => actual.clone(),
+    let intent = if args.write {
+        verified::Intent::Write
+    } else {
+        verified::Intent::Inspect
+    };
+    let serial = args
+        .confirm_serial
+        .as_deref()
+        .context("Serial confirmation is required")?;
+    let (authority, publication) = match policy {
+        SourcePolicy::Direct => {
+            let expected = args
+                .sha256
+                .as_ref()
+                .context("Image SHA-256 is required.")?
+                .to_ascii_lowercase();
+            ensure!(
+                expected.len() == 64 && expected.bytes().all(|b| b.is_ascii_hexdigit()),
+                "Invalid image SHA-256."
+            );
+            (
+                info.confirm(intent, serial)?
+                    .direct(expected)
+                    .context("invalid direct image authority")?,
+                None,
+            )
+        }
+        SourcePolicy::Published(output) => (
+            info.confirm(intent, serial)?
+                .published(output.clone())
+                .context("invalid published image authority")?,
+            Some(output),
+        ),
+        SourcePolicy::Built {
+            authority,
+            publication,
+        } => (authority, Some(publication)),
     };
     ensure!(
-        expected.len() == 64 && expected.bytes().all(|b| b.is_ascii_hexdigit()),
-        "Invalid image SHA-256."
+        authority.matches_disk(&info.evidence()?),
+        "USB identity differs from the original confirmed target"
     );
-    ensure!(actual == expected, "Image SHA-256 does not match.");
-    let current_source = fs::metadata(&image)?;
-    ensure!(
-        source_info.dev() == current_source.dev()
-            && source_info.ino() == current_source.ino()
-            && source_info.len() == current_source.len()
-            && source_info.mtime() == current_source.mtime()
-            && source_info.mtime_nsec() == current_source.mtime_nsec()
-            && source_info.ctime() == current_source.ctime()
-            && source_info.ctime_nsec() == current_source.ctime_nsec(),
-        "Image identity changed."
-    );
+    let source = copy::CheckedSource::check(source, &source_info, publication, &authority)?;
 
     if selected.is_some() {
         device::unmount(&args.device, &info)?;
@@ -306,7 +375,7 @@ fn write_image(
         before.file_type().is_block_device(),
         "USB disappeared before opening"
     );
-    let mut destination = OpenOptions::new()
+    let destination = OpenOptions::new()
         .read(true)
         .write(true)
         .custom_flags((rustix::fs::OFlags::EXCL | rustix::fs::OFlags::NOFOLLOW).bits() as i32)
@@ -317,70 +386,20 @@ fn write_image(
         "USB device changed while opening."
     );
 
-    info.same_disk(&device::checked(&args.device)?)?;
-
-    let written = copy::copy(
-        &mut source,
-        &mut destination,
-        !(args.full_write || args.verify),
-    )?;
-    let after_copy = source.metadata()?;
-    ensure!(
-        source_info.len() == after_copy.len()
-            && source_info.mtime() == after_copy.mtime()
-            && source_info.mtime_nsec() == after_copy.mtime_nsec()
-            && source_info.ctime() == after_copy.ctime()
-            && source_info.ctime_nsec() == after_copy.ctime_nsec(),
-        "Image changed while writing"
-    );
-
-    progress::waiting("Flushing USB device", Some(&info.name), || {
-        Ok(destination.sync_all()?)
-    })?;
-    info.same_disk(&device::checked(&args.device)?)?;
-
-    if args.verify {
-        destination.seek(SeekFrom::Start(0))?;
-        let mut hash = Sha256::new();
-        let mut remaining = size;
-        let mut bytes = vec![0; 8 * 1024 * 1024];
-        let mut progress = progress::Progress::new("Verifying image", size);
-        while remaining > 0 {
-            let count = remaining.min(bytes.len() as u64) as usize;
-            let read = destination.read(&mut bytes[..count])?;
-            ensure!(read != 0, "Unexpected end of USB during verification.");
-            hash.update(&bytes[..read]);
-            remaining -= read as u64;
-            progress.report(size - remaining);
-        }
-        ensure!(
-            format!("{:x}", hash.finalize()) == expected,
-            "USB read-back verification failed."
-        );
-    }
-
-    let pinned = device::release_writer(destination)?;
-    info.same_disk(&device::checked(&args.device)?)?;
-    println!("Refreshing USB partition table…");
-    run(Command::new("blockdev").arg("--rereadpt").arg(format!(
-        "/proc/{process}/fd/{descriptor}",
-        process = std::process::id(),
-        descriptor = std::os::fd::AsRawFd::as_raw_fd(&pinned),
-    )))
-    .context("Image written and flushed, but partition refresh failed; expansion and personalization have not run.")?;
-    info.same_disk(&device::checked(&args.device)?)?;
-
-    if args.verify {
-        println!("Image fully written ({written} bytes), flushed and verified.");
+    let mode = if args.verify {
+        verified::CopyMode::Verified
+    } else if args.full_write {
+        verified::CopyMode::Full
     } else {
-        println!(
-            "Image {} written ({written} bytes) and flushed; full read-back verification was skipped.",
-            if args.full_write { "fully" } else { "sparsely" }
-        );
-    }
-
-    println!("Previous USB contents were overwritten and are not recoverable by this tool.");
-    Ok(())
+        verified::CopyMode::Sparse
+    };
+    copy::execute(copy::WriteRequest::new(
+        source,
+        destination,
+        authority,
+        &args.device,
+        mode,
+    )?)
 }
 
 pub(crate) fn main() -> Result<()> {
@@ -393,7 +412,10 @@ pub(crate) fn main() -> Result<()> {
             Some(format!("write image to USB serial {}", args.source.serial))
         }
         Action::ProvisionLatest(Provision { source, .. })
-        | Action::ProvisionAfterBuild(Provision { source, .. }) => Some(format!(
+        | Action::ProvisionAfterBuild {
+            provision: Provision { source, .. },
+            ..
+        } => Some(format!(
             "write, expand and personalize USB serial {}",
             source.serial
         )),
@@ -416,10 +438,11 @@ pub(crate) fn main() -> Result<()> {
     };
 
     match action {
-        Action::Write(args) => write_image(&args, DigestSource::Explicit, None),
+        Action::Write(args) => write_image(&args, SourcePolicy::Direct, None),
         Action::WriteLatest(args) => {
-            let (write, selected) = latest(&args.source, args.write, args.full_write, args.verify)?;
-            write_image(&write, DigestSource::BuildResult, Some(&selected))
+            let (write, selected, output) =
+                latest(&args.source, args.write, args.full_write, args.verify)?;
+            write_image(&write, SourcePolicy::Published(output), Some(&selected))
         }
         Action::Personalize { root, settings } => {
             let selected = device::check_mount(&root, None)?;
@@ -427,9 +450,13 @@ pub(crate) fn main() -> Result<()> {
         }
         Action::ProvisionLatest(provision) => {
             let prepared = provision.settings.prepare()?;
-            provision.install(prepared, None)
+            provision.install(prepared, ProvisionAuthority::Published)
         }
-        Action::ProvisionAfterBuild(provision) => {
+        Action::ProvisionAfterBuild {
+            provision,
+            application_revision,
+            machine_revision,
+        } => {
             let mut reply = crate::provisioning::reply_pipe()?;
             ensure!(
                 fs::symlink_metadata(&provision.source.result_link)
@@ -458,26 +485,42 @@ pub(crate) fn main() -> Result<()> {
                 bytes = selected.size,
             );
             let prepared = provision.settings.prepare()?;
-            crate::provisioning::wait_for_build(std::io::stdin().lock(), &mut reply)?;
+            ensure!(
+                prepared.revision() == &application_revision,
+                "personalization source differs from the original build source"
+            );
+            let run = crate::provisioning::BuildRun::new(
+                provision.source.result_link.clone(),
+                application_revision,
+                machine_revision,
+            )?;
+            let waiting = selected
+                .confirm(verified::Intent::Write, &provision.source.serial)?
+                .wait(run.evidence());
+            let completed =
+                crate::provisioning::wait_for_build(&run, std::io::stdin().lock(), &mut reply)?;
+            let authority = waiting
+                .complete(completed.into_evidence())
+                .context("build completion belongs to another waiting USB run")?;
             drop(reply);
-            provision.install(prepared, Some(&selected))
+            provision.install(prepared, ProvisionAuthority::Built(authority))
         }
     }
 }
 
 impl Provision {
     /// Revalidate the selected image and disk, then reuse the ordinary provisioning sequence.
-    fn install(
-        self,
-        prepared: personalize::Prepared,
-        expected: Option<&device::Disk>,
-    ) -> Result<()> {
-        let (args, selected) = latest(&self.source, true, false, false)?;
-        if let Some(expected) = expected {
-            expected.same_disk(&selected)?;
-        }
+    fn install(self, prepared: personalize::Prepared, authority: ProvisionAuthority) -> Result<()> {
+        let (args, selected, publication) = latest(&self.source, true, false, false)?;
+        let policy = match authority {
+            ProvisionAuthority::Published => SourcePolicy::Published(publication),
+            ProvisionAuthority::Built(authority) => SourcePolicy::Built {
+                authority,
+                publication,
+            },
+        };
         growth::backup_location(&self.resize_backup_dir, &selected)?;
-        write_image(&args, DigestSource::BuildResult, Some(&selected))?;
+        write_image(&args, policy, Some(&selected))?;
         run(Command::new("udevadm").arg("settle"))?;
         growth::expand(&args.device, &selected, &self.resize_backup_dir)?;
 

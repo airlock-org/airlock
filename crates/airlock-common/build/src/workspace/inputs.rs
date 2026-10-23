@@ -31,6 +31,7 @@ const MANIFESTS: &[(&str, &str)] = manifests![
     "airlock-common/deployment",
     "airlock-common/diagnostics",
     "airlock-common/machine-planning",
+    "airlock-common/provisioning",
     "airlock-common/build",
     "airlock-common/qubes",
     "airlock-qubes-python",

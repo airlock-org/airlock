@@ -101,6 +101,8 @@ pub(crate) fn run(root: &Path, prepare: bool) -> Result<u8> {
             "airlock-deployment-core",
             "-p",
             "airlock-diagnostics",
+            "-p",
+            "airlock-provisioning-core",
             "--locked",
         ])
         .arg("--target-dir")

@@ -160,6 +160,7 @@ version = "0.1.0"
 dependencies = [
  "airlock-machine-core",
  "airlock-nix-core",
+ "airlock-provisioning-core",
  "airlock-qubes",
  "airlock-tests",
  "anyhow",
@@ -209,6 +210,13 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "airlock-provisioning-core"
+version = "0.1.0"
+dependencies = [
+ "vstd",
 ]
 
 [[package]]

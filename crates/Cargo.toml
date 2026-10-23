@@ -7,6 +7,7 @@ members = [
     "airlock-common/machine",
     "airlock-common/deployment",
     "airlock-common/diagnostics",
+    "airlock-common/provisioning",
     "airlock-common/machine-planning",
     "airlock-common/build",
     "airlock-common/qubes",

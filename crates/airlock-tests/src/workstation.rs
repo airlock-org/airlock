@@ -83,14 +83,32 @@ pub(crate) fn execute(root: &Path, name: &str, args: &[String]) -> Result<()> {
                 std::process::exit(19);
             }
             fs::write(root.join("usb-prepared"), b"credentials collected")?;
-            println!("airlock-usb-prepared-v1");
+            println!("airlock-usb-prepared-v2");
             std::io::stdout().flush()?;
             let mut completion = Vec::new();
             std::io::stdin().read_to_end(&mut completion)?;
-            if completion != b"airlock-image-build-succeeded-v1\n" {
+            if completion.is_empty() {
                 fs::write(root.join("usb-cancelled"), b"no write")?;
                 std::process::exit(1);
             }
+            let completion: Value = serde_json::from_slice(&completion)?;
+            let argument = |name: &str| -> Result<&str> {
+                let index = args
+                    .iter()
+                    .position(|a| a == name)
+                    .context("missing USB run argument")?;
+                Ok(args[index + 1].as_str())
+            };
+            ensure!(
+                completion["schema"] == "airlock.usb-build-complete.v2"
+                    && completion["status"] == "passed"
+                    && completion["result_link"] == result.to_str().context("result path")?
+                    && completion["revision"] == argument("--application-revision")?
+                    && completion["machine_revision"] == argument("--machine-revision")?
+                    && completion["output"]
+                        == "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-usb-image",
+                "USB completion did not preserve this run's source and image"
+            );
             ensure!(
                 fs::read_link(result)?
                     == Path::new("/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-usb-image"),

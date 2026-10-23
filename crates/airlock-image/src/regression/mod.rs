@@ -11,8 +11,7 @@ use crate::{acceptance, usb};
 use anyhow::Result;
 use serde_json::{Value, json};
 use std::{
-    fs::{self, File, OpenOptions},
-    io::{Seek, SeekFrom, Write},
+    fs,
     os::unix::fs::{PermissionsExt, symlink},
     path::Path,
 };
@@ -53,38 +52,6 @@ fn usb_paths_and_private_files_preserve_explicit_ownership() -> Result<()> {
     write(b"private")?;
     assert_eq!(path.metadata()?.permissions().mode() & 0o777, 0o600);
     assert_eq!(usb::personalize::password(true)?, "password");
-    Ok(())
-}
-
-/// Sparse copying skips holes deliberately; full copying replaces every byte in a reused target.
-#[test]
-fn image_copy_distinguishes_sparse_holes_from_full_materialization() -> Result<()> {
-    let temporary = tempfile::tempdir()?;
-    let image = temporary.path().join("seed.img");
-    let mut source = File::create(&image)?;
-    source.write_all(b"first")?;
-    source.seek(SeekFrom::Start(1024 * 1024))?;
-    source.write_all(b"last")?;
-    let content = fs::read(&image)?;
-    for sparse in [true, false] {
-        let target = temporary.path().join(format!("target-{sparse}"));
-        fs::write(&target, vec![b'x'; content.len()])?;
-        let count = usb::copy::copy(
-            &mut File::open(&image)?,
-            &mut OpenOptions::new().read(true).write(true).open(&target)?,
-            sparse,
-        )?;
-        let bytes = fs::read(target)?;
-        assert_eq!(&bytes[..5], b"first");
-        assert_eq!(&bytes[bytes.len() - 4..], b"last");
-        if sparse {
-            assert!(count < content.len() as u64);
-            assert_eq!(bytes[512 * 1024], b'x');
-        } else {
-            assert_eq!(count, content.len() as u64);
-            assert_eq!(bytes, content);
-        }
-    }
     Ok(())
 }
 

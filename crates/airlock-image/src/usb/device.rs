@@ -1,6 +1,7 @@
 //! Resolve a hardware serial to an unused USB disk before destructive access.
 
 use crate::support::{output, root_only, run};
+use airlock_provisioning_core as verified;
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use std::{
@@ -67,6 +68,9 @@ pub(crate) struct Disk {
     // Captured only from kernel state, never accepted from lsblk JSON.
     #[serde(skip)]
     identity: Option<Identity>,
+    // Set only after the whole descendant tree passed mounted/swap and holder checks.
+    #[serde(skip)]
+    unused: bool,
 }
 
 #[derive(Deserialize)]
@@ -76,6 +80,44 @@ struct Inventory {
 }
 
 impl Disk {
+    /// Project real kernel/inventory facts; preparing a mounted disk never claims an unused observation.
+    pub(super) fn evidence(&self) -> Result<verified::Observation> {
+        let identity = self.identity.as_ref().context("USB identity unavailable")?;
+        Ok(verified::Observation {
+            disk: verified::Disk {
+                name: self
+                    .name
+                    .to_str()
+                    .context("non-UTF-8 USB device")?
+                    .to_owned(),
+                number: identity.device,
+                sequence: identity.sequence,
+                serial: self
+                    .serial
+                    .as_ref()
+                    .context("USB serial unavailable")?
+                    .clone(),
+                bytes: self.size,
+            },
+            usb: self.tran.as_deref() == Some("usb"),
+            whole: self.kind == "disk",
+            writable: !self.ro,
+            unmounted: self.unused,
+            unheld: self.unused,
+        })
+    }
+
+    /// Require an explicit write intent and the independently supplied serial before selecting an image policy.
+    pub(super) fn confirm(
+        &self,
+        intent: verified::Intent,
+        serial: &str,
+    ) -> Result<verified::ConfirmedUsb> {
+        verified::SelectedUsb::check(self.evidence()?)
+            .and_then(|d| d.confirm(intent, serial))
+            .context("USB write intent or serial confirmation does not match the eligible disk")
+    }
+
     fn usb(&self) -> bool {
         self.kind == "disk" && self.tran.as_deref() == Some("usb")
     }
@@ -216,7 +258,30 @@ pub(crate) fn inspect(device: &Path, unused: bool) -> Result<Disk> {
     let after = identity(&target)?;
     ensure!(before == after, "USB changed during inspection");
     disk.identity = Some(after);
+    disk.unused = unused;
     Ok(disk)
+}
+
+/// Inspect the opened destination's inode and query its pinned device node for incarnation and capacity.
+/// `blockdev` reopens the proc link for read-only ioctls; this is not an atomic kernel snapshot.
+pub(super) fn opened(file: &File) -> Result<verified::OpenedDisk> {
+    let metadata = file.metadata()?;
+    ensure!(
+        metadata.file_type().is_block_device(),
+        "opened USB destination is not a block device"
+    );
+    let path = format!(
+        "/proc/{process}/fd/{descriptor}",
+        process = std::process::id(),
+        descriptor = file.as_raw_fd()
+    );
+    let sequence = output(Command::new("blockdev").arg("--getdiskseq").arg(&path))?.parse()?;
+    let bytes = output(Command::new("blockdev").arg("--getsize64").arg(&path))?.parse()?;
+    Ok(verified::OpenedDisk {
+        number: metadata.rdev(),
+        sequence,
+        bytes,
+    })
 }
 
 pub(crate) fn select(serial: &str) -> Result<PathBuf> {
