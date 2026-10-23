@@ -20,6 +20,9 @@ pub mod logical;
 /// Complete logical-to-physical resolution before segment reclamation.
 pub mod physical;
 
+/// Content-preserving replacement publication, mirror repair and view refresh.
+pub mod relocation;
+
 use vstd::prelude::*;
 
 verus! {

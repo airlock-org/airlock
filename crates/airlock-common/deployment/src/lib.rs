@@ -351,6 +351,21 @@
 //! missing required lookups and invalid backing bounds stop cleanup before deletion. View-range and
 //! running/kernel-source enumeration must supply the complete records; Verus does not prove JSON
 //! decoding, faithful extent coordinates, backing contents or filesystem/kernel observation truth.
+//! Relocation captures the original logical identity, physical range and complete decoded-record
+//! fingerprint before copying. A replacement request requires unchanged pool, length and content digest
+//! in a nonoverlapping range. Publication permission additionally checks the fresh original snapshot
+//! and the same pool/attempt's preparing transaction; stale, completed and aborted attempts refuse.
+//! The adapter derives the target object and replacement coordinates from that permission and
+//! preflights logical-mirror repair before canonical publication. A crash after canonical publication
+//! is reconciled from the current canonical record, never by replaying the interrupted copy.
+//! Verified mirror requests preserve object/path/tree identity and immutable contents, and require both
+//! observed record fingerprints to remain unchanged. Old mirror coordinates need not still have backing
+//! bytes: they are repaired from independently verified current canonical bytes. Checked per-entry map
+//! refresh preserves the original object, logical offset, pool, fragment length and digest. Running
+//! references keep their original physical pins, and explicit host/builder file-map pins skip refresh.
+//! Copy/append/hash execution, decoded-record fingerprinting, atomic publication order and durability,
+//! complete map assembly, and discovery of pinned maps remain tested adapter obligations. These request
+//! contracts do not prove the full filesystem crash protocol or append allocator correct.
 //! Record decoding, faithful request-to-path dispatch, lock discipline, truthful observations and
 //! actual unlink/fsync remain trusted. Recursive removal checks mounts and does not follow symlinks,
 //! but these filesystem properties are tested adapter contracts, not Verus theorems.

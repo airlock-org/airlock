@@ -37,36 +37,42 @@ pub(super) fn locations(root: &Path, trace: &Trace) -> Result<Locations> {
         if output.contains_key(name) {
             continue;
         }
-        let value: Value = read(&segments::object_metadata(root, name)?)?;
-        if name == ".tar-eof" {
-            ensure!(
-                value["schema"] == "airlock.closure-store.tar-eof.v1",
-                "invalid terminator location record"
-            );
-        } else {
-            ensure!(
-                value["schema"] == "airlock.closure-store.object-tar-fragment.v1"
-                    && value["entry"] == *name,
-                "object location identity mismatch"
-            );
-        }
-        if let Some(locations) = value.get("locations") {
-            let locations = locations
-                .as_array()
-                .context("invalid object location history")?;
-            ensure!(
-                locations
-                    .iter()
-                    .filter(|location| location["status"] == "current")
-                    .count()
-                    == 1,
-                "ambiguous current object location"
-            );
-        }
-        let extent = segments::extent(root, &value, true)?;
+        let (value, extent) = object(root, name)?;
         output.insert(name.clone(), (value, extent));
     }
     Ok(output)
+}
+
+/// Authenticate one canonical object record and require an unambiguous current location.
+pub(super) fn object(root: &Path, name: &str) -> Result<(Value, segments::Extent)> {
+    let value: Value = read(&segments::object_metadata(root, name)?)?;
+    if name == ".tar-eof" {
+        ensure!(
+            value["schema"] == "airlock.closure-store.tar-eof.v1",
+            "invalid terminator location record"
+        );
+    } else {
+        ensure!(
+            value["schema"] == "airlock.closure-store.object-tar-fragment.v1"
+                && value["entry"] == name,
+            "object location identity mismatch"
+        );
+    }
+    if let Some(locations) = value.get("locations") {
+        let locations = locations
+            .as_array()
+            .context("invalid object location history")?;
+        ensure!(
+            locations
+                .iter()
+                .filter(|location| location["status"] == "current")
+                .count()
+                == 1,
+            "ambiguous current object location"
+        );
+    }
+    let extent = segments::extent(root, &value, true)?;
+    Ok((value, extent))
 }
 
 /// Convert an already checked canonical range without truncating its coordinates.

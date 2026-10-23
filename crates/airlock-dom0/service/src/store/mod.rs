@@ -76,6 +76,8 @@ mod tracing;
 
 mod physical;
 
+mod relocation;
+
 mod segment_retirement;
 
 mod logical_retirement;

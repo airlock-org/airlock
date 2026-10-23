@@ -683,6 +683,12 @@ fn compaction_preserves_running_segments_until_pin_release() -> Result<()> {
         "--volume",
         "store-data",
     ])?;
+    let running = store
+        .pool
+        .join("running/usr-home-runtime-store")
+        .join(&generation)
+        .join("store-data.json");
+    let original_running = fs::read(&running)?;
     let candidates: BTreeSet<_> = plan["candidate_segments"]
         .as_array()
         .unwrap()
@@ -690,6 +696,7 @@ fn compaction_preserves_running_segments_until_pin_release() -> Result<()> {
         .map(|entry| entry["id"].as_str().unwrap())
         .collect();
     let result = common::json(&mut compact(&store), None)?;
+    assert_eq!(fs::read(&running)?, original_running);
     assert!(!result["objects_moved"].as_array().unwrap().is_empty());
     assert!(candidates.iter().all(|id| {
         result["segments_blocked_from_deletion"]
@@ -739,18 +746,37 @@ fn compaction_preserves_running_segments_until_pin_release() -> Result<()> {
     Ok(())
 }
 
+/// Physical relocation must never change the logical tar stream exposed by a software view.
+fn logical_map_identity(map: &Value) -> Vec<Value> {
+    map["extents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            json!({
+                "object":entry["object"], "logical_offset":entry["logical_offset"],
+                "length":entry["length"], "digest":entry["object_sha256"],
+            })
+        })
+        .collect()
+}
+
 /// Every durable relocation boundary can recover a usable selected view; damaged backing aborts reclamation.
 #[test]
 fn interrupted_or_corrupt_compaction_preserves_selected_data() -> Result<()> {
     for failure in [
         "compact-after-tx-create",
         "compact-after-object-copy",
+        "compact-before-location-publish",
         "compact-between-location-records",
         "compact-after-location-publish",
+        "compact-before-replacement-seal",
         "compact-after-view-refresh",
         "compact-after-tx-commit",
     ] {
         let (store, receipt) = fragmented()?;
+        let map = Path::new(receipt["canonical_blob_map"].as_str().unwrap());
+        let logical_identity = logical_map_identity(&read(map)?);
         assert!(
             !common::run(
                 compact(&store).env("AIRLOCK_CLOSURE_STORE_FAILPOINT", failure),
@@ -759,7 +785,10 @@ fn interrupted_or_corrupt_compaction_preserves_selected_data() -> Result<()> {
             .status
             .success()
         );
-        store.run(&["pool", "recover", "--pool-root", store.pool_text()])?;
+        for _ in 0..2 {
+            store.run(&["pool", "recover", "--pool-root", store.pool_text()])?;
+            assert_eq!(logical_map_identity(&read(map)?), logical_identity);
+        }
         let result = store.run(&[
             "pool",
             "load-generation",

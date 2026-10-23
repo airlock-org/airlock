@@ -2,8 +2,8 @@
 //! Relocation publishes verified replacement extents before refreshing unpinned views.
 
 use super::{
-    fs::*, logical_retirement, physical, records, runtime, segment_retirement, segments, tracing,
-    views,
+    fs::*, logical_retirement, physical, records, relocation, runtime, segment_retirement,
+    segments, tracing,
 };
 use airlock_deployment_core::retention::{
     Candidate, Generation, Protection, ReclaimRequest,
@@ -453,148 +453,9 @@ pub(super) fn gc(root: &Path, keep: usize, references: Vec<Protection>) -> Resul
     Ok(result)
 }
 
+/// Refresh immutable view placements through checked per-entry relocation requests.
 pub(super) fn refresh_maps(root: &Path) -> Result<Vec<PathBuf>> {
-    let pinned: BTreeSet<PathBuf> = records::running_refs(root)?
-        .iter()
-        .filter(|(_, v)| {
-            matches!(
-                v["volume"].as_str(),
-                Some("host-retained" | "builder-persistent")
-            )
-        })
-        .filter_map(|(_, v)| v["blob_map"].as_str().map(PathBuf::from))
-        .collect();
-
-    let mut paths = Vec::new();
-    for directory in children(&root.join("views/by-closure"))? {
-        pool_path(root, &directory)?;
-        paths.push(directory.join("store.blob-map.json"));
-    }
-    for manifest in records::manifests(root)? {
-        paths.push(
-            manifest
-                .parent()
-                .context("missing generation parent")?
-                .join("store.blob-map.json"),
-        );
-    }
-
-    let mut refreshed = Vec::new();
-    for path in paths {
-        if path.is_symlink() || !path.try_exists()? || pinned.contains(&path) {
-            continue;
-        }
-        let mut map: Value = read(&path)?;
-        let mut items = views::extents(&map)?;
-        let mut segments = BTreeMap::new();
-        let mut changed = false;
-        for item in &mut items {
-            let meta = segments::object_metadata(root, &item.object)?;
-            if !meta.try_exists()? {
-                continue;
-            }
-            let extent = segments::extent(root, &read(&meta)?, true)?;
-            ensure!(
-                item.length == extent.size && item.object_sha256 == extent.sha256,
-                "cannot refresh changed object identity"
-            );
-            changed |= (item.segment_id.as_str(), item.segment_offset)
-                != (extent.segment_id.as_str(), extent.segment_offset);
-            item.segment_id = extent.segment_id.clone();
-            item.segment_blob = extent.segment_blob.clone();
-            item.segment_offset = extent.segment_offset;
-            let meta: Value = read(&segments::metadata(root, &extent.segment_id)?)?;
-            segments.insert(extent.segment_id.clone(),json!({"id":extent.segment_id,"blob":extent.segment_blob,"size":fs::metadata(&extent.segment_blob)?.len(),"status":meta["status"]}));
-        }
-        let new_segments = json!(segments.values().collect::<Vec<_>>());
-        changed |= map["segments"] != new_segments;
-        if changed {
-            map["segments"] = new_segments;
-            map["segment_count"] = json!(segments.len());
-            map["extents"] = serde_json::to_value(items)?;
-            map["refreshed_at"] = json!(now());
-            write(&path, &map, 0o444)?;
-            refreshed.push(path);
-        }
-    }
-    Ok(refreshed)
-}
-
-fn publish_location(
-    root: &Path,
-    name: &str,
-    extent: &segments::Extent,
-    transaction: &str,
-) -> Result<()> {
-    let path = segments::object_metadata(root, name)?;
-    let mut value: Value = read(&path)?;
-    let old = segments::extent(root, &value, true)?;
-    let mut history = value["locations"]
-        .as_array()
-        .cloned()
-        .unwrap_or_else(|| vec![serde_json::to_value(&old).expect("serializable extent")]);
-    for location in &mut history {
-        if location["status"] == "current" || location.get("status").is_none() {
-            location["status"] = json!("retired");
-            location["retired_at"] = json!(now());
-            location["retired_by_transaction"] = json!(transaction);
-        }
-    }
-    let mut new = serde_json::to_value(extent)?;
-    new["status"] = json!("current");
-    new["created_at"] = json!(now());
-    new["transaction"] = json!(transaction);
-    history.push(new);
-    for (key, field) in serde_json::to_value(extent)?
-        .as_object()
-        .context("invalid extent")?
-    {
-        value[key] = field.clone();
-    }
-    value["locations"] = json!(history);
-    value["relocated_at"] = json!(now());
-    value["relocated_by_transaction"] = json!(transaction);
-    value["transaction"] = json!(transaction);
-    write(&path, &value, 0o444)?;
-    failpoint("compact-between-location-records")?;
-    reconcile_object(root, name, &value)?;
-    Ok(())
-}
-
-// The blob record is published first and owns the canonical extent. After a crash,
-// its verified identity can repair the convenience copy in the logical object record.
-fn reconcile_object(root: &Path, name: &str, value: &Value) -> Result<bool> {
-    if name != ".tar-eof" {
-        let path = root
-            .join("objects/metadata")
-            .join(format!("{}.json", component(name)?));
-        if path.try_exists()? {
-            let mut object: Value = read(&path)?;
-            ensure!(
-                object["schema"] == "airlock.closure-store.object.v2"
-                    && object["entry"] == name
-                    && value["entry"] == name
-                    && object["path"] == value["path"]
-                    && object["tree_hash"] == value["tree_hash"],
-                "cannot reconcile changed object identity"
-            );
-            if object["tar_fragment"] == *value {
-                return Ok(false);
-            }
-
-            segments::extent(root, value, true)?;
-            ensure!(
-                object["tar_fragment"]["sha256"] == value["sha256"]
-                    && object["tar_fragment"]["size"] == value["size"],
-                "cannot reconcile changed fragment contents"
-            );
-            object["tar_fragment"] = value.clone();
-            object["tree_materialized"] = json!(false);
-            write(&path, &object, 0o644)?;
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    relocation::refresh_maps(root)
 }
 
 pub(super) fn compact(
@@ -714,10 +575,11 @@ pub(super) fn compact(
     let mut copied = 0;
     for candidate in &candidates {
         let id = text(candidate, "id")?;
-        for (name, (_, old)) in &live_locations {
+        for (name, (original, old)) in &live_locations {
             if old.segment_id != id {
                 continue;
             }
+            let plan = relocation::plan(root, name, original, old, &tx)?;
             let mut temporary = tempfile::NamedTempFile::new_in(root.join("tmp"))?;
             let mut source = File::open(&old.segment_blob)?;
             source.seek(SeekFrom::Start(old.segment_offset))?;
@@ -732,9 +594,9 @@ pub(super) fn compact(
             );
             failpoint("compact-after-object-copy")?;
             let extent = segments::append(root, temporary.path(), name, &tx, target)?;
-            segments::extent(root, &serde_json::to_value(&extent)?, true)?;
+            let request = relocation::copied(plan, &extent)?;
             failpoint("compact-before-location-publish")?;
-            publish_location(root, name, &extent, &tx)?;
+            relocation::publish(request)?;
             failpoint("compact-after-location-publish")?;
             copied += extent.size;
             new_segments.insert(extent.segment_id.clone());
@@ -984,7 +846,11 @@ pub(super) fn recover(root: &Path) -> Result<Value> {
         }
         let value: Value = read(&path)?;
         let name = tracing::pending_object(&value)?;
-        if reconcile_object(root, &name, &value)? {
+        ensure!(
+            path == segments::object_metadata(root, &name)?,
+            "recovery object filename identity mismatch"
+        );
+        if relocation::reconcile(root, &name)? {
             reconciled.push(name);
         }
     }
