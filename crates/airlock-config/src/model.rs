@@ -665,7 +665,7 @@ impl Vm {
     }
 
     /// Declares a build controller with persistent state and the supplied uplink.
-    /// Uses the bootstrap controller's fixed memory and larger boot filesystem.
+    /// Starts on demand for system changes, with fixed memory and a larger boot filesystem.
     /// Rejects invalid names; registration checks the uplink's machine membership.
     pub fn controller<R: ProvidesNetwork>(
         name: &str,
