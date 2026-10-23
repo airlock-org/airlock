@@ -46,6 +46,21 @@ fn physical_expression_body(
 ) -> NixValue {
     {
         let field_normal = {
+            // Physical Qubes owns policy.d as one joined directory, populated by policy packages.
+            let capture_policy = arguments_1
+                .clone()
+                .select_segments(["lib", "findFirst"])
+                .call(NixValue::function(|package| {
+                    package
+                        .attr_or("destination", "")
+                        .equals("/etc/qubes/policy.d/45-airlock-screen-capture.policy")
+                }))
+                .call(NixValue::builtin("throw").call("missing physical capture policy package"))
+                .call(
+                    normal
+                        .clone()
+                        .select_segments(["virtualisation", "qubes", "packages"]),
+                );
             let field_stores = arguments_1
                 .clone()
                 .select("lib")
@@ -108,15 +123,7 @@ fn physical_expression_body(
                         "script",
                     ]),
                 ),
-                (
-                    "capturePolicy",
-                    normal.clone().select_segments([
-                        "environment",
-                        "etc",
-                        "qubes/policy.d/45-airlock-screen-capture.policy",
-                        "text",
-                    ]),
-                ),
+                ("capturePolicy", capture_policy.select("text")),
                 (
                     "release",
                     normal.clone().select_segments([
