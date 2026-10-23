@@ -146,8 +146,9 @@ prerequisite:
         let actual = observation["nix_config"].as_str().unwrap();
         assert!(actual.starts_with(config));
         assert!(actual.ends_with(&format!(
-            "max-jobs = 1\ncores = {jobs}\n",
-            jobs = cpus.len()
+            "max-jobs = {nix_jobs}\ncores = {nix_cores}\n",
+            nix_jobs = budget["nix_jobs"].as_u64().unwrap(),
+            nix_cores = budget["nix_cores"].as_u64().unwrap()
         )));
     }
     assert_eq!(rustix::thread::sched_getaffinity(None)?, inherited);
@@ -307,7 +308,6 @@ fn image_build_budget_is_inherited_by_nix_builders() -> Result<()> {
     let budget: Value = serde_json::from_slice(&fs::read(
         fixture.path().join(".airlock-logs/build-cpu-budget.json"),
     )?)?;
-    let cpus = budget["build_cpus"].as_array().unwrap();
     let list = observed
         .lines()
         .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
@@ -318,11 +318,11 @@ fn image_build_budget_is_inherited_by_nix_builders() -> Result<()> {
         actual.extend(start.parse::<usize>()?..=end.parse::<usize>()?);
     }
     assert_eq!(json!(actual), budget["build_cpus"]);
-    assert!(
-        observed
-            .lines()
-            .any(|line| line == format!("NIX_BUILD_CORES={count}", count = cpus.len()))
-    );
+    assert!(observed.lines().any(|line| line
+        == format!(
+            "NIX_BUILD_CORES={count}",
+            count = budget["nix_cores"].as_u64().unwrap()
+        )));
     println!(
         "{}",
         json!({"budget":budget,"builder_observation":observed,"output":output.as_str()})

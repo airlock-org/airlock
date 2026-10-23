@@ -21,6 +21,10 @@ struct Budget {
     build_cpus: Cpus,
     /// Online SMT siblings of the physical core excluded from the build.
     reserved_core_cpus: Cpus,
+    /// Number of independent Nix derivations allowed to build concurrently.
+    nix_jobs: usize,
+    /// Logical CPUs offered to each Nix derivation within the shared CPU budget.
+    nix_cores: usize,
 }
 
 /// Parse Linux's bounded CPU-list notation, rejecting incomplete topology instead of using every CPU.
@@ -84,10 +88,20 @@ fn select(inherited_cpus: Cpus, cores: &[Cpus]) -> Result<Budget> {
         !build_cpus.is_empty(),
         "cannot reserve a physical core while leaving CPUs for the build"
     );
+    // Most image fragments use one CPU. Allow several to run together without
+    // multiplying large compilers beyond the CPUs left after core reservation.
+    let build_cores = cores
+        .iter()
+        .filter(|core| !core.is_disjoint(&build_cpus))
+        .count();
+    let nix_jobs = build_cores.min(4);
+    let nix_cores = (build_cpus.len() / nix_jobs).max(1);
     Ok(Budget {
         inherited_cpus,
         build_cpus,
         reserved_core_cpus,
+        nix_jobs,
+        nix_cores,
     })
 }
 
@@ -129,10 +143,11 @@ pub(crate) fn run(root: &Path, arguments: &[OsString]) -> Result<u8> {
     let inherited_config = std::env::var("NIX_CONFIG").unwrap_or_default();
     let config = format!(
         r#"{inherited_config}
-max-jobs = 1
+max-jobs = {nix_jobs}
 cores = {cores}
 "#,
-        cores = budget.build_cpus.len()
+        nix_jobs = budget.nix_jobs,
+        cores = budget.nix_cores
     );
 
     sched_setaffinity(None, &affinity).context("cannot restrict build CPU affinity")?;
@@ -143,9 +158,11 @@ cores = {cores}
 
     support::record(&root.join(".airlock-logs/build-cpu-budget.json"), &budget)?;
     eprintln!(
-        "Image build: reserving physical-core CPUs {reserved:?}; using CPUs {build:?} with {jobs} Cargo jobs and one Nix build at a time.",
+        "Image build: reserving physical-core CPUs {reserved:?}; using CPUs {build:?} with {jobs} Cargo jobs and {nix_jobs} concurrent Nix jobs ({nix_cores} cores each).",
         reserved = budget.reserved_core_cpus,
         build = budget.build_cpus,
+        nix_jobs = budget.nix_jobs,
+        nix_cores = budget.nix_cores,
     );
 
     let error = Command::new(program)
@@ -168,13 +185,19 @@ mod tests {
         let budget = select(cpu_list("2,4,7,10,12,15")?, &cores)?;
         assert_eq!(budget.build_cpus, cpu_list("2,4,10,12")?);
         assert_eq!(budget.reserved_core_cpus, cpu_list("7,15")?);
+        assert_eq!((budget.nix_jobs, budget.nix_cores), (2, 2));
 
         let nested = select(budget.build_cpus.clone(), &cores)?;
         assert_eq!(nested.build_cpus, budget.build_cpus);
         assert_eq!(nested.reserved_core_cpus, budget.reserved_core_cpus);
+        assert_eq!((nested.nix_jobs, nested.nix_cores), (2, 2));
 
         let partial = select(cpu_list("2,4,7")?, &cores)?;
         assert_eq!(partial.build_cpus, cpu_list("2,4")?);
+        assert_eq!((partial.nix_jobs, partial.nix_cores), (2, 1));
+
+        let one = select(cpu_list("2,10")?, &cores)?;
+        assert_eq!((one.nix_jobs, one.nix_cores), (1, 2));
 
         assert!(select(cpu_list("2,10")?, &[cpu_list("2,10")?]).is_err());
         assert!(select(cpu_list("2,10")?, &[cpu_list("2,10")?, cpu_list("10,12")?]).is_err());
