@@ -815,7 +815,16 @@ fn namespace_maintenance_follows_verification_and_detects_wrong_runtime() -> Res
         machine.path("etc/generation-retention.json"),
         &json!({"enabled": true}),
     )?;
+    fs::rename(
+        machine.path("etc/generation-retention.json"),
+        machine.path("host/etc/airlock/generation-retention.json"),
+    )?;
+    symlink(
+        "/run/current-system/etc/airlock/generation-retention.json",
+        machine.path("etc/generation-retention.json"),
+    )?;
     machine.run(&["verify"], None, true)?;
+    machine.run(&["release-list"], None, true)?;
     assert!(machine.path("machine/maintenance/pending.json").is_file());
     let result = machine.run(&["generation-maintenance"], None, true)?;
     assert_eq!(result["status"], "passed");

@@ -396,7 +396,7 @@ impl Coordinator {
             "early purge override does not match active trash from release"
         );
         if saved.is_none()
-            && state::optional::<RetentionPolicy>(Path::new(
+            && state::optional_configuration::<RetentionPolicy>(Path::new(
                 "/etc/airlock/generation-retention.json",
             ))?
             .is_some_and(|p| p.enabled)
@@ -764,7 +764,7 @@ impl Coordinator {
             MachineOperation::Maintenance,
         )?;
         ensure!(
-            state::optional::<RetentionPolicy>(Path::new(
+            state::optional_configuration::<RetentionPolicy>(Path::new(
                 "/etc/airlock/generation-retention.json"
             ))?
             .is_some_and(|p| p.enabled),

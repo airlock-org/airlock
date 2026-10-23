@@ -466,7 +466,7 @@ impl Coordinator {
         self.persist(record)?;
 
         let maintenance = (|| -> Result<()> {
-            if let Some(policy) = state::optional::<RetentionPolicy>(Path::new(
+            if let Some(policy) = state::optional_configuration::<RetentionPolicy>(Path::new(
                 "/etc/airlock/generation-retention.json",
             ))? && policy.enabled
             {

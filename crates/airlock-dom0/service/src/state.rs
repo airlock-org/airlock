@@ -56,6 +56,15 @@ pub(crate) fn configuration<T: DeserializeOwned>(path: &Path) -> Result<T> {
     read_json(&resolved, LIMIT).with_context(|| format!("read configuration {}", path.display()))
 }
 
+/// Treat only an absent configuration entry as disabled; broken generation links remain errors.
+pub(crate) fn optional_configuration<T: DeserializeOwned>(path: &Path) -> Result<Option<T>> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => configuration(path).map(Some),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
 #[cfg(test)]
 mod configuration_tests {
     use super::*;
@@ -76,6 +85,8 @@ mod configuration_tests {
 
         let decoded: Value = configuration(&configured)?;
         assert_eq!(decoded["schema"], "airlock.qubes-topology.v1");
+        assert_eq!(optional_configuration::<Value>(&configured)?, Some(decoded));
+        assert!(optional_configuration::<Value>(&root.join("absent.json"))?.is_none());
         assert!(read::<Value>(&configured).is_err());
         assert!(optional::<Value>(&configured).is_err());
 
@@ -86,6 +97,7 @@ mod configuration_tests {
 
         fs::remove_file(&data)?;
         assert!(configuration::<Value>(&configured).is_err());
+        assert!(optional_configuration::<Value>(&configured).is_err());
         fs::create_dir(&data)?;
         assert!(configuration::<Value>(&configured).is_err());
         Ok(())

@@ -120,6 +120,12 @@ impl Machine {
             symlink(HOST, temporary.path().join("runtime").join(name))?;
         }
         fs::write(temporary.path().join("etc/machine-profile"), "usb-lab\n")?;
+        save(
+            temporary
+                .path()
+                .join("host/etc/airlock/machine-source.json"),
+            &json!({"schema":"airlock.machine-source.v1","revision":revision(),"lockHash":lock_hash()}),
+        )?;
         fs::write(temporary.path().join("etc/review-required"), "v1\n")?;
         save(
             temporary.path().join("etc/generation-retention.json"),
