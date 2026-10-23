@@ -8,6 +8,7 @@ license = "MIT"
 description = "Airlock command line interface"
 
 [dependencies]
+airlock-diagnostics = { path = "../airlock-common/diagnostics", features = ["runtime"] }
 airlock-nix-core = { path = "../airlock-common/nix", features = ["runtime", "artifacts"] }
 anyhow = "1.0"
 rustix = { version = "1.1", features = ["fs", "process"] }

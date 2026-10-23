@@ -25,6 +25,9 @@ fn main() -> ExitCode {
         Some(command) if command == "inspect" => {
             inspect::main_from(std::iter::once("airlock inspect".into()).chain(args))
         }
+        Some(command) if command == "diagnostics" => airlock_diagnostics::cli::main_from(
+            std::iter::once("airlock diagnostics".into()).chain(args),
+        ),
         Some(command) if command == "machine" => {
             machine::main_from(std::iter::once("airlock machine".into()).chain(args))
         }
@@ -49,7 +52,20 @@ fn main() -> ExitCode {
 
 fn help() {
     println!(
-        "{}\n\nUsage: airlock <COMMAND>\n\nCommands:\n  builder-store Mount or stop the guest builder store\n  artifact Transfer a frozen Nix configuration through dom0 admission\n  inspect  Read-only local record and lock inspection (see inspect --help)\n  machine  Configuration, deployment and maintenance (see machine --help)\n\nOptions:\n  -h, --help     Show help\n  -V, --version  Show version",
-        env!("CARGO_PKG_DESCRIPTION")
+        r#"{description}
+
+Usage: airlock <COMMAND>
+
+Commands:
+  builder-store Mount or stop the guest builder store
+  artifact      Transfer a frozen Nix configuration through dom0 admission
+  inspect       Read-only local record and lock inspection (see inspect --help)
+  machine       Configuration, deployment and maintenance (see machine --help)
+  diagnostics   Discover and request scoped read-only VM evidence
+
+Options:
+  -h, --help     Show help
+  -V, --version  Show version"#,
+        description = env!("CARGO_PKG_DESCRIPTION")
     );
 }

@@ -5,6 +5,11 @@ use std::fmt;
 /// An authoring failure with enough context to identify the VM and relationship.
 #[derive(Debug, PartialEq, Eq)]
 pub enum AuthoringError {
+    /// A diagnostic source or frozen endpoint contract is inconsistent.
+    InvalidDiagnostics {
+        /// Explanation naming the invalid source or contract.
+        reason: String,
+    },
     /// A custom feature name is invalid or would replace a role-owned invariant.
     InvalidFeature {
         /// VM whose additional feature was rejected.
@@ -88,6 +93,9 @@ impl fmt::Display for AuthoringError {
     /// Renders a contextual diagnostic without discarding its structured category.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidDiagnostics { reason } => {
+                write!(formatter, "invalid diagnostics: {reason}")
+            }
             Self::InvalidFeature { vm, name } => {
                 write!(formatter, "{vm}: invalid or role-owned feature {name}")
             }

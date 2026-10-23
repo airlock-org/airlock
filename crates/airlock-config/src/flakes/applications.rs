@@ -26,6 +26,7 @@ pub(super) fn outputs() -> NixValue {
                         ("airlock-dev", Application::Development),
                         ("airlock-image", Application::Image),
                         ("airlock-cli", Application::Cli),
+                        ("airlock-diagnostics", Application::Diagnostics),
                         ("airlock-sys-ctrl-service", Application::ControllerService),
                         ("airlock-vm-service", Application::VmService),
                         ("airlock-vm-init", Application::VmInit),

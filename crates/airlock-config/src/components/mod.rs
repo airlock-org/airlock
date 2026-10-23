@@ -7,3 +7,6 @@ mod machine_source;
 
 #[path = "screen-capture.rs"]
 pub mod screen_capture;
+
+/// Connect a designated diagnostic client to declared VM and host evidence.
+pub mod diagnostics;

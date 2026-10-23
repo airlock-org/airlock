@@ -99,6 +99,8 @@ pub(crate) fn run(root: &Path, prepare: bool) -> Result<u8> {
             "airlock-machine-planning",
             "-p",
             "airlock-deployment-core",
+            "-p",
+            "airlock-diagnostics",
             "--locked",
         ])
         .arg("--target-dir")

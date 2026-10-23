@@ -58,6 +58,7 @@ dependencies = [
 name = "airlock-cli"
 version = "0.1.0"
 dependencies = [
+ "airlock-diagnostics",
  "airlock-nix-core",
  "anyhow",
  "clap",
@@ -73,9 +74,11 @@ name = "airlock-config"
 version = "0.1.0"
 dependencies = [
  "airlock-build",
+ "airlock-diagnostics",
  "airlock-machine-core",
  "airlock-nix-core",
  "airlock-sys-gui-service",
+ "anyhow",
  "rusix",
  "serde",
  "serde_json",
@@ -110,6 +113,19 @@ dependencies = [
  "signal-hook",
  "tar",
  "tempfile",
+]
+
+[[package]]
+name = "airlock-diagnostics"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "rustix 1.1.5",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "vstd",
 ]
 
 [[package]]

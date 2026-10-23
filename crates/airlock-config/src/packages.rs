@@ -16,6 +16,7 @@ pub(crate) fn configuration() -> Config {
         let workspace = Workspace::new(NixPath::from_expression(arguments.select("apps")));
         let mut packages = [
             ("cli", Application::Cli),
+            ("diagnostics", Application::Diagnostics),
             ("development", Application::Development),
             ("dom0", Application::Dom0),
             ("controllerService", Application::ControllerService),

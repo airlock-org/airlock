@@ -73,6 +73,15 @@ impl<R> VmHandle<R> {
             .push(module.into());
     }
 
+    /// Register a component-owned evidence source; finalization checks duplicate and unsafe declarations.
+    pub fn add_diagnostic_source(&self, source: airlock_diagnostics::Source) {
+        self.reference
+            .definition
+            .diagnostic_sources
+            .borrow_mut()
+            .push(source);
+    }
+
     /// Advertise an additional Qubes feature without replacing role or relationship invariants.
     /// Reject invalid setting names and feature keys owned by the machine's role implementation.
     pub fn set_feature(&self, name: &str, value: impl Into<String>) -> Result<(), AuthoringError> {
@@ -133,7 +142,7 @@ impl<R> VmHandle<R> {
     }
 }
 
-/// A NixOS contribution that can declare the GNOME completion capability.
+/// A NixOS contribution that keeps desktop capabilities and diagnostic sources beside configuration.
 /// Ordinary Rusix modules convert directly; the GNOME contribution also
 /// informs connection validation. Implementation imports belong to each module.
 #[derive(Clone)]
@@ -142,6 +151,8 @@ pub struct VmModule {
     module: NixosModule,
     /// Whether this contribution installs GNOME, checked when connecting capture services.
     gnome: bool,
+    /// Fixed evidence declarations installed whenever this component is attached to a VM.
+    diagnostic_sources: Vec<airlock_diagnostics::Source>,
 }
 
 impl From<NixosModule> for VmModule {
@@ -150,11 +161,18 @@ impl From<NixosModule> for VmModule {
         Self {
             module,
             gnome: false,
+            diagnostic_sources: Vec::new(),
         }
     }
 }
 
 impl VmModule {
+    /// Attach a component-owned source; machine finalization validates and freezes its reader.
+    pub fn with_diagnostic_source(mut self, source: airlock_diagnostics::Source) -> Self {
+        self.diagnostic_sources.push(source);
+        self
+    }
+
     /// Records that this contribution installs GNOME and its capture completion adapter.
     pub(crate) fn with_gnome(mut self) -> Self {
         self.gnome = true;
@@ -198,6 +216,15 @@ impl VmReference {
     /// Copies configuration with resolved identities and the validated display choice.
     /// The returned data contains no links to mutable declarations.
     fn snapshot(&self, guivm: ReferenceSetting) -> VmSnapshot {
+        let mut diagnostic_sources = self.definition.diagnostic_sources.borrow().clone();
+        diagnostic_sources.extend(
+            self.definition
+                .modules
+                .borrow()
+                .iter()
+                .flat_map(|module| module.diagnostic_sources.iter().cloned()),
+        );
+
         VmSnapshot {
             name: self.definition.name.clone(),
             role: self
@@ -214,6 +241,7 @@ impl VmReference {
                 .map(|part| part.module.clone())
                 .collect(),
             guivm,
+            diagnostic_sources,
         }
     }
 }
@@ -236,6 +264,8 @@ struct VmDefinition {
     gui: RefCell<Option<GuiReference>>,
     /// Optional capture destination resolved together with the machine configuration.
     capture: RefCell<Option<CaptureTarget>>,
+    /// Evidence declarations supplied beside component configuration.
+    diagnostic_sources: RefCell<Vec<airlock_diagnostics::Source>>,
 }
 
 /// A display assignment that cannot keep a GUI/application reference cycle alive.
@@ -545,6 +575,8 @@ pub struct VmSnapshot {
     pub features: BTreeMap<String, String>,
     /// Resolved Qubes display preference: omit to inherit, null to disable, name to select.
     pub guivm: ReferenceSetting,
+    /// Component-owned evidence inventory frozen with the VM configuration.
+    pub diagnostic_sources: Vec<airlock_diagnostics::Source>,
 }
 
 /// Choices that can be edited without invalidating existing VM connections.
@@ -607,6 +639,7 @@ impl Vm {
             modules: RefCell::new(Vec::new()),
             gui: RefCell::new(None),
             capture: RefCell::new(None),
+            diagnostic_sources: RefCell::new(Vec::new()),
         });
 
         Ok(VmHandle {
@@ -854,9 +887,16 @@ pub struct MachineSnapshot {
     host: Option<HostSnapshot>,
     /// Immutable capture relationships used by endpoint lowering and host policy.
     captures: Vec<CaptureConnection>,
+    /// Validated diagnostic client and the exact installed endpoint inventory.
+    diagnostics: Option<crate::components::diagnostics::Access>,
 }
 
 impl MachineSnapshot {
+    /// Borrow the frozen diagnostic relationship used by endpoint installation and Qubes policy.
+    pub fn diagnostic_access(&self) -> Option<&crate::components::diagnostics::Access> {
+        self.diagnostics.as_ref()
+    }
+
     /// Check that a handle belongs to this snapshot, including snapshots made before later registrations.
     pub(crate) fn contains<R>(&self, handle: &VmHandle<R>) -> bool {
         handle
@@ -938,9 +978,16 @@ pub struct Machine {
     host: Option<HostBindings>,
     /// Boot environment captured alongside the resolved host relationships.
     platform: HostPlatform,
+    /// Diagnostic source declaration, checked for exact machine membership at finalization.
+    diagnostic_observer: Option<VmReference>,
 }
 
 impl Machine {
+    /// Designate the diagnostic client without granting permissions until finalization and deployment.
+    pub(crate) fn set_diagnostic_observer<R>(&mut self, observer: &VmHandle<R>) {
+        self.diagnostic_observer = Some(observer.reference.clone());
+    }
+
     /// Selects the host boot environment for subsequent snapshots.
     pub fn set_host_platform(&mut self, platform: HostPlatform) {
         self.platform = platform;
@@ -1102,12 +1149,21 @@ impl Machine {
         }
 
         crate::components::screen_capture::configure(&mut vms, &captures);
+        if let Some(observer) = &self.diagnostic_observer {
+            self.check_reference("diagnostics", "observer", &observer.definition)?;
+        }
+        let diagnostics = crate::components::diagnostics::configure(
+            &mut vms,
+            self.diagnostic_observer.as_ref().map(VmReference::name),
+            host.is_some(),
+        )?;
 
         let snapshot = MachineSnapshot {
             owner: Rc::clone(&self.owner),
             vms,
             host,
             captures,
+            diagnostics,
         };
         snapshot.relationships().ordered().map_err(|error| {
             AuthoringError::InvalidDependencies {

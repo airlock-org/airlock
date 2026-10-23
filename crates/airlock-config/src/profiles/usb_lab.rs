@@ -31,5 +31,6 @@ pub fn machine(firewall_diagnostics: bool) -> Result<MachineSnapshot, AuthoringE
     machine.add(&assistant)?;
 
     machine.set_host(&gui, &firewall, &controller);
+    crate::components::diagnostics::enable(&mut machine, &assistant);
     machine.finish()
 }

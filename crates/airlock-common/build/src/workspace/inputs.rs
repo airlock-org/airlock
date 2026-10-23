@@ -29,6 +29,7 @@ const MANIFESTS: &[(&str, &str)] = manifests![
     "airlock-common/nix",
     "airlock-common/machine",
     "airlock-common/deployment",
+    "airlock-common/diagnostics",
     "airlock-common/machine-planning",
     "airlock-common/build",
     "airlock-common/qubes",

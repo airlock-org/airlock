@@ -59,6 +59,74 @@ fn fixture() -> Fixture {
     fixture
 }
 
+/// Diagnostic authority follows declaration ownership and frozen inventories, not equal-looking names.
+#[test]
+fn diagnostics_validate_membership_and_freeze_component_sources() {
+    use airlock_config::components::diagnostics::{self, Reader, Source};
+    let mut local = fixture();
+    let foreign = fixture();
+    diagnostics::enable(&mut local.machine, &foreign.home);
+    dependency_error(
+        local.machine.finish().err().unwrap(),
+        true,
+        ("diagnostics", "observer", "usr-home"),
+    );
+
+    let missing = Vm::personal("usr-home", &local.firewall, GiB(8)).unwrap();
+    diagnostics::enable(&mut local.machine, &missing);
+    dependency_error(
+        local.machine.finish().err().unwrap(),
+        false,
+        ("diagnostics", "observer", "usr-home"),
+    );
+
+    diagnostics::enable(&mut local.machine, &local.home);
+    let before = local.machine.finish().unwrap();
+    local.network.add_module(
+        model::VmModule::from(rusix::nixos::NixosModule::empty()).with_diagnostic_source(Source {
+            id: "component-kernel".parse().unwrap(),
+            description: "Component-owned kernel evidence".into(),
+            reader: Reader::Kernel {},
+        }),
+    );
+    let after = local.machine.finish().unwrap();
+    let find = |snapshot: &model::MachineSnapshot| {
+        snapshot
+            .diagnostic_access()
+            .unwrap()
+            .endpoints()
+            .iter()
+            .find(|endpoint| endpoint.target.as_str() == "sys-net")
+            .unwrap()
+            .sources
+            .len()
+    };
+    assert_eq!(find(&after), find(&before) + 1);
+    assert_eq!(
+        before.diagnostic_access().unwrap().endpoints().len(),
+        before.vms().count() + 1
+    );
+    airlock_config::generate(&after).unwrap();
+    let policy = diagnostics::policy(after.diagnostic_access().unwrap());
+    for rule in policy
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>())
+        .filter(|fields| fields[4] == "allow")
+    {
+        assert_eq!(rule[2], "usr-home");
+        assert!(rule.contains(&"autostart=no"));
+    }
+    local.network.add_diagnostic_source(Source {
+        id: "journal".parse().unwrap(),
+        description: "Duplicate".into(),
+        reader: Reader::Kernel {},
+    });
+    assert!(matches!(
+        local.machine.finish(),
+        Err(Error::InvalidDiagnostics { .. })
+    ));
+}
+
 /// Check the error category and the VM, relationship and target reported to the author.
 fn dependency_error(error: Error, foreign: bool, expected: (&str, &str, &str)) {
     let (vm, relation, target) = match error {

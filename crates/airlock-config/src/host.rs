@@ -119,6 +119,12 @@ pub(crate) fn modules(host: &HostSnapshot, machine: &MachineSnapshot) -> Package
         };
 
         let mut modules = vec![nested::vm(true), configuration];
+        if let Some(access) = machine.diagnostic_access() {
+            modules.push(crate::components::diagnostics::host_module(
+                access,
+                airlock_build::Workspace::new(inputs.airlock_apps()),
+            ));
+        }
         modules.push(nix_record! {
             "environment": nix_record! {
                 "etc": nix_record! {

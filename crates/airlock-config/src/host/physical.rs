@@ -151,8 +151,15 @@ pub(crate) fn module(
             },
         };
 
-        ModuleBody::empty()
-            .key("airlock-config.physical-host")
+        let mut body = ModuleBody::empty();
+        if let Some(access) = machine.diagnostic_access() {
+            body = body.import_value(crate::components::diagnostics::host_module(
+                access,
+                build.workspace.clone(),
+            ));
+        }
+
+        body.key("airlock-config.physical-host")
             .import_value(super::deployment::module(&build.source, &build.workspace))
             .import_value(super::store::module(&build.workspace))
             .module(base::module(&inputs))

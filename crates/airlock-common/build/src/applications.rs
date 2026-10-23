@@ -18,6 +18,8 @@ pub enum Application {
     StoreCache,
     /// Read-only host observation with no Qubes control implementation.
     Observation,
+    /// Scoped diagnostic evidence endpoint without deployment authority.
+    Diagnostics,
     /// Fixed native argument and environment adapters.
     Launcher,
     /// Disposable NixOS test-VM systemd/udev regression, never installed in production VMs.
@@ -83,6 +85,12 @@ impl Application {
                 "airlock-observe-dom0",
                 "Read-only dom0 observations",
                 &["airlock-observe-dom0"],
+            ),
+            Self::Diagnostics => (
+                "airlock-diagnostics",
+                "airlock-diagnostics",
+                "Scoped read-only diagnostic evidence",
+                &["airlock-diagnostics", "airlock-diagnostics-relay"],
             ),
             Self::Launcher => (
                 "airlock-nix-core",
@@ -194,6 +202,8 @@ impl Application {
         );
         let features: &[&str] = if matches!(self, Self::StoreCache) {
             &["artifacts"]
+        } else if matches!(self, Self::Diagnostics) {
+            &["runtime"]
         } else {
             &[]
         };
@@ -354,7 +364,8 @@ impl Application {
             | Self::InputTest
             | Self::UplinkTest
             | Self::TestReport
-            | Self::VmInit => {}
+            | Self::VmInit
+            | Self::Diagnostics => {}
         }
 
         if matches!(self, Self::PrepareRuntime) {
