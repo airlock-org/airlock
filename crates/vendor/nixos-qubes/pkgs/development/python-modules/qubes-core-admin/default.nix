@@ -1,0 +1,183 @@
+{
+  lib,
+  buildPythonPackage,
+  fetchFromGitHub,
+  lxml,
+  docutils,
+  jinja2,
+  pyaml,
+  qubes-core-qrexec,
+  qubes-core-qubesdb,
+  qubes-core-admin-client,
+  qubes-core-libvirt,
+  pyinotify,
+  killall,
+  coreutils,
+  pkgs,
+  patsh,
+  bash,
+  lvm2,
+  util-linux,
+  replaceVars,
+  writeShellScript,
+  distutils,
+  setuptools,
+  qubes-core-qubesdb-client ? pkgs.qubes-core-qubesdb,
+  qubes-core-qubesdb-daemon ? pkgs.qubes-core-qubesdb.daemon,
+  qubes-vmm-xen,
+  gawk,
+  gnugrep,
+  pciutils,
+  # Uses entrypoints to provide usb device type extension.
+  # It may make sense to pass it to systemd service PYTHONPATH?
+  qubes-app-linux-usb-proxy,
+}:
+let
+  inherit (pkgs) hwdata;
+
+  # Original qubes.GetDate RPC uses qubes-core-admin-client package api, and
+  # we want to avoid circular dependency here.
+  # This script is short, and easily reproducible in just bash.
+  # The only bad thing here is that original supports ClockVM... But they are
+  # not used in dom0 anyway.
+  getDateRpc = writeShellScript "qubes.GetDate" ''
+    if test "$#" -lt 1 || test "$#" -gt 2; then
+      echo "wrong number of arguments, must have at most 1" >&2
+      exit 1
+    fi
+
+    arg="-Iseconds"
+    if test "$#" -ge 2 && test "$1" -ne 0; then
+      arg="-Ins"
+    fi
+
+    env -i date -u $arg
+  '';
+
+  version = "4.3.44";
+  src = fetchFromGitHub {
+    owner = "QubesOS";
+    repo = "qubes-core-admin";
+    rev = "refs/tags/v${version}";
+    hash = "sha256-bxgDi0v5u2PTLxk+sy2uW75iwaH0LBbm1MG9ss1gJ1Q=";
+  };
+in
+buildPythonPackage {
+  inherit version src;
+  pname = "qubes-core-admin";
+  format = "custom";
+
+  patches = [
+    ./0001-refactor-use-mutable-systemd.patch
+    # Note that out is substituted using %out%, and the actual
+    # substitution is done in postPatch
+    (replaceVars ./0002-refactor-template-paths.patch {
+      inherit killall hwdata coreutils;
+      qubes_client = qubes-core-admin-client;
+      qrexec_dom0 = qubes-core-qrexec.dom0;
+      qrexec_util = qubes-core-qrexec.util;
+      qrexec_client = qubes-core-qrexec;
+      qubesdb_daemon = qubes-core-qubesdb-daemon;
+      qubesdb_client = qubes-core-qubesdb-client;
+      # Imported qubes-vmm-xen is a python package, which might be built with a
+      # different python version (and is used as the system xen binary), but only
+      # binaries are wanted here.
+      qubes_vmm_xen = pkgs.qubes-vmm-xen;
+    })
+    ./0003-fix-fixup-paths.patch
+    ./0004-fix-python-prefix-arg.patch
+    ./0005-python314-qubesd-event-loop.patch
+    (replaceVars ./0006-refactor-runuser-path.patch {
+      runuser = "${util-linux}/bin/runuser";
+    })
+  ];
+
+  postPatch = ''
+    cat linux/aux-tools/startup-misc.sh
+    substituteInPlace \
+      linux/{aux-tools/startup-misc.sh,systemd/qubes-{core,qmemman}.service,systemd/qubesd.service} \
+      qubes/{app.py,storage/file.py} \
+      --replace-fail "%out%" "$out"
+
+    substituteInPlace qubes-rpc-policy/generate-admin-policy \
+      --replace-fail "#!/usr/bin/python3" "#!/usr/bin/env python3"
+    # FIXME: Shouldn't it use build-system/nativeBuildInputs/idk?
+    wrapPythonProgramsIn qubes-rpc-policy "${lxml} ${docutils} ${jinja2} ${pyaml}"
+  '';
+
+  nativeBuildInputs = [
+    patsh
+    setuptools
+    distutils
+    # In PATH at build time for patsh to resolve bare commands in scripts
+    qubes-vmm-xen
+    pciutils
+    gawk
+    gnugrep
+    coreutils
+    killall
+    lvm2
+    util-linux
+    bash
+  ];
+
+  propagatedBuildInputs = [
+    lxml
+    docutils
+    jinja2
+    pyaml
+    qubes-core-qrexec
+    qubes-core-qubesdb
+    qubes-core-admin-client
+    qubes-core-libvirt
+    qubes-app-linux-usb-proxy
+    pyinotify
+    qubes-vmm-xen
+  ];
+
+  buildFlags = [ "all" ];
+
+  # Test data contains intentionally dangling symlinks (fake sysfs PCI device tree)
+  dontCheckForBrokenSymlinks = true;
+
+  dontUsePypaInstall = true;
+  postInstall = ''
+    mkdir -p $man/share
+
+    # TODO: Move to libexec?
+    for script in create-snapshot destroy-snapshot startup-misc.sh fix-dir-perms.sh; do
+      patsh -f $out/lib/qubes/$script -s ${builtins.storeDir}
+    done
+    wrapPythonProgramsIn $out/lib/qubes ${qubes-core-admin-client}
+
+    cp ${getDateRpc} $out/etc/qubes-rpc/qubes.GetDate
+  '';
+
+  makeFlags = [
+    "DESTDIR=$(out)"
+    "DOCDIR=/share/doc/qubes"
+    "RELAXNGPATH=/share/doc/qubes/relaxng"
+    "FILESDIR=/share/qubes"
+    "UNITDIR=/lib/systemd/system"
+    "BACKEND_VMM=xen"
+    "PYTHON_PREFIX_ARG=--prefix=."
+  ];
+
+  pythonImportsCheck = [ "qubes" ];
+
+  outputs = [
+    "out"
+    "man"
+  ];
+
+  meta = {
+    description = "Qubes dom0 daemon & RPC";
+    homepage = "https://qubes-os.org";
+    license = lib.licenses.gpl2Plus;
+    maintainers = with lib.maintainers; [
+      lach
+      sigmasquadron
+    ];
+    platforms = lib.platforms.linux;
+  };
+}

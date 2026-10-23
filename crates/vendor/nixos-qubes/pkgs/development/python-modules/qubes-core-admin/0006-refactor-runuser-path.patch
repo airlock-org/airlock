@@ -1,0 +1,26 @@
+diff --git a/qubes/vm/adminvm.py b/qubes/vm/adminvm.py
+index 6e2215ff..93e21d0b 100644
+--- a/qubes/vm/adminvm.py
++++ b/qubes/vm/adminvm.py
+@@ -317,7 +317,7 @@ class AdminVM(qubes.vm.BaseVM):
+         )
+ 
+         if user != "root":
+-            cmd = ["runuser", "-u", user, "--"]
++            cmd = ["@runuser@", "-u", user, "--"]
+         else:
+             cmd = []
+         cmd.extend(
+diff --git a/qubes/vm/qubesvm.py b/qubes/vm/qubesvm.py
+index b579aa73..01cf75f2 100644
+--- a/qubes/vm/qubesvm.py
++++ b/qubes/vm/qubesvm.py
+@@ -2134,7 +2134,7 @@ class QubesVM(qubes.vm.mix.net.NetVMMixin, qubes.vm.BaseVM):
+             # some files (like clipboard) may be created as root and cause
+             # permission problems
+             qubes_group = grp.getgrnam("qubes")
+-            command = ["runuser", "-u", qubes_group.gr_mem[0], "--"] + list(
++            command = ["@runuser@", "-u", qubes_group.gr_mem[0], "--"] + list(
+                 command
+             )
+         p = await asyncio.create_subprocess_exec(*command, **kwargs)

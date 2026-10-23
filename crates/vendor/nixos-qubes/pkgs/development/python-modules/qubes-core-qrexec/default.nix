@@ -1,0 +1,244 @@
+{
+  lib,
+  stdenv,
+  buildPythonPackage,
+  fetchFromGitHub,
+  qubes-core-vchan-xen,
+  pkg-config,
+  pandoc,
+  pyinotify,
+  pygobject3,
+  wrapPython,
+  gtk3,
+  wrapGAppsHook3,
+  gobject-introspection,
+  patsh,
+  bash,
+  socat,
+  kmod,
+  linux-pam,
+  setuptools,
+  distutils,
+}:
+
+let
+  inherit (lib) optionalString;
+
+  version = "4.4.1";
+  src = fetchFromGitHub {
+    owner = "QubesOS";
+    repo = "qubes-core-qrexec";
+    rev = "refs/tags/v${version}";
+    hash = "sha256-RvkydyuKWiVsSkcNVsiRepmenUvsQmLgCzP/KMAcd+Q=";
+  };
+  makeFlags = [
+    "DESTDIR=$(out)"
+    "LIBDIR=/lib"
+    "INCLUDEDIR=/include"
+    "PYTHON_PREFIX_ARG=--prefix=."
+  ];
+
+  base = buildPythonPackage {
+    inherit version src;
+    pname = "qubes-core-qrexec-base";
+    format = "custom";
+
+    postPatch = ''
+      substituteInPlace qrexec/client.py \
+        --replace-fail "/usr/bin/qrexec-client-vm" "${domU}/bin/qrexec-client-vm" \
+        --replace-fail "/usr/bin/qrexec-client" "${dom0-bootstrap}/lib/qubes/qrexec-client"
+      substituteInPlace policy-agent-extra/qrexec-policy-agent.desktop \
+        --replace-fail "Exec=/usr/lib/qubes/qrexec-policy-agent-autostart" "Exec=$out/lib/qubes/qrexec-policy-agent-autostart"
+    '';
+
+    nativeBuildInputs = [
+      pkg-config
+      setuptools
+      distutils
+      gobject-introspection
+      wrapGAppsHook3
+    ];
+
+    buildInputs = [
+      qubes-core-vchan-xen
+      util
+      gtk3
+    ];
+
+    propagatedBuildInputs = [
+      pyinotify
+      pygobject3
+      qubes-core-vchan-xen
+      # TODO: gbulb
+    ];
+
+    buildFlags = [ "all-base" ];
+
+    dontUsePypaInstall = true;
+    installTargets = [ "install-base" ];
+
+    postInstall = ''
+      mv $out/usr/bin $out/
+      mv $out/usr/lib/* $out/lib/
+      rm -d $out/usr/{lib,}
+    '';
+
+    pythonImportsCheck = [ "qrexec" ];
+
+    inherit makeFlags;
+  };
+
+  # qrexec-client-vm qrexec-fork-server
+  domU = stdenv.mkDerivation {
+    inherit version src;
+    pname = "qubes-core-qrexec-domU";
+
+    postPatch = ''
+      substituteInPlace systemd/qubes-qrexec-agent.service \
+        --replace-fail "After=xendriverdomain.service systemd-user-sessions.service" "After=xendriverdomain.service" \
+        --replace-fail "ExecStart=/usr/lib/" "ExecStart=$out/lib/" \
+        --replace-fail "modprobe" "${kmod}/bin/modprobe"
+    '';
+
+    nativeBuildInputs = [
+      pkg-config
+      pandoc
+    ];
+
+    buildInputs = [
+      qubes-core-vchan-xen
+      util
+      linux-pam
+    ];
+
+    buildFlags = [ "all-vm" ];
+    makeFlags = makeFlags ++ [ "HAVE_PAM_APPL=1" ];
+
+    installTargets = [ "install-vm" ];
+
+    postInstall = ''
+      mv $out/usr/{bin,share} $out/
+      mv $out/usr/lib/* $out/lib/
+      rm -d $out/usr/{lib,}
+    '';
+  };
+
+  dom0 = dom0-core false;
+  dom0-bootstrap = dom0-core true;
+  # base depends on boostrap, thus building core 2 times:
+  # one time it is just the binary usable by base, second time it depends
+  # on base and provides everything.
+  dom0-core =
+    isBootstrap:
+    stdenv.mkDerivation {
+      inherit version src;
+      pname = "qubes-core-qrexec-daemon${optionalString isBootstrap "-core"}";
+
+      patches = [
+        ./0002-refactor-remove-default-policy-prgram.patch
+      ];
+
+      postPatch = ''
+        # qrexec-client -l runs a local command through a hardcoded shell.
+        # NixOS has /bin/sh, but no /bin/bash; PATH cannot fix execl().
+        substituteInPlace daemon/qrexec-client.c \
+          --replace-fail '"/bin/bash"' '"${bash}/bin/bash"'
+      ''
+      + optionalString (!isBootstrap) ''
+        substituteInPlace systemd/qubes-qrexec-policy-daemon.service \
+          --replace-fail "ExecStart=/usr/bin/qrexec-policy-daemon" "ExecStart=${base}/bin/qrexec-policy-daemon"
+      '';
+
+      nativeBuildInputs = [
+        pkg-config
+        patsh
+        wrapPython
+      ];
+
+      buildInputs = [
+        qubes-core-vchan-xen
+        util
+        bash
+        socat
+      ];
+
+      buildFlags = [ "all-dom0" ];
+
+      installTargets = [ "install-dom0" ];
+
+      postInstall = ''
+        mkdir $out/libexec
+        mv $out/usr/sbin/* $out/libexec
+        mv $out/usr/bin $out/
+        mv $out/usr/lib/{qubes,tmpfiles.d} $out/lib/
+        rm -d $out/usr/{lib,sbin,}
+      ''
+      + optionalString isBootstrap ''
+        # This service is using binary from base package
+        rm $out/lib/systemd/system/qubes-qrexec-policy-daemon.service
+        # rpc services depend on base
+        rm -rf $out/etc/qubes/policy.d
+        rm -rf $out/etc/qubes-rpc
+        rm -d $out/{etc/{qubes,},lib/systemd/{system,}}
+      ''
+      + optionalString (!isBootstrap) ''
+        for rpcname in policy.List policy.Get policy.Replace policy.Remove \
+          policy.include.List policy.include.Get policy.include.Replace \
+          policy.include.Remove policy.GetFiles;
+        do
+          ln -sf ${base}/bin/qubes-policy-admin $out/etc/qubes-rpc/$rpcname
+        done
+        wrapPythonProgramsIn $out/etc/qubes-rpc ${base}
+      '';
+
+      inherit makeFlags;
+    };
+
+  # Util hardcodes agent paths, but it is used by agent.
+  # Building separate package for agent, which doesn't use those paths.
+  util = stdenv.mkDerivation {
+    inherit version src;
+    pname = "qubes-core-qrexec-util";
+    sourceRoot = "${src.name}/libqrexec";
+
+    patches = [
+      ./0001-refactor-remove-dependency-of-util-on-daemon.patch
+    ];
+
+    postInstall = ''
+      mkdir -p $out/libexec
+      cp ../lib/qubes-rpc-multiplexer $out/libexec/
+    '';
+
+    nativeBuildInputs = [
+      pkg-config
+    ];
+
+    buildInputs = [
+      qubes-core-vchan-xen
+    ];
+
+    inherit makeFlags;
+  };
+in
+base.overrideAttrs (oldAttrs: {
+  passthru = oldAttrs.passthru // {
+    inherit
+      domU
+      dom0
+      dom0-bootstrap
+      util
+      ;
+  };
+
+  meta = {
+    description = "Qubes cross-vm RPC layer";
+    homepage = "https://qubes-os.org";
+    license = with lib.licenses; [ gpl2Plus ];
+    maintainers = with lib.maintainers; [
+      lach
+      sigmasquadron
+    ];
+    platforms = lib.platforms.all;
+  };
+})

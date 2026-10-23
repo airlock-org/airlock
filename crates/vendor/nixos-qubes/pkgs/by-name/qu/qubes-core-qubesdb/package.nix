@@ -1,0 +1,149 @@
+{
+  lib,
+  stdenv,
+  fetchFromGitHub,
+  qubes-core-vchan-xen,
+  pkg-config,
+  systemd,
+  withPython ? false,
+  python ? null,
+}:
+let
+  inherit (lib) optionals optionalAttrs;
+
+  version = "4.3.2";
+  src = fetchFromGitHub {
+    owner = "QubesOS";
+    repo = "qubes-core-qubesdb";
+    rev = "refs/tags/v${version}";
+    hash = "sha256-zbvMfNmHrQvopAz2Zu859i/7US0Ug4YHAlNmRxwVVM0=";
+  };
+
+  daemon = stdenv.mkDerivation {
+    inherit src version;
+    pname = "qubes-core-qubesdb-daemon";
+    pyproject = true;
+
+    sourceRoot = "${src.name}/daemon";
+
+    postPatch = ''
+      # vchan module needs to be loaded using system-specific means.
+      substituteInPlace qubes-db.service \
+        --replace-fail " fedora-loadmodules.service" ""
+      substituteInPlace *.service \
+        --replace-fail "ExecStart=/usr/bin/qubesdb-daemon" "ExecStart=$out/bin/qubesdb-daemon"
+    '';
+
+    nativeBuildInputs = [
+      pkg-config
+    ];
+    buildInputs = [
+      qubes-core-vchan-xen
+      systemd.dev
+    ];
+
+    postInstall = ''
+      install -D -m0444 -t $out/lib/systemd/system *.service
+    '';
+
+    makeFlags = [
+      "DESTDIR=$(out)"
+      "BINDIR=/bin"
+      "LIBDIR=/lib"
+    ];
+
+    inherit meta;
+  };
+
+  pythonModule = python.pkgs.buildPythonPackage {
+    inherit src version;
+    pname = "qubes-core-qubesdb-daemon-python";
+    pyproject = true;
+
+    sourceRoot = "${src.name}/python";
+
+    nativeBuildInputs = [
+      pkg-config
+    ];
+
+    build-system = [
+      python.pkgs.setuptools
+    ];
+
+    buildInputs = [
+      client
+    ];
+
+    makeFlags = [
+      "DESTDIR=$(out)"
+      "LIBDIR=/lib"
+      "PYTHON_PREFIX_ARG=--prefix=."
+    ];
+
+    # The installed Python extension is import-checked as qubesdb, but this
+    # split daemon package does not install matching Python distribution
+    # metadata for the derivation name.
+    dontCheckPythonMetadata = true;
+    pythonImportsCheck = [ "qubesdb" ];
+
+    inherit meta;
+  };
+
+  client = stdenv.mkDerivation {
+    inherit src version;
+    pname = "qubes-core-qubesdb-client";
+    pyproject = true;
+
+    sourceRoot = "${src.name}/client";
+
+    patches = [
+      ./0001-fix-cmd-name-parsing.patch
+    ];
+
+    # binaries in client take around 20K of space, not worth splitting those.
+    postInstall = ''
+      make -C ../include install $makeFlags
+    '';
+
+    nativeBuildInputs = [
+      pkg-config
+    ]
+    ++ optionals withPython [
+      python
+      python.pkgs.setuptools
+    ];
+
+    buildInputs = [
+      qubes-core-vchan-xen
+    ];
+
+    makeFlags = [
+      "DESTDIR=$(out)"
+      "BINDIR=/bin"
+      "LIBDIR=/lib"
+      "INCLUDEDIR=/include"
+    ];
+
+    inherit meta;
+  };
+
+  meta = {
+    description = "Qubes VM configuration interface.";
+    homepage = "https://qubes-os.org";
+    license = lib.licenses.gpl2Plus;
+    maintainers = with lib.maintainers; [
+      lach
+      sigmasquadron
+    ];
+    # daemon can also work on windows, ignoring for now.
+    platforms = lib.platforms.linux;
+  };
+in
+client.overrideAttrs {
+  passthru = {
+    inherit daemon;
+  }
+  // optionalAttrs withPython {
+    inherit pythonModule;
+  };
+}

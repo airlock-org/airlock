@@ -38,7 +38,12 @@ pub(super) fn inputs(revision: &str) -> NixValue {
             "url": "github:NixOS/nixpkgs/e0464e47880a69896f0fb1810f00e0de469f770a",
         },
         "nixos-qubes": nix_record! {
-            "url": "path:./vendor/nixos-qubes",
+            // Share the application's Git snapshot so compatibility fixes cannot drift from it.
+            "type": "git",
+            "url": "https://github.com/airlock-org/airlock.git",
+            "dir": "crates/vendor/nixos-qubes",
+            "ref": "main",
+            "rev": revision,
             "inputs": nix_record! {
                 "nixpkgs": nix_record! {
                     "follows": "nixpkgs",

@@ -172,31 +172,55 @@ fn sources(archive: &Path, store: &Path) -> Result<Value> {
     let inputs = machine["inputs"]
         .as_object()
         .context("archived machine inputs")?;
+    let machine_path = machine["path"]
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            format!(
+                "{root}/airlock-machine",
+                root = archive["path"].as_str().unwrap_or("")
+            )
+        });
+    let _: airlock_nix_core::store_path::StoreArtifact = machine_path
+        .parse()
+        .context("archived machine source path")?;
+    let lock: Value = serde_json::from_slice(&read(
+        &store
+            .join(machine_path.trim_start_matches('/'))
+            .join("flake.lock"),
+    )?)?;
+    let root = lock["root"].as_str().context("machine lock root")?;
     let mut result = serde_json::Map::new();
     for (output, input) in [
         ("nixpkgsSource", "nixpkgs"),
         ("qubesSource", "nixos-qubes"),
         ("libvirtSource", "nixpkgs-libvirt_10_5"),
     ] {
-        let local_qubes = format!(
-            "{machine}/vendor/nixos-qubes",
-            machine = machine["path"]
-                .as_str()
-                .map(str::to_owned)
-                .unwrap_or_else(|| format!(
-                    "{root}/airlock-machine",
-                    root = archive["path"].as_str().unwrap_or("")
-                ))
-        );
-        let logical = inputs
+        let id = lock["nodes"][root]["inputs"][input]
+            .as_str()
+            .with_context(|| format!("missing locked input {input}"))?;
+        let locked = &lock["nodes"][id]["locked"];
+        let local = locked["path"]
+            .as_str()
+            .and_then(|path| path.strip_prefix("./"))
+            .map(|relative| format!("{machine_path}/{relative}"));
+        let mut logical = inputs
             .get(input)
             .and_then(|value| value["path"].as_str())
-            .or_else(|| (input == "nixos-qubes").then_some(local_qubes.as_str()))
-            .with_context(|| format!("missing archived input {input}"))?;
-        ensure!(
-            logical.starts_with("/nix/store/"),
-            "unexpected source path: {logical}"
-        );
+            .or(local.as_deref())
+            .with_context(|| format!("missing archived input {input}"))?
+            .to_owned();
+        if let Some(directory) = locked["dir"]
+            .as_str()
+            .filter(|directory| !directory.is_empty())
+        {
+            logical.push('/');
+            logical.push_str(directory);
+        }
+        // Preserve nested source directories and reject traversal before filesystem access.
+        let _: airlock_nix_core::store_path::StoreArtifact = logical
+            .parse()
+            .with_context(|| format!("unexpected source path: {logical}"))?;
         let physical = store.join(logical.trim_start_matches('/'));
         ensure!(physical.is_dir(), "archived source missing: {physical:?}");
         result.insert(output.into(), json!(physical));
@@ -253,6 +277,60 @@ trailer"#;
         assert_eq!(extract(input, None)?["schema"], "other");
         assert!(extract(input, Some("missing")).is_err());
         assert!(extract(br#"{"schema":"wanted","incomplete":["#, Some("wanted")).is_err());
+        Ok(())
+    }
+
+    /// Archived Git inputs retain their locked subdirectory in standalone and parent-wrapped reports.
+    #[test]
+    fn source_reports_resolve_git_subdirectories_from_the_machine_lock() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let store = temporary.path();
+        let parent = "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-machine-source";
+        let applications = "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-applications";
+        let nixpkgs = "/nix/store/cccccccccccccccccccccccccccccccc-nixpkgs";
+        let machine = format!("{parent}/airlock-machine");
+        let mut lock = json!({"root":"root","nodes":{
+            "root":{"inputs":{"nixpkgs":"pkgs","nixpkgs-libvirt_10_5":"pkgs","nixos-qubes":"qubes"}},
+            "pkgs":{"locked":{}},
+            "qubes":{"locked":{"dir":"crates/vendor/nixos-qubes"}}
+        }});
+        let physical_machine = store.join(machine.trim_start_matches('/'));
+        fs::create_dir_all(&physical_machine)?;
+        fs::create_dir_all(store.join(nixpkgs.trim_start_matches('/')))?;
+        let qubes = format!("{applications}/crates/vendor/nixos-qubes");
+        fs::create_dir_all(store.join(qubes.trim_start_matches('/')))?;
+        fs::write(
+            physical_machine.join("flake.lock"),
+            serde_json::to_vec(&lock)?,
+        )?;
+        let archived = json!({"path":machine,"inputs":{
+            "nixpkgs":{"path":nixpkgs}, "nixpkgs-libvirt_10_5":{"path":nixpkgs},
+            "nixos-qubes":{"path":applications}
+        }});
+        let path = store.join("archive.json");
+        fs::write(&path, serde_json::to_vec(&archived)?)?;
+        let expected = sources(&path, store)?;
+        assert_eq!(
+            expected["qubesSource"].as_str(),
+            store.join(qubes.trim_start_matches('/')).to_str()
+        );
+
+        let mut relative_machine = archived;
+        relative_machine.as_object_mut().unwrap().remove("path");
+        fs::write(
+            &path,
+            serde_json::to_vec(
+                &json!({"path":parent,"inputs":{"airlock-machine":relative_machine}}),
+            )?,
+        )?;
+        assert_eq!(sources(&path, store)?, expected);
+
+        lock["nodes"]["qubes"]["locked"]["dir"] = json!("../escape");
+        fs::write(
+            physical_machine.join("flake.lock"),
+            serde_json::to_vec(&lock)?,
+        )?;
+        assert!(sources(&path, store).is_err());
         Ok(())
     }
 }

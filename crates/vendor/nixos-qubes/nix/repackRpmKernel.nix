@@ -1,0 +1,101 @@
+{
+  stdenv,
+  rpmextract,
+  fakeroot,
+  e2fsprogs,
+  util-linux,
+  zstd,
+  attr,
+  kmod,
+}:
+{
+  kernelSrc,
+  modulesSrc,
+  kernelVersion,
+  fedoraVersion,
+}:
+let
+  version = "${kernelVersion}.${fedoraVersion}";
+  modulesImg = stdenv.mkDerivation {
+    inherit version;
+    pname = "qubes-kernel-modules.img";
+    src = modulesSrc;
+    nativeBuildInputs = [
+      fakeroot
+      rpmextract
+      e2fsprogs
+      util-linux
+      zstd
+      attr
+      kmod
+    ];
+    srcs = [
+      kernelSrc
+      modulesSrc
+    ];
+    unpackPhase = ''
+      for src in $srcs; do
+        rpmextract "$src"
+      done
+    '';
+    # TODO: Shrink image after creation.
+    # TODO: Use makeDiskImage for that?
+    buildPhase = ''
+      moduledir=lib/modules/${kernelVersion}.qubes.${fedoraVersion}.${stdenv.hostPlatform.parsed.cpu.name}
+      if ! test -f "$moduledir/modules.builtin"; then
+        echo "modules dir with the specified name is not found in modules rpm"
+        ls -lah lib/modules/
+        exit 1
+      fi
+      # depmod expects lib/modules/$kver/ under its base path
+      kver=${kernelVersion}.qubes.${fedoraVersion}.${stdenv.hostPlatform.parsed.cpu.name}
+      mkdir -p depmod_base/lib/modules
+      cp -a "$moduledir" depmod_base/lib/modules/
+
+      # Generate module index files (modules.dep, modules.alias, etc.)
+      depmod -b depmod_base $kver
+
+      # The Linux HVM stubdomain also mounts modules.img as /tmp/boot and
+      # expects direct-boot artifacts at its root when a kernel cmdline is set.
+      mkdir -p imgroot
+      mv depmod_base/lib/modules/$kver imgroot/
+      cp "var/lib/qubes/vm-kernels/${version}/vmlinuz" imgroot/vmlinuz
+      cp "var/lib/qubes/vm-kernels/${version}/initramfs" imgroot/initramfs
+
+      # Set SELinux labels so modules are accessible under enforcing SELinux in VMs
+      find imgroot -exec setfattr -n security.selinux \
+        -v "system_u:object_r:modules_object_t:s0" {} \;
+
+      # Match upstream qubes-prepare-vm-kernel: ext3 with minimal features,
+      # create at 768M then shrink with resize2fs.
+      truncate -s 768M modules.img
+      fakeroot mkfs.ext3 -q -F \
+        -Enum_backup_sb=0,root_owner=0:0 \
+        -d imgroot modules.img
+      e2fsck -pDf modules.img >/dev/null || true
+      resize2fs -fM modules.img >/dev/null
+    '';
+    installPhase = ''
+      mv modules.img $out
+    '';
+  };
+in
+stdenv.mkDerivation {
+  inherit version;
+  pname = "qubes-kernel";
+  src = kernelSrc;
+  nativeBuildInputs = [
+    rpmextract
+  ];
+  unpackPhase = "rpmextract $src";
+  installPhase = ''
+    kerneldir=var/lib/qubes/vm-kernels/${kernelVersion}.${fedoraVersion}
+    if ! test -f "$kerneldir/vmlinuz"; then
+      echo "kernel with specified name is not found in kernel rpm"
+      exit 1
+    fi
+    mkdir "$out"
+    mv "$kerneldir"/* "$out/"
+    ln -s ${modulesImg} "$out/modules.img"
+  '';
+}

@@ -92,6 +92,12 @@ fn filtered_sources_preserve_cache_keys_and_compile() -> Result<()> {
         inspect(root, &relocated, "source-relocated", &cases)?
     );
     change(&workspace.join("vendor/rusix/README.md"))?;
+    writeln!(
+        fs::OpenOptions::new()
+            .append(true)
+            .open(workspace.join("vendor/nixos-qubes/pkgs/top-level/overlay.nix"))?,
+        "# source input regression"
+    )?;
     assert_eq!(
         baseline,
         inspect(root, &workspace, "source-vendor-doc-change", &cases)?

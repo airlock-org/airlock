@@ -92,6 +92,8 @@ fn offline_manifests_bind_revision_lock_and_nested_source_locations() -> Result<
         let mut dependency = json!({"inputs": {"shelly": "shelly"}});
         if local {
             dependency["locked"] = json!({"path": "./vendor/nixos-qubes"});
+        } else {
+            dependency["locked"] = json!({"dir": "crates/vendor/nixos-qubes"});
         }
         lock(
             &fixture,
@@ -117,7 +119,7 @@ fn offline_manifests_bind_revision_lock_and_nested_source_locations() -> Result<
         assert_eq!(
             manifest["inputs"],
             json!({
-                "nixos-qubes": if local {format!("{machine}/vendor/nixos-qubes")} else {source.to_owned()},
+                "nixos-qubes": if local {format!("{machine}/vendor/nixos-qubes")} else {format!("{source}/crates/vendor/nixos-qubes")},
                 "nixos-qubes/shelly": shelly
             })
         );

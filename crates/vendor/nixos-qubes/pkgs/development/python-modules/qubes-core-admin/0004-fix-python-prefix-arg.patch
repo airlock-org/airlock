@@ -1,0 +1,25 @@
+From df7fe4709fddd0af4d3449905db60de6b030fa28 Mon Sep 17 00:00:00 2001
+From: Yaroslav Bolyukin <iam@lach.pw>
+Date: Sat, 18 Apr 2026 20:55:36 +0200
+Subject: [PATCH 4/4] fix: python prefix arg
+
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 00fad0e..b874eba 100644
+--- a/Makefile
++++ b/Makefile
+@@ -183,7 +183,7 @@ ifeq ($(OS),Linux)
+ 	$(MAKE) install -C linux/aux-tools
+ 	$(MAKE) install -C linux/system-config
+ endif
+-	$(PYTHON) setup.py install -O1 --skip-build --root $(DESTDIR)
++	$(PYTHON) setup.py install -O1 --skip-build $(PYTHON_PREFIX_ARG) --root $(DESTDIR)
+ 	$(MAKE) install -C relaxng
+ 	mkdir -p $(DESTDIR)/etc/qubes
+ ifeq ($(BACKEND_VMM),xen)
+-- 
+2.53.0
+

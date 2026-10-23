@@ -218,7 +218,7 @@ fn personalization_firmware_rejects_corrupt_and_special_files() -> Result<()> {
 fn offline_source_references_encode_store_names_and_reject_traversal() -> Result<()> {
     let root = format!("/nix/store/{hash}-source", hash = "a".repeat(32));
     assert_eq!(acceptance::input_reference(&root)?, format!("path:{root}"));
-    for directory in ["apps", "crates", "vendor/nixos-qubes"] {
+    for directory in ["apps", "crates", "crates/vendor/nixos-qubes"] {
         assert_eq!(
             acceptance::input_reference(&format!("{root}/{directory}"))?,
             format!("path:{root}/{directory}")
