@@ -73,6 +73,28 @@ pub(crate) fn local(root: &Path) -> Result<(PathBuf, String)> {
     Ok((machine, revision))
 }
 
+/// Compare committed application content rather than commit age or working edits.
+pub(crate) fn check_image_source(root: &Path) -> Result<()> {
+    let source = git(root, &["rev-parse", "HEAD"])?;
+    let lock: serde_json::Value =
+        serde_json::from_str(&git(root, &["show", &format!("{source}:flake.lock")])?)?;
+    // The parent lock selects the applications actually installed by the image.
+    let revision: airlock_nix_core::identity::GitRevision = lock["nodes"]["airlock-apps"]["locked"]
+        ["rev"]
+        .as_str()
+        .context("USB image application source revision is missing")?
+        .parse()?;
+    let pinned = git(root, &["rev-parse", &format!("{revision}:crates")])?;
+    let intended = git(root, &["rev-parse", &format!("{source}:crates")])?;
+    ensure!(
+        pinned == intended,
+        "USB image application pin {revision} is stale: its crates/ content differs from committed HEAD {source}. Update airlock-machine/application-revision and both application locks, then commit the machine pin before rebuilding."
+    );
+
+    eprintln!("USB image application source matches committed crates/ ({revision}).");
+    Ok(())
+}
+
 fn url(root: &Path) -> Result<String> {
     let modules = output(
         Command::new("git")

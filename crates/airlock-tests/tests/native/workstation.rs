@@ -20,6 +20,70 @@ fn report(command: &mut Command) -> Result<Value> {
     Ok(serde_json::from_slice(&run(command, None)?.checked()?)?)
 }
 
+/// Make rejects stale committed applications before build work, while unrelated commits and dirty edits are ignored.
+#[test]
+fn image_build_rejects_stale_application_content_before_prerequisites() -> Result<()> {
+    let fixture = Repository::new()?;
+    fs::create_dir(fixture.root.join("crates"))?;
+    let application = fixture.root.join("crates/application.rs");
+    fs::write(&application, "initial application\n")?;
+    git(&fixture.root, &["add", "crates"])?;
+    git(&fixture.root, &["commit", "-qm", "Application source"])?;
+    let revision = git(&fixture.root, &["rev-parse", "HEAD"])?;
+    fs::write(
+        fixture.root.join("flake.lock"),
+        serde_json::to_vec(&json!({"nodes": {"airlock-apps": {"locked": {"rev": revision}}}}))?,
+    )?;
+    git(&fixture.root, &["commit", "-qam", "Pin application source"])?;
+    run(&mut fixture.command(&["check-image-source"]), None)?.checked()?;
+
+    fs::write(&application, "staged application\n")?;
+    git(&fixture.root, &["add", "crates"])?;
+    fs::write(&application, "unstaged application\n")?;
+    fs::write(fixture.root.join("crates/untracked.rs"), "untracked\n")?;
+    run(&mut fixture.command(&["check-image-source"]), None)?.checked()?;
+
+    git(
+        &fixture.root,
+        &["commit", "-qm", "Change application source"],
+    )?;
+    let dev = binary("AIRLOCK_DEV_BIN", "airlock-dev");
+    for goal in [
+        "usb-dev-image",
+        "usb-dom0-console-image",
+        "usb-builder-offline-check",
+    ] {
+        let mut command = Command::new("make");
+        command.current_dir(common::root()).args([
+            "--no-print-directory",
+            "--jobs=4",
+            goal,
+            "AIRLOCK_IMAGE_BUILD_LIMITED=0",
+        ]);
+        command.arg(format!(
+            "AIRLOCK_DEV={dev} --repository-root {root}",
+            dev = airlock_tests::process::quote(dev.to_str().unwrap()),
+            root = airlock_tests::process::quote(fixture.root.to_str().unwrap()),
+        ));
+        fixture.environment(&mut command);
+        let output = run(&mut command, None)?;
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("application pin"));
+        assert!(String::from_utf8_lossy(&output.stderr).contains("is stale"));
+    }
+
+    assert!(
+        !fixture
+            .root
+            .join(".airlock-logs/build-cpu-budget.json")
+            .exists()
+    );
+    assert!(fixture.calls("nix")?.is_empty());
+    assert!(fixture.calls("cargo")?.is_empty());
+
+    Ok(())
+}
+
 /// Human build logs omit empty prefixes without changing JSON stdout, failures or explicit log protocols.
 #[test]
 fn image_build_logs_preserve_diagnostics_and_exit_status() -> Result<()> {
@@ -211,24 +275,29 @@ fn image_build_bootstrap_limits_compilation_before_native_policy_is_available() 
         &std::env::var_os("PATH").context("PATH")?,
     ));
     let record = fixture.path().join("bootstrap.json");
-    let result = run(
-        Command::new(common::tool("bash")?)
-            .arg(common::root().join("crates/airlock-dev/scripts/airlock-dev.sh"))
-            .args(["build-budget", "--", "true"])
-            .env("PATH", std::env::join_paths(paths)?)
-            .env("AIRLOCK_TEST_CPU_BOOTSTRAP_RECORD", &record),
-        None,
-    )?;
-    assert_eq!(result.status.code(), Some(37));
-    let record: Value = serde_json::from_slice(&fs::read(record)?)?;
-    let cpus = record["cpus"].as_array().context("bootstrap CPUs")?;
-    assert_eq!(cpus.len(), 1);
-    assert!(rustix::thread::sched_getaffinity(None)?.is_set(cpus[0].as_u64().unwrap() as usize));
-    let args = record["args"].as_array().context("bootstrap arguments")?;
-    assert!(
-        args.windows(2)
-            .any(|pair| pair == [json!("--jobs"), json!("1")])
-    );
+    for action in ["build-budget", "check-image-source"] {
+        let result = run(
+            Command::new(common::tool("bash")?)
+                .arg(common::root().join("crates/airlock-dev/scripts/airlock-dev.sh"))
+                .arg(action)
+                .env("PATH", std::env::join_paths(&paths)?)
+                .env("AIRLOCK_TEST_CPU_BOOTSTRAP_RECORD", &record),
+            None,
+        )?;
+        assert_eq!(result.status.code(), Some(37));
+        let record: Value = serde_json::from_slice(&fs::read(&record)?)?;
+        let cpus = record["cpus"].as_array().context("bootstrap CPUs")?;
+        assert_eq!(cpus.len(), 1);
+        assert!(
+            rustix::thread::sched_getaffinity(None)?.is_set(cpus[0].as_u64().unwrap() as usize)
+        );
+        let args = record["args"].as_array().context("bootstrap arguments")?;
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == [json!("--jobs"), json!("1")])
+        );
+    }
+
     Ok(())
 }
 

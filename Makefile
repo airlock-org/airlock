@@ -318,6 +318,7 @@ usb-dev-image: image-tools-build usb-dev-prepare-inputs
 	  --image-command $(AIRLOCK_NIX) build --impure .#airlock-usb-dev-image --out-link "$(or $(AIRLOCK_RESULT_LINK_DIR),$(CURDIR)/.airlock)/usb-dev-image" --print-build-logs
 else
 usb-dom0-console-image usb-builder-offline-check usb-dev-image:
+	@$(AIRLOCK_DEV) check-image-source
 	@$(AIRLOCK_DEV) build-budget -- $(MAKE) --no-print-directory AIRLOCK_IMAGE_BUILD_LIMITED=1 $@
 endif
 

@@ -94,6 +94,8 @@ enum Action {
     },
     /// Check that the machine gitlink is reachable from the declared upstream main.
     CheckPublish,
+    /// Reject USB image builds whose application pin differs from the committed workspace.
+    CheckImageSource,
     /// Explicitly prepare and verify the controller executable used by native tests.
     CtrlArtifact {
         // Build/record are explicit preparation; verify only inspects the existing artifact.
@@ -139,6 +141,10 @@ fn execute(args: Args) -> Result<u8> {
         }
         Action::CheckPublish => {
             repository::check_publish(&root)?;
+            Ok(0)
+        }
+        Action::CheckImageSource => {
+            repository::check_image_source(&root)?;
             Ok(0)
         }
         Action::Source { command } => {
