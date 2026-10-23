@@ -381,6 +381,21 @@
 //! release and committed-record authentication, hashes, transport framing and candidate serialization
 //! remain adapter duties. Storage admission is not deployment activation authority; existing protected
 //! source approval, complete effect checks and durable execution gates still apply.
+//! The administrative configuration pipeline separately consumes content-bound validator v2 records.
+//! Its shared production gates require complete, distinct successful mandatory checks, exact original
+//! submitted bundle/manifest/commit, independently inspected Git head and all evaluated/prepared-source
+//! digests. Opaque validation and resolution values carry those inputs through source resolution.
+//! Setup and host apply consume private checked snapshots, while explicit stage retries reauthenticate
+//! the original archive and refuse substituted resolution inputs or output bytes. Old unbound validation
+//! receipts require fresh validation before activation; historical vault evidence grants no authority.
+//! JSON source-descriptor normalization checks that resolution changes only declared source fields;
+//! that recursive projection, schema decoding, hashes, Git/Nix behavior, authenticated offline-role
+//! transport, filesystem snapshots and faithful adapter execution remain tested/trusted boundaries.
+//! Verus proves evidence correspondence and complete-check gates, not truthful evaluation, faithful
+//! Nix source resolution, or correctness of every configuration action. These administrative decisions
+//! do not acquire reviewed deployment approval or its durable transaction guarantees.
+//! Direct administrative `config resolve`/`config host` commands retain their explicit local policy;
+//! they cannot be counted as consumers of this validated pipeline merely because they share adapters.
 //! Record decoding, faithful request-to-path dispatch, lock discipline, truthful observations and
 //! actual unlink/fsync remain trusted. Recursive removal checks mounts and does not follow symlinks,
 //! but these filesystem properties are tested adapter contracts, not Verus theorems.

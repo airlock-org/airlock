@@ -51,6 +51,8 @@ impl Config {
             common::peer_link(&bin, executable)?;
         }
         fs::write(root.join("xen-capabilities"), "control_d\n")?;
+        // Native peers supply Nix results; source validation still requires a committed flake entry point.
+        fs::write(root.join("candidate/flake.nix"), "{}\n")?;
         let system = json!({
             "schema": "airlock.system.v1", "dom0": {
                 "profile": {"source": null, "source_ref": null, "activation_command": "bin/airlock-dom0-profile-activate", "activation_action": "run", "message": "hello"},
@@ -141,9 +143,28 @@ impl Config {
             "refs/heads/main",
         ])?;
         self.write("manifest.json", &json!({"schema": "airlock.config-candidate.v1", "commit": commit, "branch": "main", "source_role": "sys-config-staging"}))?;
-        self.write("validation.json", &json!({"schema": "airlock.config-validation.v1", "status": "passed", "commit": commit, "checks": []}))?;
         self.write("topology.json", &self.topology)?;
         self.write("system.json", &self.system)?;
+        let record = airlock_nix_core::configuration::ValidationRecord {
+            schema: airlock_nix_core::configuration::ValidationSchema::V2,
+            status: airlock_nix_core::admission::CheckStatus::Passed,
+            reason: "fixture validation passed".into(),
+            validator_role: airlock_nix_core::configuration::ValidatorRole::Validator,
+            commit: commit.parse()?,
+            artifacts: Some(airlock_nix_core::configuration::ArtifactHashes::read(
+                self.temporary.path(),
+            )?),
+            prepared_source: None,
+            checks: airlock_nix_core::configuration::REQUIRED_CHECKS
+                .into_iter()
+                .map(|name| airlock_nix_core::configuration::ValidationCheck {
+                    name,
+                    status: airlock_nix_core::configuration::CheckOutcome::Passed,
+                    details: Default::default(),
+                })
+                .collect(),
+        };
+        self.write("validation.json", &serde_json::to_value(record)?)?;
         for (name, members) in [
             (
                 "candidate.tar",

@@ -2,7 +2,10 @@
 
 use super::io::{self, Operation};
 use crate::process::Files;
-use airlock_nix_core::identity::GitRevision;
+use airlock_nix_core::{
+    configuration::{ResolvedConfiguration, ValidatedConfiguration},
+    identity::GitRevision,
+};
 use anyhow::{Context, Result, bail, ensure};
 use clap::Args;
 use serde_json::{Value, json};
@@ -337,9 +340,56 @@ impl Resolver<'_> {
 
 /// Resolve template, native VM and host descriptors while preserving their independent contracts.
 pub(super) fn execute(request: Request) -> Result<()> {
+    let topology = crate::state::configuration(&request.topology)?;
+    let system = crate::state::configuration(&request.system)?;
+    resolve(&request.worktree, &request.commit, topology, system)?;
+    Ok(())
+}
+
+/// Resolve immutable checked documents directly, without reopening their diagnostic JSON files.
+pub(super) fn validated(
+    candidate: ValidatedConfiguration,
+    worktree: &Path,
+) -> Result<ResolvedConfiguration> {
+    let (topology, system) = resolve(
+        worktree,
+        &candidate.identity().source.commit,
+        candidate.topology().clone(),
+        candidate.system().clone(),
+    )?;
+    let operation = Operation::new("config-resolution-binding")?;
+    fs::write(
+        operation.file("config-apply-topology-validated.json"),
+        candidate.topology_bytes(),
+    )?;
+    fs::write(
+        operation.file("config-apply-system-validated.json"),
+        candidate.system_bytes(),
+    )?;
+    let resolved = candidate.resolved(&topology, &system)?;
+    fs::write(
+        operation.file("config-apply-topology.json"),
+        resolved.topology_bytes(),
+    )?;
+    fs::write(
+        operation.file("config-apply-system.json"),
+        resolved.system_bytes(),
+    )?;
+    io::save(
+        &operation.file("config-apply-resolution.json"),
+        &serde_json::to_value(resolved.record())?,
+    )?;
+    Ok(resolved)
+}
+
+/// Run the existing source resolver; the administrative CLI retains its separate explicit unvalidated entry point.
+fn resolve(
+    worktree: &Path,
+    commit: &GitRevision,
+    mut topology: Value,
+    mut system: Value,
+) -> Result<(Value, Value)> {
     let mut operation = Operation::new("config-resolve")?;
-    let mut topology: Value = crate::state::configuration(&request.topology)?;
-    let mut system: Value = crate::state::configuration(&request.system)?;
     io::save(
         &operation.file("config-apply-topology-validated.json"),
         &topology,
@@ -365,8 +415,8 @@ pub(super) fn execute(request: Request) -> Result<()> {
     let state = io::path("AIRLOCK_SYSTEM_STATE_DIR", "/var/lib/airlock/system");
     let mut resolver = Resolver {
         operation: &mut operation,
-        worktree: &request.worktree,
-        retained: state.join("sources").join(request.commit.as_str()),
+        worktree,
+        retained: state.join("sources").join(commit.as_str()),
     };
     for (name, template) in topology["templates"]
         .as_object_mut()
@@ -382,20 +432,25 @@ pub(super) fn execute(request: Request) -> Result<()> {
     {
         if domain["backend"]["type"] == "nix-closure" {
             for component in ["system", "kernel", "initrd", "modules", "root", "store"] {
-                let descriptor = &mut domain["backend"][component];
-                if !descriptor.is_null() {
+                if let Some(descriptor) = domain
+                    .get_mut("backend")
+                    .and_then(|b| b.get_mut(component))
+                    .filter(|d| !d.is_null())
+                {
                     resolver.resolve(descriptor, component, name, "nix-domain")?;
                 }
             }
         }
     }
     for component in ["profile", "system", "kernel", "xen", "bootloader", "qubes"] {
+        let dom0 = system.get_mut("dom0");
         let descriptor = if component == "profile" {
-            &mut system["dom0"]["profile"]
+            dom0.and_then(|d| d.get_mut("profile"))
         } else {
-            &mut system["dom0"]["nixos"][component]
+            dom0.and_then(|d| d.get_mut("nixos"))
+                .and_then(|n| n.get_mut(component))
         };
-        if !descriptor.is_null() {
+        if let Some(descriptor) = descriptor.filter(|d| !d.is_null()) {
             resolver.resolve(
                 descriptor,
                 &if component == "profile" {
@@ -440,5 +495,6 @@ pub(super) fn execute(request: Request) -> Result<()> {
     super::references::validate(
         &operation.file("config-apply-topology.json"),
         &operation.file("config-apply-domain-references.json"),
-    )
+    )?;
+    Ok((topology, system))
 }

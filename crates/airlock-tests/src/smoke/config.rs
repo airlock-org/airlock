@@ -749,11 +749,9 @@ fn results(
             "configuration result substituted a role identity"
         );
     }
-    ensure!(
-        archive["schema"] == "airlock.config-archive.v1"
-            && archive["validation"]["schema"] == "airlock.config-validation.v1",
-        "configuration archival schema differs"
-    );
+    let archival: airlock_nix_core::configuration::ArchivedConfiguration =
+        serde_json::from_value(archive.clone()).context("configuration archival schema differs")?;
+    archival.check()?;
     for name in [
         "nix-eval-airlock-topology",
         "airlock-topology-json",

@@ -1,13 +1,18 @@
 //! Evaluate source only in the existing validator role and return checked contracts as inert artifacts.
 
 use super::{Config, io};
-use airlock_nix_core::runtime::process;
+use airlock_nix_core::{
+    admission::CheckStatus,
+    configuration::{
+        ArtifactHashes, PreparedArchive, PreparedSource, ValidationRecord, ValidationSchema,
+        ValidatorRole, file_hash,
+    },
+    runtime::process,
+};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
-    io::Read,
     os::unix::fs::PermissionsExt,
     path::{Component, Path, PathBuf},
     process::Command,
@@ -27,6 +32,40 @@ struct Validation {
 }
 
 impl Validation {
+    /// Publish the shared receipt shape; only successful evaluation can supply complete content hashes.
+    fn record(&self, directory: &Path, prepared: bool) -> Result<ValidationRecord> {
+        Ok(ValidationRecord {
+            schema: ValidationSchema::V2,
+            status: if self.status == "passed" {
+                CheckStatus::Passed
+            } else {
+                CheckStatus::Failed
+            },
+            reason: self.reason.clone(),
+            validator_role: ValidatorRole::Validator,
+            commit: self.commit.parse()?,
+            artifacts: if self.status == "passed" {
+                Some(ArtifactHashes::read(directory)?)
+            } else {
+                None
+            },
+            prepared_source: if prepared {
+                Some(PreparedSource {
+                    archive: PreparedArchive::Source,
+                    sha256: file_hash(&directory.join("prepared-source.tar"))?,
+                })
+            } else {
+                None
+            },
+            checks: self
+                .checks
+                .iter()
+                .cloned()
+                .map(serde_json::from_value)
+                .collect::<Result<_, _>>()?,
+        })
+    }
+
     /// Add one check and preserve the first failed reason while continuing independent checks.
     fn check(&mut self, name: &str, result: Result<()>, reason: &str, mut evidence: Value) -> bool {
         let passed = result.is_ok();
@@ -229,21 +268,6 @@ fn source_checks(
     Ok(())
 }
 
-/// Hash a completed prepared artifact without loading it all into memory.
-fn hash(path: &Path) -> Result<String> {
-    let mut hash = Sha256::new();
-    let mut file = File::open(path)?;
-    let mut buffer = [0; 65536];
-    loop {
-        let size = file.read(&mut buffer)?;
-        if size == 0 {
-            break;
-        }
-        hash.update(&buffer[..size]);
-    }
-    Ok(format!("{hash:x}", hash = hash.finalize()))
-}
-
 /// Validate a staged bundle, retain each check, and export only a completely passing result.
 pub(super) fn execute(config: &Config) -> Result<()> {
     let full = std::env::var("AIRLOCK_CONFIG_VALIDATION_BUILD").unwrap_or_else(|_| "0".into());
@@ -292,11 +316,11 @@ pub(super) fn execute(config: &Config) -> Result<()> {
         json!({"details":dirty}),
     );
     if !dirty.is_empty() {
-        let record = json!({"schema":"airlock.config-validation.v1","status":"failed","reason":"validated candidate worktree is dirty","validator_role":"sys-config-validator","commit":revision,"prepared_source":null,"checks":validation.checks});
+        let record = serde_json::to_value(validation.record(directory, false)?)?;
         io::save(&validation_dir.join(format!("{revision}.json")), &record)?;
         anyhow::bail!("validated candidate worktree is dirty");
     }
-    let mut prepared_hash = None;
+    let mut prepared_source = false;
     if validation.status == "passed" && worktree.join("Cargo.toml").is_file() {
         let prepared = io::run(
             Command::new("make")
@@ -323,7 +347,7 @@ pub(super) fn execute(config: &Config) -> Result<()> {
         tar.append_dir_all(".", &worktree)?;
         tar.finish()?;
         drop(tar);
-        prepared_hash = Some(hash(&archive)?);
+        prepared_source = true;
     }
     let flake = format!("path:{path}", path = worktree.display());
     let flake_log = logs.join(format!("flake-check-{revision}.log"));
@@ -472,7 +496,7 @@ pub(super) fn execute(config: &Config) -> Result<()> {
             validation.skip(refs_name, &refs_log);
         }
     }
-    let record = json!({"schema":"airlock.config-validation.v1","status":validation.status,"reason":validation.reason,"validator_role":"sys-config-validator","commit":validation.commit,"prepared_source":prepared_hash.as_ref().map(|sha256| json!({"archive":"prepared-source.tar","sha256":sha256})),"checks":validation.checks});
+    let record = serde_json::to_value(validation.record(directory, prepared_source)?)?;
     io::save(&validation_dir.join(format!("{revision}.json")), &record)?;
     io::save(&directory.join("validation.json"), &record)?;
     ensure!(
@@ -486,7 +510,7 @@ pub(super) fn execute(config: &Config) -> Result<()> {
         "topology.json",
         "system.json",
     ];
-    if prepared_hash.is_some() {
+    if prepared_source {
         members.push("prepared-source.tar");
     }
     io::export(directory, &members)

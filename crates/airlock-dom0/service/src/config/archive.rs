@@ -1,12 +1,14 @@
 //! Validate candidate artifacts in the existing offline validator and archive them in the vault.
 
 use super::{
+    candidate::{self, Candidate},
     io::{self, Operation},
     references,
 };
+use airlock_nix_core::{configuration::SubmittedConfiguration, identity::ConfigurationHash};
 use anyhow::{Context, Result, ensure};
 use clap::Args;
-use serde_json::{Value, json};
+use serde_json::json;
 use std::{fs, path::PathBuf};
 
 /// Existing archive command options, retaining role-specific environment defaults.
@@ -41,91 +43,19 @@ pub(crate) struct Request {
     validate_only: bool,
 }
 
-/// Check the returned schemas, references and Git bundle commit against the validation identity.
-fn verify(operation: &mut Operation) -> Result<String> {
-    let temporary = tempfile::tempdir()?;
-    let members = [
-        "config.bundle",
-        "validation.json",
-        "manifest.json",
-        "topology.json",
-        "system.json",
-        "prepared-source.tar",
-    ];
-    io::unpack(
-        &operation.file("config-candidate-validated.tar"),
-        temporary.path(),
-        &members,
-        &members[..5],
-    )?;
-    for name in ["validation", "manifest", "topology", "system"] {
-        fs::copy(
-            temporary.path().join(format!("{name}.json")),
-            operation.file(&format!("config-candidate-{name}.json")),
-        )?;
-    }
-    let read = |name: &str| -> Result<Value> {
-        crate::state::read(&temporary.path().join(format!("{name}.json")))
-    };
-    let manifest = read("manifest")?;
-    let validation = read("validation")?;
-    let topology = read("topology")?;
-    let system = read("system")?;
-    ensure!(
-        topology["schema"] == "airlock.qubes-topology.v1"
-            && ["templates", "kernels", "prefs", "domains"]
-                .iter()
-                .all(|key| topology[*key].is_object()),
-        "evaluated candidate topology JSON is invalid"
-    );
-    ensure!(
-        system["schema"] == "airlock.system.v1"
-            && system["dom0"].is_object()
-            && system["plan"].is_object()
-            && ["live_actions", "reboot_actions", "reboot_reasons"]
-                .iter()
-                .all(|key| system["plan"][*key].is_array())
-            && system["plan"]["reboot_required"].is_boolean(),
-        "evaluated candidate system JSON is invalid"
-    );
-    ensure!(
-        manifest["schema"] == "airlock.config-candidate.v1"
-            && validation["schema"] == "airlock.config-validation.v1"
-            && validation["status"] == "passed",
-        "candidate manifest or validation is invalid"
-    );
-    let commit = validation["commit"]
-        .as_str()
-        .context("missing validation commit")?;
-    let _: airlock_nix_core::identity::GitRevision = commit.parse()?;
-    ensure!(
-        manifest["commit"] == commit,
-        "candidate manifest commit does not match validation commit"
-    );
+/// Require exact original source, complete successful evidence and bound evaluated artifacts.
+fn verify(
+    operation: &mut Operation,
+    submitted: &SubmittedConfiguration,
+) -> Result<ConfigurationHash> {
+    let archive = operation.file("config-candidate-validated.tar");
+    let candidate = Candidate::load(operation, &archive, submitted, None)?;
+    candidate.copy_evidence(operation, "config-candidate")?;
     references::validate(
         &operation.file("config-candidate-topology.json"),
         &operation.file("config-candidate-domain-references.json"),
     )?;
-    let repo = temporary.path().join("verify.git");
-    let repo = repo.to_str().context("Git verification path")?;
-    operation.text("git", &["init", "--bare", "-b", "main", repo])?;
-    let bundle = temporary.path().join("config.bundle");
-    let bundle = bundle.to_str().context("bundle path")?;
-    let verification = operation.text("git", &["-C", repo, "bundle", "verify", bundle])?;
-    fs::write(
-        operation.file("config-candidate-bundle-verify.log"),
-        verification,
-    )?;
-    let heads = operation.text("git", &["-C", repo, "bundle", "list-heads", bundle])?;
-    let candidate = heads
-        .split_whitespace()
-        .next()
-        .context("candidate bundle did not expose a commit")?;
-    ensure!(
-        candidate == commit,
-        "candidate commit {candidate} does not match validation commit {commit}"
-    );
-    Ok(commit.into())
+    Ok(candidate.archive_hash().clone())
 }
 
 /// Preserve archive results on every handled failure without confusing them with deployment authority.
@@ -148,6 +78,8 @@ pub(super) fn execute(request: Request) -> Result<()> {
     );
     let mut commit = String::new();
     let mut vault_commit = String::new();
+    let mut submitted = None;
+    let mut validated_candidate_sha256 = None;
     let result = (|| {
         operation.control_domain()?;
         if request.candidate_tar.is_none() {
@@ -173,6 +105,9 @@ pub(super) fn execute(request: Request) -> Result<()> {
                 &operation.file("config-candidate-export.stderr.log"),
             )?;
         }
+        let source = candidate::submitted(&staged)?;
+        commit = source.commit.to_string();
+        submitted = Some(source);
         operation.rpc(
             validator,
             &validate,
@@ -180,7 +115,10 @@ pub(super) fn execute(request: Request) -> Result<()> {
             &validated,
             &operation.file("config-candidate-validate.stderr.log"),
         )?;
-        commit = verify(&mut operation)?;
+        validated_candidate_sha256 = Some(verify(
+            &mut operation,
+            submitted.as_ref().context("missing original submission")?,
+        )?);
         if !request.validate_only {
             let output = operation.file("config-vault-archive.log");
             operation.rpc(
@@ -203,7 +141,8 @@ pub(super) fn execute(request: Request) -> Result<()> {
         }
         Ok(())
     })();
-    let mut receipt = json!({"schema":"airlock.config-archive.v1", "status":if result.is_ok() {"passed"} else {"failed"}, "reason":match &result { Ok(()) => "config candidate validated in sys-config-validator".into(), Err(error) => format!("{error:#}") }, "staging":staging,"validator":validator,"vault":vault,"candidate_export_service":export,"candidate_validate_service":validate,"archive_service":archive,"candidate_commit":commit,"validation_commit":commit,"vault_commit":vault_commit});
+    let mut receipt = json!({"schema":"airlock.config-archive.v1", "status":if result.is_ok() {"passed"} else {"failed"}, "reason":match &result { Ok(()) => "config candidate validated in sys-config-validator".into(), Err(error) => format!("{error:#}") }, "staging":staging,"validator":validator,"vault":vault,"candidate_export_service":export,"candidate_validate_service":validate,"archive_service":archive,"candidate_commit":commit,"validation_commit":commit,"vault_commit":vault_commit,
+        "submitted":submitted,"validated_candidate_sha256":validated_candidate_sha256});
     for (key, file) in [
         ("staged_candidate_tar", "config-candidate-staged.tar"),
         ("validated_candidate_tar", "config-candidate-validated.tar"),

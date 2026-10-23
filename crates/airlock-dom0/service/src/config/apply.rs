@@ -1,11 +1,16 @@
 //! Stage the existing configuration apply protocol without evaluating source or dispatching effects in shell.
 
 use super::{
-    build, host,
+    build,
+    candidate::{self, Candidate},
+    host,
     io::{self, Operation},
 };
 use crate::process::Files;
-use airlock_nix_core::identity::{GitRevision, GuestName};
+use airlock_nix_core::{
+    configuration::{ApplyInputs, ArchivedConfiguration, ResolutionRecord, ResolvedConfiguration},
+    identity::GuestName,
+};
 use anyhow::{Context, Result, ensure};
 use clap::Args;
 use serde_json::{Value, json};
@@ -115,6 +120,11 @@ const ARTIFACTS: &[(&str, &str, &str)] = &[
         "validation.json",
     ),
     ("manifest", "config-apply-manifest.json", "manifest.json"),
+    (
+        "resolution",
+        "config-apply-resolution.json",
+        "resolution.json",
+    ),
     ("archive", "config-archive.json", "archive.json"),
     ("setup", "setup-config.json", "setup.json"),
 ];
@@ -259,7 +269,7 @@ impl Apply {
     }
 
     /// Retain the archived candidate identity before any later stage is allowed to proceed.
-    fn candidate(&mut self) -> Result<()> {
+    fn candidate(&mut self) -> Result<ArchivedConfiguration> {
         if matches!(self.stage.as_str(), "full" | "archive") {
             let mut args = vec![
                 "--staging".into(),
@@ -291,116 +301,53 @@ impl Apply {
                 );
             }
         }
-        let archived: Value = crate::state::read(&self.operation.file("config-archive.json"))?;
-        ensure!(
-            archived["status"] == "passed" && archived["validation"]["status"] == "passed",
-            "archive or validation status is not passed"
-        );
-        self.commit = archived["candidate_commit"]
-            .as_str()
-            .context("archive result did not include candidate_commit")?
-            .into();
-        let _: GitRevision = self.commit.parse()?;
-        Ok(())
+        let archived: ArchivedConfiguration =
+            crate::state::read(&self.operation.file("config-archive.json"))?;
+        archived.check()?;
+        self.commit = archived.submitted.commit.to_string();
+        Ok(archived)
     }
 
-    /// Resolve only authenticated evaluated contracts, preserving the validator's generated-source checksum gate.
-    fn resolve(&mut self) -> Result<()> {
-        let temporary = tempfile::tempdir()?;
-        let members = [
-            "config.bundle",
-            "validation.json",
-            "manifest.json",
-            "topology.json",
-            "system.json",
-            "prepared-source.tar",
-        ];
-        io::unpack(
-            &self.operation.file("config-candidate-validated.tar"),
-            temporary.path(),
-            &members,
-            &members[..5],
+    /// Reauthenticate actual candidate bytes, then resolve in memory or restore an exactly bound staged result.
+    fn resolve(&mut self, archived: &ArchivedConfiguration) -> Result<ResolvedConfiguration> {
+        let archive = self.operation.file("config-candidate-validated.tar");
+        let candidate = Candidate::load(
+            &mut self.operation,
+            &archive,
+            &archived.submitted,
+            Some(&archived.validated_candidate_sha256),
         )?;
-        let mut worktree = temporary.path().join("worktree");
-        self.operation.logged(
-            "git",
-            &[
-                "clone".into(),
-                temporary.path().join("config.bundle").into_os_string(),
-                worktree.as_os_str().to_owned(),
-            ],
-            &self.operation.file("config-apply-git-clone.log"),
-            &[],
-        )?;
-        self.operation.logged(
-            "git",
-            &[
-                "-C".into(),
-                worktree.as_os_str().to_owned(),
-                "checkout".into(),
-                "--detach".into(),
-                self.commit.as_str().into(),
-            ],
-            &self.operation.file("config-apply-git-checkout.log"),
-            &[],
-        )?;
-        let topology: Value = crate::state::read(&temporary.path().join("topology.json"))?;
-        let system: Value = crate::state::read(&temporary.path().join("system.json"))?;
         ensure!(
-            topology["schema"] == "airlock.qubes-topology.v1"
-                && ["domains", "templates", "kernels", "prefs"]
-                    .iter()
-                    .all(|key| topology[*key].is_object()),
-            "validated candidate topology JSON is invalid"
+            candidate.validated().record() == &archived.validation,
+            "archive validation evidence differs from received candidate"
         );
-        ensure!(
-            system["schema"] == "airlock.system.v1"
-                && system["dom0"].is_object()
-                && system["plan"].is_object()
-                && system["plan"]["reboot_required"].is_boolean()
-                && ["live_actions", "reboot_actions", "reboot_reasons"]
-                    .iter()
-                    .all(|key| system["plan"][*key].is_array()),
-            "validated candidate system JSON is invalid"
-        );
-        for name in ["validation", "manifest"] {
-            fs::copy(
-                temporary.path().join(format!("{name}.json")),
-                self.operation.file(&format!("config-apply-{name}.json")),
-            )?;
+        candidate.copy_source_evidence(&self.operation)?;
+        if !matches!(self.stage.as_str(), "full" | "resolve") {
+            let record: ResolutionRecord =
+                crate::state::read(&self.operation.file("config-apply-resolution.json"))?;
+            let topology = candidate::bytes(&self.operation.file("config-apply-topology.json"))?;
+            let system = candidate::bytes(&self.operation.file("config-apply-system.json"))?;
+            let (_directory, validated) = candidate.into_parts();
+            return Ok(ResolvedConfiguration::restore(
+                validated, record, topology, system,
+            )?);
         }
+        let worktree = candidate.worktree(&mut self.operation)?;
         io::save(
             &self
                 .operation
                 .file("config-apply-unsupported-domain-backends.json"),
             &json!({"schema":"airlock.unsupported-domain-backends.v1","domains":[]}),
         )?;
-        if worktree.join("Cargo.toml").is_file() {
-            let prepared = temporary.path().join("prepared-source");
-            let validation: Value = crate::state::read(&temporary.path().join("validation.json"))?;
-            airlock_nix_core::artifact::prepared::unpack(
-                &temporary.path().join("prepared-source.tar"),
-                &prepared,
-                &self.commit.parse()?,
-                validation["prepared_source"]["sha256"]
-                    .as_str()
-                    .context("validated Rust candidate is missing its prepared source checksum")?,
-            )?;
-            worktree = prepared;
-        }
-        build::execute(build::Request {
-            topology: temporary.path().join("topology.json"),
-            system: temporary.path().join("system.json"),
-            worktree,
-            commit: self.commit.parse()?,
-        })
+        let (_directory, validated) = candidate.into_parts();
+        build::validated(validated, &worktree)
     }
 
     /// Apply the resolved VM topology through the fixed setup command and retain its exact receipt.
-    fn setup(&mut self) -> Result<()> {
-        let topology = self.operation.file("config-apply-topology.json");
+    fn setup(&mut self, inputs: &ApplyInputs) -> Result<()> {
+        let topology = inputs.topology();
         let program = io::setting("AIRLOCK_SETUP_CONFIG_COMMAND", "airlock-setup-config");
-        host::pending(&self.operation.file("config-apply-system.json"), false)?;
+        host::pending(&inputs.system(), false)?;
         io::save(
             &self.operation.file("setup-config.json"),
             &json!({"schema":"airlock.setup-config.v1","status":"unknown","reason":"setup has not reported an outcome"}),
@@ -435,7 +382,12 @@ impl Apply {
             ),
             ("setup-config.json", "current-setup.json"),
         ] {
-            fs::copy(self.operation.file(source), state.join(destination))?;
+            let source = if source == "config-apply-topology.json" {
+                inputs.topology()
+            } else {
+                self.operation.file(source)
+            };
+            fs::copy(source, state.join(destination))?;
         }
         Ok(())
     }
@@ -641,18 +593,21 @@ pub(super) fn execute(request: Request) -> Result<()> {
             stage = apply.stage
         );
         apply.operation.control_domain()?;
-        apply.candidate()?;
+        let archived = apply.candidate()?;
         if apply.stage == "archive" {
             return Ok(());
         }
-        if matches!(apply.stage.as_str(), "full" | "resolve") {
-            apply.resolve()?;
-        }
+        let resolved = apply.resolve(&archived)?;
         if apply.stage == "resolve" {
             return Ok(());
         }
+        let inputs = resolved.inputs()?;
+        ensure!(
+            inputs.commit() == apply.commit,
+            "checked apply inputs belong to another candidate"
+        );
         if matches!(apply.stage.as_str(), "full" | "setup")
-            && let Err(error) = apply.setup()
+            && let Err(error) = apply.setup(&inputs)
         {
             apply.archive("failed", "setup-config failed")?;
             return Err(error);
@@ -661,7 +616,7 @@ pub(super) fn execute(request: Request) -> Result<()> {
             return Ok(());
         }
         if matches!(apply.stage.as_str(), "full" | "system")
-            && host::execute(&apply.operation.file("config-apply-system.json")).is_err()
+            && host::execute(&inputs.system()).is_err()
         {
             apply.archive("failed", "system apply failed")?;
             anyhow::bail!("system apply failed");

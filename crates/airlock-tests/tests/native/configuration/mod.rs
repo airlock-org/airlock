@@ -8,6 +8,218 @@ use fixture::Config;
 use serde_json::{Value, json};
 use std::{fs, io::Read, os::unix::fs::symlink, path::PathBuf, process::Command};
 
+/// Substitute one real archive member while retaining every other member and its original bytes.
+fn damage_candidate(config: &Config, member: &str, damage: impl FnOnce(&mut Value)) -> Result<()> {
+    let payload = fs::read(config.path("candidate.tar"))?;
+    let mut output = tar::Builder::new(Vec::new());
+    let mut damage = Some(damage);
+    for entry in tar::Archive::new(payload.as_slice()).entries()? {
+        let mut entry = entry?;
+        let path = entry.path()?.into_owned();
+        let mut bytes = Vec::new();
+        entry.read_to_end(&mut bytes)?;
+        if path == std::path::Path::new(member) {
+            let mut value: Value = serde_json::from_slice(&bytes)?;
+            damage.take().unwrap()(&mut value);
+            bytes = serde_json::to_vec(&value)?;
+        }
+        let mut header = entry.header().clone();
+        header.set_size(bytes.len() as u64);
+        header.set_cksum();
+        output.append_data(&mut header, path, bytes.as_slice())?;
+    }
+    assert!(damage.is_none(), "candidate member absent: {member}");
+    fs::write(config.path("candidate.tar"), output.into_inner()?)?;
+    Ok(())
+}
+
+/// Contradictory validator success and substituted documents must fail before setup or host activation.
+#[test]
+fn configuration_validation_content_and_required_checks_gate_apply() -> Result<()> {
+    for defect in [
+        "topology",
+        "system",
+        "missing-check",
+        "failed-check",
+        "manifest",
+        "legacy",
+    ] {
+        let mut config = Config::new()?;
+        config.pack()?;
+        match defect {
+            "topology" => damage_candidate(&config, "topology.json", |v| {
+                v["prefs"]["unexpected"] = json!(true)
+            })?,
+            "system" => damage_candidate(&config, "system.json", |v| {
+                v["dom0"]["packages"] = json!(["unexpected"])
+            })?,
+            "missing-check" => damage_candidate(&config, "validation.json", |v| {
+                v["checks"].as_array_mut().unwrap().pop();
+            })?,
+            "failed-check" => damage_candidate(&config, "validation.json", |v| {
+                v["checks"][0]["status"] = json!("failed")
+            })?,
+            "manifest" => damage_candidate(&config, "manifest.json", |v| {
+                v["commit"] = json!("b".repeat(40))
+            })?,
+            "legacy" => damage_candidate(&config, "validation.json", |v| {
+                v["schema"] = json!("airlock.config-validation.v1")
+            })?,
+            _ => unreachable!(),
+        }
+        config.apply(false)?;
+        assert!(
+            !config.path("setup-topology.json").exists(),
+            "reached setup for {defect}"
+        );
+        assert!(!config.path("state/profile-activated").exists());
+    }
+    Ok(())
+}
+
+/// Explicit stage retries require the original candidate and exact resolved output bytes on every attempt.
+#[test]
+fn configuration_staged_apply_rechecks_candidate_and_resolved_outputs() -> Result<()> {
+    let mut config = Config::new()?;
+    config.pack()?;
+    for stage in ["archive", "resolve", "setup", "setup", "system"] {
+        common::json(
+            config
+                .command("apply", &["--apply"])?
+                .env("AIRLOCK_CONFIG_APPLY_STAGE", stage),
+            None,
+        )?;
+    }
+    let resolution = config.read("logs/config-apply-resolution.json")?;
+    fs::remove_file(config.path("logs/config-apply-resolution.json"))?;
+    let output = common::run(
+        config
+            .command("apply", &["--apply"])?
+            .env("AIRLOCK_CONFIG_APPLY_STAGE", "system"),
+        None,
+    )?;
+    assert!(!output.status.success());
+    config.write("logs/config-apply-resolution.json", &resolution)?;
+    let archived = config.read("logs/config-archive.json")?;
+    let mut conflicting = archived.clone();
+    conflicting["validation"]["checks"][0]["status"] = json!("failed");
+    config.write("logs/config-archive.json", &conflicting)?;
+    let output = common::run(
+        config
+            .command("apply", &["--apply"])?
+            .env("AIRLOCK_CONFIG_APPLY_STAGE", "setup"),
+        None,
+    )?;
+    assert!(!output.status.success());
+    config.write("logs/config-archive.json", &archived)?;
+    let original = fs::read(config.path("logs/config-apply-topology.json"))?;
+    let calls = config.calls()?.len();
+    fs::write(
+        config.path("logs/config-apply-topology.json"),
+        [original.clone(), vec![b' ']].concat(),
+    )?;
+    let output = common::run(
+        config
+            .command("apply", &["--apply"])?
+            .env("AIRLOCK_CONFIG_APPLY_STAGE", "setup"),
+        None,
+    )?;
+    assert!(!output.status.success());
+    assert!(
+        !config.calls()?[calls..]
+            .iter()
+            .any(|c| c["command"] == "airlock-setup-config")
+    );
+    fs::write(config.path("logs/config-apply-topology.json"), original)?;
+
+    let mut rebound = resolution;
+    rebound["input"]["source"]["commit"] = json!("b".repeat(40));
+    config.write("logs/config-apply-resolution.json", &rebound)?;
+    let output = common::run(
+        config
+            .command("apply", &["--apply"])?
+            .env("AIRLOCK_CONFIG_APPLY_STAGE", "system"),
+        None,
+    )?;
+    assert!(!output.status.success());
+    damage_candidate(&config, "topology.json", |v| {
+        v["prefs"]["changed-after-archive"] = json!(true)
+    })?;
+    fs::copy(
+        config.path("candidate.tar"),
+        config.path("logs/config-candidate-validated.tar"),
+    )?;
+    let output = common::run(
+        config
+            .command("apply", &["--apply"])?
+            .env("AIRLOCK_CONFIG_APPLY_STAGE", "resolve"),
+        None,
+    )?;
+    assert!(!output.status.success());
+    assert!(
+        config.read("logs/config-apply.json")?["reason"]
+            .as_str()
+            .unwrap()
+            .contains("archive changed")
+    );
+    Ok(())
+}
+
+/// Exercise the real validator producer, dom0 archive consumer and staged apply with only Nix replaced by inert results.
+#[test]
+fn configuration_validator_produces_content_bound_evidence_used_by_dom0() -> Result<()> {
+    let mut config = Config::new()?;
+    config.pack()?;
+    let settings = config.path("validator-runtime.json");
+    config.write("validator-runtime.json", &json!({"user":"user","repo":config.path("candidate"),"archive":config.path("vault"),"validation":config.path("validation"),"inputs":config.path("inputs"),"store":config.path("store"),"public_inputs":config.path("public-inputs"),"seed":config.path("candidate"),"nix":config.path("bin/nix"),"role":"sys-config-validator","staging_path":std::env::var("PATH")?}))?;
+    let validator = config.command("apply", &[])?;
+    let mut command = Command::new(common::binary("AIRLOCK_VM_BIN", "airlock-vm-service"));
+    for (key, value) in validator.get_envs() {
+        if let Some(value) = value {
+            command.env(key, value);
+        } else {
+            command.env_remove(key);
+        }
+    }
+    command
+        .args(["configuration", "--config"])
+        .arg(&settings)
+        .arg("validate");
+    let produced =
+        common::run(&mut command, Some(fs::read(config.path("staged.tar"))?))?.checked()?;
+    fs::write(config.path("candidate.tar"), produced)?;
+    let archived = common::json(
+        &mut config.command(
+            "archive",
+            &[
+                "--candidate-tar",
+                config.path("staged.tar").to_str().unwrap(),
+                "--validate-only",
+            ],
+        )?,
+        None,
+    )?;
+    assert_eq!(
+        archived["validation"]["schema"],
+        "airlock.config-validation.v2"
+    );
+    assert_eq!(
+        archived["validation"]["checks"].as_array().unwrap().len(),
+        12
+    );
+    assert_eq!(archived["submitted"]["commit"], config.data["commit"]);
+    for stage in ["resolve", "setup"] {
+        common::json(
+            config
+                .command("apply", &["--apply"])?
+                .env("AIRLOCK_CONFIG_APPLY_STAGE", stage),
+            None,
+        )?;
+    }
+    assert!(config.path("setup-topology.json").exists());
+    Ok(())
+}
+
 /// Empty compatibility overrides use the installed defaults just as the former shell launchers did.
 #[test]
 fn configuration_empty_settings_retain_the_installed_defaults() -> Result<()> {

@@ -39,7 +39,9 @@ pub fn execute(root: &Path, name: &str, arguments: &[String]) -> Result<()> {
             let failed = control && data["control_failure"] == true;
             let archive = json!({"schema": "airlock.config-archive.v1", "status": if failed { "failed" } else { "passed" },
                 "candidate_commit": candidate()?, "validation_commit": candidate()?,
-                "validation": {"schema": "airlock.config-validation.v1", "status": "passed", "commit": candidate()?},
+                "validation":serde_json::from_slice::<Value>(&fs::read(root.join("validation.json"))?)?,
+                "submitted":{"commit":candidate()?,"bundle":airlock_nix_core::configuration::file_hash(&root.join("config.bundle"))?,"manifest":airlock_nix_core::configuration::file_hash(&root.join("manifest.json"))?},
+                "validated_candidate_sha256":airlock_nix_core::configuration::file_hash(&root.join("candidate.tar"))?,
                 "vault_archive": {"schema": "airlock.config-vault-archive.v1", "status": "passed", "candidate_commit": candidate()?}});
             save(logs.join("config-archive.json"), &archive)?;
             if control {
@@ -136,6 +138,24 @@ pub fn execute(root: &Path, name: &str, arguments: &[String]) -> Result<()> {
                 arguments.iter().any(|arg| arg == "--offline"),
                 "configuration build lost offline policy"
             );
+            if arguments.iter().any(|arg| arg == "check") {
+                return Ok(());
+            }
+            if arguments.iter().any(|arg| arg == "eval") {
+                let attribute = arguments
+                    .iter()
+                    .find(|arg| arg.contains('#'))
+                    .and_then(|arg| arg.split_once('#'))
+                    .map(|(_, attr)| attr)
+                    .context("evaluation selector")?;
+                let name = match attribute {
+                    "airlock.topology" => "topology.json",
+                    "airlock.system" => "system.json",
+                    _ => bail!("unexpected evaluation selector"),
+                };
+                std::io::stdout().write_all(&fs::read(root.join(name))?)?;
+                return Ok(());
+            }
             let attribute = arguments
                 .last()
                 .and_then(|arg| arg.split_once('#'))

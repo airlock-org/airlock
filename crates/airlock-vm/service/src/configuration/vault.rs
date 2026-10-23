@@ -1,7 +1,13 @@
 //! Archive validated source and deployment evidence without editing staging or evaluating received source.
 
 use super::{Config, io, workspace};
-use airlock_nix_core::identity::GitRevision;
+use airlock_nix_core::{
+    configuration::{
+        CandidateDocuments, CandidateFiles, SubmittedConfiguration, ValidatedConfiguration,
+        ValidationRecord, file_hash,
+    },
+    identity::GitRevision,
+};
 use anyhow::{Context, Result, ensure};
 use serde_json::json;
 use std::{
@@ -52,7 +58,7 @@ const DOCUMENTS: &[(&str, Option<&str>)] = &[
     ("system-apply.json", Some("airlock.system-apply.v1")),
     ("system-builds.json", Some("airlock.system-builds.v1")),
     ("systemd-actions.json", Some("airlock.systemd-actions.v1")),
-    ("validation.json", Some("airlock.config-validation.v1")),
+    ("validation.json", None),
     ("manifest.json", None),
 ];
 
@@ -285,15 +291,30 @@ pub(super) fn candidate(config: &Config) -> Result<()> {
     let archive = io::receive(temporary.path())?;
     io::unpack(&archive, temporary.path(), CANDIDATE, &CANDIDATE[..5])?;
     let (revision, _) = io::bundle(temporary.path())?;
-    let validation = io::read(&temporary.path().join("validation.json"))?;
-    let system = io::read(&temporary.path().join("system.json"))?;
-    ensure!(
-        validation["schema"] == "airlock.config-validation.v1"
-            && validation["status"] == "passed"
-            && validation["commit"] == revision.as_str()
-            && system["schema"] == "airlock.system.v1",
-        "candidate validation, system or commit mismatch"
-    );
+    let validation: ValidationRecord = airlock_nix_core::state::read_json(
+        &temporary.path().join("validation.json"),
+        16 * 1024 * 1024,
+    )?;
+    let source = SubmittedConfiguration {
+        commit: revision.clone(),
+        bundle: file_hash(&temporary.path().join("config.bundle"))?,
+        manifest: file_hash(&temporary.path().join("manifest.json"))?,
+    };
+    let prepared = temporary.path().join("prepared-source.tar");
+    let _validated = ValidatedConfiguration::check(
+        &source,
+        validation,
+        CandidateDocuments::read(temporary.path())?,
+        CandidateFiles {
+            bundle_commit: revision.clone(),
+            bundle: source.bundle.clone(),
+            prepared: if prepared.exists() {
+                Some(file_hash(&prepared)?)
+            } else {
+                None
+            },
+        },
+    )?;
     let snapshot = temporary.path().join("snapshot");
     io::clone(temporary.path(), &snapshot, &revision)?;
     fs::remove_dir_all(snapshot.join(".git"))?;
@@ -322,7 +343,7 @@ pub(super) fn candidate(config: &Config) -> Result<()> {
     io::run(Command::new("cp").arg("-a").arg(snapshot).arg(&target))?;
     io::save(
         &destination.join("metadata.json"),
-        &json!({"schema":"airlock.config-candidate-archive-record.v1","candidate_commit":revision,"manifest_schema":"airlock.config-candidate.v1","validation_schema":"airlock.config-validation.v1","system_schema":"airlock.system.v1","snapshot":target,"topology":destination.join("topology.json"),"system":destination.join("system.json"),"archived_by":"dom0"}),
+        &json!({"schema":"airlock.config-candidate-archive-record.v1","candidate_commit":revision,"manifest_schema":"airlock.config-candidate.v1","validation_schema":"airlock.config-validation.v2","system_schema":"airlock.system.v1","snapshot":target,"topology":destination.join("topology.json"),"system":destination.join("system.json"),"archived_by":"dom0"}),
     )?;
     fs::write(repo.join("latest-candidate"), format!("{revision}\n"))?;
     io::git(
@@ -351,8 +372,14 @@ pub(super) fn deployment(config: &Config) -> Result<()> {
         .map(|(name, _)| (*name).to_owned())
         .collect::<Vec<_>>();
     allowed.extend(LOGS.iter().map(|name| format!("logs/{name}")));
+    allowed.push("resolution.json".into());
     let allowed = allowed.iter().map(String::as_str).collect::<Vec<_>>();
-    io::unpack(&archive, temporary.path(), &allowed, &allowed)?;
+    let required = allowed
+        .iter()
+        .copied()
+        .filter(|name| *name != "resolution.json")
+        .collect::<Vec<_>>();
+    io::unpack(&archive, temporary.path(), &allowed, &required)?;
     for (file, schema) in DOCUMENTS {
         if let Some(schema) = schema {
             ensure!(
@@ -360,6 +387,20 @@ pub(super) fn deployment(config: &Config) -> Result<()> {
                 "unsupported deployment artifact schema: {file}"
             );
         }
+    }
+    let validation = io::read(&temporary.path().join("validation.json"))?;
+    match validation["schema"].as_str() {
+        Some("airlock.config-validation.v2") => {
+            let _: ValidationRecord = serde_json::from_value(validation)?;
+            let _: airlock_nix_core::configuration::ResolutionRecord =
+                airlock_nix_core::state::read_json(
+                    &temporary.path().join("resolution.json"),
+                    16 * 1024 * 1024,
+                )?;
+        }
+        // Historical deployment archives are evidence only; this branch grants no activation authority.
+        Some("airlock.config-validation.v1") => {}
+        _ => anyhow::bail!("unsupported deployment validation schema"),
     }
     let record = io::read(&temporary.path().join("deployment.json"))?;
     let id = identity(
@@ -424,7 +465,11 @@ pub(super) fn deployment(config: &Config) -> Result<()> {
     ensure!(!target.try_exists()?, "deployment already exists: {id}");
     fs::create_dir_all(target.join("logs"))?;
     for file in &allowed {
-        fs::copy(temporary.path().join(file), target.join(file))?;
+        let source = temporary.path().join(file);
+        if *file == "resolution.json" && !source.exists() {
+            continue;
+        }
+        fs::copy(source, target.join(file))?;
     }
     fs::write(repo.join("latest-deployment-attempt"), format!("{id}\n"))?;
     io::git(

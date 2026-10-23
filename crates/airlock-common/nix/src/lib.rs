@@ -28,6 +28,9 @@ pub mod root_artifact;
 /// Shared guest-admission claims and candidate bindings.
 pub mod admission;
 
+/// Content-bound offline configuration validation and administrative apply inputs.
+pub mod configuration;
+
 #[cfg(feature = "artifacts")]
 pub mod artifact;
 

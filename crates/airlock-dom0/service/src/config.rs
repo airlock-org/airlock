@@ -6,6 +6,8 @@ mod io;
 
 mod archive;
 
+mod candidate;
+
 mod control;
 
 mod build;

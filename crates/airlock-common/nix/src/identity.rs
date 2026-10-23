@@ -106,6 +106,14 @@ hex_identity!(
 );
 
 hex_identity!(
+    /// SHA-256 of configuration artifact bytes exchanged with the offline validator.
+    ConfigurationHash,
+    64,
+    "configuration content hash",
+    "64 lowercase hexadecimal characters (SHA-256)"
+);
+
+hex_identity!(
     /// SHA-256 binding a human decision to the complete review material.
     ReviewFingerprint,
     64,

@@ -17,3 +17,6 @@ pub mod effects;
 
 /// Guest-admission evidence matched to complete immutable candidate requirements.
 pub mod admission;
+
+/// Content correspondence and complete evidence for administrative configuration validation.
+pub mod validation;
