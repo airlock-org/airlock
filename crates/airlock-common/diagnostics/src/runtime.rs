@@ -10,7 +10,10 @@ use serde_json::{Value, json};
 use std::{
     fs::{self, File},
     io::{Read, Seek, SeekFrom, Write},
-    os::{fd::AsFd, unix::net::UnixDatagram},
+    os::{
+        fd::AsFd,
+        unix::{fs::MetadataExt, net::UnixDatagram},
+    },
     path::{Component, Path},
     process::Command,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -49,6 +52,11 @@ fn now() -> u64 {
 
 /// Read one small regular source without following any path component's symlink.
 fn regular(path: &Path) -> Result<File> {
+    regular_owned(path, None)
+}
+
+/// Check account ownership and hard-link isolation for files outside the immutable store.
+fn regular_owned(path: &Path, owner: Option<u32>) -> Result<File> {
     ensure!(path.is_absolute(), "diagnostic path must be absolute");
     let mut directory = open(
         "/",
@@ -72,12 +80,31 @@ fn regular(path: &Path) -> Result<File> {
                 OFlags::DIRECTORY
             };
         directory = openat(&directory, Path::new(name), flags, Mode::empty())?;
+        if !last && let Some(owner) = owner {
+            let metadata = rustix::fs::fstat(&directory)?;
+            ensure!(
+                metadata.st_uid == 0 || metadata.st_uid == owner,
+                "diagnostic parent belongs to another account"
+            );
+            // Sticky shared directories protect owned entries; ordinary writable parents do not.
+            ensure!(
+                metadata.st_mode & 0o022 == 0 || metadata.st_mode & 0o1000 != 0,
+                "diagnostic parent is writable by another account"
+            );
+        }
     }
     let file = File::from(directory);
     ensure!(
         file.metadata()?.is_file(),
         "diagnostic source is not a regular file"
     );
+    if let Some(owner) = owner {
+        let metadata = file.metadata()?;
+        ensure!(
+            metadata.uid() == owner && metadata.nlink() == 1,
+            "diagnostic file owner or hard-link count differs from its declaration"
+        );
+    }
     Ok(file)
 }
 
@@ -191,7 +218,11 @@ impl ReadPlan {
                 } else {
                     Path::new(path).to_owned()
                 };
-                let mut file = regular(&path)?;
+                let mut file = if let Reader::File { owner, .. } = &source.reader {
+                    regular_owned(&path, Some(*owner))?
+                } else {
+                    regular(&path)?
+                };
                 let tail = matches!(source.reader, Reader::File { tail: true, .. });
                 let length = file.metadata()?.len();
                 let skipped = tail && length > bytes as u64;
@@ -331,6 +362,7 @@ fn handle(
         schema: RESPONSE_SCHEMA.into(),
         id: query.id.clone(),
         target: config.target.clone(),
+        action: query.action.clone(),
         boot: None,
         started_ms: now(),
         finished_ms: now(),
@@ -406,7 +438,11 @@ fn handle(
 
 /// Bound concurrent endpoint processes with protected nonblocking slot locks.
 fn slot() -> Result<File> {
-    let root = Path::new("/run/airlock-diagnostics");
+    acquire_slot(Path::new("/run/airlock-diagnostics"))
+}
+
+/// Keep the protected slot namespace explicit so filesystem lifetime behavior is testable.
+fn acquire_slot(root: &Path) -> Result<File> {
     fs::create_dir_all(root)?;
     let directory = open(
         root,
@@ -609,16 +645,38 @@ fn exchange(command: &mut Command, query: &Query) -> Result<Response> {
     ensure!(
         captured.success,
         "diagnostic transport failed: {error}",
-        error = String::from_utf8_lossy(&captured.stderr)
+        error = serde_json::to_string(&String::from_utf8_lossy(&captured.stderr))?
     );
     let response: Response = serde_json::from_slice(&captured.stdout)?;
+    validate_response(query, &response)?;
+    Ok(response)
+}
+
+/// Reject responses that contradict their transport/request identity or claim success without provenance.
+fn validate_response(query: &Query, response: &Response) -> Result<()> {
     ensure!(
         response.schema == RESPONSE_SCHEMA
             && response.id == query.id
-            && response.target == query.target,
+            && response.target == query.target
+            && response.action == query.action,
         "diagnostic response differs from the requested identity"
     );
-    Ok(response)
+    if matches!(response.outcome, Outcome::Complete | Outcome::Truncated) {
+        let boot = response
+            .boot
+            .as_ref()
+            .context("successful diagnostic response has no boot identity")?;
+        if let Operation::Read { options, .. } = &query.action {
+            ensure!(
+                options
+                    .boot
+                    .as_ref()
+                    .is_none_or(|expected| expected == boot),
+                "diagnostic response came from another boot"
+            );
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

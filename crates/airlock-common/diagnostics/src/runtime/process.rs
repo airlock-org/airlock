@@ -3,12 +3,12 @@
 use anyhow::{Result, ensure};
 use rustix::{
     fs::{OFlags, fcntl_getfl, fcntl_setfl},
-    process::{Pid, Signal, kill_process_group},
+    process::{Pid, Signal, WaitId, WaitIdOptions, kill_process_group, waitid},
 };
 use std::{
     io::{Read, Write},
     os::{fd::AsFd, unix::process::CommandExt},
-    process::{Child, Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     time::{Duration, Instant},
 };
 
@@ -29,15 +29,44 @@ pub(super) struct Captured {
 /// Own the process group so descendants cannot retain diagnostic pipes after a request ends.
 struct ChildGroup {
     /// Direct child, always reaped before releasing its group ownership.
-    child: Child,
+    child: Option<Child>,
     /// Separate process group created at spawn; the collector never joins it.
     group: Pid,
 }
 
 impl Drop for ChildGroup {
     fn drop(&mut self) {
-        let _ = kill_process_group(self.group, Signal::KILL);
-        let _ = self.child.wait();
+        if let Some(child) = &mut self.child {
+            let _ = kill_process_group(self.group, Signal::KILL);
+            let _ = child.wait();
+        }
+    }
+}
+
+impl ChildGroup {
+    /// Observe exit without reaping, keeping the process-group identity reserved until cleanup.
+    fn exited(&self) -> Result<bool> {
+        loop {
+            match waitid(
+                WaitId::Pid(self.group),
+                WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT,
+            ) {
+                Ok(status) => return Ok(status.is_some()),
+                Err(rustix::io::Errno::INTR) => continue,
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+
+    /// Signal the owned group before reaping its leader; never signal a recycled process identity.
+    fn finish(&mut self) -> Result<ExitStatus> {
+        match kill_process_group(self.group, Signal::KILL) {
+            Ok(()) | Err(rustix::io::Errno::SRCH) => {}
+            Err(error) => return Err(error.into()),
+        }
+        let status = self.child.as_mut().expect("owned child").wait()?;
+        self.child = None;
+        Ok(status)
     }
 }
 
@@ -89,10 +118,14 @@ pub(super) fn capture(
         .process_group(0)
         .spawn()?;
     let group = Pid::from_raw(child.id() as i32).expect("positive child PID");
-    let mut child = ChildGroup { child, group };
-    let mut stdout = child.child.stdout.take();
-    let mut stderr = child.child.stderr.take();
-    let mut stdin = child.child.stdin.take();
+    let mut child = ChildGroup {
+        child: Some(child),
+        group,
+    };
+    let owned = child.child.as_mut().expect("owned child");
+    let mut stdout = owned.stdout.take();
+    let mut stderr = owned.stderr.take();
+    let mut stdin = owned.stdin.take();
     nonblocking(stdout.as_ref().unwrap())?;
     nonblocking(stderr.as_ref().unwrap())?;
     nonblocking(stdin.as_ref().unwrap())?;
@@ -107,7 +140,7 @@ pub(super) fn capture(
     };
     let mut remaining = crate::authority::Budget::new(bytes as u64);
     let mut sent = 0;
-    let mut status = None;
+    let mut exited = false;
     loop {
         if started.elapsed() >= timeout {
             result.timed_out = true;
@@ -136,14 +169,11 @@ pub(super) fn capture(
         if result.truncated {
             break;
         }
-        if status.is_none() {
-            status = child.child.try_wait()?;
+        if !exited {
+            exited = child.exited()?;
         }
-        if stdout.is_none()
-            && stderr.is_none()
-            && let Some(status) = status
-        {
-            result.success = status.success();
+        if stdout.is_none() && stderr.is_none() && exited {
+            result.success = child.finish()?.success();
             break;
         }
         std::thread::sleep(Duration::from_millis(5));

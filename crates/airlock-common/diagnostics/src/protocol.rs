@@ -224,6 +224,8 @@ pub enum Reader {
         path: String,
         /// Select the newest bytes for growing logs; false reads configuration from its beginning.
         tail: bool,
+        /// Account owning this evidence; substituted files from other accounts are rejected.
+        owner: u32,
     },
     /// Read a declared NixOS configuration file only when it resolves into the immutable store.
     StoreFile {
@@ -429,6 +431,8 @@ pub struct Response {
     pub id: RequestId,
     /// Installed target, checked against the transport destination by the client.
     pub target: TargetId,
+    /// Exact operation, filters and bounds, preserved so saved evidence retains its query context.
+    pub action: Operation,
     /// Kernel boot UUID, absent only when collection could not establish it.
     pub boot: Option<BootId>,
     /// Collection start as Unix milliseconds; an observation, not an authorization clock.

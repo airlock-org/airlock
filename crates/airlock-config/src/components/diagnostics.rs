@@ -183,6 +183,7 @@ pub(crate) fn configure(
                 Reader::File {
                     path: format!("/var/log/xen/console/guest-{name}.log", name = vm.name),
                     tail: true,
+                    owner: 0,
                 },
             ));
         }

@@ -12,12 +12,14 @@ review interface can decide the same complete, source-bound request. Automatic
 access includes raw logs, which can disclose secrets or personal information.
 There is no redaction and no claim that an allowed source is secret-free.
 
-Verus checks exact caller, target, complete source descriptor, decision binding and
-the output ceiling and shared stream-budget accounting. Qubes identity, installed
-contract integrity, strict JSON decoding,
-canonical query encoding, audit delivery and faithful readers remain trusted.
+Verus checks the caller, target, complete source descriptor, decision binding and
+output ceiling, together with shared stream-budget accounting. Qubes identity,
+installed-contract integrity, strict JSON decoding, canonical query encoding,
+audit delivery and faithful readers remain trusted.
 The short-lived endpoint has bounded input, concurrent slots, command deadlines
-and a combined evidence budget. It neither starts stopped VMs nor executes
+and a combined evidence budget. Fixed-file readers reject unexpected owners,
+hard links and symlinks; component declarations select the owning account.
+The endpoint neither starts stopped VMs nor executes
 caller-supplied commands. Retained guest console logs are available from dom0
 when guest RPC is unavailable; their contents can span earlier guest boots.
 Qubes cannot connect a VM to itself, so a separate dom0 endpoint relays only back

@@ -17,6 +17,7 @@ fn fixture(path: &Path) -> ServerConfig {
             reader: Reader::File {
                 path: path.to_str().unwrap().into(),
                 tail: false,
+                owner: rustix::process::geteuid().as_raw(),
             },
         }],
     }
@@ -78,6 +79,7 @@ fn approval_precedes_reads_and_binds_full_request() {
     config.sources[0].reader = Reader::File {
         path: directory.path().join("other").to_str().unwrap().into(),
         tail: false,
+        owner: rustix::process::geteuid().as_raw(),
     };
     let after = ReadPlan::check(&config, &caller, original.clone()).unwrap();
     assert_ne!(
@@ -148,6 +150,7 @@ fn missing_stale_binary_and_tail_evidence_are_explicit() {
     config.sources[0].reader = Reader::File {
         path: path.to_str().unwrap().into(),
         tail: true,
+        owner: rustix::process::geteuid().as_raw(),
     };
     let response = handle(&config, &caller, original.clone(), |_| Ok(()));
     assert_eq!(response.outcome, Outcome::Truncated);
@@ -174,6 +177,10 @@ fn file_reader_rejects_symlinks_and_special_files() {
     assert!(regular(&directory.path().join("link")).is_err());
     assert!(regular(Path::new("/dev/zero")).is_err());
     assert!(regular(&real).is_err());
+    let owner = rustix::process::geteuid().as_raw();
+    assert!(regular_owned(&real.join("log"), Some(owner.wrapping_add(1))).is_err());
+    fs::hard_link(real.join("log"), real.join("alias-log")).unwrap();
+    assert!(regular_owned(&real.join("log"), Some(owner)).is_err());
     rustix::fs::mknodat(
         rustix::fs::CWD,
         directory.path().join("fifo"),
@@ -275,4 +282,52 @@ fn journal_filters_are_exact_and_cannot_become_options() {
     ] {
         assert!(value.parse::<UnitName>().is_err());
     }
+}
+
+#[test]
+fn input_and_slot_limits_survive_an_uncooperative_caller() {
+    use std::os::unix::net::UnixStream;
+    let directory = tempfile::tempdir().unwrap();
+    let mut slots = Vec::new();
+    for _ in 0..4 {
+        slots.push(acquire_slot(directory.path()).unwrap());
+    }
+    assert!(acquire_slot(directory.path()).is_err());
+    slots.pop();
+    assert!(acquire_slot(directory.path()).is_ok());
+
+    let (mut sender, receiver) = UnixStream::pair().unwrap();
+    sender.write_all(&vec![b'x'; REQUEST_LIMIT + 1]).unwrap();
+    drop(sender);
+    assert!(read_request(&mut receiver.try_clone().unwrap(), &receiver).is_err());
+
+    let (_sender, receiver) = UnixStream::pair().unwrap();
+    let started = Instant::now();
+    assert!(read_request(&mut receiver.try_clone().unwrap(), &receiver).is_err());
+    assert!(started.elapsed() < Duration::from_secs(10));
+}
+
+#[test]
+fn response_identity_includes_the_exact_query_and_successful_boot() {
+    let directory = tempfile::tempdir().unwrap();
+    let file = directory.path().join("evidence");
+    fs::write(&file, "evidence").unwrap();
+    let config = fixture(&file);
+    let query = query(&config);
+    let response = handle(
+        &config,
+        &"usr-assistant".parse().unwrap(),
+        query.clone(),
+        |_| Ok(()),
+    );
+    validate_response(&query, &response).unwrap();
+    let mut changed = response.clone();
+    changed.target = "dom0".parse().unwrap();
+    assert!(validate_response(&query, &changed).is_err());
+    let mut changed = response.clone();
+    changed.action = Operation::Catalog {};
+    assert!(validate_response(&query, &changed).is_err());
+    let mut changed = response;
+    changed.boot = None;
+    assert!(validate_response(&query, &changed).is_err());
 }
