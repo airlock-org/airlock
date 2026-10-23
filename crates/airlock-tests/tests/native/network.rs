@@ -92,14 +92,32 @@ fn development_enrollment_reports_each_network_failure() -> Result<()> {
     Ok(())
 }
 
-/// Startup interruptions are retried before dispatch; an uncertain enrollment submission is never replayed.
+/// Enrollment waits for its network path, then proceeds while unrelated apps still start.
 #[test]
 fn desktop_enrollment_waits_for_startup_and_explains_refusal() -> Result<()> {
     for outcome in [0, 126] {
         let mut peers = Peers::new()?;
+        let pending = json!({
+            "status":"working", "desktop_ready":true, "detail":"Preparing usr-assistant",
+            "guests":[
+                {"name":"sys-net","phase":"ready","applications":false},
+                {"name":"sys-firewall","phase":"ready","applications":false},
+                {"name":"usr-assistant","phase":"starting","applications":true}
+            ]
+        });
+        let ready = json!({
+            "status":"working", "desktop_ready":true, "detail":"Preparing usr-extra",
+            "guests":[
+                {"name":"sys-net","phase":"ready","applications":false},
+                {"name":"sys-firewall","phase":"ready","applications":false},
+                {"name":"usr-assistant","phase":"ready","applications":true},
+                {"name":"usr-home","phase":"ready","applications":true},
+                {"name":"usr-extra","phase":"starting","applications":true}
+            ]
+        });
         peers.rules("qvm-run", json!([
-            {"contains":"airlock.BootStatus","exists":"status-seen","stdout":"{\"status\":\"complete\",\"desktop_ready\":true}"},
-            {"contains":"airlock.BootStatus","exists":"transport-seen","stdout":"{\"status\":\"working\",\"desktop_ready\":true,\"detail\":\"Preparing usr-home\"}","write":{"status-seen":""}},
+            {"contains":"airlock.BootStatus","exists":"status-seen","stdout":ready.to_string()},
+            {"contains":"airlock.BootStatus","exists":"transport-seen","stdout":pending.to_string(),"write":{"status-seen":""}},
             {"contains":"airlock.BootStatus","exit":126,"stderr":"Request refused","write":{"transport-seen":""}},
             {"contains":"airlock.DevTailscaleUp","exit":outcome,"stdout":if outcome == 0 {"Login URL: https://login.example.test/fixture\n"} else {""},"stderr":if outcome == 126 {"Request refused"} else {""}}
         ]))?;
@@ -113,10 +131,18 @@ fn desktop_enrollment_waits_for_startup_and_explains_refusal() -> Result<()> {
                 .env("AIRLOCK_QVM_RUN", peers.path("bin/qvm-run")),
             None,
         )?;
-        assert_eq!(output.status.code(), Some(outcome));
+        assert_eq!(
+            output.status.code(),
+            Some(outcome),
+            "stdout={stdout} stderr={stderr} calls={calls}",
+            stdout = String::from_utf8_lossy(&output.stdout),
+            stderr = String::from_utf8_lossy(&output.stderr),
+            calls = peers.calls()?.len(),
+        );
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stdout.contains("Preparing usr-home"));
+        assert!(stdout.contains("Preparing usr-assistant"));
+        assert!(stdout.contains("Network and usr-assistant are ready"));
         assert_eq!(stdout.contains("Login URL:"), outcome == 0);
         if outcome == 126 {
             assert!(stderr.contains("policy restriction or an interrupted control service"));

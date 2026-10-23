@@ -34,7 +34,7 @@ root_command_names! { RUNTIME_COMMAND_NAMES {
     WORKSPACE = "workspace";
     /// Select the readiness RPC advertised by a VM.
     READINESS_SERVICE = "readiness-service";
-    /// Request interactive enrollment after background VM startup.
+    /// Request interactive enrollment when its VM and network path are ready.
     TAILSCALE_ENROLLMENT = "tailscale-enrollment";
 } }
 

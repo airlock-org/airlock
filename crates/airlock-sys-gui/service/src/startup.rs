@@ -32,9 +32,9 @@ pub(crate) struct Status {
 #[derive(Deserialize)]
 pub(crate) struct Guest {
     /// Validated Qubes identity; display text cannot supply a different target.
-    name: GuestName,
+    pub(crate) name: GuestName,
     /// Last observed checkpoint: waiting, starting, ready or failed.
-    phase: String,
+    pub(crate) phase: String,
     /// Whether this guest publishes application launchers in this GUI VM.
     applications: bool,
 }

@@ -73,10 +73,10 @@ enum Action {
         // Qubes VM whose supported RPC feature should be queried.
         name: airlock_nix_core::identity::GuestName,
     },
-    /// Wait for background startup before submitting one interactive Tailscale enrollment request.
+    /// Wait for the network path and usr-assistant before requesting Tailscale enrollment.
     #[command(name = command::TAILSCALE_ENROLLMENT)]
     TailscaleEnrollment {
-        /// Maximum time to wait for dom0's background startup, in seconds.
+        /// Maximum time to wait for the required VM readiness reports, in seconds.
         #[arg(long, default_value_t = 600, value_parser = clap::value_parser!(u64).range(1..=900))]
         startup_timeout: u64,
     },

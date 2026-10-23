@@ -9,6 +9,20 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// The enrollment RPC needs its destination and the declared network path, not every app VM.
+const ENROLLMENT_GUESTS: [&str; 3] = ["sys-net", "sys-firewall", "usr-assistant"];
+
+/// Require positive per-guest readiness before sending the request through qrexec.
+fn ready_for_enrollment(state: &startup::Status) -> bool {
+    state.desktop_ready
+        && ENROLLMENT_GUESTS.iter().all(|name| {
+            state
+                .guests
+                .iter()
+                .any(|guest| guest.name.as_str() == *name && guest.phase == "ready")
+        })
+}
+
 /// Wait only for read-only startup evidence; submit the enrollment RPC exactly once afterward.
 pub(crate) fn execute(timeout: u64) -> Result<u8> {
     let deadline = Instant::now() + Duration::from_secs(timeout);
@@ -17,14 +31,19 @@ pub(crate) fn execute(timeout: u64) -> Result<u8> {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             bail!(
-                "Startup did not finish within {timeout} seconds. Tailscale enrollment was not requested; retry after the background VMs are ready."
+                "Network and usr-assistant were not ready within {timeout} seconds. Tailscale enrollment was not requested; retry after those services are ready."
             );
         }
 
         let message = match startup::read(remaining.min(Duration::from_secs(15))) {
-            Ok(state) if state.status == "complete" => break,
+            Ok(state)
+                if matches!(state.status.as_str(), "working" | "complete" | "degraded")
+                    && ready_for_enrollment(&state) =>
+            {
+                break;
+            }
             Ok(state) if state.status == "working" => format!(
-                "Waiting for background startup: {progress}",
+                "Waiting for network and usr-assistant: {progress}",
                 progress = state.progress()
             ),
             Ok(state) => bail!(
@@ -47,7 +66,7 @@ pub(crate) fn execute(timeout: u64) -> Result<u8> {
         );
     }
 
-    println!("Startup complete. Requesting Tailscale enrollment in usr-assistant...");
+    println!("Network and usr-assistant are ready. Requesting Tailscale enrollment...");
     // Inherit the terminal so route/DNS errors and the browser login URL appear immediately.
     // The upstream timeout bounds transport and login without replaying an uncertain request.
     let status = Command::new(support::tool("AIRLOCK_TIMEOUT", "timeout"))
